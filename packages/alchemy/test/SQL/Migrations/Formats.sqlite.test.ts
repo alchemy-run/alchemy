@@ -1,10 +1,8 @@
 import {
   applyAlchemyFormat,
   applyMigrations,
-  applyWranglerFormat,
   readDrizzleDirRecords,
   readFlatRecords,
-  type MigrationRecord,
 } from "@/SQL/Migrations/index.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Database } from "bun:sqlite";
@@ -18,64 +16,55 @@ const fixture = (name: string) =>
 
 const describe = layer(NodeServices.layer);
 
-const record = (
-  name: string,
-  sql: string,
-  overrides?: Partial<MigrationRecord>,
-): MigrationRecord => ({
-  name,
-  hash: "0".repeat(64),
-  createdAtMillis: undefined,
-  sql,
-  statements: [sql],
-  ...overrides,
-});
+const ALCHEMY_COLUMNS = ["id", "hash", "created_at", "name", "applied_at"];
 
-describe("wrangler format", (it) => {
-  it.effect("creates wrangler's real table shape and applies in order", () =>
+const migrationRows = (db: Database, table = "__alchemy_migrations") =>
+  db
+    .query(
+      `SELECT hash, created_at, name, applied_at FROM ${table} ORDER BY id;`,
+    )
+    .all() as Array<{
+    hash: string;
+    created_at: number | null;
+    name: string;
+    applied_at: string | null;
+  }>;
+
+describe("alchemy format", (it) => {
+  it.effect("creates the table and applies flat migrations in order", () =>
     Effect.gen(function* () {
       const db = new Database(":memory:");
       const executor = makeSqliteExecutor(db);
       const records = yield* readFlatRecords(fixture("flat"));
-      yield* applyWranglerFormat({
+      yield* applyAlchemyFormat({
         executor,
-        table: "d1_migrations",
+        table: "__alchemy_migrations",
         records,
       });
 
       expect(tableNames(db)).toEqual(
-        expect.arrayContaining(["d1_migrations", "posts", "users"]),
+        expect.arrayContaining(["__alchemy_migrations", "posts", "users"]),
       );
       const columns = db
-        .query("PRAGMA table_info(d1_migrations);")
-        .all() as Array<{ name: string; type: string }>;
-      expect(columns.map((c) => c.name)).toEqual(["id", "name", "applied_at"]);
-      expect(columns.find((c) => c.name === "id")?.type).toBe("INTEGER");
+        .query("PRAGMA table_info(__alchemy_migrations);")
+        .all() as Array<{ name: string }>;
+      expect(columns.map((c) => c.name)).toEqual(ALCHEMY_COLUMNS);
 
-      const rows = db
-        .query("SELECT id, name, applied_at FROM d1_migrations ORDER BY id;")
-        .all() as Array<{ id: number; name: string; applied_at: string }>;
+      const rows = migrationRows(db);
       expect(rows.map((r) => r.name)).toEqual([
         "0001_users.sql",
         "0002_posts.sql",
       ]);
-      expect(rows[0].id).toBe(1);
+      expect(rows[0].hash).toMatch(/^[0-9a-f]{64}$/);
       expect(rows[0].applied_at).toBeTruthy();
-    }),
-  );
 
-  it.effect("is idempotent — replaying would fail on CREATE TABLE", () =>
-    Effect.gen(function* () {
-      const db = new Database(":memory:");
-      const executor = makeSqliteExecutor(db);
-      const records = yield* readFlatRecords(fixture("flat"));
-      yield* applyWranglerFormat({ executor, table: "d1_migrations", records });
-      // The fixture SQL uses bare CREATE TABLE — a replay would throw.
-      yield* applyWranglerFormat({ executor, table: "d1_migrations", records });
-      const [{ n }] = db
-        .query("SELECT COUNT(*) AS n FROM d1_migrations;")
-        .all() as Array<{ n: number }>;
-      expect(n).toBe(2);
+      // Idempotent — a replay would throw on the bare CREATE TABLEs.
+      yield* applyAlchemyFormat({
+        executor,
+        table: "__alchemy_migrations",
+        records,
+      });
+      expect(migrationRows(db).length).toBe(2);
     }),
   );
 
@@ -84,16 +73,17 @@ describe("wrangler format", (it) => {
       const db = new Database(":memory:");
       const executor = makeSqliteExecutor(db);
       const records = yield* readFlatRecords(fixture("flat"));
-      yield* applyWranglerFormat({
+      yield* applyAlchemyFormat({
         executor,
-        table: "d1_migrations",
+        table: "__alchemy_migrations",
         records: records.slice(0, 1),
       });
-      yield* applyWranglerFormat({ executor, table: "d1_migrations", records });
-      const rows = db
-        .query("SELECT name FROM d1_migrations ORDER BY id;")
-        .all() as Array<{ name: string }>;
-      expect(rows.map((r) => r.name)).toEqual([
+      yield* applyAlchemyFormat({
+        executor,
+        table: "__alchemy_migrations",
+        records,
+      });
+      expect(migrationRows(db).map((r) => r.name)).toEqual([
         "0001_users.sql",
         "0002_posts.sql",
       ]);
@@ -105,7 +95,7 @@ describe("wrangler format", (it) => {
     () =>
       Effect.gen(function* () {
         const db = new Database(":memory:");
-        // A pre-registry deploy: our invented shape, TEXT id.
+        // A pre-registry deploy: the invented shape, TEXT id.
         db.run(
           "CREATE TABLE d1_migrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);",
         );
@@ -119,7 +109,8 @@ describe("wrangler format", (it) => {
 
         const executor = makeSqliteExecutor(db);
         const records = yield* readFlatRecords(fixture("flat"));
-        yield* applyWranglerFormat({
+        // Legacy deploys keep converging against their persisted table.
+        yield* applyAlchemyFormat({
           executor,
           table: "d1_migrations",
           records,
@@ -128,149 +119,8 @@ describe("wrangler format", (it) => {
         const columns = db
           .query("PRAGMA table_info(d1_migrations);")
           .all() as Array<{ name: string; type: string }>;
-        expect(columns.find((c) => c.name === "id")?.type).toBe("INTEGER");
-        const rows = db
-          .query("SELECT id, name FROM d1_migrations ORDER BY id;")
-          .all() as Array<{ id: number; name: string }>;
-        expect(rows.map((r) => r.name)).toEqual([
-          "0001_users.sql",
-          "0002_posts.sql",
-        ]);
-        // 0001 was not replayed (its CREATE TABLE would have thrown),
-        // 0002 was applied fresh.
-        expect(tableNames(db)).toContain("posts");
-      }),
-  );
-
-  it.effect(
-    "upgrades the oldest 2-column shape, reading names from the primary column",
-    () =>
-      Effect.gen(function* () {
-        const db = new Database(":memory:");
-        db.run(
-          "CREATE TABLE d1_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);",
-        );
-        db.run(
-          "INSERT INTO d1_migrations (id, applied_at) VALUES ('0001_users.sql', '2024-01-01 00:00:00');",
-        );
-        db.run(
-          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
-        );
-
-        const executor = makeSqliteExecutor(db);
-        const records = yield* readFlatRecords(fixture("flat"));
-        yield* applyWranglerFormat({
-          executor,
-          table: "d1_migrations",
-          records,
-        });
-        const rows = db
-          .query("SELECT name FROM d1_migrations ORDER BY id;")
-          .all() as Array<{ name: string }>;
-        expect(rows.map((r) => r.name)).toEqual([
-          "0001_users.sql",
-          "0002_posts.sql",
-        ]);
-      }),
-  );
-
-  it.effect("refuses to write into a drizzle-shaped table", () =>
-    Effect.gen(function* () {
-      const db = new Database(":memory:");
-      db.run(
-        "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric, name text, applied_at TEXT);",
-      );
-      const executor = makeSqliteExecutor(db);
-      const result = yield* Effect.result(
-        applyWranglerFormat({
-          executor,
-          table: "d1_migrations",
-          records: [record("0001_x.sql", "SELECT 1;")],
-        }),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("MigrationError");
-        expect(result.failure.message).toContain("drizzle");
-      }
-    }),
-  );
-});
-
-describe("alchemy format (sqlite)", (it) => {
-  it.effect("creates drizzle's column shape under the neutral table", () =>
-    Effect.gen(function* () {
-      const db = new Database(":memory:");
-      const executor = makeSqliteExecutor(db);
-      const records = yield* readFlatRecords(fixture("flat"));
-      yield* applyAlchemyFormat({
-        executor,
-        table: "__alchemy_migrations",
-        records,
-      });
-      const columns = db
-        .query("PRAGMA table_info(__alchemy_migrations);")
-        .all() as Array<{ name: string }>;
-      expect(columns.map((c) => c.name)).toEqual([
-        "id",
-        "hash",
-        "created_at",
-        "name",
-        "applied_at",
-      ]);
-      const rows = db
-        .query(
-          "SELECT hash, name, applied_at FROM __alchemy_migrations ORDER BY id;",
-        )
-        .all() as Array<{ hash: string; name: string; applied_at: string }>;
-      expect(rows.map((r) => r.name)).toEqual([
-        "0001_users.sql",
-        "0002_posts.sql",
-      ]);
-      expect(rows[0].hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(rows[0].applied_at).toBeTruthy();
-
-      // Idempotent.
-      yield* applyAlchemyFormat({
-        executor,
-        table: "__alchemy_migrations",
-        records,
-      });
-      const [{ n }] = db
-        .query("SELECT COUNT(*) AS n FROM __alchemy_migrations;")
-        .all() as Array<{ n: number }>;
-      expect(n).toBe(2);
-    }),
-  );
-
-  it.effect(
-    "upgrades a legacy table, backfilling hashes from local records",
-    () =>
-      Effect.gen(function* () {
-        const db = new Database(":memory:");
-        db.run(
-          "CREATE TABLE __alchemy_migrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);",
-        );
-        db.run(
-          "INSERT INTO __alchemy_migrations (id, name, applied_at) VALUES ('00001', '0001_users.sql', '2024-01-01 00:00:00');",
-        );
-        db.run(
-          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
-        );
-
-        const executor = makeSqliteExecutor(db);
-        const records = yield* readFlatRecords(fixture("flat"));
-        yield* applyAlchemyFormat({
-          executor,
-          table: "__alchemy_migrations",
-          records,
-        });
-
-        const rows = db
-          .query(
-            "SELECT hash, name, applied_at FROM __alchemy_migrations ORDER BY id;",
-          )
-          .all() as Array<{ hash: string; name: string; applied_at: string }>;
+        expect(columns.map((c) => c.name)).toEqual(ALCHEMY_COLUMNS);
+        const rows = migrationRows(db, "d1_migrations");
         expect(rows.map((r) => r.name)).toEqual([
           "0001_users.sql",
           "0002_posts.sql",
@@ -284,11 +134,72 @@ describe("alchemy format (sqlite)", (it) => {
   );
 
   it.effect(
-    "legacy rows recorded as dir/migration.sql keep matching drizzle-layout records",
+    "upgrades the oldest 2-column shape, reading names from the primary column",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE __alchemy_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);",
+        );
+        db.run(
+          "INSERT INTO __alchemy_migrations (id, applied_at) VALUES ('0001_users.sql', '2024-01-01 00:00:00');",
+        );
+        db.run(
+          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+        );
+
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records,
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual([
+          "0001_users.sql",
+          "0002_posts.sql",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "converts a wrangler-shaped table in place when it IS the resolved table",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run(
+          "INSERT INTO d1_migrations (name, applied_at) VALUES ('0001_users.sql', '2024-01-01 00:00:00');",
+        );
+        db.run(
+          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+        );
+
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        yield* applyAlchemyFormat({
+          executor,
+          table: "d1_migrations",
+          records,
+        });
+        const columns = db
+          .query("PRAGMA table_info(d1_migrations);")
+          .all() as Array<{ name: string }>;
+        expect(columns.map((c) => c.name)).toEqual(ALCHEMY_COLUMNS);
+        expect(migrationRows(db, "d1_migrations").map((r) => r.name)).toEqual([
+          "0001_users.sql",
+          "0002_posts.sql",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "legacy rows recorded as dir/migration.sql keep matching directory records",
     () =>
       // Pre-registry Alchemy applied drizzle-layout dirs under the flat
-      // key (`<dir>/migration.sql`). After the upgrade the old key is
-      // preserved and applied-detection must not replay.
+      // key (`<dir>/migration.sql`); current records key them by `<dir>`.
       Effect.gen(function* () {
         const db = new Database(":memory:");
         db.run(
@@ -297,7 +208,6 @@ describe("alchemy format (sqlite)", (it) => {
         db.run(
           "INSERT INTO d1_migrations (id, name, applied_at) VALUES ('00001', '20240101000000_init/migration.sql', '2024-01-01 00:00:00');",
         );
-        // Migration 1 really ran:
         db.run(
           "CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);",
         );
@@ -310,11 +220,7 @@ describe("alchemy format (sqlite)", (it) => {
           table: "d1_migrations",
           records,
         });
-
-        const rows = db
-          .query("SELECT name FROM d1_migrations ORDER BY id;")
-          .all() as Array<{ name: string }>;
-        expect(rows.map((r) => r.name)).toEqual([
+        expect(migrationRows(db, "d1_migrations").map((r) => r.name)).toEqual([
           "20240101000000_init/migration.sql",
           "20240102000000_add_posts",
         ]);
@@ -351,75 +257,199 @@ describe("alchemy format (sqlite)", (it) => {
   );
 });
 
-describe("registry apply", (it) => {
-  it.effect("prisma format without a connection string is a typed error", () =>
+describe("one-way conversion from foreign tables", (it) => {
+  it.effect(
+    "adopts a wrangler-migrated database: history copied, table frozen",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        // What `wrangler d1 migrations apply` left behind.
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run(
+          "INSERT INTO d1_migrations (name, applied_at) VALUES ('0001_users.sql', '2024-01-01 00:00:00');",
+        );
+        db.run(
+          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+        );
+
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records,
+        });
+
+        // History converted, only the pending migration ran.
+        const rows = migrationRows(db);
+        expect(rows.map((r) => r.name)).toEqual([
+          "0001_users.sql",
+          "0002_posts.sql",
+        ]);
+        expect(rows[0].hash).toBe(records[0].hash);
+        expect(rows[0].applied_at).toBe("2024-01-01 00:00:00");
+
+        // The wrangler table is frozen — never written, never dropped.
+        const wrangler = db
+          .query("SELECT name FROM d1_migrations ORDER BY id;")
+          .all() as Array<{ name: string }>;
+        expect(wrangler.map((r) => r.name)).toEqual(["0001_users.sql"]);
+      }),
+  );
+
+  it.effect(
+    "conversion fails when foreign history references a missing local file",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run("INSERT INTO d1_migrations (name) VALUES ('zzz_gone.sql');");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records,
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("MigrationHistoryConflictError");
+        }
+      }),
+  );
+
+  it.effect("adopts a prisma-migrated database via _prisma_migrations", () =>
     Effect.gen(function* () {
       const db = new Database(":memory:");
+      // Prisma's table shape (sqlite rendition), one applied + one
+      // rolled-back migration.
+      db.run(
+        `CREATE TABLE _prisma_migrations (
+           id TEXT PRIMARY KEY,
+           checksum TEXT NOT NULL,
+           finished_at TEXT,
+           migration_name TEXT NOT NULL,
+           logs TEXT,
+           rolled_back_at TEXT,
+           started_at TEXT NOT NULL,
+           applied_steps_count INTEGER NOT NULL DEFAULT 0
+         );`,
+      );
+      const records = yield* readDrizzleDirRecords(fixture("prisma"));
+      db.run(
+        `INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
+         VALUES ('a', '${records[0].hash}', '2024-01-01 00:00:01', '20240101000000_init', '2024-01-01 00:00:00', 1);`,
+      );
+      db.run(
+        `INSERT INTO _prisma_migrations (id, checksum, rolled_back_at, migration_name, started_at)
+         VALUES ('b', 'dead', '2024-01-02 00:00:00', '20240102000000_rolled_back', '2024-01-02 00:00:00');`,
+      );
+      // The applied migration's tables exist (Prisma-dialect SQL in the
+      // fixture is postgres-flavored, so create a stand-in):
+      db.run("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);");
+
       const executor = makeSqliteExecutor(db);
-      const result = yield* Effect.result(
-        applyMigrations({
-          resolved: {
-            dir: fixture("prisma"),
-            format: "prisma",
-            table: "_prisma_migrations",
-            schema: undefined,
-          },
-          executor,
-        }),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("MigrationFormatUnsupportedError");
-        expect(result.failure.message).toContain("prisma migrate diff");
-      }
+      yield* applyAlchemyFormat({
+        executor,
+        // Only the applied row must convert; the rolled-back row is
+        // skipped even though it has no local file.
+        table: "__alchemy_migrations",
+        records: records.slice(0, 1),
+      });
+      const rows = migrationRows(db);
+      expect(rows.map((r) => r.name)).toEqual(["20240101000000_init"]);
+      // Prisma's checksum is sha256 of migration.sql — carried verbatim.
+      expect(rows[0].hash).toBe(records[0].hash);
+      // Frozen source.
+      expect(
+        (
+          db
+            .query("SELECT COUNT(*) AS n FROM _prisma_migrations;")
+            .all() as Array<{ n: number }>
+        )[0].n,
+      ).toBe(2);
     }),
   );
 
-  it.effect("wrangler format on a non-sqlite dialect is a typed error", () =>
+  it.effect("a failed prisma migration blocks conversion with guidance", () =>
     Effect.gen(function* () {
       const db = new Database(":memory:");
-      const executor = {
-        ...makeSqliteExecutor(db),
-        dialect: "postgres" as const,
-      };
+      db.run(
+        `CREATE TABLE _prisma_migrations (
+           id TEXT PRIMARY KEY,
+           checksum TEXT NOT NULL,
+           finished_at TEXT,
+           migration_name TEXT NOT NULL,
+           logs TEXT,
+           rolled_back_at TEXT,
+           started_at TEXT NOT NULL,
+           applied_steps_count INTEGER NOT NULL DEFAULT 0
+         );`,
+      );
+      db.run(
+        `INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at)
+         VALUES ('a', 'abc', '20240101000000_broken', '2024-01-01 00:00:00');`,
+      );
+      const executor = makeSqliteExecutor(db);
+      const records = yield* readFlatRecords(fixture("flat"));
       const result = yield* Effect.result(
-        applyMigrations({
-          resolved: {
-            dir: fixture("flat"),
-            format: "wrangler",
-            table: "d1_migrations",
-            schema: undefined,
-          },
+        applyAlchemyFormat({
           executor,
+          table: "__alchemy_migrations",
+          records,
         }),
       );
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("MigrationFormatUnsupportedError");
+        expect(result.failure._tag).toBe("MigrationError");
+        expect(result.failure.message).toContain("prisma migrate resolve");
       }
     }),
   );
+});
 
-  it.effect("alchemy format keys drizzle-layout dirs by directory name", () =>
+describe("registry apply", (it) => {
+  it.effect("keys directory-layout dirs by directory name", () =>
     Effect.gen(function* () {
       const db = new Database(":memory:");
       const executor = makeSqliteExecutor(db);
       yield* applyMigrations({
         resolved: {
           dir: fixture("drizzle-v1"),
-          format: "alchemy",
           table: "__alchemy_migrations",
-          schema: undefined,
         },
         executor,
       });
-      const rows = db
-        .query("SELECT name FROM __alchemy_migrations ORDER BY id;")
-        .all() as Array<{ name: string }>;
-      expect(rows.map((r) => r.name)).toEqual([
+      expect(migrationRows(db).map((r) => r.name)).toEqual([
         "20240101000000_init",
         "20240102000000_add_posts",
       ]);
+    }),
+  );
+
+  it.effect("rejects drizzle-v0 layouts", () =>
+    Effect.gen(function* () {
+      const db = new Database(":memory:");
+      const executor = makeSqliteExecutor(db);
+      const result = yield* Effect.result(
+        applyMigrations({
+          resolved: {
+            dir: fixture("drizzle-v0"),
+            table: "__alchemy_migrations",
+          },
+          executor,
+        }),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("DrizzleV0LayoutError");
+      }
     }),
   );
 });

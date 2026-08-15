@@ -9,8 +9,6 @@ import {
   MigrationError,
   resolveMigrations,
   type DrizzleV0LayoutError,
-  type MigrationFormatMismatchError,
-  type MigrationFormatUnsupportedError,
   type MigrationHistoryConflictError,
   type NormalizedMigrationsInput,
   type ResolvedMigrations,
@@ -120,18 +118,15 @@ export const makePgMigrationExecutor = (client: Client): SqlExecutor => ({
 export type PgMigrationError =
   | PgError
   | MigrationError
-  | MigrationFormatMismatchError
-  | MigrationFormatUnsupportedError
   | MigrationHistoryConflictError
   | DrizzleV0LayoutError;
 
 /**
- * Resolve the migration format for `input` and apply pending migrations
- * over the given connection. Inline formats (`drizzle`/`alchemy`) run
- * through a scoped pg client; the `prisma` format delegates to
- * `prisma migrate deploy` with the connection URI and never opens a client
- * of ours. Returns the resolved format/table (for stamping into state) and
- * the per-file content hashes (for drift detection).
+ * Apply pending migrations over the given connection through a scoped pg
+ * client. Bookkeeping is Alchemy's `__alchemy_migrations` table; foreign
+ * (drizzle/prisma) or legacy history is converted one-way on first
+ * contact. Returns the resolved table (for stamping into state) and the
+ * per-file content hashes (for drift detection).
  */
 export const runPgMigrations = (options: {
   connectionUri: Redacted.Redacted<string>;
@@ -152,25 +147,17 @@ export const runPgMigrations = (options: {
           }),
       ),
     );
-    const resolved = yield* resolveMigrations({
+    const resolved: ResolvedMigrations = resolveMigrations({
       input: options.input,
       stamped: options.stamped,
-      dialect: "postgres",
     });
     if (Object.keys(hashes).length > 0) {
-      if (resolved.format === "prisma") {
-        yield* applyMigrations({
+      yield* withPgClient(options.connectionUri, (client) =>
+        applyMigrations({
           resolved,
-          connectionUrl: options.connectionUri,
-        });
-      } else {
-        yield* withPgClient(options.connectionUri, (client) =>
-          applyMigrations({
-            resolved,
-            executor: makePgMigrationExecutor(client),
-          }),
-        );
-      }
+          executor: makePgMigrationExecutor(client),
+        }),
+      );
     }
     return { resolved, hashes };
   });

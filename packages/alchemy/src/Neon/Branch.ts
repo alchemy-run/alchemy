@@ -20,7 +20,6 @@ import {
   migrationsInputOf,
   resolveMigrations,
   stampedOf,
-  type MigrationFormatTag,
   type MigrationsInput,
 } from "../SQL/Migrations/index.ts";
 import { hashImports, hashMigrations, readSqlFile } from "../SQL/SqlFile.ts";
@@ -97,15 +96,13 @@ export type BranchProps = {
   endpoints?: BranchEndpointConfig[];
   /**
    * SQL migrations to apply against the branch. Accepts a directory path, a
-   * `Drizzle.Schema` resource, or `{ dir, format?, table?, schema? }`.
+   * `Drizzle.Schema` resource, or `{ dir, table? }`.
    *
-   * The applied-migrations format is detected from the directory layout:
-   * drizzle-kit dirs delegate to drizzle-orm's own migrator
-   * (`drizzle.__drizzle_migrations`), Prisma dirs delegate to
-   * `prisma migrate deploy` (`_prisma_migrations`), and plain `.sql` dirs
-   * use Alchemy's neutral `__alchemy_migrations` table. A database
-   * previously migrated by drizzle-kit or Prisma is picked up where that
-   * tool left off — no baselining required.
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy: the old tool's applied history is
+   * copied into Alchemy's table and the old table is left frozen. No
+   * baselining required.
    */
   migrations?: MigrationsInput;
   /**
@@ -160,7 +157,6 @@ export type Branch = Resource<
     pooledOrigin: PostgresOrigin;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
-    migrationsFormat: MigrationFormatTag | undefined;
     migrationsHashes: Record<string, string>;
     importHashes: Record<string, string>;
   },
@@ -277,17 +273,11 @@ export const BranchProvider = () =>
         if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
           return { action: "update" } as const;
         }
-        // Resolution also fails the plan when an explicit format
-        // contradicts the stamped one — the providerMode doctrine.
-        const resolved = yield* resolveMigrations({
+        const resolved = resolveMigrations({
           input: migrationsInput,
           stamped: stampedOf(output),
-          dialect: "postgres",
         });
-        if (
-          resolved.table !== (output?.migrationsTable ?? resolved.table) ||
-          resolved.format !== (output?.migrationsFormat ?? resolved.format)
-        ) {
+        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
           return { action: "update" } as const;
         }
       }
@@ -363,7 +353,6 @@ export const BranchProvider = () =>
         pooledOrigin: parsePostgresOrigin(conn.pooled),
         migrationsDir: olds?.migrationsDir,
         migrationsTable: olds?.migrationsTable,
-        migrationsFormat: undefined,
         migrationsHashes: {},
         importHashes: {},
       };
@@ -491,8 +480,6 @@ export const BranchProvider = () =>
         // When migrations are removed, keep the stamp (like the hashes) so
         // a later re-add resolves against the same bookkeeping table.
         migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
-        migrationsFormat:
-          migrations?.resolved.format ?? output?.migrationsFormat,
         migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
         importHashes,
       };
@@ -607,7 +594,6 @@ const hydrateBranch = (
       pooledOrigin: parsePostgresOrigin(conn.pooled),
       migrationsDir: undefined,
       migrationsTable: undefined,
-      migrationsFormat: undefined,
       migrationsHashes: {},
       importHashes: {},
     };

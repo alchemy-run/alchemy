@@ -1,26 +1,22 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { DrizzleV0LayoutError, type MigrationFormatTag } from "./Format.ts";
+import { DrizzleV0LayoutError } from "./Format.ts";
 import { DRIZZLE_DIR_PATTERN } from "./Records.ts";
 
 /**
- * The on-disk layout of a migrations directory. `flat` means plain `.sql`
- * files with no tool markers — wrangler output or hand-written SQL.
+ * The on-disk layout of a migrations directory. `directory` covers both
+ * drizzle-kit v1 and Prisma layouts (`<ts>_<name>/migration.sql` — records
+ * key by directory name); `flat` is plain `.sql` files (records key by file
+ * path).
  */
-export type MigrationLayout = "drizzle" | "prisma" | "flat";
+export type MigrationLayout = "directory" | "flat";
 
 /**
- * Fingerprint a migrations directory's layout.
- *
- * ⚠️ Prisma and drizzle-v1 layouts are otherwise identical — both are
- * `<14-digit-ts>_<name>/migration.sql`. Only `migration_lock.toml` (Prisma)
- * vs the per-migration `snapshot.json` (drizzle) separates them, so the
- * markers are checked first and the timestamp shape is never used alone.
+ * Fingerprint a migrations directory's layout to pick the record reader.
  *
  * A drizzle **v0** layout (`meta/_journal.json`) fails with a typed error:
- * drizzle-orm's own migrator refuses it, and the fix (`drizzle-kit up`) is
- * upstream of Alchemy.
+ * the fix (`drizzle-kit up`) is upstream of Alchemy.
  */
 export const detectLayout = (dir: string) =>
   Effect.gen(function* () {
@@ -29,9 +25,6 @@ export const detectLayout = (dir: string) =>
     const exists = (p: string) =>
       fs.exists(p).pipe(Effect.catch(() => Effect.succeed(false)));
 
-    if (yield* exists(path.join(dir, "migration_lock.toml"))) {
-      return "prisma" as const;
-    }
     if (yield* exists(path.join(dir, "meta", "_journal.json"))) {
       return yield* new DrizzleV0LayoutError({
         dir,
@@ -47,28 +40,8 @@ export const detectLayout = (dir: string) =>
     for (const entry of entries) {
       if (!DRIZZLE_DIR_PATTERN.test(entry)) continue;
       if (yield* exists(path.join(dir, entry, "migration.sql"))) {
-        return "drizzle" as const;
+        return "directory" as const;
       }
     }
     return "flat" as const;
   });
-
-/**
- * The format a freshly-detected layout maps to on a given target. A flat
- * directory has no owning tool, so the target's default applies: wrangler's
- * table on D1 (so `wrangler d1 migrations list` interoperates), Alchemy's
- * neutral table elsewhere.
- */
-export const formatForLayout = (
-  layout: MigrationLayout,
-  dialect: "postgres" | "mysql" | "sqlite",
-): MigrationFormatTag => {
-  switch (layout) {
-    case "drizzle":
-      return "drizzle";
-    case "prisma":
-      return "prisma";
-    case "flat":
-      return dialect === "sqlite" ? "wrangler" : "alchemy";
-  }
-};

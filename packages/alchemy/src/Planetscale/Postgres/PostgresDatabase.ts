@@ -156,17 +156,11 @@ export const PostgresDatabaseProvider = () =>
         if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
           return { action: "update", stables } as const;
         }
-        // Resolution also fails the plan when an explicit format
-        // contradicts the stamped one — the providerMode doctrine.
-        const resolved = yield* resolveMigrations({
+        const resolved = resolveMigrations({
           input: migrationsInput,
           stamped: stampedOf(output),
-          dialect: "postgres",
         });
-        if (
-          resolved.table !== (output?.migrationsTable ?? resolved.table) ||
-          resolved.format !== (output?.migrationsFormat ?? resolved.format)
-        ) {
+        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
           return { action: "update", stables } as const;
         }
       }
@@ -244,7 +238,6 @@ export const PostgresDatabaseProvider = () =>
         region: { slug: data.region.slug },
         migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
         migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
-        migrationsFormat: output?.migrationsFormat,
         migrationsHashes: output?.migrationsHashes ?? {},
         importHashes: output?.importHashes ?? {},
         clusterSize,
@@ -402,8 +395,6 @@ export const PostgresDatabaseProvider = () =>
         // When migrations are removed, keep the stamp (like the hashes) so
         // a later re-add resolves against the same bookkeeping table.
         migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
-        migrationsFormat:
-          migrations?.resolved.format ?? output?.migrationsFormat,
         migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
         importHashes,
         arch: news.arch ?? output?.arch ?? "x86",
@@ -470,7 +461,6 @@ export const PostgresDatabaseProvider = () =>
               clusterSize,
               migrationsDir: undefined,
               migrationsTable: undefined,
-              migrationsFormat: undefined,
               migrationsHashes: {},
               importHashes: {},
               arch,

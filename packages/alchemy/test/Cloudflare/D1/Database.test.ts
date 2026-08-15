@@ -11,7 +11,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -119,10 +118,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
     );
 
     expect(database.migrationsDir).toEqual(migrationsDir);
-    expect(database.migrationsTable).toEqual("d1_migrations");
-    // Flat .sql dirs use wrangler's real table format, so the wrangler CLI
-    // can list/apply against an Alchemy-managed database.
-    expect(database.migrationsFormat).toEqual("wrangler");
+    expect(database.migrationsTable).toEqual("__alchemy_migrations");
     expect(Object.keys(database.migrationsHashes).sort()).toEqual([
       "0001_users.sql",
       "0002_posts.sql",
@@ -131,18 +127,19 @@ test.provider("applies migrations from migrationsDir", (stack) =>
     const tables = yield* listTables(accountId, database.databaseId);
     expect(tables).toContain("users");
     expect(tables).toContain("posts");
-    expect(tables).toContain("d1_migrations");
+    expect(tables).toContain("__alchemy_migrations");
 
-    // wrangler's shape: INTEGER AUTOINCREMENT ids, name-keyed.
-    const applied = yield* queryAll<{ id: number; name: string }>(
+    // Alchemy's shape: INTEGER ids, name-keyed, hashed.
+    const applied = yield* queryAll<{ id: number; name: string; hash: string }>(
       accountId,
       database.databaseId,
-      "SELECT id, name FROM d1_migrations ORDER BY id;",
+      "SELECT id, name, hash FROM __alchemy_migrations ORDER BY id;",
     );
-    expect(applied).toEqual([
+    expect(applied.map((r) => ({ id: r.id, name: r.name }))).toEqual([
       { id: 1, name: "0001_users.sql" },
       { id: 2, name: "0002_posts.sql" },
     ]);
+    expect(applied[0].hash).toMatch(/^[0-9a-f]{64}$/);
 
     // Adding a new migration on update should apply only the new one and the
     // sequential id should continue from where it left off.
@@ -166,7 +163,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
     const appliedAfter = yield* queryAll<{ id: number; name: string }>(
       accountId,
       database.databaseId,
-      "SELECT id, name FROM d1_migrations ORDER BY id;",
+      "SELECT id, name FROM __alchemy_migrations ORDER BY id;",
     );
     expect(appliedAfter).toEqual([
       { id: 1, name: "0001_users.sql" },
@@ -209,15 +206,23 @@ test.provider("applies migrations using a custom migrationsTable", (stack) =>
     expect(tables).toContain("custom_migration_tracking");
     expect(tables).toContain("test_migrations_table");
     // The default table must NOT be created when a custom one is configured.
-    expect(tables).not.toContain("d1_migrations");
+    expect(tables).not.toContain("__alchemy_migrations");
 
     yield* stack.destroy();
     yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
   }).pipe(logLevel),
 );
 
+/**
+ * Adopting a drizzle-kit-migrated database: the user ran `drizzle-kit
+ * migrate` before Alchemy ever saw the database, leaving history in
+ * `__drizzle_migrations`. First deploy performs the one-way conversion —
+ * history copies into `__alchemy_migrations` (validated against local
+ * files, hashes carried verbatim) and drizzle's table is frozen, never
+ * written or dropped.
+ */
 test.provider(
-  "applies drizzle-kit layout migrations via drizzle's own bookkeeping",
+  "adopts a drizzle-kit-migrated database via one-way conversion",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -226,64 +231,92 @@ test.provider(
       const migrationsDir = yield* fs.makeTempDirectory({
         prefix: "alchemy-d1-drizzle-",
       });
+      const initSql =
+        "CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);\n--> statement-breakpoint\nCREATE UNIQUE INDEX users_name_unique ON users (name);";
       yield* fs.makeDirectory(path.join(migrationsDir, "20240101000000_init"));
       yield* fs.writeFileString(
         path.join(migrationsDir, "20240101000000_init", "migration.sql"),
-        "CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);\n--> statement-breakpoint\nCREATE UNIQUE INDEX users_name_unique ON users (name);",
+        initSql,
+      );
+      const [initRecord] = yield* hashMigrations(migrationsDir).pipe(
+        Effect.map((hashes) => Object.values(hashes)),
       );
 
       yield* stack.destroy();
 
-      const database = yield* stack.deploy(
+      // Phase 1: what `drizzle-kit migrate` left behind — deploy without
+      // migrations, then hand-write drizzle's table + the applied schema.
+      const seeded = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("DrizzleMigrationDb", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("DrizzleAdoptionDb");
         }),
       );
-
-      // Layout detection: drizzle dirs delegate to drizzle-orm's migrator.
-      expect(database.migrationsFormat).toEqual("drizzle");
-      expect(database.migrationsTable).toEqual("__drizzle_migrations");
-
-      const tables = yield* listTables(accountId, database.databaseId);
-      expect(tables).toContain("users");
-      expect(tables).toContain("__drizzle_migrations");
-      expect(tables).not.toContain("d1_migrations");
-
-      // drizzle's bookkeeping: name = directory, hash recorded.
-      const applied = yield* queryAll<{ name: string; hash: string }>(
+      yield* execSql(
         accountId,
-        database.databaseId,
-        "SELECT name, hash FROM __drizzle_migrations ORDER BY id;",
+        seeded.databaseId,
+        "CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);",
       );
-      expect(applied.map((r) => r.name)).toEqual(["20240101000000_init"]);
-      expect(applied[0].hash).toMatch(/^[0-9a-f]{64}$/);
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        "CREATE UNIQUE INDEX users_name_unique ON users (name);",
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        `CREATE TABLE __drizzle_migrations (
+           id INTEGER PRIMARY KEY,
+           hash text NOT NULL,
+           created_at numeric,
+           name text,
+           applied_at TEXT
+         );`,
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        `INSERT INTO __drizzle_migrations (hash, created_at, name, applied_at) VALUES
+           ('${initRecord}', 1704067200000, '20240101000000_init', '2024-01-01T00:00:00.000Z');`,
+      );
 
-      // A second migration applies incrementally — the first must not
-      // replay (its bare CREATE TABLE would fail).
+      // Phase 2: first Alchemy deploy with migrations + a new pending one.
       yield* fs.makeDirectory(path.join(migrationsDir, "20240102000000_posts"));
       yield* fs.writeFileString(
         path.join(migrationsDir, "20240102000000_posts", "migration.sql"),
         "CREATE TABLE posts (id integer PRIMARY KEY NOT NULL, title text NOT NULL);",
       );
-      const updated = yield* stack.deploy(
+      const database = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("DrizzleMigrationDb", {
+          return yield* Cloudflare.D1.Database("DrizzleAdoptionDb", {
             migrations: migrationsDir,
           });
         }),
       );
-      expect(updated.databaseId).toEqual(database.databaseId);
-      const appliedAfter = yield* queryAll<{ name: string }>(
+      expect(database.databaseId).toEqual(seeded.databaseId);
+      expect(database.migrationsTable).toEqual("__alchemy_migrations");
+
+      // History converted (hash carried verbatim), only the pending
+      // migration ran (a replay of init's bare CREATE TABLE would fail).
+      const applied = yield* queryAll<{ name: string; hash: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
+      );
+      expect(applied.map((r) => r.name)).toEqual([
+        "20240101000000_init",
+        "20240102000000_posts",
+      ]);
+      expect(applied[0].hash).toBe(initRecord);
+      const tables = yield* listTables(accountId, database.databaseId);
+      expect(tables).toContain("posts");
+
+      // One-way: drizzle's table is frozen, not dropped, not extended.
+      const frozen = yield* queryAll<{ name: string }>(
         accountId,
         database.databaseId,
         "SELECT name FROM __drizzle_migrations ORDER BY id;",
       );
-      expect(appliedAfter.map((r) => r.name)).toEqual([
-        "20240101000000_init",
-        "20240102000000_posts",
-      ]);
+      expect(frozen.map((r) => r.name)).toEqual(["20240101000000_init"]);
 
       yield* stack.destroy();
       yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
@@ -293,10 +326,10 @@ test.provider(
 /**
  * True roll-forward: state row AND physical table are rewritten to exactly
  * what pre-registry Alchemy persisted (3-column `id TEXT PK` table,
- * `migrationsHashes` + `migrationsTable` in state but NO `migrationsFormat`
- * stamp), then a normal deploy runs on top. Passing requires legacy
- * inference (unstamped history → wrangler, detection skipped), the in-place
- * table upgrade, and no replay (0001/0002's bare CREATE TABLEs would fail).
+ * `migrationsHashes` + `migrationsTable` in state), then a normal deploy
+ * runs on top. The persisted table name keeps winning (legacy deploys stay
+ * on `d1_migrations`), the table upgrades in place to Alchemy's shape, and
+ * nothing replays (0001/0002's bare CREATE TABLEs would fail).
  */
 test.provider(
   "rolls forward from pre-registry state and 3-column table without replaying",
@@ -329,11 +362,12 @@ test.provider(
       );
 
       // Phase 2: rewrite BOTH artifacts to the pre-registry shape.
-      // 2a. The physical table: id TEXT PK with zero-padded ids.
+      // 2a. The physical table: drop the modern one, recreate the old
+      // 3-column `id TEXT PK` shape under the old default name.
       yield* execSql(
         accountId,
         deployed.databaseId,
-        "DROP TABLE d1_migrations;",
+        "DROP TABLE __alchemy_migrations;",
       );
       yield* execSql(
         accountId,
@@ -351,7 +385,8 @@ test.provider(
            ('00001', '0001_users.sql', '2024-01-01 00:00:00'),
            ('00002', '0002_posts.sql', '2024-01-01 00:01:00');`,
       );
-      // 2b. The state row: strip the format stamp old code never wrote.
+      // 2b. The state row: exactly what old code persisted — table name
+      // pinned to d1_migrations (the old D1 default).
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
         const row = yield* state.get({
@@ -359,8 +394,10 @@ test.provider(
           stage: "test",
           fqn: "RollForwardDb",
         });
-        const attr = { ...(row as any).attr };
-        delete attr.migrationsFormat;
+        const attr = {
+          ...(row as any).attr,
+          migrationsTable: "d1_migrations",
+        };
         yield* state.set({
           stack: stack.name,
           stage: "test",
@@ -382,8 +419,7 @@ test.provider(
         }),
       );
       expect(rolled.databaseId).toEqual(deployed.databaseId);
-      // Legacy inference resolved to wrangler and stamped it.
-      expect(rolled.migrationsFormat).toEqual("wrangler");
+      // The persisted table name keeps winning for legacy deploys.
       expect(rolled.migrationsTable).toEqual("d1_migrations");
 
       const columns = yield* queryAll<{ name: string; type: string }>(
@@ -391,6 +427,14 @@ test.provider(
         deployed.databaseId,
         "PRAGMA table_info(d1_migrations);",
       );
+      // Upgraded in place to Alchemy's shape.
+      expect(columns.map((c) => c.name)).toEqual([
+        "id",
+        "hash",
+        "created_at",
+        "name",
+        "applied_at",
+      ]);
       expect(columns.find((c) => c.name === "id")?.type).toBe("INTEGER");
       const rows = yield* queryAll<{ id: number; name: string }>(
         accountId,
@@ -413,10 +457,9 @@ test.provider(
 /**
  * The Seth-shaped roll-forward: a drizzle-LAYOUT directory whose history
  * was applied by pre-registry Alchemy under flat keys
- * (`<dir>/migration.sql`) in the legacy table. Legacy inference must keep
- * converging against `d1_migrations` — resolving by layout detection here
- * would start a second bookkeeping table (`__drizzle_migrations`) and
- * replay history into a live database.
+ * (`<dir>/migration.sql`) in the legacy table. The persisted table name
+ * must keep winning — starting a second bookkeeping table would replay
+ * history into a live database.
  */
 test.provider(
   "rolls forward legacy state over a drizzle-layout dir without switching tables",
@@ -479,7 +522,6 @@ test.provider(
           migrationsTable: "d1_migrations",
           migrationsHashes: legacyHashes,
         };
-        delete attr.migrationsFormat;
         yield* state.set({
           stack: stack.name,
           stage: "test",
@@ -487,24 +529,6 @@ test.provider(
           value: { ...(row as any), attr },
         });
       }).pipe(Effect.provide(stack.state));
-
-      // Explicitly requesting the drizzle format against legacy history
-      // must fail the plan — not silently start __drizzle_migrations.
-      const mismatch = yield* Effect.result(
-        stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.D1.Database("RollForwardDrizzleDb", {
-              migrations: { dir: migrationsDir, format: "drizzle" },
-            });
-          }),
-        ),
-      );
-      expect(Result.isFailure(mismatch)).toBe(true);
-      if (Result.isFailure(mismatch)) {
-        expect(String(mismatch.failure)).toContain(
-          "MigrationFormatMismatchError",
-        );
-      }
 
       // Phase 2: add a second drizzle-layout migration and redeploy WITH
       // migrations configured.
@@ -521,8 +545,8 @@ test.provider(
         }),
       );
       expect(rolled.databaseId).toEqual(deployed.databaseId);
-      // Legacy history wins over layout detection.
-      expect(rolled.migrationsFormat).toEqual("wrangler");
+      // The persisted table name keeps winning; no second bookkeeping
+      // table appears.
       expect(rolled.migrationsTable).toEqual("d1_migrations");
 
       const tables = yield* listTables(accountId, deployed.databaseId);
@@ -537,8 +561,10 @@ test.provider(
         "SELECT name FROM d1_migrations ORDER BY id;",
       );
       expect(rows.map((r) => r.name)).toEqual([
+        // The legacy row keeps its flat key; new records use the current
+        // directory-name convention. Aliasing keeps both recognized.
         "20240101000000_init/migration.sql",
-        "20240102000000_posts/migration.sql",
+        "20240102000000_posts",
       ]);
 
       yield* stack.destroy();
@@ -546,8 +572,15 @@ test.provider(
     }).pipe(logLevel),
 );
 
+/**
+ * State-lost adoption of the OLDEST pre-registry deploys: a 2-column
+ * `d1_migrations` exists but state carries no table name. The legacy table
+ * is treated as a conversion source — history copies into
+ * `__alchemy_migrations` and the old table is frozen, exactly like a
+ * foreign tool's table.
+ */
 test.provider(
-  "migrates legacy 2-column migration table to wrangler schema",
+  "converts a legacy 2-column d1_migrations table into __alchemy_migrations",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -556,6 +589,19 @@ test.provider(
       const migrationsDir = yield* fs.makeTempDirectory({
         prefix: "alchemy-d1-legacy-",
       });
+      // History validation is strict (drizzle's own upgrade policy): every
+      // recorded row must match a local file, so the two "previously
+      // applied" migrations exist in the dir. Their bare CREATE TABLEs
+      // would fail if replayed, which is exactly what the upgrade must not
+      // do.
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0000_initial_setup.sql"),
+        "CREATE TABLE settings (id INTEGER PRIMARY KEY, value TEXT);",
+      );
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_add_indexes.sql"),
+        "CREATE INDEX settings_value_idx ON settings (value);",
+      );
       yield* fs.writeFileString(
         path.join(migrationsDir, "0002_create_users.sql"),
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -592,9 +638,11 @@ test.provider(
          ('0001_add_indexes.sql', datetime('now', '-1 hour'));`,
       );
 
-      // Step 2: deploy again with a migrationsDir; the resource should detect
-      // the legacy 2-column schema, migrate to (id, name, applied_at), and apply
-      // the new migrations on top.
+      // Step 2: deploy again with a migrationsDir. No table name is
+      // persisted in state, so the legacy table becomes a conversion
+      // source: history copies into __alchemy_migrations, only the two
+      // pending migrations run (0000/0001's SQL would fail if replayed
+      // out of order against the frozen history's assumptions).
       const upgraded = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.D1.Database("LegacyMigrationDb", {
@@ -603,30 +651,45 @@ test.provider(
         }),
       );
       expect(upgraded.databaseId).toEqual(seeded.databaseId);
+      expect(upgraded.migrationsTable).toEqual("__alchemy_migrations");
 
       const columns = yield* queryAll<{ name: string; type: string }>(
         accountId,
         seeded.databaseId,
-        "PRAGMA table_info(d1_migrations);",
+        "PRAGMA table_info(__alchemy_migrations);",
       );
-      const colNames = columns.map((c) => c.name).sort();
-      expect(colNames).toEqual(["applied_at", "id", "name"]);
-      // The rebuild lands on wrangler's real shape: INTEGER ids.
-      expect(columns.find((c) => c.name === "id")?.type).toBe("INTEGER");
+      expect(columns.map((c) => c.name)).toEqual([
+        "id",
+        "hash",
+        "created_at",
+        "name",
+        "applied_at",
+      ]);
 
       const records = yield* queryAll<{ id: number; name: string }>(
         accountId,
         seeded.databaseId,
-        "SELECT id, name FROM d1_migrations ORDER BY id;",
+        "SELECT id, name FROM __alchemy_migrations ORDER BY id;",
       );
-      const names = records.map((r) => r.name);
-      expect(names).toContain("0000_initial_setup.sql");
-      expect(names).toContain("0001_add_indexes.sql");
-      expect(names).toContain("0002_create_users.sql");
-      expect(names).toContain("0003_create_posts.sql");
-
-      // Ids are sequential autoincrement ordinals preserving apply order.
+      expect(records.map((r) => r.name)).toEqual([
+        "0000_initial_setup.sql",
+        "0001_add_indexes.sql",
+        "0002_create_users.sql",
+        "0003_create_posts.sql",
+      ]);
+      // Ids are sequential ordinals preserving apply order.
       expect(records.map((r) => r.id)).toEqual(records.map((_, i) => i + 1));
+
+      // The legacy table is frozen, never dropped or rewritten.
+      const frozen = yield* queryAll<{ id: string }>(
+        accountId,
+        seeded.databaseId,
+        "SELECT id FROM d1_migrations ORDER BY id;",
+      );
+      expect(frozen.map((r) => r.id)).toEqual([
+        "0000_initial_setup.sql",
+        "0001_add_indexes.sql",
+      ]);
 
       yield* stack.destroy();
       yield* waitForDatabaseToBeDeleted(seeded.databaseId, accountId);

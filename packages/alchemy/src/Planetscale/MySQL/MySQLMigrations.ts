@@ -88,8 +88,8 @@ const makeMySQLMigrationExecutor = (connection: Connection): SqlExecutor => ({
 /**
  * Resolve the migration format for `input` and apply pending migrations
  * against the branch through a temporary admin password. Inline formats
- * run through a scoped mysql2 connection; the `prisma` format delegates to
- * `prisma migrate deploy` with a constructed `mysql://` URL. Returns the
+ * run through a scoped mysql2 connection; foreign (drizzle/prisma) or
+ * legacy history is converted one-way into Alchemy's table. Returns the
  * resolved format/table (for stamping) and per-file content hashes.
  */
 export const runMySQLMigrations = (
@@ -107,29 +107,14 @@ export const runMySQLMigrations = (
           }),
       ),
     );
-    const resolved: ResolvedMigrations = yield* resolveMigrations({
-      input,
-      stamped,
-      dialect: "mysql",
-    });
+    const resolved: ResolvedMigrations = resolveMigrations({ input, stamped });
     if (Object.keys(hashes).length > 0) {
-      if (resolved.format === "prisma") {
-        yield* withTemporaryMySQLPassword(target, (password) =>
-          applyMigrations({
-            resolved,
-            connectionUrl: Redacted.make(
-              `mysql://${encodeURIComponent(password.username)}:${encodeURIComponent(Redacted.value(password.password))}@${password.host}/${target.database}?sslaccept=strict`,
-            ),
-          }),
-        );
-      } else {
-        yield* withMySQLConnection(target, (connection) =>
-          applyMigrations({
-            resolved,
-            executor: makeMySQLMigrationExecutor(connection),
-          }),
-        );
-      }
+      yield* withMySQLConnection(target, (connection) =>
+        applyMigrations({
+          resolved,
+          executor: makeMySQLMigrationExecutor(connection),
+        }),
+      );
     }
     return { resolved, hashes };
   });

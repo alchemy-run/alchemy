@@ -178,11 +178,10 @@ test.provider(
 
 /**
  * Migrations apply against the local simulator: reconcile boots an
- * ephemeral gateway workerd and drives the same format-registry migration
- * flow the live provider uses (wrangler's real `d1_migrations` table,
- * idempotent re-application, autoincrement ids). Verified through the
- * deployed worker's binding — the same DO SQLite storage the gateway wrote
- * to.
+ * ephemeral gateway workerd and drives the same migration flow the live
+ * provider uses (Alchemy's `__alchemy_migrations` table, idempotent
+ * re-application). Verified through the deployed worker's binding — the
+ * same DO SQLite storage the gateway wrote to.
  */
 test.provider(
   "D1 migrations apply against the local simulator and re-apply incrementally",
@@ -219,7 +218,7 @@ test.provider(
 
       const v1 = yield* stack.deploy(deploy);
       expect(v1.db.databaseId).toMatch(/^dev:/);
-      expect(v1.db.migrationsTable).toBe("d1_migrations");
+      expect(v1.db.migrationsTable).toBe("__alchemy_migrations");
       expect(Object.keys(v1.db.migrationsHashes)).toEqual(["0001_users.sql"]);
 
       const url = v1.worker.url!;
@@ -227,7 +226,7 @@ test.provider(
         tables: string[];
       };
       expect(schema.tables).toContain("users");
-      expect(schema.tables).toContain("d1_migrations");
+      expect(schema.tables).toContain("__alchemy_migrations");
 
       const users = (yield* getJsonReady(`${url}/users`)) as {
         users: string[];
@@ -249,7 +248,7 @@ test.provider(
         "0002_posts.sql",
       ]);
 
-      // wrangler's real shape: INTEGER AUTOINCREMENT ids, name-keyed.
+      // Alchemy's shape: INTEGER ids, name-keyed.
       const migrations = (yield* getJsonReady(`${url}/migrations`)) as {
         migrations: Array<{ id: number; name: string }>;
       };

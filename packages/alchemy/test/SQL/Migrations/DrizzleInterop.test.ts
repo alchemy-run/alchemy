@@ -1,4 +1,4 @@
-import { applyDrizzleFormat } from "@/SQL/Migrations/index.ts";
+import { applyMigrations } from "@/SQL/Migrations/index.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Database } from "bun:sqlite";
 import { expect, layer } from "alchemy-test";
@@ -8,60 +8,63 @@ import * as Effect from "effect/Effect";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";
 
 /**
- * Interop is the property that matters (design doc §6): after Alchemy
- * applies, drizzle's own migrator must see nothing pending — and vice
- * versa. These tests run drizzle-orm's REAL migrator (bun-sqlite driver)
- * against the same database our proxy-delegated flow uses.
+ * Adopting a drizzle-kit-migrated database (the Seth case): the user ran
+ * `drizzle-kit generate` + `drizzle-kit migrate` before Alchemy ever saw
+ * the database. Migrating to Alchemy is a ONE-WAY conversion — drizzle's
+ * REAL migrator (bun-sqlite driver) produces the starting state, our flow
+ * copies its history into `__alchemy_migrations` and owns bookkeeping from
+ * then on; `__drizzle_migrations` is frozen, never written or dropped.
  */
 
 const fixturesDir = new URL("./fixtures/drizzle-v1", import.meta.url).pathname;
 
 const describe = layer(NodeServices.layer);
 
-const migrationRows = (db: Database) =>
-  db
-    .query(
-      "SELECT id, hash, created_at, name FROM __drizzle_migrations ORDER BY id;",
-    )
-    .all() as Array<{
-    id: number;
+const rowsOf = (db: Database, table: string) =>
+  db.query(`SELECT hash, name FROM ${table} ORDER BY id;`).all() as Array<{
     hash: string;
-    created_at: number;
     name: string;
   }>;
 
-describe("drizzle interop (sqlite)", (it) => {
-  it.effect("alchemy-first: drizzle's migrator sees nothing pending", () =>
-    Effect.gen(function* () {
-      const db = new Database(":memory:");
-      const executor = makeSqliteExecutor(db);
+describe("drizzle adoption (one-way conversion)", (it) => {
+  it.effect(
+    "converts drizzle-kit history into __alchemy_migrations without replaying",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        // The user's pre-Alchemy state, produced by drizzle's own migrator.
+        yield* Effect.sync(() =>
+          drizzleMigrate(drizzle({ client: db }), {
+            migrationsFolder: fixturesDir,
+          }),
+        );
+        const drizzleRows = rowsOf(db, "__drizzle_migrations");
+        expect(drizzleRows.length).toBe(2);
 
-      yield* applyDrizzleFormat({ executor, dir: fixturesDir });
+        // First Alchemy deploy: adopt. A replay would throw on the bare
+        // CREATE TABLEs, so passing proves conversion-not-reapplication.
+        const executor = makeSqliteExecutor(db);
+        yield* applyMigrations({
+          resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+          executor,
+        });
 
-      expect(tableNames(db)).toEqual(
-        expect.arrayContaining(["__drizzle_migrations", "posts", "users"]),
-      );
-      const afterOurs = migrationRows(db);
-      expect(afterOurs.map((r) => r.name)).toEqual([
-        "20240101000000_init",
-        "20240102000000_add_posts",
-      ]);
-      expect(afterOurs[0].created_at).toBe(Date.UTC(2024, 0, 1));
-
-      // Now drizzle's own migrator: it must match every row by name and
-      // run nothing (a replay would throw on the bare CREATE TABLEs).
-      yield* Effect.sync(() =>
-        drizzleMigrate(drizzle({ client: db }), {
-          migrationsFolder: fixturesDir,
-        }),
-      );
-      expect(migrationRows(db)).toEqual(afterOurs);
-    }),
+        const ours = rowsOf(db, "__alchemy_migrations");
+        expect(ours.map((r) => r.name)).toEqual([
+          "20240101000000_init",
+          "20240102000000_add_posts",
+        ]);
+        // drizzle's hashes are sha256 of migration.sql — carried verbatim.
+        expect(ours.map((r) => r.hash)).toEqual(drizzleRows.map((r) => r.hash));
+        // The drizzle table is frozen, not dropped.
+        expect(rowsOf(db, "__drizzle_migrations")).toEqual(drizzleRows);
+        expect(tableNames(db)).toEqual(
+          expect.arrayContaining(["users", "posts", "__drizzle_migrations"]),
+        );
+      }),
   );
 
-  it.effect("drizzle-first: our flow sees nothing pending (adoption)", () =>
-    // Seth's case: `drizzle-kit generate` + `drizzle-kit migrate` happened
-    // before Alchemy ever saw the database. No baselining required.
+  it.effect("after conversion, drizzle's table is never written again", () =>
     Effect.gen(function* () {
       const db = new Database(":memory:");
       yield* Effect.sync(() =>
@@ -69,12 +72,21 @@ describe("drizzle interop (sqlite)", (it) => {
           migrationsFolder: fixturesDir,
         }),
       );
-      const afterTheirs = migrationRows(db);
-      expect(afterTheirs.length).toBe(2);
+      const frozen = rowsOf(db, "__drizzle_migrations");
 
       const executor = makeSqliteExecutor(db);
-      yield* applyDrizzleFormat({ executor, dir: fixturesDir });
-      expect(migrationRows(db)).toEqual(afterTheirs);
+      yield* applyMigrations({
+        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+        executor,
+      });
+      yield* applyMigrations({
+        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+        executor,
+      });
+
+      // One-way: drizzle's table never moves again.
+      expect(rowsOf(db, "__drizzle_migrations")).toEqual(frozen);
+      expect(rowsOf(db, "__alchemy_migrations").length).toBe(2);
     }),
   );
 
@@ -82,31 +94,18 @@ describe("drizzle interop (sqlite)", (it) => {
     Effect.gen(function* () {
       const db = new Database(":memory:");
       const executor = makeSqliteExecutor(db);
-      yield* applyDrizzleFormat({ executor, dir: fixturesDir });
-      const first = migrationRows(db);
-      yield* applyDrizzleFormat({ executor, dir: fixturesDir });
-      expect(migrationRows(db)).toEqual(first);
+      yield* applyMigrations({
+        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+        executor,
+      });
+      const first = rowsOf(db, "__alchemy_migrations");
+      yield* applyMigrations({
+        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+        executor,
+      });
+      expect(rowsOf(db, "__alchemy_migrations")).toEqual(first);
+      // No drizzle table was ever created on a greenfield database.
+      expect(tableNames(db)).not.toContain("__drizzle_migrations");
     }),
-  );
-
-  it.effect(
-    "hashes we record byte-match drizzle's (checksum interop, not just names)",
-    () =>
-      Effect.gen(function* () {
-        const ourDb = new Database(":memory:");
-        yield* applyDrizzleFormat({
-          executor: makeSqliteExecutor(ourDb),
-          dir: fixturesDir,
-        });
-        const theirDb = new Database(":memory:");
-        yield* Effect.sync(() =>
-          drizzleMigrate(drizzle({ client: theirDb }), {
-            migrationsFolder: fixturesDir,
-          }),
-        );
-        expect(migrationRows(ourDb).map((r) => r.hash)).toEqual(
-          migrationRows(theirDb).map((r) => r.hash),
-        );
-      }),
   );
 });

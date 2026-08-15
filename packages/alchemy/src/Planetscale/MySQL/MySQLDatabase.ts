@@ -223,17 +223,11 @@ export const MySQLDatabaseProvider = () =>
         if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
           return { action: "update", stables } as const;
         }
-        // Resolution also fails the plan when an explicit format
-        // contradicts the stamped one — the providerMode doctrine.
-        const resolved = yield* resolveMigrations({
+        const resolved = resolveMigrations({
           input: migrationsInput,
           stamped: stampedOf(output),
-          dialect: "mysql",
         });
-        if (
-          resolved.table !== (output?.migrationsTable ?? resolved.table) ||
-          resolved.format !== (output?.migrationsFormat ?? resolved.format)
-        ) {
+        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
           return { action: "update", stables } as const;
         }
       }
@@ -300,7 +294,6 @@ export const MySQLDatabaseProvider = () =>
                 migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
                 migrationsTable:
                   output?.migrationsTable ?? olds?.migrationsTable,
-                migrationsFormat: output?.migrationsFormat,
                 migrationsHashes: output?.migrationsHashes ?? {},
                 importHashes: output?.importHashes ?? {},
                 clusterSize: output?.clusterSize ?? "",
@@ -475,8 +468,6 @@ export const MySQLDatabaseProvider = () =>
         // When migrations are removed, keep the stamp (like the hashes) so
         // a later re-add resolves against the same bookkeeping table.
         migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
-        migrationsFormat:
-          migrations?.resolved.format ?? output?.migrationsFormat,
         migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
         importHashes,
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
@@ -523,7 +514,6 @@ export const MySQLDatabaseProvider = () =>
                 region: { slug: data.region.slug },
                 migrationsDir: undefined,
                 migrationsTable: undefined,
-                migrationsFormat: undefined,
                 migrationsHashes: {},
                 importHashes: {},
                 clusterSize: "",

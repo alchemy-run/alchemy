@@ -17,7 +17,6 @@ import {
   migrationsInputOf,
   resolveMigrations,
   stampedOf,
-  type MigrationFormatTag,
   type MigrationsInput,
   type ResolvedMigrations,
 } from "../../SQL/Migrations/index.ts";
@@ -85,14 +84,15 @@ export type DatabaseProps = {
   jurisdiction?: Jurisdiction;
   /**
    * SQL migrations to apply on deploy. Accepts a directory path, a
-   * `Drizzle.Schema` resource, or a `{ dir, format?, table? }` object.
+   * `Drizzle.Schema` resource, or a `{ dir, table? }` object.
    *
-   * The applied-migrations **format** is detected from the directory layout
-   * (drizzle-kit v1 dirs → drizzle's own `__drizzle_migrations`
-   * bookkeeping; flat `.sql` files → wrangler's `d1_migrations` table, so
-   * `wrangler d1 migrations list` interoperates). A database previously
-   * migrated with `drizzle-kit migrate` or `wrangler d1 migrations apply`
-   * is picked up where the other tool left off — no baselining required.
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated with `drizzle-kit migrate` or
+   * `wrangler d1 migrations apply` is adopted by a ONE-WAY conversion on
+   * first deploy: the old tool's applied history is copied into Alchemy's
+   * table (validated against the local files) and the old table is left
+   * frozen — never written, never dropped. From then on Alchemy owns the
+   * migration state.
    *
    * Pending migrations are detected on each deploy and applied in order as
    * part of `update`.
@@ -109,8 +109,8 @@ export type DatabaseProps = {
    * Name of the table used to track applied migrations.
    *
    * @deprecated Use {@link migrations} — `migrations: { dir, table }`.
-   * @default the resolved format's table (`d1_migrations` for flat dirs,
-   * `__drizzle_migrations` for drizzle-kit dirs)
+   * @default "__alchemy_migrations" (legacy deploys that persisted another
+   * name keep converging against it)
    */
   migrationsTable?: string;
   /**
@@ -146,7 +146,6 @@ export type Database = Resource<
     accountId: string;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
-    migrationsFormat: MigrationFormatTag | undefined;
     migrationsHashes: Record<string, string>;
     importHashes: Record<string, string>;
   },
@@ -198,13 +197,12 @@ export type Database = Resource<
  * migrations are skipped on subsequent deploys; new files are detected
  * automatically and applied as part of the next update.
  *
- * The bookkeeping format follows the tool that generated the directory.
- * Flat `.sql` files use wrangler's real `d1_migrations` table, so
- * `wrangler d1 migrations list/apply` and Alchemy can interleave freely.
- * drizzle-kit directories delegate to drizzle-orm's own migrator
- * (`__drizzle_migrations`), so a database previously migrated with
- * `drizzle-kit migrate` is picked up where drizzle left off — no
- * baselining required. A legacy Alchemy tracking table is detected by its
+ * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table —
+ * one format, owned by Alchemy. A database previously migrated with
+ * drizzle-kit, Prisma, or wrangler is adopted by a one-way conversion on
+ * first deploy: the old tool's applied history is copied into Alchemy's
+ * table and the old table is left frozen (never written, never dropped).
+ * No baselining required. Legacy Alchemy tracking tables are detected by
  * column shape and upgraded in place.
  *
  * @example Apply migrations from a directory
@@ -214,7 +212,7 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Drizzle migrations (drizzle-kit layout, detected automatically)
+ * @example Drizzle migrations (adopts an existing drizzle-kit-migrated database)
  * ```typescript
  * const schema = yield* Drizzle.Schema("app-schema", {
  *   schema: "./src/schema.ts",
@@ -225,14 +223,10 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Pin the format and table explicitly
+ * @example Custom bookkeeping table name
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
- *   migrations: {
- *     dir: "./migrations",
- *     format: "wrangler",
- *     table: "d1_migrations",
- *   },
+ *   migrations: { dir: "./migrations", table: "my_migrations" },
  * });
  * ```
  *
@@ -336,17 +330,11 @@ export const ProviderLive = () =>
         if (!recordsEqual(newHashes, oldHashes)) {
           return { action: "update" } as const;
         }
-        // Resolution also fails the plan when an explicit format
-        // contradicts the stamped one — the providerMode doctrine.
-        const resolved = yield* resolveMigrations({
+        const resolved = resolveMigrations({
           input: migrationsInput,
           stamped: stampedOf(output),
-          dialect: "sqlite",
         });
-        if (
-          resolved.table !== (output?.migrationsTable ?? resolved.table) ||
-          resolved.format !== (output?.migrationsFormat ?? resolved.format)
-        ) {
+        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
           return { action: "update" } as const;
         }
       } else if (
@@ -387,7 +375,6 @@ export const ProviderLive = () =>
                 accountId,
                 migrationsDir: undefined,
                 migrationsTable: undefined,
-                migrationsFormat: undefined,
                 migrationsHashes: {},
                 importHashes: {},
               })),
@@ -415,7 +402,6 @@ export const ProviderLive = () =>
               accountId: output.accountId,
               migrationsDir: output.migrationsDir,
               migrationsTable: output.migrationsTable,
-              migrationsFormat: output.migrationsFormat,
               migrationsHashes: output.migrationsHashes,
               importHashes: output.importHashes,
             })),
@@ -439,7 +425,6 @@ export const ProviderLive = () =>
           accountId,
           migrationsDir: olds?.migrationsDir,
           migrationsTable: olds?.migrationsTable,
-          migrationsFormat: undefined,
           migrationsHashes: {},
           importHashes: {},
         };
@@ -557,18 +542,18 @@ export const ProviderLive = () =>
         });
       }
 
-      // Sync migrations — the registry flow is idempotent (each format
-      // skips already-applied entries), so this works for both first
-      // create and ongoing updates.
+      // Sync migrations — the flow is idempotent (already-applied entries
+      // are skipped), so this works for both first create and ongoing
+      // updates. Foreign (drizzle/prisma/wrangler) or legacy history is
+      // converted into __alchemy_migrations on first contact.
       const migrationsInput = migrationsInputOf(news);
       let resolvedMigrations: ResolvedMigrations | undefined;
       let migrationsHashes: Record<string, string>;
       if (migrationsInput) {
         migrationsHashes = yield* hashMigrations(migrationsInput.dir);
-        resolvedMigrations = yield* resolveMigrations({
+        resolvedMigrations = resolveMigrations({
           input: migrationsInput,
           stamped: stampedOf(output),
-          dialect: "sqlite",
         });
         if (Object.keys(migrationsHashes).length > 0) {
           const queryDb = yield* d1.queryDatabase;
@@ -609,8 +594,6 @@ export const ProviderLive = () =>
         // When migrations are removed, keep the stamp (like the hashes) so
         // a later re-add resolves against the same bookkeeping table.
         migrationsTable: resolvedMigrations?.table ?? output?.migrationsTable,
-        migrationsFormat:
-          resolvedMigrations?.format ?? output?.migrationsFormat,
         migrationsHashes,
         importHashes,
       };
@@ -674,15 +657,11 @@ export const ProviderLocal = () =>
             if (!recordsEqual(newHashes, output.migrationsHashes ?? {})) {
               return { action: "update" } as const;
             }
-            const resolved = yield* resolveMigrations({
+            const resolved = resolveMigrations({
               input: migrationsInput,
               stamped: stampedOf(output),
-              dialect: "sqlite",
             });
-            if (
-              resolved.table !== (output.migrationsTable ?? resolved.table) ||
-              resolved.format !== (output.migrationsFormat ?? resolved.format)
-            ) {
+            if (resolved.table !== (output.migrationsTable ?? resolved.table)) {
               return { action: "update" } as const;
             }
           }
@@ -705,19 +684,17 @@ export const ProviderLocal = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const databaseId = output?.databaseId ?? generateLocalId();
 
-          // Sync migrations — the registry flow is idempotent (each format
-          // skips applied entries), driven through the ephemeral local
-          // gateway so the SAME format/bookkeeping applies locally as in
+          // Sync migrations — idempotent, driven through the ephemeral
+          // local gateway so the SAME bookkeeping applies locally as in
           // the cloud.
           const migrationsInput = migrationsInputOf(news);
           let resolvedMigrations: ResolvedMigrations | undefined;
           let migrationsHashes: Record<string, string> = {};
           if (migrationsInput) {
             migrationsHashes = yield* hashMigrations(migrationsInput.dir);
-            resolvedMigrations = yield* resolveMigrations({
+            resolvedMigrations = resolveMigrations({
               input: migrationsInput,
               stamped: stampedOf(output),
-              dialect: "sqlite",
             });
             if (Object.keys(migrationsHashes).length > 0) {
               const resolved = resolvedMigrations;
@@ -768,8 +745,6 @@ export const ProviderLocal = () =>
             migrationsDir: migrationsInput?.dir,
             migrationsTable:
               resolvedMigrations?.table ?? output?.migrationsTable,
-            migrationsFormat:
-              resolvedMigrations?.format ?? output?.migrationsFormat,
             migrationsHashes,
             importHashes,
           };

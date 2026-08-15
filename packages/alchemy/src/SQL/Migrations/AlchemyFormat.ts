@@ -1,5 +1,10 @@
 import * as Effect from "effect/Effect";
 import {
+  convertedRowInsertSql,
+  findForeignHistory,
+  matchForeignRows,
+} from "./Convert.ts";
+import {
   MigrationError,
   MigrationHistoryConflictError,
   type MigrationDialect,
@@ -12,11 +17,12 @@ import { quoteIdentifier, sqlLiteral } from "./Records.ts";
 export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 
 /**
- * The `alchemy` format is deliberately NOT a fifth invented shape — it is
- * drizzle's column shape (`id, hash, created_at, name, applied_at`,
- * name-keyed applied-detection) under a neutral table name, so a later
- * "I adopted drizzle-kit" conversion is a rename plus a name rewrite rather
- * than a data migration.
+ * THE Alchemy applied-migrations table: `id, hash, created_at, name,
+ * applied_at`, name-keyed detection. This is deliberately drizzle's column
+ * shape — a database whose history lives in `__drizzle_migrations` adopts
+ * with a verbatim row copy — but Alchemy owns the table and it is the only
+ * format Alchemy ever writes. Migrating from drizzle/prisma/wrangler
+ * bookkeeping is a one-way conversion performed once (see `Convert.ts`).
  */
 const createTableSql = (table: string, dialect: MigrationDialect): string => {
   const quoted = quoteIdentifier(table, dialect);
@@ -52,16 +58,10 @@ const insertSql = (
   table: string,
   dialect: MigrationDialect,
   record: Pick<MigrationRecord, "name" | "hash" | "createdAtMillis">,
-  appliedAt?: string,
 ): string => {
   const quoted = quoteIdentifier(table, dialect);
-  const applied =
-    dialect === "sqlite"
-      ? `, ${appliedAt ? sqlLiteral(appliedAt) : "datetime('now')"}`
-      : appliedAt
-        ? `, ${sqlLiteral(appliedAt)}`
-        : "";
-  const appliedColumn = dialect === "sqlite" || appliedAt ? ", applied_at" : "";
+  const applied = dialect === "sqlite" ? ", datetime('now')" : "";
+  const appliedColumn = dialect === "sqlite" ? ", applied_at" : "";
   return `INSERT INTO ${quoted} (hash, created_at, name${appliedColumn}) VALUES (${sqlLiteral(record.hash)}, ${sqlLiteral(record.createdAtMillis ?? null)}, ${sqlLiteral(record.name)}${applied});`;
 };
 
@@ -75,68 +75,45 @@ const renameSql = (
     : `ALTER TABLE ${quoteIdentifier(from, dialect)} RENAME TO ${quoteIdentifier(to, dialect)};`;
 
 /**
- * Rebuild a legacy Alchemy table (`id TEXT PK, name, applied_at` — or the
- * 2-column shape whose primary column carried the name) into the current
- * drizzle-shaped table, backfilling `hash`/`created_at` from local records
- * matched by name. A recorded row with no matching local file is a
- * hard error, mirroring drizzle's own `upgradeIfNeeded`: it means
- * migrations were applied that this checkout does not have.
+ * Rebuild an in-place table (legacy Alchemy 3-column / oldest 2-column /
+ * wrangler-shaped) into the Alchemy shape, backfilling `hash` and
+ * `created_at` from local records matched by name. A recorded row with no
+ * matching local file is a hard error — mirrors the same rule conversion
+ * applies (see `matchForeignRows`).
  */
-const upgradeLegacyTable = (options: {
+const rebuildInPlace = (options: {
   executor: SqlExecutor;
   table: string;
   records: ReadonlyArray<MigrationRecord>;
-  twoColumn: boolean;
+  /** SQL expression yielding the migration name from the old table. */
+  nameExpr: string;
+  tool: "legacy-alchemy" | "wrangler";
 }) =>
   Effect.gen(function* () {
-    const { executor, table, records, twoColumn } = options;
+    const { executor, table, records, nameExpr } = options;
     const dialect = executor.dialect;
     const quoted = quoteIdentifier(table, dialect);
-    const nameExpr = twoColumn ? "id" : "name";
     const rows = yield* executor.query(
       `SELECT ${nameExpr} AS name, applied_at FROM ${quoted} ORDER BY id;`,
     );
-
-    const byName = new Map(records.map((r) => [r.name, r]));
-    // Legacy state written against drizzle-layout dirs recorded
-    // `dir/migration.sql`; current records key drizzle dirs by `dir`.
-    const byDirName = new Map(
-      records.map((r) => [`${r.name}/migration.sql`, r]),
-    );
-    const matched: Array<{
-      record: MigrationRecord;
-      name: string;
-      appliedAt: string | undefined;
-    }> = [];
-    const unmatched: string[] = [];
-    for (const row of rows) {
-      const name = String(row.name);
-      const record = byName.get(name) ?? byDirName.get(name);
-      if (!record) {
-        unmatched.push(name);
-        continue;
-      }
-      matched.push({
-        record,
-        // Preserve the recorded key so applied-detection keeps matching
-        // state written by older Alchemy versions.
-        name,
-        appliedAt:
-          row.applied_at === null || row.applied_at === undefined
-            ? undefined
-            : String(row.applied_at),
-      });
-    }
-    if (unmatched.length > 0) {
-      return yield* new MigrationHistoryConflictError({
-        table,
-        unmatched,
-        message:
-          `While upgrading migrations table "${table}", ${unmatched.length} recorded ` +
-          `migration(s) match no local file: ${unmatched.join(", ")}. Migrations were ` +
-          `applied to this database that are missing from the local environment.`,
-      });
-    }
+    const matched = yield* matchForeignRows({
+      history: {
+        tool: options.tool,
+        source: table,
+        rows: rows
+          .filter((row) => row.name !== null && row.name !== undefined)
+          .map((row) => ({
+            name: String(row.name),
+            hash: undefined,
+            createdAtMillis: undefined,
+            appliedAt:
+              row.applied_at === null || row.applied_at === undefined
+                ? undefined
+                : String(row.applied_at),
+          })),
+      },
+      records,
+    });
 
     const temp = `${table}_alchemy_upgrade`;
     yield* executor.batch([
@@ -145,14 +122,7 @@ const upgradeLegacyTable = (options: {
         "CREATE TABLE IF NOT EXISTS",
         "CREATE TABLE",
       ),
-      ...matched.map(({ record, name, appliedAt }) =>
-        insertSql(
-          temp,
-          dialect,
-          { name, hash: record.hash, createdAtMillis: record.createdAtMillis },
-          appliedAt,
-        ),
-      ),
+      ...matched.map((row) => convertedRowInsertSql(temp, dialect, row)),
       `DROP TABLE ${quoted};`,
       renameSql(temp, table, dialect),
     ]);
@@ -167,33 +137,62 @@ const ensureTable = (options: {
     const { executor, table, records } = options;
     const shape = classifyTable(yield* tableColumns(executor, table));
     switch (shape) {
-      case "absent":
-        yield* executor.batch([createTableSql(table, executor.dialect)]);
+      case "absent": {
+        // Greenfield for us — but possibly not for the database. Adopt any
+        // history the previous tool (drizzle-kit / prisma / wrangler) left
+        // behind: copy it into our table ONCE and freeze theirs. One-way.
+        const history = yield* findForeignHistory({ executor, table });
+        const converted = history
+          ? yield* matchForeignRows({ history, records })
+          : [];
+        yield* executor.batch([
+          createTableSql(table, executor.dialect),
+          ...converted.map((row) =>
+            convertedRowInsertSql(table, executor.dialect, row),
+          ),
+        ]);
         return;
+      }
       case "drizzle-shaped":
+        // Already our column shape (shared with drizzle v1) — including
+        // the case where the user pointed `table` straight at an existing
+        // `__drizzle_migrations`. Adopt in place.
         return;
       case "legacy-alchemy":
-        yield* upgradeLegacyTable({
+        yield* rebuildInPlace({
           executor,
           table,
           records,
-          twoColumn: false,
+          nameExpr: "name",
+          tool: "legacy-alchemy",
         });
         return;
       case "legacy-2col":
-        yield* upgradeLegacyTable({
+        yield* rebuildInPlace({
           executor,
           table,
           records,
-          twoColumn: true,
+          nameExpr: "id",
+          tool: "legacy-alchemy",
         });
         return;
       case "wrangler":
+        // A wrangler table at OUR resolved table name (e.g. legacy D1
+        // state pinned to `d1_migrations`, or a wrangler user's table
+        // adopted under an explicit `table:`): convert it in place.
+        yield* rebuildInPlace({
+          executor,
+          table,
+          records,
+          nameExpr: "name",
+          tool: "wrangler",
+        });
+        return;
       case "unknown":
         return yield* new MigrationError({
           message:
-            `Migrations table "${table}" has an unexpected column layout for the ` +
-            `"alchemy" format; refusing to write bookkeeping into it.`,
+            `Migrations table "${table}" has an unrecognized column layout; ` +
+            `refusing to write bookkeeping into it.`,
         });
     }
   });
@@ -214,16 +213,14 @@ const appliedNames = (executor: SqlExecutor, table: string) =>
     );
 
 /**
- * Apply pending migrations with `alchemy`-format bookkeeping: drizzle's
- * column shape under `__alchemy_migrations`, name-keyed detection. Each
+ * Apply pending migrations with Alchemy's bookkeeping. Idempotent: each
  * migration's statements and its bookkeeping INSERT go through
  * `executor.batch` as one unit (a transaction on pg/mysql, one batched
- * query on D1).
+ * query on D1, which has no transactions over HTTP).
  *
- * Legacy names: pre-registry Alchemy recorded drizzle-layout migrations as
- * `dir/migration.sql`. After a legacy upgrade those rows keep their key, so
- * applied-detection here checks both the record name and its
- * `/migration.sql`-suffixed alias.
+ * Applied-detection is name-keyed with layout aliasing: pre-registry
+ * Alchemy recorded drizzle-layout migrations under `<dir>/migration.sql`
+ * while current records key them by `<dir>`, so both keys are honored.
  */
 export const applyAlchemyFormat = (options: {
   executor: SqlExecutor;
@@ -233,12 +230,13 @@ export const applyAlchemyFormat = (options: {
   Effect.gen(function* () {
     const { executor, table, records } = options;
     if (records.length === 0) return;
-    yield* ensureTable(options);
+    yield* ensureTable({ executor, table, records });
     const applied = yield* appliedNames(executor, table);
     for (const record of records) {
       if (
         applied.has(record.name) ||
-        applied.has(`${record.name}/migration.sql`)
+        applied.has(`${record.name}/migration.sql`) ||
+        applied.has(record.name.replace(/\/migration\.sql$/, ""))
       ) {
         continue;
       }

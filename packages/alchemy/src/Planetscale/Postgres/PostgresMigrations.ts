@@ -84,8 +84,8 @@ const makePostgresMigrationExecutor = (client: Client): SqlExecutor => ({
 /**
  * Resolve the migration format for `input` and apply pending migrations
  * against the branch through a temporary role. Inline formats run through
- * a scoped pg client; the `prisma` format delegates to
- * `prisma migrate deploy` with the role's connection URL. Returns the
+ * a scoped pg client; foreign (drizzle/prisma) or legacy history is
+ * converted one-way into Alchemy's table on first contact. Returns the
  * resolved format/table (for stamping) and per-file content hashes.
  */
 export const runPostgresMigrations = (
@@ -103,27 +103,14 @@ export const runPostgresMigrations = (
           }),
       ),
     );
-    const resolved: ResolvedMigrations = yield* resolveMigrations({
-      input,
-      stamped,
-      dialect: "postgres",
-    });
+    const resolved: ResolvedMigrations = resolveMigrations({ input, stamped });
     if (Object.keys(hashes).length > 0) {
-      if (resolved.format === "prisma") {
-        yield* withTemporaryPostgresRole(target, (role) =>
-          applyMigrations({
-            resolved,
-            connectionUrl: role.connectionUrl,
-          }),
-        );
-      } else {
-        yield* withPostgresClient(target, (client) =>
-          applyMigrations({
-            resolved,
-            executor: makePostgresMigrationExecutor(client),
-          }),
-        );
-      }
+      yield* withPostgresClient(target, (client) =>
+        applyMigrations({
+          resolved,
+          executor: makePostgresMigrationExecutor(client),
+        }),
+      );
     }
     return { resolved, hashes };
   });
