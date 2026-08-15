@@ -1,4 +1,5 @@
-import type * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Binding from "./Binding.ts";
 import type { InheritBinding } from "./InheritBinding.ts";
@@ -19,21 +20,20 @@ type TypeId = typeof TypeId;
 export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
 
 /**
- * Inherit a named binding from the Worker's previous upload without supplying
+ * Inherit a named binding from this script's latest upload without supplying
  * or reading its value.
  *
  * Cloudflare's upload API accepts only the literal `"latest"` as the inherit
- * source — that is the latest *uploaded* version, not necessarily the version
- * serving 100% of traffic. Alchemy always sends `version_id: "latest"` and
- * `bindings_inherit=strict`, so a missing name fails the upload instead of
- * being silently dropped.
+ * source (error 10057). That token is the latest *uploaded* version, not a
+ * pin of the 100% deployment. Alchemy always sends `version_id: "latest"`
+ * and `bindings_inherit=strict`, and refuses the deploy unless that latest
+ * upload is also the sole version currently at 100% traffic — so an
+ * undeployed preview cannot become the inherit source.
  *
- * An undeployed preview (`version.traffic: 0` / `wrangler versions upload`)
- * becomes `"latest"`. If that preview omitted or changed the named binding,
- * the next inherit deploy follows the preview, not the live 100% version.
- *
- * `Inherit` is a Worker-only binding with no backing cloud resource. Declare
- * it on a Worker's `env` or `yield*` it inside an Effect-native Worker.
+ * Do not combine `Inherit` with `version` (preview / gradual rollout) or a
+ * dispatch `namespace`. Do not inherit `ALCHEMY_*` or `VITE_*` names.
+ * `yield*` requires an explicit name; `env: { NAME: Inherit() }` uses the
+ * object key.
  *
  * Not supported in `alchemy dev` — workerd cannot inherit from a Cloudflare
  * version history. Local start fails closed.
@@ -42,7 +42,7 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * @product Workers
  * @category Workers & Compute
  *
- * @section Preserve a secret on a code-only deploy
+ * @section Inherit a secret from the latest 100% upload
  * @example Async Worker
  * ```typescript
  * export const Api = Cloudflare.Worker("Api", {
@@ -78,15 +78,18 @@ export interface Inherit extends Binding.Service<
   InheritAccessor
 > {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
-   *   When declared as `env: { API_TOKEN: Inherit() }`, the env key is used.
+   * @param name Binding name. Required when `yield*`-ed. When declared as
+   *   `env: { API_TOKEN: Inherit() }`, the env key is used.
    */
   (name?: string): InheritBinding;
 }
 
+/** Sentinel used only when `Inherit()` is called with no name. */
+const UNNAMED = "";
+
 export const Inherit = Binding.Service<Inherit>({
   id: TypeId,
-  defaultName: "INHERIT",
+  defaultName: UNNAMED,
   toWorkerBinding: (binding) => ({
     type: "inherit",
     name: binding.name,
@@ -100,6 +103,23 @@ export const inherit = Inherit;
 export const isInherit = (value: unknown): value is InheritBinding =>
   Binding.isBinding(value) && value.kind === TypeId;
 
+/** A Worker's inherit contract is invalid or its source is not the live 100% version. */
+export class WorkerInheritConfigError extends Data.TaggedError(
+  "WorkerInheritConfigError",
+)<{
+  message: string;
+}> {}
+
+export interface InheritWireBinding {
+  readonly type: "inherit";
+  readonly name: string;
+  readonly versionId?: string;
+}
+
+export const isInheritWireBinding = (
+  binding: { readonly type?: string } | undefined,
+): binding is InheritWireBinding => binding?.type === "inherit";
+
 /**
  * Cloudflare inherit bindings accept only `version_id: "latest"` (error
  * 10057). Without `bindings_inherit=strict`, an unresolvable inherit is
@@ -109,6 +129,114 @@ export const isInherit = (value: unknown): value is InheritBinding =>
 export const bindingsInheritFor = (
   bindings: readonly { readonly type?: string }[] | undefined,
 ): "strict" | undefined =>
-  bindings?.some((binding) => binding.type === "inherit")
-    ? "strict"
-    : undefined;
+  bindings?.some(isInheritWireBinding) ? "strict" : undefined;
+
+const fail = (message: string) =>
+  Effect.fail(new WorkerInheritConfigError({ message }));
+
+const reservedInheritName = (name: string): string | undefined => {
+  if (name.length === 0 || name.trim() !== name) {
+    return 'Inherit requires a binding name (env object key, or Inherit("NAME") when yield*-ed).';
+  }
+  if (name.startsWith("ALCHEMY_")) {
+    return `Cannot inherit Alchemy-managed binding '${name}'.`;
+  }
+  if (name.startsWith("VITE_")) {
+    return `Cannot inherit '${name}' — Vite build env would not receive the remote value.`;
+  }
+  return undefined;
+};
+
+/**
+ * Reject inherit combined with rollout/preview or a dispatch namespace, and
+ * reject reserved inherit names on resource-binding children.
+ */
+export const assertInheritWorkerProps = (
+  news: {
+    readonly version?: unknown;
+    readonly namespace?: unknown;
+  },
+  inheritNames: readonly string[],
+): Effect.Effect<void, WorkerInheritConfigError> => {
+  if (inheritNames.length === 0) return Effect.void;
+  if (news.version !== undefined) {
+    return fail(
+      "Inherit cannot be combined with Worker.version (preview or gradual rollout). Inherit copies the latest upload; a version upload would become that source.",
+    );
+  }
+  if (news.namespace !== undefined) {
+    return fail(
+      "Inherit is not supported on Workers for Platforms dispatch-namespace uploads.",
+    );
+  }
+  for (const name of inheritNames) {
+    const reserved = reservedInheritName(name);
+    if (reserved !== undefined) return fail(reserved);
+  }
+  return Effect.void;
+};
+
+export const inheritNamesFromResourceBindings = (
+  bindings: readonly {
+    readonly data?: {
+      readonly bindings?: readonly {
+        readonly type?: string;
+        readonly name?: string;
+      }[];
+    };
+  }[],
+): string[] =>
+  bindings.flatMap((binding) =>
+    (binding.data?.bindings ?? [])
+      .filter(isInheritWireBinding)
+      .map((item) => item.name),
+  );
+
+/**
+ * Validate the assembled Worker upload bindings and return the
+ * `bindings_inherit` query. Fails on unnamed inherit, reserved names,
+ * non-latest inherit tokens, value-bearing inherit markers, and duplicate
+ * binding names.
+ */
+export const finalizeInheritUploadBindings = (
+  bindings: readonly {
+    readonly type?: string;
+    readonly name?: string;
+    readonly versionId?: string;
+    readonly text?: unknown;
+    readonly json?: unknown;
+    readonly value?: unknown;
+  }[],
+): Effect.Effect<"strict" | undefined, WorkerInheritConfigError> =>
+  Effect.gen(function* () {
+    const names = new Set<string>();
+    let inheritCount = 0;
+    for (const binding of bindings) {
+      const name = binding.name ?? "";
+      if (name.length > 0) {
+        if (names.has(name)) {
+          return yield* fail(
+            `Worker binding '${name}' is declared more than once.`,
+          );
+        }
+        names.add(name);
+      }
+      if (!isInheritWireBinding(binding)) continue;
+      inheritCount += 1;
+      const reserved = reservedInheritName(name);
+      if (reserved !== undefined) return yield* fail(reserved);
+      if (binding.versionId !== undefined && binding.versionId !== "latest") {
+        return yield* fail(
+          `Inherit binding '${name}' must use version_id "latest"; Cloudflare rejects exact version IDs (error 10057).`,
+        );
+      }
+      if (
+        binding.text !== undefined ||
+        binding.json !== undefined ||
+        binding.value !== undefined
+      ) {
+        return yield* fail(`Inherit binding '${name}' must be value-free.`);
+      }
+    }
+    return inheritCount > 0 ? "strict" : undefined;
+  });

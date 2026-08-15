@@ -21,6 +21,7 @@ import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
 import type { ViteOptions } from "../Worker.ts";
+import { isInherit, WorkerInheritConfigError } from "../Inherit.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
 /**
@@ -289,15 +290,21 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
                 : Redacted.isRedacted(value) &&
                     typeof Redacted.value(value) === "string"
                   ? Redacted.value(value)
-                  : // A `WorkerLoader` is a real Effect that also carries
-                    // the `~alchemy/Kind` marker — it is a binding, not a
-                    // runnable env value. Check it before `Effect.isEffect`
-                    // so we don't execute it as an inlined env entry.
-                    isWorkerLoader(value)
-                    ? undefined
-                    : Effect.isEffect(value)
-                      ? yield* value as any as Effect.Effect<any>
-                      : undefined,
+                  : isInherit(value)
+                    ? key.startsWith("VITE_")
+                      ? yield* new WorkerInheritConfigError({
+                          message: `Cannot inherit '${key}' — Vite build env would not receive the remote value.`,
+                        })
+                      : undefined
+                    : // A `WorkerLoader` is a real Effect that also carries
+                      // the `~alchemy/Kind` marker — it is a binding, not a
+                      // runnable env value. Check it before `Effect.isEffect`
+                      // so we don't execute it as an inlined env entry.
+                      isWorkerLoader(value)
+                      ? undefined
+                      : Effect.isEffect(value)
+                        ? yield* value as any as Effect.Effect<any>
+                        : undefined,
             ];
           }),
         ),

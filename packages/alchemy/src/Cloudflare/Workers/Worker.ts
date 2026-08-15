@@ -1341,22 +1341,21 @@ export const isSelf = (value: unknown): value is Self =>
  * Durable Objects, Assets, and more).
  *
  * @section Inheriting bindings
- * Use `Cloudflare.Workers.Inherit()` for a code-only deploy that must keep a named
- * binding from the previous upload without supplying or reading its
- * value. Alchemy emits `{ type: "inherit", version_id: "latest" }` and
- * sends `bindings_inherit=strict`. Cloudflare copies the binding from
- * the latest *uploaded* version of this script — not necessarily the
- * version serving 100% of traffic — and fails the upload if that
- * version does not have the name.
+ * Use `Cloudflare.Workers.Inherit()` to copy a named binding from this
+ * script's latest upload without supplying or reading its value. Alchemy
+ * emits `{ type: "inherit", version_id: "latest" }` and sends
+ * `bindings_inherit=strict`. The deploy is refused unless that latest
+ * upload is also the sole version at 100% traffic — an undeployed preview
+ * cannot become the source.
  *
  * Exact version IDs are rejected by the Cloudflare upload API
- * (error 10057). Do not put inherit under {@link WorkerVersionOptions};
- * that surface is rollout/preview (`parent`, `traffic`, `alias`).
+ * (error 10057). Do not combine `Inherit` with {@link WorkerVersionOptions}
+ * or a dispatch `namespace`. Do not inherit `ALCHEMY_*` or `VITE_*`.
  *
  * `alchemy dev` cannot inherit from Cloudflare version history;
  * local start fails closed.
  *
- * @example Preserve a separately custodied secret
+ * @example Inherit a separately custodied secret from the live upload
  * ```typescript
  * yield* Cloudflare.Worker("Api", {
  *   main: "./src/api.ts",

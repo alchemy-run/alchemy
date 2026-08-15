@@ -18,24 +18,62 @@ const logLevel = Effect.provideService(
 const script = `export default { fetch(_request, env) { return new Response(env.SOURCE_MARK ?? "missing"); } };`;
 
 describe("Cloudflare.Workers.Inherit", () => {
-  test("emits a value-free inherit marker pinned to latest", () => {
-    const binding = Cloudflare.Workers.Inherit("API_TOKEN");
-    expect(Cloudflare.Workers.isInherit(binding)).toBe(true);
-    expect(binding.toWorkerBinding()).toEqual({
-      type: "inherit",
-      name: "API_TOKEN",
-      versionId: "latest",
-    });
-    expect(JSON.stringify(binding.toWorkerBinding())).not.toMatch(
-      /text|json|value|secret/i,
-    );
-    expect(Cloudflare.Workers.bindingsInheritFor(undefined)).toBeUndefined();
-    expect(
-      Cloudflare.Workers.bindingsInheritFor([
-        { type: "inherit", name: "API_TOKEN" },
-      ]),
-    ).toBe("strict");
-  });
+  test.provider(
+    "refuses inherit on a greenfield Worker with no previous upload",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const failure = yield* stack
+          .deploy(
+            Cloudflare.Worker("InheritGreenfield", {
+              script,
+              env: {
+                API_TOKEN: Cloudflare.Workers.Inherit(),
+              },
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(failure).toEqual(
+          expect.objectContaining({
+            _tag: "WorkerInheritConfigError",
+            message: expect.stringMatching(/existing/i),
+          }),
+        );
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "refuses inherit combined with version.traffic",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(
+          Cloudflare.Worker("InheritVersion", {
+            script,
+            env: { SOURCE_MARK: "from-v1" },
+          }),
+        );
+        const failure = yield* stack
+          .deploy(
+            Cloudflare.Worker("InheritVersion", {
+              script,
+              version: { traffic: 0 },
+              env: { SOURCE_MARK: Cloudflare.Workers.Inherit() },
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(failure).toEqual(
+          expect.objectContaining({
+            _tag: "WorkerInheritConfigError",
+            message: expect.stringMatching(/version/i),
+          }),
+        );
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
 
   test.provider(
     "inherits named bindings from the previous upload and fails closed for a missing name",
