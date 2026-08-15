@@ -167,6 +167,23 @@ export type Policy = Resource<
  * });
  * ```
  *
+ * @section Pre-built policies
+ * @example Allow Cloudflare account members
+ * ```typescript
+ * const members = yield* Cloudflare.Access.Policy("AccountMembers", {
+ *   decision: "allow",
+ *   include: [{ cloudflareAccountMember: {} }],
+ * });
+ * ```
+ *
+ * @example Bypass Access for everyone
+ * ```typescript
+ * const publicBypass = yield* Cloudflare.Access.Policy("PublicBypass", {
+ *   decision: "bypass",
+ *   include: [{ everyone: {} }],
+ * });
+ * ```
+ *
  * @section Combining rule groups
  * @example Include + exclude + require
  * ```typescript

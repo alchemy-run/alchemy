@@ -788,6 +788,10 @@ export default defineConfig({
                   link: "/cloudflare/security/secrets-store",
                 },
                 { label: "Turnstile", link: "/cloudflare/security/turnstile" },
+                {
+                  label: "Access on Workers",
+                  link: "/cloudflare/security/access-workers",
+                },
               ],
             },
             {

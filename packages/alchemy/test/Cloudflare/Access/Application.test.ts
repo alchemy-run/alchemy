@@ -169,7 +169,7 @@ test.provider(
 
       expect(app.type).toEqual("warp");
       // Cloudflare derives the warp domain as `${authDomain}/warp`.
-      expect(app.domain.endsWith("/warp")).toBe(true);
+      expect(app.domain?.endsWith("/warp")).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

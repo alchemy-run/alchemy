@@ -1,0 +1,103 @@
+---
+title: Protect Workers with Access
+description: Attach Cloudflare Access to a Worker by identity — one Worker, its previews, or every preview in the account — and read the authenticated identity at runtime.
+sidebar:
+  order: 24
+---
+
+Cloudflare Access can protect a Worker by **identity**, not just by
+hostname. An Access application with a worker destination covers
+every URL that Worker serves — routes, custom domains, `workers.dev`,
+and preview URLs — without listing those hostnames. See Cloudflare's
+[Access for Workers docs](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+and the
+[launch post](https://blog.cloudflare.com/workers-protected-by-access/).
+
+## Three-tier model
+
+| Destination | What it protects |
+|---|---|
+| `{ type: "worker", workerId }` | One Worker, everywhere it serves |
+| `{ type: "preview_worker", workerId }` | That Worker's preview URLs only |
+| `{ type: "all_workers" }` | Every Worker in the account, including future ones |
+| `{ type: "all_preview_workers" }` | Every preview URL in the account |
+
+`workerId` is the Worker's immutable script tag (`worker.workerId`),
+not the script name (`worker.workerName`).
+
+## Precedence
+
+Hostname/path applications win over worker-level applications, which
+win over account-wide ones. A worker-level app with a reusable
+`bypass` + `everyone` policy makes that Worker public under an
+account-wide gate. A hostname/path app still overrides both.
+
+## Protect one Worker
+
+```typescript
+const worker = yield* Cloudflare.Worker("Api", { main: "./src/api.ts" });
+
+const allowOrg = yield* Cloudflare.Access.Policy("AllowOrg", {
+  decision: "allow",
+  include: [{ cloudflareAccountMember: {} }],
+});
+
+yield* Cloudflare.Access.Application("ProtectApi", {
+  type: "self_hosted",
+  destinations: [{ type: "worker", workerId: worker.workerId }],
+  policies: [allowOrg.policyId],
+});
+```
+
+## Public exception
+
+```typescript
+const publicBypass = yield* Cloudflare.Access.Policy("PublicBypass", {
+  decision: "bypass",
+  include: [{ everyone: {} }],
+});
+
+yield* Cloudflare.Access.Application("PublicApi", {
+  type: "self_hosted",
+  destinations: [{ type: "worker", workerId: worker.workerId }],
+  policies: [publicBypass.policyId],
+});
+```
+
+Dashboard one-click Access uses the same reusable-policy model.
+Inline policies are not supported.
+
+## Identity at runtime
+
+```typescript
+const ctx = yield* Cloudflare.WorkerExecutionContext;
+const aud = yield* ctx.access.aud;
+const identity = yield* ctx.access.identity;
+// or: yield* Cloudflare.Access.getIdentity
+```
+
+`ctx.access` is `undefined` when Access did not authenticate the
+request. `identity` is then `undefined`. A rejected lookup is
+`AccessIdentityError`.
+
+The raw workerd API is still on `ctx.raw.access` (`aud` and
+`getIdentity()`).
+
+:::caution
+Worker-level Access policies reject WebSocket upgrades with 403.
+Use a hostname/path application if the Worker serves WebSockets.
+:::
+
+Workers for Platforms: Access protects the **dispatch Worker**. User
+workers in a dispatch namespace are not Access targets.
+
+Under `alchemy dev`, `ctx.access` is absent and `identity` resolves
+`undefined`. Local simulation is a planned follow-up.
+
+## Related
+
+- [Cloudflare Access for Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+  — destination types, hierarchy, WebSocket limitation, and
+  `ctx.access`.
+- [Workers protected by Access](https://blog.cloudflare.com/workers-protected-by-access/)
+  — launch post for attaching Access to a Worker or the whole account.

@@ -744,10 +744,9 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // hang), and it maximizes exposure to loader races under concurrent
   // dynamic imports. The shared dependency graph is deduped by the module
   // cache, so a modest bound keeps nearly all of the speedup.
-  const collectConcurrency =
-    options.concurrency === "unbounded"
-      ? 32
-      : Math.min(options.concurrency, 32);
+  // Sequential only. Bun 1.3.x drops AsyncLocalStorage across `import()`,
+  // so Registry.collect uses a process-global fallback that cannot overlap.
+  const collectConcurrency = 1;
   // collectFile never fails — import errors are captured on the result.
   const collected = yield* Effect.forEach(
     absoluteFiles.map((absolute, i) => [absolute, relative[i]!] as const),

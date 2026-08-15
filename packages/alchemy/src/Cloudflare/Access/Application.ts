@@ -4,6 +4,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -30,13 +31,28 @@ export type ApplicationType =
 /**
  * A destination that this Access application protects.
  *
- * Cloudflare supports three destination flavours:
+ * Hostname / path destinations:
  * - `public` — a public hostname/URI you own in Cloudflare (the legacy
  *   `domain` field on `ApplicationProps` covers the simple case).
  * - `private` — a hostname or CIDR reachable through a Cloudflare Tunnel.
  *   Traffic from WARP-enrolled devices is intercepted and forwarded
  *   through the tunnel; identity is enforced before forwarding.
  * - `via_mcp_server_portal` — routes via a managed MCP server portal.
+ *
+ * Worker-identity destinations (no hostname required). Precedence is
+ * hostname/path apps > worker-level > account-level. Worker-level
+ * policies break WebSocket upgrades (403). Workers for Platforms:
+ * Access protects the dispatch Worker; user workers are not Access
+ * targets.
+ * - `worker` — one Worker, everywhere it serves (routes, custom
+ *   domains, workers.dev, previews). `workerId` is the immutable
+ *   script tag (`Worker.workerId`).
+ * - `preview_worker` — that Worker's preview URLs only.
+ * - `all_workers` — account-wide, current and future Workers.
+ * - `all_preview_workers` — account-wide preview URLs.
+ *
+ * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/
+ * @see https://blog.cloudflare.com/workers-protected-by-access/
  */
 export type ApplicationDestination =
   | { type: "public"; uri: string }
@@ -48,7 +64,11 @@ export type ApplicationDestination =
       portRange?: string;
       vnetId?: string;
     }
-  | { type: "via_mcp_server_portal"; mcpServerId: string };
+  | { type: "via_mcp_server_portal"; mcpServerId: string }
+  | { type: "worker"; workerId: string }
+  | { type: "preview_worker"; workerId: string }
+  | { type: "all_workers" }
+  | { type: "all_preview_workers" };
 
 /**
  * Configuration for an OAuth authorization flow managed by Cloudflare Access.
@@ -93,9 +113,12 @@ export interface ApplicationProps {
    */
   name?: string;
   /**
-   * Primary hostname and path secured by Access. Required for `self_hosted`
-   * apps; ignored on the request for `warp` (Cloudflare auto-fills it with
-   * `${authDomain}/warp`) and `saas` (Cloudflare uses the OIDC issuer).
+   * Primary hostname and path secured by Access. Required for hostname-
+   * based `self_hosted` apps; omit it when protecting a Worker via
+   * `destinations` (`worker` / `preview_worker` / `all_workers` /
+   * `all_preview_workers`). Ignored on the request for `warp`
+   * (Cloudflare auto-fills `${authDomain}/warp`) and `saas`
+   * (Cloudflare uses the OIDC issuer).
    */
   domain?: string;
   /**
@@ -199,8 +222,11 @@ export interface ApplicationAttributes {
   applicationId: string;
   /** Audience tag used to verify JWTs issued for this application. */
   aud: string;
-  /** Resolved domain. Cloudflare fills this in for `warp`/`saas` apps. */
-  domain: string;
+  /**
+   * Resolved domain. Cloudflare fills this in for `warp`/`saas` apps.
+   * Worker-identity destinations have no hostname — `undefined`.
+   */
+  domain: string | undefined;
   /** Resolved destinations (echoed back by Cloudflare). */
   destinations: ReadonlyArray<ApplicationDestination> | undefined;
   /** Resolved managed OAuth configuration. */
@@ -319,6 +345,72 @@ export type Application = Resource<
  *   policies: [admins.policyId],
  * });
  * ```
+ *
+ * @section Protecting Workers with Access
+ * @example Protect one Worker everywhere it serves
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", { main: "./src/api.ts" });
+ * const allowOrg = yield* Cloudflare.Access.Policy("AllowOrg", {
+ *   decision: "allow",
+ *   include: [{ cloudflareAccountMember: {} }],
+ * });
+ * yield* Cloudflare.Access.Application("ProtectApi", {
+ *   type: "self_hosted",
+ *   destinations: [{ type: "worker", workerId: worker.workerId }],
+ *   policies: [allowOrg.policyId],
+ * });
+ * ```
+ *
+ * @example Protect only preview URLs
+ * ```typescript
+ * yield* Cloudflare.Access.Application("ProtectPreviews", {
+ *   type: "self_hosted",
+ *   destinations: [{ type: "preview_worker", workerId: worker.workerId }],
+ *   policies: [allowOrg.policyId],
+ * });
+ * ```
+ *
+ * @example Account-wide preview gate
+ * ```typescript
+ * yield* Cloudflare.Access.Application("AllPreviews", {
+ *   type: "self_hosted",
+ *   destinations: [{ type: "all_preview_workers" }],
+ *   policies: [allowOrg.policyId],
+ * });
+ * ```
+ *
+ * @example Public exception under an account-wide gate
+ * ```typescript
+ * const publicBypass = yield* Cloudflare.Access.Policy("PublicBypass", {
+ *   decision: "bypass",
+ *   include: [{ everyone: {} }],
+ * });
+ * yield* Cloudflare.Access.Application("PublicApi", {
+ *   type: "self_hosted",
+ *   destinations: [{ type: "worker", workerId: worker.workerId }],
+ *   policies: [publicBypass.policyId],
+ * });
+ * ```
+ *
+ * @example Path carve-out (hostname app beats worker-level)
+ * ```typescript
+ * yield* Cloudflare.Access.Application("PublicHealth", {
+ *   type: "self_hosted",
+ *   domain: "api.example.com/health",
+ *   policies: [publicBypass.policyId],
+ * });
+ * ```
+ *
+ * @section Precedence
+ * @example Hostname/path apps win over worker-level, which wins over account-wide
+ * ```typescript
+ * // A worker destination with a bypass + everyone policy makes that
+ * // Worker public even when `all_workers` gates the rest of the account.
+ * // A hostname/path application still overrides both.
+ * ```
+ *
+ * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/
+ * @see https://blog.cloudflare.com/workers-protected-by-access/
  */
 export const Application = Resource<Application>(
   "Cloudflare.Access.Application",
@@ -361,12 +453,9 @@ export const ApplicationProvider = () =>
     stables: ["applicationId", "aud", "type", "accountId"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      if ((olds as ApplicationProps).type !== undefined) {
-        if (
-          (olds as ApplicationProps).type !== (news as ApplicationProps).type
-        ) {
-          return { action: "replace" } as const;
-        }
+      if (!isResolved(news)) return undefined;
+      if (olds.type !== undefined && olds.type !== news.type) {
+        return { action: "replace" } as const;
       }
     }),
 
@@ -393,7 +482,13 @@ export const ApplicationProvider = () =>
       }
       const domain = observed.domain ?? output?.domain ?? olds?.domain;
       const name = observed.name ?? output?.name;
-      if (domain === undefined || name === undefined) {
+      // Domain-scan recovery needs a domain to match; an id-recovered
+      // Worker-identity app has none and must not look missing (that
+      // recreates it). Name is still required.
+      if (name === undefined) {
+        return undefined;
+      }
+      if (domain === undefined && output?.applicationId === undefined) {
         return undefined;
       }
       const attrs = {
@@ -540,7 +635,7 @@ export const ApplicationProvider = () =>
       return {
         applicationId: observed.id,
         aud: observed.aud,
-        domain: observed.domain ?? body.domain ?? "",
+        domain: observed.domain ?? body.domain,
         destinations: observed.destinations ?? body.destinations,
         // Keep the provider output cloud-authoritative. If Cloudflare rejects
         // or clears the desired configuration, do not mask that drift with
@@ -579,7 +674,7 @@ export const ApplicationProvider = () =>
                   {
                     applicationId: app.id,
                     aud: app.aud,
-                    domain: app.domain ?? "",
+                    domain: app.domain,
                     destinations: app.destinations,
                     oauthConfiguration: app.oauthConfiguration,
                     type: app.type,
@@ -601,7 +696,10 @@ export const ApplicationProvider = () =>
           accountId: output.accountId,
           appId: output.applicationId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(
+          retryTransientAccessError,
+          Effect.catchTag("AccessApplicationNotFound", () => Effect.void),
+        );
     }),
   });
 
@@ -672,11 +770,10 @@ const observeById = (accountId: string, appId: string) =>
     const r = yield* zeroTrust
       .getAccessApplicationForAccount({ accountId, appId })
       .pipe(
-        // Distilled only tags transport errors (Unauthorized,
-        // ServiceUnavailable, etc.); the live Cloudflare 404 surfaces as
-        // an untagged error. Swallow generically so observe falls through
-        // to recreate.
-        Effect.catch(() => Effect.succeed(undefined)),
+        retryTransientAccessError,
+        Effect.catchTag("AccessApplicationNotFound", () =>
+          Effect.succeed(undefined),
+        ),
       );
     if (r === undefined) return undefined;
     return narrowApp(r as Parameters<typeof narrowApp>[0]);

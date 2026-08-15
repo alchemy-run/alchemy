@@ -2,13 +2,11 @@
  * Per-file registration state.
  *
  * While a test file's module body is evaluating, `describe`/`test`/hook
- * calls register nodes against that file's collector. The runner imports
- * all test files in PARALLEL; attribution stays correct because the
- * collector is carried by AsyncLocalStorage — the module loader propagates
- * the async context of the `import()` call into the module's top-level
- * evaluation (and into microtasks queued from it), so each file's
- * registrations resolve to its own root no matter how many imports are in
- * flight.
+ * calls register nodes against that file's collector. Collection is
+ * sequential: Bun 1.3.x does not propagate AsyncLocalStorage through
+ * dynamic `import()`, so a module-level fallback attributes registrations
+ * to the file currently importing. Do not raise collect concurrency
+ * without restoring ALS (the fallback is process-global).
  *
  * The storage lives on `globalThis` so that a duplicated module instance
  * (e.g. two resolutions of the package) still shares one registry.
@@ -26,6 +24,11 @@ const key = Symbol.for("alchemy-test/registry");
 const storage: AsyncLocalStorage<FileContext> = ((globalThis as any)[key] ??=
   new AsyncLocalStorage<FileContext>());
 
+// Bun 1.3.x does not propagate AsyncLocalStorage through dynamic
+// `import()`. Collection is sequential (see Runner.ts), so a module
+// fallback attributes `describe`/`test` to the file currently importing.
+let importFallback: FileContext | undefined;
+
 /**
  * Collect one file: run `f` (the file's dynamic import + microtask flush)
  * with a fresh root as the ambient collector, and return the root.
@@ -35,12 +38,19 @@ export const collect = async (
   f: () => Promise<void>,
 ): Promise<FileSuite> => {
   const root = makeFileSuite(file);
-  await storage.run({ current: root }, f);
-  return root;
+  const ctx: FileContext = { current: root };
+  const previous = importFallback;
+  importFallback = ctx;
+  try {
+    await storage.run(ctx, f);
+    return root;
+  } finally {
+    importFallback = previous;
+  }
 };
 
 const currentContext = (): FileContext => {
-  const context = storage.getStore();
+  const context = storage.getStore() ?? importFallback;
   if (context === undefined) {
     throw new Error(
       "alchemy-test: describe/test/hook called outside of a test file collection. " +
@@ -59,7 +69,8 @@ export const currentSuite = (): Suite => currentContext().current;
  * at registration time to namespace per-test durable state by file.
  */
 export const currentFile = (): string | undefined => {
-  let suite: Suite | undefined = storage.getStore()?.current;
+  let suite: Suite | undefined =
+    storage.getStore()?.current ?? importFallback?.current;
   while (suite?.parent !== undefined) suite = suite.parent;
   return suite !== undefined && "file" in suite
     ? (suite as FileSuite).file
