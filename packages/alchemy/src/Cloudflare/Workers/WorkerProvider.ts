@@ -54,6 +54,7 @@ import {
 import {
   getCacheBinding,
   getCronBindings,
+  getOwnedWorkflowClassNames,
   isContainerDecl,
 } from "./WorkerAsyncBindings.ts";
 import type {
@@ -2100,7 +2101,12 @@ export const LiveWorkerProvider = () =>
         );
       });
 
-      const prepareBundle = (id: string, props: WorkerProps) =>
+      const prepareBundle = (
+        id: string,
+        workerName: string,
+        props: WorkerProps,
+        bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+      ) =>
         (isPythonMain(props.main)
           ? readPythonWorkerBundle({
               id,
@@ -2119,6 +2125,10 @@ export const LiveWorkerProvider = () =>
                 entry: props.isExternal
                   ? {
                       kind: "external",
+                      workflowClassNames: getOwnedWorkflowClassNames(
+                        bindings,
+                        workerName,
+                      ),
                     }
                   : {
                       kind: "effect",
@@ -2250,6 +2260,7 @@ export const LiveWorkerProvider = () =>
         id: string,
         workerName: string,
         props: WorkerProps,
+        bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
@@ -2333,7 +2344,7 @@ export const LiveWorkerProvider = () =>
               opts.skipAssetsRead
                 ? Effect.succeed(undefined)
                 : prepareAssets(props.assets),
-              prepareBundle(id, props),
+              prepareBundle(id, workerName, props, bindings),
             ],
             { concurrency: "unbounded" },
           );
@@ -2733,6 +2744,7 @@ export const LiveWorkerProvider = () =>
           id,
           parentName,
           news,
+          bindings,
           { skipAssetsRead: true },
         );
         const metadataHash = yield* resolveWorkerMetadataHash({
@@ -2976,7 +2988,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, name, news, {
+        } = yield* prepareAssetsAndBundle(id, name, news, bindings, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -4057,9 +4069,12 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, props).pipe(
-          Effect.map((b) => b.hash),
-        );
+        const bundleHash = yield* prepareBundle(
+          id,
+          output.workerName,
+          props,
+          bindings ?? [],
+        ).pipe(Effect.map((b) => b.hash));
         if (bundleHash !== output.hash?.bundle) {
           return true;
         }

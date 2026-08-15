@@ -35,6 +35,44 @@ const writeFixture = Effect.fn(function* (files: Record<string, string>) {
 });
 
 layer(NodeServices.layer)("WorkerBundle", (it) => {
+  // Regression test for #1232: the two-argument Worker API treats `main`
+  // as an external Cloudflare module. If that module exports an Effect-native
+  // Workflow class, workerd otherwise dispatches its missing native entrypoint
+  // back through the Worker's HTTP socket until loopback ports are exhausted.
+  it.effect(
+    "validates configured Workflow exports in external Worker bundles",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const root = yield* writeFixture({
+          "package.json": "{}",
+          "worker.mjs": [
+            `export class GuideWorkflow {}`,
+            `export default { fetch: () => new Response("ok") };`,
+          ].join("\n"),
+        });
+
+        const bundler = yield* WorkerBundle;
+        const output = yield* bundler.build({
+          id: "external-effect-workflow",
+          main: path.join(root, "worker.mjs"),
+          compatibility: { date: "2026-03-17", flags: [] },
+          entry: {
+            kind: "external",
+            workflowClassNames: ["GuideWorkflow"],
+          },
+          stack: { name: "worker-bundle-test", stage: "test" },
+          extraOptions: undefined,
+        });
+
+        const bundle = output.files.map((file) => decode(file.content)).join();
+        expect(bundle).toContain(
+          "is configured as a Workflow but does not extend cloudflare:workers WorkflowEntrypoint",
+        );
+        expect(bundle).toContain("Import and yield the Effect Worker class");
+      }),
+  );
+
   // Regression test for #880: CJS dependencies (like `pg`) that
   // `require("events")` must have those requires converted into ESM imports
   // of the workerd-provided Node builtins. Left unconverted, rolldown emits

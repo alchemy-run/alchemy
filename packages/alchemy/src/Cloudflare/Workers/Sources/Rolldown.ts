@@ -48,6 +48,8 @@ export interface WorkerBundleOptions {
   entry:
     | {
         kind: "external";
+        /** Workflow exports that must use Cloudflare's native entrypoint API. */
+        workflowClassNames?: ReadonlyArray<string>;
       }
     | {
         kind: "effect";
@@ -142,7 +144,16 @@ export const WorkerBundle = Effect.gen(function* () {
                 makeEffectVirtualEntry(options.entry.exports, options.stack),
               ),
             ]
-          : undefined,
+          : options.entry.workflowClassNames?.length
+            ? [
+                virtualEntryPlugin(
+                  makeExternalVirtualEntry(
+                    options.entry.workflowClassNames,
+                    options.id,
+                  ),
+                ),
+              ]
+            : undefined,
       ],
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages
@@ -207,6 +218,33 @@ export const WorkerBundle = Effect.gen(function* () {
     ),
   };
 });
+
+export const makeExternalVirtualEntry = (
+  workflowClassNames: ReadonlyArray<string>,
+  workerId: string,
+) => {
+  const names = JSON.stringify(Array.from(new Set(workflowClassNames)));
+  return (importPath: string) => `
+import { WorkflowEntrypoint } from "cloudflare:workers";
+import * as entry from ${JSON.stringify(importPath)};
+
+const workerId = ${JSON.stringify(workerId)};
+for (const className of ${names}) {
+  const exported = entry[className];
+  if (
+    typeof exported !== "function" ||
+    !WorkflowEntrypoint.prototype.isPrototypeOf(exported.prototype)
+  ) {
+    throw new Error(
+      \`External Worker \${workerId} export "\${className}" is configured as a Workflow but does not extend cloudflare:workers WorkflowEntrypoint. Cloudflare.Worker(id, { main, ... }) uses the external Worker API and does not install Effect entrypoint bridges. Import and yield the Effect Worker class from the stack instead, or export a native WorkflowEntrypoint.\`,
+    );
+  }
+}
+
+export * from ${JSON.stringify(importPath)};
+export default entry.default;
+`;
+};
 
 export const makeEffectVirtualEntry = (
   exports: Record<string, DurableObjectExport | WorkflowExport>,

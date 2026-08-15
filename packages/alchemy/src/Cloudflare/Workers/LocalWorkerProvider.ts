@@ -49,7 +49,10 @@ import {
 } from "../../Artifacts.ts";
 import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
-import { getCronBindings } from "./WorkerAsyncBindings.ts";
+import {
+  getCronBindings,
+  getOwnedWorkflowClassNames,
+} from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { createWorkerName } from "./WorkerName.ts";
@@ -473,7 +476,13 @@ export const LocalWorkerProvider = () =>
             main: props.main!,
             compatibility,
             entry: props.isExternal
-              ? { kind: "external" as const }
+              ? {
+                  kind: "external" as const,
+                  workflowClassNames: getOwnedWorkflowClassNames(
+                    bindings,
+                    name,
+                  ),
+                }
               : {
                   kind: "effect" as const,
                   exports: props.exports ?? {},
