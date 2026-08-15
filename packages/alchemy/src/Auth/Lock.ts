@@ -7,7 +7,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import { rootDir } from "./Profile.ts";
+import { rootDir } from "./Paths.ts";
 
 const semaphores = new Map<string, Semaphore.Semaphore>();
 
@@ -155,10 +155,7 @@ export const withLock = <A, E, R>(
   return semaphore.withPermit(
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      // Read `rootDir` here, not at module eval, so the
-      // `Profile -> AuthProvider -> Lock -> Profile` import cycle never
-      // sees it uninitialised.
-      const lockPath = path.join(rootDir, "lock", `${safeKey}.lock`);
+      const lockPath = path.join(rootDir(), "lock", `${safeKey}.lock`);
       yield* acquireFileLock(
         lockPath,
         options?.timeout ?? DEFAULT_TIMEOUT,
@@ -167,3 +164,13 @@ export const withLock = <A, E, R>(
     }).pipe(Effect.scoped),
   );
 };
+
+/**
+ * Serialize an operation with every credential mutation for a profile. The
+ * lock key is shared by every credential operation for the profile,
+ * including profile-wide rename and delete operations.
+ */
+export const withProfileCredentialsLock = <A, E, R>(
+  profileName: string,
+  effect: Effect.Effect<A, E, R>,
+) => withLock(`profile-credentials-${profileName}`, effect);

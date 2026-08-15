@@ -253,7 +253,7 @@ export const describeStateStoreFailure = (e: unknown): string => {
   if (typeof tag === "string" && tag.startsWith("Unauthorized")) {
     message =
       "State store rejected the request as unauthorized. " +
-      "The stored state-store credentials may be stale — run 'alchemy login' to refresh them.";
+      "The stored state-store credentials may be stale — run 'alchemy profile edit' to reconfigure them.";
   }
   const status = (e as { response?: { status?: unknown } }).response?.status;
   if (typeof status === "number" && !message.includes(String(status))) {

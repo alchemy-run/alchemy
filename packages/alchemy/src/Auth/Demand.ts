@@ -6,17 +6,14 @@
  * out of local emulation via `Alchemy.remote()`, a local Worker binding
  * that proxies to a remote resource (`dev: { remote: true }`), or the
  * deletion of a row that was last reconciled live — credentials are
- * demanded exactly once, up front, in the exec process (which owns the
- * tty), BEFORE apply begins:
+ * validated exactly once, up front, BEFORE apply begins. The seam never
+ * starts a login flow: missing credentials fail with the typed
+ * {@link CredentialsRequired} error naming the demanding resources and
+ * pointing at `alchemy profile edit` — the profile command is the only
+ * place logins happen.
  *
- *   - interactive: the provider's existing `configure` flow runs, prefixed
- *     with a human-readable reason naming the demanding resources
- *     (threaded via {@link ConfigureContext}'s `reason`).
- *   - non-interactive: fail with the typed {@link CredentialsRequired}
- *     error naming the demanding resources and pointing at `alchemy login`.
- *
- * The RPC sidecar never prompts — its stdio is piped and it only ever
- * reads credentials persisted by this seam (or a prior `alchemy login`).
+ * The RPC sidecar only ever reads credentials persisted by a prior
+ * `alchemy profile edit`.
  *
  * Non-dev runs (`alchemy deploy` / `destroy`) never enter this seam:
  * state-store init and live providers drive the pre-existing lazy
@@ -27,9 +24,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { BindingNode, Plan } from "../Plan.ts";
-import { isNonInteractive } from "../Util/interactive.ts";
-import { AuthProviders, type ConfigureContext } from "./AuthProvider.ts";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "./Profile.ts";
+import { AuthProviders } from "./AuthProvider.ts";
+import { ALCHEMY_PROFILE, ProfileStore } from "./Profile.ts";
 
 /** Why a plan row demands live (cloud) credentials during a dev run. */
 export type CredentialDemandReason =
@@ -58,9 +54,9 @@ export interface CredentialDemand {
 }
 
 /**
- * A dev-mode plan needs cloud credentials, none are configured for the
- * active profile, and the process is non-interactive so the configure flow
- * cannot run. The message names the demanding resources and the fix.
+ * A dev-mode plan needs cloud credentials and none are configured for the
+ * active profile. The message names the demanding resources and the exact
+ * `alchemy profile edit` invocation that fixes it.
  */
 export class CredentialsRequired extends Data.TaggedError(
   "CredentialsRequired",
@@ -107,21 +103,12 @@ export const credentialsRequired = (
     reason: [...new Set(demand.resources.map((r) => r.reason))].join(", "),
     message:
       `${demand.provider} credentials are required, but none are configured ` +
-      `for profile '${profileName}' and this process is non-interactive so ` +
-      "they can't be configured now.\n" +
+      `for profile '${profileName}'.\n` +
       `These resources require ${demand.provider} credentials:\n` +
       `${resourceLines(demand)}\n` +
-      `Run \`alchemy login --profile ${profileName}\` to configure ` +
+      `Run \`alchemy profile edit ${profileName} --add ${demand.provider}\` to configure ` +
       "credentials, or set CI=1 to use environment-variable credentials.",
   });
-
-/**
- * The human-readable reason shown at the top of an interactive configure
- * flow triggered by this seam (threaded via {@link ConfigureContext}).
- */
-const demandBanner = (demand: CredentialDemand): string =>
-  `This dev session requires ${demand.provider} credentials:\n` +
-  resourceLines(demand);
 
 const bindingDemandsRemote = (
   bindings: readonly BindingNode[] | undefined,
@@ -194,58 +181,45 @@ export const collectCredentialDemands = (plan: Plan): CredentialDemand[] => {
   }));
 };
 
-export interface DemandCredentialsOptions {
-  /**
-   * Overrides {@link isNonInteractive} — a test seam. When `true`, a
-   * missing profile fails with {@link CredentialsRequired} instead of
-   * driving the interactive configure flow.
-   */
-  readonly nonInteractive?: boolean;
-}
-
 /**
- * Ensure credentials exist for every demand, prompting at most once per
- * provider and only when nothing is configured yet:
+ * Validate that credentials exist for every demand. Never starts a login
+ * flow — logging in belongs to `alchemy profile edit` exclusively:
  *
- *   - already configured for the active profile → no-op (never re-prompts)
- *   - missing + interactive → the provider's `configure` flow runs (via
- *     `AlchemyProfile.loadOrConfigure`), prefixed with a reason naming the
- *     demanding resources
- *   - missing + non-interactive (and not CI) → typed
- *     {@link CredentialsRequired} failure
- *   - CI → `loadOrConfigure` picks the provider's non-interactive default
- *     (env-var credentials), matching every other CI path
+ *   - already configured for the active profile → no-op
+ *   - missing → typed {@link CredentialsRequired} failure with the exact
+ *     `alchemy profile edit` invocation to run
+ *   - CI → validates the provider's environment credentials directly,
+ *     matching every other CI path without creating profile state
  *
  * Demands whose cloud has no registered auth provider are skipped (bare
  * engine runs with test providers demand nothing). All context is
  * resolved optionally, so the effect is safe to run in any environment.
  */
 export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
-  function* (
-    demands: readonly CredentialDemand[],
-    options?: DemandCredentialsOptions,
-  ) {
+  function* (demands: readonly CredentialDemand[]) {
     if (demands.length === 0) return;
     const registry = Option.getOrUndefined(
       yield* Effect.serviceOption(AuthProviders),
     );
     const profile = Option.getOrUndefined(
-      yield* Effect.serviceOption(AlchemyProfile),
+      yield* Effect.serviceOption(ProfileStore),
     );
     if (registry === undefined || profile === undefined) return;
     const profileName = yield* ALCHEMY_PROFILE;
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    const nonInteractive = options?.nonInteractive ?? isNonInteractive();
     for (const demand of demands) {
       const auth = registry[demand.provider];
       if (auth == null) continue;
       const existing = yield* profile.getProfile(profileName);
-      if (existing?.[auth.name] != null) continue;
-      if (!ci && nonInteractive) {
-        return yield* credentialsRequired(demand, profileName);
+      if (existing?.providers[auth.name] != null) continue;
+      if (ci) {
+        if (auth.readEnvironment === undefined) {
+          return yield* credentialsRequired(demand, profileName);
+        }
+        yield* auth.readEnvironment;
+        continue;
       }
-      const ctx: ConfigureContext = { ci, reason: demandBanner(demand) };
-      yield* profile.loadOrConfigure(auth, profileName, ctx);
+      return yield* credentialsRequired(demand, profileName);
     }
   },
 );
@@ -254,7 +228,5 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
  * The one-call seam wired into the dev path: scan the plan for live
  * demand and, if any, run {@link demandCredentials} BEFORE apply begins.
  */
-export const demandPlanCredentials = (
-  plan: Plan,
-  options?: DemandCredentialsOptions,
-) => demandCredentials(collectCredentialDemands(plan), options);
+export const demandPlanCredentials = (plan: Plan) =>
+  demandCredentials(collectCredentialDemands(plan));

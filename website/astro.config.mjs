@@ -340,6 +340,7 @@ function buildOutputChecks() {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
   },
@@ -585,10 +586,7 @@ export default defineConfig({
             },
             {
               label: "Auth",
-              items: [
-                { label: "login", link: "/cli/login" },
-                { label: "profile", link: "/cli/profile" },
-              ],
+              items: [{ label: "profile", link: "/cli/profile" }],
             },
             {
               label: "State",

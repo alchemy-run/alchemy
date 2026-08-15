@@ -1,0 +1,308 @@
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as CliKit from "../Cli/CliKit/index.ts";
+import {
+  AuthError,
+  AuthProviderLayer,
+  needsReauth,
+  type ConfigureField,
+  type ConfigureMethod,
+  type EnvironmentVariable,
+  type NeedsReauth,
+  type ProviderDetails,
+} from "./AuthProvider.ts";
+import { CredentialsStore, displayRedacted } from "./Credentials.ts";
+import { mapPromptCancellation } from "./Env.ts";
+
+/**
+ * Collected field values: one string per non-omitted field, keyed by
+ * {@link ConfigureField.name}.
+ */
+export type StoredValues = Record<string, string | undefined>;
+
+/**
+ * Everything needed to generate a complete single-method ("stored")
+ * {@link AuthProviderImpl} for a provider whose credential is a token (or a
+ * small set of fields) the user pastes once: prompts, flag-driven
+ * configuration, schema-validated persistence, login/logout, structured
+ * details, and typed {@link NeedsReauth} failures.
+ *
+ * Providers with several auth methods (browser OAuth, SSO) don't fit this
+ * factory — they hand-roll the impl and may still reuse
+ * {@link collectFieldValues} for their token-shaped method.
+ */
+export interface StoredAuthProviderConfig<Resolved> {
+  /** Registry name, e.g. `"Neon"`. */
+  readonly provider: string;
+  /** Credential file key, e.g. `"neon-stored"`. */
+  readonly storageKey: string;
+  /** The fields collected interactively or via `--set`. */
+  readonly fields: ReadonlyArray<ConfigureField>;
+  /**
+   * Derive additional stored values after input collection — e.g. resolve
+   * an account id with an API call using the entered token. Runs for both
+   * the interactive and flag-driven paths, before persistence.
+   */
+  readonly complete?: (
+    values: StoredValues,
+  ) => Effect.Effect<StoredValues, AuthError>;
+  /**
+   * Map validated stored values to the in-memory resolved credentials.
+   * `source` distinguishes profile-stored values from CI env resolution.
+   */
+  readonly toResolved: (values: StoredValues, source: "stored") => Resolved;
+  /** CI resolution from env vars; requires {@link environment}. */
+  readonly readEnvironment?: Effect.Effect<Resolved, AuthError>;
+  readonly environment?: ReadonlyArray<EnvironmentVariable>;
+}
+
+/** The config shape every factory-made provider persists in the manifest. */
+export type StoredAuthConfig = { method: "stored" };
+
+/** Manifest-entry schema for {@link StoredAuthConfig} providers. */
+export const StoredAuthConfigSchema: Schema.Codec<StoredAuthConfig, any> =
+  Schema.Struct({ method: Schema.Literal("stored") });
+
+/**
+ * Validate flag-provided values against the field specs: unknown keys,
+ * missing required fields, and per-field validators all fail with an
+ * actionable {@link AuthError}.
+ */
+export const validateFieldValues = (
+  provider: string,
+  fields: ReadonlyArray<ConfigureField>,
+  values: Record<string, string>,
+): Effect.Effect<StoredValues, AuthError> =>
+  Effect.gen(function* () {
+    const known = new Set(fields.map((field) => field.name));
+    for (const key of Object.keys(values)) {
+      if (!known.has(key)) {
+        return yield* Effect.fail(
+          new AuthError({
+            message:
+              `${provider}: unknown field '${key}'. ` +
+              `Valid fields: ${[...known].join(", ")}.`,
+          }),
+        );
+      }
+    }
+    const collected: StoredValues = {};
+    for (const field of fields) {
+      const raw = values[field.name] ?? field.defaultValue;
+      if (raw === undefined || raw.length === 0) {
+        if (field.optional) continue;
+        return yield* Effect.fail(
+          new AuthError({
+            message: `${provider}: missing required field '${field.name}' (${field.label}). Pass it with --set ${field.name}=<value>.`,
+          }),
+        );
+      }
+      const invalid = field.validate?.(raw);
+      if (invalid !== undefined) {
+        return yield* Effect.fail(
+          new AuthError({
+            message: `${provider}: invalid '${field.name}': ${invalid}`,
+          }),
+        );
+      }
+      collected[field.name] = raw;
+    }
+    return collected;
+  });
+
+/**
+ * Prompt for each field in order (secret fields masked, optional fields
+ * skippable with an empty answer). Shared by the factory's interactive
+ * `configure` and by hand-rolled multi-method providers that want the same
+ * behavior for their token method.
+ */
+export const collectFieldValues = (
+  fields: ReadonlyArray<ConfigureField>,
+): Effect.Effect<StoredValues, AuthError, never> =>
+  Effect.gen(function* () {
+    const prompt = yield* CliKit.CliKit;
+    const values: StoredValues = {};
+    for (const field of fields) {
+      const message = field.optional
+        ? `${field.label} (optional — press Enter to skip)`
+        : field.label;
+      const validate = (value: string) =>
+        value.length === 0
+          ? field.optional
+            ? undefined
+            : "Required"
+          : field.validate?.(value);
+      const answer = field.secret
+        ? yield* prompt.prompt
+            .password({ message, placeholder: field.placeholder, validate })
+            .pipe(mapPromptCancellation)
+        : yield* prompt.prompt
+            .text({
+              message,
+              placeholder: field.placeholder,
+              defaultValue: field.defaultValue,
+              validate,
+            })
+            .pipe(mapPromptCancellation);
+      if (answer.length === 0 && field.optional) continue;
+      values[field.name] = answer;
+    }
+    return values;
+  });
+
+/**
+ * Build a registration Layer (plus the derived stored-credentials schema)
+ * for a single-method stored-credential provider.
+ *
+ * ```ts
+ * export const { layer: NeonAuth, storedSchema: NeonStoredCredentials } =
+ *   makeStoredAuthProvider({
+ *     provider: "Neon",
+ *     storageKey: "neon-stored",
+ *     fields: [{ name: "apiKey", label: "Neon API Key", secret: true }],
+ *     toResolved: (values, source) => ({ ... }),
+ *     readEnvironment: ...,
+ *     environment: [...],
+ *   });
+ * ```
+ */
+export const makeStoredAuthProvider = <Resolved>(
+  config: StoredAuthProviderConfig<Resolved>,
+) => {
+  const { provider, storageKey, fields } = config;
+
+  const storedSchema = Schema.Struct(
+    Object.fromEntries(
+      fields.map((field) => [
+        field.name,
+        field.optional ? Schema.optional(Schema.String) : Schema.String,
+      ]),
+    ),
+  ) as Schema.Codec<StoredValues, StoredValues>;
+
+  const layer = AuthProviderLayer<StoredAuthConfig, Resolved>()(
+    provider,
+    Effect.gen(function* () {
+      const prompt = yield* CliKit.CliKit;
+      const store = yield* CredentialsStore;
+
+      const persist = (profileName: string, values: StoredValues) =>
+        Effect.gen(function* () {
+          const completed = (yield* (
+            config.complete?.(values) ?? Effect.succeed(values)
+          )) as StoredValues;
+          yield* store.write(profileName, storageKey, storedSchema, completed);
+          yield* prompt.output.success(`${provider}: credentials saved.`);
+          return { method: "stored" as const };
+        });
+
+      const configure = (profileName: string) =>
+        collectFieldValues(fields).pipe(
+          Effect.flatMap((values) => persist(profileName, values)),
+          Effect.mapError((e) =>
+            e instanceof AuthError
+              ? e
+              : new AuthError({
+                  message: `${provider}: failed to configure credentials`,
+                  cause: e,
+                }),
+          ),
+        );
+
+      const configureWith = (
+        profileName: string,
+        input: { method: string; values: Record<string, string> },
+      ) =>
+        input.method === "stored"
+          ? validateFieldValues(provider, fields, input.values).pipe(
+              Effect.flatMap((values) => persist(profileName, values)),
+            )
+          : Effect.fail(
+              new AuthError({
+                message: `${provider}: unknown method '${input.method}'. Only 'stored' is supported.`,
+              }),
+            );
+
+      const readStored = (profileName: string) =>
+        store.read(profileName, storageKey, storedSchema).pipe(
+          Effect.flatMap((values) =>
+            values == null
+              ? Effect.fail(
+                  needsReauth({
+                    provider,
+                    profile: profileName,
+                    detail: `${provider} stored credentials not found.`,
+                  }),
+                )
+              : Effect.succeed(values),
+          ),
+        );
+
+      const read = (profileName: string, _config: StoredAuthConfig) =>
+        readStored(profileName).pipe(
+          Effect.map((values) => config.toResolved(values, "stored")),
+        );
+
+      const login = (profileName: string, _config: StoredAuthConfig) =>
+        store
+          .read(profileName, storageKey, storedSchema)
+          .pipe(
+            Effect.flatMap((values) =>
+              values == null
+                ? configure(profileName).pipe(Effect.asVoid)
+                : Effect.void,
+            ),
+          );
+
+      const logout = (profileName: string, _config: StoredAuthConfig) =>
+        store
+          .delete(profileName, storageKey)
+          .pipe(
+            Effect.andThen(
+              prompt.output.success(`${provider}: stored credentials removed`),
+            ),
+          );
+
+      const details = (
+        profileName: string,
+        _config: StoredAuthConfig,
+      ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth> =>
+        readStored(profileName).pipe(
+          Effect.map((values) => ({
+            lines: fields.flatMap((field) => {
+              const value = values[field.name];
+              if (value === undefined) return [];
+              return [
+                {
+                  key: field.name,
+                  value: field.secret
+                    ? displayRedacted(Redacted.make(value))
+                    : value,
+                },
+              ];
+            }),
+          })),
+        );
+
+      const configureMethods: ReadonlyArray<ConfigureMethod> = [
+        { method: "stored", fields },
+      ];
+
+      return {
+        configSchema: StoredAuthConfigSchema,
+        configure,
+        configureWith,
+        configureMethods,
+        login,
+        logout,
+        details,
+        read,
+        readEnvironment: config.readEnvironment,
+        environment: config.environment,
+      };
+    }),
+  );
+
+  return { layer, storedSchema };
+};

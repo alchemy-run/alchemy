@@ -62,7 +62,7 @@ Deletion runs in passes: each pass attempts every remaining resource, failures a
 | Option                | Description                                                                                                                                                            |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `[file]`              | Stack file to import (defaults to `alchemy.run.ts`); used only to discover which providers are registered                                                              |
-| `--profile <name>`    | Auth profile to use (defaults to `default` or `$ALCHEMY_PROFILE`)                                                                                                      |
+| `--profile <name>`    | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`)                                                                                                      |
 | `--env-file <path>`   | Load environment variables from a file                                                                                                                                 |
 | `--yes`               | Skip the confirmation prompt                                                                                                                                           |
 | `--dry-run`           | Report what would be deleted, then exit without deleting                                                                                                               |

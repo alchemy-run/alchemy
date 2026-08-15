@@ -53,7 +53,7 @@ When the plan contains no changes, the approval prompt is skipped automatically.
 | `--dry-run`         | Show the plan without applying (same as `alchemy plan`)                                                                    |
 | `--force`           | Force updates for resources that would otherwise no-op                                                                     |
 | `--adopt`           | Adopt pre-existing cloud resources that conflict with this stack instead of failing. Useful for re-importing into a fresh state store. |
-| `--profile <name>`  | Auth profile to use (defaults to `default` or `$ALCHEMY_PROFILE`)                                                          |
+| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`)                                                          |
 | `--env-file <path>` | Load environment variables from a file                                                                                     |
 
 How `--adopt` decides what to take over is covered in [Adopting Resources](/cli/adopting-resources).

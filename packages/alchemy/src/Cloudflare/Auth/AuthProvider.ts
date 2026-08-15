@@ -1,84 +1,71 @@
 import * as cfAccounts from "@distilled.cloud/cloudflare/accounts";
 import * as CfCredentialsModule from "@distilled.cloud/cloudflare/Credentials";
-import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   AuthError,
   AuthProviderLayer,
-  type ConfigureContext,
+  NeedsReauth,
+  needsReauth,
+  type ConfigureField,
+  type ConfigureMethod,
+  type ProviderDetails,
 } from "../../Auth/AuthProvider.ts";
+import { validateFieldValues } from "../../Auth/StoredAuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
+import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
 import {
-  getEnv,
   getEnvRedacted,
   getEnvRequired,
-  retryOnce,
+  mapPromptCancellation,
 } from "../../Auth/Env.ts";
-import * as Clank from "../../Util/Clank.ts";
+import { browserOAuth } from "../../Auth/BrowserOAuth.ts";
+import * as CliKit from "../../Cli/CliKit/index.ts";
 import { CREDENTIALS_FILE as STATE_STORE_CREDENTIALS_FILE } from "../StateStore/CredentialsFile.ts";
 import * as OAuthClient from "./OAuthClient.ts";
+import {
+  CLOUDFLARE_AUTH_PROVIDER_NAME,
+  CloudflareAuthConfigSchema,
+  CloudflareStoredCredentials,
+  OAUTH_STORAGE_KEY,
+  STORED_STORAGE_KEY,
+  validateAccountId,
+  validateAccountIdField,
+  type CloudflareAuthConfig,
+  type CloudflareResolvedCredentials,
+} from "./AuthConfig.ts";
+import {
+  ALL_SCOPE_IDS,
+  BASIC_SCOPES,
+  customOAuthScopeDefaults,
+  OAUTH_SCOPE_GROUPS,
+  OAUTH_SCOPE_NAMES,
+  partitionOAuthScopes,
+} from "./OAuthScopes.ts";
 
 const options: Array<{
   value: CloudflareAuthConfig["method"];
   label: string;
-  hint?: string;
+  description?: string;
 }> = [
   {
     value: "oauth",
     label: "OAuth",
-    hint: "recommended — browser-based login with automatic token refresh",
-  },
-  {
-    value: "env",
-    label: "Environment Variables",
-    hint: "CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL",
+    description:
+      "recommended — browser-based login with automatic token refresh",
   },
   {
     value: "stored",
     label: "API Token or API Key",
-    hint: "enter credentials interactively, stored in ~/.alchemy/credentials",
+    description: "use an API token or global API key",
   },
 ];
-
-export type CloudflareAuthConfig =
-  | { method: "env" }
-  | { method: "stored"; credentialType: "apiToken" }
-  | { method: "stored"; credentialType: "apiKey" }
-  | { method: "oauth"; scopes: string[]; accountId: string };
-
-export type CloudflareStoredCredentials =
-  | { type: "apiToken"; apiToken: string; accountId: string }
-  | { type: "apiKey"; apiKey: string; email: string; accountId: string };
-
-export type CloudflareResolvedCredentials =
-  | {
-      type: "apiToken";
-      apiToken: Redacted.Redacted<string>;
-      accountId: string;
-      source: { type: CloudflareAuthConfig["method"]; details?: string };
-    }
-  | {
-      type: "apiKey";
-      apiKey: Redacted.Redacted<string>;
-      email: Redacted.Redacted<string>;
-      accountId: string;
-      source: { type: CloudflareAuthConfig["method"]; details?: string };
-    }
-  | {
-      type: "oauth";
-      accessToken: Redacted.Redacted<string>;
-      expires: number;
-      accountId: string;
-      source: { type: CloudflareAuthConfig["method"]; details?: string };
-    };
-
-export const CLOUDFLARE_AUTH_PROVIDER_NAME = "Cloudflare";
 
 const withOAuthCredentials = <A, E>(
   accessToken: string,
@@ -102,6 +89,7 @@ const withOAuthCredentials = <A, E>(
 
 const selectAccount = (accessToken: string) =>
   Effect.gen(function* () {
+    const prompt = yield* CliKit.CliKit;
     const list = yield* cfAccounts.listAccounts;
     const response = yield* list({});
     const accounts = response.result;
@@ -112,101 +100,113 @@ const selectAccount = (accessToken: string) =>
     }
     if (accounts.length === 1) {
       const account = accounts[0]!;
-      yield* Clank.info(
-        `Cloudflare: using account: ${account.name} (${account.id})`,
-      );
+      yield* prompt.output.info(`Using Cloudflare account ${account.name}.`);
       return account.id;
     }
-    return yield* Clank.select({
-      message: "Select a Cloudflare account",
-      options: accounts.map((a) => ({
-        value: a.id,
-        label: a.name,
-        hint: a.id,
-      })),
-    }).pipe(retryOnce);
+    return yield* prompt.prompt
+      .select({
+        message: "Select a Cloudflare account",
+        searchable: true,
+        options: accounts.map((a) => ({
+          value: a.id,
+          label: a.name,
+          description: a.id,
+        })),
+      })
+      .pipe(mapPromptCancellation);
   }).pipe((e) => withOAuthCredentials(accessToken, e));
 
-/**
- * Cloudflare account IDs are 32 lowercase hex characters. Placeholder
- * values ("", "-", "dummy", …) end up interpolated into API paths and
- * surface as baffling `InvalidRoute: Could not route to
- * /accounts/<value>/...` errors, so reject them up front with an
- * actionable message instead.
- */
-const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i;
+const promptAccountId = () =>
+  Effect.gen(function* () {
+    const prompt = yield* CliKit.CliKit;
+    return yield* prompt.prompt
+      .text({
+        message: "Cloudflare Account ID",
+        validate: validateAccountIdField,
+      })
+      .pipe(mapPromptCancellation);
+  });
 
-export const validateAccountId = (
-  accountId: string | undefined,
-  source: string,
-): Effect.Effect<string, AuthError> => {
-  const trimmed = accountId?.trim() ?? "";
-  if (trimmed.length === 0) {
-    return Effect.fail(
-      new AuthError({
-        message:
-          `Cloudflare account ID is missing (${source}). ` +
-          "Set CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy login' and provide your account ID " +
-          "(found in the Cloudflare dashboard under Workers & Pages → Account details).",
-      }),
-    );
-  }
-  if (!ACCOUNT_ID_PATTERN.test(trimmed)) {
-    return Effect.fail(
-      new AuthError({
-        message:
-          `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
-          "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +
-          "into CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy login'.",
-      }),
-    );
-  }
-  return Effect.succeed(trimmed.toLowerCase());
+const accountIdField: ConfigureField = {
+  name: "accountId",
+  label: "Cloudflare Account ID",
+  validate: validateAccountIdField,
 };
 
-const promptAccountId = () =>
-  getEnv("CLOUDFLARE_ACCOUNT_ID").pipe(
-    Effect.flatMap((envAccountId) =>
-      Clank.text({
-        message: "Cloudflare Account ID (Enter to skip)",
-        placeholder: envAccountId ?? "",
-        defaultValue: envAccountId ?? "",
-        validate: (v) =>
-          v.trim().length === 0 || ACCOUNT_ID_PATTERN.test(v.trim())
-            ? undefined
-            : "Expected a 32-character hex account ID (Workers & Pages → Account details)",
-      }).pipe(retryOnce),
-    ),
-  );
+/** `--set` fields for `--method api-token`. */
+const apiTokenFields: ReadonlyArray<ConfigureField> = [
+  { name: "apiToken", label: "Cloudflare API Token", secret: true },
+  accountIdField,
+];
 
-const promptOAuthScopes = () =>
-  Clank.confirm({
-    message: "Customize OAuth scopes? (default covers typical use cases)",
-    initialValue: false,
-  }).pipe(
-    retryOnce,
-    Effect.flatMap((customize) => {
-      if (!customize) return Effect.succeed([...DEFAULT_SCOPES]);
-      return Clank.multiselect({
+/** `--set` fields for `--method api-key`. */
+const apiKeyFields: ReadonlyArray<ConfigureField> = [
+  { name: "apiKey", label: "Cloudflare API Key", secret: true },
+  { name: "email", label: "Cloudflare Email" },
+  accountIdField,
+];
+
+/**
+ * Flag-driven configuration methods. OAuth is deliberately absent — it is
+ * interactive-only (browser grant).
+ */
+const configureMethods: ReadonlyArray<ConfigureMethod> = [
+  { method: "api-token", fields: apiTokenFields },
+  { method: "api-key", fields: apiKeyFields },
+];
+
+const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
+  Effect.gen(function* () {
+    const prompt = yield* CliKit.CliKit;
+    const mode = yield* prompt.prompt
+      .select({
+        message: "Cloudflare OAuth scopes",
+        options: [
+          {
+            value: "basic" as const,
+            label: "Basic Scopes",
+            description: "recommended — covers typical Alchemy use cases",
+          },
+          {
+            value: "all" as const,
+            label: "All Scopes",
+            description: "authorize every available Cloudflare permission",
+          },
+          {
+            value: "custom" as const,
+            label: "Custom Scopes",
+            description: "choose individual permissions",
+          },
+        ],
+      })
+      .pipe(mapPromptCancellation);
+    if (mode === "basic") return [...BASIC_SCOPES];
+    if (mode === "all") return [...ALL_SCOPE_IDS];
+    return yield* prompt.prompt
+      .multiSelect({
         message: "Select OAuth scopes",
-        initialValues: DEFAULT_SCOPES as string[],
-        options: Object.entries(ALL_SCOPES).map(([value, hint]) => ({
-          value: value as string,
-          label: value,
-          hint,
-        })),
+        initialValues: customOAuthScopeDefaults(currentConfig),
+        descriptionPlacement: "inline",
+        options: OAUTH_SCOPE_GROUPS.flatMap((group) =>
+          group.scopes.map((value) => ({
+            value,
+            label: OAUTH_SCOPE_NAMES[value],
+            description: value,
+            group: group.label,
+          })),
+        ),
         required: true,
-      }).pipe(
+      })
+      .pipe(
         Effect.map((s) => s as string[]),
-        retryOnce,
+        mapPromptCancellation,
       );
-    }),
-  );
+  });
 
 /**
  * Layer that registers the Cloudflare {@link AuthProvider} into the
  * {@link AuthProviders} registry when built. Include this in the Cloudflare
- * `providers()` layer so `alchemy login` can discover it.
+ * `providers()` layer so the alchemy CLI can discover it.
  */
 export const CloudflareAuth = AuthProviderLayer<
   CloudflareAuthConfig,
@@ -214,6 +214,7 @@ export const CloudflareAuth = AuthProviderLayer<
 >()(
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
+    const prompt = yield* CliKit.CliKit;
     const store = yield* CredentialsStore;
 
     const oauthLogin = (profileName: string, scopes: string[]) =>
@@ -223,66 +224,56 @@ export const CloudflareAuth = AuthProviderLayer<
           "offline_access",
         ]);
 
-        yield* Clank.info("Cloudflare: opening browser for OAuth login...");
-        yield* Clank.info(authorization.url);
-        yield* Clank.openUrl(authorization.url).pipe(
-          Effect.catch(() =>
-            Clank.warn(
-              "Cloudflare: could not open browser automatically. Please open the URL above manually.",
-            ),
-          ),
+        const credentials = yield* browserOAuth({
+          provider: "Cloudflare",
+          url: authorization.url,
+          callback: OAuthClient.callback(authorization),
+          exchange: (input) =>
+            OAuthClient.exchangeCallbackInput(input, authorization),
+        });
+        yield* store.write(
+          profileName,
+          OAUTH_STORAGE_KEY,
+          OAuthClient.OAuthCredentials,
+          credentials,
         );
-        yield* Clank.info(
-          "Cloudflare: waiting for authorization (up to 5 minutes).",
-        );
-
-        const credentials = yield* Effect.raceFirst(
-          OAuthClient.callback(authorization),
-          Clank.text({
-            message: "Paste the authorization code or callback URL",
-            placeholder:
-              "The browser will complete this automatically when local",
-            validate: (value) =>
-              value.trim().length > 0 ? undefined : "Paste a code or URL",
-          }).pipe(
-            Effect.flatMap((input) =>
-              OAuthClient.exchangeCallbackInput(input, authorization),
-            ),
-          ),
-        );
-        yield* store.write(profileName, "cf-oauth", credentials);
-        yield* Clank.success("Cloudflare: OAuth credentials saved.");
+        yield* prompt.output.success("Connected to Cloudflare with OAuth.");
         return credentials;
       });
 
     const loginStored = Effect.fn(function* (profileName: string) {
-      const credentialType = yield* Clank.select({
-        message: "Cloudflare credential type",
-        options: [
-          {
-            value: "apiToken" as const,
-            label: "API Token",
-            hint: "recommended",
-          },
-          { value: "apiKey" as const, label: "API Key + Email" },
-        ],
-      }).pipe(retryOnce);
+      const credentialType = yield* prompt.prompt
+        .select({
+          message: "Cloudflare credential type",
+          options: [
+            {
+              value: "apiToken" as const,
+              label: "API Token",
+              description: "recommended",
+            },
+            { value: "apiKey" as const, label: "API Key + Email" },
+          ],
+        })
+        .pipe(mapPromptCancellation);
 
       return yield* Match.value(credentialType).pipe(
         Match.when("apiToken", () =>
           Effect.gen(function* () {
-            const apiToken = yield* Clank.password({
-              message: "Cloudflare API Token",
-              validate: (v) => (v.length === 0 ? "Required" : undefined),
-            }).pipe(retryOnce);
+            const apiToken = yield* prompt.prompt
+              .password({
+                message: "Cloudflare API Token",
+                validate: (v) => (v.length === 0 ? "Required" : undefined),
+              })
+              .pipe(mapPromptCancellation);
             const accountId = yield* promptAccountId();
 
-            yield* store.write<CloudflareStoredCredentials>(
+            yield* store.write(
               profileName,
-              "cf-stored",
+              STORED_STORAGE_KEY,
+              CloudflareStoredCredentials,
               { type: "apiToken", apiToken, accountId },
             );
-            yield* Clank.success("Cloudflare: credentials saved.");
+            yield* prompt.output.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiToken" as const,
@@ -291,23 +282,28 @@ export const CloudflareAuth = AuthProviderLayer<
         ),
         Match.when("apiKey", () =>
           Effect.gen(function* () {
-            const apiKey = yield* Clank.text({
-              message: "Cloudflare API Key",
-              validate: (v) => (v.length === 0 ? "Required" : undefined),
-            }).pipe(retryOnce);
+            const apiKey = yield* prompt.prompt
+              .password({
+                message: "Cloudflare API Key",
+                validate: (v) => (v.length === 0 ? "Required" : undefined),
+              })
+              .pipe(mapPromptCancellation);
 
-            const email = yield* Clank.text({
-              message: "Cloudflare Email",
-              validate: (v) => (v.length === 0 ? "Required" : undefined),
-            }).pipe(retryOnce);
+            const email = yield* prompt.prompt
+              .text({
+                message: "Cloudflare Email",
+                validate: (v) => (v.length === 0 ? "Required" : undefined),
+              })
+              .pipe(mapPromptCancellation);
             const accountId = yield* promptAccountId();
 
-            yield* store.write<CloudflareStoredCredentials>(
+            yield* store.write(
               profileName,
-              "cf-stored",
+              STORED_STORAGE_KEY,
+              CloudflareStoredCredentials,
               { type: "apiKey", apiKey, email, accountId },
             );
-            yield* Clank.success("Cloudflare: credentials saved.");
+            yield* prompt.output.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiKey" as const,
@@ -318,8 +314,11 @@ export const CloudflareAuth = AuthProviderLayer<
       );
     });
 
-    const configureOAuth = Effect.fn(function* (profileName: string) {
-      const scopes = yield* promptOAuthScopes();
+    const configureOAuth = Effect.fn(function* (
+      profileName: string,
+      currentConfig?: CloudflareAuthConfig,
+    ) {
+      const scopes = yield* promptOAuthScopes(currentConfig);
 
       const oauthCreds = yield* oauthLogin(profileName, scopes);
 
@@ -340,26 +339,33 @@ export const CloudflareAuth = AuthProviderLayer<
       };
     });
 
-    const configureInteractive = (profileName: string) =>
-      Clank.select({
-        message: "Cloudflare authentication method",
-        options,
-      }).pipe(
-        Effect.flatMap((method) =>
-          Match.value(method).pipe(
-            Match.when("env", () => Effect.succeed({ method: "env" as const })),
-            Match.when("oauth", () => configureOAuth(profileName)),
-            Match.when("stored", () => loginStored(profileName)),
-            Match.exhaustive,
+    const configureInteractive = (
+      profileName: string,
+      currentConfig?: CloudflareAuthConfig,
+    ) =>
+      prompt.prompt
+        .select({
+          message: "Cloudflare authentication method",
+          options,
+        })
+        .pipe(
+          Effect.flatMap((method) =>
+            Match.value(method).pipe(
+              Match.when("oauth", () =>
+                configureOAuth(profileName, currentConfig),
+              ),
+              Match.when("stored", () => loginStored(profileName)),
+              Match.exhaustive,
+            ),
           ),
-        ),
-      );
+        );
 
-    const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
+    const configureCredentials = (
+      profileName: string,
+      currentConfig?: CloudflareAuthConfig,
+    ) =>
       Effect.gen(function* () {
-        const config = ctx.ci
-          ? { method: "env" as const }
-          : yield* configureInteractive(profileName);
+        const config = yield* configureInteractive(profileName, currentConfig);
         // Re-configuring auth may point this profile at a different
         // Cloudflare account. The cached state-store credentials
         // (`~/.alchemy/credentials/{profile}/cloudflare-state-store.json`)
@@ -382,84 +388,44 @@ export const CloudflareAuth = AuthProviderLayer<
     const resolveCredentials = (
       profileName: string,
       config: CloudflareAuthConfig,
-    ): Effect.Effect<CloudflareResolvedCredentials, AuthError> =>
+    ): Effect.Effect<CloudflareResolvedCredentials, AuthError | NeedsReauth> =>
       Match.value(config).pipe(
-        Match.when(
-          { method: "env" },
-          Effect.fn(function* () {
-            const accountId = yield* getEnvRequired(
-              "CLOUDFLARE_ACCOUNT_ID",
-            ).pipe(
-              Effect.flatMap((id) =>
-                validateAccountId(id, "from the CLOUDFLARE_ACCOUNT_ID env var"),
-              ),
-            );
-            const apiToken = yield* getEnvRedacted("CLOUDFLARE_API_TOKEN");
-            if (apiToken) {
-              return {
-                type: "apiToken" as const,
-                apiToken,
-                accountId,
-                source: { type: "env" as const },
-              };
-            }
-            const apiKey = yield* getEnvRedacted("CLOUDFLARE_API_KEY");
-            const email = yield* getEnvRedacted("CLOUDFLARE_EMAIL");
-            if (apiKey && email) {
-              return {
-                type: "apiKey" as const,
-                apiKey,
-                email,
-                accountId,
-                source: { type: "env" as const },
-              };
-            }
-            return yield* new AuthError({
-              message:
-                "Cloudflare env credentials not found. Set CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL.",
-            });
-          }),
-        ),
         Match.when({ method: "stored" }, () =>
           store
-            .read<CloudflareStoredCredentials>(profileName, "cf-stored")
+            .read(profileName, STORED_STORAGE_KEY, CloudflareStoredCredentials)
             .pipe(
-              Effect.flatMap((creds) =>
-                creds == null
-                  ? Effect.fail(
-                      new AuthError({
-                        message:
-                          "Cloudflare stored credentials not found. Run: alchemy login --configure",
+              Effect.flatMap(
+                Effect.fn(function* (creds) {
+                  if (creds == null) {
+                    return yield* Effect.fail(
+                      needsReauth({
+                        provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                        profile: profileName,
+                        detail: "Cloudflare stored credentials not found.",
                       }),
-                    )
-                  : Effect.gen(function* () {
-                      // The account ID prompt is skippable, so stored
-                      // credentials may carry an empty accountId; fall
-                      // back to the env var before validating.
-                      const envAccountId = yield* getEnv(
-                        "CLOUDFLARE_ACCOUNT_ID",
-                      );
-                      const accountId = yield* validateAccountId(
-                        creds.accountId?.trim() || envAccountId,
-                        `stored for profile '${profileName}'`,
-                      );
-                      return Match.value(creds).pipe(
-                        Match.when({ type: "apiToken" }, (c) => ({
-                          type: "apiToken" as const,
-                          apiToken: Redacted.make(c.apiToken),
-                          accountId,
-                          source: { type: "stored" as const },
-                        })),
-                        Match.when({ type: "apiKey" }, (c) => ({
-                          type: "apiKey" as const,
-                          apiKey: Redacted.make(c.apiKey),
-                          email: Redacted.make(c.email),
-                          accountId,
-                          source: { type: "stored" as const },
-                        })),
-                        Match.exhaustive,
-                      );
-                    }),
+                    );
+                  }
+                  const accountId = yield* validateAccountId(
+                    creds.accountId,
+                    `stored for profile '${profileName}'`,
+                  );
+                  return Match.value(creds).pipe(
+                    Match.when({ type: "apiToken" }, (c) => ({
+                      type: "apiToken" as const,
+                      apiToken: Redacted.make(c.apiToken),
+                      accountId,
+                      source: { type: "stored" as const },
+                    })),
+                    Match.when({ type: "apiKey" }, (c) => ({
+                      type: "apiKey" as const,
+                      apiKey: Redacted.make(c.apiKey),
+                      email: Redacted.make(c.email),
+                      accountId,
+                      source: { type: "stored" as const },
+                    })),
+                    Match.exhaustive,
+                  );
+                }),
               ),
             ),
         ),
@@ -469,15 +435,27 @@ export const CloudflareAuth = AuthProviderLayer<
               cfg.accountId,
               `configured for profile '${profileName}'`,
             );
-            const creds = yield* store.read<OAuthClient.OAuthCredentials>(
+            const creds = yield* store.read(
               profileName,
-              "cf-oauth",
+              OAUTH_STORAGE_KEY,
+              OAuthClient.OAuthCredentials,
             );
             if (creds == null || creds.type !== "oauth") {
               return yield* Effect.fail(
-                new AuthError({
-                  message:
-                    "Cloudflare OAuth credentials not found. Run: alchemy login",
+                needsReauth({
+                  provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  detail: "Cloudflare OAuth credentials not found.",
+                }),
+              );
+            }
+            if (!OAuthClient.usesCurrentClient(creds)) {
+              yield* store.delete(profileName, OAUTH_STORAGE_KEY);
+              return yield* Effect.fail(
+                needsReauth({
+                  provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  detail: `Cloudflare OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed.`,
                 }),
               );
             }
@@ -489,15 +467,20 @@ export const CloudflareAuth = AuthProviderLayer<
                 ? creds
                 : yield* OAuthClient.refresh(creds).pipe(
                     Effect.tap((refreshed) =>
-                      store.write(profileName, "cf-oauth", refreshed),
+                      store.write(
+                        profileName,
+                        OAUTH_STORAGE_KEY,
+                        OAuthClient.OAuthCredentials,
+                        refreshed,
+                      ),
                     ),
-                    Effect.mapError(
-                      (e) =>
-                        new AuthError({
-                          message:
-                            "Cloudflare OAuth refresh failed. Run: alchemy login",
-                          cause: e,
-                        }),
+                    Effect.mapError((e) =>
+                      needsReauth({
+                        provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                        profile: profileName,
+                        detail: "Cloudflare OAuth refresh failed.",
+                        cause: e,
+                      }),
                     ),
                   );
             return {
@@ -512,37 +495,79 @@ export const CloudflareAuth = AuthProviderLayer<
         Match.exhaustive,
       );
 
+    const readEnvironment = Effect.gen(function* () {
+      const accountId = yield* getEnvRequired("CLOUDFLARE_ACCOUNT_ID").pipe(
+        Effect.flatMap((id) =>
+          validateAccountId(id, "from CLOUDFLARE_ACCOUNT_ID"),
+        ),
+      );
+      const apiToken = yield* getEnvRedacted("CLOUDFLARE_API_TOKEN");
+      if (apiToken) {
+        return {
+          type: "apiToken" as const,
+          apiToken,
+          accountId,
+          source: { type: "env" as const },
+        };
+      }
+      const apiKey = yield* getEnvRedacted("CLOUDFLARE_API_KEY");
+      const email =
+        (yield* getEnvRedacted("CLOUDFLARE_EMAIL")) ??
+        (yield* getEnvRedacted("CLOUDFLARE_ACCOUNT_EMAIL"));
+      if (apiKey && email) {
+        return {
+          type: "apiKey" as const,
+          apiKey,
+          email,
+          accountId,
+          source: { type: "env" as const },
+        };
+      }
+      return yield* new AuthError({
+        message:
+          "Cloudflare CI credentials not found. Set CLOUDFLARE_API_TOKEN, or CLOUDFLARE_API_KEY with CLOUDFLARE_EMAIL/CLOUDFLARE_ACCOUNT_EMAIL.",
+      });
+    });
+
     const logout = (profileName: string, config: CloudflareAuthConfig) =>
       Match.value(config)
         .pipe(
-          Match.when({ method: "env" }, () => Effect.void),
           Match.when({ method: "stored" }, () =>
             store
-              .delete(profileName, "cf-stored")
+              .delete(profileName, STORED_STORAGE_KEY)
               .pipe(
                 Effect.andThen(
-                  Clank.success("Cloudflare: stored credentials removed"),
+                  prompt.output.success(
+                    "Cloudflare: stored credentials removed",
+                  ),
                 ),
               ),
           ),
           Match.when({ method: "oauth" }, () =>
             store
-              .read<OAuthClient.OAuthCredentials>(profileName, "cf-oauth")
+              .read(
+                profileName,
+                OAUTH_STORAGE_KEY,
+                OAuthClient.OAuthCredentials,
+              )
               .pipe(
                 Effect.tap((creds) =>
-                  creds?.type === "oauth"
+                  creds?.type === "oauth" &&
+                  OAuthClient.usesCurrentClient(creds)
                     ? OAuthClient.revoke(creds).pipe(
                         Effect.catchTag("OAuthError", (err) =>
-                          Clank.warn(
+                          prompt.output.warning(
                             `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
                           ),
                         ),
                       )
                     : Effect.void,
                 ),
-                Effect.andThen(store.delete(profileName, "cf-oauth")),
+                Effect.andThen(store.delete(profileName, OAUTH_STORAGE_KEY)),
                 Effect.andThen(
-                  Clank.success("Cloudflare: OAuth credentials removed."),
+                  prompt.output.success(
+                    "Cloudflare: OAuth credentials removed.",
+                  ),
                 ),
               ),
           ),
@@ -561,10 +586,13 @@ export const CloudflareAuth = AuthProviderLayer<
     const login = (profileName: string, config: CloudflareAuthConfig) =>
       Match.value(config)
         .pipe(
-          Match.when({ method: "env" }, () => Effect.void),
           Match.when({ method: "stored" }, () =>
             store
-              .read<CloudflareStoredCredentials>(profileName, "cf-stored")
+              .read(
+                profileName,
+                STORED_STORAGE_KEY,
+                CloudflareStoredCredentials,
+              )
               .pipe(
                 Effect.flatMap((creds) =>
                   creds == null ? loginStored(profileName) : Effect.void,
@@ -573,233 +601,264 @@ export const CloudflareAuth = AuthProviderLayer<
           ),
           Match.when({ method: "oauth" }, (c) =>
             Effect.gen(function* () {
-              const creds = yield* store.read<OAuthClient.OAuthCredentials>(
+              const creds = yield* store.read(
                 profileName,
-                "cf-oauth",
+                OAUTH_STORAGE_KEY,
+                OAuthClient.OAuthCredentials,
               );
+              // Any path that falls back to a full browser login rebuilds the
+              // authorize URL from the profile's stored scopes. Those scopes
+              // may predate the current OAuth client (or a catalog change), and
+              // one unknown scope makes the whole authorize URL invalid — so
+              // sanitize before generating a URL, never after it fails.
+              const fullLogin = Effect.suspend(() => {
+                const { valid, dropped } = partitionOAuthScopes(c.scopes);
+                if (valid.length === 0) {
+                  return Effect.fail(
+                    new AuthError({
+                      message:
+                        `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
+                        `Run \`alchemy profile edit ${profileName} --reconfigure Cloudflare\` to pick scopes again.`,
+                    }),
+                  );
+                }
+                return (
+                  dropped.length === 0
+                    ? Effect.void
+                    : prompt.output.warning(
+                        `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
+                          `Run \`alchemy profile edit ${profileName} --reconfigure Cloudflare\` to re-pick scopes.`,
+                      )
+                ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
+              });
 
-              if (creds?.type === "oauth") {
-                yield* Clank.info(
-                  "Cloudflare: refreshing OAuth credentials...",
-                );
-                yield* OAuthClient.refresh(creds).pipe(
-                  Effect.flatMap((refreshed) =>
-                    store
-                      .write(profileName, "cf-oauth", refreshed)
-                      .pipe(
-                        Effect.andThen(
-                          Clank.success(
-                            "Cloudflare: OAuth credentials refreshed.",
+              // The silent refresh rotates a single-use refresh token, so
+              // its read-refresh-persist section runs under the profile
+              // lock — a concurrent `read` refreshing the same token would
+              // double-spend it. The lock is held only for this API
+              // round-trip, never across the browser wait below.
+              const outcome =
+                creds?.type === "oauth" && OAuthClient.usesCurrentClient(creds)
+                  ? yield* withProfileCredentialsLock(
+                      profileName,
+                      prompt.output
+                        .info("Cloudflare: refreshing OAuth credentials...")
+                        .pipe(
+                          Effect.andThen(OAuthClient.refresh(creds)),
+                          Effect.flatMap((refreshed) =>
+                            store
+                              .write(
+                                profileName,
+                                OAUTH_STORAGE_KEY,
+                                OAuthClient.OAuthCredentials,
+                                refreshed,
+                              )
+                              .pipe(
+                                Effect.andThen(
+                                  prompt.output.success(
+                                    "Cloudflare: OAuth credentials refreshed.",
+                                  ),
+                                ),
+                              ),
+                          ),
+                          Effect.as("refreshed" as const),
+                          Effect.catchTag("OAuthError", () =>
+                            Effect.succeed("browser" as const),
                           ),
                         ),
-                      ),
-                  ),
-                  Effect.catchTag("OAuthError", () =>
-                    oauthLogin(profileName, c.scopes).pipe(Effect.asVoid),
-                  ),
-                );
-                return;
+                    )
+                  : yield* Effect.gen(function* () {
+                      if (creds?.type === "oauth") {
+                        yield* store.delete(profileName, OAUTH_STORAGE_KEY);
+                        yield* prompt.output.warning(
+                          "Cloudflare: removed OAuth credentials issued to the previous client.",
+                        );
+                      }
+                      return "browser" as const;
+                    });
+              if (outcome === "browser") {
+                yield* fullLogin;
               }
-
-              yield* oauthLogin(profileName, c.scopes);
             }),
           ),
           Match.exhaustive,
         )
         .pipe(
-          Effect.mapError(
-            (e) => new AuthError({ message: "login failed", cause: e }),
+          // A blanket mapError must never swallow the NeedsReauth tag —
+          // the profile UI matches on it to render "needs re-login".
+          Effect.mapError((e) =>
+            e instanceof NeedsReauth
+              ? e
+              : new AuthError({ message: "login failed", cause: e }),
           ),
         );
 
-    const prettyPrint = (profileName: string, config: CloudflareAuthConfig) =>
+    const details = (
+      profileName: string,
+      config: CloudflareAuthConfig,
+    ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth> =>
       resolveCredentials(profileName, config).pipe(
-        Effect.tap((creds) => {
-          const sourceStr = creds.source.details
-            ? `${creds.source.type} - ${creds.source.details}`
-            : creds.source.type;
-          return Match.value(creds).pipe(
-            Match.when({ type: "apiToken" }, (c) =>
-              Effect.all([
-                Console.log(`  apiToken: ${displayRedacted(c.apiToken, 9)}`),
-                Console.log(`  accountId: ${c.accountId}`),
-                Console.log(`  source: ${sourceStr}`),
+        Effect.map((creds) => {
+          const source = {
+            key: "source",
+            value: creds.source.details
+              ? `${creds.source.type} - ${creds.source.details}`
+              : creds.source.type,
+          };
+          return {
+            lines: Match.value(creds).pipe(
+              Match.when({ type: "apiToken" }, (c) => [
+                { key: "apiToken", value: displayRedacted(c.apiToken, 9) },
+                { key: "accountId", value: c.accountId },
+                source,
               ]),
-            ),
-            Match.when({ type: "apiKey" }, (c) =>
-              Effect.all([
-                Console.log(`  apiKey: ${displayRedacted(c.apiKey)}`),
-                Console.log(`  email:  ${displayRedacted(c.email)}`),
-                Console.log(`  accountId: ${c.accountId}`),
-                Console.log(`  source: ${sourceStr}`),
+              Match.when({ type: "apiKey" }, (c) => [
+                { key: "apiKey", value: displayRedacted(c.apiKey) },
+                { key: "email", value: displayRedacted(c.email) },
+                { key: "accountId", value: c.accountId },
+                source,
               ]),
+              Match.when({ type: "oauth" }, (c) => {
+                const remainingMs = c.expires - Date.now();
+                const expiresAt = new Date(c.expires).toISOString();
+                const expiresStr =
+                  remainingMs <= 0
+                    ? `expired (${expiresAt})`
+                    : `in ${Duration.format(Duration.millis(remainingMs))} (${expiresAt})`;
+                return [
+                  { key: "accessToken", value: displayRedacted(c.accessToken) },
+                  { key: "expires", value: expiresStr },
+                  { key: "accountId", value: c.accountId },
+                  source,
+                ];
+              }),
+              Match.exhaustive,
             ),
-            Match.when({ type: "oauth" }, (c) => {
-              const remainingMs = c.expires - Date.now();
-              const expiresAt = new Date(c.expires).toISOString();
-              const expiresStr =
-                remainingMs <= 0
-                  ? `expired (${expiresAt})`
-                  : `in ${Duration.format(Duration.millis(remainingMs))} (${expiresAt})`;
-              return Effect.all([
-                Console.log(`  accessToken: ${displayRedacted(c.accessToken)}`),
-                Console.log(`  expires: ${expiresStr}`),
-                Console.log(`  accountId: ${c.accountId}`),
-                Console.log(`  source: ${sourceStr}`),
-              ]);
-            }),
-            Match.exhaustive,
-          );
+          };
         }),
       );
 
+    /**
+     * Persist flag-provided stored credentials (`--method api-token` /
+     * `--method api-key`). Writes the same `cloudflare-stored` file the
+     * interactive stored path writes; OAuth is interactive-only and not
+     * accepted here.
+     */
+    const configureWith = (
+      profileName: string,
+      input: {
+        readonly method: string;
+        readonly values: Record<string, string>;
+      },
+    ): Effect.Effect<CloudflareAuthConfig, AuthError> => {
+      const persist = (
+        credentials: CloudflareStoredCredentials,
+        config: CloudflareAuthConfig,
+      ) =>
+        store
+          .write(
+            profileName,
+            STORED_STORAGE_KEY,
+            CloudflareStoredCredentials,
+            credentials,
+          )
+          .pipe(
+            // Re-configuring may point this profile at a different
+            // Cloudflare account; the cached state-store credentials are
+            // minted per-account, so drop them (same as `configure`).
+            Effect.andThen(
+              store
+                .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
+                .pipe(Effect.ignore),
+            ),
+            Effect.as(config),
+          );
+      return Match.value(input.method).pipe(
+        Match.when("api-token", () =>
+          validateFieldValues(
+            CLOUDFLARE_AUTH_PROVIDER_NAME,
+            apiTokenFields,
+            input.values,
+          ).pipe(
+            Effect.flatMap((values) =>
+              persist(
+                {
+                  type: "apiToken",
+                  apiToken: values.apiToken!,
+                  accountId: values.accountId!.trim().toLowerCase(),
+                },
+                { method: "stored", credentialType: "apiToken" },
+              ),
+            ),
+          ),
+        ),
+        Match.when("api-key", () =>
+          validateFieldValues(
+            CLOUDFLARE_AUTH_PROVIDER_NAME,
+            apiKeyFields,
+            input.values,
+          ).pipe(
+            Effect.flatMap((values) =>
+              persist(
+                {
+                  type: "apiKey",
+                  apiKey: values.apiKey!,
+                  email: values.email!,
+                  accountId: values.accountId!.trim().toLowerCase(),
+                },
+                { method: "stored", credentialType: "apiKey" },
+              ),
+            ),
+          ),
+        ),
+        Match.orElse(() =>
+          Effect.fail(
+            new AuthError({
+              message: `Cloudflare: unknown method '${input.method}'. Valid methods: api-token, api-key. (OAuth is interactive-only.)`,
+            }),
+          ),
+        ),
+      );
+    };
+
     return {
+      configSchema: CloudflareAuthConfigSchema,
       configure: configureCredentials,
+      configureWith,
+      configureMethods,
       logout,
       login,
-      prettyPrint,
+      details,
       read: resolveCredentials,
+      readEnvironment,
+      environment: [
+        {
+          name: "CLOUDFLARE_ACCOUNT_ID",
+          required: true,
+          description: "Account the stack deploys into.",
+        },
+        {
+          name: "CLOUDFLARE_API_TOKEN",
+          required: true,
+          secret: true,
+          alternatives: ["CLOUDFLARE_API_KEY"],
+          description:
+            "API token (preferred). Not consulted when unset and CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL are provided instead.",
+        },
+        {
+          name: "CLOUDFLARE_API_KEY",
+          required: false,
+          secret: true,
+          description:
+            "Global API key; used with CLOUDFLARE_EMAIL when no API token is set.",
+        },
+        {
+          name: "CLOUDFLARE_EMAIL",
+          required: false,
+          alternatives: ["CLOUDFLARE_ACCOUNT_EMAIL"],
+          description: "Account email paired with CLOUDFLARE_API_KEY.",
+        },
+      ],
     };
   }),
 );
-
-export const ALL_SCOPES = {
-  "access:read":
-    "See Cloudflare Access data such as zones, applications, certificates, device postures, groups, identity providers, login counts, organizations, policies, service tokens, and users",
-  "access:write":
-    "See and change Cloudflare Access data such as zones, applications, certificates, device postures, groups, identity providers, login counts, organizations, policies, service tokens, and users",
-  "account:read":
-    "See your account info such as account details, analytics, and memberships",
-  "agw:read": "Grants read level access to Agents Gateway",
-  "agw:run": "Grants run level access to Agents Gateway",
-  "agw:write": "Grants read and write level access to Agents Gateway",
-  "ai:read": "Grants read level access to Workers AI",
-  "ai:write": "Grants write level access to Workers AI",
-  "aiaudit:read": "Grants read level access to AI Audit",
-  "aiaudit:write": "Grants write level access to AI Audit",
-  "aig:read": "Grants read level access to AI Gateway",
-  "aig:write": "Grants write level access to AI Gateway",
-  "auditlogs:read": "View Cloudflare Account Audit Logs",
-  "browser:read": "Grants read level access to Browser Rendering",
-  "browser:write": "Grants write level access to Browser Rendering",
-  "cfone:read": "Grants read level access to Cloudforce One data",
-  "cfone:write": "Grants write level access to Cloudforce One data",
-  "cloudchamber:write": "See and make changes to Cloudchamber",
-  "connectivity:admin":
-    "See, change, and bind to Connectivity Directory services, including creating services targeting Cloudflare Tunnel",
-  "connectivity:bind":
-    "read, list, and bind to Connectivity Directory services, as well as read and list Cloudflare Tunnels",
-  "connectivity:read":
-    "See Connectivity Directory services and Cloudflare Tunnels",
-  "constellation:write":
-    "Grants write access to Constellation configuration and models",
-  "containers:write": "See and make changes to Workers Containers",
-  "d1:write": "See and make changes to D1",
-  "dex:read": "Grants read level access to Cloudflare DEX",
-  "dex:write": "Grants write level access to Cloudflare DEX",
-  "dns_analytics:read": "Grants read level access to Cloudflare DNS Analytics",
-  "dns_records:edit": "Grants edit level access to dns records",
-  "dns_records:read": "Grants read level access to dns records",
-  "dns_settings:read": "Grants read level access to Cloudflare DNS Settings",
-  "firstpartytags:write":
-    "Can see, edit and publish Google tag gateway configuration.",
-  "lb:edit": "Grants edit level access to lb and lb pools",
-  "lb:read": "Grants read level access to lb and lb pools",
-  "logpush:read": "See Cloudflare Logpush data",
-  "logpush:write": "See and change Cloudflare Logpush data",
-  "notification:read": "View Cloudflare Notifications",
-  "notification:write": "View and Modify Cloudflare Notifications",
-  "pages:read": "See Cloudflare Pages projects, settings and deployments",
-  "pages:write":
-    "See and change Cloudflare Pages projects, settings and deployments",
-  "pipelines:read": "Grants read level access to Cloudflare Pipelines",
-  "pipelines:setup":
-    "Grants permission to generate R2 tokens for Workers Pipelines",
-  "pipelines:write": "Grants write level access to Cloudflare Pipelines",
-  "query_cache:write": "See and make changes to Hyperdrive",
-  "queues:write": "See and change Cloudflare Queues settings and data",
-  "r2_catalog:write": "Grants write level access to R2 Data Catalog",
-  "radar:read": "Grants access to read Cloudflare Radar data",
-  "ai-search:read": "Grants read level access to AI Search",
-  "ai-search:write": "Grants write level access to AI Search",
-  "ai-search:run": "Grants run level access to AI Search",
-  "secrets_store:read": "Grants read level access to Secrets Store",
-  "secrets_store:write": "Grants write level access to Secrets Store",
-  "ssl_certs:write":
-    "Grants read and write access to SSL MTLS certificates or Certificate Store",
-  "sso-connector:read": "See Cloudflare SSO connectors",
-  "sso-connector:write":
-    "See Cloudflare SSO connectors to toggle activation and deactivation of SSO",
-  "teams:pii": "See personally identifiable Cloudflare Teams data",
-  "teams:read":
-    "See Cloudflare Teams data such as zones, gateway, and argo tunnel details",
-  "teams:secure_location":
-    "See all DNS Location data but can only change secure DNS Locations",
-  "teams:write":
-    "See and change Cloudflare Teams data such as zones, gateway, and argo tunnel details",
-  "url_scanner:read": "Grants read level access to URL Scanner",
-  "url_scanner:write": "Grants write level access to URL Scanner",
-  "user:read":
-    "See your user info such as name, email address, and account memberships",
-  "vectorize:write": "See and make changes to Vectorize",
-  "workers:read":
-    "See Cloudflare Workers data such as zones, KV storage, R2 storage, scripts, and routes",
-  "workers:write":
-    "See and change Cloudflare Workers data such as zones, KV storage, R2 storage, scripts, and routes",
-  "workers_builds:read":
-    "See Cloudflare Workers Builds data such as builds, build configuration, and build logs",
-  "workers_builds:write":
-    "See and change Cloudflare Workers Builds data such as builds, build configuration, and build logs",
-  "workers_kv:write":
-    "See and change Cloudflare Workers KV Storage data such as keys and namespaces",
-  "workers_observability:read":
-    "Grants read access to Cloudflare Workers Observability",
-  "workers_observability:write":
-    "Grants read and write access to Cloudflare Workers Observability",
-  "workers_observability_telemetry:write":
-    "Grants write access to Cloudflare Workers Observability Telemetry API",
-  "workers_routes:write":
-    "See and change Cloudflare Workers data such as filters and routes",
-  "workers_scripts:write":
-    "See and change Cloudflare Workers scripts, durable objects, subdomains, triggers, and tail data",
-  "workers_tail:read": "See Cloudflare Workers tail and script data",
-  "zone:read": "Grants read level access to account zone",
-};
-
-export const DEFAULT_SCOPES = [
-  "account:read",
-  "ai-search:write",
-  "ai-search:run",
-  "ai:write",
-  "aig:read",
-  "aig:write",
-  "cloudchamber:write",
-  "connectivity:admin",
-  "containers:write",
-  "d1:write",
-  "pages:write",
-  "pipelines:write",
-  "queues:write",
-  "secrets_store:write",
-  "ssl_certs:write",
-  "user:read",
-  "vectorize:write",
-  "workers_kv:write",
-  "workers_observability:read",
-  "workers_observability:write",
-  "workers_observability_telemetry:write",
-  "workers_routes:write",
-  "workers_scripts:write",
-  "workers_tail:read",
-  "workers:write",
-  "zone:read",
-];
-
-export const OAUTH_CLIENT_ID = "6d8c2255-0773-45f6-b376-2914632e6f91";
-export const OAUTH_REDIRECT_URI = "https://alchemy.run/auth/callback";
-export const OAUTH_LOCAL_CALLBACK_URI = "http://localhost:9976/auth/callback";
-export const OAUTH_ENDPOINTS = {
-  authorize: "https://dash.cloudflare.com/oauth2/authorize",
-  token: "https://dash.cloudflare.com/oauth2/token",
-  revoke: "https://dash.cloudflare.com/oauth2/revoke",
-};

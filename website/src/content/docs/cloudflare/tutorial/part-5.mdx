@@ -57,7 +57,8 @@ Rather than hand those elevated rights to your day-to-day profile,
 create a dedicated `admin` profile:
 
 ```sh
-alchemy login --profile admin
+alchemy profile create admin
+alchemy profile edit admin --add Cloudflare
 ```
 
 When prompted for a Cloudflare credential, pick one of:

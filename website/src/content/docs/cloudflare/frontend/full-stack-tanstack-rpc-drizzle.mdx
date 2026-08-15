@@ -513,9 +513,10 @@ hand-written DTOs, no `fetch` URLs, no response parsing.
 ## 9. Deploy
 
 Deploying provisions the Neon branch, runs the generated migrations, creates the
-Hyperdrive pool, and uploads both Workers. If you haven't configured [Cloudflare](/cloudflare/setup/)
-and [Neon](/neon/setup) credentials already (e.g. using `alchemy login` or an `.env` file),
-Alchemy will guide you through this process during your first deploy.
+Hyperdrive pool, and uploads both Workers. Configure [Cloudflare](/cloudflare/setup/)
+and [Neon](/neon/setup) credentials first with `alchemy profile edit` (or an
+`.env` file in CI) — a deploy with nothing configured fails with the exact
+command to run.
 
 ```sh
 bun install

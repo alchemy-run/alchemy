@@ -313,7 +313,8 @@ Rather than hand those rights to your default
 [profile](/environments/profiles), create a separate `admin` profile:
 
 ```sh
-alchemy login --profile admin
+alchemy profile create admin
+alchemy profile edit admin
 ```
 
 :::danger[Heads up]
@@ -584,7 +585,7 @@ not sensitive).
 
 Your `--profile admin` AWS credentials need IAM admin rights for
 this stack: it creates an `OpenIDConnectProvider` and an IAM `Role`.
-Run `alchemy login --profile admin` and choose a credential
+Run `alchemy profile edit admin --add AWS` and choose a credential
 (SSO/OIDC, access keys, etc.) that's authorized for IAM
 administration.
 
@@ -788,6 +789,6 @@ Then add the secrets to your workflow's deploy and cleanup steps:
 ## Where next
 
 - [Stages](/environments/stages) — how `pr-42` and `prod` stay isolated.
-- [Profiles](/environments/profiles) — one credential bundle per environment.
+- [Profiles](/environments/profiles) — local credential bundles and the CI environment-variable matrix.
 - [Secrets & env on Cloudflare](/cloudflare/security/secrets-env) — wire app secrets into a Worker.
 - [Secrets & env on AWS](/aws/security/secrets-env) — the same walk for Lambda.
