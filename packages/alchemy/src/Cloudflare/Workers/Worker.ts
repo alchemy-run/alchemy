@@ -37,7 +37,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
-import type { Application } from "../Access/Application.ts";
+import type { Application, ApplicationProps } from "../Access/Application.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
@@ -84,17 +84,59 @@ export interface WorkerExecutionContextCache {
 }
 
 /**
- * Enroll this Worker into a Cloudflare Access application (`access` prop).
- * The application owns the policies; enrolling pushes this Worker's
- * `worker` destination (and a `preview_worker` destination unless
- * `previews: false`) onto the application through its binding contract, so
- * the application deploys with — and converges on — the destinations of
- * every enrolled Worker. Removing the prop (or the Worker) un-enrolls it
- * on the application's next reconcile.
+ * Protect this Worker with Cloudflare Access (`access` prop). Two forms:
+ *
+ * - `{ application }` — enroll into a **shared** application (one policy
+ *   set across several Workers).
+ * - `{ policies }` — a **dedicated** application owned by this Worker,
+ *   created/updated/deleted with it. Access configuration (policies,
+ *   session duration, IdPs) lives on applications, so per-Worker
+ *   configuration means a per-Worker application — this form declares one
+ *   for you (logical id `<WorkerId>Access`).
+ *
+ * Either way, enrolling pushes this Worker's `worker` destination (and a
+ * `preview_worker` destination unless `previews: false`) onto the
+ * application through its binding contract, so the application deploys
+ * with — and converges on — the destinations of every enrolled Worker.
+ * Removing the prop (or the Worker) un-enrolls it on the application's
+ * next reconcile.
  */
-export interface WorkerAccessConfig {
+export type WorkerAccessConfig =
+  | WorkerAccessEnrollment
+  | WorkerAccessApplication;
+
+/** Enroll this Worker into a shared Access application. */
+export interface WorkerAccessEnrollment {
   /** The `Cloudflare.Access.Application` to enroll into. */
   application: Application;
+  /**
+   * Also protect the Worker's version preview URLs.
+   * @default true
+   */
+  previews?: boolean;
+}
+
+/**
+ * A dedicated Access application owned by this Worker — per-Worker
+ * policies without declaring the application yourself.
+ */
+export interface WorkerAccessApplication {
+  /**
+   * Policies gating access to this Worker — inline bodies, reusable
+   * `Cloudflare.Access.Policy` resources, or policy ids (see
+   * `ApplicationProps["policies"]`).
+   */
+  policies: NonNullable<ApplicationProps["policies"]>;
+  /** Display name for the application. Auto-generated when omitted. */
+  name?: string;
+  /** Session lifetime, e.g. `"24h"`. */
+  sessionDuration?: string;
+  /** Allowed identity-provider UUIDs. */
+  allowedIdps?: string[];
+  /** Skip the IdP picker when exactly one IdP is allowed. */
+  autoRedirectToIdentity?: boolean;
+  /** Show the application in the App Launcher dashboard. */
+  appLauncherVisible?: boolean;
   /**
    * Also protect the Worker's version preview URLs.
    * @default true
@@ -796,6 +838,17 @@ export interface WorkerProps<
    *
    * @example
    * ```ts
+   * // Dedicated application owned by this Worker (per-Worker policies):
+   * export default class Api extends Cloudflare.Worker<Api>()("Api", {
+   *   main: import.meta.url,
+   *   access: {
+   *     policies: [
+   *       { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+   *     ],
+   *   },
+   * }, ...) {}
+   *
+   * // Or enroll into a shared application (one policy set, many Workers):
    * const App = Cloudflare.Access.Application("TeamOnly", {
    *   type: "self_hosted",
    *   policies: [

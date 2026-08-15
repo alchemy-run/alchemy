@@ -5,7 +5,7 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import type { Application } from "../Access/Application.ts";
+import { Application } from "../Access/Application.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -50,6 +50,7 @@ import {
   isSelfUrl,
   isWorker,
   type Worker,
+  type WorkerAccessConfig,
   type WorkerProps,
 } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
@@ -72,16 +73,28 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       isYieldableEffectLike(accessInput) && !Output.isOutput(accessInput)
         ? yield* accessInput as Effect.Effect<unknown>
         : accessInput
-    ) as { application: unknown; previews?: unknown };
-    // The application can be the declaration Effect (module-scope
-    // `const App = Cloudflare.Access.Application(...)`) or an
-    // already-yielded resource.
-    const application = (
-      isYieldableEffectLike(access.application) &&
-      !Output.isOutput(access.application)
-        ? yield* access.application as Effect.Effect<unknown>
-        : access.application
-    ) as Application;
+    ) as InputProps<WorkerAccessConfig>;
+    const application =
+      "application" in access
+        ? // Shared form: the application can be the declaration Effect
+          // (module-scope `const App = Cloudflare.Access.Application(...)`)
+          // or an already-yielded resource.
+          ((isYieldableEffectLike(access.application) &&
+          !Output.isOutput(access.application)
+            ? yield* access.application as Effect.Effect<unknown>
+            : access.application) as Application)
+        : // Dedicated form: declare an application owned by this Worker —
+          // per-Worker Access configuration means a per-Worker application
+          // (Cloudflare attaches policies to applications, not Workers).
+          yield* Application(`${resource.LogicalId}Access`, {
+            type: "self_hosted",
+            name: access.name,
+            policies: access.policies,
+            sessionDuration: access.sessionDuration,
+            allowedIdps: access.allowedIdps,
+            autoRedirectToIdentity: access.autoRedirectToIdentity,
+            appLauncherVisible: access.appLauncherVisible,
+          });
     const previews = access.previews !== false;
     yield* application.bind(`access:${resource.FQN}`, {
       destinations: [

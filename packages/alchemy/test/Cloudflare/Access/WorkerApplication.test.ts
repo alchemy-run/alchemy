@@ -7,6 +7,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import OwnedAccessWorker from "./fixtures/access-owned-worker.ts";
 import AccessProtectedWorker, { App } from "./fixtures/access-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -176,6 +178,74 @@ test.provider(
           ),
         );
       expect(gone).toBe("gone");
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+/** Find a live application by its exact display name, or undefined. */
+const findAppByName = (accountId: string, name: string) =>
+  zeroTrust.listAccessApplicationsForAccount.pages({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .flatMap((page) => page.result ?? [])
+        .map(
+          (raw) => raw as unknown as LiveApp & { id?: string; name?: string },
+        )
+        .find((app) => app.name === name),
+    ),
+  );
+
+test.provider(
+  "access.policies declares a dedicated application owned by the Worker",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const { worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* OwnedAccessWorker;
+          return { worker };
+        }),
+      );
+
+      // The dedicated application exists with the inline policy and this
+      // Worker's destinations — declared entirely from the `access` prop.
+      const app = yield* findAppByName(
+        accountId,
+        "Access for alchemy owned-app test",
+      );
+      expect(app).toBeDefined();
+      expect(app!.policies?.length).toBe(1);
+      expect(app!.policies![0].decision).toBe("allow");
+      expect(app!.policies![0].reusable).toBe(false);
+      expect(app!.destinations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "worker",
+            workerId: worker.scriptTag,
+          }),
+          expect.objectContaining({
+            type: "preview_worker",
+            workerId: worker.scriptTag,
+          }),
+        ]),
+      );
+
+      // Unauthenticated requests are intercepted.
+      const location = yield* expectAccessLoginRedirect(worker.url!);
+      expect(location).toContain("cloudflareaccess.com");
+
+      yield* stack.destroy();
+
+      // The dedicated application is deleted with the Worker's stack.
+      const appAfter = yield* findAppByName(
+        accountId,
+        "Access for alchemy owned-app test",
+      );
+      expect(appAfter).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
