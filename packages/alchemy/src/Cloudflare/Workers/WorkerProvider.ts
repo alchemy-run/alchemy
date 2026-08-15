@@ -42,10 +42,11 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import {
+  assertInheritEnvCollision,
   assertInheritWorkerProps,
   bindingsInheritFor,
   finalizeInheritUploadBindings,
-  inheritNamesFromResourceBindings,
+  inheritNamesForWorker,
   isInherit,
   WorkerInheritConfigError,
 } from "./Inherit.ts";
@@ -2459,11 +2460,7 @@ export const LiveWorkerProvider = () =>
             if (value === undefined) continue;
             const existing = metadataBindings.find((b) => b.name === key);
             if (existing !== undefined) {
-              if (existing.type === "inherit" && !isInherit(value)) {
-                return yield* new WorkerInheritConfigError({
-                  message: `Binding '${key}' cannot be both inherited and given an explicit value.`,
-                });
-              }
+              yield* assertInheritEnvCollision(existing, value);
               continue;
             }
             if (Redacted.isRedacted(value)) {
@@ -2493,6 +2490,12 @@ export const LiveWorkerProvider = () =>
         }
       });
 
+      /**
+       * Best-effort preflight: inherit's wire token is always `"latest"`
+       * (Cloudflare error 10057). Refuse unless the latest listed upload is
+       * also the sole 100% deployment. Not an atomic lock — a concurrent
+       * preview can still become `latest` after this check and before PUT.
+       */
       const assertInheritSourceIsLive = Effect.fn(function* (
         accountId: string,
         scriptName: string,
@@ -2531,7 +2534,7 @@ export const LiveWorkerProvider = () =>
             message:
               `Inherit copies the latest upload of '${scriptName}' (${latestUploaded}), which is not the sole 100% deployment` +
               (liveId !== undefined ? ` (${liveId})` : "") +
-              `. Deploy that version at 100% (or delete undeployed previews) before inheriting.`,
+              `. Deploy that version at 100% (or delete undeployed previews) before inheriting. This is a best-effort preflight; a concurrent upload can still become latest before the PUT.`,
           });
         }
       });
@@ -2762,7 +2765,7 @@ export const LiveWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         yield* assertInheritWorkerProps(
           news,
-          inheritNamesFromResourceBindings(bindings),
+          inheritNamesForWorker(news, bindings),
         );
         const version = news.version!;
         const parentName = resolveVersionParentName(version);
@@ -3020,7 +3023,7 @@ export const LiveWorkerProvider = () =>
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
         yield* assertInheritWorkerProps(
           news,
-          inheritNamesFromResourceBindings(bindings),
+          inheritNamesForWorker(news, bindings),
         );
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
@@ -4581,7 +4584,7 @@ export const LiveWorkerProvider = () =>
             existingSettings?.bindings,
           );
 
-          const inheritNames = inheritNamesFromResourceBindings(bindings);
+          const inheritNames = inheritNamesForWorker(news, bindings);
           yield* assertInheritWorkerProps(news, inheritNames);
           if (inheritNames.length > 0 && existingSettings === undefined) {
             return yield* new WorkerInheritConfigError({

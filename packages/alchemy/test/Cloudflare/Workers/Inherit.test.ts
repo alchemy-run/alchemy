@@ -76,6 +76,73 @@ describe("Cloudflare.Workers.Inherit", () => {
   );
 
   test.provider(
+    "refuses inherit when an undeployed preview is the latest upload",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const live = yield* stack.deploy(
+          Cloudflare.Worker("InheritPreviewPoison", {
+            script,
+            env: {
+              SOURCE_MARK: "from-v100",
+              API_TOKEN: Redacted.make("retained-secret-value"),
+            },
+          }),
+        );
+
+        yield* stack.deploy(
+          Cloudflare.Worker("InheritPreviewPoison", {
+            script,
+            version: { traffic: 0, message: "undeployed inherit preview" },
+            env: {
+              SOURCE_MARK: "from-preview",
+            },
+          }),
+        );
+
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const listed = yield* workers.listScriptVersions({
+          accountId,
+          scriptName: live.workerName,
+          perPage: 5,
+        });
+        const { deployments } = yield* workers.listScriptDeployments({
+          accountId,
+          scriptName: live.workerName,
+        });
+        const latestUploaded = listed.items?.[0]?.id;
+        const liveId = (deployments[0]?.versions ?? []).find(
+          (version) => version.percentage === 100,
+        )?.versionId;
+        expect(latestUploaded).toBeDefined();
+        expect(liveId).toBeDefined();
+        expect(latestUploaded).not.toEqual(liveId);
+
+        const failure = yield* stack
+          .deploy(
+            Cloudflare.Worker("InheritPreviewPoison", {
+              script,
+              env: {
+                SOURCE_MARK: Cloudflare.Workers.Inherit(),
+                API_TOKEN: Cloudflare.Workers.Inherit(),
+              },
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(failure).toEqual(
+          expect.objectContaining({
+            _tag: "WorkerInheritConfigError",
+            message: expect.stringMatching(/100%|latest upload/i),
+          }),
+        );
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 180_000 },
+  );
+
+  test.provider(
     "inherits named bindings from the previous upload and fails closed for a missing name",
     (stack) =>
       Effect.gen(function* () {

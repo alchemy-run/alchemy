@@ -1,5 +1,6 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Binding from "./Binding.ts";
 import type { InheritBinding } from "./InheritBinding.ts";
@@ -26,9 +27,11 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * Cloudflare's upload API accepts only the literal `"latest"` as the inherit
  * source (error 10057). That token is the latest *uploaded* version, not a
  * pin of the 100% deployment. Alchemy always sends `version_id: "latest"`
- * and `bindings_inherit=strict`, and refuses the deploy unless that latest
- * upload is also the sole version currently at 100% traffic — so an
- * undeployed preview cannot become the inherit source.
+ * and `bindings_inherit=strict`. Before the upload it refuses unless the
+ * latest listed upload is also the sole version currently at 100% traffic.
+ * That check is a best-effort preflight, not an atomic lock: a concurrent
+ * preview upload can still become `latest` after the check and before the
+ * PUT. Treat Alchemy as the exclusive uploader of this script.
  *
  * Do not combine `Inherit` with `version` (preview / gradual rollout) or a
  * dispatch `namespace`. Do not inherit `ALCHEMY_*` or `VITE_*` names.
@@ -42,7 +45,7 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * @product Workers
  * @category Workers & Compute
  *
- * @section Inherit a secret from the latest 100% upload
+ * @section Inherit a secret from the latest upload
  * @example Async Worker
  * ```typescript
  * export const Api = Cloudflare.Worker("Api", {
@@ -100,8 +103,20 @@ export const Inherit = Binding.Service<Inherit>({
 /** Call-site alias for {@link Inherit}. */
 export const inherit = Inherit;
 
-export const isInherit = (value: unknown): value is InheritBinding =>
-  Binding.isBinding(value) && value.kind === TypeId;
+const hasInheritKind = (value: object): boolean =>
+  "kind" in value && (value as { readonly kind?: unknown }).kind === TypeId;
+
+export const isInherit = (value: unknown): value is InheritBinding => {
+  if (typeof value !== "object" || value === null) return false;
+  if (Binding.isBinding(value) && value.kind === TypeId) return true;
+  if (hasInheritKind(value)) return true;
+  if ("~alchemy/Binding" in value) {
+    return isInherit(
+      (value as { readonly "~alchemy/Binding": unknown })["~alchemy/Binding"],
+    );
+  }
+  return false;
+};
 
 /** A Worker's inherit contract is invalid or its source is not the live 100% version. */
 export class WorkerInheritConfigError extends Data.TaggedError(
@@ -191,6 +206,84 @@ export const inheritNamesFromResourceBindings = (
       .filter(isInheritWireBinding)
       .map((item) => item.name),
   );
+
+export const inheritNamesFromEnv = (
+  env: Record<string, unknown> | undefined,
+): string[] =>
+  env == null
+    ? []
+    : Object.entries(env)
+        .filter(([, value]) => isInheritEnvValue(value))
+        .map(([name]) => name);
+
+export const inheritNamesForWorker = (
+  news: { readonly env?: Record<string, unknown> },
+  bindings: Parameters<typeof inheritNamesFromResourceBindings>[0],
+): string[] => [
+  ...new Set([
+    ...inheritNamesFromResourceBindings(bindings),
+    ...inheritNamesFromEnv(news.env),
+  ]),
+];
+
+export const isInheritEnvValue = (value: unknown): boolean =>
+  isInherit(value) ||
+  (typeof value === "object" &&
+    value !== null &&
+    isInheritWireBinding(value as { readonly type?: string }));
+
+/**
+ * `news.env` values that appendAlchemy would emit as plain_text / secret /
+ * json. Worker-only bindings, Effects, class instances, and inherit
+ * markers are not explicit — at reconcile `Inherit()` may no longer be a
+ * live binding instance.
+ */
+export const isExplicitInheritEnvValue = (value: unknown): boolean => {
+  if (value === undefined || isInheritEnvValue(value)) return false;
+  if (Binding.isBinding(value)) return false;
+  if (typeof value === "object" && value !== null && "~alchemy/Kind" in value) {
+    return false;
+  }
+  if (Redacted.isRedacted(value)) return true;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+  if (value === null || Array.isArray(value)) return true;
+  if (typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  }
+  return false;
+};
+
+/**
+ * Resource-binding metadata and `news.env` must agree on inherit vs
+ * explicit for the same name. Either direction of a real mismatch is
+ * rejected so an explicit survivor cannot silently drop an inherit
+ * marker. Unclassified env values (Effects, other bindings) are not
+ * treated as explicit.
+ */
+export const assertInheritEnvCollision = (
+  existing: { readonly type?: string; readonly name?: string },
+  envValue: unknown,
+): Effect.Effect<void, WorkerInheritConfigError> => {
+  const existingIsInherit = isInheritWireBinding(existing);
+  const envIsInherit = isInheritEnvValue(envValue);
+  const envIsExplicit = isExplicitInheritEnvValue(envValue);
+  if (
+    (existingIsInherit && envIsExplicit) ||
+    (!existingIsInherit && envIsInherit)
+  ) {
+    return fail(
+      `Binding '${existing.name ?? ""}' cannot be both inherited and given an explicit value.`,
+    );
+  }
+  return Effect.void;
+};
 
 /**
  * Validate the assembled Worker upload bindings and return the

@@ -1,7 +1,9 @@
 import {
+  assertInheritEnvCollision,
   assertInheritWorkerProps,
   bindingsInheritFor,
   finalizeInheritUploadBindings,
+  inheritNamesFromEnv,
   Inherit,
   isInherit,
   WorkerInheritConfigError,
@@ -121,5 +123,80 @@ describe("Cloudflare.Workers.Inherit validation", () => {
     expect(Result.isSuccess(run(assertInheritWorkerProps({}, names)))).toBe(
       true,
     );
+    expect(inheritNamesFromEnv({ API_TOKEN: Inherit() })).toEqual([
+      "API_TOKEN",
+    ]);
+    expect(inheritNamesFromEnv({ MARK: "plain" })).toEqual([]);
+  });
+
+  test("rejects inherit vs explicit collision in either direction", () => {
+    const inheritThenValue = run(
+      assertInheritEnvCollision(
+        { type: "inherit", name: "API_TOKEN" },
+        "explicit",
+      ),
+    );
+    expect(Result.isFailure(inheritThenValue)).toBe(true);
+    if (Result.isFailure(inheritThenValue)) {
+      expect(inheritThenValue.failure).toBeInstanceOf(WorkerInheritConfigError);
+      expect(inheritThenValue.failure.message).toMatch(
+        /inherited and given an explicit value/,
+      );
+    }
+
+    const valueThenInherit = run(
+      assertInheritEnvCollision(
+        { type: "plain_text", name: "API_TOKEN" },
+        Inherit(),
+      ),
+    );
+    expect(Result.isFailure(valueThenInherit)).toBe(true);
+    if (Result.isFailure(valueThenInherit)) {
+      expect(valueThenInherit.failure).toBeInstanceOf(WorkerInheritConfigError);
+      expect(valueThenInherit.failure.message).toMatch(
+        /inherited and given an explicit value/,
+      );
+    }
+
+    expect(
+      Result.isSuccess(
+        run(
+          assertInheritEnvCollision(
+            { type: "inherit", name: "API_TOKEN" },
+            Inherit(),
+          ),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      Result.isSuccess(
+        run(
+          assertInheritEnvCollision(
+            { type: "plain_text", name: "API_TOKEN" },
+            "explicit",
+          ),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      Result.isSuccess(
+        run(
+          assertInheritEnvCollision(
+            { type: "inherit", name: "API_TOKEN" },
+            Effect.succeed("runtime"),
+          ),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      Result.isSuccess(
+        run(
+          assertInheritEnvCollision(
+            { type: "inherit", name: "API_TOKEN" },
+            { kind: "Cloudflare.Workers.Inherit", name: "API_TOKEN" },
+          ),
+        ),
+      ),
+    ).toBe(true);
   });
 });

@@ -1344,9 +1344,11 @@ export const isSelf = (value: unknown): value is Self =>
  * Use `Cloudflare.Workers.Inherit()` to copy a named binding from this
  * script's latest upload without supplying or reading its value. Alchemy
  * emits `{ type: "inherit", version_id: "latest" }` and sends
- * `bindings_inherit=strict`. The deploy is refused unless that latest
- * upload is also the sole version at 100% traffic — an undeployed preview
- * cannot become the source.
+ * `bindings_inherit=strict`. Before the upload it refuses unless the latest
+ * listed upload is also the sole version at 100% traffic. That check is a
+ * best-effort preflight, not an atomic lock — a concurrent preview can still
+ * become `latest` between the check and the PUT. Treat Alchemy as the
+ * exclusive uploader of this script.
  *
  * Exact version IDs are rejected by the Cloudflare upload API
  * (error 10057). Do not combine `Inherit` with {@link WorkerVersionOptions}
