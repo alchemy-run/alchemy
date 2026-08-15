@@ -8,7 +8,10 @@ sidebar:
 Cloudflare Access can protect a Worker by **identity**, not just by
 hostname. An Access application with a worker destination covers
 every URL that Worker serves — routes, custom domains, `workers.dev`,
-and preview URLs — without listing those hostnames.
+and preview URLs — without listing those hostnames. See Cloudflare's
+[Access for Workers docs](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+and the
+[launch post](https://blog.cloudflare.com/workers-protected-by-access/).
 
 ## Three-tier model
 
@@ -90,3 +93,11 @@ workers in a dispatch namespace are not Access targets.
 
 Under `alchemy dev`, `ctx.access` is absent and `identity` resolves
 `undefined`. Local simulation is a planned follow-up.
+
+## Related
+
+- [Cloudflare Access for Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+  — destination types, hierarchy, WebSocket limitation, and
+  `ctx.access`.
+- [Workers protected by Access](https://blog.cloudflare.com/workers-protected-by-access/)
+  — launch post for attaching Access to a Worker or the whole account.

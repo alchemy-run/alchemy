@@ -12,6 +12,9 @@ import {
  * `undefined` when Access did not authenticate it.
  *
  * Thin delegate over {@link WorkerExecutionContext.access.identity}.
+ *
+ * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/#read-authenticated-user-identity-with-ctxaccess
+ * @see https://blog.cloudflare.com/workers-protected-by-access/
  */
 export const getIdentity: Effect.Effect<
   cf.CloudflareAccessIdentity | undefined,

@@ -50,6 +50,9 @@ export type ApplicationType =
  * - `preview_worker` — that Worker's preview URLs only.
  * - `all_workers` — account-wide, current and future Workers.
  * - `all_preview_workers` — account-wide preview URLs.
+ *
+ * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/
+ * @see https://blog.cloudflare.com/workers-protected-by-access/
  */
 export type ApplicationDestination =
   | { type: "public"; uri: string }
@@ -405,6 +408,9 @@ export type Application = Resource<
  * // Worker public even when `all_workers` gates the rest of the account.
  * // A hostname/path application still overrides both.
  * ```
+ *
+ * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/
+ * @see https://blog.cloudflare.com/workers-protected-by-access/
  */
 export const Application = Resource<Application>(
   "Cloudflare.Access.Application",

@@ -114,6 +114,9 @@ export class WorkerExecutionContext extends Context.Service<
      * Cloudflare Access identity on this request. `ctx.access` is
      * `undefined` when Access did not authenticate the request (no
      * application, bypass policy, or local `alchemy dev`).
+     *
+     * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/#read-authenticated-user-identity-with-ctxaccess
+     * @see https://blog.cloudflare.com/workers-protected-by-access/
      */
     readonly access: {
       readonly aud: Effect.Effect<string | undefined, never, RuntimeContext>;
@@ -1104,6 +1107,8 @@ export type Worker<Bindings = any> = Resource<
      * this value as `Access.Application` `destinations[].workerId`.
      * Workers for Platforms user workers also receive a tag, but they
      * are not Access targets — Access protects the dispatch Worker only.
+     *
+     * @see https://developers.cloudflare.com/workers/configuration/cloudflare-access/
      */
     workerId: string;
     /**
