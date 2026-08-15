@@ -9,6 +9,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import OwnedAccessWorker from "./fixtures/access-owned-worker.ts";
+import SecondAccessWorker from "./fixtures/access-worker-b.ts";
 import AccessProtectedWorker, { App } from "./fixtures/access-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -246,6 +247,76 @@ test.provider(
         "Access for alchemy owned-app test",
       );
       expect(appAfter).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+test.provider(
+  "a shared application merges enrollments from multiple Workers",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Two Workers enroll into the SAME application — worker B with
+      // `previews: false` (production traffic only).
+      const both = Effect.gen(function* () {
+        const a = yield* AccessProtectedWorker;
+        const b = yield* SecondAccessWorker;
+        const app = yield* App;
+        return { a, b, app };
+      });
+      const { a, b, app } = yield* stack.deploy(both);
+
+      const live = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: app.applicationId,
+      })) as unknown as LiveApp;
+      const workerDestinations = (live.destinations ?? []).filter(
+        (d) => d.workerId === a.scriptTag || d.workerId === b.scriptTag,
+      );
+      expect(workerDestinations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "worker", workerId: a.scriptTag }),
+          expect.objectContaining({
+            type: "preview_worker",
+            workerId: a.scriptTag,
+          }),
+          expect.objectContaining({ type: "worker", workerId: b.scriptTag }),
+        ]),
+      );
+      // previews: false — no preview destination for worker B.
+      expect(workerDestinations).toHaveLength(3);
+
+      // Un-enrollment without destroy: remove worker B from the stack —
+      // its binding contribution disappears and the application converges
+      // to worker A's destinations only.
+      const onlyA = Effect.gen(function* () {
+        const a = yield* AccessProtectedWorker;
+        const app = yield* App;
+        return { a, app };
+      });
+      yield* stack.deploy(onlyA);
+      const liveAfter = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: app.applicationId,
+      })) as unknown as LiveApp;
+      const remaining = (liveAfter.destinations ?? []).filter(
+        (d) => d.workerId === a.scriptTag || d.workerId === b.scriptTag,
+      );
+      expect(remaining).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "worker", workerId: a.scriptTag }),
+          expect.objectContaining({
+            type: "preview_worker",
+            workerId: a.scriptTag,
+          }),
+        ]),
+      );
+      expect(remaining).toHaveLength(2);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
