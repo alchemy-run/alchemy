@@ -42,26 +42,27 @@ import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest"
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Actor, SessionRef } from "../../AI/Agent.ts";
 import { Driver, type Charter, type Interpretable } from "../../AI/Driver.ts";
-import type { ThreadStorageService } from "../../AI/ThreadStorage.ts";
-import { makeThreadStorageMemory } from "../../AI/ThreadStorageMemory.ts";
 import {
   makeSessionEngine,
   reminderInput,
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
-import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
+import { SessionIndex } from "../../AI/SessionIndex.ts";
 import {
-  SessionSockets,
   handleSessionSocketFrame,
   type SessionSocketClientFrame,
   type SessionSocketServerFrame,
-} from "../../AI/EventStream.ts";
+} from "../../AI/SessionSocket.ts";
+import { Sessions } from "../../AI/Sessions.ts";
+import type { ThreadStorageService } from "../../AI/ThreadStorage.ts";
+import { makeThreadStorageMemory } from "../../AI/ThreadStorageMemory.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { MainRpc } from "../../Platform.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker } from "../Workers/Worker.ts";
 import {
@@ -147,7 +148,7 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   ) => Effect.Effect<void>;
 }
 
-export { SessionSockets } from "../../AI/EventStream.ts";
+export { Sessions } from "../../AI/Sessions.ts";
 
 /**
  * The `AI.Driver` for Cloudflare — no argument, and no class for the
@@ -161,12 +162,15 @@ export { SessionSockets } from "../../AI/EventStream.ts";
  * LanguageModel | ThreadStorage>` — the substrate is in the type.
  */
 export const DurableObjectHost: Layer.Layer<
-  Driver | SessionSockets,
+  Driver | Sessions,
   never,
   LanguageModel.LanguageModel | Worker
 > = Layer.unwrap(
   Effect.gen(function* () {
     const languageModel = yield* LanguageModel.LanguageModel;
+    // `Sessions.list` delegates to whatever index the assembly
+    // composed in; absent an index, the population is unlistable
+    const sessionIndex = yield* Effect.serviceOption(SessionIndex);
     const registrations = new Map<string, RegisteredCharter>();
 
     /**
@@ -293,7 +297,16 @@ export const DurableObjectHost: Layer.Layer<
             driver: "DriverCloudflare",
             term: me.term,
             charter: registration.charter,
-            context: registration.context,
+            // the charter's captured context PLUS this instance's own
+            // state: per-session capabilities (the attached container —
+            // `SandboxContainerSession` — and anything else keyed to
+            // the DO) resolve it at call time, which is what lets their
+            // Layers build in the shared per-isolate graph
+            context: Context.add(
+              registration.context,
+              DurableObjectState,
+              state,
+            ) as Context.Context<never>,
             storage: singleSessionStorage,
             languageModel,
             // execution rides DO events; the burst is contained (it
@@ -330,7 +343,7 @@ export const DurableObjectHost: Layer.Layer<
 
         return Effect.succeed<SessionRpc>({
           /**
-           * The LIVE VIEW attaches here (via {@link SessionSockets}):
+           * The LIVE VIEW attaches here (via {@link Sessions.attach}):
            * accept the WebSocket and hibernate freely — there is no
            * in-memory session state to lose, because `broadcast`
            * re-reads the attached sockets from the runtime every time.
@@ -495,7 +508,14 @@ export const DurableObjectHost: Layer.Layer<
 
     return Layer.mergeAll(
       Layer.succeed(Driver, { interpret }),
-      Layer.succeed(SessionSockets, { attach }),
+      Layer.succeed(Sessions, {
+        attach,
+        list: () =>
+          Option.match(sessionIndex, {
+            onNone: () => Effect.succeed([]),
+            onSome: (index) => index.list(),
+          }),
+      }),
     );
   }),
 );

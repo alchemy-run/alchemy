@@ -3,6 +3,7 @@ import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
@@ -23,7 +24,7 @@ const parseSessionId = (id: string): { term: string; key: string } => {
 
 /**
  * The org's HTTP surface. The chat list comes from the
- * {@link AI.SessionIndex} (the one cross-session aggregate); each
+ * {@link AI.Sessions} (the driver's outside window); each
  * transcript comes from the session's OWN storage
  * (`ThreadStorage.observations` shaped by `AI.toUIMessages`); the
  * live tail rides the session socket (`/attach`, wired by the
@@ -32,8 +33,13 @@ const parseSessionId = (id: string): { term: string; key: string } => {
  * list.
  */
 export const orgRoutes = Effect.gen(function* () {
-  const index = yield* AI.SessionIndex;
-  const storage = yield* AI.ThreadStorage;
+  const sessions = yield* AI.Sessions;
+  // OPTIONAL: the local server reads transcripts straight from the
+  // shared storage; on Cloudflare each session's rows live in its own
+  // Durable Object — no worker-side ThreadStorage exists, snapshot
+  // endpoints 404, and the UI hydrates from the session socket's
+  // replay instead.
+  const storage = yield* Effect.serviceOption(AI.ThreadStorage);
   const bot = yield* ReviewBot;
   const approvals = yield* Approvals;
   const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
@@ -51,9 +57,9 @@ export const orgRoutes = Effect.gen(function* () {
   const repoName = `${identity.owner}/${identity.repository}`;
 
   const readBoard = Effect.gen(function* () {
-    const [sessions, openPrs] = yield* Effect.all(
+    const [summaries, openPrs] = yield* Effect.all(
       [
-        index.list(),
+        sessions.list(),
         listPullRequests({ state: "open" }).pipe(
           Effect.map((list) =>
             list.map((pull) => ({ number: pull.number, title: pull.title })),
@@ -64,14 +70,14 @@ export const orgRoutes = Effect.gen(function* () {
       ] as const,
       { concurrency: 2 },
     );
-    return buildBoard(repoName, sessions, openPrs);
+    return buildBoard(repoName, summaries, openPrs);
   });
 
   const listSessions = HttpRouter.add(
     "GET",
     "/api/chats",
     Effect.gen(function* () {
-      return yield* HttpServerResponse.json(yield* index.list());
+      return yield* HttpServerResponse.json(yield* sessions.list());
     }),
   );
 
@@ -112,13 +118,19 @@ export const orgRoutes = Effect.gen(function* () {
     "GET",
     "/api/chats/:id/messages",
     Effect.gen(function* () {
+      if (Option.isNone(storage)) {
+        return yield* HttpServerResponse.json(
+          { error: "transcripts ride the session socket on this placement" },
+          { status: 404 },
+        );
+      }
       const params = yield* HttpRouter.params;
       const { term, key } = parseSessionId(
         decodeURIComponent(String(params.id ?? "")),
       );
       // an unknown session is an EMPTY one — the chat exists from the
       // first visit, before any message has been sent
-      const handle = yield* storage.open(term, key);
+      const handle = yield* storage.value.open(term, key);
       const log = yield* handle.observations(0);
       return yield* HttpServerResponse.json(AI.toUIMessages(log));
     }),
@@ -131,12 +143,18 @@ export const orgRoutes = Effect.gen(function* () {
     "GET",
     "/api/chats/:id/log",
     Effect.gen(function* () {
+      if (Option.isNone(storage)) {
+        return yield* HttpServerResponse.json(
+          { error: "transcripts ride the session socket on this placement" },
+          { status: 404 },
+        );
+      }
       const request = yield* HttpServerRequest;
       const params = yield* HttpRouter.params;
       const { term, key } = parseSessionId(
         decodeURIComponent(String(params.id ?? "")),
       );
-      const handle = yield* storage.open(term, key);
+      const handle = yield* storage.value.open(term, key);
       const log = yield* handle.observations(0);
       const limitRaw = new URL(request.url, "http://org").searchParams.get(
         "limit",

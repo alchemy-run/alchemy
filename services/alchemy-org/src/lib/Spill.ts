@@ -1,6 +1,6 @@
 /**
  * The SPILL NET — the org's backstop for tool output that nothing
- * else bounded: an {@link AI.ToolEngine} that keeps DIRECT
+ * else bounded: an {@link AI.Tools} that keeps DIRECT
  * presentation (every mention stays its own provider tool — the
  * compiled `mention.tool` passes straight through) and wraps every
  * handler so an oversized SUCCESS lands in the {@link ToolOutputStore}
@@ -28,7 +28,7 @@ const MAX_INLINE_BYTES = 60_000;
 const PREVIEW_LINES = 200;
 
 export const SpillTools = Layer.effect(
-  AI.ToolEngine,
+  AI.Tools,
   Effect.gen(function* () {
     const store = yield* ToolOutputStore;
     const wrap = (mention: AI.ToolMention): AI.ToolMention => ({

@@ -3,7 +3,7 @@ import { markdown } from "../Code/Markdown.ts";
 import { typescript } from "../Code/TypeScript.ts";
 import { makeCodeMode, type CodeModeOptions } from "./CodeMode.ts";
 import type { Eval } from "./Eval.ts";
-import type { ToolEngine } from "./ToolEngine.ts";
+import type { Tools } from "./Tools.ts";
 
 /**
  * The `"./tools.js"` adapter: re-shape the evaluator's raw async
@@ -42,7 +42,7 @@ const toolsAdapter = (names: ReadonlyArray<string>): string =>
  */
 export const CodeModeEffect = (
   options?: CodeModeOptions,
-): Layer.Layer<ToolEngine, never, Eval> =>
+): Layer.Layer<Tools, never, Eval> =>
   makeCodeMode({
     options,
     // the declared failures ARE the error channel; R is always never —

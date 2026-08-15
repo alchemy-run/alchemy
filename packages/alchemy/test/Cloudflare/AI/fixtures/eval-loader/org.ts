@@ -113,14 +113,14 @@ export interface SessionFacts {
 
 /**
  * Run ONE complete session (real driver, real charter, real codemode)
- * over the given already-provided {@link AI.ToolEngine}, and report the
+ * over the given already-provided {@link AI.Tools}, and report the
  * facts: the answer, the tool names the model was offered, the
  * generated signature, what the second model call saw (the tool
  * result), and which tool invocations actually executed.
  */
 export const sessionFacts = (options: {
   readonly code: string;
-  readonly codeMode: Layer.Layer<AI.ToolEngine>;
+  readonly codeMode: Layer.Layer<AI.Tools>;
 }) =>
   Effect.gen(function* () {
     const model = scriptedModel(options.code);

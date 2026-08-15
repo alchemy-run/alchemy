@@ -280,14 +280,14 @@ the **union-toolkit + stance masking** transport (SHIPPED; §13):
 unmentioned tools stay in the provider payload and are rejected on
 call — bytes change, the law does not.
 
-### 2c. The wire seam: `ToolEngine` and codemode
+### 2c. The wire seam: `Tools` and codemode
 
 Direct tool-calling loses what agents are best post-trained on: writing
 CODE that composes primitives (Bash pipes are the canonical case). It
 gains granular access control. Codemode keeps both: the model writes a
 program; the ONLY functions in scope are this tick's granted handlers.
 
-**`ToolEngine` is an optional service the driver resolves from the
+**`Tools` is an optional service the driver resolves from the
 interpret context** at every sampling boundary. Absent: every mention
 is its own provider tool (the default, unchanged). Present: the engine
 transforms the tick's mentions (`ToolMention[]`) into their wire
@@ -583,18 +583,18 @@ unchanged stance, which the driver re-parks without sampling.
 ## 5b. Workspaces: the checkout as a capability
 
 A coding agent needs a repository checked out somewhere it can work. That
-"somewhere" is a capability like any other — one contract (`Git.Workspaces`),
+"somewhere" is a capability like any other — one contract (`Git.Checkouts`),
 physics chosen by the Layer:
 
 ```ts
 // init: the binding, like any other capability
-const workspaces = yield* Git.Workspaces;
+const checkouts = yield* Git.Checkouts;
 const remote = GitHub.remote(testAlchemy);   // provider → Git, never the reverse
 
 // init is per-session — the thread exists at admit, so the checkout is
 // thread-scoped SETUP the turn and tools close over
 const { key } = yield* AI.Thread;
-const ws = yield* workspaces.checkout({ key, remote });
+const ws = yield* checkouts.checkout({ key, remote });
 
 return Effect.gen(function* () {
   return yield* AI.fragment`
@@ -611,7 +611,7 @@ The laws:
   KEY is the address.
 - **Isolated across keys.** Two concurrent sessions get two trees. What crosses
   agent/machine boundaries is the pushed branch, never a shared filesystem.
-- **Layer-swapped physics.** `Git.WorkspacesWorktree` (local): one central
+- **Layer-swapped physics.** `Git.CheckoutsWorktree` (local): one central
   blobless clone per remote, `git worktree add` per key. A clean-clone-per-key
   layer when isolation beats speed. A `Cloudflare.Artifacts` layer for
   containers: per-key forks mounted via artifact-fs, whose deploy-time half
@@ -1216,7 +1216,7 @@ return yield* AI.fragment`
   mentioned, in first-mention order — the provider payload is
   byte-stable across phase flips — and a union tool the CURRENT
   stance does not mention rejects model-visibly. The SEMANTICS stay
-  §2b's mention-is-presence, unchanged; an explicit `ToolEngine` owns
+  §2b's mention-is-presence, unchanged; an explicit `Tools` service owns
   the policy for its own presentation (codemode's single `eval` tool
   is stable by construction).
 - **Request-envelope logging — SHIPPED 2026-08-14** (dsh's
@@ -1233,7 +1233,7 @@ return yield* AI.fragment`
   1. **Spill at result time** — oversized tool output parked behind a
      preview + retrieval id; best-effort (a spill failure keeps the
      inline original, never fails the call). Shipped in userland as a
-     `ToolEngine` wrapper (`alchemy-org/src/lib/Spill.ts`) — the seam
+     `Tools` wrapper (`alchemy-org/src/lib/Spill.ts`) — the seam
      already exposes every mention's handler, so no new core surface.
   2. **Deterministic tool-result pruning** — head/middle/tail shrink
      of oversized results, each replacement logged with the shadowed
@@ -1252,7 +1252,7 @@ return yield* AI.fragment`
   the LIVE composition — seams present, tool schemas, event vocabulary
   — so self-edits are written against reality, not recall. Pairs with
   the approval gate for the apply step.
-- **Codemode: SHIPPED as `ToolEngine` Layers** (§2c) —
+- **Codemode: SHIPPED as `Tools` Layers** (§2c) —
   `AI.CodeModeEffect()` / `AI.CodeModeAsync()` collapse the tick's
   mentions into one `eval` tool with generated signatures; evaluation
   is v0 in-process behind the **`Eval` seam** (`run({ modules, main,
@@ -1264,7 +1264,7 @@ return yield* AI.fragment`
 
   ```ts
   // the engine requires the seam; placements pick the physics:
-  AI.CodeModeEffect()                                  // Layer<ToolEngine, never, Eval>
+  AI.CodeModeEffect()                                  // Layer<Tools, never, Eval>
     .pipe(Layer.provide(AI.EvalFunction))              // in-process (v0, composition seam)
     .pipe(Layer.provide(Cloudflare.EvalWorkerLoader))  // DO host: native isolates
   ```

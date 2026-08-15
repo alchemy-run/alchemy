@@ -24,7 +24,7 @@ import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 
 const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
 
-/** The two codemode ToolEngines, over the in-process evaluator. */
+/** The two codemode Tools implementations, over the in-process evaluator. */
 const codeModeAsync = AI.CodeModeAsync().pipe(Layer.provide(AI.EvalFunction));
 const codeModeEffect = AI.CodeModeEffect().pipe(Layer.provide(AI.EvalFunction));
 
@@ -372,7 +372,7 @@ describe("DriverLocal (in-memory)", () => {
         // call 3: the lead concludes — REPLAYED step must handle it too
       ]);
       const seen: Array<AI.SessionObservation> = [];
-      const ObserverLive = Layer.succeed(AI.EventStream, {
+      const ObserverLive = Layer.succeed(AI.Events, {
         emit: (observation) => Effect.sync(() => void seen.push(observation)),
       });
       const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
@@ -842,7 +842,7 @@ Record the final ${result}.`((p) =>
       () => [Model.text("All done."), Model.finish()],
     ]);
     const seen: Array<AI.SessionObservation> = [];
-    const ObserverLive = Layer.succeed(AI.EventStream, {
+    const ObserverLive = Layer.succeed(AI.Events, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
     const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
@@ -920,7 +920,7 @@ Record the final ${result}.`((p) =>
       () => [Model.text("All done."), Model.finish()],
     ]);
     const seen: Array<AI.SessionObservation> = [];
-    const ObserverLive = Layer.succeed(AI.EventStream, {
+    const ObserverLive = Layer.succeed(AI.Events, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
     const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
@@ -1292,7 +1292,7 @@ ${
       ]);
       return Effect.gen(function* () {
         const seen: Array<AI.SessionObservation> = [];
-        const ObserverLive = Layer.succeed(AI.EventStream, {
+        const ObserverLive = Layer.succeed(AI.Events, {
           emit: (observation) => Effect.sync(() => void seen.push(observation)),
         });
         const search = recordingSearch();

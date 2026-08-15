@@ -63,7 +63,7 @@ const workspaceRoot = rootConfig("CODER_WORKSPACE", (cwd) => `${cwd}/../..`);
 
 /**
  * The review worktrees ROOT — one directory holds the central blobless
- * clone and the per-PR worktrees (`Git.WorkspacesWorktree` populates
+ * clone and the per-PR worktrees (`Git.CheckoutsWorktree` populates
  * it). `ORG_WORKSPACE` overrides the location.
  */
 const worktreesRoot = rootConfig(
@@ -74,9 +74,9 @@ const worktreesRoot = rootConfig(
 /** Checkouts as a capability: central clone + one worktree per PR.
  *  ONE instance — the charter's init checkout and the toolbox root
  *  share the cache (same const, memoized by reference). */
-const WorkspacesLive = Layer.unwrap(
+const CheckoutsLive = Layer.unwrap(
   Effect.map(worktreesRoot, (root) =>
-    Git.WorkspacesWorktree({ root }).pipe(
+    Git.CheckoutsWorktree({ root }).pipe(
       Layer.provide(GitHub.GitCredentials),
       Layer.provide(Credentials),
     ),
@@ -95,6 +95,7 @@ const WorkspacesLive = Layer.unwrap(
 const Toolbox = Layer.unwrap(
   Effect.map(workspaceRoot, (fallback) =>
     Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
+      Layer.provide(ToolOutputStoreLive),
       Layer.provide(AI.SandboxLocal),
       Layer.provide(Workspace.perRun({ fallback })),
     ),
@@ -127,14 +128,14 @@ const ReviewBotLocal = ReviewBotEvents.pipe(
 /**
  * The whole org over LOCAL physics. The driver bundle is
  * provideMERGED because the HTTP edge consumes it too:
- * `SessionSockets` for the `/attach` door, `SessionIndex` for the
+ * `Sessions` for the `/attach` door and the
  * board, `ThreadStorage` for transcripts. GitHub physics
  * (profile/app credentials, REST polling, the Local bindings) and
  * the worktree cache sit under both agents.
  */
 export const Org = Layer.mergeAll(EngineerLocal, ReviewBotLocal).pipe(
   Layer.provideMerge(DriverLocal),
-  Layer.provideMerge(WorkspacesLive),
+  Layer.provideMerge(CheckoutsLive),
   Layer.provideMerge(GitHubLocal),
   // provideMERGE: the HTTP edge reads/answers the same gate the
   // review bot's dangerous tools ask (one instance)
@@ -155,7 +156,7 @@ export default class OrgServer extends Local.Vite<OrgServer>()(
     },
   },
   Effect.gen(function* () {
-    const gateway = yield* AI.SessionSockets;
+    const sessions = yield* AI.Sessions;
     const api = yield* HttpRouter.toHttpEffect(yield* orgRoutes);
 
     return {
@@ -169,7 +170,7 @@ export default class OrgServer extends Local.Vite<OrgServer>()(
               status: 400,
             });
           }
-          return yield* gateway.attach(
+          return yield* sessions.attach(
             decodeURIComponent(term),
             rest.map(decodeURIComponent).join("/"),
             request,

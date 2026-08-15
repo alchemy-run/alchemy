@@ -10,8 +10,12 @@ import {
   Container,
   type ContainerStartupOptions,
 } from "../Containers/Container.ts";
-import { layer as containerLayer } from "../Containers/StartContainer.ts";
+import {
+  layer as containerLayer,
+  startContainer,
+} from "../Containers/StartContainer.ts";
 import type { Providers } from "../Providers.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 
 /**
  * The typed RPC surface the sandbox container guest serves — a 1:1
@@ -46,10 +50,8 @@ export interface SandboxContainerShape {
  *
  * ```ts
  * // alchemy.run.ts
- * import SandboxContainerRuntime from "alchemy/Cloudflare/AI/SandboxContainerRuntime";
- *
  * Alchemy.Stack("Org", config, program.pipe(
- *   Effect.provide(SandboxContainerRuntime),
+ *   Effect.provide(Cloudflare.AI.SandboxContainerRuntime),
  * ));
  * ```
  */
@@ -98,3 +100,81 @@ export const SandboxContainer = (
       };
     }),
   ).pipe(Layer.provide(containerLayer(SandboxContainerImage, options)));
+
+/** One started container stub per DO instance — the isolate is
+ *  single-threaded, so a plain WeakMap gate is race-free. */
+const sessionBoxes = new WeakMap<
+  object,
+  Effect.Effect<Container.Instance<SandboxContainerImage>>
+>();
+
+/**
+ * The DEFERRED per-session container {@link Sandbox} — for layers that
+ * build in the SHARED per-isolate graph (a charter's tool layers under
+ * `DriverCloudflare`), where no `DurableObjectState` exists at build:
+ * the container is resolved and started at CALL time from the session
+ * context (the session DO adds its own state — see
+ * `DriverCloudflare`), memoized per instance.
+ *
+ * Same contract, same machine as {@link SandboxContainer}; the only
+ * difference is WHEN the instance binds — build time (a layer inside
+ * one DO) vs call time (a layer shared by every session of the
+ * isolate).
+ *
+ * ```ts
+ * // in the org's charter provide-list, replacing SandboxLocal:
+ * Layer.provide(Cloudflare.AI.SandboxContainerSession())
+ * ```
+ */
+export const SandboxContainerSession = (
+  options?: ContainerStartupOptions,
+): Layer.Layer<
+  Sandbox,
+  never,
+  Container.Application<SandboxContainerImage> | Providers
+> =>
+  Layer.effect(
+    Sandbox,
+    Effect.gen(function* () {
+      // capture the build context (the container binding + providers)
+      // so the call-time start needs only the session's own state
+      const captured = yield* Effect.context<
+        Container.Application<SandboxContainerImage> | Providers
+      >();
+
+      const box = Effect.gen(function* () {
+        const state = yield* DurableObjectState;
+        const existing = sessionBoxes.get(state);
+        if (existing !== undefined) return yield* existing;
+        const started = Effect.cached(
+          startContainer(SandboxContainerImage, options).pipe(
+            Effect.provide(captured),
+            Effect.orDie,
+          ) as Effect.Effect<Container.Instance<SandboxContainerImage>>,
+        ).pipe(Effect.runSync);
+        sessionBoxes.set(state, started);
+        return yield* started;
+      });
+
+      // the session context carries DurableObjectState at call time
+      // (the DO placement provides it); the contract's R stays clean
+      const withBox = <A, E>(
+        use: (
+          instance: Container.Instance<SandboxContainerImage>,
+        ) => Effect.Effect<A, E>,
+      ): Effect.Effect<A, E> =>
+        Effect.flatMap(box, use) as unknown as Effect.Effect<A, E>;
+
+      return {
+        exec: (command, args, execOptions) =>
+          withBox((instance) => instance.exec(command, args, execOptions)),
+        readFile: (path) => withBox((instance) => instance.readFile(path)),
+        writeFile: (path, content) =>
+          withBox((instance) => instance.writeFile(path, content)),
+        deleteFile: (path) => withBox((instance) => instance.deleteFile(path)),
+        mkdir: (path) => withBox((instance) => instance.mkdir(path)),
+        listFiles: (path) => withBox((instance) => instance.listFiles(path)),
+        exists: (path) => withBox((instance) => instance.exists(path)),
+      };
+    }),
+  );

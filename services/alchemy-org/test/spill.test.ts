@@ -31,7 +31,7 @@ const mention = (
 test("oversized output spills to an artifact; bounded output passes through", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
-      const engine = yield* AI.ToolEngine;
+      const engine = yield* AI.Tools;
       const store = yield* ToolOutputStore;
 
       const fat = "x".repeat(100) + "\n";

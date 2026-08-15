@@ -10,9 +10,8 @@
   },
   "type": "module",
   "scripts": {
-    "deploy": "alchemy deploy ./local.run.ts",
-    "destroy": "alchemy destroy ./local.run.ts",
-    "local": "alchemy deploy ./local.run.ts",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
     "test": "bun test",
     "test:tools": "bun test test/tools test/coding.test.ts",
     "typecheck": "bun tsc -b tsconfig.json",

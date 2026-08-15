@@ -6,7 +6,7 @@
  * to the GitHub bindings (`GitHub.GetPullRequest(testAlchemy)`) and to
  * `consumeRepositoryEvents` — its declared identity (owner/name) is
  * readable statically, so none of that needs a Stack. The Stack in
- * local.run.ts `yield*`s the same const to provision it — resources
+ * alchemy.run.ts `yield*`s the same const to provision it — resources
  * are memoized by FQN, so every yield resolves the one instance.
  *
  * This is the `test-alchemy` SANDBOX: a repo we own and can reset, so

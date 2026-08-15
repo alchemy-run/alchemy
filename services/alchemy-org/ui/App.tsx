@@ -500,7 +500,13 @@ const ChatView = ({
   active,
   ...context
 }: { id: string; active: boolean } & ChatContext) => {
-  const [initial, setInitial] = useState<UIMessage[]>();
+  const [initial, setInitial] = useState<{
+    messages: UIMessage[];
+    /** Snapshot delivered → socket tails live; 404 (the Cloudflare
+     *  placement keeps transcripts in each session's own DO) → the
+     *  socket replays the full history instead. */
+    hydrated: boolean;
+  }>();
 
   // snapshot first; the live tail rides the run socket. Drop the
   // snapshot's in-flight `live-*` sample — the socket restates that
@@ -508,14 +514,18 @@ const ChatView = ({
   // stuck on "Thinking…" forever).
   useEffect(() => {
     fetch(`/api/chats/${encodeURIComponent(id)}/messages`)
-      .then(
-        (response) =>
-          (response.ok ? response.json() : []) as Promise<UIMessage[]>,
+      .then(async (response) =>
+        response.ok
+          ? {
+              messages: ((await response.json()) as UIMessage[]).filter(
+                (m) => !m.id.startsWith("live-"),
+              ),
+              hydrated: true,
+            }
+          : { messages: [], hydrated: false },
       )
-      .then((messages) =>
-        setInitial(messages.filter((m) => !m.id.startsWith("live-"))),
-      )
-      .catch(() => setInitial([]));
+      .then(setInitial)
+      .catch(() => setInitial({ messages: [], hydrated: false }));
   }, [id]);
 
   if (initial === undefined) {
@@ -525,7 +535,15 @@ const ChatView = ({
       </div>
     );
   }
-  return <Chat id={id} initial={initial} active={active} {...context} />;
+  return (
+    <Chat
+      id={id}
+      initial={initial.messages}
+      hydrated={initial.hydrated}
+      active={active}
+      {...context}
+    />
+  );
 };
 
 /** Full local timestamp, tooltip-grade: "Sun, Mar 1, 2026, 02:54:07". */
@@ -919,6 +937,7 @@ const ReasoningTrace = ({
 const Chat = ({
   id,
   initial,
+  hydrated,
   active,
   agents,
   breadcrumb,
@@ -926,13 +945,17 @@ const Chat = ({
 }: {
   id: string;
   initial: UIMessage[];
+  /** false = no snapshot endpoint (Cloudflare) — replay over the socket. */
+  hydrated: boolean;
   active: boolean;
 } & ChatContext) => {
   // Persistent run socket — subscribe on mount, re-subscribe after
   // each burst so a parked IssueOwner keeps streaming. `history:
-  // "live"`: the transcript hydrates from `initial` (the /messages
-  // snapshot); a full replay would render every message twice.
-  const agent = useAgent({ chatId: id, history: "live" });
+  // "live"` when the transcript hydrated from `initial` (the
+  // /messages snapshot — a full replay would render every message
+  // twice); `"replay"` when no snapshot exists and the socket owns
+  // the history.
+  const agent = useAgent({ chatId: id, history: hydrated ? "live" : "replay" });
   const { messages, sendMessage, status, stop } = useChat({
     agent,
     messages: initial,

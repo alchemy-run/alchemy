@@ -3,7 +3,7 @@ import { markdown } from "../Code/Markdown.ts";
 import { typescript } from "../Code/TypeScript.ts";
 import { makeCodeMode, type CodeModeOptions } from "./CodeMode.ts";
 import type { Eval } from "./Eval.ts";
-import type { ToolEngine } from "./ToolEngine.ts";
+import type { Tools } from "./Tools.ts";
 
 /**
  * CODEMODE, ASYNC convention — the model writes a COMPLETE JavaScript
@@ -19,11 +19,11 @@ import type { ToolEngine } from "./ToolEngine.ts";
  *
  * Driver intrinsics (`dispatch`, `spawn`, `skill`) stay direct tools —
  * they are conversation control, not capabilities. Provide no
- * ToolEngine at all for plain one-at-a-time tool calling.
+ * Tools at all for plain one-at-a-time tool calling.
  */
 export const CodeModeAsync = (
   options?: CodeModeOptions,
-): Layer.Layer<ToolEngine, never, Eval> =>
+): Layer.Layer<Tools, never, Eval> =>
   makeCodeMode({
     options,
     // a rejection carries the declared error; the tags are listed as

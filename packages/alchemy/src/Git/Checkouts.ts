@@ -15,8 +15,8 @@ export class GitError extends Data.TaggedError("Git.GitError")<{
   }
 }
 
-/** A working tree, addressed by its key. */
-export interface Workspace {
+/** A working tree derived from a remote at a ref, addressed by its key. */
+export interface Checkout {
   /** The address — what crosses agent boundaries. */
   readonly key: string;
   /** Absolute path of the working tree (dir, volume, or FUSE mount). */
@@ -32,7 +32,7 @@ export interface Workspace {
   readonly remote: Remote;
 }
 
-export interface WorkspacesService {
+export interface CheckoutsService {
   /**
    * Acquire the working tree for `key` — IDEMPOTENT: the same key
    * returns the same tree. `fresh: true` discards any existing tree
@@ -44,9 +44,9 @@ export interface WorkspacesService {
     /** Branch or commit to base the tree on. @default the remote's default branch */
     readonly ref?: string;
     readonly fresh?: boolean;
-  }) => Effect.Effect<Workspace, GitError>;
+  }) => Effect.Effect<Checkout, GitError>;
   /** Address an existing tree by key. */
-  readonly get: (key: string) => Effect.Effect<Option.Option<Workspace>>;
+  readonly get: (key: string) => Effect.Effect<Option.Option<Checkout>>;
   /** Drop the tree — a settled run's cleanup. Idempotent. */
   readonly release: (key: string) => Effect.Effect<void, GitError>;
 }
@@ -55,12 +55,12 @@ export interface WorkspacesService {
  * A git repository CHECKED OUT somewhere an agent can work — as a
  * capability. One contract; the PHYSICS of "somewhere" is the Layer:
  *
- * - {@link WorkspacesWorktree} (local): one central blobless clone per
+ * - {@link CheckoutsWorktree} (local): one central blobless clone per
  *   remote, `git worktree add` per key — cheap per-run trees, shared
  *   object store.
- * - `WorkspacesClone` (local): a clean clone per key, when isolation
+ * - `CheckoutsClone` (local): a clean clone per key, when isolation
  *   beats speed.
- * - `WorkspacesArtifacts` (Cloudflare containers): per-key FORKS in a
+ * - `CheckoutsArtifacts` (Cloudflare containers): per-key FORKS in a
  *   `Cloudflare.Artifacts` namespace, mounted via artifact-fs with
  *   blobs hydrating on demand; its deploy-time half contributes the
  *   image statements (install artifact-fs, fuse3) to the host
@@ -77,15 +77,14 @@ export interface WorkspacesService {
  * the turn and tool handlers close over:
  *
  * ```ts
- * const workspaces = yield* Git.Workspaces;              // init: the binding
+ * const checkouts = yield* Git.Checkouts;                // init: the binding
  * const { key } = yield* AI.Thread;                      // init is per-run
- * const ws = yield* workspaces.checkout({ key, remote });
+ * const ws = yield* checkouts.checkout({ key, remote });
  * return Effect.gen(function* () {
  *   return yield* AI.fragment`…your checkout is ${ws.path}, branch ${ws.branch}…`;
  * });
  * ```
  */
-export class Workspaces extends Context.Service<
-  Workspaces,
-  WorkspacesService
->()("alchemy/Git/Workspaces") {}
+export class Checkouts extends Context.Service<Checkouts, CheckoutsService>()(
+  "alchemy/Git/Checkouts",
+) {}

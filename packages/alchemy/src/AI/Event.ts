@@ -128,7 +128,7 @@ export const isEvent = (value: unknown): value is Event =>
  * CLASS instance types (`Mentioned | Wake`), not their structural
  * expansions, so hovers stay nominal.
  */
-export type Events<Refs extends any[]> = Refs[number] extends infer R
+export type EventsOf<Refs extends any[]> = Refs[number] extends infer R
   ? R extends Event<any, any, any[]>
     ? InstanceType<R>
     : never
@@ -141,6 +141,6 @@ export type Events<Refs extends any[]> = Refs[number] extends infer R
  * accepts `unknown` — no events spliced means no claim made, not
  * "nothing accepted".
  */
-export type Accepts<Refs extends any[]> = [Events<Refs>] extends [never]
+export type Accepts<Refs extends any[]> = [EventsOf<Refs>] extends [never]
   ? unknown
-  : Events<Refs> | string;
+  : EventsOf<Refs> | string;

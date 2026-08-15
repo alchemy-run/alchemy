@@ -11,9 +11,9 @@ import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { Credentials } from "./Credentials.ts";
 import { defaultBranch, type Remote } from "./Remote.ts";
-import { GitError, Workspaces, type Workspace } from "./Workspaces.ts";
+import { Checkouts, GitError, type Checkout } from "./Checkouts.ts";
 
-export interface WorkspacesWorktreeOptions {
+export interface CheckoutsWorktreeOptions {
   /** Where the central clones and worktrees live. Created if missing. */
   readonly root: string;
 }
@@ -26,7 +26,7 @@ const remoteSlug = (remote: Remote): string =>
   slug(remote.url.replace(/^[a-z+]+:\/\//, "").replace(/\.git$/, ""));
 
 /**
- * The local {@link Workspaces} physics: ONE central blobless clone per
+ * The local {@link Checkouts} physics: ONE central blobless clone per
  * remote under `{root}/repos/…`, and `git worktree add` per key under
  * `{root}/trees/{key}` — per-run trees are cheap (no object copies,
  * shared store), isolated (each tree owns its branch), and addressable
@@ -39,15 +39,15 @@ const remoteSlug = (remote: Remote): string =>
  * working dir (same posture as a developer's `gh` setup); the askpass
  * upgrade slots in here without touching the contract.
  */
-export const WorkspacesWorktree = (
-  options: WorkspacesWorktreeOptions,
+export const CheckoutsWorktree = (
+  options: CheckoutsWorktreeOptions,
 ): Layer.Layer<
-  Workspaces,
+  Checkouts,
   never,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner | Credentials
 > =>
   Layer.effect(
-    Workspaces,
+    Checkouts,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -57,7 +57,7 @@ export const WorkspacesWorktree = (
       const root = path.resolve(options.root);
       yield* fs.makeDirectory(root, { recursive: true }).pipe(Effect.orDie);
 
-      const cache = yield* Ref.make<ReadonlyMap<string, Workspace>>(new Map());
+      const cache = yield* Ref.make<ReadonlyMap<string, Checkout>>(new Map());
       // one mutator at a time: clone/fetch/worktree ops share gitdirs
       const lock = yield* Semaphore.make(1);
 
@@ -151,24 +151,20 @@ export const WorkspacesWorktree = (
               `origin/${ref}`,
             ]);
           }
-          const workspace: Workspace = {
+          const checkout: Checkout = {
             key,
             root: treeDir,
             path: path.join("trees", treeSlug),
             branch: `ws/${treeSlug}`,
             remote,
           };
-          yield* Ref.update(cache, (map) => new Map(map).set(key, workspace));
-          return workspace;
+          yield* Ref.update(cache, (map) => new Map(map).set(key, checkout));
+          return checkout;
         });
 
-      const drop = (workspace: Workspace) =>
+      const drop = (checkout: Checkout) =>
         Effect.gen(function* () {
-          const repoDir = path.join(
-            root,
-            "repos",
-            remoteSlug(workspace.remote),
-          );
+          const repoDir = path.join(root, "repos", remoteSlug(checkout.remote));
           // already-gone is success: drops are idempotent
           yield* git([
             "-C",
@@ -176,14 +172,14 @@ export const WorkspacesWorktree = (
             "worktree",
             "remove",
             "--force",
-            workspace.root,
+            checkout.root,
           ]).pipe(Effect.catchTag("Git.GitError", () => Effect.void));
-          yield* git(["-C", repoDir, "branch", "-D", workspace.branch]).pipe(
+          yield* git(["-C", repoDir, "branch", "-D", checkout.branch]).pipe(
             Effect.catchTag("Git.GitError", () => Effect.void),
           );
           yield* Ref.update(cache, (map) => {
             const next = new Map(map);
-            next.delete(workspace.key);
+            next.delete(checkout.key);
             return next;
           });
         });

@@ -16,7 +16,7 @@ import * as Git from "../Git/index.ts";
  *
  * - {@link fixed}: one static containment root — a desk that works
  *   the same checkout for every run.
- * - {@link perRun}: the root IS the current run's {@link Git.Workspaces}
+ * - {@link perRun}: the root IS the current run's {@link Git.Checkouts}
  *   checkout, derived from `AI.Thread` at CALL time — the coding-agent
  *   shape. Tools physically cannot write outside the run's own
  *   worktree, so path discipline needs no prose, and concurrent runs
@@ -152,7 +152,7 @@ export const fixed = (
       const fs = yield* FileSystem.FileSystem;
 
       // self-provisioning on first use: checkouts land under it later —
-      // Git.Workspaces populates, we contain
+      // Git.Checkouts populates, we contain
       const canonicalRoot = yield* Effect.cached(
         Effect.gen(function* () {
           const resolved = path.resolve(root);
@@ -186,7 +186,7 @@ export const fixed = (
 
 /**
  * The PER-RUN containment root: the current thread's
- * {@link Git.Workspaces} checkout. Every resolution derives the root
+ * {@link Git.Checkouts} checkout. Every resolution derives the root
  * from `AI.Thread` at call time (tool handlers run with the thread
  * provided), so an agent's tools are physically confined to its own
  * worktree — "which directory am I in" is not a fact the model can
@@ -196,7 +196,7 @@ export const perRun = (options?: {
   /**
    * Check the run's worktree out LAZILY on first use, from this
    * remote — making this layer the ONE place that binds run key →
-   * worktree (`Git.Workspaces.checkout` is memoized by key, so any
+   * worktree (`Git.Checkouts.checkout` is memoized by key, so any
    * other holder of the same key — a PR tool committing the work —
    * lands in the same tree). Without a remote, the charter's init
    * must have acquired the checkout itself.
@@ -215,14 +215,14 @@ export const perRun = (options?: {
 }): Layer.Layer<
   Workspace,
   never,
-  Path.Path | FileSystem.FileSystem | Git.Workspaces
+  Path.Path | FileSystem.FileSystem | Git.Checkouts
 > =>
   Layer.effect(
     Workspace,
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      const workspaces = yield* Git.Workspaces;
+      const checkouts = yield* Git.Checkouts;
 
       const fallbackRoot =
         options?.fallback === undefined
@@ -242,10 +242,10 @@ export const perRun = (options?: {
       // (the same doctrine as tool handlers reading AI.Thread).
       const root = Effect.gen(function* () {
         const { key } = yield* Thread;
-        const found = yield* workspaces.get(key);
+        const found = yield* checkouts.get(key);
         if (Option.isSome(found)) return found.value.root;
         if (options?.remote !== undefined) {
-          const checkout = yield* workspaces
+          const checkout = yield* checkouts
             .checkout({ key, remote: options.remote })
             .pipe(Effect.mapError((error) => error.message));
           return checkout.root;

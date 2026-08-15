@@ -13,12 +13,14 @@ import {
   reminderInput,
   type SessionEngine,
 } from "./DriverCore.ts";
+import * as Option from "effect/Option";
+import { SessionIndex } from "./SessionIndex.ts";
 import {
-  SessionSockets,
   handleSessionSocketFrame,
   type SessionSocketClientFrame,
   type SessionSocketServerFrame,
-} from "./EventStream.ts";
+} from "./SessionSocket.ts";
+import { Sessions } from "./Sessions.ts";
 import { ThreadStorage } from "./ThreadStorage.ts";
 
 type SendFrame = (frame: SessionSocketServerFrame) => Effect.Effect<void>;
@@ -33,7 +35,7 @@ type SendFrame = (frame: SessionSocketServerFrame) => Effect.Effect<void>;
  * - **kick** — offer to the session's wake queue (starting its fiber
  *   on first sight);
  * - **broadcast** — a RAM set of socket writers per session, served
- *   over the host's own HTTP server (`SessionSockets`);
+ *   over the host's own HTTP server (`Sessions.attach`);
  * - **remind / recovery re-entry** — sleeping fibers on the process
  *   scope;
  * - **restore** — persisted sessions revive parked at interpret,
@@ -51,13 +53,16 @@ type SendFrame = (frame: SessionSocketServerFrame) => Effect.Effect<void>;
  * ```
  */
 export const DriverLocal: Layer.Layer<
-  Driver | SessionSockets,
+  Driver | Sessions,
   never,
   LanguageModel.LanguageModel | ThreadStorage
 > = Layer.unwrap(
   Effect.gen(function* () {
     const languageModel = yield* LanguageModel.LanguageModel;
     const threadStorage = yield* ThreadStorage;
+    // `Sessions.list` delegates to whatever index the assembly
+    // composed in; absent an index, the population is unlistable
+    const sessionIndex = yield* Effect.serviceOption(SessionIndex);
     // Process-lifetime forks (session fibers, reminders, sockets):
     // under a Platform Host these survive `Effect.provide` of the org
     // layer; in unit tests they ride the ambient Scope wrapping the
@@ -202,7 +207,7 @@ export const DriverLocal: Layer.Layer<
       });
 
     /**
-     * The local {@link SessionSockets}: the SAME protocol the Durable
+     * The local {@link Sessions.attach}: the SAME protocol the Durable
      * Object placement speaks, served in-process — a WebSocket
      * upgrade on the host's own HTTP server, replay from the
      * session's handle, live broadcast from the engine's observe.
@@ -254,7 +259,14 @@ export const DriverLocal: Layer.Layer<
 
     return Layer.mergeAll(
       Layer.succeed(Driver, { interpret }),
-      Layer.succeed(SessionSockets, { attach }),
+      Layer.succeed(Sessions, {
+        attach,
+        list: () =>
+          Option.match(sessionIndex, {
+            onNone: () => Effect.succeed([]),
+            onSome: (index) => index.list(),
+          }),
+      }),
     );
   }),
 );

@@ -25,7 +25,7 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
   Effect.gen(function* () {
     const scribe = yield* Scribe;
     const supervisor = yield* Supervisor;
-    const gateway = yield* Cloudflare.AI.SessionSockets;
+    const gateway = yield* Cloudflare.AI.Sessions;
     const actors = { Scribe: scribe, Supervisor: supervisor };
 
     return {

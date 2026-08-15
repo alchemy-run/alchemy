@@ -2,7 +2,7 @@ import { useChat as useAiChat } from "@ai-sdk/react";
 import type { ChatInit, UIMessage } from "ai";
 import { useEffect, useMemo } from "react";
 import { sessionId as makeChatId } from "./SessionIndex.ts";
-import { SessionSocketTransport } from "./EventStream.ts";
+import { SessionSocketTransport } from "./SessionSocket.ts";
 
 /**
  * Build the session-socket URL for a chat id (`${term}:${key}`) or an
@@ -120,7 +120,7 @@ export type UseChatOptions = Omit<ChatInit<UIMessage>, "transport"> & {
  * This IS the Vercel AI SDK's `useChat` — same return shape, same
  * ecosystem compatibility (ai-elements etc.) — pre-wired with the
  * agent's socket transport instead of HTTP POST + SSE. It works
- * against ANY driver that provides `AI.SessionSockets`: the resident
+ * against ANY driver that provides `AI.Sessions`: the resident
  * driver serving from a local process and the Cloudflare driver
  * serving from a session's own Durable Object speak the identical
  * protocol.

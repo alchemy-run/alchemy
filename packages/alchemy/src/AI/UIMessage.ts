@@ -1,6 +1,6 @@
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import { renderCrash } from "./DriverCore.ts";
-import type { SessionObservation } from "./EventStream.ts";
+import type { SessionObservation } from "./Events.ts";
 
 /** The IN-FLIGHT sampling a projection may accumulate from
  *  `assistant-delta` and live `tool-call` observations — transient:

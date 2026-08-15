@@ -6,10 +6,12 @@ export * from "./Gateway.ts";
 export * from "./DriverCloudflare.ts";
 export * from "./EvalWorkerLoader.ts";
 export * from "./EvalWorkerLoaderEffect.ts";
-// NOTE: SandboxContainerRuntime.ts (the guest .make()) is deliberately NOT
-// exported — import it directly into the Stack program so Durable Object
-// bundles that touch this barrel never pull the guest's process machinery.
 export * from "./SandboxContainer.ts";
+// The guest .make() rides the barrel because it is pure effect modules
+// (no node SDKs, no top-level process work) — Worker bundles carry only
+// inert weight. Container runtimes with real host dependencies must
+// stay OFF barrels (the Container Layer pattern's bundle rule).
+export { SandboxContainerRuntime } from "./SandboxContainerRuntime.ts";
 export * from "./ThreadStorageDurableObject.ts";
 export * from "./GatewayDynamicRouting.ts";
 export * from "./GatewayProvider.ts";

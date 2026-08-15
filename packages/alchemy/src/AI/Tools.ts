@@ -7,7 +7,7 @@ import type * as AiTool from "effect/unstable/ai/Tool";
  * to its teaching, JSON schemas for input and RETURN (from the Tool's
  * `returns` schema — `AI.Tool("readDiff", S.String)`), its declared
  * failures, and the live handler. A tool appears here iff this tick's
- * stance mentioned it — the array {@link ToolEngineService.present}
+ * stance mentioned it — the array {@link ToolsService.present}
  * receives is mention-is-presence, materialized.
  */
 export interface ToolMention {
@@ -44,7 +44,7 @@ export interface ToolPresentation {
   readonly handlers: Record<string, (input: any) => Effect.Effect<any, any>>;
 }
 
-export interface ToolEngineService {
+export interface ToolsService {
   /** Present this tick's mentions — called at every sampling boundary. */
   readonly present: (
     mentions: ReadonlyArray<ToolMention>,
@@ -52,10 +52,10 @@ export interface ToolEngineService {
 }
 
 /**
- * The TOOL ENGINE: how a tick's mentioned capabilities are presented
+ * The TOOLS surface: how a tick's mentioned capabilities are presented
  * to the model and how its invocations execute. Mention-is-presence
  * stays the semantics either way — the stance decides WHAT exists
- * this tick; the engine decides how those mentions appear on the wire.
+ * this tick; this service decides how those mentions appear on the wire.
  *
  * Absent (the default): direct tool-calling — every mention is its own
  * provider tool. Present (an optional service the driver resolves
@@ -81,7 +81,6 @@ export interface ToolEngineService {
  * // provide neither: direct tool-calling, exactly as before
  * ```
  */
-export class ToolEngine extends Context.Service<
-  ToolEngine,
-  ToolEngineService
->()("alchemy/AI/ToolEngine") {}
+export class Tools extends Context.Service<Tools, ToolsService>()(
+  "alchemy/AI/Tools",
+) {}

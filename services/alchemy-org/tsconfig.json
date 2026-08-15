@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.base.json",
   "include": [
     "alchemy.run.ts",
-    "local.run.ts",
     "vite.config.ts",
     "src/**/*.ts",
     "test/**/*.ts",

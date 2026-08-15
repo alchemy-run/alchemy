@@ -4,11 +4,7 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as AiTool from "effect/unstable/ai/Tool";
 import { Eval, type EvalResult, type EvalTool } from "./Eval.ts";
-import {
-  ToolEngine,
-  type ToolMention,
-  type ToolPresentation,
-} from "./ToolEngine.ts";
+import { Tools, type ToolMention, type ToolPresentation } from "./Tools.ts";
 
 // ── JSON schema → TS-ish signature text ─────────────────────────────
 
@@ -110,7 +106,7 @@ export interface CodeModeOptions {
 }
 
 /**
- * One CODEMODE convention — a {@link ToolEngine} that collapses a
+ * One CODEMODE convention — a {@link Tools} that collapses a
  * tick's mentions into ONE `eval` tool and delegates execution to the
  * {@link Eval} service. It owns the CONVENTION entirely:
  *
@@ -137,9 +133,9 @@ export const makeCodeMode = (convention: {
     readonly main: string;
   };
   readonly options?: CodeModeOptions;
-}): Layer.Layer<ToolEngine, never, Eval> =>
+}): Layer.Layer<Tools, never, Eval> =>
   Layer.effect(
-    ToolEngine,
+    Tools,
     Effect.map(Eval, (evaluator) => ({
       present: (mentions) =>
         Effect.sync((): ToolPresentation => {

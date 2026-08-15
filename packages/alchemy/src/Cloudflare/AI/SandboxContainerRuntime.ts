@@ -31,19 +31,22 @@ export const SANDBOX_DOCKERFILE = Dockerfile.inline`
 
 /**
  * The sandbox container GUEST — the runtime half of
- * {@link SandboxContainerImage} (Container Layer pattern: the class and
- * this `.make()` live in separate files so a Durable Object that
- * imports the class never bundles the guest's process machinery).
+ * {@link SandboxContainerImage} (Container Layer pattern: the class
+ * and this `.make()` live in separate files, and this module is the
+ * container's own entry — `main: import.meta.url`).
  *
  * Inside the container this is just {@link makeSandboxLocal} — the
  * exact physics the trusted-host `SandboxLocal` runs — over a fixed
  * `/workspace` root, served to the Durable Object as typed RPC. The
  * SAME contract, the same code, a different machine.
  *
- * Provide this default export on the Stack program so the image is
- * built and the ContainerApplication deployed.
+ * Provide it on the Stack program (`Cloudflare.AI.SandboxContainerRuntime`)
+ * so the image is built and the ContainerApplication deployed. Unlike
+ * most container runtimes, this one is barrel-exported: the guest is
+ * pure effect modules (no node SDKs, no top-level process work), so a
+ * Worker bundle that touches the barrel carries only inert weight.
  */
-export default SandboxContainerImage.make(
+export const SandboxContainerRuntime = SandboxContainerImage.make(
   {
     main: import.meta.url,
     runtime: "bun",
@@ -64,3 +67,6 @@ export default SandboxContainerImage.make(
     };
   }).pipe(Effect.provide(fixed("/workspace"))),
 );
+
+/** The container entry contract: the module default-exports its runtime. */
+export default SandboxContainerRuntime;

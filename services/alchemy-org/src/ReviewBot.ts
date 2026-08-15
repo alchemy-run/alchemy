@@ -97,7 +97,7 @@ interface PendingComment {
 export const ReviewBotLive = ReviewBot.make(
   Effect.gen(function* () {
     // ── INIT: once per pull request ─────────────────────────────────
-    const workspaces = yield* Git.Workspaces;
+    const checkouts = yield* Git.Checkouts;
     const createComment = yield* GitHub.CreateIssueComment(testAlchemy);
     const createReview = yield* GitHub.CreatePullRequestReview(testAlchemy);
     const approvals = yield* Approvals;
@@ -111,7 +111,7 @@ export const ReviewBotLive = ReviewBot.make(
     // The PR's ACTUAL code, not just its diff: `pull/N/head` is where
     // GitHub serves every PR's tip (fork PRs included). `fresh: true`
     // so a re-activated session reviews the head as it is now.
-    const checkout = workspaces
+    const checkout = checkouts
       .checkout({
         key: thread.key,
         remote: GitHub.remote(testAlchemy),
@@ -304,7 +304,7 @@ export const ReviewBotEvents = Layer.effectDiscard(
   Effect.gen(function* () {
     const bot = yield* ReviewBot;
     const ledger = yield* Ledger;
-    const workspaces = yield* Git.Workspaces;
+    const checkouts = yield* Git.Checkouts;
 
     yield* GitHub.consumeRepositoryEvents(
       testAlchemy,
@@ -345,7 +345,7 @@ export const ReviewBotEvents = Layer.effectDiscard(
               const key = `${repo}#${event.pullRequest.number}`;
               yield* bot.settle(key, event);
               // a settled review's worktree is garbage — drop it
-              return yield* workspaces
+              return yield* checkouts
                 .release(key)
                 .pipe(Effect.catchTag("Git.GitError", () => Effect.void));
             }

@@ -24,7 +24,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Prompt from "effect/unstable/ai/Prompt";
-import type { SessionObservation } from "../../AI/EventStream.ts";
+import type { SessionObservation } from "../../AI/Events.ts";
 import type { SessionMeta, ThreadHandle } from "../../AI/ThreadStorage.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { DurableObjectState } from "../Workers/DurableObjectState.ts";

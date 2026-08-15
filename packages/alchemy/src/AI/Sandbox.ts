@@ -63,7 +63,7 @@ export interface SandboxEntry {
  * that frameworks keep ABOVE this seam stay above it here too —
  * line-level output truncation, artifact retention, and
  * digest-guarded writes are tool-layer concerns. Git is a SEPARATE
- * seam: repositories materialize through `Git.Workspaces` (worktrees
+ * seam: repositories materialize through `Git.Checkouts` (worktrees
  * on the host, artifact-fs mounts in containers), whose
  * implementations may run over this machine but are not part of it.
  *

@@ -1,5 +1,5 @@
 /**
- * WorkspacesWorktree against a LOCAL origin (no network): a seeded
+ * CheckoutsWorktree against a LOCAL origin (no network): a seeded
  * bare repo stands in for GitHub; the layer clones it once centrally
  * and derives one worktree per key. Asserts the contract's laws —
  * idempotence by key, isolation between keys, `fresh` re-derivation,
@@ -60,7 +60,7 @@ const seedOrigin = Effect.gen(function* () {
   return { base, remote: { url: origin } satisfies Git.Remote };
 });
 
-describe("Git.WorkspacesWorktree", () => {
+describe("Git.CheckoutsWorktree", () => {
   it.effect(
     "checkout is idempotent by key, isolated across keys, fresh re-derives, release drops",
     () =>
@@ -70,7 +70,7 @@ describe("Git.WorkspacesWorktree", () => {
         const { base, remote } = yield* seedOrigin;
 
         const program = Effect.gen(function* () {
-          const workspaces = yield* Git.Workspaces;
+          const workspaces = yield* Git.Checkouts;
 
           // checkout: the tree exists, on its own branch, seeded
           const one = yield* workspaces.checkout({ key: "issue/1", remote });
@@ -113,7 +113,7 @@ describe("Git.WorkspacesWorktree", () => {
 
         yield* program.pipe(
           Effect.provide(
-            Git.WorkspacesWorktree({
+            Git.CheckoutsWorktree({
               root: path.join(base, "workspaces"),
             }).pipe(
               Layer.provide(NoCredentials),

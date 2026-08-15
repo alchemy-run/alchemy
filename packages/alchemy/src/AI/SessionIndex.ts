@@ -1,7 +1,8 @@
 import * as Context from "effect/Context";
+
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { EventStream, type SessionObservation } from "./EventStream.ts";
+import { Events, type SessionObservation } from "./Events.ts";
 
 /** One session's index id: `${term}:${key}`. */
 export const sessionId = (term: string, key: string) => `${term}:${key}`;
@@ -33,7 +34,7 @@ export interface SessionSummary {
 }
 
 /**
- * The SESSION INDEX — the one {@link EventStream} consumer the core
+ * The SESSION INDEX — the one {@link Events} consumer the core
  * ships, because every UI needs it and no session can answer it: the
  * cross-session directory. `ThreadStorage` is sharded per session (one
  * Durable Object each on Cloudflare), so "list the sessions, newest
@@ -56,14 +57,14 @@ export class SessionIndex extends Context.Service<
 >()("alchemy/AI/SessionIndex") {}
 
 /**
- * Wire the index INTO the driver's {@link EventStream} — provide this
+ * Wire the index INTO the driver's {@link Events} — provide this
  * beside the driver Layer, over ONE shared {@link SessionIndex}
  * instance (the same const the HTTP surface reads; layers memoize by
  * reference).
  */
-export const SessionIndexStream: Layer.Layer<EventStream, never, SessionIndex> =
+export const SessionIndexStream: Layer.Layer<Events, never, SessionIndex> =
   Layer.effect(
-    EventStream,
+    Events,
     Effect.map(SessionIndex, (index) => ({
       emit: (observation) => Effect.ignore(index.ingest(observation)),
     })),

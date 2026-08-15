@@ -5,7 +5,7 @@ import { type RepositoryLike, repositoryIdentity } from "./RepositoryLike.ts";
 /**
  * GitHub → Git: derive a provider-neutral {@link Git.Remote} from the
  * {@link Repository} resource — the dependency points DOWN (GitHub
- * knows Git; `Git.Workspaces` never knows GitHub). Usable at module
+ * knows Git; `Git.Checkouts` never knows GitHub). Usable at module
  * scope with the deferred constructor form
  * (`export const repo = GitHub.Repository(…)`). Dies when the
  * repository's identity props are unresolved `Input`s, same doctrine

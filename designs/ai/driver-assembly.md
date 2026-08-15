@@ -28,7 +28,7 @@ algorithm and the defaults, not the personality.
 
 **The algorithm** — `compileTick` (turn → stance → skill-graph
 fixpoint → doors/dispatch/spawn/skill intrinsics → toolkit, through
-the optional `ToolEngine` seam) and `sampleTick` (thread →
+the optional `Tools` seam) and `sampleTick` (thread →
 `LanguageModel.streamText` → live parts → response append + observations, malformed
 feedback).
 
@@ -53,8 +53,8 @@ The engine consumes:
 |---|---|
 | `ThreadStorage` | where session facts persist: messages, observation log, meta (tick/cursor/active/busy/settled), and the INBOX with `putInbox`/`listInbox`/`admit` — admit is the ATOMIC drain (messages + watermark + round-open in one write) |
 | `LanguageModel` | one model call (effect/ai): streaming consolidation; retry/tiering wrap this Layer |
-| `ToolEngine` | how mentions appear on the wire (direct tools vs codemode `eval`) |
-| `EventStream` | lifecycle facts out (session index, boards, live tails) |
+| `Tools` | how mentions appear on the wire (direct tools vs codemode `eval`) |
+| `Events` | lifecycle facts out (session index, boards, live tails) |
 | `PersistentRef.Store` | charter refs, framed per session |
 
 And a placement provides five callbacks: `kick` (trigger execution),

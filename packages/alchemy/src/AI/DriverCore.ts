@@ -26,16 +26,16 @@ import * as Response from "effect/unstable/ai/Response";
 import {
   isLiveObservation,
   RoundAbandoned,
-  EventStream,
+  Events,
   type EncodedCrash,
   type SessionObservation,
-} from "./EventStream.ts";
+} from "./Events.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Fragment.ts";
 import type {
   SessionSocketHost,
   SessionSocketServerFrame,
-} from "./EventStream.ts";
+} from "./SessionSocket.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
 import {
   Thread,
@@ -56,7 +56,7 @@ import {
   isToolImpl,
   type Tool,
 } from "./Tool.ts";
-import { ToolEngine, type ToolPresentation } from "./ToolEngine.ts";
+import { Tools, type ToolPresentation } from "./Tools.ts";
 
 /**
  * A burst failure, described for the driver's two consumers (spec
@@ -525,7 +525,7 @@ export interface SessionOps {
   readonly term: string;
   readonly key: string;
   /** The charter's captured Layer context: capability resolution and
-   *  the optional seams (`ToolEngine`). */
+   *  the optional seams (`Tools`). */
   readonly context: Context.Context<never>;
   /** Provide the session-scoped services (`AI.Thread`, `AI.Tick`,
    *  refs, the captured context, the runtime color) to charter code. */
@@ -802,7 +802,7 @@ export const renderStance = (
  * (function turns receive `{count, inputs}`), render the stance,
  * walk the skill graph to its active fixpoint, and assemble this
  * sampling's system prompt + toolkit — capabilities through the
- * optional `ToolEngine` seam, intrinsics always direct.
+ * optional `Tools` seam, intrinsics always direct.
  */
 export const compileTick = (
   ops: SessionOps,
@@ -958,7 +958,7 @@ export const compileTick = (
       ...activeTools,
       ...doorTools,
     ]);
-    const toolCalling = Context.getOption(ops.context, ToolEngine);
+    const toolCalling = Context.getOption(ops.context, Tools);
     let wire: ToolPresentation;
     if (Option.isSome(toolCalling) && capabilityTools.length > 0) {
       wire = yield* toolCalling.value.present(
@@ -1611,7 +1611,7 @@ export const makeSessionEngine = (
 
   const sessions = new Map<string, EngineSession>();
   const resolvers = makeResolvers(driver, term, context);
-  const observer = Context.getOption(context, EventStream);
+  const observer = Context.getOption(context, Events);
   const ambientStore = Context.getOption(context, PersistentRef.Store);
   // Minted keys are PROCESS-UNIQUE, not just engine-unique: session
   // identity leaks into the world (workspace checkouts key on

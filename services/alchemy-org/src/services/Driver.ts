@@ -31,6 +31,8 @@ export const DriverLocal = Layer.mergeAll(
   AI.DriverLocal.pipe(
     Layer.provideMerge(EngineerStorage),
     Layer.provide(Model),
+    // the driver's `Sessions.list` delegates to the index
+    Layer.provide(EngineerIndex),
   ),
   // provideMERGE: the HTTP surface reads the index the stream writes
   AI.SessionIndexStream.pipe(Layer.provideMerge(EngineerIndex)),

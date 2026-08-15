@@ -276,7 +276,7 @@ export const makeSandboxLocal: Effect.Effect<
  * boundary — processes run as the operator with the operator's
  * environment; containment is path discipline, not a security
  * barrier. Pair with `Workspace.fixed` (one desk for every session)
- * or `Workspace.perRun` (per-session `Git.Workspaces` worktrees).
+ * or `Workspace.perRun` (per-session `Git.Checkouts` worktrees).
  */
 export const SandboxLocal: Layer.Layer<
   Sandbox,
