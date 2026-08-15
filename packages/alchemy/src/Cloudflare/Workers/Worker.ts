@@ -676,7 +676,8 @@ export interface WorkerProps<
    *   },
    * }, ...) {}
    *
-   * // Or enroll into a shared application (one policy set, many Workers):
+   * // Or enroll into a shared application (one policy set, many Workers —
+   * // note policies are application-wide):
    * const App = Cloudflare.Access.Application("TeamOnly", {
    *   type: "self_hosted",
    *   policies: [
@@ -686,7 +687,7 @@ export interface WorkerProps<
    *
    * export default class Api extends Cloudflare.Worker<Api>()("Api", {
    *   main: import.meta.url,
-   *   access: { application: App },
+   *   access: App,
    * }, ...) {}
    * ```
    */

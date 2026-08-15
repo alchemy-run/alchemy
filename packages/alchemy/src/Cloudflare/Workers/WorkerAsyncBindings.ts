@@ -5,7 +5,11 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import { Application } from "../Access/Application.ts";
+import {
+  Application,
+  isApplication,
+  type Application as AccessApplication,
+} from "../Access/Application.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -52,7 +56,7 @@ import {
   type Worker,
   type WorkerProps,
 } from "./Worker.ts";
-import type { WorkerAccessConfig } from "./WorkerAccess.ts";
+import type { WorkerAccessApplication } from "./WorkerAccess.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -69,33 +73,30 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   // destinations.
   if (props.access) {
     const accessInput = props.access;
+    // The shared form is the application itself — as the module-scope
+    // declaration Effect (`const App = Cloudflare.Access.Application(...)`)
+    // or an already-yielded resource. Resolve the yieldable spelling first,
+    // then discriminate.
     const access = (
       isYieldableEffectLike(accessInput) && !Output.isOutput(accessInput)
         ? yield* accessInput as Effect.Effect<unknown>
         : accessInput
-    ) as InputProps<WorkerAccessConfig>;
-    const application =
-      "application" in access
-        ? // Shared form: the application can be the declaration Effect
-          // (module-scope `const App = Cloudflare.Access.Application(...)`)
-          // or an already-yielded resource.
-          ((isYieldableEffectLike(access.application) &&
-          !Output.isOutput(access.application)
-            ? yield* access.application as Effect.Effect<unknown>
-            : access.application) as Application)
-        : // Dedicated form: declare an application owned by this Worker —
-          // per-Worker Access configuration means a per-Worker application
-          // (Cloudflare attaches policies to applications, not Workers).
-          yield* Application(`${resource.LogicalId}Access`, {
-            type: "self_hosted",
-            name: access.name,
-            policies: access.policies,
-            sessionDuration: access.sessionDuration,
-            allowedIdps: access.allowedIdps,
-            autoRedirectToIdentity: access.autoRedirectToIdentity,
-            appLauncherVisible: access.appLauncherVisible,
-          });
-    const previews = access.previews !== false;
+    ) as AccessApplication | InputProps<WorkerAccessApplication>;
+    const application = isApplication(access)
+      ? access
+      : // Dedicated form: declare an application owned by this Worker —
+        // per-Worker Access configuration means a per-Worker application
+        // (Cloudflare attaches policies to applications, not Workers).
+        yield* Application(`${resource.LogicalId}Access`, {
+          type: "self_hosted",
+          name: access.name,
+          policies: access.policies,
+          sessionDuration: access.sessionDuration,
+          allowedIdps: access.allowedIdps,
+          autoRedirectToIdentity: access.autoRedirectToIdentity,
+          appLauncherVisible: access.appLauncherVisible,
+        });
+    const previews = isApplication(access) || access.previews !== false;
     yield* application.bind(`access:${resource.FQN}`, {
       destinations: [
         { type: "worker", workerId: resource.scriptTag.as<string>() },

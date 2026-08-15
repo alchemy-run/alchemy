@@ -154,7 +154,7 @@ export default Cloudflare.Worker(
   "Api",
   {
     main: import.meta.url,
-    access: { application: TeamOnly },
+    access: TeamOnly,
   },
   /* ... */
 );
@@ -164,10 +164,12 @@ Each enrolled Worker contributes its destinations to the application
 through the engine's binding contract, so the application always
 converges on exactly the set of currently-enrolled Workers — removing
 the `access` prop (or the Worker itself) un-enrolls it on the next
-deploy.
+deploy. Keep in mind Access policies are **application-wide**: every
+Worker enrolled in `TeamOnly` is gated by the same policy set. For
+per-Worker rules, use the dedicated `{ policies }` form above.
 
-Set `previews: false` on either form to protect production traffic
-only, leaving version preview URLs open.
+On the dedicated form, set `previews: false` to protect production
+traffic only, leaving version preview URLs open.
 
 ## Protect every Worker on the account
 

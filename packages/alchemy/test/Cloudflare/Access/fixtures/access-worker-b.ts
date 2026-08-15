@@ -5,14 +5,14 @@ import { App } from "./access-worker.ts";
 
 /**
  * Second Worker enrolling into the SAME shared application as
- * `access-worker.ts`, with `previews: false` — production traffic only.
- * Pins the many-Workers-one-application merge through the binding contract.
+ * `access-worker.ts`. Pins the many-Workers-one-application merge through
+ * the binding contract.
  */
 export default class SecondAccessWorker extends Cloudflare.Worker<SecondAccessWorker>()(
   "SecondAccessWorker",
   {
     main: import.meta.url,
-    access: { application: App, previews: false },
+    access: App,
   },
   Effect.gen(function* () {
     return {

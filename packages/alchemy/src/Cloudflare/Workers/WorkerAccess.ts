@@ -7,13 +7,15 @@ import type { Application, ApplicationProps } from "../Access/Application.ts";
 /**
  * Protect this Worker with Cloudflare Access (`access` prop). Two forms:
  *
- * - `{ application }` — enroll into a **shared** application (one policy
- *   set across several Workers).
- * - `{ policies }` — a **dedicated** application owned by this Worker,
- *   created/updated/deleted with it. Access configuration (policies,
- *   session duration, IdPs) lives on applications, so per-Worker
- *   configuration means a per-Worker application — this form declares one
- *   for you (logical id `<WorkerId>Access`).
+ * - a `Cloudflare.Access.Application` — enroll into a **shared**
+ *   application (one policy set across several Workers). Note Access
+ *   policies are application-wide: every Worker enrolled in the
+ *   application is gated by the same policies.
+ * - `{ policies, ... }` — a **dedicated** application owned by this
+ *   Worker, created/updated/deleted with it. Access configuration
+ *   (policies, session duration, IdPs) lives on applications, so
+ *   per-Worker configuration means a per-Worker application — this form
+ *   declares one for you (logical id `<WorkerId>Access`).
  *
  * Either way, enrolling pushes this Worker's `worker` destination (and a
  * `preview_worker` destination unless `previews: false`) onto the
@@ -22,20 +24,7 @@ import type { Application, ApplicationProps } from "../Access/Application.ts";
  * Removing the prop (or the Worker) un-enrolls it on the application's
  * next reconcile.
  */
-export type WorkerAccessConfig =
-  | WorkerAccessEnrollment
-  | WorkerAccessApplication;
-
-/** Enroll this Worker into a shared Access application. */
-export interface WorkerAccessEnrollment {
-  /** The `Cloudflare.Access.Application` to enroll into. */
-  application: Application;
-  /**
-   * Also protect the Worker's version preview URLs.
-   * @default true
-   */
-  previews?: boolean;
-}
+export type WorkerAccessConfig = Application | WorkerAccessApplication;
 
 /**
  * A dedicated Access application owned by this Worker — per-Worker

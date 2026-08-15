@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -302,6 +302,9 @@ export interface ApplicationAttributes {
 export interface ApplicationBinding {
   destinations?: ApplicationDestination[];
 }
+
+export const isApplication = <T>(value: T): value is T & Application =>
+  isResourceOfType(value, "Cloudflare.Access.Application");
 
 export type Application = Resource<
   "Cloudflare.Access.Application",

@@ -27,7 +27,7 @@ export default class AccessProtectedWorker extends Cloudflare.Worker<AccessProte
   "AccessProtectedWorker",
   {
     main: import.meta.url,
-    access: { application: App },
+    access: App,
   },
   Effect.gen(function* () {
     return {

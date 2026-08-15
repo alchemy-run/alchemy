@@ -222,18 +222,10 @@ test.provider(
       expect(app!.policies?.length).toBe(1);
       expect(app!.policies![0].decision).toBe("allow");
       expect(app!.policies![0].reusable).toBe(false);
-      expect(app!.destinations).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            type: "worker",
-            workerId: worker.scriptTag,
-          }),
-          expect.objectContaining({
-            type: "preview_worker",
-            workerId: worker.scriptTag,
-          }),
-        ]),
-      );
+      // `previews: false` — production destination only.
+      expect(app!.destinations).toEqual([
+        expect.objectContaining({ type: "worker", workerId: worker.scriptTag }),
+      ]);
 
       // Unauthenticated requests are intercepted.
       const location = yield* expectAccessLoginRedirect(worker.url!);
@@ -259,8 +251,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Two Workers enroll into the SAME application — worker B with
-      // `previews: false` (production traffic only).
+      // Two Workers enroll into the SAME application.
       const both = Effect.gen(function* () {
         const a = yield* AccessProtectedWorker;
         const b = yield* SecondAccessWorker;
@@ -284,10 +275,13 @@ test.provider(
             workerId: a.scriptTag,
           }),
           expect.objectContaining({ type: "worker", workerId: b.scriptTag }),
+          expect.objectContaining({
+            type: "preview_worker",
+            workerId: b.scriptTag,
+          }),
         ]),
       );
-      // previews: false — no preview destination for worker B.
-      expect(workerDestinations).toHaveLength(3);
+      expect(workerDestinations).toHaveLength(4);
 
       // Un-enrollment without destroy: remove worker B from the stack —
       // its binding contribution disappears and the application converges

@@ -12,9 +12,9 @@ const App = Cloudflare.Access.Application("TypesApp", {
   policies: [{ decision: "allow", include: [{ emailDomain: "example.com" }] }],
 });
 
-// The shared-application form: props are Input-wrapped, so the declaration
-// Effect is accepted directly.
-const access = { application: App, previews: false };
+// The shared-application form is the application itself — props are
+// Input-wrapped, so the declaration Effect is accepted directly.
+const access = App;
 
 const dedicated = {
   policies: [

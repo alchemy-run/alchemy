@@ -13,6 +13,8 @@ export default class OwnedAccessWorker extends Cloudflare.Worker<OwnedAccessWork
     main: import.meta.url,
     access: {
       name: "Access for alchemy owned-app test",
+      // Production traffic only — preview URLs stay open.
+      previews: false,
       policies: [
         {
           decision: "allow",
