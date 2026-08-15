@@ -313,7 +313,13 @@ export const LocalWorkerProvider = () =>
         const props = news as WorkerProps;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
-        const bindingDescriptors: WorkerBinding[] = [];
+        // Worker metadata and explicit `env` can both describe the same
+        // binding (for example, an Effect Workflow class plus its stack
+        // descriptor). workerd requires binding names to be unique; keeping
+        // both can make a same-worker Workflow resolve through its own
+        // registry proxy indefinitely. Match Cloudflare's last-write-wins
+        // binding semantics while preserving the first insertion order.
+        const bindingDescriptors = new Map<string, WorkerBinding>();
         const durableObjectNamespaces: Record<
           string,
           RuntimeDurableObject & { uniqueKey: string }
@@ -345,7 +351,10 @@ export const LocalWorkerProvider = () =>
                 uniqueKey: namespaceId,
                 sql: true,
               };
-              bindingDescriptors.push({ ...binding, namespaceId });
+              bindingDescriptors.set(binding.name, {
+                ...binding,
+                namespaceId,
+              });
             } else {
               if (
                 binding.type === "workflow" &&
@@ -359,7 +368,7 @@ export const LocalWorkerProvider = () =>
                   className: binding.className,
                 };
               }
-              bindingDescriptors.push(binding);
+              bindingDescriptors.set(binding.name, binding);
             }
           }
           if (data.devRemote) {
@@ -442,7 +451,7 @@ export const LocalWorkerProvider = () =>
             props.script === undefined &&
             !props.vite &&
             !!props.assets,
-          bindingDescriptors,
+          bindingDescriptors: Array.from(bindingDescriptors.values()),
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
           hyperdrives,
