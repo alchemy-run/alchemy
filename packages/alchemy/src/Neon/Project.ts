@@ -22,8 +22,9 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
+  diffMigrations,
+  migrationsAttrs,
   migrationsInputOf,
-  resolveMigrations,
   stampedOf,
   type MigrationsInput,
 } from "../SQL/Migrations/index.ts";
@@ -264,19 +265,8 @@ export const ProjectProvider = () =>
       ) {
         return { action: "update" } as const;
       }
-      const migrationsInput = migrationsInputOf(news);
-      if (migrationsInput) {
-        const newHashes = yield* hashMigrations(migrationsInput.dir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update" } as const;
-        }
-        const resolved = resolveMigrations({
-          input: migrationsInput,
-          stamped: stampedOf(output),
-        });
-        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
-          return { action: "update" } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update" } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -424,11 +414,7 @@ export const ProjectProvider = () =>
 
       return {
         ...projectInfo,
-        migrationsDir: migrationsInput?.dir,
-        // When migrations are removed, keep the stamp (like the hashes) so
-        // a later re-add resolves against the same bookkeeping table.
-        migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
-        migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
       };
     }),

@@ -16,6 +16,8 @@ export {
   type SqlExecutor,
 } from "./Format.ts";
 export { classifyTable, tableColumns, type TableShape } from "./Introspect.ts";
+export { makeMySQLMigrationExecutor } from "./MySQLExecutor.ts";
+export { makePgMigrationExecutor } from "./PgExecutor.ts";
 export {
   inlineSqlParams,
   quoteIdentifier,
@@ -25,10 +27,14 @@ export {
 } from "./Records.ts";
 export {
   applyMigrations,
+  diffMigrations,
+  migrationsAttrs,
   migrationsInputOf,
+  runMigrations,
   normalizeMigrationsInput,
   resolveMigrations,
   stampedOf,
+  type MigrationRun,
   type MigrationsInput,
   type NormalizedMigrationsInput,
   type ResolvedMigrations,

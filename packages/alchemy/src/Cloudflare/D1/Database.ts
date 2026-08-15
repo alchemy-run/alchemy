@@ -13,14 +13,14 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import {
-  applyMigrations as applyResolvedMigrations,
+  diffMigrations,
+  migrationsAttrs,
   migrationsInputOf,
-  resolveMigrations,
+  runMigrations,
   stampedOf,
   type MigrationsInput,
-  type ResolvedMigrations,
 } from "../../SQL/Migrations/index.ts";
-import { hashImports, hashMigrations, readSqlFile } from "../../SQL/SqlFile.ts";
+import { hashImports, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
@@ -308,26 +308,8 @@ export const ProviderLive = () =>
         return { action: "update" } as const;
       }
       // Detect migration/import file drift.
-      const migrationsInput = migrationsInputOf(news);
-      if (migrationsInput) {
-        const newHashes = yield* hashMigrations(migrationsInput.dir);
-        const oldHashes = output?.migrationsHashes ?? {};
-        if (!recordsEqual(newHashes, oldHashes)) {
-          return { action: "update" } as const;
-        }
-        const resolved = resolveMigrations({
-          input: migrationsInput,
-          stamped: stampedOf(output),
-        });
-        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
-          return { action: "update" } as const;
-        }
-      } else if (
-        output?.migrationsHashes &&
-        Object.keys(output.migrationsHashes).length > 0
-      ) {
-        // migrations was removed but state still tracks them: nothing
-        // to do remotely (we never un-apply), but no diff needed either.
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update" } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -527,34 +509,27 @@ export const ProviderLive = () =>
         });
       }
 
-      // Sync migrations — the flow is idempotent (already-applied entries
-      // are skipped), so this works for both first create and ongoing
-      // updates. Foreign (drizzle/prisma/wrangler) or legacy history is
-      // converted into __alchemy_migrations on first contact.
+      // Sync migrations — the shared pipeline is idempotent
+      // (already-applied entries are skipped), so this works for both
+      // first create and ongoing updates. Foreign (drizzle/prisma/
+      // wrangler) or legacy history is converted into
+      // __alchemy_migrations on first contact.
       const migrationsInput = migrationsInputOf(news);
-      let resolvedMigrations: ResolvedMigrations | undefined;
-      let migrationsHashes: Record<string, string>;
-      if (migrationsInput) {
-        migrationsHashes = yield* hashMigrations(migrationsInput.dir);
-        resolvedMigrations = resolveMigrations({
-          input: migrationsInput,
-          stamped: stampedOf(output),
-        });
-        if (Object.keys(migrationsHashes).length > 0) {
-          const queryDb = yield* d1.queryDatabase;
-          const executor = makeD1MigrationExecutor((sql) =>
-            queryDb({ accountId: acct, databaseId, sql }),
-          );
-          yield* applyResolvedMigrations({
-            resolved: resolvedMigrations,
-            executor,
-          });
-        }
-      } else {
-        migrationsHashes = isFirstCreation
-          ? {}
-          : (output?.migrationsHashes ?? {});
-      }
+      const migrations = migrationsInput
+        ? yield* runMigrations({
+            input: migrationsInput,
+            stamped: stampedOf(output),
+            withExecutor: (apply) =>
+              Effect.gen(function* () {
+                const queryDb = yield* d1.queryDatabase;
+                yield* apply(
+                  makeD1MigrationExecutor((sql) =>
+                    queryDb({ accountId: acct, databaseId, sql }),
+                  ),
+                );
+              }),
+          })
+        : undefined;
 
       // Sync imports — `runImports` skips files whose hash matches
       // previously-imported state. On first create the previous map
@@ -575,11 +550,13 @@ export const ProviderLive = () =>
         jurisdiction: (output?.jurisdiction ?? jurisdiction) as Jurisdiction,
         readReplication: news.readReplication,
         accountId: acct,
-        migrationsDir: migrationsInput?.dir,
-        // When migrations are removed, keep the stamp (like the hashes) so
-        // a later re-add resolves against the same bookkeeping table.
-        migrationsTable: resolvedMigrations?.table ?? output?.migrationsTable,
-        migrationsHashes,
+        // On first creation prior state is meaningless; otherwise removing
+        // `migrations` keeps the stamp and hashes for a later re-add.
+        ...migrationsAttrs({
+          input: migrationsInput,
+          run: migrations,
+          output: isFirstCreation ? undefined : output,
+        }),
         importHashes,
       };
     }),
@@ -636,19 +613,8 @@ export const ProviderLocal = () =>
           }
           // Detect migration/import file drift — same rules as the live
           // provider.
-          const migrationsInput = migrationsInputOf(news);
-          if (migrationsInput) {
-            const newHashes = yield* hashMigrations(migrationsInput.dir);
-            if (!recordsEqual(newHashes, output.migrationsHashes ?? {})) {
-              return { action: "update" } as const;
-            }
-            const resolved = resolveMigrations({
-              input: migrationsInput,
-              stamped: stampedOf(output),
-            });
-            if (resolved.table !== (output.migrationsTable ?? resolved.table)) {
-              return { action: "update" } as const;
-            }
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
           }
           if (news.importFiles?.length) {
             const newHashes = yield* hashImports(
@@ -669,30 +635,20 @@ export const ProviderLocal = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const databaseId = output?.databaseId ?? generateLocalId();
 
-          // Sync migrations — idempotent, driven through the ephemeral
-          // local gateway so the SAME bookkeeping applies locally as in
-          // the cloud.
+          // Sync migrations — the shared pipeline, driven through the
+          // ephemeral local gateway so the SAME bookkeeping applies
+          // locally as in the cloud.
           const migrationsInput = migrationsInputOf(news);
-          let resolvedMigrations: ResolvedMigrations | undefined;
-          let migrationsHashes: Record<string, string> = {};
-          if (migrationsInput) {
-            migrationsHashes = yield* hashMigrations(migrationsInput.dir);
-            resolvedMigrations = resolveMigrations({
-              input: migrationsInput,
-              stamped: stampedOf(output),
-            });
-            if (Object.keys(migrationsHashes).length > 0) {
-              const resolved = resolvedMigrations;
-              yield* withLocalD1Executor(databaseId, (executor) =>
-                applyResolvedMigrations({
-                  resolved,
-                  executor: makeD1MigrationExecutor(executor),
-                }),
-              ).pipe(Effect.provideContext(runtimeContext));
-            }
-          } else {
-            migrationsHashes = output?.migrationsHashes ?? {};
-          }
+          const migrations = migrationsInput
+            ? yield* runMigrations({
+                input: migrationsInput,
+                stamped: stampedOf(output),
+                withExecutor: (apply) =>
+                  withLocalD1Executor(databaseId, (executor) =>
+                    apply(makeD1MigrationExecutor(executor)),
+                  ).pipe(Effect.provideContext(runtimeContext)),
+              })
+            : undefined;
 
           // Sync imports — locally an import file is just multi-statement
           // SQL, executed through the same gateway. Files whose hash matches
@@ -727,10 +683,11 @@ export const ProviderLocal = () =>
             jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
             readReplication: news.readReplication,
             accountId: output?.accountId ?? accountId,
-            migrationsDir: migrationsInput?.dir,
-            migrationsTable:
-              resolvedMigrations?.table ?? output?.migrationsTable,
-            migrationsHashes,
+            ...migrationsAttrs({
+              input: migrationsInput,
+              run: migrations,
+              output,
+            }),
             importHashes,
           };
         }),

@@ -1,22 +1,14 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type { Client } from "pg";
 import {
-  applyMigrations,
-  MigrationError,
-  resolveMigrations,
-  type DrizzleV0LayoutError,
-  type MigrationHistoryConflictError,
+  makePgMigrationExecutor,
+  runMigrations,
   type NormalizedMigrationsInput,
-  type ResolvedMigrations,
-  type SqlExecutor,
   type StampedMigrationsState,
 } from "../SQL/Migrations/index.ts";
 import { importPg } from "../SQL/PostgresDriver.ts";
-import { hashMigrations } from "../SQL/SqlFile.ts";
 
 export class PgError extends Data.TaggedError("PgError")<{
   message: string;
@@ -75,91 +67,20 @@ export const withPgClient = <A, E, R>(
   );
 
 /**
- * Adapt an open pg client into the registry's {@link SqlExecutor}. Batches
- * run in a transaction so a migration and its bookkeeping INSERT commit
- * (or roll back) together.
- */
-export const makePgMigrationExecutor = (client: Client): SqlExecutor => ({
-  dialect: "postgres",
-  query: (sql, params) =>
-    Effect.tryPromise({
-      try: () =>
-        client
-          .query(sql, (params ?? []) as unknown[])
-          .then((result) => result.rows as Array<Record<string, unknown>>),
-      catch: (cause) =>
-        new MigrationError({
-          message: `postgres query failed: ${String(cause)}`,
-          cause,
-        }),
-    }),
-  batch: (statements) =>
-    Effect.tryPromise({
-      try: async () => {
-        await client.query("BEGIN");
-        try {
-          for (const statement of statements) {
-            await client.query(statement);
-          }
-          await client.query("COMMIT");
-        } catch (error) {
-          await client.query("ROLLBACK").catch(() => {});
-          throw error;
-        }
-      },
-      catch: (cause) =>
-        new MigrationError({
-          message: `postgres migration batch failed: ${String(cause)}`,
-          cause,
-        }),
-    }),
-});
-
-export type PgMigrationError =
-  | PgError
-  | MigrationError
-  | MigrationHistoryConflictError
-  | DrizzleV0LayoutError;
-
-/**
- * Apply pending migrations over the given connection through a scoped pg
- * client. Bookkeeping is Alchemy's `__alchemy_migrations` table; foreign
- * (drizzle/prisma) or legacy history is converted one-way on first
- * contact. Returns the resolved table (for stamping into state) and the
- * per-file content hashes (for drift detection).
+ * Neon's migration adaptation is exactly this: the shared pipeline with a
+ * connection-URI-scoped pg client as its executor.
  */
 export const runPgMigrations = (options: {
   connectionUri: Redacted.Redacted<string>;
   input: NormalizedMigrationsInput;
   stamped: StampedMigrationsState;
-}): Effect.Effect<
-  { resolved: ResolvedMigrations; hashes: Record<string, string> },
-  PgMigrationError,
-  FileSystem.FileSystem | Path.Path
-> =>
-  Effect.gen(function* () {
-    const hashes = yield* hashMigrations(options.input.dir).pipe(
-      Effect.mapError(
-        (cause) =>
-          new MigrationError({
-            message: `Failed to read migrations from ${options.input.dir}: ${String(cause)}`,
-            cause,
-          }),
+}) =>
+  runMigrations({
+    ...options,
+    withExecutor: (apply) =>
+      withPgClient(options.connectionUri, (client) =>
+        apply(makePgMigrationExecutor(client)),
       ),
-    );
-    const resolved: ResolvedMigrations = resolveMigrations({
-      input: options.input,
-      stamped: options.stamped,
-    });
-    if (Object.keys(hashes).length > 0) {
-      yield* withPgClient(options.connectionUri, (client) =>
-        applyMigrations({
-          resolved,
-          executor: makePgMigrationExecutor(client),
-        }),
-      );
-    }
-    return { resolved, hashes };
   });
 
 /**

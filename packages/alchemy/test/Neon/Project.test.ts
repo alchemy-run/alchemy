@@ -1,9 +1,6 @@
 import * as Neon from "@/Neon";
-import {
-  makePgMigrationExecutor,
-  runSql,
-  withPgClient,
-} from "@/Neon/Migrations.ts";
+import { runSql, withPgClient } from "@/Neon/Migrations.ts";
+import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
 import * as Provider from "@/Provider";
 import { hashMigrations } from "@/SQL/SqlFile.ts";
 import * as Test from "@/Test/Alchemy";

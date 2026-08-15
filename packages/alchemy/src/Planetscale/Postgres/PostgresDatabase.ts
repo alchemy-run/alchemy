@@ -8,8 +8,9 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
 import {
+  diffMigrations,
+  migrationsAttrs,
   migrationsInputOf,
-  resolveMigrations,
   stampedOf,
 } from "../../SQL/Migrations/index.ts";
 import { recordsEqual } from "../../Util/equal.ts";
@@ -150,19 +151,8 @@ export const PostgresDatabaseProvider = () =>
         return { action: "replace" } as const;
       }
 
-      const migrationsInput = migrationsInputOf(news);
-      if (migrationsInput) {
-        const newHashes = yield* hashMigrations(migrationsInput.dir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update", stables } as const;
-        }
-        const resolved = resolveMigrations({
-          input: migrationsInput,
-          stamped: stampedOf(output),
-        });
-        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
-          return { action: "update", stables } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -393,11 +383,7 @@ export const PostgresDatabaseProvider = () =>
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
         clusterSize: clusterSize,
-        migrationsDir: migrationsInput?.dir,
-        // When migrations are removed, keep the stamp (like the hashes) so
-        // a later re-add resolves against the same bookkeeping table.
-        migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
-        migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         arch: news.arch ?? output?.arch ?? "x86",
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,

@@ -17,12 +17,13 @@ import {
   waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
 import {
+  diffMigrations,
+  migrationsAttrs,
   migrationsInputOf,
-  resolveMigrations,
   stampedOf,
+  type MigrationRun,
   type MigrationsInput,
   type NormalizedMigrationsInput,
-  type ResolvedMigrations,
   type StampedMigrationsState,
 } from "../SQL/Migrations/index.ts";
 import {
@@ -162,11 +163,7 @@ export interface BranchMigrationRunners {
     target: { organization: string; database: string; branch: string },
     input: NormalizedMigrationsInput,
     stamped: StampedMigrationsState,
-  ) => Effect.Effect<
-    { resolved: ResolvedMigrations; hashes: Record<string, string> },
-    any,
-    any
-  >;
+  ) => Effect.Effect<MigrationRun, any, any>;
   runImports: (
     target: { organization: string; database: string; branch: string },
     importFiles: string[],
@@ -331,19 +328,8 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      const migrationsInput = migrationsInputOf(news);
-      if (migrationsInput) {
-        const newHashes = yield* hashMigrations(migrationsInput.dir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update", stables } as const;
-        }
-        const resolved = resolveMigrations({
-          input: migrationsInput,
-          stamped: stampedOf(output),
-        });
-        if (resolved.table !== (output?.migrationsTable ?? resolved.table)) {
-          return { action: "update", stables } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -662,11 +648,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         updatedAt: updated.updated_at,
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
-        migrationsDir: migrationsInput?.dir,
-        // When migrations are removed, keep the stamp (like the hashes) so
-        // a later re-add resolves against the same bookkeeping table.
-        migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
-        migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         desiredReplicas: news.replicas ?? output?.desiredReplicas,
         hasReplicas: updated.has_replicas,

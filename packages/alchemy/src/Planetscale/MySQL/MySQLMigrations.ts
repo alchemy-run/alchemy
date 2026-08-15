@@ -5,19 +5,12 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { Connection } from "mysql2/promise";
 import {
-  applyMigrations,
-  MigrationError,
-  resolveMigrations,
+  makeMySQLMigrationExecutor,
+  runMigrations,
   type NormalizedMigrationsInput,
-  type ResolvedMigrations,
-  type SqlExecutor,
   type StampedMigrationsState,
 } from "../../SQL/Migrations/index.ts";
-import {
-  hashMigrations,
-  readSqlFile,
-  splitSqlStatements,
-} from "../../SQL/SqlFile.ts";
+import { readSqlFile, splitSqlStatements } from "../../SQL/SqlFile.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
 
@@ -45,78 +38,21 @@ export interface MySQLMigrationTarget {
 }
 
 /**
- * Adapt an open mysql2 connection into the registry's SqlExecutor. Batches
- * run in a transaction (MySQL DDL auto-commits, matching the previous
- * behavior of statement-by-statement application).
- */
-const makeMySQLMigrationExecutor = (connection: Connection): SqlExecutor => ({
-  dialect: "mysql",
-  query: (sql, params) =>
-    Effect.tryPromise({
-      try: () =>
-        connection
-          .query(sql, params ? [...params] : undefined)
-          .then(([rows]) => rows as Array<Record<string, unknown>>),
-      catch: (cause) =>
-        new MigrationError({
-          message: `mysql query failed: ${String(cause)}`,
-          cause,
-        }),
-    }),
-  batch: (statements) =>
-    Effect.tryPromise({
-      try: async () => {
-        await connection.query("START TRANSACTION");
-        try {
-          for (const statement of statements) {
-            await connection.query(statement);
-          }
-          await connection.query("COMMIT");
-        } catch (error) {
-          await connection.query("ROLLBACK").catch(() => {});
-          throw error;
-        }
-      },
-      catch: (cause) =>
-        new MigrationError({
-          message: `mysql migration batch failed: ${String(cause)}`,
-          cause,
-        }),
-    }),
-});
-
-/**
- * Resolve the migration format for `input` and apply pending migrations
- * against the branch through a temporary admin password. Inline formats
- * run through a scoped mysql2 connection; foreign (drizzle/prisma) or
- * legacy history is converted one-way into Alchemy's table. Returns the
- * resolved format/table (for stamping) and per-file content hashes.
+ * PlanetScale MySQL's migration adaptation is exactly this: the shared
+ * pipeline with a temp-password-scoped mysql2 connection as its executor.
  */
 export const runMySQLMigrations = (
   target: MySQLMigrationTarget,
   input: NormalizedMigrationsInput,
   stamped: StampedMigrationsState,
 ) =>
-  Effect.gen(function* () {
-    const hashes = yield* hashMigrations(input.dir).pipe(
-      Effect.mapError(
-        (cause) =>
-          new MigrationError({
-            message: `Failed to read migrations from ${input.dir}: ${String(cause)}`,
-            cause,
-          }),
+  runMigrations({
+    input,
+    stamped,
+    withExecutor: (apply) =>
+      withMySQLConnection(target, (connection) =>
+        apply(makeMySQLMigrationExecutor(connection)),
       ),
-    );
-    const resolved: ResolvedMigrations = resolveMigrations({ input, stamped });
-    if (Object.keys(hashes).length > 0) {
-      yield* withMySQLConnection(target, (connection) =>
-        applyMigrations({
-          resolved,
-          executor: makeMySQLMigrationExecutor(connection),
-        }),
-      );
-    }
-    return { resolved, hashes };
   });
 
 export const runMySQLImports = (
