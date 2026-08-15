@@ -10,13 +10,18 @@ its custom domains, routes, `workers.dev` URL, and version preview
 URLs — and hands your code the authenticated identity at runtime. In
 alchemy this is a property of the Worker: set the `access` prop.
 
-## Protect a Worker
+The prop has two forms — a **dedicated application** owned by the
+Worker (`access: { policies }`) for per-Worker rules, and a **shared
+application** (`access: App`) when several Workers sit behind one
+policy set. Each has its own section below.
+
+## Dedicated application (per-Worker policies)
 
 The simplest form declares the policies right on the Worker. Alchemy
 creates a dedicated Access application for it (Cloudflare attaches
 policies to *applications*, so per-Worker policies mean a per-Worker
 application — created, updated, and deleted with the Worker, and
-namespaced under it in the plan as `Api/Access`):
+namespaced under it as `Api/Access`):
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -132,10 +137,10 @@ NOT. Parameter-less kinds collapse to bare strings (`"everyone"`,
 [Access policy docs](https://developers.cloudflare.com/cloudflare-one/policies/access/)
 pastes in directly.
 
-## Share one application across Workers
+## Shared application (one policy set, many Workers)
 
 When several Workers should sit behind the same policy set, declare
-the application once and enroll each Worker into it:
+the application once and pass it to each Worker directly:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";

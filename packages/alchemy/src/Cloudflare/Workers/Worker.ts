@@ -650,46 +650,37 @@ export interface WorkerProps<
    */
   workersDev?: boolean | WorkersDevConfig;
   /**
-   * Protect this Worker with Cloudflare Access by enrolling it into an
-   * Access application. The application owns the policies (author them
-   * inline on the application or as `Cloudflare.Access.Policy` resources);
-   * the provider adds this Worker as a `worker` destination — and a
-   * `preview_worker` destination unless `previews: false` — covering its
-   * custom domains, routes, `workers.dev` URL, and version preview URLs.
-   * Removing the prop (or deleting the Worker) un-enrolls it.
+   * Protect this Worker with Cloudflare Access. Two forms:
+   *
+   * **Dedicated** — `{ policies, ... }` declares an Access application
+   * owned by this Worker (namespaced under it as `<Worker>/Access`),
+   * created, updated, and deleted with it:
+   * ```ts
+   * access: {
+   *   policies: [
+   *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
+   *   ],
+   * }
+   * ```
+   *
+   * **Shared** — pass a `Cloudflare.Access.Application` directly to enroll
+   * into it. Access policies are application-wide: every enrolled Worker
+   * is gated by the same policy set:
+   * ```ts
+   * access: TeamOnly
+   * ```
+   *
+   * Either way the Worker's `worker` destination — and a `preview_worker`
+   * destination unless `previews: false` (dedicated form) — is pushed onto
+   * the application, covering custom domains, routes, the `workers.dev`
+   * URL, and version preview URLs. Removing the prop (or deleting the
+   * Worker) un-enrolls it.
    *
    * At runtime, read the authenticated identity from `ctx.access` via
    * `Cloudflare.Access.Context`; under `alchemy dev`, simulate it with
    * `dev: { access: ... }`. Also accepted by every `Cloudflare.Website.*`
    * framework. See the
    * [Protect a Worker with Access](/cloudflare/security/access) guide.
-   *
-   * @example
-   * ```ts
-   * // Dedicated application owned by this Worker (per-Worker policies):
-   * export default class Api extends Cloudflare.Worker<Api>()("Api", {
-   *   main: import.meta.url,
-   *   access: {
-   *     policies: [
-   *       { decision: "allow", include: [{ emailDomain: "example.com" }] },
-   *     ],
-   *   },
-   * }, ...) {}
-   *
-   * // Or enroll into a shared application (one policy set, many Workers —
-   * // note policies are application-wide):
-   * const App = Cloudflare.Access.Application("TeamOnly", {
-   *   type: "self_hosted",
-   *   policies: [
-   *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
-   *   ],
-   * });
-   *
-   * export default class Api extends Cloudflare.Worker<Api>()("Api", {
-   *   main: import.meta.url,
-   *   access: App,
-   * }, ...) {}
-   * ```
    */
   access?: WorkerAccessConfig;
   /**
@@ -1434,7 +1425,10 @@ export const isSelf = (value: unknown): value is Self =>
  * `Cloudflare.Access.Context`. See the
  * [Protect a Worker with Access](/cloudflare/security/access) guide.
  *
- * @example Require a verified email domain
+ * @example Dedicated application — per-Worker policies
+ * The `{ policies }` form declares an Access application owned by this
+ * Worker (namespaced under it as `<Worker>/Access`), created, updated,
+ * and deleted with it:
  * ```typescript
  * export default Cloudflare.Worker(
  *   "Api",
@@ -1457,6 +1451,25 @@ export const isSelf = (value: unknown): value is Self =>
  *       }),
  *     };
  *   }),
+ * );
+ * ```
+ *
+ * @example Shared application — one policy set, many Workers
+ * Pass a `Cloudflare.Access.Application` directly to enroll into it.
+ * Access policies are application-wide: every enrolled Worker is gated
+ * by the same policy set.
+ * ```typescript
+ * const TeamOnly = Cloudflare.Access.Application("TeamOnly", {
+ *   type: "self_hosted",
+ *   policies: [
+ *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
+ *   ],
+ * });
+ *
+ * export default Cloudflare.Worker(
+ *   "Api",
+ *   { main: import.meta.url, access: TeamOnly },
+ *   /* ... *​/
  * );
  * ```
  *
