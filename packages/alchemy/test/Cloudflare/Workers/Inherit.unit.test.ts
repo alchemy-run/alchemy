@@ -178,16 +178,13 @@ describe("Cloudflare.Workers.Inherit validation", () => {
         ),
       ),
     ).toBe(true);
-    expect(
-      Result.isSuccess(
-        run(
-          assertInheritEnvCollision(
-            { type: "inherit", name: "API_TOKEN" },
-            Effect.succeed("runtime"),
-          ),
-        ),
+    const inheritThenEffect = run(
+      assertInheritEnvCollision(
+        { type: "inherit", name: "API_TOKEN" },
+        Effect.succeed("runtime"),
       ),
-    ).toBe(true);
+    );
+    expect(Result.isFailure(inheritThenEffect)).toBe(true);
     expect(
       Result.isSuccess(
         run(

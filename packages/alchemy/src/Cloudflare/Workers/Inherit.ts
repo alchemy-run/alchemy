@@ -1,6 +1,5 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Binding from "./Binding.ts";
 import type { InheritBinding } from "./InheritBinding.ts";
@@ -39,7 +38,8 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * object key.
  *
  * Not supported in `alchemy dev` — workerd cannot inherit from a Cloudflare
- * version history. Local start fails closed.
+ * version history. Local workerd start fails closed. `dev: { mode: "external" }`
+ * does not start workerd and does not materialize inherit.
  *
  * @binding
  * @product Workers
@@ -233,56 +233,24 @@ export const isInheritEnvValue = (value: unknown): boolean =>
     isInheritWireBinding(value as { readonly type?: string }));
 
 /**
- * `news.env` values that appendAlchemy would emit as plain_text / secret /
- * json. Worker-only bindings, Effects, class instances, and inherit
- * markers are not explicit — at reconcile `Inherit()` may no longer be a
- * live binding instance.
- */
-export const isExplicitInheritEnvValue = (value: unknown): boolean => {
-  if (value === undefined || isInheritEnvValue(value)) return false;
-  if (Binding.isBinding(value)) return false;
-  if (typeof value === "object" && value !== null && "~alchemy/Kind" in value) {
-    return false;
-  }
-  if (Redacted.isRedacted(value)) return true;
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return true;
-  }
-  if (value === null || Array.isArray(value)) return true;
-  if (typeof value === "object") {
-    const proto = Object.getPrototypeOf(value);
-    return proto === Object.prototype || proto === null;
-  }
-  return false;
-};
-
-/**
  * Resource-binding metadata and `news.env` must agree on inherit vs
- * explicit for the same name. Either direction of a real mismatch is
- * rejected so an explicit survivor cannot silently drop an inherit
- * marker. Unclassified env values (Effects, other bindings) are not
- * treated as explicit.
+ * anything else for the same name. Either direction is rejected so an
+ * explicit survivor cannot silently drop an inherit marker, and inherit
+ * cannot last-win over another binding. `undefined` is skipped. Stripped
+ * `{ kind: "Cloudflare.Workers.Inherit" }` env objects still count as
+ * inherit.
  */
 export const assertInheritEnvCollision = (
   existing: { readonly type?: string; readonly name?: string },
   envValue: unknown,
 ): Effect.Effect<void, WorkerInheritConfigError> => {
+  if (envValue === undefined) return Effect.void;
   const existingIsInherit = isInheritWireBinding(existing);
   const envIsInherit = isInheritEnvValue(envValue);
-  const envIsExplicit = isExplicitInheritEnvValue(envValue);
-  if (
-    (existingIsInherit && envIsExplicit) ||
-    (!existingIsInherit && envIsInherit)
-  ) {
-    return fail(
-      `Binding '${existing.name ?? ""}' cannot be both inherited and given an explicit value.`,
-    );
-  }
-  return Effect.void;
+  if (existingIsInherit === envIsInherit) return Effect.void;
+  return fail(
+    `Binding '${existing.name ?? ""}' cannot be both inherited and given an explicit value.`,
+  );
 };
 
 /**

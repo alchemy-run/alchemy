@@ -1355,7 +1355,8 @@ export const isSelf = (value: unknown): value is Self =>
  * or a dispatch `namespace`. Do not inherit `ALCHEMY_*` or `VITE_*`.
  *
  * `alchemy dev` cannot inherit from Cloudflare version history;
- * local start fails closed.
+ * local workerd start fails closed. `dev: { mode: "external" }` does
+ * not start workerd and does not materialize inherit.
  *
  * @example Inherit a separately custodied secret from the live upload
  * ```typescript
