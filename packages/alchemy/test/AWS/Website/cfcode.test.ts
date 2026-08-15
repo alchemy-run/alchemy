@@ -271,3 +271,30 @@ describe("AWS.Website compileServerRoutes", () => {
       }),
   );
 });
+
+describe("AWS.Website CloudFront Function size limit", () => {
+  // CloudFront Functions hard-cap code at 10 KB. The shared Router's
+  // request function silently crossed it when the serverRoutes edge block
+  // landed (surfaced live as FunctionSizeLimitExceeded only after weeks of
+  // masked runs), so the WORST-CASE composition — host redirect with
+  // redirect hosts AND the cloudfront-default arm, plus a typical user
+  // injection — is pinned here with headroom for growth.
+  it("the Router request function stays under 10KB in its worst-case shape", async () => {
+    const { buildRouterRequestFunctionCode } =
+      await import("@/AWS/Website/Router.ts");
+    const code = buildRouterRequestFunctionCode({
+      kvNamespace: "alchemy-router-namespace-with-a-long-name",
+      userInjection:
+        'if (event.request.uri === "/health") { return { statusCode: 200, statusDescription: "OK" }; }',
+      hostRedirect: {
+        to: "app.example.com",
+        hosts: ["www.example.com", "example.com"],
+        cloudfrontDefault: true,
+      },
+    });
+    const bytes = Buffer.byteLength(code);
+    expect(bytes).toBeLessThan(10_240);
+    // Growth headroom: fail the build well before the cliff.
+    expect(bytes).toBeLessThan(9_728);
+  });
+});

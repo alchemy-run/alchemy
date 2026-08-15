@@ -22,7 +22,11 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Records as Route53Records } from "../Route53/Records.ts";
 import type { Bucket } from "../S3/Bucket.ts";
-import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import {
+  buildHostRedirectInjection,
+  CF_ROUTER_INJECTION,
+  compactCloudFrontFunctionCode,
+} from "./cfcode.ts";
 import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
 
 /**
@@ -432,11 +436,8 @@ export const Router = Effect.fn("AWS.Website.Router")(
   (effect, id: string, _props: RouterProps) => effect.pipe(Namespace.push(id)),
 );
 
-const buildRouterRequestFunctionCode = ({
-  kvNamespace,
-  userInjection,
-  hostRedirect,
-}: {
+/** @internal exported for the cfcode size-limit pin */
+export const buildRouterRequestFunctionCode = (options: {
   kvNamespace: string;
   userInjection?: string;
   hostRedirect?: {
@@ -444,7 +445,9 @@ const buildRouterRequestFunctionCode = ({
     hosts: string[];
     cloudfrontDefault: boolean;
   };
-}) => `import cf from "cloudfront";
+}) => {
+  const { kvNamespace, userInjection, hostRedirect } = options;
+  return compactCloudFrontFunctionCode(`import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}
   ${
@@ -520,14 +523,15 @@ async function handler(event) {
     return response || event.request;
   }
   return event.request;
-}`;
+}`);
+};
 
 const buildRouterResponseFunctionCode = (userInjection?: string) =>
-  `import cf from "cloudfront";
+  compactCloudFrontFunctionCode(`import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}
   return event.response;
-}`;
+}`);
 
 const normalizePattern = (pattern: string) => {
   if (pattern === "/" || pattern === "/*") return "/";

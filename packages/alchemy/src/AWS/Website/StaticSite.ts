@@ -41,7 +41,11 @@ import {
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
-import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import {
+  buildHostRedirectInjection,
+  CF_ROUTER_INJECTION,
+  compactCloudFrontFunctionCode,
+} from "./cfcode.ts";
 import {
   attachLambdaServeShell,
   compileServerRoutes,
@@ -1359,7 +1363,8 @@ const buildRequestFunctionCode = ({
     hosts: string[];
     cloudfrontDefault: boolean;
   };
-}) => `import cf from "cloudfront";
+}) =>
+  compactCloudFrontFunctionCode(`import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}
   ${
@@ -1383,15 +1388,14 @@ async function handler(event) {
 
   const response = await routeSite(kvNamespace, metadata);
   return response || event.request;
-}`;
+}`);
 
-const buildResponseFunctionCode = (
-  userInjection?: string,
-) => `import cf from "cloudfront";
+const buildResponseFunctionCode = (userInjection?: string) =>
+  compactCloudFrontFunctionCode(`import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}
   return event.response;
-}`;
+}`);
 
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";

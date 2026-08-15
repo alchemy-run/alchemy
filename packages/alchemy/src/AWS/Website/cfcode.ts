@@ -48,6 +48,23 @@ export const buildHostRedirectInjection = ({
 
 const CLOUDFRONT_FUNCTION_SAFE_HEADER_LIMIT = 10240 - 512;
 
+/**
+ * Compact generated CloudFront Function code to stay under the service's
+ * 10 KB code limit: drop whole-line `//` comments, leading indentation,
+ * and repeated blank lines. Safe for this code by construction — the
+ * cloudfront-functions runtime (cf2.0) has no template literals, so no
+ * generated or user-injected line carries semantic leading whitespace,
+ * and only lines that START with `//` are dropped (string contents like
+ * "https://…" are untouched).
+ */
+export const compactCloudFrontFunctionCode = (code: string): string =>
+  code
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .map((line) => line.trim())
+    .filter((line, index, all) => line !== "" || all[index - 1] !== "")
+    .join("\n");
+
 export const CF_ROUTER_INJECTION = `
 async function routeSite(kvNamespace, metadata) {
   if (metadata.redirect && metadata.redirect.hosts.indexOf(event.request.headers.host.value) !== -1) {

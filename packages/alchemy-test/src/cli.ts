@@ -244,6 +244,25 @@ const rootCommand = Command.make(
   }),
 );
 
+// TEMP DIAGNOSTIC (exit-130 hunt): log every signal delivery with timing so
+// an interrupted-only death can be attributed to a real OS signal vs an
+// internal interruption. Removed once the sender is identified.
+if (process.env.ALCHEMY_TEST_TRACE_SIGNALS) {
+  const nodeFs = await import("node:fs");
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGUSR2"] as const) {
+    process.on(signal, () => {
+      try {
+        nodeFs.appendFileSync(
+          process.env.ALCHEMY_TEST_TRACE_SIGNALS!,
+          `${new Date().toISOString()} pid=${process.pid} received ${signal}\n`,
+        );
+      } catch {
+        // best effort
+      }
+    });
+  }
+}
+
 const cli = Command.run(rootCommand, {
   version: packageJson.version,
 });
