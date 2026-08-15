@@ -15,26 +15,35 @@ const categories = [...new Set(more.map((tab) => tab.category))];
 <nav class="alc-tabs" aria-label="Documentation sections">
   <div class="alc-tabs__group">
     {
-      primary.map((tab) => (
-        <a
-          href={tab.href}
-          class:list={["alc-tabs__tab", { "alc-tabs__tab--active": tab.label === current.label }]}
-          aria-current={tab.label === current.label ? "true" : undefined}
-        >
-          {TAB_ICONS[tab.label] && (
-            <svg
-              class="alc-tabs__icon"
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              set:html={TAB_ICONS[tab.label]}
-            />
+      primary.map((tab, i) => (
+        <>
+          {/* Divider between adjacent group changes: core | clouds | databases */}
+          {i > 0 && primary[i - 1].group !== tab.group && (
+            <span class="alc-tabs__divider" aria-hidden="true" />
           )}
-          {tab.label}
-        </a>
+          <a
+            href={tab.href}
+            class:list={["alc-tabs__tab", { "alc-tabs__tab--active": tab.label === current.label }]}
+            aria-current={tab.label === current.label ? "true" : undefined}
+          >
+            {TAB_ICONS[tab.label] && (
+              <svg
+                class="alc-tabs__icon"
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                set:html={TAB_ICONS[tab.label]}
+              />
+            )}
+            {tab.label}
+          </a>
+        </>
       ))
     }
+
+    <span class="alc-tabs__divider" aria-hidden="true" />
+
 
     {/* Desktop: "More ▾" dropdown. When the active tab lives inside it, the
         trigger renders as that tab (contextual), keeping your place visible. */}
@@ -148,6 +157,15 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     display: flex;
     align-items: stretch;
     gap: 2px;
+  }
+  .alc-tabs__divider {
+    width: 1px;
+    align-self: center;
+    height: 1.1em;
+    flex: none;
+    background: var(--alc-fg-2);
+    opacity: 0.25;
+    margin: 0 6px;
   }
   .alc-tabs__tab {
     display: inline-flex;

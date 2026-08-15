@@ -17,6 +17,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   CLI: l("square-terminal"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
+  Vercel: b("vercel"),
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Prisma: b("prisma"),
@@ -63,6 +64,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Concepts: l("book-text"),
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
+  Vercel: b("vercel"),
   Cloudflare: b("cloudflare"),
   GitHub: b("github"),
   Neon: b("neon"),
