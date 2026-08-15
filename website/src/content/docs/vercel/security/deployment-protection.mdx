@@ -1,0 +1,164 @@
+---
+title: Deployment protection
+description: Team accounts SSO-gate deployment URLs by default — alchemy mints the automation bypass secret before the first deploy, exports it as a Redacted attribute, and each binding's runtime carries exactly the credential it needs.
+---
+
+Vercel team accounts protect deployments by default (Standard
+Protection): preview URLs answer with an SSO login page instead of
+your app, and even the per-deployment `*-{team}.vercel.app` URLs of
+**production** deployments are gated — only the production alias
+serves publicly. Without a bypass, `curl`, integration tests,
+webhooks, and cross-project calls all get a 401.
+
+Alchemy's answer is the **automation bypass secret**: a per-project
+secret Vercel's deployment protection accepts as proof that a request
+is your automation, not a stranger.
+
+## The bypass secret is an attribute
+
+Every `Vercel.Function` mints (or observes) its project's automation
+bypass secret and exposes it as the `protectionBypass` attribute — a
+`Redacted<string>`:
+
+```typescript
+const api = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+});
+// api.url              — the read-back deployment URL
+// api.protectionBypass — Redacted<string> | undefined
+```
+
+`undefined` occurs only in [tenant mode](/vercel/compute/functions),
+when the foreign project has no existing secret to observe.
+
+:::caution[Minted before the first deploy, never regenerated]
+A bypass secret only opens deployments created **after** it was
+minted (live-verified). Alchemy therefore mints the secret during
+project ensure — before the first deployment exists — and never
+regenerates an existing one: regenerating would orphan every older
+deployment, breaking instant rollback targets. If you rotate the
+secret in the dashboard, expect older deployments to stop accepting
+it.
+:::
+
+## Send the bypass header
+
+Requests pass protection by carrying the secret as the
+`x-vercel-protection-bypass` header (a query parameter of the same
+name also works):
+
+```sh
+curl -H "x-vercel-protection-bypass: $BYPASS" https://my-api-abc123.vercel.app/
+# → 200 instead of the SSO interstitial
+```
+
+From an Effect program — a test, a script — unwrap the `Redacted` at
+the call site:
+
+```typescript
+import * as Redacted from "effect/Redacted";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+
+const res = yield* HttpClient.get(`${api.url}/health`, {
+  headers: {
+    "x-vercel-protection-bypass": Redacted.value(api.protectionBypass!),
+  },
+});
+```
+
+## Cross-project calls: bind url + bypass as env
+
+Two Functions talking over HTTP is the platform's inter-project
+protocol — there is no service-binding RPC on Vercel. Bind the
+target's `url` and `protectionBypass` attributes into the caller's
+env and the caller can reach the protected target:
+
+```typescript
+const surface = yield* Vercel.Function("Surface", {
+  main: "./src/surface.ts",
+  env: {
+    API_URL: api.url,
+    API_BYPASS: api.protectionBypass, // Redacted ⇒ sensitive env var
+  },
+});
+```
+
+```typescript
+// src/surface.ts
+export default {
+  async fetch(): Promise<Response> {
+    return fetch(`${process.env.API_URL}/data`, {
+      headers: {
+        "x-vercel-protection-bypass": process.env.API_BYPASS!,
+      },
+    });
+  },
+};
+```
+
+The same shape crosses **stages**: export `url` and
+`protectionBypass` as stack outputs from one stage and bind them into
+another stage's env. Queues distribute work *within* a
+`(project, environment)` boundary; HTTP with an explicit, revocable
+bypass grant is the protocol *between* boundaries.
+
+For calls between Functions in the same stack, skip the manual
+plumbing — [`Vercel.invoke`](/vercel/apis/invoke-function) binds both
+vars and sets the header for you, circular topologies included.
+
+## How each binding's compute gets permission
+
+There is no IAM on Vercel. Each capability binding authorizes its
+runtime with the narrowest credential the platform offers — minted,
+observed, or platform-ambient, but never alchemy's own management
+token (with one explicit, opt-in exception):
+
+| Capability | Credential | Scope |
+| --- | --- | --- |
+| [`Vercel.invoke`](/vercel/apis/invoke-function) (`InvokeFunctionHttp`) | Target's automation bypass secret, bound as the sensitive `{LogicalId}_BYPASS` env var | Passes deployment protection on that one project's deployments; cannot touch the Vercel API |
+| [Queues](/vercel/messaging/queues) `SendMessage` / `ReceiveMessages` (`SendMessageHttp` / `ReceiveMessagesHttp`) | Ambient per-deployment OIDC token (`x-vercel-oidc-token` request header, falling back to `VERCEL_OIDC_TOKEN`) — nothing minted or synced by alchemy | The `(project, environment)` queue namespace; self-expiring |
+| [Blob](/vercel/data/blob) `ReadBlob` / `WriteBlob` / `ReadWriteBlob` (`*BlobHttp`) | Platform-injected `BLOB_READ_WRITE_TOKEN`, provisioned via the store↔project connection the deploy declares | Store-scoped read-write; read-only / write-only is enforced at the client surface (the platform has no narrower token) |
+| [Edge Config](/vercel/data/edge-config) `ReadEdgeConfig` (`ReadEdgeConfigHttp`) | Minted read-only, per-config data-plane token | Reads of that one config; no management credential reaches the Function |
+| Edge Config `WriteEdgeConfig` (`WriteEdgeConfigHttp({ token })`) | **User-supplied** team/user-wide management token — explicit opt-in, resolved from the deploy machine and synced as a sensitive env var | Full management authority over the team |
+| [Cron](/vercel/compute/cron) routes | Auto-minted `CRON_SECRET`, synced as a sensitive env var; Vercel's invoker sends `Authorization: Bearer $CRON_SECRET` | That Function's cron routes; verified with a constant-time comparison before dispatch |
+
+Two rows deserve emphasis:
+
+- **Queues need no credential plumbing at all** — the OIDC token is
+  provisioned by the platform on every invocation. The deploy half
+  binds only non-secret topic metadata. Consumers running *outside*
+  Vercel mint a `development`-scoped project OIDC token, a namespace
+  disjoint from deployed production traffic.
+- **Edge Config writes are the deliberate exception.** Edge Configs
+  are team-owned and the write path only accepts team/user-wide
+  tokens (live-verified: project-scoped tokens can't see them), so
+  there is no least-privilege write credential to mint. Alchemy never
+  auto-binds its own token — `WriteEdgeConfigHttp` makes you supply
+  one, so the tradeoff is visible at the call site. Prefer
+  deploy-time declarative `items` where possible.
+
+## Tenant stages are gated too
+
+A preview tenant's stable `{projectName}-{stage}.vercel.app` alias is
+SSO-gated on team accounts like any other deployment URL. The tenant
+Function observes the shared project's existing bypass secret (it
+never mints on a foreign project), so `protectionBypass` is the way
+to drive PR-stage URLs from tests and scripts.
+
+## Where next
+
+Related:
+
+- [Invoke a Function](/vercel/apis/invoke-function) — the bypass
+  plumbing done for you, circular topologies included.
+- [Secrets & env](/vercel/security/secrets-env) — how `Redacted`
+  attributes become write-only sensitive env vars.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — why old deployments (and the secrets that open them) are kept.
+
+Reference:
+
+- [`Function` reference](/providers/vercel/functions/function) — the
+  `protectionBypass` attribute, every prop and attribute.
+- [`InvokeFunction` reference](/providers/vercel/functions/invokefunction)
+  — the cross-function client.

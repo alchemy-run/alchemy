@@ -1,0 +1,273 @@
+---
+title: Drains
+description: Stream logs, traces, and analytics to any HTTP, OTLP, or S3 sink with the Drain resource — filtered, sampled, and signed — and toggle Web Analytics per project.
+---
+
+Vercel keeps no queryable history of runtime logs — once a
+request's lines scroll past [`alchemy tail`](/vercel/observability/logs),
+they're gone. A **Drain** fixes that: it's Vercel's unified
+observability export, streaming whole datasets — logs, traces,
+Web Analytics events, Speed Insights, AI Gateway and audit logs —
+to an external endpoint as they happen. In alchemy a drain is the
+`Vercel.Drain` resource: the sink, the datasets, the filters, and
+the sampling rules are all props in your Stack, so a change to
+what you export is a diff in the PR.
+
+Drains are **team-scoped**, not per-project — one drain can
+receive events from every project in the team, or be restricted
+to a list of project ids.
+
+## Create a drain
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Observability",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    const drain = yield* Vercel.Drain("Logs", {
+      schemas: { log: { version: "v1" } },
+      delivery: {
+        type: "http",
+        endpoint: "https://logs.example.com/ingest",
+        encoding: "ndjson",
+        compression: "gzip",
+      },
+    });
+    return { drainId: drain.drainId };
+  }),
+);
+```
+
+`schemas` picks the datasets to receive, keyed by dataset name
+with a schema version — `{ log: { version: "v1" } }` subscribes
+to runtime logs. `delivery` says where they go: here Vercel POSTs
+gzipped NDJSON batches to the endpoint. No `name` required —
+alchemy generates a unique one from the app, stage, and logical
+ID, so `prod` and `pr-42` each get their own drain.
+
+:::caution[The endpoint is validated, delivery is not]
+Vercel resolves the endpoint URL at create time — an
+unresolvable host is rejected — but it never verifies that the
+endpoint accepts the payloads. A drain that delivers into a 500
+is created happily; Vercel flips its observed `status` to
+`errored` after repeated delivery failures.
+:::
+
+## Pick datasets
+
+Seven datasets are available, each currently at schema version
+`"v1"`: `log`, `trace`, `analytics` (Web Analytics events),
+`speed_insights`, `ai_gateway`, `audit_log`, and `connect`. One
+drain can subscribe to several:
+
+```typescript
+const drain = yield* Vercel.Drain("Everything", {
+  schemas: {
+    log: { version: "v1" },
+    analytics: { version: "v1" },
+  },
+  delivery: {
+    type: "http",
+    endpoint: "https://sink.example.com/ingest",
+    encoding: "json",
+  },
+});
+```
+
+## Filter what's delivered
+
+A `basic` filter restricts by log source, deployment
+environment, and project — only what matches is delivered:
+
+```typescript
+const drain = yield* Vercel.Drain("ProdErrors", {
+  schemas: { log: { version: "v1" } },
+  filter: {
+    type: "basic",
+    log: { sources: ["lambda", "edge"] },
+    deployment: { environments: ["production"] },
+  },
+  delivery: {
+    type: "http",
+    endpoint: "https://logs.example.com/ingest",
+    encoding: "json",
+  },
+});
+```
+
+Log sources cover `build`, `edge`, `lambda`, `static`,
+`external`, `firewall`, and `redirect`; environments are
+`production` and `preview`. For anything the structured filter
+can't express, pass `{ type: "odata", text: "..." }` — a
+free-form OData expression instead.
+
+Removing the `filter` prop converges back to "deliver
+everything" on the next deploy — filter changes are in-place
+updates, never replacements.
+
+## Sample high-volume events
+
+Head-sampling rules drop a fraction of events before delivery —
+`rate` is 0 to 1, optionally scoped to an environment or a
+request-path prefix:
+
+```typescript
+const drain = yield* Vercel.Drain("Sampled", {
+  schemas: { log: { version: "v1" } },
+  sampling: [{ rate: 0.1, env: "production" }],
+  delivery: {
+    type: "http",
+    endpoint: "https://logs.example.com/ingest",
+    encoding: "json",
+  },
+});
+```
+
+## Scope to specific projects
+
+By default a drain receives events from **all** projects in the
+team. Set `projects: "some"` and list ids — Output references
+resolve in place, so the drain tracks the projects it watches:
+
+```typescript
+const site = yield* Vercel.Project("Site", {});
+
+const drain = yield* Vercel.Drain("SiteLogs", {
+  projects: "some",
+  projectIds: [site.projectId],
+  schemas: { log: { version: "v1" } },
+  delivery: {
+    type: "http",
+    endpoint: "https://logs.example.com/ingest",
+    encoding: "json",
+  },
+});
+```
+
+## Sign deliveries
+
+Give the delivery a `secret` and Vercel signs every batch with
+an `x-vercel-signature` header, so your sink can reject payloads
+that didn't come from Vercel:
+
+```typescript
+delivery: {
+  type: "http",
+  endpoint: "https://logs.example.com/ingest",
+  encoding: "ndjson",
+  headers: { authorization: "Bearer ..." },
+  secret: "rotate-me",
+},
+```
+
+The secret is **write-only** on Vercel's side — it can never be
+read back. Alchemy diffs it against the previously deployed
+props, so changing the value rotates the secret in place. Extra
+`headers` ride along with every delivery request.
+
+## Ship traces over OTLP
+
+The `otlphttp` delivery speaks OTLP/HTTP for the `trace`
+dataset, pointing straight at any OpenTelemetry collector:
+
+```typescript
+const traces = yield* Vercel.Drain("Traces", {
+  schemas: { trace: { version: "v1" } },
+  delivery: {
+    type: "otlphttp",
+    endpoint: { traces: "https://otel.example.com/v1/traces" },
+    encoding: "proto",
+  },
+});
+```
+
+## Archive to S3
+
+The `s3` delivery writes Hive-partitioned objects into a bucket
+using an IAM role Vercel assumes:
+
+```typescript
+const archive = yield* Vercel.Drain("Archive", {
+  schemas: { log: { version: "v1" } },
+  delivery: {
+    type: "s3",
+    endpoint: "s3://my-log-bucket/vercel",
+    encoding: "ndjson",
+    compression: "none",
+    fileStructure: "hive",
+    roleArn: "arn:aws:iam::123456789012:role/vercel-drain",
+    region: "us-east-1",
+  },
+});
+```
+
+## Pause without deleting
+
+`status: "disabled"` stops delivery while keeping the drain — a
+one-prop diff to flip it back on:
+
+```typescript
+const drain = yield* Vercel.Drain("Logs", {
+  schemas: { log: { version: "v1" } },
+  status: "disabled",
+  delivery: { /* ... */ },
+});
+```
+
+All of these — filter, sampling, delivery, scope, status — are
+in-place PATCH updates on the same drain; a redeploy with
+identical props patches nothing, leaving the drain's `updatedAt`
+untouched.
+
+## Web Analytics
+
+Web Analytics is the other platform-side observability toggle:
+per-project page-view collection. `Vercel.WebAnalytics` declares
+the toggle **on** while the resource exists and switches it back
+off on destroy:
+
+```typescript
+const site = yield* Vercel.Project("Site", {});
+
+yield* Vercel.WebAnalytics("Analytics", {
+  project: site.projectId,
+});
+```
+
+`project` accepts an id or name; changing it replaces the
+resource — analytics is toggled off on the old project and on
+for the new one. Collecting page views additionally requires the
+`@vercel/analytics` script in the deployed app — the resource
+manages only the platform-side enablement.
+
+:::note[Already enabled by hand?]
+If analytics was switched on in the dashboard before alchemy
+ever saw the project, the first deploy refuses to silently take
+it over — pass `--adopt` to adopt the existing enablement.
+:::
+
+Once enabled, the `analytics` dataset above is how you get the
+collected events *out* — a drain subscribed to
+`{ analytics: { version: "v1" } }` delivers them to your own
+sink.
+
+## Where next
+
+- [Logs](/vercel/observability/logs) — the live `tail` and
+  historical `logs` commands a drain complements.
+- [Firewall](/vercel/security/firewall) — the `firewall` log
+  source drains capture.
+- [Observability](/testing/observability) — OTel-native
+  telemetry from your Effect code, the emitting side of the
+  `otlphttp` drain.
+
+Reference:
+
+- [`Drain` reference](/providers/vercel/drains/drain) — every
+  prop and attribute.
+- [`WebAnalytics` reference](/providers/vercel/analytics/webanalytics)

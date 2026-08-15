@@ -1,0 +1,158 @@
+---
+title: Fluid compute
+description: What runs under a Vercel Function — warm instances serving concurrent requests, memory tiers and max duration, post-response finalizers via waitUntil, and the SIGTERM shutdown window.
+---
+
+**Fluid compute** is Vercel's execution model for Functions:
+instances stay warm between requests and serve **many concurrent
+requests each** — closer to a long-running server than to classic
+one-request-per-sandbox serverless. Every
+[Function](/vercel/compute/functions) alchemy deploys runs Node.js
+on Fluid, and the generated runtime bridge is built for it: the
+Effect layer stack is constructed once per instance, and every
+request runs in its own fiber.
+
+This page is the runtime model. For deploying and configuring the
+Function itself, start at [Functions](/vercel/compute/functions).
+
+## One instance, many requests
+
+The init phase's layer stack is built **once per instance**, lazily
+on the first request, and reused by every request after it — only a
+successful build is memoized, so a transient init failure heals on
+the next request. Each request then runs in its own Effect fiber
+with a fresh `Scope` and its own `HttpServerRequest`; the bridge
+keeps zero per-instance mutable request state, so concurrent
+requests never interleave through it.
+
+Your own module state *is* instance-global, and that's often useful
+— a counter written by one request is visible to the next request on
+the same warm instance:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+let hits = 0;
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        hits++;
+        return yield* HttpServerResponse.json({ hits });
+      }),
+    };
+  }),
+) {}
+```
+
+:::caution[Instance state is a cache, not a store]
+Fluid runs multiple instances and recycles them freely — module
+state is per-instance, unsynchronized, and gone on recycle. Treat it
+as a cache. Anything that must survive belongs in
+[Blob](/vercel/data/blob), a database, or a
+[queue](/vercel/messaging/queues). And review any code ported from
+one-request-per-isolate runtimes for hidden single-request
+assumptions — under Fluid, two requests really do run at once.
+:::
+
+## Memory tiers, duration, regions
+
+The `resources` and `regions` props configure the compute under the
+Function:
+
+```typescript
+const api = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+  resources: {
+    // "standard_legacy" | "standard" (default) | "performance"
+    // | "performance_xl"
+    memory: "performance",
+    // per-request cap, in seconds
+    maxDuration: 60,
+  },
+  regions: ["iad1"],
+});
+```
+
+`memory` selects the Fluid memory tier (set as the project-level
+default on the Function's owned project), `maxDuration` caps a
+single request's runtime in seconds, and `regions` pins the
+deployment's compute regions. Setting any of these pins
+`fluid: true` on the project's resource config explicitly.
+
+A standalone [`Vercel.Project`](/providers/vercel/projects/project)
+accepts the same `resources`/`regions` shape when you manage a
+shared project for [tenant
+Functions](/vercel/compute/functions#tenant-mode).
+
+## Post-response work
+
+Request finalizers settle **after the response**. The bridge closes
+each request's `Scope` under Vercel's `waitUntil` — the
+`@vercel/request-context` contract that `@vercel/functions` wraps,
+honored with exact timing (live-verified) — so `Effect.addFinalizer`
+in a handler never delays the reply:
+
+```typescript
+fetch: Effect.gen(function* () {
+  yield* Effect.addFinalizer(() =>
+    // runs ~post-response; the platform keeps the instance alive
+    // until it settles
+    recordMetrics().pipe(Effect.ignore),
+  );
+  return yield* HttpServerResponse.json({ ok: true });
+}),
+```
+
+This is true workerd-style semantics — the opposite of Lambda, where
+request finalizers block the response
+([why](/aws/compute/lambda#sandbox-scope-vs-invocation-scope)).
+Streaming responses hand the scope to the body stream instead, which
+closes it when the stream ends.
+
+## Shutdown
+
+When Fluid retires an instance it delivers `SIGTERM` and allows a
+~500ms grace window before `SIGKILL`. The bridge installs a signal
+handler that closes the **instance scope**, so finalizers registered
+in the init phase run before the instance dies:
+
+```typescript
+Effect.gen(function* () {
+  // init: once per instance
+  yield* Effect.addFinalizer(() =>
+    // runs in the ~500ms SIGTERM window at instance retirement
+    flushTelemetry().pipe(Effect.ignore),
+  );
+  return { fetch: /* per-request */ };
+}),
+```
+
+Treat instance-level cleanup as best-effort: half a second, and not
+delivered on hard failures. Flush caches and close connections
+there; anything that *must* happen belongs in the handler, scoped to
+the request. See [Instance scope vs request
+scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+for the model across all runtimes.
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the two-phase pattern,
+  bindings, and env.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — what a deploy actually ships.
+- [Cron](/vercel/compute/cron) — scheduled handlers on the same
+  runtime.
+- [Vercel's Fluid compute docs](https://vercel.com/docs/fluid-compute)
+  — the underlying platform feature.
+
+Reference:
+
+- [`Function` reference](/providers/vercel/functions/function) —
+  every prop and attribute, including `resources` and `regions`.

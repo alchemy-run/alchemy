@@ -1,0 +1,361 @@
+---
+title: Queues
+description: Vercel Queues in alchemy are typed Topic values — declare the payload schema and region once, produce with SendMessage, push-consume with subscribe, and poll with ReceiveMessages, all with at-least-once, deployment-pinned delivery.
+---
+
+A Vercel queue decouples work from the request that triggered it:
+a Function *produces* messages onto a topic, Vercel buffers them,
+and push-delivers each one to a consumer with **at-least-once**
+semantics — a failed delivery is retried until it's acknowledged
+or the message expires.
+
+In alchemy, a queue topic is a **value**, not a resource. Vercel
+topics have no lifecycle: nothing to create, list, or delete — a
+topic springs into existence on the first send, is scoped to one
+project and region, and its messages expire on their own (up to
+7 days; there is no delete API). So `Topic` has no provider, no
+state row, and never appears in a plan. Only its *uses*
+materialize: the producer binding
+([`SendMessage`](/providers/vercel/queues/sendmessage)), the poll
+consumer
+([`ReceiveMessages`](/providers/vercel/queues/receivemessages)),
+and the push event source
+([`subscribe`](/providers/vercel/queues/subscribe)).
+
+By the end you'll have a Function that:
+
+- Declares a typed `Orders` topic — schema and region pinned once.
+- Enqueues an order from a public `fetch` route.
+- Push-consumes each order with `Vercel.subscribe`.
+- Drains a topic in poll mode with `ReceiveMessages`.
+
+## Declare a Topic
+
+```typescript
+// src/orders.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Schema from "effect/Schema";
+
+export class Orders extends Vercel.Topic<Orders>()("orders", {
+  schema: Schema.Struct({
+    orderId: Schema.String,
+    amountCents: Schema.Int,
+  }),
+  region: "iad1",
+}) {}
+```
+
+`Vercel.Topic` is the single home for the payload schema, the
+region pin, and send defaults (`retentionSeconds`,
+`delaySeconds`) — declared once, inherited by both ends. The
+producer's `send` is typed by the schema and encodes on the way
+in; every consumer decodes with the same schema on the way out.
+The region picks the data-plane endpoint
+(`https://iad1.vercel-queue.com`), so producer and consumer can
+never disagree about where the topic lives.
+
+The class form makes the topic importable from any function file.
+When you don't need a named class, the value form is one line:
+`const Orders = Vercel.Topic()("orders", { schema, region: "iad1" })`.
+
+## Send messages
+
+`Vercel.SendMessage(Orders)` binds a typed producer inside a
+[Function](/vercel/compute/functions)'s init phase:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Orders } from "./orders.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const orders = yield* Vercel.SendMessage(Orders);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* orders
+          .send({ orderId: crypto.randomUUID(), amountCents: 4200 })
+          .pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ queued: true });
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.SendMessageHttp)),
+) {}
+```
+
+`SendMessage` schema-encodes each message and sends it to the
+topic's region endpoint, authenticated with the OIDC token Vercel
+provisions inside every deployed Function — no tokens land in
+your env, and nothing extra is deployed. `send` fails with typed
+errors (`DuplicateMessage`, `QueueRateLimited`, …), so you decide
+per call whether to `Effect.orDie`, retry, or surface them.
+`Vercel.SendMessageHttp` is the implementation layer, provided on
+the Function's init Effect.
+
+Pass an `idempotencyKey` to dedupe on the platform side — a
+duplicate key fails with the typed `DuplicateMessage` error:
+
+```typescript
+yield* orders.send(order, { idempotencyKey: order.orderId });
+```
+
+## Subscribe to the topic
+
+`Vercel.subscribe(topic, handler)` is the push half — Vercel
+delivers each message to your handler:
+
+```diff lang="typescript"
+// src/api.ts
+  Effect.gen(function* () {
+    const orders = yield* Vercel.SendMessage(Orders);
++
++    yield* Vercel.subscribe(Orders, (order, meta) =>
++      Effect.log(
++        `processing order ${order.orderId} (attempt ${meta.deliveryCount})`,
++      ),
++    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        // ...
+      }),
+    };
+-  }).pipe(Effect.provide(Vercel.SendMessageHttp)),
++  }).pipe(
++    Effect.provide([Vercel.SendMessageHttp, Vercel.QueueEventSourceLive]),
++  ),
+```
+
+One call wires both halves: at deploy time it contributes a queue
+trigger to the deployment, and at runtime it registers the
+handler — each delivery is decoded with the topic's schema before
+your handler sees it, alongside delivery metadata (`messageId`,
+`deliveryCount`, `topicName`, `consumerGroup`).
+`Vercel.QueueEventSourceLive` is the event-source layer that
+`subscribe` needs, provided alongside the producer layer.
+
+The platform consumes under a **consumer group**, defaulting to
+`alchemy-{FunctionLogicalId}` — deterministic across deploys,
+which matters: groups have independent cursors, so a *fresh*
+group replays the topic from the beginning.
+
+### Why your public routes survive
+
+Vercel has a sharp platform rule: a function carrying a queue
+trigger loses **all** public HTTP routing. So alchemy lowers your
+`subscribe` calls into a *separate* consumer function inside the
+same deployment (`functions/_alchemy-queue.func`) that shares
+your Function's module — the public function keeps serving
+`fetch`, and the consumer function is never publicly routed.
+
+One consequence worth knowing: the consumer runs in separate
+instances from your public routes, so module-global state written
+by a `subscribe` handler is invisible to `fetch`. If a handler
+needs to hand results back, publish them somewhere shared — a
+[Blob store](/vercel/data/blob), or a second topic drained with
+`ReceiveMessages` below.
+
+## Tune redelivery
+
+A failing handler responds 500 without acknowledging, so the
+message is redelivered after the visibility window — this is
+at-least-once delivery, so **make handlers idempotent**. The
+third argument tunes the schedule:
+
+```typescript
+yield* Vercel.subscribe(
+  Orders,
+  (order, meta) =>
+    Effect.log(
+      `order ${order.orderId} (message ${meta.messageId}, attempt ${meta.deliveryCount})`,
+    ),
+  { retryAfterSeconds: 30, initialDelaySeconds: 5 },
+);
+```
+
+`retryAfterSeconds` is the backoff after a failed delivery;
+`initialDelaySeconds` delays the first attempt. Both are part of
+the deployment's trigger config, so changing them redeploys the
+Function.
+
+:::caution[Every topic you send into needs a subscriber]
+The platform rejects sends into a topic no deployment carries a
+trigger for — the typed `ConsumerRegistryNotConfigured` error
+(HTTP 503). Even a topic you only ever drain in poll mode needs
+at least a no-op trigger: `yield* Vercel.subscribe(topic, () =>
+Effect.void)`. The no-op acks under its own consumer group; your
+poll group keeps its own independent cursor.
+:::
+
+## Poll with ReceiveMessages
+
+`Vercel.ReceiveMessages(topic, { consumerGroup })` is the pull
+half — bounded receives plus lease management, for draining a
+topic on your own schedule:
+
+```typescript
+// src/api.ts (a drain route)
+Effect.gen(function* () {
+  const reader = yield* Vercel.ReceiveMessages(Orders, {
+    consumerGroup: "readback",
+  });
+
+  return {
+    fetch: Effect.gen(function* () {
+      const batch = yield* reader
+        .receive({ maxMessages: 10, visibilityTimeoutSeconds: 60 })
+        .pipe(Effect.orDie);
+      for (const message of batch) {
+        yield* Effect.log(message.payload.orderId); // schema-decoded
+        yield* reader.ack(message.receiptHandle).pipe(Effect.orDie);
+      }
+      return yield* HttpServerResponse.json({ drained: batch.length });
+    }),
+  };
+}).pipe(Effect.provide(Vercel.ReceiveMessagesHttp)),
+```
+
+`receive` is one bounded request (1–10 messages), never a long
+poll. Each message is leased for the visibility timeout: `ack` it
+to complete the delivery, or let the lease lapse and it's
+redelivered to the group. Consumer groups are dynamic — each has
+its own cursor, leases, and acks, and a fresh group replays the
+topic from the beginning, which makes them cheap fan-out: point a
+second group at the same topic and it sees every message
+independently.
+
+For work that outlives the lease, extend it:
+
+```typescript
+const [message] = yield* reader.receive({ visibilityTimeoutSeconds: 30 });
+yield* reader.extendLease(message.receiptHandle, 300);
+```
+
+## Delivery is deployment-pinned
+
+Vercel partitions queue traffic by deployment: a message sent by
+one deployment is invisible to receivers pinned to another. This
+is the default (`partition: "deployment"` on the topic) and it's
+what makes deploys safe — in-flight messages drain through the
+deployment that produced them, and push delivery consumes the
+sending deployment's partition, so a new deploy never steals the
+old one's backlog.
+
+Opt a topic out with `partition: "shared"`: sends land in the
+topic's shared partition, visible to any unpinned consumer. The
+two partitions are disjoint — a pinned send is never visible to a
+shared receiver, and vice versa. Reach for `shared` when an
+external worker outside Vercel drains the topic and messages must
+survive deploys unclaimed.
+
+## The isolation model
+
+The queue namespace is per **(project, environment)** — and that
+changes what a `Topic` *is* compared to the other data resources.
+
+A [Blob store](/vercel/data/blob) or
+[Edge Config](/vercel/data/edge-config) handle denotes one
+specific physical thing: stage-suffixed names isolate them per
+stage, and passing a store's id across stages deliberately shares
+it. A `Topic` is a typed **name**, not a handle — the physical
+stream it resolves to is decided at *runtime* by the ambient
+identity of the running Function (its project and environment).
+Two stages importing the same `Orders` class talk to two disjoint
+streams. No reference can bridge them, which means a topic can
+never accidentally leak traffic across stages.
+
+Cross-stage communication is therefore HTTP, by design: export
+the upstream Function's `url` and `protectionBypass` as stack
+outputs, and bind them as env in the downstream stage — an
+explicit, revocable grant (see
+[Deployment protection](/vercel/security/deployment-protection)).
+Queues distribute work *within* a `(project, environment)`; HTTP
+is the protocol *between* boundaries.
+
+## Send from outside Vercel
+
+Outside a deployed Function (tests, scripts, workers on other
+clouds) there is no ambient OIDC token — mint one and build a
+client directly:
+
+```typescript
+import * as Vercel from "alchemy/Vercel";
+
+const token = yield* Vercel.mintProjectOidcToken(fn.projectId);
+const producer = yield* Vercel.makeSendMessageClient(Orders, {
+  token,
+  deploymentId: fn.deploymentId,
+});
+yield* producer.send({ orderId: "o-1", amountCents: 100 });
+
+const consumer = yield* Vercel.makeReceiveMessagesClient(Orders, {
+  consumerGroup: "external-worker",
+  token,
+  deploymentId: fn.deploymentId,
+});
+```
+
+One caveat: externally minted project tokens are
+**development-scoped**, and the queue namespace is per
+`(project, environment)` — so an external client lives in a
+different namespace from your production Functions' ambient
+traffic. External send/receive round-trips work end to end (this
+is how alchemy's own test suite drives the data plane), but an
+external client can't peek at what production produced. To reach
+production traffic from outside, front it with an HTTP route on
+the Function.
+
+## Plain async Functions
+
+If a Function ships no Effect runtime, `sendMessageFromEnv` is
+the escape hatch — it resolves the ambient OIDC token and
+deployment pin from the environment at call time and returns a
+Promise-based client:
+
+```typescript
+// api/enqueue.ts
+import * as Vercel from "alchemy/Vercel";
+import { Orders } from "../src/orders.ts";
+
+const orders = Vercel.sendMessageFromEnv(Orders);
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    await orders.send({ orderId: crypto.randomUUID(), amountCents: 4200 });
+    return Response.json({ queued: true });
+  },
+};
+```
+
+Messages are still encoded with the topic's schema; failures
+throw plain `Error`s. Push consumption (`subscribe`) is
+Effect-only — the handler registry lives in the Effect Function's
+init phase.
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the compute that
+  produces and consumes queue messages.
+- [Cron](/vercel/compute/cron) — scheduled triggers instead of
+  message-driven ones.
+- [Tutorial part 3](/vercel/tutorial/part-3) — builds a
+  queue-backed Function step by step.
+
+Related:
+
+- [Webhooks](/vercel/messaging/webhooks) — platform events pushed
+  to your endpoint instead of app messages.
+- [Deployment protection](/vercel/security/deployment-protection)
+  — the `protectionBypass` grant that cross-stage HTTP rides on.
+
+Reference:
+
+- [`SendMessage` reference](/providers/vercel/queues/sendmessage)
+- [`ReceiveMessages` reference](/providers/vercel/queues/receivemessages)
+- [`subscribe` reference](/providers/vercel/queues/subscribe) —
+  every option on the event source.

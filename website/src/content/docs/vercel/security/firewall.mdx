@@ -1,0 +1,178 @@
+---
+title: Firewall
+description: Vercel's WAF as one versioned document per project — declare custom rules, IP blocks, OWASP managed rules, and rate limits with FirewallConfig, and every deploy converges dashboard drift back to the declared state.
+---
+
+Vercel's WAF (firewall) guards a project's traffic with custom rules,
+IP blocking, and managed rulesets. Its configuration is a **versioned
+singleton document**: each project has exactly one, every change
+replaces the whole document, and the platform increments its
+`version` on every write — including edits made in the dashboard.
+
+`Vercel.FirewallConfig` declares that document. The provider diffs
+the observed active configuration against your declaration and writes
+only on a delta, so an unchanged deploy leaves the version untouched
+while any drift — a rule added by hand, an escalation toggled in the
+dashboard — is converged back on the next deploy.
+
+## Create a firewall configuration
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+const App = Alchemy.Stack(
+  "MyApp",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    const api = yield* Vercel.Function("Api", {
+      main: "./src/api.ts",
+    });
+
+    const waf = yield* Vercel.FirewallConfig("Waf", {
+      projectId: api.projectId,
+      rules: [
+        {
+          name: "block-admin",
+          conditionGroup: [
+            { conditions: [{ type: "path", op: "pre", value: "/admin" }] },
+          ],
+          action: { action: "deny" },
+        },
+      ],
+    });
+
+    return { url: api.url };
+  }),
+);
+```
+
+`FirewallConfig` attaches to any project by `projectId` — a
+`Vercel.Function`'s auto-provisioned project, a `Vercel.Project`, or
+a pre-existing id. Rules are evaluated in array order; each rule's
+`conditionGroup`s are OR-ed, the conditions inside a group AND-ed.
+Actions are `log`, `challenge`, `deny`, `bypass`, `rate_limit`, or
+`redirect`.
+
+## The document is the unit of change
+
+Every write PUTs the **full desired document** — rules not listed in
+`rules` are removed, IP rules not listed in `ips` are removed. There
+is no per-rule resource to orphan: your declaration is the complete
+state, and the deployed `version` attribute tells you exactly which
+document revision is active.
+
+Two props opt out of full replacement: `crs` and `botIdEnabled` are
+left untouched on the platform when omitted, so you can manage custom
+rules without clobbering managed-ruleset settings configured
+elsewhere.
+
+## Drift converges on the next deploy
+
+Because the observed active document — not persisted state — is the
+diff baseline, out-of-band edits are corrected automatically:
+
+- Someone adds a rule in the dashboard → the platform bumps
+  `version` → your next deploy observes the extra rule, PUTs the
+  declared document, and the drift rule is gone.
+- Nothing changed anywhere → the observed document matches the
+  declaration → no write, `version` stays put.
+
+This is the standard alchemy reconcile loop applied to a document
+API: observe, diff, write only the delta — here the delta is always
+the whole document, so "write" and "converge" are the same PUT.
+
+## Block IPs
+
+```typescript
+const waf = yield* Vercel.FirewallConfig("Waf", {
+  projectId: api.projectId,
+  ips: [{ hostname: "*", ip: "203.0.113.0/24", action: "deny" }],
+});
+```
+
+`hostname: "*"` applies the rule to every host on the project; IP
+rules accept single addresses or CIDR blocks, and the same
+`deny` / `challenge` / `log` / `bypass` actions as custom rules.
+
+## Enable managed rules (OWASP Core Ruleset)
+
+```typescript
+const waf = yield* Vercel.FirewallConfig("Waf", {
+  projectId: api.projectId,
+  crs: {
+    sqli: { active: true, action: "deny" },
+    xss: { active: true, action: "deny" },
+  },
+});
+```
+
+`crs` keys are Vercel's category codes — `sqli` SQL injection, `xss`
+XSS, `rce` remote code execution, `lfi`/`rfi` file inclusion, `sd`
+scanner detection, and the rest. Each category takes `active` plus a
+`deny` or `log` action. Omit `crs` entirely to leave the project's
+existing Core Ruleset settings alone. `botIdEnabled: true` switches
+on Vercel BotID protection the same way.
+
+## Rate limit a route
+
+```typescript
+const waf = yield* Vercel.FirewallConfig("Waf", {
+  projectId: api.projectId,
+  rules: [
+    {
+      name: "api-rate-limit",
+      conditionGroup: [
+        { conditions: [{ type: "path", op: "pre", value: "/api" }] },
+      ],
+      action: {
+        action: "rate_limit",
+        rateLimit: {
+          algo: "fixed_window",
+          window: 60,
+          limit: 100,
+          keys: ["ip"],
+          action: "deny",
+        },
+      },
+    },
+  ],
+});
+```
+
+`rate_limit` rules carry their own config: the algorithm
+(`fixed_window` or `token_bucket`), the window in seconds, the
+request limit, the keys the limit is partitioned by (here per-IP),
+and the action once exceeded.
+
+## Replacement and delete semantics
+
+Changing `projectId` **replaces** the resource: the new project's
+document is written first, then the old project's firewall is reset.
+Everything else is an in-place update of the document.
+
+Destroying the resource resets the project's firewall to an empty,
+disabled configuration — Vercel's DELETE endpoint targets *draft*
+config versions, not the active document, so a full PUT of the empty
+document is the reset primitive. The document itself remains on the
+project (still versioned), just empty and off. The reset is
+idempotent, and a project that's already gone is not an error.
+
+## Where next
+
+Related:
+
+- [Deployment protection](/vercel/security/deployment-protection) —
+  the SSO gate in front of deployment URLs, and how automation gets
+  through it.
+- [Functions](/vercel/compute/functions) — the project every
+  firewall document attaches to.
+- [Vercel WAF docs](https://vercel.com/docs/security/vercel-waf) —
+  the platform's own rule-configuration reference.
+
+Reference:
+
+- [`FirewallConfig` reference](/providers/vercel/security/firewallconfig)
+  — every prop and attribute.

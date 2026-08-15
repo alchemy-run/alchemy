@@ -1,0 +1,211 @@
+---
+title: Vercel
+description: Build and deploy full applications on Vercel with alchemy — one Effect Function plus Edge Config, Blob, and Queues wired by typed bindings, shipped as prebuilt immutable deployments with no git integration and no build pipeline.
+---
+
+An alchemy app on Vercel is one **Function** — a project serving a
+single fetch handler — plus the resources it talks to: Edge Configs,
+Blob stores, queue topics, cron schedules — all declared in the same
+TypeScript program and wired together by typed bindings. Deploy the
+whole thing with `bun alchemy deploy`; alchemy figures out what
+changed.
+
+New here? [Set up your token](/vercel/setup), then start the
+[tutorial](/vercel/tutorial/part-1).
+
+## No git, no build pipeline
+
+alchemy does not connect a git repository and never triggers
+Vercel's build pipeline. It bundles your code locally, uploads the
+files, and creates a **prebuilt, immutable deployment** directly —
+the same deploy path works from your laptop and from CI, with no
+repo linking, no framework detection, and no `vercel.json`. Rollback
+is a pure traffic operation: `Vercel.rollbackProduction` re-points
+production at an earlier deployment without rebuilding anything —
+see [Deployments & rollback](/vercel/compute/deployments-and-rollback).
+
+## The whole surface in one Function
+
+One file declares the config, the storage, the queue, and the
+Function that binds them all:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export const Flags = Vercel.EdgeConfig("Flags", {
+  items: { greeting: "hello" },
+});
+
+export const Uploads = Vercel.BlobStore("Uploads", { access: "public" });
+
+export class Jobs extends Vercel.Topic<Jobs>()("jobs", {
+  schema: Schema.Struct({ jobId: Schema.String }),
+  region: "iad1",
+}) {}
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const config = yield* Vercel.ReadEdgeConfig(Flags);
+    const blob = yield* Vercel.ReadWriteBlob(Uploads);
+    const jobs = yield* Vercel.SendMessage(Jobs);
+
+    yield* Vercel.subscribe(Jobs, (job) =>
+      Effect.log(`processing ${job.jobId}`),
+    );
+
+    yield* Vercel.cron("0 3 * * *", Effect.log("nightly cleanup"));
+
+    return {
+      fetch: Effect.gen(function* () {
+        const greeting = yield* config.get("greeting").pipe(Effect.orDie);
+        yield* blob
+          .put("greetings/latest.txt", String(greeting), {
+            contentType: "text/plain",
+          })
+          .pipe(Effect.orDie);
+        yield* jobs.send({ jobId: "refresh-cache" }).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ greeting });
+      }),
+    };
+  }).pipe(
+    Effect.provide([
+      Vercel.ReadEdgeConfigHttp,
+      Vercel.ReadWriteBlobHttp,
+      Vercel.SendMessageHttp,
+      Vercel.QueueEventSourceLive,
+      Vercel.CronEventSourceLive,
+    ]),
+  ),
+) {}
+```
+
+Each `yield*` in the init is a **binding**: it provisions the
+resource, connects it to the Function's project, and hands back a
+typed runtime client — `config.get`, `blob.put`, `jobs.send` — with
+tokens injected as env vars, no dashboard clicking.
+`Vercel.subscribe` registers a push-delivered queue consumer and
+`Vercel.cron` a schedule, both on the same deployment.
+
+The stack file deploys it:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url }; // → https://<project>.vercel.app
+  }),
+);
+```
+
+```sh
+bun alchemy deploy
+```
+
+[Tutorial part 1](/vercel/tutorial/part-1) builds this up step by
+step.
+
+## Compute
+
+- [Functions](/vercel/compute/functions) — the compute runtime; every
+  app has at least one. The Effect class DX, plus plain async
+  handlers as the escape hatch.
+- [Fluid compute](/vercel/compute/fluid-compute) — how Vercel's
+  runtime model shapes concurrency, `waitUntil`, and instance reuse.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback) —
+  the immutable-deployment model, `rollbackProduction`, and
+  `promoteToProduction`.
+- [Cron](/vercel/compute/cron) — scheduled handlers with a
+  secret-guarded route; production-only on Vercel.
+
+## Frontend
+
+- [Websites](/vercel/frontend/websites) — the frontend block: framework
+  builds deployed as prebuilt output.
+- [Nuxt](/vercel/frontend/nuxt), [Astro](/vercel/frontend/astro),
+  [SvelteKit](/vercel/frontend/sveltekit) — first-class framework
+  resources.
+- [Static sites](/vercel/frontend/static-site) — any build command's
+  static output as a `StaticSite`.
+
+## Data
+
+- [Blob](/vercel/data/blob) — object storage with read/write-scoped
+  bindings; data survives redeploys.
+- [Edge Config](/vercel/data/edge-config) — feature flags and config
+  served from the edge; item flips propagate without a redeploy.
+
+## Messaging
+
+- [Queues](/vercel/messaging/queues) — typed topics with
+  `SendMessage`, `subscribe`, and the per-stage isolation model.
+- [Webhooks](/vercel/messaging/webhooks) — subscribe to platform
+  events on your team.
+
+## APIs
+
+- [Effect HTTP API](/vercel/apis/effect-http-api) — typed HTTP APIs on
+  a Function.
+- [Invoke a Function](/vercel/apis/invoke-function) — call one
+  Function from another over its URL, protection bypass included.
+
+## Networking
+
+- [Custom domains](/vercel/networking/custom-domains) — put a Function
+  or website on a domain you own.
+- [Domains & DNS](/vercel/networking/domains) — domains, DNS records,
+  and certs as resources.
+
+## Security & secrets
+
+- [Secrets & env](/vercel/security/secrets-env) — plain, encrypted,
+  and sensitive env vars; rotation mints a new deployment.
+- [Deployment protection](/vercel/security/deployment-protection) —
+  SSO gating, bypass secrets, and who can reach what.
+- [Firewall](/vercel/security/firewall) — WAF rules as part of the
+  Stack.
+
+## Observability
+
+- [Logs](/vercel/observability/logs) — runtime logs from your
+  Functions.
+- [Drains](/vercel/observability/drains) — ship logs and analytics to
+  your own sink.
+
+## What are you building?
+
+| App shape | Stack |
+| --- | --- |
+| HTTP API | [Function](/vercel/compute/functions) — see [Effect HTTP API](/vercel/apis/effect-http-api) |
+| Full-stack app | [Nuxt](/vercel/frontend/nuxt), [Astro](/vercel/frontend/astro), or [SvelteKit](/vercel/frontend/sveltekit) |
+| Static site | [Static sites](/vercel/frontend/static-site) |
+| Background jobs | [Queues](/vercel/messaging/queues) |
+| Scheduled jobs | [Cron](/vercel/compute/cron) |
+| Feature flags & runtime config | [Edge Config](/vercel/data/edge-config) |
+| File uploads | [Blob](/vercel/data/blob) |
+| Call one Function from another | [Invoke a Function](/vercel/apis/invoke-function) |
+| App on your own domain | [Custom domains](/vercel/networking/custom-domains) |
+| Production observability | [Drains](/vercel/observability/drains) |
+
+## Where next
+
+- [Setup](/vercel/setup) — install alchemy and connect your Vercel
+  account.
+- [Tutorial](/vercel/tutorial/part-1) — from empty directory to a
+  deployed Function with storage, queues, local dev, tests, and CI.
+- [Functions](/vercel/compute/functions) — the runtime everything
+  else plugs into.
+- [API reference](/providers) — every Vercel resource and binding.

@@ -1,0 +1,351 @@
+---
+title: "Part 1: Your First Stack"
+description: Install Alchemy, create a Stack with a Vercel Function, and deploy it — no git repo, no build pipeline, no vercel CLI.
+sidebar:
+  order: 1
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../../versions";
+
+export const pkgs = `"alchemy@next" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+In this first part you'll install Alchemy and Effect, create a Stack
+with a Vercel Function, and deploy it — all in under five minutes.
+No git repo, no `vercel` CLI, and Vercel's build pipeline never
+runs: alchemy bundles your code locally and ships it as a prebuilt,
+immutable deployment.
+
+Over the six parts of this tutorial you'll grow this Function into
+an order-intake API with feature flags, blob-stored receipts, a
+typed queue, a nightly cron, local dev, tests, and a CI/CD pipeline
+with PR previews and instant rollback.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- A [Vercel](https://vercel.com/signup) account
+
+## Create a project
+
+Start with an empty directory and initialize a `package.json`:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir order-intake && cd order-intake && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir order-intake && cd order-intake && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir order-intake && cd order-intake && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir order-intake && cd order-intake && yarn init -y" lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Install dependencies
+
+Install <code>alchemy@next</code> and <code>effect@{effectVersion}</code>:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+:::tip
+We recommend Bun for the best development experience, but Node.js
+works too.
+:::
+
+## Create the Stack
+
+Every Alchemy program starts with a `Stack` — a collection of
+Resources managed by Providers with state tracked between deploys.
+
+Create an `alchemy.run.ts` file:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "OrderIntake",
+  {
+  // @error: ts(2345) Argument of type '{ providers: Layer.Layer<never, never, never>; }' is not assignable to parameter of type 'StackProps<never>'.
+  // @error:   Property 'state' is missing in type '{ providers: Layer.Layer<never, never, never>; }' but required in type 'StackProps<never>'.
+    providers: Layer.empty,
+  },
+  Effect.gen(function* () {
+    // we'll add resources here next
+  }),
+);
+```
+
+TypeScript is unhappy: the `state` property is required. Every Stack
+needs a **state store** so Alchemy can persist resource state between
+deploys and compute diffs against your infrastructure.
+
+## Configure state
+
+For this tutorial we'll use `Vercel.state()`, which keeps state on
+Vercel itself — a small `alchemy-state` Function backed by a private
+Blob store, deployed into your account by alchemy's own deploy
+engine:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
++import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "OrderIntake",
+  {
+    providers: Layer.empty,
++    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    // we'll add resources here next
+  }),
+);
+```
+
+The first time you run `alchemy deploy`, `plan`, or `dev`, Alchemy
+prompts for permission and deploys the state-store Function. This is
+a one-time event — the store is reused across every stack and stage
+on this Vercel account, and its auth token is cached under
+`~/.alchemy/credentials`. See [State Store](/state-store) for the
+full picture.
+
+:::note[Other state stores]
+Don't want to deploy a Function just for state? Swap
+`Vercel.state()` for `State.localState()` from `alchemy/State` to
+keep state on disk under `.alchemy/`, or
+[write your own](/state-store).
+:::
+
+## Create the Function
+
+Resources represent cloud infrastructure — projects, stores,
+configs, and functions. A Vercel Function is a special kind of
+Resource: it has an infrastructure definition *and* a runtime
+implementation expressed as an Effect.
+
+Create `src/api.ts`:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({ service: "order-intake" });
+      }),
+    };
+  }),
+) {}
+```
+
+The `class Api extends Vercel.Function<Api>()(...)` shape is a
+one-time bit of ceremony that gives the Function a real, importable
+class — later parts import `Api` into other files and the type
+system follows along. `main: import.meta.url` points the bundler at
+this very file.
+
+:::note
+Notice the "Effect returning an Effect" pattern. The outer generator
+is the **init phase** — it runs at plan time and once per instance
+at runtime, and it's where bindings are registered in later parts.
+The inner `fetch` generator is the **runtime phase** — it runs once
+per request.
+:::
+
+## Wire it into the Stack
+
+Import the Function and `yield*` it inside the Stack's generator:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
++import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "OrderIntake",
+  {
+    // @error: ts(2322) Type 'Layer<never, never, never>' is not assignable to type 'Layer<NoInfer<Providers>, never, StackServices>'.
+    // @error:   Type 'Providers' is not assignable to type 'never'.
+    providers: Layer.empty,
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
++    const api = yield* Api;
+  }),
+);
+```
+
+TypeScript is telling us that `Layer.empty` doesn't provide
+`Vercel.Providers` — the layer the Function needs to talk to
+Vercel's APIs.
+
+## Fix the Providers
+
+Replace `Layer.empty` with `Vercel.providers()` to resolve the
+type error:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+-import * as Layer from "effect/Layer";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "OrderIntake",
+  {
++    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+  }),
+);
+```
+
+Now the program type-checks. The providers layer tells Alchemy how
+to reach Vercel's management API, and the type system ensures you
+never forget to wire it up.
+
+## Return Stack outputs
+
+Stack outputs let you see important values after a deploy. Return an
+object from the generator to expose them:
+
+```diff lang="typescript"
+// alchemy.run.ts
+  Effect.gen(function* () {
+    const api = yield* Api;
+
++    return {
++      url: api.url,
+    };
+  }),
+);
+```
+
+## Deploy
+
+Run `alchemy deploy`:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+The first time you deploy, Alchemy walks you through an interactive
+login and saves the credentials to your **`default`**
+[profile](/environments/profiles). For Vercel, paste an API token
+(create one at
+[vercel.com/account/settings/tokens](https://vercel.com/account/settings/tokens))
+and pick the team to deploy into — see [Setup](/vercel/setup) for
+the details and CI variants.
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+[g]+[/g] [b]Api[/b] [d](Vercel.Function)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](Vercel.Function)[/d] [g]created[/g]
+{
+[s2]url: "https://orderintake-api-dev-sam-a1b2c3d4.vercel.app",
+}`} />
+
+Alchemy shows a plan, asks for confirmation, provisions a Vercel
+project, and deploys the Function. The `url` output is the project's
+production alias — read back from Vercel, never guessed.
+
+:::tip
+By convention, Alchemy looks for `alchemy.run.ts` at the root of
+your project. You can specify a different file with
+`alchemy deploy <file>`.
+:::
+
+## What just happened
+
+There was no `git push` and no Vercel build. Alchemy bundled
+`src/api.ts` locally with rolldown, auto-provisioned a project named
+from the stack, id, and stage, and uploaded the bundle as a
+**prebuilt, immutable deployment** — Vercel's git integration and
+build pipeline are bypassed entirely. Every future deploy mints a
+new immutable deployment the same way; the old ones stick around,
+which is what makes [instant rollback](/vercel/tutorial/part-6)
+possible later.
+
+## Verify it worked
+
+Hit the URL from your outputs:
+
+```sh
+curl https://orderintake-api-dev-sam-a1b2c3d4.vercel.app
+# → {"service":"order-intake"}
+```
+
+Then run `alchemy deploy` again. Nothing changed, so nothing
+deploys — the Function's artifact hash is identical and the plan is
+a no-op:
+
+<Terminal content={`[u]Plan[/u]: [d]no changes[/d]
+
+{
+[s2]url: "https://orderintake-api-dev-sam-a1b2c3d4.vercel.app",
+}`} />
+
+This is the core loop — declare resources in code, deploy, and
+Alchemy figures out what changed.
+
+## Recap
+
+You now have:
+
+- An `alchemy.run.ts` with a Stack and a Vercel Function
+- A live production deployment, built locally and shipped prebuilt
+- Stack outputs showing the Function's URL
+
+In [Part 2](/vercel/tutorial/part-2), you'll add feature flags with
+Edge Config and store order receipts in a Blob store — both bound
+into the Function as typed runtime clients.

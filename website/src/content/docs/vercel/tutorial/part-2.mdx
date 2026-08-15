@@ -1,0 +1,377 @@
+---
+title: "Part 2: Storage Bindings"
+description: Guard the API with an Edge Config feature flag and store order receipts in a Blob store — both bound into the Function as typed clients.
+sidebar:
+  order: 2
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+In [Part 1](/vercel/tutorial/part-1) you deployed a Vercel Function.
+Now the order-intake API gets real behavior: a feature flag in
+[Edge Config](/vercel/data/edge-config) decides whether orders are
+accepted, and every accepted order writes a receipt into a
+[Blob store](/vercel/data/blob).
+
+## Add feature flags
+
+A common pattern in Alchemy is to give each resource its own file.
+Create `src/flags.ts` with an Edge Config holding one flag:
+
+```typescript
+// src/flags.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Flags = Vercel.EdgeConfig("Flags", {
+  items: {
+    acceptOrders: true,
+  },
+});
+```
+
+`items` is **declarative**: every deploy converges the config to
+exactly this map — adding, updating, and removing keys as needed, and
+reverting anything edited out-of-band in the dashboard. The file is
+the source of truth.
+
+:::tip
+Resource declarations like `Vercel.EdgeConfig("Flags", ...)` are
+just descriptions — they don't execute until you `yield*` them. You
+can safely import them from multiple files; the same logical id
+always resolves to the same instance.
+:::
+
+## Bind it in the Function
+
+Bind the Edge Config in the Api's init phase with
+`Vercel.ReadEdgeConfig` and observe the type error:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { Flags } from "./flags.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+  // @error: ts(2345) Type 'EdgeConfigRead' is not assignable to type 'FunctionServices | PlatformServices'.
++    const config = yield* Vercel.ReadEdgeConfig(Flags);
+
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({ service: "order-intake" });
+      }),
+    };
+  }),
+) {}
+```
+
+`Vercel.ReadEdgeConfig(flags)` is a **binding** — it returns a typed
+read client (`get`, `getAll`, `has`, `digest`) and, at deploy time,
+registers everything the client needs on the Function. The type
+error says its implementation layer is missing.
+
+## Provide the binding layer
+
+Fix it by piping the init Effect through
+`Vercel.ReadEdgeConfigHttp`:
+
+```diff lang="typescript"
+// src/api.ts
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({ service: "order-intake" });
+      }),
+    };
+-  }),
++  }).pipe(Effect.provide(Vercel.ReadEdgeConfigHttp)),
+) {}
+```
+
+`ReadEdgeConfigHttp` mints a read-scoped Edge Config token for this
+Function and injects the connection string as a `sensitive` project
+env var; at runtime the client follows that connection string to
+Vercel's edge data plane. No token handling in your code.
+
+## Guard the orders route
+
+Now use the flag. Add a `POST /orders` route that refuses when
+`acceptOrders` is off:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Flags } from "./flags.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const config = yield* Vercel.ReadEdgeConfig(Flags);
+
+    return {
+      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = yield* Effect.sync(
++          () => new URL(request.url, "http://localhost"),
++        );
++
++        if (request.method === "POST" && url.pathname === "/orders") {
++          const accepting = yield* config
++            .get<boolean>("acceptOrders")
++            .pipe(Effect.orDie);
++          if (accepting !== true) {
++            return HttpServerResponse.text("not accepting orders", {
++              status: 503,
++            });
++          }
++          return yield* HttpServerResponse.json({ accepted: true });
++        }
+
+        return yield* HttpServerResponse.json({ service: "order-intake" });
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.ReadEdgeConfigHttp)),
+) {}
+```
+
+`config.get<boolean>("acceptOrders")` can fail with a typed
+`Vercel.EdgeConfigReadError`, and a `fetch` handler's error channel
+doesn't allow it — `Effect.orDie` converts the failure into a defect,
+which the runtime answers with a 500. When an error deserves real
+handling, `Effect.catchTag` it instead; you'll do exactly that for
+blob reads below.
+
+## Add the receipts store
+
+Create `src/receipts.ts` with a Blob store:
+
+```typescript
+// src/receipts.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Receipts = Vercel.BlobStore("Receipts", {
+  access: "public",
+});
+```
+
+No name required — alchemy generates a unique one from the app,
+stage, and logical id. `access: "public"` means every blob gets a
+world-readable `*.public.blob.vercel-storage.com` URL, which is
+exactly what we want for shareable receipts.
+
+## Bind the store
+
+Bind it read-write alongside the config, and add the blob layer to
+the provide list:
+
+```diff lang="typescript"
+// src/api.ts
+import { Flags } from "./flags.ts";
++import { Receipts } from "./receipts.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const config = yield* Vercel.ReadEdgeConfig(Flags);
++    const receipts = yield* Vercel.ReadWriteBlob(Receipts);
+
+    return {
+      // ...
+    };
+-  }).pipe(Effect.provide(Vercel.ReadEdgeConfigHttp)),
++  }).pipe(
++    Effect.provide([Vercel.ReadEdgeConfigHttp, Vercel.ReadWriteBlobHttp]),
++  ),
+) {}
+```
+
+`ReadWriteBlob` is the binding that connects the store to this
+Function's project — the platform then injects the data-plane token
+as project env, and the client uses it transparently. The
+`Read`/`Write`/`ReadWrite` split is least-privilege: a Function that
+only ever reads receipts would bind `Vercel.ReadBlob` and the write
+methods wouldn't even exist on the client's type.
+
+## Write a receipt
+
+Accepted orders now get an id and a receipt blob:
+
+```diff lang="typescript"
+// src/api.ts
+        if (request.method === "POST" && url.pathname === "/orders") {
+          const accepting = yield* config
+            .get<boolean>("acceptOrders")
+            .pipe(Effect.orDie);
+          if (accepting !== true) {
+            return HttpServerResponse.text("not accepting orders", {
+              status: 503,
+            });
+          }
+-          return yield* HttpServerResponse.json({ accepted: true });
++          const orderId = yield* Effect.sync(() => crypto.randomUUID());
++          const put = yield* receipts
++            .put(
++              `orders/${orderId}.json`,
++              JSON.stringify({ orderId, status: "received" }),
++              { contentType: "application/json" },
++            )
++            .pipe(Effect.orDie);
++          return yield* HttpServerResponse.json({
++            orderId,
++            receipt: put.url,
++          });
+        }
+```
+
+`receipts.put(pathname, body, options)` returns the blob's `etag`,
+`url`, and `pathname`. Because the store is public, `put.url` is a
+directly shareable link to the receipt.
+
+## Read a receipt back
+
+Add `GET /orders/:id`, handling the missing case with the typed
+`Vercel.Blob.NotFound` tag:
+
+```diff lang="typescript"
+// src/api.ts
+          return yield* HttpServerResponse.json({
+            orderId,
+            receipt: put.url,
+          });
+        }
+
++        if (request.method === "GET" && url.pathname.startsWith("/orders/")) {
++          const orderId = url.pathname.slice("/orders/".length);
++          return yield* receipts.get(`orders/${orderId}.json`).pipe(
++            Effect.flatMap((blob) => blob.text),
++            Effect.map((text) =>
++              HttpServerResponse.text(text, {
++                contentType: "application/json",
++              }),
++            ),
++            Effect.catchTag("Vercel.Blob.NotFound", () =>
++              Effect.succeed(
++                HttpServerResponse.text("no such order", { status: 404 }),
++              ),
++            ),
++            Effect.orDie,
++          );
++        }
+
+        return yield* HttpServerResponse.json({ service: "order-intake" });
+```
+
+`Effect.catchTag` matches errors by their `_tag` field — a missing
+blob is a typed `Vercel.Blob.NotFound`, so the 404 case is handled
+explicitly and everything else still dies to a 500. You can't forget
+this case: without the `catchTag`, the error would surface in the
+handler's type.
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]2 to create[/g], [y]1 to update[/y]
+[g]+[/g] [b]Flags[/b] [d](Vercel.EdgeConfig)[/d]
+[g]+[/g] [b]Receipts[/b] [d](Vercel.BlobStore)[/d]
+[y]~[/y] [b]Api[/b] [d](Vercel.Function)[/d] [c](2 bindings)[/c]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Flags[/b] [d](Vercel.EdgeConfig)[/d] [g]created[/g]
+[g]✓[/g] [b]Receipts[/b] [d](Vercel.BlobStore)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Vercel.Function)[/d] [g]updated[/g]
+{
+[s2]url: "https://orderintake-api-dev-sam-a1b2c3d4.vercel.app",
+}`} />
+
+The Edge Config and Blob store were never mentioned in
+`alchemy.run.ts` — yielding them inside the Api's init phase is what
+registered them, and the bindings ordered the deploy: config and
+store first, then the Function that references them.
+
+## Try it out
+
+Place an order and read the receipt back:
+
+```sh
+# Place an order
+curl -X POST https://orderintake-api-dev-sam-a1b2c3d4.vercel.app/orders
+# → {"orderId":"6f9d…","receipt":"https://…public.blob.vercel-storage.com/orders/6f9d….json"}
+
+# Read it through the API
+curl https://orderintake-api-dev-sam-a1b2c3d4.vercel.app/orders/6f9d…
+# → {"orderId":"6f9d…","status":"received"}
+
+# Or fetch the public receipt URL directly
+curl "https://…public.blob.vercel-storage.com/orders/6f9d….json"
+
+# A missing order 404s
+curl https://orderintake-api-dev-sam-a1b2c3d4.vercel.app/orders/nope
+# → no such order
+```
+
+## Flip the flag
+
+Close the shop — change the flag value in `src/flags.ts`:
+
+```diff lang="typescript"
+// src/flags.ts
+export const Flags = Vercel.EdgeConfig("Flags", {
+  items: {
+-    acceptOrders: true,
++    acceptOrders: false,
+  },
+});
+```
+
+Deploy again and watch the plan: only `Flags` updates. The
+Function's deployment is untouched — Edge Config items live on
+Vercel's data plane, shared by every deployment, so flag flips
+propagate without a rebuild or redeploy:
+
+```sh
+bun alchemy deploy
+
+curl -X POST https://orderintake-api-dev-sam-a1b2c3d4.vercel.app/orders
+# → not accepting orders  (503)
+```
+
+Flip it back to `true` and redeploy before moving on.
+
+## Recap
+
+You now have:
+
+- An Edge Config feature flag gating order intake, declared in code
+  and converged on every deploy
+- A Blob store holding one JSON receipt per order, with public
+  receipt URLs
+- Both bound into the Function as typed clients — token minting,
+  env injection, and project connections handled by the bindings
+
+In [Part 3](/vercel/tutorial/part-3), you'll queue accepted orders
+into a typed Topic, process them with a push-delivered consumer, and
+add a nightly cron.

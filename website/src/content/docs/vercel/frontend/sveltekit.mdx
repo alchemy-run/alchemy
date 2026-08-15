@@ -1,0 +1,181 @@
+---
+title: SvelteKit
+description: Deploy a SvelteKit app to Vercel with Vercel.Website.SvelteKit — the @sveltejs/adapter-vercel adapter, server routes and SSR as serverless functions, one Vite build.
+sidebar:
+  order: 4
+---
+
+`Vercel.Website.SvelteKit` deploys a
+[SvelteKit](https://svelte.dev/docs/kit) app to Vercel. It runs
+your project's own Vite build; the
+[`@sveltejs/adapter-vercel`](https://svelte.dev/docs/kit/adapter-vercel)
+adapter — installed and declared in your `svelte.config.js` — emits
+a complete `.vercel/output` tree: server routes and SSR as
+serverless functions, client assets and prerendered pages as static
+files. The tree deploys through the same engine as every
+[`Function`](/vercel/compute/functions) — prebuilt, immutable, no
+Vercel build pipeline.
+
+## Install the adapter
+
+```sh
+bun add -d @sveltejs/adapter-vercel
+```
+
+Declare it in `svelte.config.js`:
+
+```typescript
+// web/svelte.config.js
+import adapter from "@sveltejs/adapter-vercel";
+
+export default {
+  kit: {
+    adapter: adapter({ runtime: "nodejs22.x" }),
+  },
+};
+```
+
+:::caution[Pin the adapter's runtime]
+Without an explicit `runtime`, `@sveltejs/adapter-vercel` derives
+one from the Node version on the build machine — and rejects
+versions it doesn't recognize. Pinning `runtime: "nodejs22.x"`
+keeps the build deterministic across machines and CI.
+:::
+
+## Deploy the site
+
+Point `rootDir` at the directory containing `svelte.config.js` and
+return the site's URL as a stack output:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySvelteKitSite",
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Vercel.Website.SvelteKit("Site", {
+      rootDir: "./web",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+```sh
+bun alchemy deploy
+```
+
+`alchemy deploy` runs `bunx vite build` in `./web` — SvelteKit's
+build is a plain Vite build — uploads the resulting `.vercel/output`
+tree as an immutable deployment, and moves the production alias to
+it. `site.url` is the project's assigned production URL — always
+read back from Vercel, never computed.
+
+## Pass environment to the build and runtime
+
+`env` reaches both the build subprocess (`PUBLIC_*` values are
+inlined into client code by Vite) and the deployed functions (as
+synced project env vars in `process.env`):
+
+```diff lang="typescript"
+// alchemy.run.ts
++    const api = yield* Vercel.Function("Api", { main: "./src/api.ts" });
+    const site = yield* Vercel.Website.SvelteKit("Site", {
+      rootDir: "./web",
++      env: { PUBLIC_API_URL: api.url },
+    });
+```
+
+`api.url` resolves before the build runs, so client and server see
+the same value. `Redacted` secrets become sensitive project env
+vars — see [Secrets & env](/vercel/security/secrets-env).
+
+## Customize the build command
+
+`command` overrides the default `bunx vite build` — useful when the
+build needs an install step or a wrapper script:
+
+```typescript
+const site = yield* Vercel.Website.SvelteKit("Site", {
+  rootDir: "./web",
+  command: "./build.sh",
+});
+```
+
+## Rebuilds are memoized
+
+Every non-gitignored file under `rootDir` (plus the nearest
+lockfile) is content-hashed; unchanged inputs skip the build, and
+an unchanged output tree skips the deploy entirely. Make sure build
+output stays out of the hash:
+
+```sh
+# web/.gitignore
+.svelte-kit
+.vercel
+node_modules
+```
+
+Use `memo` to narrow the hashed scope explicitly, or `memo: false`
+to rebuild on every deploy.
+
+## Class form
+
+Calling `SvelteKit` with no arguments returns a constructor you can
+`extend` to declare the site as a named class:
+
+```typescript
+// site.ts
+import * as Vercel from "alchemy/Vercel";
+
+export default class Site extends Vercel.Website.SvelteKit<Site>()("Site", {
+  rootDir: "./web",
+}) {}
+```
+
+```typescript
+// alchemy.run.ts
+import Site from "./site.ts";
+
+const site = yield* Site;
+```
+
+## Local dev
+
+For frontend iteration, run SvelteKit's own dev server directly —
+the build is Vite's own, so nothing alchemy-specific is involved:
+
+```sh
+bunx vite dev
+```
+
+Websites have no local emulation during `alchemy dev` yet. If the
+site is part of a stack you run with `alchemy dev`, pipe it through
+`Alchemy.remote()` to keep deploying it live while the rest of the
+stack runs locally:
+
+```typescript
+import * as Alchemy from "alchemy";
+
+const site = yield* Vercel.Website.SvelteKit("Site", {
+  rootDir: "./web",
+}).pipe(Alchemy.remote());
+```
+
+## Where next
+
+- [Websites overview](/vercel/frontend/websites) — the Build Output
+  pipeline all frameworks share.
+- [Custom domains](/vercel/networking/custom-domains) — attach
+  `app.acme.com` to the site's project.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — immutable deployments, aliases, instant rollback.
+- [`Website.SvelteKit` reference](/providers/vercel/website/sveltekit)
+  — every prop and attribute.

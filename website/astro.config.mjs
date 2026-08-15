@@ -25,6 +25,7 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "Cloudflare", link: "/cloudflare" },
+      { label: "Vercel", link: "/vercel" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
@@ -947,6 +948,113 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("AWS"),
+          ],
+        },
+        {
+          label: "Vercel",
+          items: [
+            { label: "Overview", link: "/vercel" },
+            { label: "Setup", link: "/vercel/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "vercel/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Functions", link: "/vercel/compute/functions" },
+                {
+                  label: "Fluid compute",
+                  link: "/vercel/compute/fluid-compute",
+                },
+                {
+                  label: "Deployments & rollback",
+                  link: "/vercel/compute/deployments-and-rollback",
+                },
+                { label: "Cron", link: "/vercel/compute/cron" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/vercel/frontend/websites",
+                },
+                { label: "Astro", link: "/vercel/frontend/astro" },
+                { label: "Nuxt", link: "/vercel/frontend/nuxt" },
+                {
+                  label: "Static sites",
+                  link: "/vercel/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/vercel/frontend/sveltekit",
+                },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [
+                {
+                  label: "Effect HTTP",
+                  link: "/vercel/apis/effect-http-api",
+                },
+                {
+                  label: "Invoke a Function",
+                  link: "/vercel/apis/invoke-function",
+                },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Blob", link: "/vercel/data/blob" },
+                { label: "Edge Config", link: "/vercel/data/edge-config" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Queues", link: "/vercel/messaging/queues" },
+                { label: "Webhooks", link: "/vercel/messaging/webhooks" },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                {
+                  label: "Secrets & env",
+                  link: "/vercel/security/secrets-env",
+                },
+                {
+                  label: "Deployment protection",
+                  link: "/vercel/security/deployment-protection",
+                },
+                { label: "Firewall", link: "/vercel/security/firewall" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                { label: "Logs", link: "/vercel/observability/logs" },
+                { label: "Drains", link: "/vercel/observability/drains" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                {
+                  label: "Domains & DNS",
+                  link: "/vercel/networking/domains",
+                },
+                {
+                  label: "Custom domains",
+                  link: "/vercel/networking/custom-domains",
+                },
+              ],
+            },
+            providerResourcesEntry("Vercel"),
           ],
         },
         {

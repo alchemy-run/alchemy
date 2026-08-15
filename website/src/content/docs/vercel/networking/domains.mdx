@@ -1,0 +1,219 @@
+---
+title: Domains & DNS
+description: Manage Vercel domains, DNS records, and TLS certificates as resources — add a DNS zone, adopt the domain you already have, and get in-place vs replacement semantics right.
+---
+
+Your domain is infrastructure too. Alchemy manages Vercel's
+domain surface as ordinary resources, declared next to the
+Functions and sites they route to: `Vercel.Domain` (the
+domain-of-record on your team, with an optional Vercel DNS zone),
+`Vercel.DnsRecord` (records inside that zone),
+[`Vercel.ProjectDomain`](/vercel/networking/custom-domains) (a
+hostname attached to a project), and `Vercel.Cert` (TLS
+certificates, for the rare cases the automatic ones don't cover).
+
+## Add a domain
+
+A domain is one resource declaration:
+
+```typescript
+import * as Vercel from "alchemy/Vercel";
+
+const zone = yield* Vercel.Domain("Zone", { name: "acme.com" });
+// zone.domainId, zone.verified, zone.nameservers,
+// zone.intendedNameservers, zone.serviceType
+```
+
+By default (`zone: true`) Vercel creates a DNS zone for the
+domain — the prerequisite for any `Vercel.DnsRecord`. To serve
+DNS from Vercel, point your registrar at
+`zone.intendedNameservers`; `nameservers` reports what the domain
+currently resolves through, and `serviceType` is `zeit.world`
+once Vercel handles DNS (`external` otherwise).
+
+## Adopt an existing domain
+
+Vercel domains carry no tags or metadata, so alchemy cannot prove
+it created a domain that already exists on the team. Deploying a
+`Domain` whose name matches a pre-existing one reports it as
+unowned and refuses the takeover — unless you opt in with
+`adopt(true)`:
+
+```typescript
+import { adopt } from "alchemy/AdoptPolicy";
+
+const zone = yield* Vercel.Domain("Zone", {
+  name: "acme.com",
+}).pipe(adopt(true));
+```
+
+The same gate can be lifted for an entire deploy with
+`alchemy deploy --adopt`. Once adopted, the domain is managed
+like any other resource — including deletion on destroy, so only
+adopt domains the stack should truly own.
+
+## Externally-managed domains
+
+When DNS stays at your current provider, add the domain without a
+Vercel zone:
+
+```typescript
+const domain = yield* Vercel.Domain("Apex", {
+  name: "acme.com",
+  zone: false,
+});
+```
+
+`zone` and `cdnEnabled` are immutable on the platform — re-adding
+an existing domain does not update them. Changing either replaces
+the domain **delete-first**: the physical name is identical on
+both sides of the replacement, so the old domain must go before
+the new one can be added.
+
+:::note[Child records survive a parent replacement]
+A delete-first `Domain` replacement physically destroys every
+record in its zone. Records declared as `Vercel.DnsRecord`s are
+not lost: their name didn't change, so they aren't replaced —
+their reconcile observes the loss and recreates them in the new
+zone on the same deploy.
+:::
+
+## DNS records
+
+`Vercel.DnsRecord` manages a single record in a Vercel-hosted
+zone. `domain` accepts the `Domain` resource or a plain domain
+name:
+
+```typescript
+yield* Vercel.DnsRecord("Verification", {
+  domain: zone,
+  type: "TXT",
+  name: "_verify",
+  value: "token-123",
+  comment: "third-party site verification",
+});
+```
+
+`name` is the subdomain (an empty string targets the root),
+`ttl` defaults to 60 seconds, and `comment` (max 500 characters)
+documents why the record exists. Records in a zone that is not
+Vercel-hosted are rejected — the parent needs `zone: true` on its
+`Domain`.
+
+An MX record carries its priority as `mxPriority`:
+
+```typescript
+yield* Vercel.DnsRecord("Mail", {
+  domain: zone,
+  type: "MX",
+  name: "",
+  value: "mail.acme.com",
+  mxPriority: 10,
+});
+```
+
+SRV and HTTPS records take structured payloads instead of `name`
+and `value`:
+
+```typescript
+yield* Vercel.DnsRecord("Sip", {
+  domain: zone,
+  type: "SRV",
+  srv: {
+    target: "sip.acme.com",
+    port: 5060,
+    priority: 10,
+    weight: 5,
+  },
+});
+```
+
+## In-place updates vs replacement
+
+Changing a record's `value`, `ttl`, `name`, `type`, or `comment`
+updates the record in place. One platform quirk to know: Vercel
+mints a **new record id on every update**, so the `recordId`
+output is not stable across updates. Treat the
+`(domain, name, type)` triple as the record's identity, not the
+id.
+
+Moving a record to a different `domain` is a replacement — a
+record cannot cross zones, so a new one is created in the target
+zone and the old one deleted.
+
+:::note[Zone-management records are left alone]
+Vercel creates some records itself when it hosts a zone (CAA and
+similar). They belong to the zone, not to any alchemy resource —
+deploys and destroys never touch them.
+:::
+
+## Attach domains to projects
+
+Serving traffic on a hostname is a `Vercel.ProjectDomain` — the
+attachment between a domain name and the project behind a
+Function or Website:
+
+```typescript
+yield* Vercel.ProjectDomain("AppDomain", {
+  project: site,
+  name: "app.acme.com",
+});
+```
+
+The [custom domains guide](/vercel/networking/custom-domains)
+covers the full setup — verification states, redirects, branch
+domains, and what the read-back `url` output means.
+
+## Certificates
+
+Vercel issues and renews TLS certificates automatically for every
+project domain, so most stacks never declare one. An explicit
+`Vercel.Cert` covers the two exceptions — advance issuance and
+custom certificates:
+
+```typescript
+const cert = yield* Vercel.Cert("Cert", {
+  cns: ["acme.com", "www.acme.com"],
+});
+// cert.certId, cert.expiresAt, cert.autoRenew
+```
+
+The common names must already resolve to Vercel at issuance time
+— issuing for a domain that doesn't yet resolve fails with the
+typed `DomainPretestFailed` error (HTTP 449). Certificates are
+immutable: any change to the requested names replaces the
+certificate.
+
+### Custom certificates (Enterprise)
+
+Uploading your own certificate material requires an Enterprise
+plan — on other plans the upload fails with the typed
+`PaymentRequired` error:
+
+```typescript
+const cert = yield* Vercel.Cert("CustomCert", {
+  upload: { ca: CA_PEM, key: KEY_PEM, cert: CERT_PEM },
+});
+```
+
+Like issued certificates, uploads are immutable — changing the
+material replaces the certificate.
+
+## Where next
+
+- [Custom domains](/vercel/networking/custom-domains) — attach a
+  hostname to a Function or Website, end to end.
+
+Related:
+
+- [Functions](/vercel/compute/functions) — the compute your DNS
+  points at.
+- [Websites](/vercel/frontend/websites) — framework sites and
+  static sites on Vercel.
+
+Reference:
+
+- [Domain API reference](/providers/vercel/domains/domain)
+- [DnsRecord API reference](/providers/vercel/domains/dnsrecord)
+- [ProjectDomain API reference](/providers/vercel/domains/projectdomain)
+- [Cert API reference](/providers/vercel/domains/cert)

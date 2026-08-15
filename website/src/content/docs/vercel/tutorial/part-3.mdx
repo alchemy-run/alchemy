@@ -1,0 +1,267 @@
+---
+title: "Part 3: Queues & Cron"
+description: Queue accepted orders into a typed Topic, process them with Vercel's push delivery, and add a nightly cron — producer, consumer, and schedule in one Function.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+In [Part 2](/vercel/tutorial/part-2) the API started writing
+receipts. Processing an order inline in the request would be a
+mistake — payment capture, inventory, and email don't belong on the
+request path. In this part you'll queue accepted orders into a
+[Vercel Queues](/vercel/messaging/queues) topic, consume them with a
+push-delivered handler, and add a nightly cron.
+
+## Declare the Topic
+
+Create `src/orders.ts` with a typed topic:
+
+```typescript
+// src/orders.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Schema from "effect/Schema";
+
+export class Orders extends Vercel.Topic<Orders>()("orders", {
+  schema: Schema.Struct({
+    orderId: Schema.String,
+    amountCents: Schema.Int,
+  }),
+  region: "iad1",
+}) {}
+```
+
+A `Topic` is a typed config **value**, not a lifecycle resource —
+Vercel topics have nothing to create or delete: one springs into
+existence on the first send, it's scoped to a single project and
+environment, and its messages expire on their own (7 days max). The
+class is the single home for the payload schema (typing both ends),
+the region pin, and send defaults.
+
+:::note
+Because topics are scoped per (project, environment), a topic name
+is not shareable across stages — every stage gets its own `orders`
+namespace automatically. Cross-stage integration goes over HTTP, not
+queues.
+:::
+
+## Produce from the orders route
+
+Bind a producer with `Vercel.SendMessage` and send each accepted
+order:
+
+```diff lang="typescript"
+// src/api.ts
+import { Flags } from "./flags.ts";
++import { Orders } from "./orders.ts";
+import { Receipts } from "./receipts.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const config = yield* Vercel.ReadEdgeConfig(Flags);
+    const receipts = yield* Vercel.ReadWriteBlob(Receipts);
++    const orders = yield* Vercel.SendMessage(Orders);
+
+    return {
+      fetch: Effect.gen(function* () {
+        // ...
+        if (request.method === "POST" && url.pathname === "/orders") {
+          // ... flag check ...
+          const orderId = yield* Effect.sync(() => crypto.randomUUID());
++          const amountCents = Math.trunc(
++            Number(url.searchParams.get("amount") ?? 0),
++          );
++          yield* orders.send({ orderId, amountCents }).pipe(Effect.orDie);
+          const put = yield* receipts
+            .put(
+              `orders/${orderId}.json`,
+-              JSON.stringify({ orderId, status: "received" }),
++              JSON.stringify({ orderId, amountCents, status: "received" }),
+              { contentType: "application/json" },
+            )
+            .pipe(Effect.orDie);
+          // ...
+        }
+        // ...
+      }),
+    };
+  }).pipe(
+    Effect.provide([
+      Vercel.ReadEdgeConfigHttp,
+      Vercel.ReadWriteBlobHttp,
++      Vercel.SendMessageHttp,
+    ]),
+  ),
+) {}
+```
+
+`orders.send(payload)` encodes the payload with the topic's schema
+at the queue boundary and returns a receipt with a `messageId`.
+Authentication is ambient — the deployment's own OIDC identity —
+so there is no token to configure.
+
+## Consume with `subscribe`
+
+Register the consumer half in the same init phase:
+
+```diff lang="typescript"
+// src/api.ts
+    const orders = yield* Vercel.SendMessage(Orders);
+
++    yield* Vercel.subscribe(Orders, (order, meta) =>
++      Effect.log(
++        `processing order ${order.orderId} for ${order.amountCents} cents ` +
++          `(attempt ${meta.deliveryCount})`,
++      ),
++    );
+
+    return {
+      // ...
+    };
+  }).pipe(
+    Effect.provide([
+      Vercel.ReadEdgeConfigHttp,
+      Vercel.ReadWriteBlobHttp,
+      Vercel.SendMessageHttp,
++      Vercel.QueueEventSourceLive,
+    ]),
+  ),
+```
+
+`Vercel.subscribe(topic, handler)` wires both halves of the event
+source: at deploy time it contributes a queue trigger to the
+deployment, and at runtime Vercel **push-delivers** each message —
+decoded through the topic's schema, so `order` is fully typed — to
+your handler. Real fulfillment logic goes where the `Effect.log`
+is.
+
+:::note[One module, two functions]
+A Vercel function carrying a queue trigger loses all public HTTP
+routing, so alchemy lowers the trigger into a separate, never-routed
+consumer function that shares the Api's module. Your public routes
+keep serving; the consumer runs the same init code and the same
+bindings. One thing to know: the consumer is a separate instance, so
+module-level state doesn't cross between them.
+:::
+
+Delivery is **at-least-once**: a failing handler responds 500
+without acking, and the message is redelivered after the visibility
+window — make handlers idempotent. Retry pacing is declarative:
+`Vercel.subscribe(Orders, handler, { retryAfterSeconds: 30 })`.
+
+## Add a nightly cron
+
+Schedules are one more line in the init phase:
+
+```diff lang="typescript"
+// src/api.ts
+    yield* Vercel.subscribe(Orders, (order, meta) =>
+      Effect.log(
+        `processing order ${order.orderId} for ${order.amountCents} cents ` +
+          `(attempt ${meta.deliveryCount})`,
+      ),
+    );
+
++    yield* Vercel.cron("0 3 * * *", Effect.log("nightly order summary"));
+
+    return {
+      // ...
+    };
+  }).pipe(
+    Effect.provide([
+      Vercel.ReadEdgeConfigHttp,
+      Vercel.ReadWriteBlobHttp,
+      Vercel.SendMessageHttp,
+      Vercel.QueueEventSourceLive,
++      Vercel.CronEventSourceLive,
+    ]),
+  ),
+```
+
+`Vercel.cron(schedule, handler)` registers the handler under an
+internal route (`/_alchemy/cron/0`) and lowers the schedule into the
+deployment's cron config. Alchemy auto-mints a sensitive
+`CRON_SECRET` env var; Vercel's invoker sends it as a bearer token
+and the route verifies it with a constant-time comparison — an
+unauthenticated request to the cron route is a 401 and never reaches
+your handler.
+
+:::caution[Cron platform rules]
+Schedules are **UTC** and fire only on **production** deployments —
+a preview stage's crons never run. On Hobby plans only daily
+schedules are allowed (a sub-daily one fails the deployment, not the
+plan). See [Cron](/vercel/compute/cron) for the full model.
+:::
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+[y]~[/y] [b]Api[/b] [d](Vercel.Function)[/d] [c](4 bindings)[/c]
+[d]•[/d] [b]Flags[/b] [d](Vercel.EdgeConfig)[/d]
+[d]•[/d] [b]Receipts[/b] [d](Vercel.BlobStore)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](Vercel.Function)[/d] [g]updated[/g]
+{
+[s2]url: "https://orderintake-api-dev-sam-a1b2c3d4.vercel.app",
+}`} />
+
+Only the Function updates — a new immutable deployment carrying the
+queue trigger, the consumer function, and the cron schedule. The
+topic itself never appears in the plan; it has no lifecycle.
+
+## Watch an order flow
+
+Send an order and watch it get processed:
+
+```sh
+curl -X POST "https://orderintake-api-dev-sam-a1b2c3d4.vercel.app/orders?amount=4200"
+# → {"orderId":"…","receipt":"https://…"}
+```
+
+Within a few seconds Vercel push-delivers the message and the
+consumer logs `processing order … for 4200 cents (attempt 1)` —
+visible in the project's logs. See [Logs](/vercel/observability/logs)
+for tailing them from your terminal.
+
+:::tip
+Your cron handler is reachable for a manual test run: request
+`/_alchemy/cron/0` with `Authorization: Bearer <CRON_SECRET>` —
+the secret lives in the project's env (and on the Function's
+`cronSecret` attribute). Without the bearer, the route answers 401.
+:::
+
+## Recap
+
+You now have:
+
+- A typed `Orders` topic — schema, region, and send defaults
+  declared once, inherited by producer and consumer
+- `POST /orders` producing to the queue, with fulfillment running
+  off the request path via push delivery
+- A nightly cron on the production deployment, secret-guarded
+  end to end
+
+In [Part 4](/vercel/tutorial/part-4), you'll run this entire stack —
+flags, blobs, queue delivery, and crons — locally with
+`alchemy dev`.

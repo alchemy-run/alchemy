@@ -1,0 +1,192 @@
+---
+title: Nuxt
+description: Deploy a Nuxt app to Vercel with Vercel.Website.Nuxt — Nitro's built-in vercel preset, no adapter package, SSR and server routes as serverless functions.
+sidebar:
+  order: 2
+---
+
+`Vercel.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app to
+Vercel. It runs your project's own build with Nitro's **built-in**
+`vercel` preset (`NITRO_PRESET=vercel` is set on the build
+subprocess for you — no adapter package to install, no
+`nuxt.config.ts` changes), which emits a complete `.vercel/output`
+tree: server routes and SSR as serverless functions, client assets
+and prerendered pages as static files. The tree deploys through the
+same engine as every [`Function`](/vercel/compute/functions) —
+prebuilt, immutable, no Vercel build pipeline.
+
+## Configure Nuxt
+
+Your `nuxt.config.ts` needs nothing Vercel-specific — configure
+Nuxt exactly as you would anywhere else:
+
+```typescript
+// web/nuxt.config.ts
+export default defineNuxtConfig({
+  compatibilityDate: "2026-07-01",
+});
+```
+
+Don't set `nitro.preset` — alchemy sets `NITRO_PRESET=vercel` on
+the build subprocess, so the Vercel target needs no line in your
+config, and a foreign preset there would fight it.
+
+## Deploy the site
+
+Point `rootDir` at the directory containing `nuxt.config.ts` and
+return the site's URL as a stack output:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyNuxtSite",
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Vercel.Website.Nuxt("Site", {
+      rootDir: "./web",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+```sh
+bun alchemy deploy
+```
+
+`alchemy deploy` runs `bunx nuxi build` in `./web`, uploads the
+resulting `.vercel/output` tree as an immutable deployment, and
+moves the production alias to it. `site.url` is the project's
+assigned production URL — always read back from Vercel, never
+computed.
+
+## Server routes run as serverless functions
+
+Nitro server routes deploy as serverless functions with no extra
+configuration:
+
+```typescript
+// web/server/api/hello.ts
+export default defineEventHandler(() => ({ ok: true }));
+```
+
+```sh
+curl https://my-nuxt-site.vercel.app/api/hello
+# → {"ok":true}
+```
+
+SSR pages render the same way; prerendered pages and client assets
+are served by Vercel's static layer without invoking a function.
+
+## Pass environment to the build and runtime
+
+`env` reaches both the build subprocess and the deployed functions
+— `NUXT_PUBLIC_*` values are baked into client code at build time,
+and every entry lands in the functions' `process.env` as a synced
+project env var:
+
+```diff lang="typescript"
+// alchemy.run.ts
++    const api = yield* Vercel.Function("Api", { main: "./src/api.ts" });
+    const site = yield* Vercel.Website.Nuxt("Site", {
+      rootDir: "./web",
++      env: { NUXT_PUBLIC_API_URL: api.url },
+    });
+```
+
+`api.url` resolves before the build runs, so the client bundle and
+the server functions see the same value. `Redacted` secrets become
+sensitive project env vars — see
+[Secrets & env](/vercel/security/secrets-env).
+
+## Customize the build command
+
+`command` overrides the default `bunx nuxi build` — it runs in
+`rootDir` with `NITRO_PRESET=vercel` set either way:
+
+```typescript
+const site = yield* Vercel.Website.Nuxt("Site", {
+  rootDir: "./web",
+  command: "npm run build",
+});
+```
+
+## Rebuilds are memoized
+
+Every non-gitignored file under `rootDir` (plus the nearest
+lockfile) is content-hashed; unchanged inputs skip the build, and
+an unchanged output tree skips the deploy entirely. Make sure build
+output stays out of the hash:
+
+```sh
+# web/.gitignore
+.nuxt
+.output
+.vercel
+node_modules
+```
+
+Use `memo` to narrow the hashed scope explicitly, or `memo: false`
+to rebuild on every deploy.
+
+## Class form
+
+Calling `Nuxt` with no arguments returns a constructor you can
+`extend` to declare the site as a named class — both an `Effect`
+you can `yield*` and a type you can reference elsewhere:
+
+```typescript
+// site.ts
+import * as Vercel from "alchemy/Vercel";
+
+export default class Site extends Vercel.Website.Nuxt<Site>()("Site", {
+  rootDir: "./web",
+}) {}
+```
+
+```typescript
+// alchemy.run.ts
+import Site from "./site.ts";
+
+const site = yield* Site;
+```
+
+## Local dev
+
+For frontend iteration, run Nuxt's own dev server directly — the
+build is Nuxt's own, so nothing alchemy-specific is involved:
+
+```sh
+bunx nuxi dev
+```
+
+Websites have no local emulation during `alchemy dev` yet. If the
+site is part of a stack you run with `alchemy dev`, pipe it through
+`Alchemy.remote()` to keep deploying it live while the rest of the
+stack runs locally:
+
+```typescript
+import * as Alchemy from "alchemy";
+
+const site = yield* Vercel.Website.Nuxt("Site", {
+  rootDir: "./web",
+}).pipe(Alchemy.remote());
+```
+
+## Where next
+
+- [Websites overview](/vercel/frontend/websites) — the Build Output
+  pipeline all frameworks share.
+- [Custom domains](/vercel/networking/custom-domains) — attach
+  `app.acme.com` to the site's project.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — immutable deployments, aliases, instant rollback.
+- [`Website.Nuxt` reference](/providers/vercel/website/nuxt) —
+  every prop and attribute.

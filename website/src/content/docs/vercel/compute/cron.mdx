@@ -1,0 +1,143 @@
+---
+title: Cron
+description: Schedule Effect handlers on a Vercel Function with Vercel.cron — one call registers the cron on the deployment and serves it from a CRON_SECRET-guarded route, verified with a constant-time comparison.
+---
+
+`Vercel.cron` subscribes a [Function](/vercel/compute/functions) to
+a cron schedule with an Effect handler. A single call wires both
+halves: at deploy time it registers the schedule on the deployment,
+and at runtime it serves the handler from a stable internal route
+(`/_alchemy/cron/{n}`) that the bridge dispatches *before* your
+`fetch` — guarded by an auto-minted secret, so only Vercel's cron
+invoker (or someone holding the secret) can fire it.
+
+## Declare a schedule
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Vercel.cron("0 3 * * *", Effect.log("nightly cleanup"));
+
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(Effect.provide(Vercel.CronEventSourceLive)),
+) {}
+```
+
+`Vercel.cron(schedule, handler)` takes a standard cron expression
+and any `Effect` — it runs in the same runtime as your `fetch`
+handlers, so bindings resolved in the init phase are available to
+it. `Vercel.CronEventSourceLive` is the implementation layer;
+provide it on the Function's init Effect (crons only exist in
+[Effect mode](/vercel/compute/functions#async-functions-the-escape-hatch)
+— async Functions have no bridge to route them).
+
+## Multiple schedules
+
+Each call gets its own guarded route, so a daily fire never runs the
+hourly handler:
+
+```typescript
+yield* Vercel.cron("0 * * * *", syncFeeds);
+yield* Vercel.cron("0 0 * * *", purgeExpired);
+```
+
+Routes are numbered in registration order — the same init code runs
+at plan time and inside the deployed bundle, so the schedule in the
+deployment config and the runtime route registration always agree.
+
+## The CRON_SECRET guard
+
+Whenever crons are registered, the provider auto-mints a secret and
+syncs it into project env as the **sensitive** `CRON_SECRET` var.
+That name is Vercel's own contract: when a project defines
+`CRON_SECRET`, every platform cron request carries
+`Authorization: Bearer $CRON_SECRET`. The bridge verifies the bearer
+with a constant-time comparison before the handler runs:
+
+- missing or wrong bearer → `401`, the handler never runs
+- handler succeeds → `200`
+- handler fails → `500`, so Vercel records the invocation as failed
+
+The secret is stable across deploys (a rotating value would force a
+redeploy every deploy) and is dropped with the last cron. It's
+exposed as the Function's `cronSecret` attribute, so you can fire a
+cron manually:
+
+```sh
+curl -i https://my-app.vercel.app/_alchemy/cron/0 \
+  -H "Authorization: Bearer $CRON_SECRET"
+# → 200 {"ok":true}   (401 without the header)
+```
+
+## Production only, UTC
+
+Platform semantics to plan around:
+
+- Crons are **deployment artifacts** — the schedule ships with each
+  deployment, and only the **production** deployment's crons run. A
+  preview or [tenant](/vercel/compute/functions#tenant-mode) stage's
+  crons never fire.
+- Schedules are evaluated in **UTC**.
+- Hobby plans are limited to **daily** schedules — a sub-daily
+  schedule fails the deployment, not the plan.
+
+## Handle failures with Effect.retry
+
+A failing handler answers `500` and Vercel records the invocation as
+failed — the platform does not retry it. Express retries
+declaratively inside the handler instead:
+
+```typescript
+import * as Schedule from "effect/Schedule";
+
+yield* Vercel.cron(
+  "0 3 * * *",
+  reindexSearch.pipe(
+    Effect.retry({
+      schedule: Schedule.exponential("1 second"),
+      times: 3,
+    }),
+  ),
+);
+```
+
+The handler's whole run must fit the Function's `maxDuration` — for
+long jobs, have the cron enqueue work to a
+[queue](/vercel/messaging/queues) and let the consumer chew through
+it.
+
+## Local development
+
+During `alchemy dev` crons fire on schedule against the local
+Function, with the platform invoker's exact request shape — the
+`CRON_SECRET` guard included — so the handler you test locally is
+the handler production runs. See [tutorial part
+3](/vercel/tutorial/part-3) for a scheduled Function built step by
+step.
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the host resource and the
+  two-phase pattern.
+- [Queues](/vercel/messaging/queues) — hand long-running work off to
+  a consumer.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — why the schedule rides the deployment.
+- [Vercel's cron jobs docs](https://vercel.com/docs/cron-jobs) — the
+  underlying platform feature.
+
+Reference:
+
+- [`cron` reference](/providers/vercel/functions/cron) — the binding
+  contract.
+- [`Function` reference](/providers/vercel/functions/function) — the
+  `cronSecret` attribute.

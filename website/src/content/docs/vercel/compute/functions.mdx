@@ -1,0 +1,443 @@
+---
+title: Functions
+description: Deploy a Vercel Function as one Effect program — the init phase provisions the project and registers bindings, handlers serve requests on Fluid compute, and every deploy is an immutable prebuilt deployment.
+---
+
+A Vercel Function is Node.js running on [Fluid
+compute](/vercel/compute/fluid-compute). In alchemy, a Function is a
+special kind of Resource: it has an infrastructure definition (its
+project, env, resources) and a runtime implementation expressed as an
+Effect — one program describes what to deploy *and* what it does.
+Each Function owns its own auto-provisioned Vercel project, and every
+deploy ships a prebuilt, immutable deployment straight to Vercel — no
+git integration, no Vercel build pipeline.
+
+Reach for a Function whenever you need compute on Vercel: HTTP APIs,
+queue consumers, cron jobs, webhook receivers. Every other building
+block — [Blob](/vercel/data/blob), [Edge
+Config](/vercel/data/edge-config), [Queues](/vercel/messaging/queues)
+— is reached *through* a Function via bindings.
+
+## Deploy a Function
+
+A Function follows a two-phase pattern: the outer `Effect.gen` is the
+**init phase** (binds resources at deploy time), and the handlers it
+returns are the **runtime phase** (run on each request).
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Vercel!")),
+    };
+  }),
+) {}
+```
+
+The `<Api>` type argument plus the empty `()` is a one-time bit of
+ceremony — it lets TypeScript reason about `Api` as a typed handle
+that other resources can bind against. `main: import.meta.url` makes
+this same file the bundle entrypoint: at deploy time it's bundled
+with Rolldown and wrapped with the Vercel runtime bridge.
+
+Wire it into a Stack and expose its URL:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+
+    return { url: api.url };
+  }),
+);
+```
+
+```sh
+bun alchemy deploy
+```
+
+Alchemy creates a Vercel project named from the stack, logical id,
+and stage, uploads the bundle as a prebuilt deployment, and prints
+the URL as a stack output. The `url` is always **read back** from
+Vercel — the assigned production domain, never a computed
+`{name}.vercel.app` guess.
+
+## The two phases
+
+The init `Effect.gen` runs twice: once at **plan time** on your
+machine (registering bindings and collecting the export shape), and
+once **per instance** inside the deployed Function, lazily on the
+first request. The handlers it returns run per request, each in its
+own Effect fiber. Keep the init phase to wiring — resolve bindings,
+build clients — and put per-request work in the handlers.
+
+`fetch` receives `HttpServerRequest` and returns an
+`HttpServerResponse`, the same `effect/unstable/http` surface used
+across every alchemy runtime — your handler never sees Vercel's raw
+request envelope:
+
+```typescript
+fetch: Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  return yield* HttpServerResponse.json({ path: request.url });
+}),
+```
+
+## Bindings
+
+Functions reach other resources through **bindings** — typed clients
+resolved in the init phase. Declare the resources in their own files:
+
+```typescript
+// src/flags.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Flags = Vercel.EdgeConfig("Flags", {
+  items: { banner: "Hello from the edge" },
+});
+```
+
+```typescript
+// src/uploads.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Uploads = Vercel.BlobStore("Uploads", { access: "public" });
+```
+
+Bind them by yielding the capability with the resource, and provide
+the implementation layers on the init Effect:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Flags } from "./flags.ts";
+import { Uploads } from "./uploads.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // init: register the bindings, get typed clients
+    const flags = yield* Flags;
+    const config = yield* Vercel.ReadEdgeConfig(flags);
+    const blob = yield* Vercel.ReadWriteBlob(Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/banner")) {
+          const value = yield* config.get("banner").pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ value: value ?? null });
+        }
+        const put = yield* blob
+          .put("hits/last.txt", new Date().toISOString(), {
+            contentType: "text/plain",
+          })
+          .pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ etag: put.etag });
+      }),
+    };
+  }).pipe(
+    Effect.provide([Vercel.ReadEdgeConfigHttp, Vercel.ReadWriteBlobHttp]),
+  ),
+) {}
+```
+
+Three things make this different from configuring env by hand:
+
+- The binding is declared where it's used — deploying the Function
+  deploys the wiring (the Blob token, the Edge Config connection
+  string, the store-to-project connection).
+- The client is fully typed, and its errors (like
+  `Vercel.Blob.NotFound`) live in the Effect type system.
+- Access is scoped: request `ReadEdgeConfig` or `ReadBlob` when the
+  Function only reads — least privilege by construction.
+
+Every building block follows the same shape — see
+[Blob](/vercel/data/blob), [Edge Config](/vercel/data/edge-config),
+and [Queues](/vercel/messaging/queues), or walk through it step by
+step in [tutorial part 2](/vercel/tutorial/part-2).
+
+## The Function's own URL
+
+`Vercel.Function.URL` is the Function's own public URL, resolved
+from the project's assigned production domain and injected as an env
+var on that same Function. Yield it in the init phase to get a
+deferred accessor:
+
+```typescript
+Effect.gen(function* () {
+  const selfUrl = yield* Vercel.Function.URL;
+
+  return {
+    fetch: Effect.gen(function* () {
+      return yield* HttpServerResponse.json({ url: yield* selfUrl });
+    }),
+  };
+}),
+```
+
+The accessor is colored with `RuntimeContext` — it only resolves
+inside the deployed Function, where the env var exists. The value is
+always the **read-back** production domain: `.vercel.app` is a global
+namespace, so the computed name is never trusted.
+
+## Environment variables
+
+The `env` prop syncs project env vars. Values may be plain strings,
+JSON-serializable values, `Redacted` secrets, or attribute `Output`s
+of other resources:
+
+```typescript
+// alchemy.run.ts
+import * as Redacted from "effect/Redacted";
+
+const api = yield* Api;
+
+const hooks = yield* Vercel.Function("Hooks", {
+  main: "./src/hooks.ts",
+  env: {
+    API_URL: api.url,                     // attribute Output
+    API_BYPASS: api.protectionBypass,     // Redacted Output → sensitive
+    RELEASE: "v1",                        // plain value
+    SIGNING_KEY: Redacted.make(process.env.SIGNING_KEY!),
+  },
+});
+```
+
+`Redacted` values become **sensitive** env vars — write-only on
+Vercel, hidden from the dashboard and the API, drift-detected via a
+fingerprint so an unchanged secret never churns a deploy. Rotating
+one mints a new deployment.
+
+:::note[Env changes always redeploy]
+Vercel env only takes effect on new deployments, so any env change
+forces a fresh immutable deployment — there is no in-place mutation.
+See [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+for the model.
+:::
+
+Three ways to source secret values — `.env`, CI env, secret managers
+— are covered in [Secrets & env](/vercel/security/secrets-env).
+
+## Async Functions: the escape hatch
+
+When you don't want the Effect runtime in the bundle, skip the
+implementation Effect entirely. `main` then exports web-standard
+handlers directly and no bridge ships:
+
+```typescript
+// alchemy.run.ts
+const api = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+});
+```
+
+```typescript
+// src/api.ts — plain fetch export, no Effect runtime
+export default {
+  async fetch(request: Request): Promise<Response> {
+    return Response.json({ ok: true });
+  },
+};
+```
+
+Bindings don't exist in async mode — everything flows through
+project env vars. `Vercel.InferEnv` maps the Function's `env` prop
+to its runtime manifestation (every value arrives in `process.env`
+as a string), so the handler stays typed:
+
+```typescript
+// alchemy.run.ts
+export const Hooks = Vercel.Function("Hooks", {
+  main: "./src/hooks.ts",
+  env: {
+    API_URL: api.url,
+    SELF_URL: Vercel.Function.URL, // self-URL works in async mode too
+  },
+});
+export type HooksEnv = Vercel.InferEnv<typeof Hooks>;
+```
+
+```typescript
+// src/hooks.ts
+import type { HooksEnv } from "../alchemy.run.ts";
+
+const env = process.env as HooksEnv;
+
+export default {
+  async fetch(): Promise<Response> {
+    return Response.json({ api: env.API_URL, self: env.SELF_URL });
+  },
+};
+```
+
+Async mode is the documented escape hatch — plain handlers, plain
+env. The Effect class pattern is the core DX: typed bindings, cron
+and queue event sources, request finalizers, and the runtime bridge
+only exist there.
+
+## Instance scope vs request scope
+
+Fluid keeps instances warm and runs **concurrent requests against
+one instance**. The init phase's layer stack is built once per
+instance; each request then runs in its own fiber with a **fresh
+`Scope`**. `Effect.addFinalizer` in a handler attaches to the
+request scope and settles **after the response** via Vercel's
+`waitUntil` — cleanup never delays the reply:
+
+```typescript
+fetch: Effect.gen(function* () {
+  yield* Effect.addFinalizer(() =>
+    // runs post-response, under waitUntil
+    flushAnalytics().pipe(Effect.ignore),
+  );
+  return yield* HttpServerResponse.json({ ok: true });
+}),
+```
+
+On shutdown, Fluid delivers `SIGTERM` with a ~500ms grace window;
+the bridge closes the instance scope so init-level finalizers run.
+The full model — concurrency, memory tiers, post-response work —
+lives in [Fluid compute](/vercel/compute/fluid-compute).
+
+## Call another Function
+
+`Vercel.invoke` binds a sibling Function's read-back URL and its
+deployment-protection bypass secret into the caller, and returns a
+typed `HttpClient` scoped to the target — circular topologies (A
+invokes B, B invokes A) included:
+
+```typescript
+import Billing from "./billing.ts";
+
+Effect.gen(function* () {
+  const billing = yield* Vercel.invoke(Billing);
+
+  return {
+    fetch: Effect.gen(function* () {
+      const res = yield* billing.get("/invoices").pipe(Effect.orDie);
+      return yield* HttpServerResponse.json(
+        yield* res.json.pipe(Effect.orDie),
+      );
+    }),
+  };
+}).pipe(Effect.provide(Vercel.InvokeFunctionHttp)),
+```
+
+See [Invoke a Function](/vercel/apis/invoke-function) for the full
+guide, including the circular A↔B pattern.
+
+## Cron schedules
+
+`Vercel.cron` subscribes the Function to a schedule with an Effect
+handler — the deploy half registers the cron on the deployment, the
+runtime half serves it from a secret-guarded internal route:
+
+```typescript
+Effect.gen(function* () {
+  yield* Vercel.cron("0 3 * * *", Effect.log("nightly cleanup"));
+  return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+}).pipe(Effect.provide(Vercel.CronEventSourceLive)),
+```
+
+Crons fire only on production deployments — see
+[Cron](/vercel/compute/cron) for the platform semantics and the
+`CRON_SECRET` guard.
+
+## Fluid resources and regions
+
+Tune the compute under the Function with `resources` and `regions`:
+
+```typescript
+const api = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+  runtime: "nodejs22.x", // default; also "nodejs24.x" | "bun1.x"
+  resources: { memory: "performance", maxDuration: 60 },
+  regions: ["iad1"],
+});
+```
+
+`memory` picks the Fluid memory tier and `maxDuration` caps a
+request in seconds — [Fluid compute](/vercel/compute/fluid-compute)
+covers the tiers.
+
+## Tenant mode
+
+By default the Function owns its project outright. Pass `project:`
+to deploy into an existing project instead — the Function then owns
+only its deployments, its stable per-stage alias, and the env it
+delivers, never the project's settings or lifecycle:
+
+```typescript
+const shared = yield* Vercel.Project("Shared");
+const fn = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+  project: shared.projectId,
+});
+```
+
+Tenants deploy `target: "preview"` by default and are additive: any
+number of PR stages can share one project, each behind its own
+stable `{project}-{stage}.vercel.app` alias, and destroying a stage
+removes only its alias and deployments. See [Deployments &
+rollback](/vercel/compute/deployments-and-rollback#destroy-semantics)
+for the ownership rules.
+
+## Local development
+
+During `alchemy dev` the Function runs locally instead of deploying:
+the same bundle (bridge included) serves from a stable
+`http://localhost:<port>` URL with hot rebuilds, the Vercel platform
+env injected, and crons fired on schedule. Pin the port with
+`dev: { port: 3000 }`, or opt a Function out of emulation with
+`.pipe(Alchemy.remote())`. [Tutorial part 4](/vercel/tutorial/part-4)
+walks through the dev loop.
+
+## Where next
+
+- [Fluid compute](/vercel/compute/fluid-compute) — the concurrency
+  model, memory tiers, and post-response work.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — immutable deployments, aliases, promote and rollback.
+- [Cron](/vercel/compute/cron) — scheduled handlers and the
+  `CRON_SECRET` guard.
+- [Tutorial part 1](/vercel/tutorial/part-1) — build this Function
+  step by step.
+
+Related:
+
+- [Blob](/vercel/data/blob) — object storage bound with read/write
+  scoped clients.
+- [Queues](/vercel/messaging/queues) — `Vercel.Topic`,
+  `Vercel.subscribe`, and the per-stage isolation model.
+- [Secrets & env](/vercel/security/secrets-env) — sourcing secret
+  values into `env`.
+- [Deployment protection](/vercel/security/deployment-protection) —
+  SSO gating and the automation bypass secret.
+
+Reference:
+
+- [`Function` reference](/providers/vercel/functions/function) —
+  every prop and attribute.

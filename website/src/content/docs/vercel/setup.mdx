@@ -1,0 +1,143 @@
+---
+title: Setup
+description: Install alchemy, create a Vercel API token, and connect the two — interactive login with a team picker, saved to a local profile, or plain VERCEL_TOKEN in CI.
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../versions";
+
+export const pkgs = `"alchemy@next" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+Everything you need before deploying to Vercel: the alchemy
+package, a Vercel account, an API token, and stored credentials.
+
+## Install
+
+Install <code>alchemy@next</code> and <code>effect@{effectVersion}</code>
+in your project:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+:::tip
+We recommend [Bun](https://bun.sh) for the best development
+experience, but Node.js 22+ works too.
+:::
+
+## Create a Vercel API token
+
+If you don't have an account yet,
+[sign up for Vercel](https://vercel.com/signup) — the Hobby plan is
+enough to get started.
+
+Then create a token at
+[vercel.com/account/settings/tokens](https://vercel.com/account/settings/tokens).
+Scope it to the **team** you'll deploy to (recommended), or to
+**Full Account** if you want one token spanning every team you
+belong to. Don't use a project-scoped token — it can't create
+projects, and alchemy creates one project per Function.
+
+## Connect alchemy to Vercel
+
+There is no separate credentials step. The first time you run
+`alchemy deploy` (or `plan`, `dev`, `destroy`) a stack that uses
+`Vercel.providers()`, alchemy walks you through an interactive
+login. For Vercel you can:
+
+- **Paste an API token** — alchemy verifies it against the API,
+  then lists the teams the token can see and prompts you to pick
+  one (or stay on your personal account). The token and team are
+  saved under `~/.alchemy/credentials`.
+- **Environment variables** — alchemy reads `VERCEL_TOKEN` (or
+  `VERCEL_API_TOKEN`) plus an optional `VERCEL_TEAM_ID` from the
+  environment on every run.
+
+A full-account token lists every team at the picker; a team-scoped
+token lists just its own team.
+
+Either way the choice is saved to your **`default`**
+[profile](/environments/profiles) — no `vercel login` and no
+`.vercel/` directory required.
+
+To run the flow explicitly, or re-run it later:
+
+```sh
+# Refresh credentials for the current profile
+alchemy login
+
+# Re-run the interactive setup (e.g. switch token or team)
+alchemy login --configure
+```
+
+`login` imports your stack file to discover which providers are
+needed, so the prompts match the providers you actually use.
+
+## Profiles
+
+A profile is a named bundle of credentials. Every command uses the
+profile named `default` unless you pass `--profile <name>` or set
+`$ALCHEMY_PROFILE` — handy for separating work and personal teams,
+or staging and prod credentials:
+
+```sh
+# Log into a separate profile
+alchemy login --profile prod --configure
+
+# Deploy with it
+alchemy deploy --stage prod --profile prod
+```
+
+Inspect what's stored (the token is redacted) with:
+
+```sh
+alchemy profile show
+```
+
+See [Profiles](/environments/profiles) for the full picture.
+
+:::note[Running in CI?]
+CI environments can't do interactive logins. When alchemy detects
+`CI=true` it skips the prompt and reads credentials from the
+environment automatically: set `VERCEL_TOKEN` (or
+`VERCEL_API_TOKEN`) and `VERCEL_TEAM_ID` as secrets in your CI
+provider. See the [CI guide](/environments/ci) for the full GitHub
+Actions setup.
+:::
+
+## State storage
+
+For Vercel stacks, pass `Vercel.state()` as the Stack's `state`
+option. Deploy state lives in a small state store that alchemy
+self-hosts **on Vercel**: an `alchemy-state` Function backed by a
+private Blob store, one encrypted blob per state row. On first use
+alchemy offers to deploy it (automatic with `--yes` and in CI); the
+same configuration then works locally and in CI with no extra
+setup. To deploy or upgrade it explicitly:
+
+```sh
+alchemy vercel bootstrap
+```
+
+For purely local iteration, `Alchemy.localState()` writes state
+under `.alchemy/` next to your code instead.
+
+## Where next
+
+- [Tutorial part 1](/vercel/tutorial/part-1) — create a Stack,
+  deploy your first Function.
+- [Vercel overview](/vercel) — the map of resources and guides.
+- [Secrets & env](/vercel/security/secrets-env) — wire `.env`
+  values and secrets into your Functions (deploy credentials live
+  in your profile; app secrets are env bindings).
