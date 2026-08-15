@@ -17,5 +17,10 @@ export default function makeBinding(env: { ORIGIN: HyperdriveOrigin }) {
     password: env.ORIGIN.password,
     host: env.ORIGIN.host,
     port: env.ORIGIN.port,
+    // Production Hyperdrive exposes a synthetic IPv4 literal for drivers that
+    // reject hostnames; locally the origin host is directly connectable, so
+    // it doubles as the "ip" (drivers pass it back into connect(), which
+    // accepts hostnames).
+    ip: env.ORIGIN.host,
   } satisfies Hyperdrive;
 }

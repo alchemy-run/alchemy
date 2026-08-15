@@ -517,11 +517,18 @@ export const LocalWorkerProvider = () =>
         selfUrl: string | undefined,
       ) {
         const { accountId } = yield* cloudflareEnv;
-        return yield* materializeRuntimeBindings(config, {
-          accountId,
-          selfUrl,
-          stack: { name: stack.name, stage: stack.stage },
-        });
+        return yield* materializeRuntimeBindings(
+          {
+            ...config,
+            devAccess:
+              config.dev.mode === "external" ? undefined : config.dev.access,
+          },
+          {
+            accountId,
+            selfUrl,
+            stack: { name: stack.name, stage: stack.stage },
+          },
+        );
       });
 
       // Latest successful serve per worker id, so runtime wiring changes
@@ -995,6 +1002,7 @@ export const LocalWorkerProvider = () =>
                         hasAssets: worker.hasAssets,
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
+                        devAccess: worker.dev.access,
                         durableObjectNamespaces: worker.durableObjectNamespaces,
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
@@ -1165,6 +1173,8 @@ export const LocalWorkerProvider = () =>
           return {
             workerId: name,
             workerName: name,
+            // No cloud script exists in dev — there is no immutable id.
+            scriptTag: undefined,
             namespace: undefined,
             logpush: undefined,
             url: urls[0],
@@ -1198,6 +1208,7 @@ export const LocalWorkerProvider = () =>
             return {
               workerId: config.name,
               workerName: config.name,
+              scriptTag: undefined,
               namespace: undefined,
               logpush: undefined,
               url: urls[0],
@@ -1267,6 +1278,7 @@ export const LocalWorkerProvider = () =>
           return {
             workerId: config.name,
             workerName: config.name,
+            scriptTag: undefined,
             namespace: undefined,
             logpush: undefined,
             url: urls[0],

@@ -2905,6 +2905,9 @@ export const LiveWorkerProvider = () =>
         return {
           workerId: parentName,
           workerName: parentName,
+          // A version worker never owns a script; protect its preview URLs
+          // through the parent Worker's scriptTag instead.
+          scriptTag: undefined,
           namespace: undefined,
           logpush: undefined,
           url: urls[0],
@@ -3459,7 +3462,12 @@ export const LiveWorkerProvider = () =>
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
         let deploymentId: string | undefined;
-        let worker: { id?: string | null; logpush?: boolean | null };
+        let worker: {
+          id?: string | null;
+          logpush?: boolean | null;
+          /** The immutable script id (Cloudflare's script "tag"). */
+          tag?: string | null;
+        };
         // A gradual rollout (`version.traffic` < 100) deploys through the
         // versions API instead of the full-cutover script PUT. That's only
         // possible when the script already has a live deployment to split
@@ -3618,6 +3626,7 @@ export const LiveWorkerProvider = () =>
           return {
             workerId: worker.id ?? name,
             workerName: name,
+            scriptTag: worker.tag ?? output?.scriptTag,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
             url: undefined,
@@ -3865,6 +3874,10 @@ export const LiveWorkerProvider = () =>
         return {
           workerId: worker.id ?? name,
           workerName: name,
+          // The gradual-rollout branch deploys via the versions API (no
+          // script PUT response); the immutable tag is stable, so the cached
+          // value carries over.
+          scriptTag: worker.tag ?? output?.scriptTag,
           namespace: undefined,
           logpush: worker.logpush ?? undefined,
           url: urls[0],
@@ -4067,7 +4080,7 @@ export const LiveWorkerProvider = () =>
       });
 
       return Worker.Provider.of({
-        stables: ["workerId", "workerName"],
+        stables: ["workerId", "workerName", "scriptTag"],
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* yield* CloudflareEnvironment;
@@ -4104,6 +4117,7 @@ export const LiveWorkerProvider = () =>
                               accountId,
                               workerId: script.id,
                               workerName: script.id,
+                              scriptTag: script.tag ?? undefined,
                               namespace: undefined,
                               logpush: script.logpush ?? undefined,
                               url: undefined,
@@ -4296,7 +4310,9 @@ export const LiveWorkerProvider = () =>
             // `workerId` is always stable across an update; seed it so it
             // survives now that `diff.stables` overrides `provider.stables`
             // rather than being merged with it.
-            const stables: string[] = ["workerId"];
+            // `workerId` and the immutable script tag are always stable
+            // across an update.
+            const stables: string[] = ["workerId", "scriptTag"];
             if (oldWorkerName === workerName) {
               stables.push("workerName");
             }
@@ -4370,6 +4386,7 @@ export const LiveWorkerProvider = () =>
             return {
               workerId: name,
               workerName: name,
+              scriptTag: undefined,
               namespace: undefined,
               logpush: undefined,
               url: undefined,
@@ -4397,6 +4414,9 @@ export const LiveWorkerProvider = () =>
             return {
               workerId: name,
               workerName: name,
+              // The placeholder upload's tag isn't captured; reconcile's
+              // full deploy records the real immutable id right after.
+              scriptTag: undefined,
               namespace:
                 typeof news.namespace === "string" ? news.namespace : undefined,
               logpush: undefined,
@@ -4594,6 +4614,9 @@ export const LiveWorkerProvider = () =>
           return {
             workerId: name,
             workerName: name,
+            // The placeholder upload's tag isn't captured; reconcile's full
+            // deploy records the real immutable id right after.
+            scriptTag: undefined,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
             url: undefined,
@@ -4661,6 +4684,9 @@ export const LiveWorkerProvider = () =>
                 accountId,
                 workerId: workerName,
                 workerName,
+                // Not observable from the settings endpoint; carry the
+                // cached immutable id forward (backfilled by deploys).
+                scriptTag: output?.scriptTag,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
                 url: undefined,
@@ -4788,6 +4814,9 @@ export const LiveWorkerProvider = () =>
               accountId,
               workerId: workerName,
               workerName,
+              // Not observable from the settings endpoint; carry the cached
+              // immutable id forward (backfilled by deploys).
+              scriptTag: output?.scriptTag,
               namespace: undefined,
               logpush: settings.logpush ?? undefined,
               url: urls[0],

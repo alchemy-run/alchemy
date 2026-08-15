@@ -82,6 +82,84 @@ export interface WorkerExecutionContextCache {
   ): Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>;
 }
 
+export class WorkerAccessIdentityError extends Data.TaggedError(
+  "WorkerAccessIdentityError",
+)<{
+  message: string;
+  cause?: unknown;
+}> {}
+
+/**
+ * The identity Cloudflare Access authenticated for the current request,
+ * as resolved by `ctx.access.getIdentity()`. Field names follow the wire
+ * format of Access's identity payload (snake_case); identity providers can
+ * attach additional fields, captured by the index signature.
+ */
+export interface WorkerAccessIdentity {
+  /** The user's email address, if the identity provider supplies one. */
+  readonly email?: string;
+  /** The user's display name. */
+  readonly name?: string;
+  /** The user's unique identifier. */
+  readonly user_uuid?: string;
+  /** The Cloudflare account id the Access organization belongs to. */
+  readonly account_id?: string;
+  /** Login timestamp (Unix epoch seconds). */
+  readonly iat?: number;
+  /** The user's IP address at authentication time. */
+  readonly ip?: string;
+  /** Authentication methods used (e.g. `"pwd"`). */
+  readonly amr?: string[];
+  /** Identity-provider information. */
+  readonly idp?: { id: string; type: string };
+  /** Where the user authenticated from. */
+  readonly geo?: { country: string };
+  /** Group memberships from the identity provider. */
+  readonly groups?: Array<{ id: string; name: string; email?: string }>;
+  /** Device posture check results, keyed by check id. */
+  readonly devicePosture?: Record<string, unknown>;
+  /** True when the user connected via Cloudflare WARP. */
+  readonly is_warp?: boolean;
+  /** True when the user is authenticated via Cloudflare Gateway. */
+  readonly is_gateway?: boolean;
+  /** Service-token client id, when authenticated via a service token. */
+  readonly service_token_id?: string;
+  /** True when the request authenticated with a service token. */
+  readonly service_token_status?: boolean;
+  readonly [key: string]: unknown;
+}
+
+/**
+ * Effect-native view of the Cloudflare Access runtime API on the execution
+ * context (`ctx.access`). Present only when the request was admitted by a
+ * Cloudflare Access policy (see `Cloudflare.Access.Application` with
+ * `worker`/`all_workers` destinations), or when simulated locally via the
+ * Worker's `dev.access` config.
+ */
+export interface WorkerExecutionContextAccess {
+  /** The Access application audience (AUD) tag that admitted this request. */
+  readonly aud: string;
+  /**
+   * Resolve the authenticated identity — email, name, groups, device
+   * posture, etc. Resolves `undefined` when Access has no identity for the
+   * request (e.g. some service-token flows).
+   */
+  getIdentity(): Effect.Effect<
+    WorkerAccessIdentity | undefined,
+    WorkerAccessIdentityError,
+    RuntimeContext
+  >;
+}
+
+/**
+ * The shape workerd exposes on `ctx.access` (typed locally — this package's
+ * workers-types predates it) and that the local dev simulation mirrors.
+ */
+interface RawAccessContext {
+  readonly aud: string;
+  getIdentity(): Promise<WorkerAccessIdentity | undefined>;
+}
+
 export class WorkerExecutionContext extends Context.Service<
   WorkerExecutionContext,
   {
@@ -104,16 +182,68 @@ export class WorkerExecutionContext extends Context.Service<
      */
     readonly cache: WorkerExecutionContextCache;
     /**
+     * The Cloudflare Access context for the current request (`ctx.access`),
+     * or `undefined` when the request did not pass through Access. Under
+     * `alchemy dev` the Worker's `dev.access` config simulates it.
+     */
+    readonly access: Effect.Effect<
+      WorkerExecutionContextAccess | undefined,
+      never,
+      RuntimeContext
+    >;
+    /**
      * The raw workerd ExecutionContext, for interop with async APIs.
      */
     readonly raw: cf.ExecutionContext;
   }
 >()("Cloudflare.Workers.WorkerExecutionContext") {}
 
+const makeAccessContext = (
+  raw: RawAccessContext,
+): WorkerExecutionContextAccess => ({
+  aud: raw.aud,
+  getIdentity: () =>
+    Effect.tryPromise({
+      try: () => raw.getIdentity(),
+      catch: (cause) =>
+        new WorkerAccessIdentityError({
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "Unknown Access identity resolution error",
+          cause,
+        }),
+    }),
+});
+
+/** The env key `dev.access` is lowered into by the local worker provider. */
+export const DEV_ACCESS_ENV_KEY = "ALCHEMY_DEV_ACCESS";
+
 export const fromExecutionContext = (
   ctx: cf.ExecutionContext,
+  env?: Record<string, unknown>,
 ): WorkerExecutionContext["Service"] => ({
   raw: ctx,
+  access: Effect.sync(() => {
+    // Deployed behind Access: workerd populates ctx.access natively.
+    const native = (ctx as cf.ExecutionContext & { access?: RawAccessContext })
+      .access;
+    if (native !== undefined) {
+      return makeAccessContext(native);
+    }
+    // Local dev: the Worker's `dev.access` config is lowered into an env
+    // binding; absent config simulates an unauthenticated request.
+    const dev = env?.[DEV_ACCESS_ENV_KEY] as
+      | { aud?: string; identity?: WorkerAccessIdentity }
+      | undefined;
+    if (dev !== undefined) {
+      return {
+        aud: dev.aud ?? "dev",
+        getIdentity: () => Effect.succeed(dev.identity),
+      };
+    }
+    return undefined;
+  }),
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
@@ -176,6 +306,17 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
       liveExecutionContext.pipe(
         Effect.flatMap((live) => live.cache.purge(options)),
       ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
+  },
+  // A getter so this module-level literal doesn't eagerly reference
+  // `liveExecutionContext` before its declaration below.
+  get access() {
+    return liveExecutionContext.pipe(
+      Effect.flatMap((live) => live.access),
+    ) as Effect.Effect<
+      WorkerExecutionContextAccess | undefined,
+      never,
+      RuntimeContext
+    >;
   },
 };
 
@@ -923,6 +1064,27 @@ export interface WorkerProps<
          * different edge location.
          */
         cf?: Record<string, unknown>;
+        /**
+         * Simulate Cloudflare Access locally (the alchemy equivalent of
+         * wrangler's `access.dev` config). When set, `ctx.access` is
+         * defined under `alchemy dev` with this audience and identity —
+         * letting you exercise identity-aware logic without deploying.
+         * Omit to simulate unauthenticated requests (`ctx.access` is
+         * `undefined`). Ignored on deploy: production `ctx.access` is
+         * populated by Cloudflare when the request passes through Access.
+         */
+        access?: {
+          /**
+           * Simulated Access application audience (AUD) tag.
+           * @default "dev"
+           */
+          aud?: string;
+          /**
+           * Simulated identity returned by `ctx.access.getIdentity()`,
+           * e.g. `{ email: "dev@example.com" }`.
+           */
+          identity?: WorkerAccessIdentity;
+        };
       }
     | {
         /**
@@ -1049,6 +1211,16 @@ export type Worker<Bindings = any> = Resource<
   {
     workerId: string;
     workerName: string;
+    /**
+     * The immutable id Cloudflare assigns to this Worker's script (the
+     * script "tag" — shown as the Worker ID in the dashboard). This is the
+     * `workerId` a `Cloudflare.Access.Application` worker destination
+     * expects (see `Cloudflare.Access.worker(...)`). `undefined` for a
+     * version worker (protect its previews through the parent Worker) and
+     * for state persisted before this attribute existed (backfilled on the
+     * next deploy).
+     */
+    scriptTag: string | undefined;
     /**
      * The Workers for Platforms dispatch namespace this Worker was deployed
      * into, or `undefined` for a regular account-level Worker.
