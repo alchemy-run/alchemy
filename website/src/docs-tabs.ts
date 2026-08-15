@@ -21,6 +21,12 @@ export interface DocsTab {
   /** URL path prefixes this tab owns (matched on segment boundaries). */
   prefixes: string[];
   slot: "primary" | "more" | "end";
+  /**
+   * Visual grouping for primary tabs — a vertical divider renders in the
+   * tab bar wherever adjacent tabs belong to different groups
+   * (core | clouds | databases | More).
+   */
+  group?: string;
   /** Dropdown category heading (only for slot: "more"). */
   category?: string;
   /** One-line scope hint shown in the dropdown. */
@@ -28,37 +34,61 @@ export interface DocsTab {
 }
 
 export const DOCS_TABS: DocsTab[] = [
-  { label: "Core", href: "/getting-started", prefixes: [], slot: "primary" },
-  { label: "CLI", href: "/cli", prefixes: ["/cli"], slot: "primary" },
+  {
+    label: "Core",
+    href: "/getting-started",
+    prefixes: [],
+    slot: "primary",
+    group: "core",
+  },
+  {
+    label: "CLI",
+    href: "/cli",
+    prefixes: ["/cli"],
+    slot: "primary",
+    group: "core",
+  },
   {
     label: "Cloudflare",
     href: "/cloudflare",
     prefixes: ["/cloudflare", "/providers/cloudflare"],
     slot: "primary",
+    group: "clouds",
   },
   {
     label: "AWS",
     href: "/aws",
     prefixes: ["/aws", "/providers/aws"],
     slot: "primary",
+    group: "clouds",
+  },
+  {
+    label: "Vercel",
+    href: "/vercel",
+    prefixes: ["/vercel", "/providers/vercel"],
+    slot: "primary",
+    group: "clouds",
   },
   {
     label: "PlanetScale",
     href: "/planetscale",
     prefixes: ["/planetscale", "/providers/planetscale"],
     slot: "primary",
+    group: "databases",
   },
   {
     label: "Neon",
     href: "/neon",
     prefixes: ["/neon", "/providers/neon"],
     slot: "primary",
+    group: "databases",
   },
   {
     label: "Prisma",
     href: "/prisma",
     prefixes: ["/prisma", "/providers/prisma"],
     slot: "primary",
+    group: "databases",
   },
   {
     label: "Better Auth",

@@ -27,6 +27,7 @@ import {
   isResolved,
   type NoopDiff,
   type ReplaceDiff,
+  stripUnresolved,
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
@@ -1165,13 +1166,24 @@ export const make = <A>(
             // update keeps the deploy idempotent: if cloud state already
             // matches news, the provider's update is a no-op write.
             //
-            // Skip the adoption probe entirely when `news` still contains
-            // unresolved upstream Outputs (e.g. a `streamArn` referencing
-            // a stream being created in the same plan). Calling `read` with
-            // an unresolved value would surface as `ParseError` from the
-            // SDK protocol layer. Resources whose props depend on
-            // not-yet-created upstreams cannot themselves be pre-existing
-            // — there's nothing to adopt.
+            // `news` may still contain unresolved upstream Outputs (e.g. an
+            // env value referencing a sibling created in the same plan).
+            // That does NOT mean the resource cannot pre-exist: physical
+            // identity usually comes from a deterministic name (or a
+            // literal name prop), so a same-name resource can already live
+            // in the cloud while the row's non-identity inputs are still
+            // unresolved. Skipping the probe for such rows let `reconcile`
+            // silently converge onto an existing unowned resource —
+            // adoption without consent. Instead, probe with the unresolved
+            // leaves stripped (`stripUnresolved`) — the same sanitized
+            // `olds` shape `read` already tolerates from interrupted-apply
+            // state — and treat THAT probe as best-effort: a read that
+            // chokes on a stripped hole (its identity genuinely lived in
+            // the unresolved value, e.g. a `streamArn` of a stream being
+            // created in the same plan) degrades to "not pre-existing",
+            // the pre-probe behavior, instead of failing the plan (same
+            // rationale as the #995 recovery-read degrade below). A fully
+            // resolved probe keeps propagating errors as before.
             // A resource declared at a former FQN whose row just migrated
             // away is genuinely NEW by declaration — skip the probe. Its
             // predecessor's physical resource still carries tags branded
@@ -1180,22 +1192,31 @@ export const make = <A>(
             // and silently adopt the very resource that was renamed away.
             const reusesMigratedFqn = migratedRowFqns.has(fqn);
             let forceUpdateAfterAdoption = false;
-            if (
-              oldState === undefined &&
-              provider.read &&
-              isResolved(news) &&
-              !reusesMigratedFqn
-            ) {
+            if (oldState === undefined && provider.read && !reusesMigratedFqn) {
+              const newsResolved = isResolved(news);
+              const probeOlds = newsResolved ? news : stripUnresolved(news);
               const adoptInstanceId = yield* generateInstanceId();
-              const readResult = yield* provider
+              const probe = provider
                 .read({
                   id,
                   fqn,
                   instanceId: adoptInstanceId,
-                  olds: news,
+                  olds: probeOlds,
                   output: undefined,
                 })
                 .pipe(providePlanScope(fqn, adoptInstanceId));
+              const readResult = yield* newsResolved
+                ? probe
+                : probe.pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.logDebug(
+                        `Adoption probe for '${fqn}' failed with unresolved ` +
+                          "inputs stripped; treating the resource as not " +
+                          "pre-existing.",
+                        cause,
+                      ).pipe(Effect.as(undefined)),
+                    ),
+                  );
               if (readResult !== undefined) {
                 const isUnowned = Unowned.is(readResult);
                 // A resource-scoped `adopt(...)` (captured on the resource at

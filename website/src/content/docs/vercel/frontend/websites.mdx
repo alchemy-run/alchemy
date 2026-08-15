@@ -1,0 +1,143 @@
+---
+title: Websites
+description: Deploy Nuxt, Astro, SvelteKit, or any static build to Vercel with Vercel.Website resources — your framework's own build, prebuilt immutable deployments, no git integration required.
+sidebar:
+  label: Overview
+  order: 1
+---
+
+Alchemy deploys frontends to Vercel with a family of
+`Vercel.Website` resources. Each one runs your framework's **own
+build** — whose Vercel preset or adapter emits a complete
+`.vercel/output` ([Build Output v3](https://vercel.com/docs/build-output-api/v3))
+tree — and deploys that tree through the same engine as every
+[`Vercel.Function`](/vercel/compute/functions): a **prebuilt,
+immutable deployment**. Vercel's build pipeline never runs, and no
+git integration is involved — your machine (or CI) is the build
+machine, and Vercel only ever sees finished output.
+
+- [`Nuxt`](/vercel/frontend/nuxt) — Nuxt apps built with Nitro's
+  built-in `vercel` preset; no adapter package, no config changes.
+- [`Astro`](/vercel/frontend/astro) — Astro sites built with the
+  `@astrojs/vercel` adapter declared in your `astro.config.*`.
+- [`SvelteKit`](/vercel/frontend/sveltekit) — SvelteKit apps built
+  with `@sveltejs/adapter-vercel` declared in `svelte.config.js`.
+- [`StaticSite`](/vercel/frontend/static-site) — any build
+  command's output directory, for static generators like Hugo,
+  Eleventy, and Zola.
+
+Every resource returns a plain [`Function`](/vercel/compute/functions),
+so everything a Function supports applies: `env` synced into project
+env, `resources` (memory tier, max duration), `regions`, tenant
+`project` mode, and the `url` / `projectId` / `protectionBypass`
+outputs.
+
+## The Build Output pipeline
+
+A Website deploy is three steps, each of which skips itself when
+nothing changed:
+
+1. **Build** — the framework's own build command runs in `rootDir`
+   (`bunx nuxi build`, `bunx astro build`, `bunx vite build`, or
+   your `command` override). The framework's Vercel preset/adapter
+   writes `.vercel/output`: server routes and SSR as serverless
+   functions, client assets and prerendered pages as static files.
+2. **Hash** — the project's input files are content-hashed
+   (`.gitignore`-aware, plus the nearest lockfile). Unchanged inputs
+   skip the build entirely. Keep build output (`.nuxt`, `.output`,
+   `dist`, `.svelte-kit`, `.vercel`) gitignored so it never churns
+   the hash.
+3. **Deploy** — the output tree is uploaded as an immutable
+   deployment and the production alias moves to it. An unchanged
+   tree skips the deploy too — the deployment id is stable across
+   no-op runs.
+
+:::note[No Vercel build, no git]
+Vercel's own build pipeline and git integration are bypassed
+entirely. There is nothing to connect in the dashboard, no
+`vercel.json` build settings, and no repository access to grant —
+see [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+for how immutable deployments and aliases fit together.
+:::
+
+## What's supported
+
+| Framework | Resource | Adapter | Guide |
+| --- | --- | --- | --- |
+| Nuxt | `Website.Nuxt` | none — Nitro's `vercel` preset is built in | [Nuxt](/vercel/frontend/nuxt) |
+| Astro | `Website.Astro` | `@astrojs/vercel` | [Astro](/vercel/frontend/astro) |
+| SvelteKit | `Website.SvelteKit` | `@sveltejs/adapter-vercel` | [SvelteKit](/vercel/frontend/sveltekit) |
+| Hugo, Eleventy, Zola, any static generator | `Website.StaticSite` | none — any command, any directory | [Static sites](/vercel/frontend/static-site) |
+
+Next.js support is coming; today, deploy a prebuilt `.vercel/output`
+tree via `Vercel.Function`'s `prebuilt` prop if you have one.
+
+The last table row is deliberately open-ended: `StaticSite` runs any
+shell command that produces a directory of files, so any generator
+works the same way.
+
+## Wire environment into the build and runtime
+
+`env` on a Website reaches **both** the build subprocess and the
+deployed functions. Values may be strings, `Redacted` secrets,
+`Config` values, or `Output` references to other resources:
+
+```typescript
+const api = yield* Vercel.Function("Api", { main: "./src/api.ts" });
+
+const site = yield* Vercel.Website.Nuxt("Site", {
+  rootDir: "./web",
+  env: { NUXT_PUBLIC_API_URL: api.url },
+});
+```
+
+`api.url` is an `Output` — it resolves to the Api function's real
+production URL before the site builds, so Nuxt bakes it into client
+code (`NUXT_PUBLIC_*`) and the deployed server functions read it
+from `process.env`. `Redacted` values become **sensitive** project
+env vars — see [Secrets & env](/vercel/security/secrets-env).
+
+## Attach a custom domain
+
+Every Website owns a Vercel project; attach a domain to it with
+[`ProjectDomain`](/vercel/networking/custom-domains):
+
+```typescript
+const site = yield* Vercel.Website.Nuxt("Site", { rootDir: "./web" });
+
+yield* Vercel.ProjectDomain("AppDomain", {
+  project: site.projectId,
+  name: "app.acme.com",
+});
+```
+
+If the domain's apex is owned by (or gets auto-added to) your team,
+the attachment verifies immediately and the site serves on it.
+
+## Where next
+
+- [Nuxt](/vercel/frontend/nuxt) — zero-adapter deploys through
+  Nitro's built-in preset.
+- [Astro](/vercel/frontend/astro) — SSR and prerendered pages via
+  the `@astrojs/vercel` adapter.
+- [SvelteKit](/vercel/frontend/sveltekit) — the
+  `@sveltejs/adapter-vercel` setup, runtime pinning included.
+- [Static sites](/vercel/frontend/static-site) — any build command,
+  assets-only deployments.
+
+Related:
+
+- [Functions](/vercel/compute/functions) — the resource every
+  Website returns.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — the immutable-deployment model underneath.
+- [Custom domains](/vercel/networking/custom-domains) — apex
+  redirects, branch domains, verification.
+
+Reference:
+
+- [`Website.Nuxt`](/providers/vercel/website/nuxt),
+  [`Website.Astro`](/providers/vercel/website/astro),
+  [`Website.SvelteKit`](/providers/vercel/website/sveltekit),
+  [`Website.StaticSite`](/providers/vercel/website/staticsite) —
+  every prop and attribute.

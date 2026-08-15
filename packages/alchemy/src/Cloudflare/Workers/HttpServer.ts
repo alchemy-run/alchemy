@@ -3,6 +3,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -27,6 +28,10 @@ export const makeRequestEffect = <Req = never>(
 ) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return Effect.gen(function* () {
+    // The bridge-provided per-event scope (WorkerBridge.processEvent /
+    // DurableObjectBridge.#execute) — handed to toHandledWebResponse so the
+    // handler's finalizers settle post-response with it via ctx.waitUntil.
+    const requestScope = yield* Effect.scope;
     const request = HttpServerRequest.fromWeb(
       webRequest as any as globalThis.Request,
     ).modify({
@@ -42,7 +47,7 @@ export const makeRequestEffect = <Req = never>(
         }),
     });
 
-    return yield* toHandledWebResponse(safeHandler).pipe(
+    return yield* toHandledWebResponse(safeHandler, requestScope).pipe(
       Effect.provide([
         Layer.succeed(HttpServerRequest.HttpServerRequest, request),
         Layer.succeed(Request, webRequest as any),
@@ -53,6 +58,7 @@ export const makeRequestEffect = <Req = never>(
 
 const toHandledWebResponse = <Req>(
   handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
+  requestScope: Scope.Scope,
 ) =>
   Effect.gen(function* () {
     // `toHandled` exposes the final response through this callback, not its
@@ -61,12 +67,37 @@ const toHandledWebResponse = <Req>(
     const webResponse = yield* Deferred.make<Response>();
 
     yield* EffectHttp.toHandled(handler, (request, response) =>
-      Deferred.succeed(
-        webResponse,
-        // Conversion to web response with options matches `EffectHttp.toWebHandler`'s callback.
-        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
-          withoutBody: request.method === "HEAD",
-          context,
+      Effect.flatMap(Effect.scope, (handlerScope) =>
+        Effect.gen(function* () {
+          // `toHandled` runs the handler under its OWN internal scope
+          // (shadowing the bridge's per-event scope) and closes it INLINE
+          // right after this callback — a handler's `Effect.addFinalizer`
+          // would delay the response by the finalizer's full duration.
+          // Eject it and settle it with the bridge's request scope instead,
+          // which the bridge closes post-response via `ctx.waitUntil` —
+          // honoring the documented contract that request finalizers run
+          // after the response. Streaming bodies keep effect's native
+          // transfer: `scopeTransferToStream` ejects the scope itself and
+          // closes it when the body stream ends. (Mirrors the Vercel
+          // FunctionBridge's toHandledWebResponse.)
+          if (response.body._tag !== "Stream") {
+            EffectHttp.scopeDisableClose(handlerScope);
+            yield* Scope.addFinalizerExit(requestScope, (exit) =>
+              Scope.close(handlerScope, exit),
+            );
+          }
+          yield* Deferred.succeed(
+            webResponse,
+            // Conversion to web response with options matches
+            // `EffectHttp.toWebHandler`'s callback.
+            HttpServerResponse.toWeb(
+              EffectHttp.scopeTransferToStream(response),
+              {
+                withoutBody: request.method === "HEAD",
+                context,
+              },
+            ),
+          );
         }),
       ),
     );

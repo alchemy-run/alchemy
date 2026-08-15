@@ -216,6 +216,18 @@
       "worker": "./src/Neon/*/index.ts",
       "import": "./lib/Neon/*/index.js"
     },
+    "./Vercel": {
+      "types": "./lib/Vercel/index.d.ts",
+      "bun": "./src/Vercel/index.ts",
+      "worker": "./src/Vercel/index.ts",
+      "import": "./lib/Vercel/index.js"
+    },
+    "./Vercel/*": {
+      "types": "./lib/Vercel/*/index.d.ts",
+      "bun": "./src/Vercel/*/index.ts",
+      "worker": "./src/Vercel/*/index.ts",
+      "import": "./lib/Vercel/*/index.js"
+    },
     "./Prisma": {
       "types": "./lib/Prisma/index.d.ts",
       "bun": "./src/Prisma/index.ts",
@@ -375,6 +387,7 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@distilled.cloud/vercel": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
     "@libsql/client": "catalog:",

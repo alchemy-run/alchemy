@@ -1,0 +1,176 @@
+---
+title: Logs
+description: Stream a Function's runtime logs live with alchemy tail, fetch historical build events with alchemy logs — and know exactly what each surface can and cannot show.
+---
+
+Vercel exposes two log surfaces for a Function. **Runtime logs**
+— every request summary and every line your code writes to
+stdout/stderr — are delivered as a live-only stream: Vercel keeps
+no queryable history of them. **Build events** — the output of
+creating a deployment — are the only historical log source the
+API offers. Alchemy maps its two log commands onto exactly those
+surfaces: [`alchemy tail`](/cli/tail) rides the live runtime
+stream, and [`alchemy logs`](/cli/logs) fetches build history
+plus a short live window.
+
+Reach for `tail` while you're poking a deployed
+[Function](/vercel/compute/functions) and want to watch requests
+land; reach for `logs` when you want to see how a deployment was
+built. For durable, queryable runtime logs, ship them somewhere —
+that's what [Drains](/vercel/observability/drains) are for.
+
+## Log something
+
+Anything the Function writes to stdout or stderr becomes a
+runtime log row — `console.log`, or `Effect.log` through Effect's
+default console logger:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        yield* Effect.log(`handling ${request.url}`);
+        return yield* HttpServerResponse.json({ ok: true });
+      }),
+    };
+  }),
+) {}
+```
+
+You don't have to log anything to get signal, though — Vercel
+emits a request-summary row for every invocation, which alchemy
+renders as `GET /path > 200`.
+
+Deploy it in a Stack as usual:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## Stream live logs with `alchemy tail`
+
+```sh
+bun alchemy tail
+```
+
+`tail` opens the runtime-logs stream for every deployed Function
+in the stack and prints lines as invocations happen — request
+summaries (`GET /api/users > 200`) interleaved with your log
+output, color-coded by resource. It streams until you `Ctrl+C`.
+
+Log lines print their message directly; non-`info` levels are
+prefixed (`error: connection refused`). Expect a lag of a few
+seconds between making a request and its lines appearing —
+that's Vercel's delivery latency, not buffering on alchemy's
+side.
+
+Vercel ends the hanging stream after an idle window; alchemy
+reopens it automatically. Because delivery is live-only,
+reconnects never replay or duplicate lines.
+
+:::note[Tail is live-only]
+The stream delivers zero historical lines on connect. If nothing
+is hitting the Function, `tail` prints nothing — open it first,
+*then* make requests. A request that completed before the stream
+opened is gone.
+:::
+
+## Fetch history with `alchemy logs`
+
+```sh
+bun alchemy logs --limit 50 --since 1h
+```
+
+`logs` fetches a batch and exits. The batch is two things merged
+and sorted by timestamp:
+
+1. **Build events** — the deployment's build output
+   (stdout/stderr and command lines). This is real history:
+   it's queryable long after the deploy.
+2. **A short live window** — `logs` also holds the runtime
+   stream open for about five seconds, so invocations happening
+   *right now* surface in the batch too.
+
+`--limit` (default 100) caps the batch and `--since` bounds the
+build events. Runtime lines appear only if they occur inside the
+live window — there is no runtime history to page through.
+
+:::caution[Yesterday's invocations are not retrievable]
+The platform keeps no queryable runtime-log history, so
+`alchemy logs` cannot show you an error from last night. If you
+need runtime logs you can search after the fact, deliver them to
+an external sink with a [Drain](/vercel/observability/drains).
+:::
+
+## What each command shows
+
+| | `alchemy tail` | `alchemy logs` |
+| --- | --- | --- |
+| Runtime logs (requests, `console.log`) | live, until interrupted | ~5s live window only |
+| Build events | no | yes — the historical batch |
+| `--since` / `--limit` | — | yes |
+
+## Filter to one Function
+
+Both commands take `--filter` with logical resource IDs, and both
+target the deployment recorded in your stack state — the one your
+last `alchemy deploy` produced:
+
+```sh
+bun alchemy tail --filter Api
+bun alchemy logs --filter Api --stage prod
+```
+
+:::note[Rollbacks don't move the tail]
+`tail` follows the stack's *recorded* deployment. After a
+[production rollback](/vercel/compute/deployments-and-rollback),
+live traffic serves an older deployment while your state still
+points at the newest one — so a rolled-back deployment's traffic
+won't show up until you promote or redeploy.
+:::
+
+A Function that has never completed a deploy has no deployment to
+read from and yields no lines; if no deployed resource in the
+stack supports logs, the command says so and exits.
+
+## Where next
+
+- [Drains](/vercel/observability/drains) — durable delivery of
+  runtime logs, traces, and analytics to your own sink.
+- [Functions](/vercel/compute/functions) — the resource these
+  commands observe.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback) —
+  the deployment model behind "which deployment gets tailed".
+
+Related:
+
+- [`alchemy tail`](/cli/tail) — full flag reference.
+- [`alchemy logs`](/cli/logs) — full flag reference.
+
+Reference:
+
+- [`Function` reference](/providers/vercel/functions/function) —
+  every prop and attribute.

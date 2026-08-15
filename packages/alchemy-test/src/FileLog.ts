@@ -32,6 +32,10 @@ export const formatEvent = (event: TestEvent): string | undefined => {
   switch (event._tag) {
     case "RunStart":
       return `running ${event.tests.length} tests from ${event.files} files (${new Date().toISOString()})\n\n`;
+    case "TestRetry": {
+      const title = `${event.test.file} > ${event.test.titlePath.join(" > ")}`;
+      return `RETRY ${title} — attempt ${event.attempt} failed:\n${event.error}\n\n`;
+    }
     case "TestEnd": {
       const title = `${event.test.file} > ${event.test.titlePath.join(" > ")}`;
       const retries =
@@ -79,6 +83,13 @@ export const formatEvent = (event: TestEvent): string | undefined => {
 
 export interface FileLog {
   readonly append: (event: TestEvent) => Effect.Effect<void>;
+  /**
+   * Append a raw pre-formatted chunk. Used for records that are not test
+   * events — e.g. the RUN INTERRUPTED trailer written when the process is
+   * killed externally (SIGINT/SIGTERM) mid-run. Best-effort: write failures
+   * are ignored.
+   */
+  readonly appendRaw: (text: string) => Effect.Effect<void>;
   /**
    * Enqueue one live file-hook log line (prefixed with the file it belongs
    * to). File-level hooks (beforeAll deploys / afterAll destroys) can run
@@ -145,6 +156,8 @@ export const makeFileLog = Effect.fn(function* (logFile: string) {
       .writeFileString(logFile, chunk, { flag: "a" })
       .pipe(Effect.ignore);
   };
+  const appendRaw: FileLog["appendRaw"] = (text) =>
+    fs.writeFileString(logFile, text, { flag: "a" }).pipe(Effect.ignore);
   // Hook lines flow through an unbounded queue to a single writer fiber so
   // the capture site (a synchronous array-push interception) never performs
   // I/O and never blocks: `offerUnsafe` on an unbounded queue is a plain
@@ -176,5 +189,5 @@ export const makeFileLog = Effect.fn(function* (logFile: string) {
     yield* Queue.end(hookLines);
     yield* Fiber.await(writer);
   });
-  return { append, appendHookLine, close } satisfies FileLog;
+  return { append, appendRaw, appendHookLine, close } satisfies FileLog;
 });

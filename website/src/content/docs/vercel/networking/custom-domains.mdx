@@ -1,0 +1,236 @@
+---
+title: Custom domains
+description: Serve a Vercel Function or Website from your own hostname — attach it with ProjectDomain, read the verification states, and know what the read-back url output means.
+sidebar:
+  order: 0
+---
+
+Every Function and Website deploys into a Vercel project that
+serves from an assigned `{name}.vercel.app` domain. Production
+apps live on their own hostname. In alchemy a custom domain is
+one resource — `Vercel.ProjectDomain` — declared next to the
+Function or site it points at.
+
+All the snippets below run inside a Stack's `Effect.gen` body:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    // resources go here
+    return {};
+  }),
+);
+```
+
+## Attach a domain to a Function
+
+The Function under test is the usual class form — the
+[Functions guide](/vercel/compute/functions) walks through the
+ceremony:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("hello");
+      }),
+    };
+  }),
+) {}
+```
+
+`Vercel.ProjectDomain` attaches a hostname to the project behind
+it. `project` accepts anything carrying a `projectId` — the
+Function's output here, a [`Vercel.Website.*`
+site](/vercel/frontend/websites), a `Vercel.Project`, or a plain
+project id/name string:
+
+```typescript
+import Api from "./src/api.ts";
+
+const api = yield* Api;
+
+const attached = yield* Vercel.ProjectDomain("ApiDomain", {
+  project: api,
+  name: "api.acme.com",
+});
+// attached.name     === "api.acme.com"
+// attached.apexName === "acme.com"
+```
+
+Attaching a domain whose apex is not yet on the team
+automatically adds the apex to the team's domain list. The apex
+then behaves like any other team domain — manage it explicitly
+with [`Vercel.Domain`](/vercel/networking/domains) when you want
+Vercel to host its DNS too.
+
+## Attach a domain to a Website
+
+Websites deploy into a project just like Functions, so the same
+resource attaches their hostname:
+
+```typescript
+const site = yield* Vercel.Website.StaticSite("Site", {
+  command: "bun run build",
+  outdir: "dist",
+});
+
+yield* Vercel.ProjectDomain("SiteDomain", {
+  project: site,
+  name: "www.acme.com",
+});
+```
+
+## What the `url` output means
+
+A Function's `url` is always **read back** from Vercel — never
+computed from the project name. `.vercel.app` is a global
+namespace, so `{name}.vercel.app` may already be taken by another
+team and Vercel assigns a suffixed domain instead; a computed URL
+would lie. Production deploys read the project's assigned
+production domain; preview deploys carry the deployment-specific
+URL.
+
+```typescript
+const api = yield* Api;
+// api.url === "https://myapp-api-prod.vercel.app"
+```
+
+The custom hostname lives on the `ProjectDomain` output, not on
+`url` — read `attached.name` (and `attached.verified`, below)
+when you need it.
+
+:::note[SSO-protected URLs]
+On team accounts, deployment URLs sit behind Vercel SSO by
+default. The Function's `protectionBypass` output is the secret
+that opens them — send it as `x-vercel-protection-bypass`. See
+[Deployment protection](/vercel/security/deployment-protection).
+:::
+
+## Verification states
+
+`verified` on the attachment tells you whether the hostname is
+usable:
+
+```typescript
+const attached = yield* Vercel.ProjectDomain("AppDomain", {
+  project: api,
+  name: "app.acme.com",
+});
+// attached.verified     — true once the domain serves the project
+// attached.verification — outstanding challenge(s) while false
+```
+
+When the apex is a domain-of-record on the **same team** (owned,
+or auto-added by the attachment), the domain verifies
+immediately: `verified` is `true` and `verification` is empty.
+
+When the domain is owned by **another Vercel team**, the
+attachment stays `verified: false` and `verification` carries a
+TXT challenge. The resource converges to this pending state and
+reports the challenge in its attributes rather than failing the
+deploy. Create the TXT record wherever that domain's DNS lives;
+the provider re-attempts verification on every subsequent deploy
+until it passes.
+
+## Point DNS at Vercel
+
+Verification makes the hostname *valid*; DNS makes it *resolve*.
+If the apex has a Vercel DNS zone (the [`Vercel.Domain`
+default](/vercel/networking/domains)), declare the record next to
+the attachment:
+
+```typescript
+const zone = yield* Vercel.Domain("Zone", { name: "acme.com" });
+
+yield* Vercel.DnsRecord("Www", {
+  domain: zone,
+  type: "CNAME",
+  name: "www",
+  value: "cname.vercel-dns.com",
+});
+```
+
+If DNS lives elsewhere, create the same CNAME at your provider.
+
+## Redirect the apex to www
+
+`redirect` and `redirectStatusCode` turn an attachment into a
+redirect — the canonical apex-to-www shape:
+
+```typescript
+yield* Vercel.ProjectDomain("ApexRedirect", {
+  project: site,
+  name: "acme.com",
+  redirect: "www.acme.com",
+  redirectStatusCode: 308,
+});
+```
+
+`redirect`, `redirectStatusCode`, and `gitBranch` are mutable —
+changing them patches the attachment in place on the next deploy.
+
+## Branch domains
+
+`gitBranch` links the attachment to a branch, so deploys of that
+branch serve on the hostname instead of production:
+
+```typescript
+yield* Vercel.ProjectDomain("StagingDomain", {
+  project: site,
+  name: "staging.acme.com",
+  gitBranch: "staging",
+});
+```
+
+## Replacement semantics
+
+Changing `name` replaces the attachment — a new one is created,
+then the old one detached.
+
+Re-pointing `project` at a different project is a **delete-first**
+replacement: a domain name can be attached to only one project on
+the team at a time, so the old attachment must detach before the
+new one can claim the same name. Both projects must stay deployed
+across the move — alchemy handles the ordering.
+
+:::note[Destroy detaches, it doesn't delete]
+Destroying a `ProjectDomain` detaches the hostname from the
+project. It does **not** remove an auto-added apex from the
+team's domain list — that is a separate `Vercel.Domain`.
+:::
+
+## Where next
+
+- [Domains & DNS](/vercel/networking/domains) — the full domain
+  surface: team domains, DNS records, adoption, certificates.
+- [Functions](/vercel/compute/functions) — the Function resource
+  the domain points at.
+- [Websites](/vercel/frontend/websites) — deploying framework
+  sites and static sites.
+
+Related:
+
+- [Deployment protection](/vercel/security/deployment-protection)
+  — SSO gates and the `protectionBypass` secret.
+
+Reference:
+
+- [ProjectDomain API reference](/providers/vercel/domains/projectdomain)
+- [Domain API reference](/providers/vercel/domains/domain)
+- [DnsRecord API reference](/providers/vercel/domains/dnsrecord)

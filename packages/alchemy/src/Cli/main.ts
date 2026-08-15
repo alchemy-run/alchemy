@@ -29,6 +29,7 @@ import { profileCommand } from "./commands/profile.ts";
 import { stateCommand } from "./commands/state.ts";
 import { syncCommand } from "./commands/sync.ts";
 import { tailCommand } from "./commands/tail.ts";
+import { vercelCommand } from "./commands/vercel.ts";
 import { selectCli } from "./selectCli.ts";
 
 const root = Command.make("alchemy", {}).pipe(
@@ -46,6 +47,7 @@ const root = Command.make("alchemy", {}).pipe(
     stateCommand,
     syncCommand,
     unsafeCommand,
+    vercelCommand,
   ]),
 );
 

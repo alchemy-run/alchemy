@@ -50,7 +50,10 @@ state via their default stage (`dev_$USER`).
 ## Remote state
 
 For teams and CI, configure a remote state store so all deploys share
-the same state. Alchemy includes a Cloudflare-backed store:
+the same state. Alchemy ships self-hosted stores for
+[Cloudflare](#cloudflare-state-store) and
+[Vercel](#vercel-state-store) — pick the one matching where your app
+already runs:
 
 ```typescript
 Alchemy.Stack(
@@ -118,6 +121,108 @@ you want a dedicated store per Cloudflare account or per team:
 state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
 ```
 
+## Vercel state store
+
+`Vercel.state()` is the recommended state store for projects deploying
+to Vercel. It persists state in a Vercel Function that alchemy deploys
+onto your own team — a project named `alchemy-state` serving the same
+HTTP state contract as the Cloudflare store, backed by a private
+[Blob store](/vercel/data/blob) with one AES-CTR-encrypted JSON blob
+per state row.
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+It needs the same Vercel credentials as `Vercel.providers()` — see
+[Setup](/vercel/setup) if you haven't connected a token yet.
+
+### First-run bootstrap
+
+The first time you run `alchemy deploy`, `plan`, or `dev` against a
+stack configured with `Vercel.state()`, Alchemy can't find the
+`alchemy-state` project on your team and pauses to ask permission
+before deploying it. Confirming deploys the store through alchemy's
+own Vercel deploy engine — first tracked by local state, then that
+state is hoisted into the freshly deployed store itself and the local
+copy is deleted, so the store tracks its own infrastructure.
+
+What gets created:
+
+- **`alchemy-state`** — the state-store project and Function,
+  implementing the shared state API with bearer-token auth and an
+  unauthenticated `/version` route
+- **A private Blob store** (also named `alchemy-state`) — holds one
+  encrypted JSON blob per state row, connected to the Function
+- **`ALCHEMY_STATE_TOKEN` / `ALCHEMY_STATE_ENCRYPTION_KEY`** — the
+  bearer token and AES encryption key, generated at bootstrap and
+  delivered to the Function as `encrypted` project env vars
+
+The store is a team-level singleton: every stack and stage that uses
+`Vercel.state()` on this team shares it. Subsequent runs detect the
+existing store and skip the prompt.
+
+### Where credentials live
+
+After the bootstrap, Alchemy caches the store's URL and bearer token
+under your profile at
+`~/.alchemy/credentials/<profile>/vercel-state.json`. Losing the file
+is harmless — Alchemy finds the deterministic `alchemy-state` project
+and reads the token back from its `encrypted` `ALCHEMY_STATE_TOKEN`
+env var via the management API. The cache also records the Vercel
+team it was minted against; switching teams discards it and
+re-derives credentials for the new scope, so state never silently
+reads from the wrong team.
+
+### Bootstrapping in CI
+
+CI runs never prompt: a missing store fails with instructions instead
+of hanging. Either deploy the store once, non-interactively, with the
+profile your CI uses:
+
+```sh
+bun alchemy vercel bootstrap --profile ci
+```
+
+or pass `--yes` to `alchemy deploy` to accept the deploy
+automatically. In CI nothing is persisted to disk — credentials are
+re-derived from the management API on every run.
+
+### Version upgrades
+
+The deployed Function pins a contract version and serves it at the
+unauthenticated `/version` route. Every run probes it; when your CLI
+expects a newer version, Alchemy offers to upgrade the store in place
+(automatic with `--yes`; CI fails with a bootstrap hint instead).
+`alchemy vercel bootstrap` also performs the upgrade directly — an
+up-to-date store is adopted and only its credentials refreshed,
+unless you pass `--force` to redeploy regardless.
+
+### Tearing it down
+
+`alchemy vercel teardown` is the inverse of bootstrap: it deletes the
+`alchemy-state` project (and with it every deployment and env var),
+purges and deletes the private Blob store, and drops the cached
+credentials. It's idempotent — already-missing resources are treated
+as gone.
+
+:::caution
+Teardown deletes **every state row** for every stack and stage on the
+team. Destroy your stacks first, or their resources become orphans no
+longer tracked by any state.
+:::
+
 ## State and lifecycle
 
 State transitions track the lifecycle of each resource:
@@ -169,3 +274,5 @@ the full walkthrough.
 - [Testing Providers](/testing/testing-providers) — the in-memory store in practice.
 - [References](/infrastructure-as-code/references) — reading another
   stack's outputs.
+- [`Vercel.state` reference](/providers/vercel/statestore/state) — the
+  self-deployed store's full contract and bootstrap flow.

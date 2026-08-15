@@ -1,0 +1,438 @@
+---
+title: "Part 6: Stages, Rollback & CI/CD"
+description: Split the app into stages, share one Vercel project across PR previews with tenancy, roll a bad release back instantly, and automate it all with GitHub Actions.
+sidebar:
+  order: 6
+---
+
+In [Part 5](/vercel/tutorial/part-5) you wrote integration tests.
+Now you'll take the app to production shape: a durable `staging`
+stage, PR previews that share staging's Vercel project instead of
+provisioning their own, instant rollback over retained deployments,
+and a GitHub Actions workflow that ties it together.
+
+## Stages are isolated copies
+
+Everything so far deployed to your personal default stage —
+`dev_<user>`. A **stage** is a fully isolated instance of the stack:
+deploy with `--stage` and you get a separate project, Edge Config,
+Blob store, and queue namespace, tracked under its own state.
+
+```sh
+bun alchemy deploy --stage staging
+```
+
+Nothing is shared between stages by default — queue topics are
+scoped per (project, environment), so staging's `orders` topic can
+never see your dev stage's messages. Isolation is the default;
+sharing is what you opt into next.
+
+## Give the Stack a typed handle
+
+To share anything across stages, a stage needs to *read* another
+stage's outputs — which means the Stack needs an importable, typed
+handle. Create `src/app.ts`:
+
+```typescript
+// src/app.ts
+import * as Alchemy from "alchemy";
+
+export class App extends Alchemy.Stack<
+  App,
+  {
+    url: string;
+    projectId: string;
+    deploymentId: string;
+  }
+>()("OrderIntake") {}
+```
+
+The class form declares the stack's name and output shape once.
+`App.stage.staging` is a typed reference to whatever the `staging`
+stage last deployed — you'll use it below.
+
+## Move the program onto the handle
+
+Update `alchemy.run.ts` to build the stack through `App.make`
+instead of the inline `Alchemy.Stack(...)` call:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
++import { App } from "./src/app.ts";
+
+-export default Alchemy.Stack(
+-  "OrderIntake",
++export default App.make(
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+
+    return {
+      url: api.url,
+    };
+  }),
+);
+```
+
+Same program, same state — `App.make` just binds it to the typed
+handle, so the stack name now lives in one place.
+
+## Create the shared project
+
+Following the file-per-resource pattern, create `src/project.ts`:
+
+```typescript
+// src/project.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Shared = Vercel.Project("Shared");
+```
+
+`Vercel.Project` is a plain managed project — no deployments of its
+own. The `staging` stage will own it, deploy the Api into it as
+production, and every PR stage will ride along as a tenant.
+
+## Anchor staging to the shared project
+
+So far the Api's props were a static object. Make them an Effect
+that reads the current stage — on `staging`, the Api deploys **into**
+the shared project as its production:
+
+```diff lang="typescript"
+// src/api.ts
++import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Flags } from "./flags.ts";
+import { Orders } from "./orders.ts";
++import { Shared } from "./project.ts";
+import { Receipts } from "./receipts.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+-  { main: import.meta.url },
++  Effect.gen(function* () {
++    const { stage } = yield* Alchemy.Stack;
++    if (stage === "staging") {
++      const shared = yield* Shared;
++      return {
++        main: import.meta.url,
++        project: shared.projectId,
++        target: "production" as const,
++      };
++    }
++    return { main: import.meta.url };
++  }),
+  Effect.gen(function* () {
+    // ... init phase unchanged ...
+```
+
+The `project:` prop switches the Function into **tenant mode**: it
+deploys into an existing project instead of auto-provisioning one,
+and owns only its deployments, its alias, and the env it delivers —
+never the project's settings or lifecycle. On every other stage the
+props fall through unchanged, so your dev stage keeps its own
+auto-provisioned project.
+
+## Tenant PR stages into staging's project
+
+Add the PR branch, referencing staging's exported project through
+the typed handle:
+
+```diff lang="typescript"
+// src/api.ts
+  Effect.gen(function* () {
+    const { stage } = yield* Alchemy.Stack;
+    if (stage === "staging") {
+      const shared = yield* Shared;
+      return {
+        main: import.meta.url,
+        project: shared.projectId,
+        target: "production" as const,
+      };
+    }
++    if (stage.startsWith("pr-")) {
++      const staging = yield* App.stage.staging;
++      return {
++        main: import.meta.url,
++        project: staging.projectId,
++      };
++    }
+    return { main: import.meta.url };
+  }),
+```
+
+`yield* App.stage.staging` reads the `staging` stage's persisted
+outputs at plan time, so `staging.projectId` is a typed
+`Output<string>` (add `import { App } from "./app.ts"` to the
+imports). Without an explicit `target`, a tenant deploys
+**previews**: any number of PR stages cohabit one project
+additively, each serving from a stable
+`{projectName}-{stage}.vercel.app` alias, with its env delivered
+per-deployment. Staging's production deployment is never touched.
+
+## Export staging's project id
+
+The PR branch reads `projectId` from staging's outputs — so staging
+has to export it. Update the program's return:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import Api from "./src/api.ts";
+import { App } from "./src/app.ts";
++import { Shared } from "./src/project.ts";
+
+export default App.make(
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
++    const { stage } = yield* Alchemy.Stack;
+    const api = yield* Api;
+
++    if (stage === "staging") {
++      const shared = yield* Shared;
++      return {
++        url: api.url,
++        projectId: shared.projectId,
++        deploymentId: api.deploymentId,
++      };
++    }
+
+    return {
+      url: api.url,
++      deploymentId: api.deploymentId,
+    };
+  }),
+);
+```
+
+Yielding `Shared` here resolves to the same instance the Api's props
+already registered — registration is idempotent per logical id. The
+`deploymentId` output is new on every stage: you'll need it for
+rollback in a moment.
+
+## Deploy staging first
+
+References only read what's already deployed — a PR stage planned
+before staging exists fails fast with a typed
+`InvalidReferenceError`. Deploy in order:
+
+```sh
+bun alchemy deploy --stage staging
+```
+
+Staging now owns the shared project, and its Api serves on the
+project's production alias.
+
+## Ship a PR preview
+
+```sh
+bun alchemy deploy --stage pr-42
+```
+
+The PR stage tenants into staging's project: one additive preview
+deployment behind the stable alias
+`<project-name>-pr-42.vercel.app`, plus the stage's own Edge
+Config, Blob store, and queue namespace. Tear it down just as
+surgically:
+
+```sh
+bun alchemy destroy --stage pr-42
+```
+
+Only the PR stage's alias, deployments, and resources are removed —
+the shared project and staging's production stay untouched.
+
+:::note[Preview URLs are SSO-gated on team accounts]
+Vercel protects preview deployment URLs behind team SSO. To drive a
+preview from `curl` or CI, send the project's automation bypass
+secret — the Function exposes it as the `protectionBypass`
+attribute — in the `x-vercel-protection-bypass` header. See
+[Deployment Protection](/vercel/security/deployment-protection).
+Also remember from Part 3: crons fire only on production, so a PR
+stage's crons never run.
+:::
+
+## Roll back a bad release
+
+Every deploy in this tutorial minted an **immutable deployment**,
+and the old ones are all still there — production is just a pointer.
+`Vercel.rollbackProduction` re-points it, instantly, with no
+rebuild. Create a small ops runbook using the Part 5 harness:
+
+```typescript
+// test/ops.test.ts
+import * as Test from "alchemy/Test/Bun";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+const { test } = Test.make({
+  providers: Vercel.providers(),
+  state: Vercel.state(),
+});
+
+const projectId = process.env.PROJECT_ID;
+const rollbackTo = process.env.ROLLBACK_TO;
+
+test.skipIf(!projectId || !rollbackTo)(
+  "roll production back",
+  Effect.gen(function* () {
+    yield* Vercel.rollbackProduction(projectId!, rollbackTo!, {
+      description: "rolling back a bad release",
+    });
+  }),
+);
+```
+
+Grab the ids from your deploy outputs (`projectId` and the
+*previous* deploy's `deploymentId`) and run it:
+
+```sh
+PROJECT_ID=prj_... ROLLBACK_TO=dpl_... bun test test/ops.test.ts
+```
+
+Traffic serves the old release within seconds. Two properties worth
+knowing:
+
+- **Env rides the deployment.** Each deployment carries the env it
+  was built with, so a rollback also restores that release's
+  secrets — rotations roll back with the code.
+- **Edge Config doesn't.** Flag reads go to the data plane, shared
+  by all deployments — your *current* flag values keep serving on
+  the rolled-back release. Flags survive rollbacks by design.
+
+When the fix ships (or you want to move forward again),
+`Vercel.promoteToProduction(projectId, deploymentId)` is the same
+pure traffic re-point in the other direction. The full model lives
+in [Deployments & Rollback](/vercel/compute/deployments-and-rollback).
+
+## Add the CI secrets
+
+In CI, alchemy authenticates through environment variables:
+`VERCEL_TOKEN` (an API token from
+[vercel.com/account/settings/tokens](https://vercel.com/account/settings/tokens))
+and, when deploying into a team, `VERCEL_TEAM_ID`. Add both as
+GitHub Actions secrets under your repo's **Settings → Secrets and
+variables → Actions**.
+
+:::note[State store in CI]
+`Vercel.state()` prompts interactively the first time it deploys its
+state Function. CI can't answer prompts — passing `--yes` to deploy
+approves it automatically, or bootstrap it explicitly once with
+`alchemy vercel bootstrap`.
+:::
+
+## Create the workflow
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+  STAGE: >-
+    ${{ github.event_name == 'pull_request'
+      && format('pr-{0}', github.event.number)
+      || 'staging' }}
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
+
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Destroy preview
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
+```
+
+Pull requests deploy `pr-{number}` — a preview tenant on staging's
+project. Pushes to `main` deploy `staging` itself. Closed PRs tear
+their stage down; the `cleanup` job's stage expression can only ever
+name a `pr-*` stage, so staging is never destroyed by accident.
+
+## The full picture
+
+1. You deployed `--stage staging` once from your laptop. It owns
+   the shared Vercel project and serves production traffic on it.
+2. A developer opens a PR. Actions runs
+   `alchemy deploy --stage pr-42 --yes` — a preview deployment
+   lands on staging's project behind its own stable alias, with an
+   isolated Edge Config, Blob store, and queue namespace.
+3. The PR merges. The cleanup job destroys `pr-42`; the push to
+   `main` redeploys `staging` with the merged code — a new
+   immutable deployment.
+4. The release is bad? `rollbackProduction` re-points production to
+   the previous deployment in seconds, no rebuild — and the flags
+   from Part 2 keep serving current values throughout.
+
+:::caution
+A tenant that explicitly targets production (staging's Api here)
+refuses to delete its active production deployment on destroy —
+that's live traffic. Roll another release to production first, or
+tear down previews and re-point before destroying staging.
+:::
+
+## Recap
+
+You've completed the tutorial. You now know how to:
+
+- **Part 1** — Create a Stack and ship a prebuilt, immutable
+  deployment with no build pipeline
+- **Part 2** — Bind Edge Config flags and Blob storage as typed,
+  least-privilege clients
+- **Part 3** — Produce to a typed queue Topic, consume with push
+  delivery, and schedule secret-guarded crons
+- **Part 4** — Run the whole stack locally with `alchemy dev`
+- **Part 5** — Write integration tests that deploy once and drive
+  the live API over HTTP
+- **Part 6** — Isolate stages, share one project across PR previews
+  with tenancy, roll back instantly, and deploy from Actions
+
+## What's next
+
+- [Functions](/vercel/compute/functions) — the full Effect class DX,
+  async-mode escape hatch, fluid compute, and typed env
+- [Deployments & Rollback](/vercel/compute/deployments-and-rollback) —
+  the immutable-deployment model this tutorial rode on
+- [Queues](/vercel/messaging/queues) — the isolation model,
+  consumer groups, and retry tuning in depth
+- [Websites](/vercel/frontend/websites) — deploy Nuxt, Astro,
+  SvelteKit, or a static site next to your Functions
+- [Testing a Stack](/testing/testing-a-stack) — more advanced
+  testing patterns
+- [`Function` reference](/providers/vercel/functions/function) —
+  every prop and attribute

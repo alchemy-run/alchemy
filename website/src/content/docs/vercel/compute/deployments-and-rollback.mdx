@@ -1,0 +1,221 @@
+---
+title: Deployments & rollback
+description: How alchemy ships to Vercel — each Function owns its project, every deploy is an immutable meta-stamped deployment, aliases pin stable hostnames, and promote/rollback re-point traffic without rebuilding.
+---
+
+Alchemy inverts the usual Vercel workflow: there is no git
+integration and no Vercel build pipeline. Each
+[Function](/vercel/compute/functions) **owns its own project**, and
+every deploy uploads a **prebuilt, immutable deployment** of it —
+built and bundled on your machine (or CI), stamped with alchemy
+metadata, and pushed directly to Vercel's deployment API.
+
+That inversion buys the whole model on this page: deployments are
+versions, updates are "new deployment + move traffic", rollback is a
+traffic re-point measured in seconds, and the deployment history in
+the Vercel dashboard is your version history.
+
+## The resource owns the project
+
+Deploying a Function auto-provisions a Vercel project named from the
+stack, logical id, and stage. The project is the long-lived
+container — settings, env vars, domains — and the Function's
+reconciler converges it on every deploy:
+
+```typescript
+const api = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+});
+// api.projectId, api.projectName — stable across deploys
+// api.deploymentId — the current immutable deployment
+// api.url — read back from Vercel, never computed
+```
+
+`projectId` and `projectName` are stable: routine deploys never
+touch them. Only two things replace the project — changing an
+explicit `name`, or reparenting via the `project:` prop. A
+standalone [`Vercel.Project`](/providers/vercel/projects/project) is
+only needed for [tenant
+mode](/vercel/compute/functions#tenant-mode), where several stages
+rent space in one shared project.
+
+## Deployments are versions
+
+Every deploy whose content changed mints one new **immutable
+deployment**. There is no in-place mutation to reason about — an
+"update" is always a new deployment plus a production traffic move,
+which Vercel performs atomically when the deployment is ready. The
+state store records only the current pointer (`deploymentId` and the
+content hashes); the version history lives in Vercel, visible in the
+project's deployment list.
+
+Three consequences worth internalizing:
+
+- **Env rides the deployment.** Project env only takes effect on new
+  deployments, so an env change always redeploys — and a rolled-back
+  deployment serves the env snapshot it was built with.
+- **Old deployments keep working.** Alchemy never prunes them: they
+  power instant rollback, and Vercel's skew protection version-pins
+  live clients to the deployment that served them.
+- **Rollback needs no rebuild.** Any retained deployment can take
+  production traffic in seconds.
+
+## Meta stamps and skip-on-hash
+
+Every deployment alchemy creates carries `meta` stamps —
+`alchemyContentHash`, `alchemyStack`, `alchemyStage`,
+`alchemyLogicalId` — that make ownership and identity queryable:
+
+- **Skip-on-hash**: an identical redeploy (same artifact hash, same
+  env hash, live deployment) is a no-op — `deploymentId` doesn't
+  move.
+- **Crash recovery**: if a deploy dies after `createDeployment` but
+  before state persists, the next deploy recomputes the same content
+  hash, finds the existing deployment by `meta.alchemyContentHash`,
+  and reuses it instead of duplicating.
+- **Tenant cleanup**: in a shared project, destroy deletes only the
+  stage's own meta-stamped deployments.
+
+## Pin a stable hostname
+
+Deployment URLs are per-version. `Vercel.Alias` pins a stable
+hostname to a specific deployment:
+
+```typescript
+const api = yield* Vercel.Function("Api", { main: "./src/api.ts" });
+
+const pinned = yield* Vercel.Alias("Pinned", {
+  alias: "my-app-stable.vercel.app",
+  deployment: api,
+});
+// pinned.url === "https://my-app-stable.vercel.app"
+```
+
+`deployment` accepts the Function itself (its current
+`deploymentId`) or a plain deployment id. When the Function
+redeploys, the alias **re-points in place** — Vercel's assign
+endpoint is an upsert, so the alias's `uid` is stable while its
+target moves. A custom domain already attached to the project works
+the same way: `alias: "canary.acme.com"`.
+
+:::note[.vercel.app aliases are SSO-gated on team accounts]
+Only the auto-assigned production domain and custom domains are
+public by default. Drive a gated alias with the Function's
+`protectionBypass` secret (`x-vercel-protection-bypass` header) —
+see [Deployment protection](/vercel/security/deployment-protection).
+:::
+
+## Roll back without rebuilding
+
+`Vercel.rollbackProduction` re-points the project's production
+alias(es) at a previous production deployment. It is a pure traffic
+operation — nothing is rebuilt, the project's deployment count
+doesn't move, and the old release serves within seconds:
+
+```typescript
+yield* Vercel.rollbackProduction(api.projectId, previousDeploymentId, {
+  description: "beta.46 regression",
+});
+```
+
+Both promote and rollback are **plain Effects, not resources** — run
+them from any Effect context with the Vercel environment (a script,
+a test, an operational task). The endpoint verifies the target was
+previously promoted and records the operation (with the optional
+`description`) in the project's history.
+
+Because env rides the deployment, the rolled-back deployment serves
+its *original* env values — a rotated secret rolls back with the
+code. Data planes are the exception: [Edge
+Config](/vercel/data/edge-config) reads are deployment-independent,
+so a flag flipped after the rollback target was built still serves
+its new value on the rolled-back deployment.
+
+## Promote forward
+
+`Vercel.promoteToProduction` is the same traffic operation in the
+other direction — point production at any retained deployment:
+
+```typescript
+// promote a specific retained deployment to production
+yield* Vercel.promoteToProduction(api.projectId, "dpl_123abc");
+
+// or promote the Function's current deployment
+yield* Vercel.promoteToProduction(api);
+```
+
+Passing a `Vercel.Function` (or its attributes) defaults the target
+to its own `deploymentId`. Like rollback, promotion never rebuilds —
+"this does NOT rebuild the deployment" is the endpoint's own
+contract.
+
+## Aliases are swept by promote and rollback
+
+Live-verified platform behavior: promote and rollback re-point
+**every alias riding the outgoing production deployment** to the
+target — custom aliases included, not just the production domains.
+
+An `Alias` pinned to the *active production* deployment therefore
+tracks production through rollback and promote, rather than staying
+put. If you need a version URL that stays pinned — a "last known
+good" bookmark, a canary URL — point the alias at a
+**non-production** deployment (a superseded one, or a
+`target: "preview"` deploy), which the sweep never touches.
+
+A subsequent `alchemy deploy` converges cleanly after either action:
+an unchanged stack is a full no-op, and a changed one mints the next
+deployment as usual — the traffic operations never confuse
+reconciliation.
+
+## Replacement re-binds downstream
+
+When a Function's project *is* replaced (explicit `name` change,
+`project:` reparenting), the replacement is **create-first**: the
+successor project is created and deployed, downstream dependents'
+bound attributes — a sibling's
+[`invoke`](/vercel/apis/invoke-function) URL and bypass secret, an
+env `Output` — re-resolve to the successor and those dependents
+redeploy in place, and only then is the predecessor project deleted.
+A consumer never observes a window where its binding points at
+nothing.
+
+## Destroy semantics
+
+Destroy follows ownership:
+
+- **Owned mode** (the default): deleting the Function deletes its
+  project, which cascades — deployments, env, domains, aliases all
+  go with it.
+- **Tenant mode** (`project:` set): the Function owns only its slice
+  — destroy removes its stage alias, its own meta-stamped
+  deployments, and the env keys it manages, leaving the shared
+  project and every other stage untouched. An explicit
+  `target: "production"` tenant refuses to delete the project's
+  active production deployment (a typed
+  `Vercel.TenantProductionDeleteRefused` error) rather than brick a
+  foreign site.
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the resource this model
+  ships.
+- [Tutorial part 6](/vercel/tutorial/part-6) — stages, rollback, and
+  CI/CD end to end.
+- [Custom domains](/vercel/networking/custom-domains) — serve
+  production from your own hostnames.
+
+Related:
+
+- [Deployment protection](/vercel/security/deployment-protection) —
+  SSO gating, the bypass secret, and who can reach which URL.
+- [Edge Config](/vercel/data/edge-config) — deployment-independent
+  config that survives rollbacks.
+
+Reference:
+
+- [`Alias` reference](/providers/vercel/aliases/alias) — every prop
+  and attribute.
+- [`Function` reference](/providers/vercel/functions/function) — the
+  deployment-bearing resource.
+- [`Project` reference](/providers/vercel/projects/project) — the
+  standalone project for tenancy.

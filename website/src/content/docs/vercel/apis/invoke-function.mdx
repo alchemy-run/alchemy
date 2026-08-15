@@ -1,0 +1,237 @@
+---
+title: Invoke a Function
+description: Call one Vercel Function from another with Vercel.invoke — a typed HttpClient bound to the target's read-back URL and protection-bypass secret, with InvokeRef closing circular pairs.
+sidebar:
+  order: 2
+---
+
+Every Vercel Function deploys as its own project, so there is no
+native service-binding channel between them — cross-function calls
+are plain HTTP. `Vercel.invoke` makes that HTTP typed and wired:
+bind a target Function in your init phase and you get back a full
+`HttpClient` whose requests are rewritten against the target's real
+production URL and carry the target's **protection-bypass secret**,
+so the call succeeds even when
+[deployment protection](/vercel/security/deployment-protection)
+guards the target.
+
+Reach for `invoke` whenever one Function calls another inside the
+same stack — including circular topologies, where A invokes B and B
+invokes A.
+
+## Invoke a sibling Function
+
+Import the target's class and bind it with `Vercel.invoke` inside
+the caller's init phase. The implementation layer is
+`Vercel.InvokeFunctionHttp`.
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import Billing from "./billing.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const billing = yield* Vercel.invoke(Billing);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const res = yield* billing.get("/invoices").pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(
+          yield* res.json.pipe(Effect.orDie),
+        );
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.InvokeFunctionHttp)),
+) {}
+```
+
+`Vercel.invoke(Billing)` returns an `InvokeFunctionClient` — the
+standard `HttpClient` surface (`get`, `post`, `execute`, …) plus a
+`.url` accessor for the target's resolved URL. Relative paths like
+`/invoices` are prefixed with the target's production URL at call
+time, and every request carries the target's bypass secret in the
+`x-vercel-protection-bypass` header. Add both Functions to your
+[Stack](/vercel/compute/functions) and deploy as usual.
+
+## What the binding does
+
+At deploy time, `invoke` binds two project env vars on the
+**caller**, keyed by the target's logical id:
+
+- `{LogicalId}_URL` — the target's **read-back** production URL
+  (never computed from the name; always what Vercel actually
+  assigned).
+- `{LogicalId}_BYPASS` — the target's automation protection-bypass
+  secret, stored as a `sensitive` env var.
+
+At runtime, the client resolves both lazily from `process.env` —
+they only exist inside the deployed Function, which is why the
+client's operations are colored with `RuntimeContext`.
+
+:::note[Replacement re-binds automatically]
+If the target is later **replaced** (say its `name` prop changes,
+which replaces the project), the caller's bound URL and bypass env
+re-resolve to the successor on the next deploy and the caller
+redeploys in place — no fixture or handler changes needed.
+:::
+
+## The bypass secret is the grant
+
+The caller is authorized by the target's automation
+protection-bypass secret — minted once per target project at ensure
+time, *before* the first deploy, and never regenerated. It grants
+exactly one thing: passing Vercel's deployment protection (team
+SSO / preview protection) on requests to that one project's
+deployments. It is **not** a management credential and cannot touch
+the Vercel API. Targets without a secret (a foreign tenant project
+that never had one minted) are called unauthenticated.
+
+## Circular pairs: `InvokeRef` by logical id
+
+Circular topologies work: the engine **pre-creates** both projects,
+so each side's URL and bypass secret exist before either function
+deploys. One side imports the other's class normally:
+
+```typescript
+// src/a.ts — imports B's class and invokes it
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import B from "./b.ts";
+
+export default class A extends Vercel.Function<A>()(
+  "A",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const b = yield* Vercel.invoke(B);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const res = yield* b.get("/echo?from=a").pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(
+          yield* res.json.pipe(Effect.orDie),
+        );
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.InvokeFunctionHttp)),
+) {}
+```
+
+The other side must **not** import `a.ts` back — a mutual class
+import makes each class's *type* depend on its own initializer
+through the other side's implementation, which TypeScript collapses
+to `any` (TS7022). Instead, close the cycle with an `InvokeRef`: a
+by-logical-id forward reference.
+
+```typescript
+// src/b.ts — deliberately does NOT import a.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class B extends Vercel.Function<B>()(
+  "B",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const a = yield* Vercel.invoke({ LogicalId: "A" });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const res = yield* a.get("/echo?from=b").pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(
+          yield* res.json.pipe(Effect.orDie),
+        );
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.InvokeFunctionHttp)),
+) {}
+```
+
+`{ LogicalId: "A" }` resolves through the engine's pre-created stub
+for `A` — never through the sibling module — so the module graph
+(and therefore the type graph) stays acyclic while the *runtime*
+topology is fully circular. The deploy half forward-refs the id
+exactly like a class target, so both forms produce the identical
+binding. In a circular pair, at least one side must use the by-id
+form.
+
+## One-way async targets
+
+The client half of `invoke` needs the Effect runtime, so an
+[async-mode Function](/vercel/compute/functions) — a plain
+web-standard `{ fetch }` export — can't use it. For a one-way call
+*from* async code, bind the same two attributes yourself through
+the plain `env:` channel:
+
+```typescript
+// src/functions.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Target = Vercel.Function("Target", {
+  main: "./src/target.ts",
+});
+
+export const Caller = Vercel.Function("Caller", {
+  main: "./src/caller.ts",
+  env: {
+    TARGET_URL: Target.url,
+    TARGET_BYPASS: Target.protectionBypass,
+  },
+});
+
+export type CallerEnv = Vercel.InferEnv<typeof Caller>;
+```
+
+`Target.url` is the read-back production URL and
+`Target.protectionBypass` is the bypass secret — a `Redacted`
+attribute, so it lands as a `sensitive` env var. `InferEnv` maps
+the `env` prop to its runtime manifestation (every value arrives in
+`process.env` as a string), which types the handler's cast:
+
+```typescript
+// src/caller.ts — web-standard fetch export, no Effect runtime
+import type { CallerEnv } from "./functions.ts";
+
+const env = process.env as CallerEnv;
+
+export default {
+  async fetch(): Promise<Response> {
+    const res = await fetch(`${env.TARGET_URL}/echo`, {
+      method: "POST",
+      headers: { "x-vercel-protection-bypass": env.TARGET_BYPASS },
+      body: "hi from caller",
+    });
+    return Response.json({ status: res.status, body: await res.json() });
+  },
+};
+```
+
+This is the escape hatch, not the default — you're managing the URL
+prefix and bypass header by hand, exactly what the Effect-mode
+client does for you. For asynchronous fan-out rather than
+request/response, reach for [Queues](/vercel/messaging/queues)
+instead of chaining HTTP calls.
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the host resource: init
+  phase, Effect and async modes, env bindings.
+- [Deployment protection](/vercel/security/deployment-protection) —
+  what the bypass secret passes, and the permission model around
+  it.
+- [Effect HTTP API](/vercel/apis/effect-http-api) — give the target
+  a schema-validated surface instead of ad-hoc routes.
+- [Queues](/vercel/messaging/queues) — one-way, at-least-once work
+  instead of synchronous invocation.
+
+Reference:
+
+- [`InvokeFunction` reference](/providers/vercel/functions/invokefunction)
+  — the binding contract and client surface.
+- [`Function` reference](/providers/vercel/functions/function) —
+  every prop and attribute.

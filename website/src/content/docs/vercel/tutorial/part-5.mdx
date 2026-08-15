@@ -1,0 +1,230 @@
+---
+title: "Part 5: Testing"
+description: Write integration tests that deploy the stack once, drive the live API over HTTP, and flip to local emulation with a single flag.
+sidebar:
+  order: 5
+---
+
+In [Part 4](/vercel/tutorial/part-4) you ran the stack locally. Now
+you'll write integration tests that deploy the stack, hit the live
+API over HTTP, and verify the whole path — flag, receipt, queue —
+actually works.
+
+## Create the test file
+
+Alchemy ships test utilities for Bun that wrap `bun:test` with
+Effect support. Configure providers and state once at the top of the
+file with `Test.make({...})` — the same `Vercel.providers()` /
+`Vercel.state()` you used in your Stack:
+
+```typescript
+// test/integ.test.ts
+import * as Test from "alchemy/Test/Bun";
+import * as Vercel from "alchemy/Vercel";
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Vercel.providers(),
+  state: Vercel.state(),
+});
+```
+
+`expect` (and any other `bun:test` helpers like `describe`) come
+from `bun:test` directly — `Test.make` only provides the
+Effect-aware test runner pieces.
+
+## Deploy the stack before tests
+
+Use `beforeAll` with `deploy` to deploy your stack once before any
+tests run:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Vercel.providers(),
+  state: Vercel.state(),
+});
+
++const stack = beforeAll(deploy(Stack));
+```
+
+`deploy(Stack)` returns an Effect that plans and applies the stack.
+`beforeAll` runs it once, then returns a lazy accessor you can
+`yield*` inside each test to get the stack outputs.
+
+## Write the first test
+
+Use `yield* stack` to get the outputs you returned from the Stack:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack));
+
++test(
++  "stack exposes the api url",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++
++    expect(url).toStartWith("https://");
++  }),
++);
+```
+
+`test(name, effect)` wraps `bun:test` — you write an Effect
+generator instead of an async function.
+
+## Run the tests
+
+```sh
+bun test test/integ.test.ts
+```
+
+The first run deploys the stack (or reuses the existing one if
+already deployed). Subsequent runs are fast because Alchemy diffs
+and skips unchanged resources.
+
+## Retry the first request
+
+Fresh `.vercel.app` URLs take a few seconds to start serving 200s,
+so a live test must always retry its first request. Add a small
+helper that treats a non-200 as retryable:
+
+```diff lang="typescript"
+// test/integ.test.ts
+import * as Effect from "effect/Effect";
++import * as Schedule from "effect/Schedule";
++import * as HttpClient from "effect/unstable/http/HttpClient";
+import Stack from "../alchemy.run.ts";
+
+// ...
+
++const postJson = (url: string) =>
++  HttpClient.post(url).pipe(
++    Effect.flatMap((response) =>
++      response.status === 200
++        ? response.json
++        : Effect.fail(new Error(`status ${response.status}`)),
++    ),
++    // Fresh .vercel.app URLs take a few seconds to serve — bounded retry.
++    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 20 }),
++  );
+```
+
+`Effect.retry` with a bounded `times` fails fast instead of hanging
+until the test timeout — the schedule paces the attempts, the cap
+ends them.
+
+## Test the order flow
+
+Now drive the real API end to end:
+
+```diff lang="typescript"
+// test/integ.test.ts
+-test(
+-  "stack exposes the api url",
+-  Effect.gen(function* () {
+-    const { url } = yield* stack;
+-
+-    expect(url).toStartWith("https://");
+-  }),
+-);
++test(
++  "POST /orders writes a readable receipt",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++
++    const order = (yield* postJson(`${url}/orders?amount=4200`)) as {
++      orderId: string;
++      receipt: string;
++    };
++    expect(order.orderId).toBeString();
++    expect(order.receipt).toContain("blob.vercel-storage.com");
++
++    const read = yield* HttpClient.get(`${url}/orders/${order.orderId}`);
++    expect(read.status).toBe(200);
++    const receipt = (yield* read.json) as { status: string };
++    expect(receipt.status).toBe("received");
++  }),
++  { timeout: 120_000 },
++);
++
++test(
++  "GET missing order returns 404",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const response = yield* HttpClient.get(`${url}/orders/no-such-order`);
++    expect(response.status).toBe(404);
++  }),
++);
+```
+
+`HttpClient` is provided automatically by the test harness — no
+extra setup needed. The first test proves the whole part-2 path:
+flag allows, blob written, receipt readable; the second pins the
+typed `Vercel.Blob.NotFound` handling.
+
+## Destroy after tests on CI
+
+Right now the stack stays deployed after tests finish. That's great
+locally — you can re-run tests instantly against the already-deployed
+stack. But on CI you want to clean up.
+
+Add `afterAll` with `destroy`, using `skipIf` to only tear down when
+`CI` is set:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack));
+
++afterAll.skipIf(!process.env.CI)(destroy(Stack));
+```
+
+- **Locally** — `CI` is not set, so `skipIf` skips the destroy. You
+  iterate fast against the live stack.
+- **On CI** — `CI=true` is set by every major CI system, and the
+  stack is torn down automatically after tests complete.
+
+## Run against local emulation
+
+The harness has the same `dev` switch as `alchemy dev`: pass
+`dev: true` and `beforeAll(deploy(Stack))` boots the Function and
+its emulators locally instead of deploying — same wiring as Part 4,
+no extra terminal.
+
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Vercel.providers(),
+  state: Vercel.state(),
++  dev: true,
+});
+```
+
+Rather than hardcoding it, leave the flag off and set `ALCHEMY_DEV=1`
+in your shell — the harness reads it as the default, so the same
+file tests local emulation on your laptop and the real cloud in CI:
+
+```sh
+ALCHEMY_DEV=1 bun test test/integ.test.ts
+```
+
+## Recap
+
+You now have:
+
+- `Test.make({ providers, state })` wiring your provider layer and
+  state store into the test runner once per file
+- `beforeAll(deploy(Stack))` deploying once, `yield* stack` reading
+  outputs in each test
+- A bounded first-request retry — the non-negotiable for fresh
+  Vercel URLs
+- End-to-end assertions over the live order flow, and
+  `ALCHEMY_DEV=1` to run the same file against local emulation
+- `afterAll.skipIf(!process.env.CI)(destroy(Stack))` for automatic
+  cleanup on CI
+
+In [Part 6](/vercel/tutorial/part-6), you'll split the app into
+stages, share one Vercel project across PR previews, roll a bad
+release back instantly, and wire it all into GitHub Actions.

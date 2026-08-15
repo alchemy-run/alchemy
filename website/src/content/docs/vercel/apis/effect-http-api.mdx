@@ -1,0 +1,508 @@
+---
+title: Effect HTTP API
+description: Build a schema-validated HTTP API with Effect's HttpApi module and serve it from a Vercel Function — typed handlers over Blob storage and a typed client with no codegen.
+sidebar:
+  order: 1
+---
+
+Effect HTTP is the trust-boundary modality: schema-validated REST
+endpoints — real URLs, path params, query strings, payloads — that
+any HTTP client can call, no Effect or TypeScript required on the
+consumer's side. This page serves one from a
+[Vercel Function](/vercel/compute/functions); the concept home is
+[Effect HTTP](/apis/effect-http).
+
+Manual `if/else` routing inside a `fetch` handler works, but as an
+API grows you lose type safety at the boundary — request payloads
+aren't validated, response shapes aren't enforced, and errors slip
+through untyped. Effect's `HttpApi` module solves this: you declare
+endpoints with schemas for payloads, responses, and errors, then
+implement handlers against those schemas. The result is an
+`HttpEffect` — the same type a Function's `fetch` expects — so it
+plugs in directly.
+
+This is not a hypothetical pairing: alchemy's own
+[Vercel state store](/providers/vercel/statestore/state) is a
+Vercel Function serving an `HttpApi` over a private Blob store,
+deployed and exercised by every `Vercel.state()` run.
+
+The mental model:
+
+1. **Define the schema and API outside the Function.** Both are
+   pure descriptions and can be imported by clients.
+2. **Construct the handlers inside the Function's init phase.**
+   Init runs at plan time *and* once per instance at boot, so we
+   only do pure construction here — we never `yield*` something
+   that needs a request to exist.
+3. **Return `{ fetch }`** where `fetch` is the Effect that builds
+   the router — the runtime bridge builds it once per instance and
+   then runs the resulting `HttpEffect` on every request.
+4. **Bonus:** deploy, grab the URL, and call the API from a fully
+   typed client.
+
+## 1. Define the schema
+
+Start with a domain model. The schema lives outside the Function so
+the same file can be imported by clients without pulling in any
+runtime code.
+
+```typescript
+// src/task.ts
+import * as Schema from "effect/Schema";
+
+export class Task extends Schema.Class<Task>("Task")({
+  id: Schema.String,
+  title: Schema.String,
+  completed: Schema.Boolean,
+}) {}
+
+export class TaskNotFound extends Schema.TaggedError<TaskNotFound>()(
+  "TaskNotFound",
+  { id: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+```
+
+`Schema.Class` gives you a runtime-validated class with an inferred
+TypeScript type. `Schema.TaggedError` gives you a typed error you
+can return from handlers and discriminate against on the client —
+`httpApiStatus: 404` maps it to a 404 response instead of a generic
+500.
+
+## 2. Declare the API
+
+Endpoints are declarations — they describe `(method, path, params,
+payload, success, error)` without implementing anything yet.
+Putting them in their own file keeps the spec importable from both
+the server *and* a typed client.
+
+```typescript
+// src/api.ts
+import * as Schema from "effect/Schema";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import { Task, TaskNotFound } from "./task.ts";
+
+const TaskParams = Schema.Struct({
+  id: Schema.String,
+});
+
+const getTask = HttpApiEndpoint.get("getTask", "/:id", {
+  params: TaskParams,
+  success: Task,
+  error: TaskNotFound,
+});
+
+const createTask = HttpApiEndpoint.post("createTask", "/", {
+  success: Task,
+  payload: Schema.Struct({
+    title: Schema.String,
+  }),
+});
+
+export class TasksGroup extends HttpApiGroup.make("Tasks")
+  .add(getTask)
+  .add(createTask) {}
+
+export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
+```
+
+Nothing executes yet — `TaskApi` is purely a value-level
+description. The same `TaskApi` constant is what we'll hand to the
+client at the end of this guide.
+
+## 3. Build the Function
+
+Now we wire it up. Create `src/function.ts` with an empty init
+phase — the class ceremony is the standard
+[Effect-native Function](/vercel/compute/functions) shape:
+
+```typescript
+// src/function.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {};
+  }),
+) {}
+```
+
+The generator inside `Vercel.Function` is the **init phase**. It
+runs both at *plan time* (when alchemy builds the deployment graph)
+and at *runtime* (once per Fluid compute instance, on the first
+request). Anything you `yield*` here must be safe in both contexts
+— typically binding factories like `Vercel.ReadWriteBlob(...)`,
+never per-request work.
+
+### 3a. Bind a Blob store for storage
+
+Tasks need to live somewhere durable. Declare a
+[Blob store](/vercel/data/blob) and bind it inside init —
+`ReadWriteBlob` returns a typed client whose `get` / `put` / `del`
+/ `list` methods we'll call from the handlers below. Binding the
+store also connects the Function's project to it, so the data-plane
+token arrives with no extra wiring.
+
+```typescript
+// src/store.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Tasks = Vercel.BlobStore("Tasks", { access: "private" });
+```
+
+```diff lang="typescript"
++import { Tasks } from "./store.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
++    const tasks = yield* Vercel.ReadWriteBlob(Tasks);
+
+    return {};
+  }),
+) {}
+```
+
+We'll provide the runtime side of this binding
+(`Vercel.ReadWriteBlobHttp`) in step 3c when we assemble the full
+file.
+
+### 3b. Construct the handler group inside init
+
+`HttpApiBuilder.group` *constructs* a `Layer` that wires handlers
+into the API spec. It's pure — it doesn't run them. That makes it
+safe to call inside init.
+
+One Vercel-specific wrinkle first: the Blob client's operations are
+colored with `RuntimeContext` — alchemy's type-level marker for
+"only runs inside a deployed Function". A plain `fetch` handler
+discharges that requirement automatically, but `HttpApiBuilder`
+handlers must have their requirements satisfied by the API's Layer
+stack, which knows nothing about it. Discharge it explicitly with
+`RuntimeContext.phantom` — safe because these handlers
+definitionally execute inside the deployed Function. This is
+exactly what the shipped state store does.
+
+```diff lang="typescript"
+// src/function.ts
++import { RuntimeContext } from "alchemy";
+
+  Effect.gen(function* () {
+    const tasks = yield* Vercel.ReadWriteBlob(Tasks);
+
++    const runtime = Effect.provide(RuntimeContext.phantom);
++
++    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
++      handlers
++        .handle("getTask", ({ params }) =>
++          Effect.gen(function* () {
++            const text = yield* tasks.get(`tasks/${params.id}`).pipe(
++              Effect.flatMap((blob) => blob.text),
++              Effect.catchTag("Vercel.Blob.NotFound", () =>
++                Effect.succeed(undefined),
++              ),
++              runtime,
++              Effect.orDie,
++            );
++            if (text === undefined) {
++              return yield* Effect.fail(new TaskNotFound({ id: params.id }));
++            }
++            return Schema.decodeUnknownSync(Task)(JSON.parse(text));
++          }),
++        )
++        .handle("createTask", ({ payload }) =>
++          Effect.gen(function* () {
++            const task = new Task({
++              id: crypto.randomUUID(),
++              title: payload.title,
++              completed: false,
++            });
++            yield* tasks.put(`tasks/${task.id}`, JSON.stringify(task), {
++              contentType: "application/json",
++            });
++            return task;
++          }).pipe(runtime, Effect.orDie),
++        ),
++    );
+
+    return {};
+  }),
+```
+
+Each handler receives a typed request. `params.id` is a `string`
+because that's what the endpoint declared, and the return type must
+satisfy `Task` (or fail with `TaskNotFound`). Mismatches are caught
+at compile time.
+
+A missing blob surfaces as the typed `Vercel.Blob.NotFound` tag —
+we map it to our domain's `TaskNotFound`. Every other Blob failure
+(`Effect.orDie`) becomes a defect the HttpApi runtime turns into a
+500 response, keeping the typed error channel reserved for
+`TaskNotFound`.
+
+### 3c. Return `{ fetch }`
+
+The return value of init is the *Function's surface* — for a
+fetch-style Function that means an object with a `fetch` field. The
+bridge accepts either an `HttpEffect` (an Effect that, given an
+`HttpServerRequest`, produces an `HttpServerResponse`) or an Effect
+that *builds* one — which it runs once per instance, at boot, so
+route construction never repeats per request.
+
+We assemble the API in layers, then convert:
+
+- `HttpApiBuilder.layer(TaskApi)` — the top-level API layer.
+- `Layer.provide(tasksGroup)` — plug in the handlers we just built.
+- `Layer.provide([Etag.layer, HttpPlatformStub, Path.layer])` —
+  platform services the builder needs (content negotiation, ETag
+  generation, path handling).
+- `HttpRouter.toHttpEffect` — build the assembled Layer and hand
+  back the request handler.
+
+`HttpPlatformStub` stands in for `HttpPlatform.layer` — the API
+never serves files, so its file-response surface is stubbed. Define
+it once at module scope:
+
+```typescript
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: {
+    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+    compressResponse: (response) => Effect.succeed(response),
+  },
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
+```
+
+```diff lang="typescript"
+// src/function.ts
+    return {
++      fetch: HttpApiBuilder.layer(TaskApi).pipe(
++        Layer.provide(tasksGroup),
++        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
++        HttpRouter.toHttpEffect,
++      ),
+    };
+```
+
+The pipe ends in `HttpRouter.toHttpEffect`, so `fetch` is an Effect
+that builds the router — the bridge yields it once at instance boot
+and serves the resulting `HttpEffect` on every request after that.
+
+### Putting it together
+
+Here's the complete `src/function.ts`:
+
+```typescript
+// src/function.ts
+import { RuntimeContext } from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { TaskApi } from "./api.ts";
+import { Tasks } from "./store.ts";
+import { Task, TaskNotFound } from "./task.ts";
+
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: {
+    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+    compressResponse: (response) => Effect.succeed(response),
+  },
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const tasks = yield* Vercel.ReadWriteBlob(Tasks);
+
+    const runtime = Effect.provide(RuntimeContext.phantom);
+
+    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+      handlers
+        .handle("getTask", ({ params }) =>
+          Effect.gen(function* () {
+            const text = yield* tasks.get(`tasks/${params.id}`).pipe(
+              Effect.flatMap((blob) => blob.text),
+              Effect.catchTag("Vercel.Blob.NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              runtime,
+              Effect.orDie,
+            );
+            if (text === undefined) {
+              return yield* Effect.fail(new TaskNotFound({ id: params.id }));
+            }
+            return Schema.decodeUnknownSync(Task)(JSON.parse(text));
+          }),
+        )
+        .handle("createTask", ({ payload }) =>
+          Effect.gen(function* () {
+            const task = new Task({
+              id: crypto.randomUUID(),
+              title: payload.title,
+              completed: false,
+            });
+            yield* tasks.put(`tasks/${task.id}`, JSON.stringify(task), {
+              contentType: "application/json",
+            });
+            return task;
+          }).pipe(runtime, Effect.orDie),
+        ),
+    );
+
+    return {
+      fetch: HttpApiBuilder.layer(TaskApi).pipe(
+        Layer.provide(tasksGroup),
+        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+        HttpRouter.toHttpEffect,
+      ),
+    };
+  }).pipe(Effect.provide(Vercel.ReadWriteBlobHttp)),
+) {}
+```
+
+## 4. Add to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import Api from "./src/function.ts";
+
+export default Alchemy.Stack(
+  "TaskApi",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## 5. Deploy
+
+```sh
+bun alchemy deploy
+```
+
+The deploy is a prebuilt, immutable deployment — no Vercel build
+pipeline, no git. You can hit the production URL directly with
+`curl`:
+
+```sh
+curl -X POST https://task-api-xxxxxxxx.vercel.app/ \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Write docs"}'
+# → {"id":"...","title":"Write docs","completed":false}
+
+curl https://task-api-xxxxxxxx.vercel.app/<id>
+# → {"id":"...","title":"Write docs","completed":false}
+```
+
+Invalid payloads get automatic 400 responses with structured
+validation errors — no manual checking needed.
+
+:::note[Fresh URLs take a moment]
+A newly assigned `.vercel.app` URL can take a few seconds to start
+serving 200s while the edge propagates — retry the first request.
+If [deployment protection](/vercel/security/deployment-protection)
+guards the project, requests additionally need the
+`x-vercel-protection-bypass` header carrying the Function's
+`protectionBypass` output — that's the same grant
+[`Vercel.invoke`](/vercel/apis/invoke-function) binds automatically
+for function-to-function calls.
+:::
+
+## Bonus: call it from a typed client
+
+Because `TaskApi` is just a value, the same spec drives a fully
+typed client. There's no codegen step — `HttpApiClient.make`
+produces methods whose argument and return types come straight from
+the endpoint schemas. (Alchemy's CLI talks to the deployed state
+store exactly this way.)
+
+```typescript
+// scripts/client.ts
+import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { TaskApi } from "../src/api.ts";
+
+const program = Effect.gen(function* () {
+  const client = yield* HttpApiClient.make(TaskApi, {
+    baseUrl: process.env.TASK_API_URL!,
+  });
+
+  const created = yield* client.Tasks.createTask({
+    payload: { title: "Write docs" },
+  });
+  console.log("Created:", created.id);
+
+  const fetched = yield* client.Tasks.getTask({
+    params: { id: created.id },
+  });
+  console.log("Fetched:", fetched.title);
+});
+
+Effect.runPromise(program);
+```
+
+Get the URL from the deploy output and run it:
+
+```sh
+TASK_API_URL=https://task-api-xxxxxxxx.vercel.app bun scripts/client.ts
+```
+
+`client.Tasks.getTask` returns
+`Effect<Task, TaskNotFound | HttpClientError>`. The `TaskNotFound`
+branch is a real typed value you can pattern-match on, not an HTTP
+status code you have to interpret.
+
+## Recap
+
+- The **schema** (`Task`, `TaskNotFound`) and the **API spec**
+  (`TaskApi`) live outside the Function — they're pure descriptions.
+- The **handlers** are constructed inside the Function's init phase
+  closure, with the Blob client's `RuntimeContext` requirement
+  discharged via `RuntimeContext.phantom`.
+- The Function's surface is `{ fetch }`, where `fetch` is the
+  Effect ending in `HttpRouter.toHttpEffect` — the bridge builds
+  the router once per instance.
+- The same `TaskApi` value drives a fully typed client via
+  `HttpApiClient.make` — no codegen, no string URLs.
+
+## Where next
+
+- [Effect HTTP](/apis/effect-http) — the concept home for this
+  modality.
+- [Functions](/vercel/compute/functions) — the host: init phase,
+  Fluid compute, env bindings.
+- [Invoke a Function](/vercel/apis/invoke-function) — typed HTTP
+  calls between Functions, protection bypass included.
+- [Blob](/vercel/data/blob) — the storage this API is built on.
+
+Reference:
+
+- [`Function` reference](/providers/vercel/functions/function) —
+  every prop and attribute.
+- [`ReadWriteBlob` reference](/providers/vercel/blob/readwriteblob)
+  — the full Blob client surface.

@@ -249,6 +249,16 @@ const onEvent = (
         state.running.delete(`${event.file} :: ${event.hook}`);
         state.lastEnd = Date.now();
       });
+    case "TestRetry": {
+      // The failed attempt's error prints NOW — the retry may run for
+      // minutes, and if the process is killed during it this line is the
+      // only console record of what went wrong.
+      const title = `${dim(event.test.file)} ${dim(">")} ${event.test.titlePath.join(` ${dim(">")} `)}`;
+      const firstLine = event.error.split("\n", 1)[0] ?? event.error;
+      return write(
+        `${yellow("↻")} ${title} ${yellow(`attempt ${event.attempt} failed — retrying`)}\n${indent(dim(firstLine))}`,
+      );
+    }
     case "TestEnd": {
       state.running.delete(event.test.id);
       state.lastEnd = Date.now();

@@ -1,0 +1,114 @@
+---
+title: "Part 4: Local Dev"
+description: Run the whole stack locally with alchemy dev — hot rebuilds, emulated Edge Config, Blob, queue push delivery, and locally-fired crons.
+sidebar:
+  order: 4
+---
+
+In [Part 3](/vercel/tutorial/part-3) you wired up queues and a cron.
+But deploying to Vercel on every code change is slow. In this part
+you'll run everything locally with `bun alchemy dev` — the same
+program, hot reloaded, no cloud round-trips.
+
+## Start dev mode
+
+```sh
+bun alchemy dev
+```
+
+That's it. Instead of deploying, the Function boots locally on a
+stable `http://localhost:<port>` URL — the same bundle that would
+ship to Vercel, Effect bridge included — and its supporting
+resources are emulated in-process. The outputs now show local
+addresses:
+
+```sh
+curl "http://localhost:52341/orders?amount=4200" -X POST
+# → {"orderId":"…","receipt":"…"}
+```
+
+Edit `src/api.ts` — say, change a response string — and the Function
+rebuilds and reloads instantly. Requests keep hitting the same URL.
+
+## What runs locally
+
+Everything from the first three parts works without touching the
+cloud:
+
+- **The Function** serves from localhost with hot rebuilds, and the
+  Vercel platform env is injected (`VERCEL=1`,
+  `VERCEL_ENV=development`, `VERCEL_URL`, a `dev:`-prefixed
+  `VERCEL_DEPLOYMENT_ID`) so code that inspects it behaves the same
+- **Edge Config** reads are served from a local store seeded with
+  your declared `items`
+- **Blob** puts and gets run against a local blob server
+- **Queues** deliver through a local broker: `POST /orders` sends,
+  the broker push-delivers to your `subscribe` handler, and the
+  `processing order …` log line lands in your terminal
+- **Crons** fire on their schedule, with the exact request shape
+  Vercel's invoker uses — `CRON_SECRET` guard included
+
+The `dev:` prefix on identifiers is the proof that a resource's
+lifecycle never left your machine — a local resource is never a
+cloud API call.
+
+## One file, both modes
+
+There is no separate dev config. The same `alchemy.run.ts` drives
+`alchemy dev` and `alchemy deploy`; dev mode swaps each resource's
+provider for its local implementation and nothing in your program
+changes. See [Local Providers](/infrastructure-as-code/local-provider)
+for how that works under the hood.
+
+## Pin the port
+
+Ephemeral ports are stable for a dev session, but you can pin one:
+
+```diff lang="typescript"
+// src/api.ts
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
++    dev: {
++      port: 3000,
++    },
+  },
+  // ...
+) {}
+```
+
+`dev.port` only affects `alchemy dev` — live deploys ignore it. If
+the port is taken, the Function falls back to an ephemeral one and
+logs a warning.
+
+## Mixing local and live
+
+Sometimes you want one resource to stay real during dev — seed data
+in a real Blob store, for instance. Pipe the resource through
+`Alchemy.remote()` at the point you deploy it and it opts out of
+emulation: a dev run then provisions (and binds) the real thing
+while everything else stays local.
+
+:::caution
+A live Blob store's data-plane token is injected as project env of a
+real, connected Vercel project — a *local* Function has no such
+project, so binding a remote store from a local Function requires
+passing the token explicitly (e.g. via `env`). During everyday dev,
+keep stores local; reach for `Alchemy.remote()` when the data is the
+point.
+:::
+
+## Recap
+
+You now have:
+
+- The full order-intake stack — flags, receipts, queue delivery,
+  crons — running locally with `bun alchemy dev`
+- Hot reloads on every file change
+- `dev:` identity markers proving local resources never call the
+  cloud, and `Alchemy.remote()` as the escape hatch when one should
+
+In [Part 5](/vercel/tutorial/part-5), you'll write integration tests
+that deploy the stack and drive it over HTTP — against the real
+cloud or the local emulators, same test file.

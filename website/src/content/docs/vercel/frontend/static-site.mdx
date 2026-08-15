@@ -1,0 +1,197 @@
+---
+title: Static sites
+description: Deploy any build command's output directory to Vercel with Vercel.Website.StaticSite — assets-only deployments, memoized rebuilds, and custom route entries for redirects and headers.
+sidebar:
+  order: 5
+---
+
+`Vercel.Website.StaticSite` runs a build command, content-hashes
+the output directory, and deploys it as a **static-only** Vercel
+deployment — no serverless function ships at all, and Vercel's
+static layer answers every request. Reach for it whenever your site
+has its own build step that produces a directory of files: Hugo,
+Eleventy, Zola, or any custom pipeline. Frameworks with dedicated
+resources — [Nuxt](/vercel/frontend/nuxt),
+[Astro](/vercel/frontend/astro),
+[SvelteKit](/vercel/frontend/sveltekit) — have a better path that
+keeps server rendering available.
+
+## Deploy a Hugo site
+
+Point `command` at your build and `outdir` at where it writes
+output, and return the site's URL as a stack output:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyBlog",
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Vercel.Website.StaticSite("Blog", {
+      command: "hugo --minify",
+      outdir: "public",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+```sh
+bun alchemy deploy
+```
+
+`alchemy deploy` runs `hugo --minify`, hashes `public/`, wraps it
+in a static-only Build Output artifact, and uploads it as an
+immutable deployment. `site.url` is the project's assigned
+production URL — always read back from Vercel, never computed.
+
+## Props
+
+The build contract is two required props, plus a handful of
+optional ones:
+
+- `command` — the shell command that builds the site (e.g.
+  `"hugo --minify"`, `"npm run build"`, or a `./build.sh`).
+- `outdir` — the directory the command writes, relative to `cwd`.
+  Every file under it deploys as a static asset.
+- `cwd` — working directory for the command. Defaults to the
+  process working directory.
+- `env` — environment for the build subprocess, doubling as the
+  project env input. `Redacted` values stay out of logs and state.
+- `memo` — `MemoOptions | boolean`. By default every non-gitignored
+  file in `cwd` (plus the nearest lockfile) is hashed to decide
+  whether the build re-runs; `memo: { include: [...] }` narrows the
+  scope, `memo: false` rebuilds on every deploy.
+- `routes` — extra Build Output route entries merged before the
+  filesystem handler (see [below](#redirects-and-custom-routes)).
+
+Everything else a [`Function`](/vercel/compute/functions) accepts —
+`name`, tenant `project` mode, `target` — applies too, since a
+`StaticSite` is a Function underneath. `runtime`, `resources`, and
+`regions` are omitted: no function code ships.
+
+## No-op redeploys are free
+
+Deployments are immutable, so alchemy skips work at two levels:
+unchanged inputs skip the rebuild (content-hash memoization), and
+an unchanged output tree skips the deploy entirely — the
+`deploymentId` is stable across no-op runs. When content does
+change, a new immutable deployment is minted and the production
+alias moves to it; the old content is fully replaced.
+
+Keep build output out of the input hash:
+
+```sh
+# .gitignore
+public
+node_modules
+```
+
+## Redirects and custom routes
+
+`routes` merges raw
+[Build Output route entries](https://vercel.com/docs/build-output-api/v3/configuration#routes)
+ahead of the filesystem handler — redirects, headers, rewrites:
+
+```typescript
+const site = yield* Vercel.Website.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+  routes: [
+    { src: "/old-post", status: 308, headers: { Location: "/new-post" } },
+  ],
+});
+```
+
+Entries are passed through verbatim, so anything Vercel's route
+syntax supports works. Requests that match no route fall through to
+the filesystem handler and serve your files.
+
+## Build in a monorepo subdirectory
+
+Set `cwd` to run the build in a package directory — `outdir` is
+resolved relative to it:
+
+```typescript
+const site = yield* Vercel.Website.StaticSite("Web", {
+  cwd: "apps/web",
+  command: "npm run build",
+  outdir: "dist",
+});
+```
+
+## Narrow the rebuild scope
+
+When only part of the tree feeds the build, list the inputs
+explicitly so unrelated edits don't trigger rebuilds:
+
+```typescript
+const site = yield* Vercel.Website.StaticSite("Docs", {
+  command: "npm run build",
+  outdir: "dist",
+  memo: { include: ["content/**", "templates/**", "config.toml"] },
+});
+```
+
+## Class form
+
+Calling `StaticSite` with no arguments returns a constructor you
+can `extend` to declare the site as a named class — both an
+`Effect` you can `yield*` and a type you can reference elsewhere:
+
+```typescript
+// blog.ts
+import * as Vercel from "alchemy/Vercel";
+
+export default class Blog extends Vercel.Website.StaticSite<Blog>()("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+}) {}
+```
+
+```typescript
+// alchemy.run.ts
+import Blog from "./blog.ts";
+
+const site = yield* Blog;
+```
+
+## Local dev
+
+For content iteration, run your generator's own dev server directly
+(`hugo server`, `zola serve`, ...) — the build is your own command,
+so nothing alchemy-specific is involved.
+
+Websites have no local emulation during `alchemy dev` yet. If the
+site is part of a stack you run with `alchemy dev`, pipe it through
+`Alchemy.remote()` to keep deploying it live while the rest of the
+stack runs locally:
+
+```typescript
+import * as Alchemy from "alchemy";
+
+const site = yield* Vercel.Website.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+}).pipe(Alchemy.remote());
+```
+
+## Where next
+
+- [Websites overview](/vercel/frontend/websites) — the Build Output
+  pipeline all frameworks share.
+- [Nuxt](/vercel/frontend/nuxt),
+  [Astro](/vercel/frontend/astro),
+  [SvelteKit](/vercel/frontend/sveltekit) — dedicated resources
+  when your framework has one.
+- [Custom domains](/vercel/networking/custom-domains) — attach
+  `blog.acme.com` to the site's project.
+- [`Website.StaticSite` reference](/providers/vercel/website/staticsite)
+  — every prop and attribute.

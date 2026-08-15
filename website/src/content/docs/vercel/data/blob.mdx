@@ -1,0 +1,293 @@
+---
+title: Blob
+description: Vercel Blob is CDN-served object storage — create a store, bind it into a Function with read/write-scoped clients, and put, get, and compare-and-swap blobs with etags.
+---
+
+Vercel Blob is object storage: blobs addressed by pathname, served
+from a global CDN. Public stores serve every blob from a
+world-readable URL; private stores require authenticated reads. In
+alchemy a blob store is a one-line resource, and Functions reach it
+through typed, access-scoped clients.
+
+Reach for Blob whenever you need to store files: user uploads, build
+artifacts, media, generated reports, or any payload too big for an
+env var or [Edge Config](/vercel/data/edge-config).
+
+## Create a store
+
+```typescript
+// src/uploads.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Uploads = Vercel.BlobStore("Uploads");
+```
+
+Yield it inside your Stack:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import { Uploads } from "./src/uploads.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const uploads = yield* Uploads;
+
+    return { storeId: uploads.storeId };
+  }),
+);
+```
+
+No name required — alchemy generates a unique one from the app,
+stage, and logical ID. `access` defaults to `"public"` and `region`
+to `"iad1"`; both are immutable on Vercel, so changing either
+replaces the store.
+
+## Bind it to a Function
+
+Bind the store in the Function's init phase and use the typed client
+in the runtime handlers. This Function stores a blob on `PUT
+/?path=` and serves it back on `GET /?path=`:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Uploads } from "./uploads.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const uploads = yield* Vercel.ReadWriteBlob(Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://localhost");
+        const path = url.searchParams.get("path") ?? "";
+
+        if (request.method === "PUT") {
+          const body = yield* request.text;
+          const put = yield* uploads
+            .put(path, body, { contentType: "text/plain" })
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ etag: put.etag });
+        }
+
+        return yield* uploads.get(path).pipe(
+          Effect.flatMap((blob) => blob.text),
+          Effect.map((text) => HttpServerResponse.text(text)),
+          Effect.catchTag("Vercel.Blob.NotFound", () =>
+            Effect.succeed(
+              HttpServerResponse.text("Not found", { status: 404 }),
+            ),
+          ),
+          Effect.orDie,
+        );
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.ReadWriteBlobHttp)),
+) {}
+```
+
+`ReadWriteBlob(Uploads)` returns the typed client — `put`, `get`,
+`head`, `list`, `del` — and a missing blob is the typed
+`Vercel.Blob.NotFound`, kept in the type system until you handle it
+with `Effect.catchTag`. The `Vercel.ReadWriteBlobHttp` layer is the
+implementation you provide on the Function's init Effect.
+
+## The permission story
+
+Binding a store to a Function is all the wiring there is: the
+binding connects the Function's project to the store through a
+**store↔project connection**, and Vercel injects a
+`BLOB_READ_WRITE_TOKEN` environment variable into every connected
+project — the data-plane credential the client authenticates with.
+No token appears in your code or your alchemy config; the platform
+owns it.
+
+To connect projects that aren't hosts of a binding (another team's
+project, an app deployed outside this stack), list them on the
+store, and optionally limit which environments receive the injected
+variable:
+
+```typescript
+export const Uploads = Vercel.BlobStore("Uploads", {
+  projects: ["prj_XXXXXXXXXXXXXXXXXXXXXXXXXXXX"],
+  envVarEnvironments: ["production"],
+});
+```
+
+Removing a project from `projects` (or removing the binding)
+disconnects it and removes the injected variable.
+
+:::note[One store per project]
+The injected env name is fixed, so a project can hold at most **one**
+blob-store connection — a second connect fails with Vercel's
+`project_env_var_not_unique`. Alchemy accounts for this during
+replacement: a connected store is deleted before its successor is
+created, so the successor can claim the connection.
+:::
+
+## Read, Write, ReadWrite
+
+The store capability is split by access level so each Function gets
+least privilege:
+
+- `Vercel.ReadBlob` — `head`, `get`, `list`.
+- `Vercel.WriteBlob` — `put`, `del`.
+- `Vercel.ReadWriteBlob` — both.
+
+Provide the matching implementation layer on the Function
+(`Vercel.ReadBlobHttp`, `Vercel.WriteBlobHttp`,
+`Vercel.ReadWriteBlobHttp`) — several can coexist on one Function.
+
+:::note
+Vercel only issues a read-write store token, so the split is
+enforced on the **client type**, not by the credential: a
+`ReadBlobClient` simply has no `put` or `del` to call.
+:::
+
+## Compare-and-swap with etags
+
+Every `put`, `head`, and `list` row carries a quoted `etag`. Pass it
+back as `ifMatch` to write only if the blob hasn't changed since you
+read it:
+
+```typescript
+const updated = yield* uploads
+  .put("state.json", JSON.stringify(next), { ifMatch: current.etag })
+  .pipe(
+    Effect.catchTag("Vercel.Blob.PreconditionFailed", () =>
+      Effect.fail(new ConcurrentWrite()),
+    ),
+  );
+```
+
+A mismatch fails with the typed `Vercel.Blob.PreconditionFailed`
+(wire: 412) — the standard optimistic-concurrency loop is read,
+compute, `put` with `ifMatch`, retry on the tag.
+
+## Conditional create
+
+`allowOverwrite: false` turns `put` into a create-only write:
+
+```typescript
+yield* uploads.put("locks/nightly", "1", { allowOverwrite: false }).pipe(
+  Effect.catchTag("Vercel.Blob.AlreadyExists", () => Effect.void),
+);
+```
+
+If the pathname already exists the write fails with the typed
+`Vercel.Blob.AlreadyExists` instead of clobbering it — a cheap
+distributed "first writer wins". The default is `allowOverwrite:
+true`.
+
+## Private stores
+
+```typescript
+export const Uploads = Vercel.BlobStore("Uploads", {
+  access: "private",
+  region: "fra1",
+});
+```
+
+A public blob is world-readable at its canonical URL
+(`https://{store}.public.blob.vercel-storage.com/{pathname}`) —
+handy for serving media directly from the CDN. A private store
+rejects unauthenticated reads on that URL; content is only
+reachable through the authenticated client. `access` is immutable,
+so flipping it replaces the store.
+
+## Plain async Functions
+
+If a Function is a plain async handler (no Effect runtime),
+`readWriteBlobFromEnv` is the promise-based escape hatch. It reads
+the platform-injected `BLOB_READ_WRITE_TOKEN` directly:
+
+```typescript
+// src/handler.ts
+import { readWriteBlobFromEnv } from "alchemy/Vercel";
+
+const uploads = readWriteBlobFromEnv({ access: "private" });
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    const put = await uploads.put("hello.txt", "hi", {
+      contentType: "text/plain",
+    });
+    const blob = await uploads.get("hello.txt");
+    return Response.json({ etag: put.etag, text: blob.text });
+  },
+};
+```
+
+There's no binding to connect the project for you, so wire the
+connection from stack composition through the store's binding
+contract:
+
+```typescript
+// alchemy.run.ts (inside the Stack Effect)
+const store = yield* Vercel.BlobStore("Uploads", { access: "private" });
+const fn = yield* Vercel.Function("Api", {
+  main: "./src/handler.ts",
+  env: { BLOB_STORE_ID: store.storeId },
+});
+yield* store.bind("Api", { projects: [fn.projectId] });
+```
+
+`store.bind` feeds the Function's project id into the store's
+binding contract — exactly what the Effect-mode capability does
+under the hood — and tolerates the circular reference between the
+two resources. The `env` reference makes the Function depend on the
+store so the connection (and its injected token) lands *before* the
+deployment is created; project env only takes effect on new
+deployments.
+
+## Destroy a non-empty store
+
+:::caution[forceDestroy purges every blob]
+Vercel refuses to delete a non-empty store (409 `not_empty`) and
+offers no force parameter, so by default destroying a store that
+still holds blobs fails with the typed Conflict — the
+data-protection default. Opt in to purging:
+
+```typescript
+export const Uploads = Vercel.BlobStore("Uploads", {
+  forceDestroy: true,
+});
+```
+
+With `forceDestroy: true`, `alchemy destroy` deletes every blob
+through the data plane before deleting the store. There is no undo.
+:::
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the class DX that hosts
+  these bindings.
+- [Tutorial part 2](/vercel/tutorial/part-2) — build a Function with
+  storage bindings step by step.
+
+Related:
+
+- [Edge Config](/vercel/data/edge-config) — edge-replicated config
+  reads for flags and small values.
+- [Secrets & env](/vercel/security/secrets-env) — how env vars and
+  sensitive values reach a Function.
+
+Reference:
+
+- [`BlobStore` reference](/providers/vercel/blob/blobstore) — every
+  prop and attribute.
+- [`ReadWriteBlob` reference](/providers/vercel/blob/readwriteblob)

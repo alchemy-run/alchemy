@@ -1,0 +1,299 @@
+---
+title: Edge Config
+description: Vercel Edge Config is edge-replicated key-value config — declare items on the resource, read them from a Function through an auto-minted read token, and opt in explicitly to runtime writes.
+---
+
+Edge Config is Vercel's ultra-low-latency key-value store,
+replicated to the edge network — built for feature flags, A/B
+configuration, and dynamic redirects. In alchemy an Edge Config is a
+resource whose **items are declared in code**: every deploy diffs
+the observed items against the declared map and applies only the
+delta, so drift written out-of-band converges back to what your
+stack says.
+
+Reach for Edge Config when values are small, read constantly, and
+written rarely. For files and large payloads, use
+[Blob](/vercel/data/blob).
+
+## Create an Edge Config
+
+```typescript
+// src/flags.ts
+import * as Vercel from "alchemy/Vercel";
+
+export const Flags = Vercel.EdgeConfig("Flags", {
+  items: {
+    enableCheckout: true,
+    bannerText: "Hello!",
+    limits: { maxItems: 10 },
+  },
+});
+```
+
+Yield it inside your Stack:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import { Flags } from "./src/flags.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Vercel.providers(),
+    state: Vercel.state(),
+  },
+  Effect.gen(function* () {
+    const flags = yield* Flags;
+
+    return { edgeConfigId: flags.edgeConfigId };
+  }),
+);
+```
+
+Values may be any JSON value. Removing a key from `items` deletes it
+on the next deploy; omitting `items` entirely leaves whatever is
+stored unmanaged. No `slug` required — alchemy generates a unique
+one, and an explicit `slug` renames in place (slugs aren't unique
+identifiers on Vercel).
+
+## Enforce a schema
+
+Vercel can validate every item write against a JSON Schema — pass
+one and alchemy keeps it in sync:
+
+```typescript
+export const Flags = Vercel.EdgeConfig("Flags", {
+  schema: {
+    type: "object",
+    properties: {
+      enableCheckout: { type: "boolean" },
+    },
+  },
+  items: { enableCheckout: false },
+});
+```
+
+The schema is synced *before* the items on each deploy, so declared
+items always validate against the declared schema. Dropping the
+`schema` prop deletes the schema.
+
+## Read it from a Function
+
+Bind the config in the Function's init phase and read through the
+typed client — the same `get`/`getAll`/`has`/`digest` surface as
+`@vercel/edge-config`:
+
+```typescript
+// src/api.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Flags } from "./flags.ts";
+
+export default class Api extends Vercel.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const config = yield* Vercel.ReadEdgeConfig(Flags);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const enabled = yield* config
+          .get<boolean>("enableCheckout")
+          .pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ enabled });
+      }),
+    };
+  }).pipe(Effect.provide(Vercel.ReadEdgeConfigHttp)),
+) {}
+```
+
+`ReadEdgeConfig(Flags)` returns the typed read client. `get` on a
+missing key is `undefined`, not an error; `getAll` takes an optional
+key subset; `digest` returns the content digest that changes
+whenever any item changes. The `Vercel.ReadEdgeConfigHttp` layer is
+the implementation you provide on the init Effect.
+
+## Read tokens
+
+Under the hood, `ReadEdgeConfigHttp` mints an `EdgeConfigToken` —
+a **read-only, per-config data-plane token** — for each Function
+that binds the config, and injects its connection string into the
+Function's environment as a `sensitive` project env var. Read
+access is least-privilege by construction: the token grants nothing
+beyond reading this one config, and no management credential ever
+reaches the Function.
+
+Vercel discloses the token's plaintext exactly **once**, at
+creation. Alchemy persists it in state and *observes-and-keeps*: as
+long as the token still exists on Vercel, every subsequent deploy
+reuses the same value, so dependent env vars — and therefore the
+deployment itself — never churn.
+
+Declare a token explicitly when a consumer lives outside the
+binding system (an async Function, an external app):
+
+```typescript
+const token = yield* Vercel.EdgeConfigToken("FlagsToken", {
+  edgeConfigId: flags.edgeConfigId,
+});
+// token.connectionString ===
+//   "https://edge-config.vercel.com/{edgeConfigId}?token={token}"
+```
+
+`connectionString` is `Redacted` — the exact shape
+`@vercel/edge-config` and `readEdgeConfigFromEnv` accept.
+
+## Plain async Functions
+
+If a Function is a plain async handler (no Effect runtime), bind an
+explicit token's connection string into its env:
+
+```typescript
+// alchemy.run.ts (inside the Stack Effect)
+const fn = yield* Vercel.Function("Api", {
+  main: "./src/api.ts",
+  env: {
+    // Redacted ⇒ synced as a `sensitive` project env var
+    FLAGS: token.connectionString,
+  },
+});
+```
+
+Then read it with the promise-based `readEdgeConfigFromEnv`:
+
+```typescript
+// src/api.ts
+import { readEdgeConfigFromEnv } from "alchemy/Vercel";
+
+const flags = readEdgeConfigFromEnv("FLAGS");
+
+export default {
+  async fetch(): Promise<Response> {
+    return Response.json({
+      checkout: await flags.get("enableCheckout"),
+    });
+  },
+};
+```
+
+`readEdgeConfigFromEnv` resolves the connection string from the
+given env var at call time and exposes the same
+`get`/`getAll`/`has`/`digest` surface as promises, with failures as
+plain `Error`s.
+
+## Propagation timing
+
+Item writes — the deploy-time sync and runtime writes alike — go
+through Vercel's management API, which is strongly consistent: a
+read back through the API sees them immediately. The edge data
+plane (`edge-config.vercel.com`) converges shortly after, typically
+within a couple of seconds.
+
+When something downstream needs certainty (a test, a migration
+step), poll the data-plane `digest` until it matches the resource's
+`digest` attribute — bounded, never in a bare loop:
+
+```typescript
+yield* config.digest().pipe(
+  Effect.repeat({
+    schedule: Schedule.spaced("2 seconds"),
+    until: (digest) => digest === flags.digest,
+    times: 15,
+  }),
+);
+```
+
+## Runtime writes — an explicit opt-in
+
+Deploy-time declarative `items` cover most needs. When a Function
+genuinely must write at runtime (an admin toggle, a kill switch),
+bind `WriteEdgeConfig` — but read the tradeoff first.
+
+:::caution[The write token is a team-wide management token]
+Edge Config **writes have no scoped credential** — this is a
+live-verified platform limitation, not an alchemy choice. Configs
+are owned by the team, so project-scoped tokens can't see them; the
+only token that can write items is a team-wide (or user-wide) API
+token with full management authority over every project and
+resource in the team. Alchemy therefore never auto-binds its own
+token: `WriteEdgeConfigHttp` requires you to hand it one
+explicitly, and any code running in that Function can use it for
+*any* team-scoped management call. Prefer a dedicated machine-user
+token with an expiry, rotate it, and stick to declarative `items`
+whenever runtime writes aren't strictly required.
+:::
+
+```typescript
+// src/admin.ts
+import * as Vercel from "alchemy/Vercel";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Flags } from "./flags.ts";
+
+export default class Admin extends Vercel.Function<Admin>()(
+  "Admin",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const writer = yield* Vercel.WriteEdgeConfig(Flags);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* writer.set({ maintenance: true }).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ ok: true });
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      Vercel.WriteEdgeConfigHttp({
+        token: Config.redacted("EDGE_CONFIG_WRITE_TOKEN"),
+      }),
+    ),
+  ),
+) {}
+```
+
+`WriteEdgeConfigHttp({ token })` resolves the token from the
+**deploy machine's** environment (`Config.redacted`) and syncs it to
+the Function as a `sensitive` project env var. The client offers
+`set` (batched upserts), `delete` (batched deletes), and `patch` to
+mix both in one call:
+
+```typescript
+yield* writer.patch([
+  { operation: "upsert", key: "banner", value: "hello" },
+  { operation: "delete", key: "legacyFlag" },
+]);
+```
+
+:::note
+`alchemy dev` emulates the Edge Config *read* data plane only.
+Runtime writes always target the real management API, so in dev
+they fail unless the config is deployed live via `Alchemy.remote()`.
+:::
+
+## Where next
+
+- [Functions](/vercel/compute/functions) — the class DX that hosts
+  these bindings.
+- [Tutorial part 2](/vercel/tutorial/part-2) — build a Function with
+  storage bindings step by step.
+
+Related:
+
+- [Blob](/vercel/data/blob) — CDN-served object storage for files
+  and large payloads.
+- [Secrets & env](/vercel/security/secrets-env) — how sensitive env
+  vars reach a Function.
+
+Reference:
+
+- [`EdgeConfig` reference](/providers/vercel/edgeconfig/edgeconfig)
+  — every prop and attribute.
+- [`EdgeConfigToken` reference](/providers/vercel/edgeconfig/edgeconfigtoken)
+- [`EdgeConfigRead` reference](/providers/vercel/edgeconfig/edgeconfigread)
+- [`EdgeConfigWrite` reference](/providers/vercel/edgeconfig/edgeconfigwrite)

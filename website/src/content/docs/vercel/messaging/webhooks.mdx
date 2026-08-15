@@ -1,0 +1,141 @@
+---
+title: Webhooks
+description: Vercel.Webhook POSTs platform events — deployments, domains, projects — to an HTTPS endpoint, signed with a write-once secret; any prop change replaces the hook and mints a new secret.
+---
+
+A Vercel webhook is an HTTPS endpoint that Vercel POSTs platform
+events to — deployments succeeding or failing, projects and
+domains being created, and so on — each delivery signed with a
+secret minted when the webhook is created.
+
+Reach for `Vercel.Webhook` when something *outside* your app
+needs to react to the platform itself: paging on failed
+production deploys, syncing an external dashboard, or kicking off
+downstream automation. For messages *between* parts of your own
+app, use [Queues](/vercel/messaging/queues) instead — webhooks
+carry platform events, not application payloads.
+
+## Create a webhook
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Vercel from "alchemy/Vercel";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Ops",
+  { providers: Vercel.providers(), state: Vercel.state() },
+  Effect.gen(function* () {
+    const hook = yield* Vercel.Webhook("Deploys", {
+      url: "https://ops.example.com/hooks/vercel",
+      events: ["deployment.succeeded", "deployment.error"],
+    });
+    return { webhookId: hook.webhookId };
+  }),
+);
+```
+
+`Vercel.Webhook` registers an account-level hook: with no project
+scope, it fires for **every** project in the team. `events` names
+the platform events that trigger a delivery — the union of known
+event names is typed (`Vercel.WebhookEvent`), and any string is
+accepted for events newer than the type; the full catalog lives
+in [Vercel's webhook docs](https://vercel.com/docs/webhooks).
+
+Point `url` at a stable endpoint — a
+[custom domain](/vercel/networking/custom-domains), not a
+per-deployment URL — because changing the URL replaces the
+webhook (see below).
+
+## Scope to specific projects
+
+```typescript
+const hook = yield* Vercel.Webhook("SiteDeploys", {
+  url: "https://ops.example.com/hooks/site",
+  events: ["deployment.succeeded"],
+  projectIds: [project.projectId],
+});
+```
+
+`projectIds` restricts deliveries to the listed projects — pass
+the `projectId` output of the projects you care about, and the
+hook stays quiet for everything else in the team.
+
+## Replace, never update
+
+Vercel's API has no webhook update operation, so this resource is
+**replace-only**: changing any prop (`url`, `events`,
+`projectIds`) creates a new webhook — with a new `webhookId` and
+a new signing secret — and then deletes the old one. The
+successor is created first, so there's no window with no hook
+registered.
+
+Both list props are compared as *sets* — reordering `events` or
+`projectIds` is a no-op: same id, same secret, nothing redeploys.
+
+```typescript
+// no-op: same set, different order
+events: ["deployment.error", "deployment.succeeded"]
+
+// replacement: the set changed — new id, new secret
+events: ["deployment.succeeded", "deployment.error", "project.created"]
+```
+
+Deletion is idempotent: a webhook removed out-of-band (say, from
+the dashboard) doesn't fail `destroy` — already-gone is success.
+
+## The signing secret
+
+Vercel returns the signing secret **exactly once**, in the create
+response — it can never be read back from the API. Alchemy
+persists it in the webhook's attributes, so `hook.secret` is
+always available to your stack:
+
+```typescript
+const hook = yield* Vercel.Webhook("Deploys", {
+  url: "https://ops.example.com/hooks/vercel",
+  events: ["deployment.succeeded"],
+});
+return { signingSecret: hook.secret.as<string>() };
+```
+
+Exporting it as a stack output lets the receiving service pick it
+up from wherever you surface outputs. Remember the replacement
+rule: any prop change mints a *new* secret, so the receiver's
+copy must be refreshed whenever the hook is replaced.
+
+## Verify deliveries
+
+Every delivery carries an `x-vercel-signature` header — the
+HMAC-SHA1 of the raw request body, keyed with the webhook's
+secret. Verify before trusting the payload:
+
+```typescript
+// the receiving endpoint
+import crypto from "node:crypto";
+
+const expected = crypto
+  .createHmac("sha1", process.env.WEBHOOK_SECRET!)
+  .update(rawBody)
+  .digest("hex");
+
+if (expected !== request.headers.get("x-vercel-signature")) {
+  return new Response("invalid signature", { status: 401 });
+}
+```
+
+Compute the HMAC over the **raw** body bytes — parsing and
+re-serializing the JSON first will change the bytes and fail
+verification.
+
+## Where next
+
+- [Queues](/vercel/messaging/queues) — application messages
+  between your own Functions, instead of platform events.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback)
+  — the deploy lifecycle the `deployment.*` events narrate.
+- [Log drains](/vercel/observability/drains) — continuous
+  log/analytics export, where webhooks would be too coarse.
+- [`Webhook` reference](/providers/vercel/webhooks/webhook) —
+  every prop and attribute.

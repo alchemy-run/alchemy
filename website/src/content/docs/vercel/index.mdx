@@ -1,0 +1,97 @@
+---
+title: Vercel
+description: Build and deploy full applications on Vercel with Alchemy — Fluid compute Functions plus resources like Edge Config, Blob, Queues, and cron schedules, wired together by typed bindings.
+---
+
+An alchemy app on Vercel is any number of **Functions** and
+**Websites** — each owning its own Vercel project — plus the
+resources they talk to: Edge Configs, Blob stores, queue topics,
+cron schedules — all declared in the same TypeScript program and
+wired together by typed bindings. Deploy the whole thing with
+`bun alchemy deploy`; alchemy figures out what changed.
+
+New here? [Set up your account](/vercel/setup), then start the
+[tutorial](/vercel/tutorial/part-1).
+
+## Compute
+
+- [Functions](/vercel/compute/functions) — the compute runtime;
+  Effect-native classes with typed bindings, or plain async handlers.
+- [Fluid compute](/vercel/compute/fluid-compute) — memory tiers, max
+  duration, regions, and concurrent instances.
+- [Deployments & rollback](/vercel/compute/deployments-and-rollback) —
+  every deploy is an immutable version; roll back in seconds without
+  rebuilding.
+- [Cron](/vercel/compute/cron) — scheduled routes with a secret-guarded
+  invoker.
+
+## Frontend
+
+- [Websites](/vercel/frontend/websites) — framework builds deployed
+  alongside your Functions.
+- [Nuxt](/vercel/frontend/nuxt) — zero-config: Nitro's Vercel preset is
+  built in.
+- [Astro](/vercel/frontend/astro) and
+  [SvelteKit](/vercel/frontend/sveltekit) — via their official Vercel
+  adapters.
+- [Static sites](/vercel/frontend/static-site) — any build command's
+  static output.
+
+## Data
+
+- [Blob](/vercel/data/blob) — object storage with read/write-scoped
+  bindings and etag-based conditional writes.
+- [Edge Config](/vercel/data/edge-config) — low-latency config and
+  feature flags with scoped read tokens.
+
+## Messaging
+
+- [Queues](/vercel/messaging/queues) — typed topics with at-least-once
+  push delivery to your Functions.
+- [Webhooks](/vercel/messaging/webhooks) — deployment and project events
+  delivered to your endpoints.
+
+## APIs
+
+- [Effect HTTP API](/vercel/apis/effect-http-api) — schema-validated
+  REST endpoints served from a Function.
+- [Invoke a Function](/vercel/apis/invoke-function) — typed
+  Function-to-Function calls, including circular topologies.
+
+## Networking
+
+- [Domains & DNS](/vercel/networking/domains) — domains, DNS records,
+  and certificates as resources.
+- [Custom domains](/vercel/networking/custom-domains) — serve a Function
+  or Website on your own domain.
+
+## Security & secrets
+
+- [Secrets & env](/vercel/security/secrets-env) — encrypted and
+  sensitive env vars, typed at the boundary.
+- [Deployment protection](/vercel/security/deployment-protection) — SSO,
+  bypass secrets, and how each binding gets its runtime authority.
+- [Firewall](/vercel/security/firewall) — WAF rules managed as one
+  versioned document.
+
+## Observability
+
+- [Logs](/vercel/observability/logs) — build logs and live runtime
+  tailing from the CLI.
+- [Drains](/vercel/observability/drains) — ship logs and traces to
+  external sinks.
+
+## What are you building?
+
+| App shape | Stack |
+| --- | --- |
+| HTTP API | [Function](/vercel/compute/functions) + [Blob](/vercel/data/blob) — see [Effect HTTP API](/vercel/apis/effect-http-api) |
+| Background jobs | [Queues](/vercel/messaging/queues) — typed topics, push consumers |
+| Scheduled work | [Cron](/vercel/compute/cron) |
+| Full-stack app | [Nuxt](/vercel/frontend/nuxt), [Astro](/vercel/frontend/astro), or [SvelteKit](/vercel/frontend/sveltekit) + a [Function](/vercel/compute/functions) API |
+| Feature flags & config | [Edge Config](/vercel/data/edge-config) |
+| Call one Function from another | [Invoke a Function](/vercel/apis/invoke-function) |
+| App on your own domain | [Domains & DNS](/vercel/networking/domains) — see [Custom domains](/vercel/networking/custom-domains) |
+| Instant rollback | [Deployments & rollback](/vercel/compute/deployments-and-rollback) |
+| Production observability | [Logs](/vercel/observability/logs) and [Drains](/vercel/observability/drains) |
+| Store deploy state on Vercel | [Vercel state store](/state-store#vercel-state-store) |
