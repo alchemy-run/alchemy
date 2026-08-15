@@ -181,7 +181,7 @@ const removeProviders = Flag.string("remove").pipe(
 
 const methodFlag = Flag.string("method").pipe(
   Flag.withDescription(
-    "Configure non-interactively using this method (see `alchemy provider list` for each provider's methods)",
+    "Configure non-interactively using this method (each provider documents its methods and fields in `alchemy profile edit --help`)",
   ),
   Flag.optional,
   Flag.map(Option.getOrUndefined),

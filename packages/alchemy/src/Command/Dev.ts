@@ -1,10 +1,15 @@
+import * as ConsoleService from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { stripAnsi } from "../Cli/CliKit/index.ts";
+import { makeResourceOutput } from "../Cli/Output.ts";
+import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { Stage } from "../Stage.ts";
 import {
   CommandExecutor,
   UnexpectedExit,
@@ -110,14 +115,33 @@ export const DevProviderLocal = () =>
     ),
     Effect.gen(function* () {
       const { spawn } = yield* CommandExecutor;
+      const stage = yield* Stage;
+      const openDevLog = yield* makeDevLogOpener;
+      const baseConsole = yield* ConsoleService.Console;
 
       return {
         // The dev process is spawned into the instance scope the helper
         // provides: it keeps running after `start` returns (readiness) and
         // is killed when the helper closes the scope on restart/delete.
-        start: Effect.fn(function* ({ news: props, invalidate }) {
+        start: Effect.fn(function* ({ id, news: props, invalidate }) {
           const child = yield* spawn(props);
           const redactor = makeCommandRedactor(props.env);
+          // One log file per process generation, closed with the instance
+          // scope: log/{stage}/{logicalId}/{timestamp}.log. Terminal lines
+          // carry the resource's pnpm-style prefix; the file gets raw text.
+          const devLog = yield* openDevLog(stage, id);
+          yield* Effect.log(`[${id}] Logs → ${devLog.path}`);
+          // Through the Console SERVICE, never a raw fd write: the process
+          // that owns the terminal runs an ink renderer, and a bare write
+          // to its stdout tears the animated region. The CLI's console
+          // capture inserts these lines above it instead.
+          const prefixed = makeResourceOutput(id, baseConsole);
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              prefixed.stdout.flush();
+              prefixed.stderr.flush();
+            }),
+          );
 
           let buffer = "";
           // A non-local URL seen so far (docs link, error page, update notice,
@@ -132,7 +156,10 @@ export const DevProviderLocal = () =>
               Stream.decodeText,
               redactor.stream,
               Stream.tap((text) =>
-                Effect.sync(() => process[sink].write(text)),
+                Effect.sync(() => {
+                  prefixed[sink].push(text);
+                  devLog.write(text);
+                }),
               ),
               Stream.tap((text) =>
                 Effect.sync(() => {
@@ -204,19 +231,16 @@ const LOCAL_URL_REGEX =
 // set of punctuation typically used to wrap URLs in log output.
 const URL_REGEX = /https?:\/\/[^\s)\],"'`]+/;
 
-// ECMA-262 ANSI/VT100 escape sequences — `Vite`, `Next`, etc. surround the
-// URL with color codes that would otherwise be eaten by the URL regex.
-// eslint-disable-next-line no-control-regex
-const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
-
 /**
  * Extract a URL from `text`, favoring a localhost/IP URL (the dev server's
  * own address) over any other URL. Returns the first localhost/IP URL if one
  * is present, otherwise the first plain http(s) URL, otherwise `undefined`.
+ * `Vite`, `Next`, etc. surround the URL with ANSI color codes that would
+ * otherwise be eaten by the URL regex, so strip them first.
  * @internal
  */
 export const extractUrl = (text: string) => {
-  const clean = text.replaceAll(ANSI_REGEX, "");
+  const clean = stripAnsi(text);
   return clean.match(LOCAL_URL_REGEX)?.[0] ?? clean.match(URL_REGEX)?.[0];
 };
 

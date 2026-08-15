@@ -7,6 +7,7 @@ import {
   TerminalCancelled,
   CliKit,
   hyperlink,
+  linePrefix,
   stripAnsi,
   layer as cliKitLayer,
 } from "@/Cli/CliKit/index.ts";
@@ -32,8 +33,18 @@ import {
 } from "@/Cli/CliKit/components.ts";
 import type { CliKitService } from "@/Cli/CliKit/CliKit.ts";
 import { makeRuntime } from "@/Cli/CliKit/InkRuntime.tsx";
+import { isInProgress } from "@/Cli/views/statusStyle.ts";
+import { makeResourceLogger, makeResourceOutput } from "@/Cli/Output.ts";
+import { stackOutputsView } from "@/Cli/views/StackOutputs.tsx";
+import {
+  buildStageNodes,
+  stateExplorerScreen,
+  StateExplorerStore,
+  type StateExplorerSource,
+} from "@/Cli/views/StateExplorer.tsx";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Logger from "effect/Logger";
 import { expect, it } from "alchemy-test";
 
 class CaptureStream extends PassThrough {
@@ -91,6 +102,90 @@ const makeStatic = () => {
   return { ...runtime, stdout };
 };
 
+const makeExplorerSource = () => {
+  const calls = { stacks: 0, stages: 0, resources: 0, files: 0 };
+  const source: StateExplorerSource = {
+    backend: "local",
+    listStacks: async () => {
+      calls.stacks++;
+      return ["app"];
+    },
+    listStages: async () => {
+      calls.stages++;
+      return ["prod"];
+    },
+    listResources: async () => {
+      calls.resources++;
+      return ["Api/Worker"];
+    },
+    readFile: async () => {
+      calls.files++;
+      return { status: "created", url: "https://workers.dev" };
+    },
+    deleteNodes: async () => {},
+  };
+  return { calls, source };
+};
+
+const explorerSource = makeExplorerSource().source;
+
+it("builds Finder-style namespace columns from FQN names", () => {
+  const nodes = buildStageNodes("app", "prod", ["Api/Worker"]);
+  expect(nodes.map((node) => node.name)).toEqual(["Api", "output.json"]);
+  const api = nodes[0];
+  expect(api?.kind).toBe("namespace");
+  if (api?.kind === "namespace") {
+    expect(api.children.map((node) => node.name)).toEqual(["Worker.json"]);
+  }
+});
+
+it("loads state columns and file contents only when selected", async () => {
+  const { calls, source } = makeExplorerSource();
+  const store = new StateExplorerStore(source);
+  store.loadRoot();
+  await Promise.resolve();
+  expect(calls).toEqual({ stacks: 1, stages: 0, resources: 0, files: 0 });
+
+  const root = store.snapshot().root;
+  expect(root.status).toBe("ready");
+  if (root.status !== "ready") return;
+  const stack = root.value[0]!;
+  store.loadChildren(stack);
+  await Promise.resolve();
+  expect(calls).toEqual({ stacks: 1, stages: 1, resources: 0, files: 0 });
+
+  const stages = store.snapshot().children.get(stack.id);
+  if (stages?.status !== "ready") return;
+  const stage = stages.value[0]!;
+  store.loadChildren(stage);
+  await Promise.resolve();
+  expect(calls).toEqual({ stacks: 1, stages: 1, resources: 1, files: 0 });
+
+  const state = store.snapshot().children.get(stage.id);
+  if (state?.status !== "ready") return;
+  const namespace = state.value.find((node) => node.kind === "namespace");
+  if (namespace?.kind !== "namespace") return;
+  store.loadFile(namespace.children[0]!);
+  await Promise.resolve();
+  expect(calls).toEqual({ stacks: 1, stages: 1, resources: 1, files: 1 });
+});
+
+it("formats stack outputs as labeled values instead of a raw object dump", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    stackOutputsView({
+      apiUrl: "https://example.com",
+      metadata: { region: "us-east-1", replicas: 2 },
+    }),
+  );
+
+  expect(output).toContain("Outputs");
+  expect(output).toContain("apiUrl");
+  expect(output).toContain("https://example.com");
+  expect(output).toContain("metadata");
+  expect(output).toContain("region");
+});
+
 /**
  * Scoped variant of `makeStatic` for tests that mount a persistent renderer.
  * Disposal runs as a finalizer, so a failing test never leaks an Ink
@@ -129,6 +224,34 @@ const makeLive = (
   );
 };
 
+it.effect(
+  "keeps the state explorer active while searching and quits cleanly",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service } = yield* makeLive({ stdin });
+      const fiber = yield* service
+        .application(service.prompt.custom(stateExplorerScreen(explorerSource)))
+        .pipe(Application.alternate)
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(
+        () => new Promise<void>((resolve) => setTimeout(resolve, 75)),
+      );
+
+      yield* Effect.sync(() => stdin.write("/"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("workers.dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* settleInput;
+      expect(fiber.pollUnsafe()).toBeUndefined();
+
+      yield* Effect.sync(() => stdin.write("q"));
+      yield* Fiber.join(fiber);
+    }),
+);
+
 it.effect("renders the built-in layout components without writing", () =>
   Effect.gen(function* () {
     const { service, stdout } = makeStatic();
@@ -158,6 +281,14 @@ it.effect("preserves zero in primitive-array views", () =>
     expect(rendered).toBe("count: 0");
   }),
 );
+
+it("does not animate work before it starts", () => {
+  expect(isInProgress("pending")).toBe(false);
+  expect(isInProgress("creating")).toBe(true);
+  expect(isInProgress("updating")).toBe(true);
+  expect(isInProgress("deleting")).toBe(true);
+  expect(isInProgress("running")).toBe(true);
+});
 
 it.effect("prints tables and nested sections through one service", () =>
   Effect.gen(function* () {
@@ -423,6 +554,64 @@ it("strips terminal colors and hyperlinks", () => {
     stripAnsi(`\u001B[31mred\u001B[0m ${hyperlink("docs", "https://x")}`),
   ).toBe("red docs");
 });
+
+it("uses one resource-prefixed pipeline for chunked stdout and stderr", () => {
+  const lines: string[] = [];
+  const output = makeResourceOutput("www", {
+    log: (...args) => lines.push(args.join(" ")),
+  });
+
+  output.stdout.push("first\nsec");
+  output.stdout.push("ond\r");
+  output.stderr.push("failed");
+  output.stdout.flush();
+  output.stderr.flush();
+
+  const prefix = stripAnsi(linePrefix("www"));
+  expect(lines.map(stripAnsi)).toEqual([
+    `${prefix} first`,
+    `${prefix} second`,
+    `${prefix} failed`,
+  ]);
+});
+
+it.effect(
+  "routes effectful resource output through the configured logger",
+  () => {
+    const entries: Array<{ level: string; message: unknown }> = [];
+    const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+      entries.push({ level: logLevel, message });
+    });
+    const output = makeResourceLogger("www");
+
+    return Effect.gen(function* () {
+      yield* output("stdout", "[MDX] generated files");
+      yield* output("stderr", "vite diagnostic");
+      expect(entries).toEqual([
+        { level: "Info", message: ["[www] [MDX] generated files"] },
+        { level: "Info", message: ["[www] vite diagnostic"] },
+      ]);
+    }).pipe(Effect.provide(Logger.layer([logger])));
+  },
+);
+
+it.effect("does not decorate resource stderr as a semantic failure", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive({ captureConsole: true });
+    const live = yield* service.live.open(<Text>Building</Text>);
+
+    const output = makeResourceOutput("www", globalThis.console);
+    output.stderr.push("[FILE_NAME_CONFLICT] warning\n");
+    output.stderr.flush();
+    yield* live.close;
+
+    const rendered = stripAnsi(stdout.output);
+    expect(rendered).toContain(
+      `${stripAnsi(linePrefix("www"))} [FILE_NAME_CONFLICT] warning`,
+    );
+    expect(rendered).not.toContain("✖");
+  }),
+);
 
 it.effect("runs interactive components inside the owned session", () =>
   Effect.gen(function* () {

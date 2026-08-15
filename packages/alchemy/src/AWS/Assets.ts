@@ -91,7 +91,7 @@ export const AssetsLive = Layer.effect(
               if (!environment.endpoint) {
                 return yield* Effect.die(
                   new Error(
-                    "Assets bucket not found. Run 'alchemy aws bootstrap' to create it.",
+                    "Assets bucket not found. Run 'alchemy provider aws bootstrap' to create it.",
                   ),
                 );
               }

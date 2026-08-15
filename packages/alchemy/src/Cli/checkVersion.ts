@@ -9,6 +9,14 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import packageJson from "../../package.json" with { type: "json" };
+import {
+  ANSI_RESET,
+  ansiFg,
+  colorsEnabled,
+  glyphsFor,
+  theme,
+  unicodeEnabled,
+} from "./CliKit/index.ts";
 
 const NPM_DIST_TAGS_URL =
   "https://registry.npmjs.org/-/package/alchemy/dist-tags";
@@ -179,11 +187,16 @@ export const checkLatestVersion = Effect.gen(function* () {
   // Print via the Console service, not Effect.logWarning: TelemetryLive
   // replaces the default stdout logger with an OTLP-only logger at this
   // stage of the program, so log output would never reach the terminal.
-  const useColor = process.stderr.isTTY === true;
+  const useColor = colorsEnabled();
+  const glyphs = glyphsFor(unicodeEnabled());
   const message =
     `alchemy ${latest} is available (you're on ${current}). ` +
     `Run \`${installCmd}\` to upgrade.`;
-  yield* Console.warn(useColor ? `\x1b[33m${message}\x1b[0m` : message);
+  yield* Console.warn(
+    useColor
+      ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}`
+      : message,
+  );
 }).pipe(Effect.catch(() => Effect.void));
 
 // Exported for tests.

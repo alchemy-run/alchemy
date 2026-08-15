@@ -6,7 +6,7 @@ description: Preview what would change without applying anything. Equivalent to 
 import Terminal from "../../../components/Terminal.astro";
 
 ```sh
-alchemy plan [file] [options]
+alchemy plan [options]
 ```
 
 `plan` previews what would change without applying anything — it is equivalent to `alchemy deploy --dry-run`.
@@ -24,7 +24,7 @@ made.
 
 | Option              | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
-| `[file]`            | Stack file to plan (defaults to `alchemy.run.ts`)                 |
+| `--config, -c <file>`            | Stack file to plan (defaults to `alchemy.run.ts`)                 |
 | `--stage <name>`    | Stage to plan against (defaults to `dev_$USER`)                   |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`) |
 | `--env-file <path>` | Load environment variables from a file                            |

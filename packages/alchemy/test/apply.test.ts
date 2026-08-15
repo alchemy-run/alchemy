@@ -1452,6 +1452,32 @@ describe("prop-flow convergence", () => {
       }),
   );
 
+  test.provider("apply sessions finalize after a resource failure", (stack) =>
+    Effect.gen(function* () {
+      let finalized = 0;
+      const cli = Cli.of({
+        approvePlan: () => Effect.succeed(true),
+        displayPlan: () => Effect.void,
+        startApplySession: () =>
+          Effect.succeed({
+            done: () =>
+              Effect.sync(() => {
+                finalized += 1;
+              }),
+            emit: () => Effect.void,
+          }),
+      });
+
+      yield* TestResource("A", { string: "value" }).pipe(
+        stack.deploy,
+        hook(failOn("A", "create")),
+        Effect.provide(Layer.succeed(Cli, cli)),
+      );
+
+      expect(finalized).toBe(1);
+    }),
+  );
+
   // Regression: a resource with `precreate` (e.g. Cloudflare Worker) resolves
   // its early `ready` signal before its real `reconcile` runs. A non-cyclic
   // downstream must still wait for the upstream's TERMINAL output, so that an

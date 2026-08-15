@@ -10,7 +10,6 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 import { pathToFileURL } from "node:url";
@@ -70,10 +69,7 @@ export const isPromptCancellation = (e: unknown): boolean => {
     if (cur instanceof TerminalCancelled) return true;
     if (
       typeof cur === "object" &&
-      // "PromptCancelled" is the legacy Clack (Util/Clank.ts) cancellation;
-      // it goes away once every command has migrated to CliKit prompts.
-      ((cur as { _tag?: unknown })._tag === "TerminalCancelled" ||
-        (cur as { _tag?: unknown })._tag === "PromptCancelled")
+      (cur as { _tag?: unknown })._tag === "TerminalCancelled"
     ) {
       return true;
     }
@@ -295,38 +291,6 @@ export const force = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
-export const dryRun = Flag.boolean("dry-run").pipe(
-  Flag.withDescription("Dry run the deployment, do not actually deploy"),
-  Flag.withDefault(false),
-);
-
-export const script = Argument.file("main", {
-  mustExist: true,
-}).pipe(
-  Argument.withDescription("Main file to deploy, defaults to alchemy.run.ts"),
-  Argument.withDefault("alchemy.run.ts"),
-);
-
-export const resourceFilter = Flag.string("filter").pipe(
-  Flag.withDescription(
-    "Comma-separated logical resource IDs (e.g. Api,Sandbox). Only those resources are included.",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-export const parseResourceFilter = (
-  filter: string | undefined,
-): ReadonlySet<string> | undefined => {
-  if (filter === undefined) return undefined;
-  const ids = filter
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  if (ids.length === 0) return undefined;
-  return new Set(ids);
-};
-
 export const config = Flag.file("config", { mustExist: true }).pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
@@ -356,7 +320,6 @@ export const TAIL_COLORS = [
   ansiFg(theme.color.accentMuted), // sage
   ansiFg(theme.color.success), // moss
 ];
-export const TAIL_RESET = ANSI_RESET;
 
 export const formatLocalTimestamp = (date: Date): string => {
   const y = date.getFullYear();
@@ -608,8 +571,7 @@ export interface BuildStackProvidersOptions {
   /** Stack entrypoint to import (e.g. `"alchemy.run.ts"`). */
   main: string;
   envFile: Option.Option<string>;
-  /** `--profile` override; `undefined` falls through to the stored default. */
-  profile: string | undefined;
+  profile: string;
   /**
    * Registry to populate. Pass a pre-seeded registry (e.g. one that already
    * has built-in providers) to layer the stack's providers on top of it,

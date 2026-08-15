@@ -4,75 +4,73 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Argument from "effect/unstable/cli/Argument";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
+import * as CliKit from "../../Cli/CliKit/index.ts";
 import { Stage } from "../../Stage.ts";
 import * as State from "../../State/index.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
-import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
+import {
+  stateExplorerScreen,
+  type StateBrowserNode,
+  type StateExplorerSource,
+  type StateFileRef,
+} from "../views/StateExplorer.tsx";
 
 import {
+  config,
   envFile,
+  failWithHelp,
   importStack,
   instrumentCommand,
   profile,
-  script,
-  yes,
+  UserInputError,
 } from "./_shared.ts";
 
-/**
- * When set, the State service is replaced with the on-disk
- * `LocalState` (`.alchemy/state` under the cwd) instead of whatever
- * the stack file configures (e.g. the Cloudflare HTTP state store).
- * Useful for inspecting orphaned local state after a partially-failed
- * bootstrap.
- */
-const localFlag = Flag.boolean("local").pipe(
-  Flag.withDescription(
-    "Read from local .alchemy/state instead of the stack's configured state store",
-  ),
+const backend = Flag.choice("backend", ["configured", "local"] as const).pipe(
+  Flag.withDescription("State backend (default: configured)"),
+  Flag.withDefault("configured" as const),
+);
+
+const pathArgument = Argument.string("path").pipe(
+  Argument.withDescription("State path (stack/stage/namespace/resource.json)"),
+  Argument.optional,
+);
+
+const requiredPathArgument = Argument.string("path").pipe(
+  Argument.withDescription("State path (stack/stage/namespace/resource.json)"),
+);
+
+const recursive = Flag.boolean("recursive").pipe(
+  Flag.withAlias("r"),
+  Flag.withDescription("Operate recursively on directories"),
   Flag.withDefault(false),
 );
 
-const stackFlag = Flag.string("stack").pipe(
-  Flag.withDescription("Stack name (e.g. AlchemyEffectWebsite)"),
-);
+type StateArgs = {
+  readonly main: string;
+  readonly envFile: Option.Option<string>;
+  readonly profile: string | undefined;
+  readonly backend: "configured" | "local";
+};
 
-const stageFlag = Flag.string("stage").pipe(
-  Flag.withDescription("Stage name (e.g. dev, prod)"),
-);
-
-const fqnFlag = Flag.string("fqn").pipe(
-  Flag.withDescription("Fully-qualified resource name"),
-);
-
-/**
- * Build the layer stack used by every `alchemy state ...` subcommand.
- *
- * The stack file is imported and evaluated so that its `state` layer
- * (Cloudflare HTTP store, in-memory, etc.) is in scope. Pass `local`
- * to swap the configured State for an on-disk LocalState instead.
- *
- * The Stage service is only needed to build the stack's state layer;
- * state operations address (stack, stage) explicitly, so a placeholder
- * value (same as `alchemy unsafe nuke`) is sufficient.
- */
 const withStateService = <A, E>(
-  args: {
-    main: string;
-    envFile: Option.Option<string>;
-    profile: string | undefined;
-    local: boolean;
-  },
+  args: StateArgs,
   body: (state: State.StateService) => Effect.Effect<A, E, never>,
 ) =>
   Effect.gen(function* () {
-    const stackEffect = yield* importStack(args.main);
+    if (args.backend === "local") {
+      return yield* Effect.gen(function* () {
+        return yield* body(yield* yield* State.State);
+      }).pipe(Effect.provide(State.localState()));
+    }
 
+    const stackEffect = yield* importStack(args.main);
     const services = Layer.mergeAll(
       Layer.succeed(AuthProviders, {}),
       ConfigProvider.layer(
@@ -83,247 +81,198 @@ const withStateService = <A, E>(
       ),
       Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
       Layer.succeed(Stage, "placeholder"),
-      // When --local is set we still build the stack to get its other
-      // services, but force State to be LocalState. Without --local the
-      // stack's configured State (httpState, etc.) wins.
-      args.local ? State.localState() : Layer.empty,
     );
 
     return yield* Effect.gen(function* () {
       const stack = yield* stackEffect;
       return yield* Effect.gen(function* () {
-        const state = yield* yield* State.State;
-        return yield* body(state);
+        return yield* body(yield* yield* State.State);
       }).pipe(Effect.provide(stack.services));
     }).pipe(Effect.provide(services));
   });
 
-const stacksCommand = Command.make(
-  "stacks",
-  { main: script, envFile, profile, local: localFlag },
-  instrumentCommand("state.stacks")(
-    Effect.fn(function* (args) {
-      yield* withStateService(args, (state) =>
-        Effect.gen(function* () {
-          const stacks = yield* state.listStacks();
-          if (stacks.length === 0) {
-            yield* Console.log("(no stacks)");
-            return;
-          }
-          for (const s of [...stacks].sort()) {
-            yield* Console.log(s);
-          }
-        }),
-      );
-    }),
-  ),
-);
+const pathParts = (path: string | undefined): ReadonlyArray<string> =>
+  (path ?? "").split("/").filter((part) => part !== "" && part !== ".");
 
-const stagesCommand = Command.make(
-  "stages",
-  { stack: stackFlag, main: script, envFile, profile, local: localFlag },
-  instrumentCommand("state.stages")(
-    Effect.fn(function* ({ stack: stackName, ...rest }) {
-      yield* withStateService(rest, (state) =>
-        Effect.gen(function* () {
-          const stages = yield* state.listStages(stackName);
-          if (stages.length === 0) {
-            yield* Console.log(`(no stages in ${stackName})`);
-            return;
-          }
-          for (const s of [...stages].sort()) {
-            yield* Console.log(s);
-          }
-        }),
-      );
-    }),
-  ),
-);
+const invalidPath = (path: string) =>
+  Effect.fail(new UserInputError({ message: `invalid state path: ${path}` }));
 
-const resourcesCommand = Command.make(
-  "resources",
+type StateFile =
+  | {
+      readonly kind: "resource";
+      readonly path: string;
+      readonly stack: string;
+      readonly stage: string;
+      readonly fqn: string;
+    }
+  | {
+      readonly kind: "output";
+      readonly path: string;
+      readonly stack: string;
+      readonly stage: string;
+    };
+
+const stageFiles = Effect.fn(function* (
+  state: State.StateService,
+  stack: string,
+  stage: string,
+) {
+  const fqns = yield* state.list({ stack, stage });
+  return [
+    ...fqns.map(
+      (fqn): StateFile => ({
+        kind: "resource",
+        path: `${stack}/${stage}/${fqn}.json`,
+        stack,
+        stage,
+        fqn,
+      }),
+    ),
+    {
+      kind: "output",
+      path: `${stack}/${stage}/output.json`,
+      stack,
+      stage,
+    } as const,
+  ];
+});
+
+const allFiles = Effect.fn(function* (state: State.StateService) {
+  const files: StateFile[] = [];
+  for (const stack of yield* state.listStacks()) {
+    for (const stage of yield* state.listStages(stack)) {
+      files.push(...(yield* stageFiles(state, stack, stage)));
+    }
+  }
+  return files;
+});
+
+const filesAt = Effect.fn(function* (
+  state: State.StateService,
+  parts: ReadonlyArray<string>,
+) {
+  const path = parts.join("/");
+  if (parts.length === 0) {
+    return { directory: true as const, files: yield* allFiles(state) };
+  }
+  if (parts.length === 1) {
+    const stack = parts[0]!;
+    if (!(yield* state.listStacks()).includes(stack)) {
+      return yield* invalidPath(path);
+    }
+    const files: StateFile[] = [];
+    for (const stage of yield* state.listStages(stack)) {
+      files.push(...(yield* stageFiles(state, stack, stage)));
+    }
+    return { directory: true as const, files };
+  }
+  if (parts.length === 2) {
+    const [stack, stage] = parts as [string, string];
+    if (!(yield* state.listStages(stack)).includes(stage)) {
+      return yield* invalidPath(path);
+    }
+    return {
+      directory: true as const,
+      files: yield* stageFiles(state, stack, stage),
+    };
+  }
+  const files = yield* stageFiles(state, parts[0]!, parts[1]!);
+  const exact = files.find((file) => file.path === path);
+  if (exact !== undefined) return { directory: false as const, files: [exact] };
+  const prefix = path === "" ? "" : `${path}/`;
+  const descendants = files.filter((file) => file.path.startsWith(prefix));
+  if (descendants.length === 0) return yield* invalidPath(path);
+  return { directory: true as const, files: descendants };
+});
+
+const listPaths = Effect.fn(function* (
+  state: State.StateService,
+  parts: ReadonlyArray<string>,
+  recurse: boolean,
+) {
+  const path = parts.join("/");
+  if (parts.length === 0 && !recurse) {
+    return (yield* state.listStacks()).map((stack) => `${stack}/`);
+  }
+  const { directory, files } = yield* filesAt(state, parts);
+  if (!directory) return [path];
+  const prefix = path === "" ? "" : `${path}/`;
+  if (recurse) return files.map((file) => file.path);
+  return [
+    ...new Set(
+      files.map((file) => {
+        const rest = file.path.slice(prefix.length);
+        const child = rest.split("/")[0]!;
+        return rest.includes("/") ? `${prefix}${child}/` : file.path;
+      }),
+    ),
+  ];
+});
+
+const listCommand = Command.make(
+  "list",
   {
-    stack: stackFlag,
-    stageName: stageFlag,
-    main: script,
+    path: pathArgument,
+    recursive,
+    main: config,
     envFile,
     profile,
-    local: localFlag,
+    backend,
   },
-  instrumentCommand("state.resources")(
-    Effect.fn(function* ({ stack: stackName, stageName, ...rest }) {
+  instrumentCommand("state.list")(
+    Effect.fn(function* ({ path, recursive, ...rest }) {
+      const parts = pathParts(Option.getOrUndefined(path));
+      if (parts.includes("..")) return yield* invalidPath(parts.join("/"));
       yield* withStateService(rest, (state) =>
-        Effect.gen(function* () {
-          const fqns = yield* state.list({
-            stack: stackName,
-            stage: stageName,
-          });
-          if (fqns.length === 0) {
-            yield* Console.log(`(no resources in ${stackName}/${stageName})`);
-            return;
-          }
-          for (const f of [...fqns].sort()) {
-            yield* Console.log(f);
-          }
-        }),
+        listPaths(state, parts, recursive).pipe(
+          Effect.flatMap((items) => Console.log([...items].sort().join("\n"))),
+        ),
       );
     }),
   ),
+).pipe(
+  Command.withAlias("ls"),
+  Command.withDescription("List a state-store directory"),
 );
 
-const getCommand = Command.make(
-  "get",
+const readCommand = Command.make(
+  "read",
   {
-    stack: stackFlag,
-    stageName: stageFlag,
-    fqn: fqnFlag,
-    main: script,
+    path: pathArgument,
+    recursive,
+    main: config,
     envFile,
     profile,
-    local: localFlag,
+    backend,
   },
-  instrumentCommand("state.get")(
-    Effect.fn(function* ({ stack: stackName, stageName, fqn, ...rest }) {
+  instrumentCommand("state.read")(
+    Effect.fn(function* ({ path, recursive, ...rest }) {
+      const requestedPath = Option.getOrUndefined(path);
+      const parts = pathParts(requestedPath);
+      if (parts.includes("..")) return yield* invalidPath(requestedPath ?? "/");
       yield* withStateService(rest, (state) =>
         Effect.gen(function* () {
-          const value = yield* state.get({
-            stack: stackName,
-            stage: stageName,
-            fqn,
-          });
-          if (value === undefined) {
-            yield* Console.log(`(not found: ${stackName}/${stageName}/${fqn})`);
-            return;
-          }
-          // encodeState produces a JSON-friendly view: redacted secrets
-          // are unwrapped into `{ __redacted__: ... }`, Resources are
-          // flattened, etc. Same shape the store persists.
-          yield* Console.log(JSON.stringify(encodeState(value), null, 2));
-        }),
-      );
-    }),
-  ),
-);
-
-const treeCommand = Command.make(
-  "tree",
-  { main: script, envFile, profile, local: localFlag },
-  instrumentCommand("state.tree")(
-    Effect.fn(function* (args) {
-      yield* withStateService(args, (state) =>
-        Effect.gen(function* () {
-          const stacks = [...(yield* state.listStacks())].sort();
-          if (stacks.length === 0) {
-            yield* Console.log("(empty state store)");
-            return;
-          }
-          // Fetch the entire tree in parallel: for each stack, list its
-          // stages; for each (stack, stage), list its resources. All
-          // network round-trips happen concurrently; output is rendered
-          // once at the end so the user doesn't see stuttered partial
-          // output.
-          const tree = yield* Effect.forEach(
-            stacks,
-            (stk) =>
-              Effect.gen(function* () {
-                const stages = [...(yield* state.listStages(stk))].sort();
-                const stageEntries = yield* Effect.forEach(
-                  stages,
-                  (stg) =>
-                    Effect.map(
-                      state.list({ stack: stk, stage: stg }),
-                      (fqns) => ({ stage: stg, fqns: [...fqns].sort() }),
-                    ),
-                  { concurrency: "unbounded" },
-                );
-                return { stack: stk, stages: stageEntries };
+          const target = yield* filesAt(state, parts);
+          if (target.directory && !recursive) {
+            return yield* Effect.fail(
+              new UserInputError({
+                message: `${requestedPath ?? "/"} is a directory; use --recursive`,
               }),
-            { concurrency: "unbounded" },
-          );
-
-          const lines: string[] = [];
-          for (const { stack: stk, stages } of tree) {
-            lines.push(stk);
-            for (let i = 0; i < stages.length; i++) {
-              const { stage: stg, fqns } = stages[i]!;
-              const stageBranch = i === stages.length - 1 ? "└─" : "├─";
-              lines.push(`${stageBranch} ${stg}`);
-              const indent = i === stages.length - 1 ? "   " : "│  ";
-              for (let j = 0; j < fqns.length; j++) {
-                const leaf = j === fqns.length - 1 ? "└─" : "├─";
-                lines.push(`${indent}${leaf} ${fqns[j]}`);
-              }
-            }
+            );
           }
-          yield* Console.log(lines.join("\n"));
-        }),
-      );
-    }),
-  ),
-);
-
-const optionalStackFlag = Flag.string("stack").pipe(
-  Flag.withDescription(
-    "Stack name to export. Omit to export ALL stacks in the store.",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-const optionalStageFlag = Flag.string("stage").pipe(
-  Flag.withDescription(
-    "Stage to export within the stack. Omit to export all stages.",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-/**
- * Bulk state read: every matching resource record as one JSON
- * document, so a whole estate is read in a single CLI invocation
- * instead of `state resources` + one `state get` per FQN per
- * stack/stage. Filter locally, e.g.:
- *
- * ```sh
- * alchemy state export | jq '.resources[] | select(.state.resourceType == "AWS.EC2.Instance")'
- * ```
- */
-const exportCommand = Command.make(
-  "export",
-  {
-    stack: optionalStackFlag,
-    stageName: optionalStageFlag,
-    main: script,
-    envFile,
-    profile,
-    local: localFlag,
-  },
-  instrumentCommand("state.export")(
-    Effect.fn(function* ({ stack: stackName, stageName, ...rest }) {
-      if (stageName !== undefined && stackName === undefined) {
-        yield* Console.log(
-          "Error: cannot specify --stage without --stack. Pass the stack name via --stack.",
-        );
-        return yield* Effect.fail(new Error("missing stack"));
-      }
-
-      yield* withStateService(rest, (state) =>
-        Effect.gen(function* () {
-          const exported = yield* State.exportState(state, {
-            stack: stackName,
-            stage: stageName,
-          });
-          // Same JSON-friendly view `state get` prints: redacted
-          // secrets become `{ __redacted__: ... }`, Resources are
-          // flattened, etc.
+          const values = yield* Effect.forEach(target.files, (file) =>
+            (file.kind === "output"
+              ? state.getOutput(file)
+              : state.get(file)
+            ).pipe(
+              Effect.map(
+                (value) => [file.path, encodeState(value) ?? null] as const,
+              ),
+            ),
+          );
           yield* Console.log(
             JSON.stringify(
-              {
-                resources: exported.resources.map((r) => ({
-                  ...r,
-                  state: encodeState(r.state),
-                })),
-              },
+              values.length === 1 ? values[0]![1] : Object.fromEntries(values),
               null,
               2,
             ),
@@ -332,113 +281,153 @@ const exportCommand = Command.make(
       );
     }),
   ),
+).pipe(
+  Command.withAlias("cat"),
+  Command.withDescription("Read a state-store file or directory"),
 );
 
-const clearStackFlag = Flag.string("stack").pipe(
-  Flag.withDescription(
-    "Stack name to clear. Omit to clear ALL stacks in the store.",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-const clearStageFlag = Flag.string("stage").pipe(
-  Flag.withDescription(
-    "Stage to clear within the stack. Omit to clear all stages in the stack.",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-/**
- * Destructive: removes resource state from the store. The actual cloud
- * resources are NOT touched — this only affects what alchemy thinks
- * exists. Always confirms before deleting unless `--yes` is passed.
- */
-const clearCommand = Command.make(
-  "clear",
+const deleteCommand = Command.make(
+  "delete",
   {
-    stack: clearStackFlag,
-    stageName: clearStageFlag,
-    main: script,
+    path: requiredPathArgument,
+    recursive,
+    main: config,
     envFile,
     profile,
-    local: localFlag,
-    yes,
+    backend,
   },
-  instrumentCommand("state.clear")(
-    Effect.fn(function* ({
-      stack: stackName,
-      stageName,
-      yes: yesFlag,
-      ...rest
-    }) {
-      if (stageName !== undefined && stackName === undefined) {
-        yield* Console.log(
-          "Error: cannot specify --stage without --stack. Pass the stack name via --stack.",
-        );
-        return yield* Effect.fail(new Error("missing stack"));
-      }
-
+  instrumentCommand("state.delete")(
+    Effect.fn(function* ({ path, recursive, ...rest }) {
+      const parts = pathParts(path);
+      if (parts.length === 0 || parts.includes(".."))
+        return yield* invalidPath(path);
       yield* withStateService(rest, (state) =>
         Effect.gen(function* () {
-          const targets: ReadonlyArray<{ stack: string; stage?: string }> =
-            stackName === undefined
-              ? [...(yield* state.listStacks())]
-                  .sort()
-                  .map((s) => ({ stack: s }))
-              : stageName === undefined
-                ? [{ stack: stackName }]
-                : [{ stack: stackName, stage: stageName }];
-
-          if (targets.length === 0) {
-            yield* Console.log("(nothing to clear)");
-            return;
-          }
-
-          const scope =
-            stackName === undefined
-              ? `ALL stacks (${targets.length}): ${targets.map((t) => t.stack).join(", ")}`
-              : stageName === undefined
-                ? `stack '${stackName}' (all stages)`
-                : `stage '${stageName}' in stack '${stackName}'`;
-
-          if (!yesFlag) {
-            const ok = yield* Clank.confirm({
-              message: `About to delete ${scope} from the state store. This cannot be undone. Continue?`,
-              initialValue: false,
-            });
-            if (!ok) {
-              yield* Console.log("Cancelled.");
-              return;
-            }
-          }
-
-          yield* Effect.forEach(
-            targets,
-            (target) =>
-              Effect.gen(function* () {
-                yield* state.deleteStack(target);
-                yield* Console.log(
-                  `cleared ${target.stack}${target.stage ? `/${target.stage}` : ""}`,
-                );
+          const target = yield* filesAt(state, parts);
+          if (target.directory && !recursive) {
+            return yield* Effect.fail(
+              new UserInputError({
+                message: `${path} is a directory; use --recursive`,
               }),
-            { concurrency: 32 },
+            );
+          }
+          if (parts.length === 1) {
+            yield* state.deleteStack({ stack: parts[0]! });
+          } else if (parts.length === 2) {
+            yield* state.deleteStack({ stack: parts[0]!, stage: parts[1]! });
+          } else {
+            const resources = target.files.filter(
+              (file) => file.kind === "resource",
+            );
+            if (resources.length === 0) {
+              return yield* Effect.fail(
+                new UserInputError({
+                  message: "output.json cannot be deleted independently",
+                }),
+              );
+            }
+            yield* Effect.forEach(resources, (file) => state.delete(file), {
+              concurrency: 32,
+            });
+          }
+          yield* (yield* CliKit.CliKit).output.success(
+            `Deleted state at ${path}`,
           );
         }),
       );
     }),
   ),
+).pipe(
+  Command.withAlias("rm"),
+  Command.withDescription(
+    "Delete state records without deleting cloud resources",
+  ),
 );
 
-export const stateCommand = Command.make("state", {}).pipe(
-  Command.withSubcommands([
-    stacksCommand,
-    stagesCommand,
-    resourcesCommand,
-    getCommand,
-    exportCommand,
-    treeCommand,
-    clearCommand,
-  ]),
+const stateExplorer = (args: StateArgs) =>
+  withStateService(args, (state) =>
+    Effect.gen(function* () {
+      const cli = yield* CliKit.CliKit;
+      const source: StateExplorerSource = {
+        backend: state.id,
+        listStacks: () => Effect.runPromise(state.listStacks()),
+        listStages: (stack) => Effect.runPromise(state.listStages(stack)),
+        listResources: (stack, stage) =>
+          Effect.runPromise(state.list({ stack, stage })),
+        readFile: (file) =>
+          Effect.runPromise(
+            file.kind === "output" ? state.getOutput(file) : state.get(file),
+          ).then(encodeState),
+        deleteNodes: (nodes) =>
+          Effect.runPromise(
+            Effect.forEach(
+              // Drop nodes covered by a marked ancestor so a stack/stage
+              // delete isn't raced by per-resource deletes beneath it.
+              nodes.filter(
+                (node, index) =>
+                  !nodes.some(
+                    (parent, parentIndex) =>
+                      parentIndex !== index &&
+                      (parent.kind === "stack" ||
+                        parent.kind === "stage" ||
+                        parent.kind === "namespace") &&
+                      node.path.startsWith(`${parent.path}/`),
+                  ),
+              ),
+              (node) => {
+                if (node.kind === "stack") {
+                  return state.deleteStack({ stack: node.stack });
+                }
+                if (node.kind === "stage") {
+                  return state.deleteStack({
+                    stack: node.stack,
+                    stage: node.stage,
+                  });
+                }
+                if (node.kind === "resource") return state.delete(node.file);
+                // The explorer blocks deleting output.json directly — it is
+                // removed with its stage.
+                if (node.kind === "output") return Effect.void;
+                const resources: Array<
+                  StateFileRef & { readonly kind: "resource" }
+                > = [];
+                const collect = (children: ReadonlyArray<StateBrowserNode>) => {
+                  for (const child of children) {
+                    if (child.kind === "resource") resources.push(child.file);
+                    else if (child.kind === "namespace")
+                      collect(child.children);
+                  }
+                };
+                collect(node.children);
+                return Effect.forEach(
+                  resources,
+                  (resource) => state.delete(resource),
+                  { concurrency: 32, discard: true },
+                );
+              },
+              { concurrency: 32, discard: true },
+            ),
+          ),
+      };
+      yield* cli
+        .application(cli.prompt.custom(stateExplorerScreen(source)))
+        .pipe(CliKit.Application.alternate)
+        .pipe(Effect.catchTag("TerminalCancelled", () => Effect.void));
+    }),
+  );
+
+export const stateCommand = Command.make(
+  "state",
+  { main: config, envFile, profile, backend },
+  instrumentCommand("state")(
+    Effect.fn(function* (args) {
+      if (!(yield* CliKit.CliKit).terminal.input) {
+        return yield* failWithHelp(["alchemy", "state"]);
+      }
+      yield* stateExplorer(args);
+    }),
+  ),
+).pipe(
+  Command.withDescription("Inspect and manage deployment state"),
+  Command.withSubcommands([listCommand, readCommand, deleteCommand]),
 );

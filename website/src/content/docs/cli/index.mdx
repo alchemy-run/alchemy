@@ -4,34 +4,36 @@ description: Every alchemy command at a glance — the command map, common optio
 ---
 
 ```sh
-bun alchemy <command> [file] [options]
+bun alchemy <command> [options]
 ```
 
-Every command operates on an `alchemy.run.ts` stack file (or a custom entrypoint passed as the positional `[file]`, which must exist) and targets a [stage](/environments/stages).
+Every command operates on an `alchemy.run.ts` stack file (or a custom entrypoint passed with `--config <file>`, which must exist) and targets a [stage](/environments/stages).
 
 ## Command map
 
 ```sh
 alchemy
-├─ deploy [file]        # plan → approve → apply
-├─ plan [file]          # preview changes, apply nothing
-├─ destroy [file]       # delete every resource in a stage
-├─ unsafe nuke [file]   # delete everything a provider can list, tracked or not
+├─ deploy              # plan → approve → apply
+├─ plan                # preview changes, apply nothing
+├─ destroy             # delete every resource in a stage
+├─ drift               # detect (and optionally repair) infrastructure drift
+├─ unsafe nuke         # delete everything a provider can list, tracked or not
 │
-├─ dev [file]           # hot-reloading development loop
-├─ tail [file]          # stream live logs from deployed resources
-├─ logs [file]          # fetch past log entries
+├─ dev                 # hot-reloading development loop
+├─ logs                # fetch past log entries, or stream live with --follow
 │
 ├─ profile create|rename|edit|refresh|current|set-default|list|show|delete
-│                       # manage credentials and accounts (bare `profile` opens the dashboard)
+│                      # manage credentials and accounts (bare `profile` opens the dashboard)
 │
-├─ state stacks|stages|resources|get|export|tree|clear   # inspect and manage the state store
+├─ state list|read|delete        # inspect and manage the state store (bare `state` opens the explorer)
 │
-├─ aws bootstrap        # set up the per-account AWS assets bucket
-└─ cloudflare bootstrap|create-token|state logs   # state-store worker, API tokens, its logs
+└─ provider
+   ├─ check-env           # CI preflight: verify required provider env vars are set
+   ├─ aws bootstrap|teardown
+   └─ cloudflare bootstrap|teardown|token|state logs
 ```
 
-Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [tail](/cli/tail), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [aws](/cli/aws), [cloudflare](/cli/cloudflare) — plus two workflow guides, [Adopting Resources](/cli/adopting-resources) and [Inspecting State](/cli/inspecting-state).
+Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), [Cloudflare provider commands](/cli/cloudflare) — plus two workflow guides, [Adopting Resources](/cli/adopting-resources) and [Inspecting State](/cli/inspecting-state).
 
 ## Common options
 
@@ -42,9 +44,9 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 | `--env-file <path>` | File to load environment variables from. Defaults to `.env`.                                                                             |
 | `--yes`             | Yes to all prompts.                                                                                                                       |
 | `--no-input`        | Disable prompts and the interactive TUI. Commands that would need input fail instead of hanging.                                          |
-| `[file]`            | Stack entrypoint. Defaults to `alchemy.run.ts`; must exist.                                                                              |
+| `--config, -c <file>` | Stack entrypoint. Defaults to `alchemy.run.ts`; must exist.                                                                            |
 
-`--profile` is genuinely common — `deploy`, `plan`, `destroy`, `dev`, `tail`, `logs`, and `state` all take it.
+`--profile` is genuinely common — `deploy`, `plan`, `destroy`, `dev`, `logs`, `drift`, and `state` all take it.
 
 ## The interactive TUI
 
@@ -62,6 +64,16 @@ The `--no-input` flag and environment variables override the detection, in this 
 The TUI module is lazily imported only when selected, so plain runs never pay the Ink import cost.
 
 Plain mode never prompts — it prints the plan, makes no changes, and reports: `Non-interactive terminal detected. Pass --yes to approve, or set ALCHEMY_TUI=1 for the interactive UI.` In CI, always pass `--yes`.
+
+## Exit codes
+
+Exit codes are script-safe: `0` only means the command actually completed.
+
+| Code  | Meaning                                                                                             |
+| ----- | --------------------------------------------------------------------------------------------------- |
+| `0`   | Command completed                                                                                    |
+| `1`   | Failure — including a declined plan/confirmation, and bare `profile`/`state` without a terminal      |
+| `130` | Cancelled by the user (Ctrl-C, or Escape inside a prompt)                                            |
 
 Running these commands in a pipeline? See [CI](/environments/ci).
 

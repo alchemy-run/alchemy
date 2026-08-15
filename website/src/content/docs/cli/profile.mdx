@@ -137,10 +137,9 @@ method and repeatable `--set` supplies its fields. Values come in three
 forms so secrets stay out of shell history: a literal (`name=value`), an
 environment variable (`name=env:VAR`, resolved from the environment and
 `--env-file`), or stdin (`name=-`, one field at most). Each provider
-declares its configure methods and their fields, and `--set` input is
-validated against that declaration; when a provider has exactly one
-method, `--method` can be omitted. Browser-OAuth methods stay
-interactive-only.
+documents its methods and fields in `alchemy profile edit --help`; when a
+provider has exactly one method, `--method` can be omitted. Browser-OAuth
+methods stay interactive-only.
 
 In a non-interactive session (no terminal, CI, coding agents), the menu can't
 open; the command prints this usage instead and exits non-zero — use the

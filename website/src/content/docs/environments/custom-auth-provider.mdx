@@ -115,7 +115,8 @@ What each piece buys you:
   (the `{ method: "stored" }` manifest entry), so invalid manifest entries
   fail the same way; hand-rolled multi-method providers declare their own.
 - **`readEnvironment`** is the CI-only resolver; **`environment`** is its
-  machine-readable contract, mirrored in the
+  machine-readable contract, checked by `alchemy provider check-env` and
+  mirrored in the
   [CI environment-variable table](/environments/profiles#ci-environment-variables-by-provider).
   Registration fails if you implement `readEnvironment` without declaring
   `environment`.
@@ -234,6 +235,7 @@ alchemy profile edit --add stripe --set apiKey=env:STRIPE_API_KEY
 op read op://vault/stripe/key | alchemy profile edit --add stripe --set apiKey=-
 
 alchemy profile show       # renders your provider's details
+alchemy provider check-env --provider stripe   # CI preflight for STRIPE_API_KEY
 ```
 
 In CI, profile resolution is bypassed, so setting `STRIPE_API_KEY` is all a

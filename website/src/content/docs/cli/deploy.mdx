@@ -6,7 +6,7 @@ description: Compute a plan, ask for approval, and create/update/delete resource
 import Terminal from "../../../components/Terminal.astro";
 
 ```sh
-alchemy deploy [file] [options]
+alchemy deploy [options]
 ```
 
 `deploy` computes a plan, asks for approval, and creates/updates/deletes resources to match the desired state.
@@ -47,13 +47,13 @@ When the plan contains no changes, the approval prompt is skipped automatically.
 
 | Option              | Description                                                                                                                |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `[file]`            | Stack file to deploy (defaults to `alchemy.run.ts`)                                                                        |
+| `--config, -c <file>`            | Stack file to deploy (defaults to `alchemy.run.ts`)                                                                        |
 | `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)                                                                               |
 | `--yes`             | Skip the approval prompt                                                                                                   |
 | `--dry-run`         | Show the plan without applying (same as `alchemy plan`)                                                                    |
 | `--force`           | Force updates for resources that would otherwise no-op                                                                     |
 | `--adopt`           | Adopt pre-existing cloud resources that conflict with this stack instead of failing. Useful for re-importing into a fresh state store. |
-| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`)                                                          |
+| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`)                                    |
 | `--env-file <path>` | Load environment variables from a file                                                                                     |
 
 How `--adopt` decides what to take over is covered in [Adopting Resources](/cli/adopting-resources).
@@ -70,7 +70,7 @@ alchemy deploy --stage prod --yes
 alchemy deploy --stage pr-42
 
 # Deploy a different stack file
-alchemy deploy stacks/github.ts
+alchemy deploy --config stacks/github.ts
 
 # Preview what would change
 alchemy deploy --dry-run

@@ -412,7 +412,7 @@ export const editProfileFlow = Effect.fn(function* (options: {
           new AuthError({
             message:
               `Cannot configure '${selectedProvider}' non-interactively. ` +
-              "Pass --method/--set (see `alchemy provider list`), or run in an interactive terminal.",
+              "Pass --method/--set (see `alchemy profile edit --help`), or run in an interactive terminal.",
           }),
         );
       }

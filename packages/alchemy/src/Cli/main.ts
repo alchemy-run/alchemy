@@ -2,6 +2,8 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Command from "effect/unstable/cli/Command";
+import * as CliConfig from "effect/unstable/cli/CliConfig";
+import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -17,8 +19,6 @@ import packageJson from "../../package.json" with { type: "json" };
 import * as CliKit from "./CliKit/index.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCliErrors } from "./commands/_shared.ts";
-import { awsCommand } from "./commands/aws.ts";
-import { cloudflareCommand } from "./commands/cloudflare.ts";
 import {
   deployCommand,
   destroyCommand,
@@ -28,17 +28,16 @@ import { devCommand } from "./commands/dev.ts";
 import { logsCommand } from "./commands/logs.ts";
 import { unsafeCommand } from "./commands/nuke.ts";
 import { profileCommand } from "./commands/profile/index.ts";
+import { providerCommand } from "./commands/provider.ts";
 import { stateCommand } from "./commands/state.ts";
-import { syncCommand } from "./commands/sync.ts";
-import { tailCommand } from "./commands/tail.ts";
-import { selectCli } from "./selectCli.ts";
+import { driftCommand } from "./commands/drift.ts";
+import { selectCliServices } from "./selectCli.ts";
 
 /**
  * `--no-input` forces plain, prompt-free output regardless of TTY or env
  * detection. The value is read via an argv scan in `Util/interactive.ts`
  * (capability detection runs while the service layers are built, before flag
- * parsing); this registration exists so the parser accepts the flag and help
- * documents it.
+ * parsing); this registration exists so the parser accepts the flag.
  */
 const NoInput = GlobalFlag.setting("no-input")({
   flag: Flag.boolean("no-input").pipe(
@@ -49,44 +48,57 @@ const NoInput = GlobalFlag.setting("no-input")({
   ),
 });
 
-const root = Command.make("alchemy", {}).pipe(
+const root = Command.make("alchemy", {}, () =>
+  Effect.fail(new CliError.ShowHelp({ commandPath: ["alchemy"], errors: [] })),
+).pipe(
+  Command.withDescription(
+    "Define, deploy, and operate cloud infrastructure with type-safe Effect programs.",
+  ),
+  Command.withExamples([
+    { command: "alchemy deploy" },
+    { command: "alchemy plan --stage prod" },
+    { command: "alchemy dev" },
+    { command: "alchemy logs --follow" },
+  ]),
   Command.withSubcommands([
-    awsCommand,
-    cloudflareCommand,
+    providerCommand,
     deployCommand,
     devCommand,
     destroyCommand,
     planCommand,
-    tailCommand,
     logsCommand,
     profileCommand,
     stateCommand,
-    syncCommand,
+    driftCommand,
     unsafeCommand,
   ]),
   Command.withGlobalFlags([NoInput]),
 );
 
 const cli = Command.run(root, {
-  // name: "Alchemy Effect CLI",
   version: packageJson.version,
 });
 
 const services = Layer.mergeAll(
+  CliConfig.layer({
+    builtIns: [
+      GlobalFlag.Help,
+      GlobalFlag.Version,
+      GlobalFlag.Completions,
+      GlobalFlag.LogLevel,
+    ],
+  }),
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
   // Ambient per-CLI-run artifact root. Commands that define their own run
-  // boundary (deploy, sync) provide a fresh store closer to the work, which
+  // boundary (deploy, drift) provide a fresh store closer to the work, which
   // wins over this one.
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,
-  // CliKit backs every prompt/screen surface (profile flows today; other
-  // commands migrate off Clack in follow-up PRs). The ink renderer mounts
-  // lazily, so plain runs never pay for it.
-  Layer.provideMerge(selectCli(), CliKit.layer()),
+  Layer.provideMerge(selectCliServices(), CliKit.layer()),
 );
 
 const program = Effect.gen(function* () {

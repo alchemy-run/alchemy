@@ -5,7 +5,7 @@ import type { ApplyEvent } from "./Event.ts";
 
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
-  done: () => Effect.Effect<void>;
+  done: (outcome: "success" | "failure") => Effect.Effect<void>;
 }
 
 export interface ScopedPlanStatusSession extends PlanStatusSession {

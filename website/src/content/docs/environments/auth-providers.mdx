@@ -73,8 +73,8 @@ was explicitly selected — see
 [environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
 `environment` declares every variable `readEnvironment` consumes
 (`name`, `required`, `secret`, `description`, `alternatives`) — it is
-schema-validated at registration, and registering a `readEnvironment`
-without it fails.
+schema-validated at registration, registering a `readEnvironment` without
+it fails, and `alchemy provider check-env` uses it as a CI preflight.
 
 Providers register by name into a single `AuthProviders` registry
 via `AuthProviderLayer`, inside each cloud's `providers()` Layer:

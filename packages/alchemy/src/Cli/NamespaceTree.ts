@@ -7,13 +7,17 @@ import type {
 } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
 
-export interface TreeBinding {
-  sid: string;
-  action: BindingAction;
-}
-
 export type ActionTreeItem = ActionApply | ActionDelete;
 export type ActionVerb = ActionTreeItem["action"]; // "run" | "noop" | "delete"
+
+/** A resource belongs in a review/progress view only when it or a binding changes. */
+export const resourceHasPlannedWork = (item: CRUD): boolean =>
+  item.action !== "noop" ||
+  item.bindings.some((binding) => binding.action !== "noop");
+
+/** No-op actions are dependency markers, not work the user needs to review. */
+export const actionHasPlannedWork = (item: ActionTreeItem): boolean =>
+  item.action !== "noop";
 
 /**
  * A tree node representing a namespace.
@@ -78,7 +82,7 @@ export function buildNamespaceTree(
   return root;
 }
 
-export function deriveNamespaceAction(node: TreeNode): DerivedAction {
+function deriveNamespaceAction(node: TreeNode): DerivedAction {
   const actions = new Set<BindingAction | CRUD["action"] | DerivedAction>();
 
   for (const resource of node.resources) {
@@ -225,16 +229,6 @@ const isEmpty = (node: TreeNode) =>
   node.resources.length === 0 &&
   node.actions.length === 0 &&
   Array.from(node.children.values()).every(isEmpty);
-
-const countVisibleChildren = (node: TreeNode) => {
-  const resourceIds = new Set(
-    node.resources.map((resource) => resource.resource.LogicalId),
-  );
-  return (
-    node.resources.length +
-    Array.from(node.children.keys()).filter((id) => !resourceIds.has(id)).length
-  );
-};
 
 const deriveResourceChildrenAction = (
   resource: CRUD,

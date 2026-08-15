@@ -24,7 +24,7 @@ import {
   bootstrap as bootstrapCloudflare,
   teardownStateStore,
 } from "../../Cloudflare/StateStore/State.ts";
-import * as Clank from "../../Util/Clank.ts";
+import * as CliKit from "../../Cli/CliKit/index.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
@@ -34,17 +34,19 @@ import {
   instrumentCommand,
   parseSince,
   profile,
+  yes,
 } from "./_shared.ts";
+import { resolveProfileName } from "../ProfileSelection.ts";
 
 /**
  * Build the Cloudflare auth + environment layer stack used by every
- * `alchemy cloudflare ...` subcommand. Mirrors the wiring inside
+ * `alchemy provider cloudflare ...` subcommand. Mirrors the wiring inside
  * `Cloudflare.state(...)` so the command can talk to the user's
  * account out-of-band.
  */
 const cloudflareLayers = (
   envFileOpt: Option.Option<string>,
-  profileName: string | undefined,
+  profileName: string,
 ) =>
   Effect.gen(function* () {
     const authProviders: AuthProviders["Service"] = {};
@@ -97,25 +99,30 @@ const bootstrapCommand = Command.make(
     workerName: cloudflareWorkerName,
   },
   instrumentCommand(
-    "cloudflare.bootstrap",
+    "provider.cloudflare.bootstrap",
     (a: {
       profile: string | undefined;
       force: boolean;
       workerName: string | undefined;
     }) => ({
-      "alchemy.profile": a.profile,
+      "alchemy.profile": a.profile ?? "",
       "alchemy.force": a.force,
       "alchemy.worker_name": a.workerName ?? "",
     }),
   )(
     Effect.fn(function* ({ envFile, profile, force, workerName }) {
-      const services = yield* cloudflareLayers(envFile, profile);
+      const profileName = yield* resolveProfileName(envFile, profile);
+      const services = yield* cloudflareLayers(envFile, profileName);
       yield* bootstrapCloudflare({
         workerName,
         force,
-        profile,
+        profile: profileName,
       }).pipe(Effect.provide(services));
     }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Provision Cloudflare account prerequisites for deployments",
   ),
 );
 
@@ -125,25 +132,37 @@ const teardownCommand = Command.make(
     envFile,
     profile,
     workerName: cloudflareWorkerName,
+    yes,
   },
   instrumentCommand(
-    "cloudflare.teardown",
+    "provider.cloudflare.teardown",
     (a: { profile: string | undefined; workerName: string | undefined }) => ({
-      "alchemy.profile": a.profile,
+      "alchemy.profile": a.profile ?? "",
       "alchemy.worker_name": a.workerName ?? "",
     }),
   )(
-    Effect.fn(function* ({ envFile, profile, workerName }) {
-      const services = yield* cloudflareLayers(envFile, profile);
+    Effect.fn(function* ({ envFile, profile, workerName, yes: approved }) {
+      if (
+        !approved &&
+        !(yield* (yield* CliKit.CliKit).prompt.confirm({
+          message:
+            "Tear down the Cloudflare state store and its backing resources?",
+          initialValue: false,
+        }))
+      ) {
+        return;
+      }
+      const profileName = yield* resolveProfileName(envFile, profile);
+      const services = yield* cloudflareLayers(envFile, profileName);
       yield* teardownStateStore({
         workerName,
-        profile,
+        profile: profileName,
       }).pipe(Effect.provide(services));
     }),
   ),
 ).pipe(
+  Command.withDescription("Tear down the Cloudflare state store"),
   Command.unlisted,
-  Command.withDescription("Tear down the cloudflare state store"),
 );
 
 /**
@@ -165,6 +184,7 @@ type CreateTokenPolicy = {
 const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
   "com.cloudflare.api.account": "account",
   "com.cloudflare.api.account.zone": "zone",
+  "com.cloudflare.api.user": "user",
   "com.cloudflare.edge.r2.bucket": "r2",
 };
 
@@ -174,6 +194,8 @@ const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
  *
  * - `com.cloudflare.api.account` → scoped to each selected account ID
  * - `com.cloudflare.api.account.zone` → all zones (`*`)
+ * - `com.cloudflare.api.user` → the authenticated user
+ * - `com.cloudflare.edge.r2.bucket` → all R2 buckets (`*`)
  * - `com.cloudflare.edge.r2.bucket` → all buckets (`*`)
  *
  * Mirrors the upstream `alchemy` "god token" policy shape. Groups with an
@@ -183,6 +205,7 @@ const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
  */
 const buildTokenPolicies = (
   accountIds: readonly string[],
+  userId: string,
   groups: readonly { id: string; scopes: readonly string[] }[],
 ): CreateTokenPolicy[] => {
   const buckets: Record<string, CreateTokenPolicy> = {
@@ -197,6 +220,11 @@ const buildTokenPolicies = (
       effect: "allow",
       permissionGroups: [],
       resources: { "com.cloudflare.api.account.zone.*": "*" },
+    },
+    "com.cloudflare.api.user": {
+      effect: "allow",
+      permissionGroups: [],
+      resources: { [`com.cloudflare.api.user.${userId}`]: "*" },
     },
     "com.cloudflare.edge.r2.bucket": {
       effect: "allow",
@@ -235,18 +263,19 @@ const selectAccountIds = (defaultAccountId: string | undefined) =>
     }
     if (accounts.length === 1) {
       const account = accounts[0]!;
-      yield* Clank.info(`Using account: ${account.name} (${account.id})`);
+      yield* (yield* CliKit.CliKit).output.info(
+        `Using account: ${account.name} (${account.id})`,
+      );
       return [account.id];
     }
-    return yield* Clank.multiselect<string>({
-      message:
-        "Select the Cloudflare account(s) to scope the token to " +
-        "(space to toggle, enter to confirm)",
+    return yield* (yield* CliKit.CliKit).prompt.multiSelect<string>({
+      message: "Select the Cloudflare accounts to scope the token to",
       initialValues: defaultAccountId ? [defaultAccountId] : undefined,
       options: accounts.map((a) => ({
         value: a.id,
         label: a.name,
-        hint: a.id === defaultAccountId ? `${a.id} (current profile)` : a.id,
+        description:
+          a.id === defaultAccountId ? `${a.id} (current profile)` : a.id,
       })),
       required: true,
     });
@@ -287,7 +316,7 @@ const tokenAccountIdFlag = Flag.string("account-id").pipe(
 );
 
 /**
- * `alchemy cloudflare create-token` — mint a Cloudflare API token
+ * `alchemy provider cloudflare create-token` — mint a Cloudflare API token
  * (`POST /user/tokens`).
  *
  * This command is **standalone**: it does not use an Alchemy auth profile.
@@ -307,7 +336,7 @@ const tokenAccountIdFlag = Flag.string("account-id").pipe(
  * from the interactive selection prompt.
  */
 const createTokenCommand = Command.make(
-  "create-token",
+  "token",
   {
     envFile,
     allPermissions: allPermissionsFlag,
@@ -326,32 +355,218 @@ const createTokenCommand = Command.make(
       );
 
       yield* Effect.gen(function* () {
-        // The Global API Key is a dashboard-only secret — there is no API to
-        // fetch it — so read it from the environment or prompt for it. It is
-        // used only to create the token and is never stored.
-        const envApiKey = yield* Config.string("CLOUDFLARE_API_KEY").pipe(
-          Config.option,
-          Config.map(Option.getOrUndefined),
-        );
-        const apiKey =
-          envApiKey ??
-          (yield* Clank.password({
-            message:
-              "Paste your Global API Key (see bottom of https://dash.cloudflare.com/profile/api-tokens)",
-            validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
-          }));
+        const prompt = yield* CliKit.CliKit;
+        const prepare = Effect.gen(function* () {
+          // The Global API Key is a dashboard-only secret — there is no API to
+          // fetch it — so read it from the environment or prompt for it. It is
+          // used only to create the token and is never stored.
+          const envApiKey = yield* Config.string("CLOUDFLARE_API_KEY").pipe(
+            Config.option,
+            Config.map(Option.getOrUndefined),
+          );
+          const apiKey =
+            envApiKey ??
+            (yield* prompt.prompt.password({
+              message:
+                "Paste your Global API Key (see bottom of https://dash.cloudflare.com/profile/api-tokens)",
+              validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
+            }));
 
-        const envEmail = yield* Config.string("CLOUDFLARE_EMAIL").pipe(
-          Config.option,
-          Config.map(Option.getOrUndefined),
-        );
-        const email =
-          envEmail ??
-          (yield* Clank.text({
-            message: "Cloudflare account email",
-            validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
-          }));
+          const envEmail = yield* Config.string("CLOUDFLARE_EMAIL").pipe(
+            Config.option,
+            Config.map(Option.getOrUndefined),
+          );
+          const email =
+            envEmail ??
+            (yield* prompt.prompt.text({
+              message: "Cloudflare account email",
+              validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
+            }));
 
+          const credentials = Effect.succeed(
+            apiKeyCredentials({ apiKey, email }),
+          );
+          const withCreds = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+            self.pipe(
+              Effect.provideService(
+                CloudflareCredentials.Credentials,
+                credentials,
+              ),
+            );
+
+          const resolvedAccountIds =
+            accountId ?? (yield* withCreds(selectAccountIds(undefined)));
+          const currentUser = yield* withCreds(user.getUser({}));
+
+          const tokenName =
+            name ??
+            (yield* prompt.prompt.text({
+              message: "Token name",
+              placeholder: allPermissions ? "alchemy-superuser" : "alchemy",
+              validate: (v) =>
+                v.trim().length === 0 ? "Token name is required" : undefined,
+            }));
+
+          // Resolve permission groups live from Cloudflare instead of a static
+          // catalog. Cloudflare silently ignores permission-group IDs it doesn't
+          // recognize, so a stale local list yields a token with zero
+          // permissions. `/user/tokens/permission_groups` returns exactly the
+          // groups (and IDs) valid for this credential.
+          //
+          // We hit the endpoint with a raw GET rather than the typed distilled
+          // client: the client hard-codes the set of valid `scopes` literals,
+          // and Cloudflare keeps adding new ones (e.g. `com.cloudflare.edge.
+          // worker.script`), which makes the strict schema reject the whole
+          // response. Parsing leniently keeps us forward-compatible.
+          const http = yield* HttpClient.HttpClient;
+          const headers = {
+            "X-Auth-Key": apiKey,
+            "X-Auth-Email": email,
+            Accept: "application/json",
+          };
+          const [pgResponse, oauthResponse] = yield* Effect.all(
+            [
+              http.get(
+                "https://api.cloudflare.com/client/v4/user/tokens/permission_groups",
+                { headers },
+              ),
+              http.get("https://api.cloudflare.com/client/v4/oauth/scopes", {
+                headers,
+              }),
+            ],
+            { concurrency: "unbounded" },
+          );
+          const pgBody = (yield* pgResponse.json) as {
+            result?: {
+              id?: string;
+              name?: string;
+              category?: string;
+              scopes?: string[];
+            }[];
+          };
+          const oauthBody = (yield* oauthResponse.json) as {
+            result?: {
+              id?: string;
+              name?: string;
+              category?: string;
+              scopes?: string[];
+            }[];
+          };
+          // These are separate Cloudflare catalogs with different identifiers
+          // and cardinality. Preserve both independently; the name/scope join
+          // below is presentation metadata, never the source of token policy
+          // membership.
+          const oauthScopes = (oauthBody.result ?? []).flatMap((scope) =>
+            scope.id && scope.name && scope.scopes
+              ? [
+                  {
+                    id: scope.id,
+                    name: scope.name,
+                    category: scope.category,
+                    scopes: scope.scopes,
+                  },
+                ]
+              : [],
+          );
+          const oauthScopeByPermission = new Map(
+            oauthScopes.flatMap((scope) =>
+              scope.scopes.map(
+                (resourceScope) =>
+                  [`${scope.name}\0${resourceScope}`, scope] as const,
+              ),
+            ),
+          );
+          const permissionGroups = (pgBody.result ?? []).flatMap((group) =>
+            group.id && group.name && group.scopes?.length
+              ? [
+                  {
+                    id: group.id,
+                    name: group.name,
+                    category: group.category,
+                    scopes: group.scopes,
+                  },
+                ]
+              : [],
+          );
+
+          let selected: typeof permissionGroups;
+          if (allPermissions) {
+            selected = permissionGroups;
+          } else {
+            // Only groups whose scope maps to one of the four policy buckets
+            // can actually become a policy (see `buildTokenPolicies`); offering
+            // the rest would let the user "select" permissions that are then
+            // silently dropped. Restrict the prompt to selectable groups.
+            const selectable = permissionGroups
+              .filter(
+                (g) => SELECTABLE_SCOPE_LABELS[g.scopes[0]!] !== undefined,
+              )
+              .sort(
+                (a, b) =>
+                  (a.category ?? "").localeCompare(b.category ?? "") ||
+                  a.name.localeCompare(b.name) ||
+                  a.scopes[0]!.localeCompare(b.scopes[0]!),
+              );
+
+            const chosenIds = yield* prompt.prompt.multiSelect<string>({
+              message: "Select the permission groups to grant",
+              descriptionPlacement: "inline",
+              options: selectable.map((group) => {
+                const oauthScope = oauthScopeByPermission.get(
+                  `${group.name}\0${group.scopes[0]}`,
+                );
+                return {
+                  value: group.id,
+                  label:
+                    oauthScope === undefined
+                      ? group.name
+                      : `${group.name} (${oauthScope.id})`,
+                  description: SELECTABLE_SCOPE_LABELS[group.scopes[0]!],
+                };
+              }),
+              required: true,
+            });
+
+            const chosen = new Set(chosenIds);
+            selected = selectable.filter((g) => chosen.has(g.id));
+          }
+          const policies = buildTokenPolicies(
+            resolvedAccountIds,
+            currentUser.id,
+            selected,
+          );
+
+          if (policies.length === 0) {
+            return yield* Effect.die(
+              "No permission groups resolved for this account; cannot create a token.",
+            );
+          }
+
+          if (allPermissions) {
+            yield* prompt.output.warning(
+              "This token will have FULL access to your Cloudflare account. " +
+                "Keep it secret — anyone with it can control your account.",
+            );
+            const ok = yield* prompt.prompt.confirm({
+              message: "Create a superuser token with all permissions?",
+              initialValue: false,
+            });
+            if (!ok) {
+              return yield* Effect.succeed(undefined);
+            }
+          }
+
+          return { apiKey, email, http, policies, tokenName };
+        });
+
+        const prepared = yield* prompt.terminal.input
+          ? prompt.wizard(prepare)
+          : prepare;
+        if (prepared === undefined) {
+          yield* prompt.output.info("Cancelled.");
+          return;
+        }
+        const { apiKey, email, http, policies, tokenName } = prepared;
         const credentials = Effect.succeed(
           apiKeyCredentials({ apiKey, email }),
         );
@@ -362,98 +577,6 @@ const createTokenCommand = Command.make(
               credentials,
             ),
           );
-
-        const resolvedAccountIds =
-          accountId ?? (yield* withCreds(selectAccountIds(undefined)));
-
-        const tokenName =
-          name ??
-          (yield* Clank.text({
-            message: "Token name",
-            placeholder: allPermissions ? "alchemy-superuser" : "alchemy",
-            validate: (v) =>
-              v.trim().length === 0 ? "Token name is required" : undefined,
-          }));
-
-        // Resolve permission groups live from Cloudflare instead of a static
-        // catalog. Cloudflare silently ignores permission-group IDs it doesn't
-        // recognize, so a stale local list yields a token with zero
-        // permissions. `/user/tokens/permission_groups` returns exactly the
-        // groups (and IDs) valid for this credential.
-        //
-        // We hit the endpoint with a raw GET rather than the typed distilled
-        // client: the client hard-codes the set of valid `scopes` literals,
-        // and Cloudflare keeps adding new ones (e.g. `com.cloudflare.edge.
-        // worker.script`), which makes the strict schema reject the whole
-        // response. Parsing leniently keeps us forward-compatible.
-        const http = yield* HttpClient.HttpClient;
-        const pgResponse = yield* http.get(
-          "https://api.cloudflare.com/client/v4/user/tokens/permission_groups",
-          {
-            headers: {
-              "X-Auth-Key": apiKey,
-              "X-Auth-Email": email,
-              Accept: "application/json",
-            },
-          },
-        );
-        const pgBody = (yield* pgResponse.json) as {
-          result?: { id?: string; name?: string; scopes?: string[] }[];
-        };
-        const liveGroups = (pgBody.result ?? []).flatMap((g) =>
-          g.id && g.scopes && g.scopes.length > 0
-            ? [{ id: g.id, name: g.name ?? "", scopes: g.scopes }]
-            : [],
-        );
-
-        let selected: typeof liveGroups;
-        if (allPermissions) {
-          selected = liveGroups;
-        } else {
-          // Only groups whose scope maps to one of the three policy buckets
-          // can actually become a policy (see `buildTokenPolicies`); offering
-          // the rest would let the user "select" permissions that are then
-          // silently dropped. Restrict the prompt to selectable groups.
-          const selectable = liveGroups
-            .filter((g) => SELECTABLE_SCOPE_LABELS[g.scopes[0]!] !== undefined)
-            .sort((a, b) => a.name.localeCompare(b.name));
-
-          const chosenIds = yield* Clank.multiselect<string>({
-            message:
-              "Select the permission groups to grant (space to toggle, enter to confirm)",
-            options: selectable.map((g) => ({
-              value: g.id,
-              label: g.name,
-              hint: SELECTABLE_SCOPE_LABELS[g.scopes[0]!],
-            })),
-            required: true,
-          });
-
-          const chosen = new Set(chosenIds);
-          selected = selectable.filter((g) => chosen.has(g.id));
-        }
-        const policies = buildTokenPolicies(resolvedAccountIds, selected);
-
-        if (policies.length === 0) {
-          return yield* Effect.die(
-            "No permission groups resolved for this account; cannot create a token.",
-          );
-        }
-
-        if (allPermissions) {
-          yield* Clank.warn(
-            "This token will have FULL access to your Cloudflare account. " +
-              "Keep it secret — anyone with it can control your account.",
-          );
-          const ok = yield* Clank.confirm({
-            message: "Create a superuser token with all permissions?",
-            initialValue: false,
-          });
-          if (!ok) {
-            yield* Console.log("Cancelled.");
-            return;
-          }
-        }
 
         const result = yield* withCreds(
           user.createToken({ name: tokenName, policies }),
@@ -512,7 +635,7 @@ const createTokenCommand = Command.make(
         );
 
         if (granted === 0) {
-          yield* Clank.warn(
+          yield* (yield* CliKit.CliKit).output.warning(
             "Cloudflare granted 0 permissions. A token can only carry permissions " +
               "the authenticating user already holds, so this usually means the " +
               "Global API Key's user is not a Super Administrator on the selected " +
@@ -521,7 +644,7 @@ const createTokenCommand = Command.make(
           );
         } else {
           // Token is good; preempt the "it looks empty" confusion.
-          yield* Clank.info(
+          yield* (yield* CliKit.CliKit).output.info(
             "Heads up: the Cloudflare dashboard often renders API-created tokens " +
               'with a blank permission summary (and a greyed-out "View") — this is ' +
               "a known UI bug, not a broken token. The permissions above are applied. " +
@@ -531,9 +654,10 @@ const createTokenCommand = Command.make(
       }).pipe(Effect.provide(configProvider));
     }),
   ),
-);
+).pipe(Command.withDescription("Create a scoped Cloudflare API token"));
 
-const tailFlag = Flag.boolean("tail").pipe(
+const followFlag = Flag.boolean("follow").pipe(
+  Flag.withAlias("f"),
   Flag.withDescription(
     "Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries.",
   ),
@@ -541,7 +665,9 @@ const tailFlag = Flag.boolean("tail").pipe(
 );
 
 const limitFlag = Flag.integer("limit").pipe(
-  Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
+  Flag.withDescription(
+    "Number of log entries to fetch (ignored with --follow)",
+  ),
   Flag.withDefault(100),
 );
 
@@ -554,7 +680,7 @@ const sinceFlag = Flag.string("since").pipe(
 );
 
 /**
- * `alchemy cloudflare state logs` — get or tail logs from the
+ * `alchemy provider cloudflare state logs` — get or follow logs from the
  * `alchemy-state-store` Worker on the user's account. Lets us debug
  * the state-store worker without standing up a stack file.
  */
@@ -564,7 +690,7 @@ const stateLogsCommand = Command.make(
     envFile,
     profile,
     workerName: cloudflareWorkerName,
-    tail: tailFlag,
+    follow: followFlag,
     limit: limitFlag,
     since: sinceFlag,
   },
@@ -573,17 +699,25 @@ const stateLogsCommand = Command.make(
     (a: {
       profile: string | undefined;
       workerName: string | undefined;
-      tail: boolean;
+      follow: boolean;
       limit: number;
     }) => ({
-      "alchemy.profile": a.profile,
+      "alchemy.profile": a.profile ?? "",
       "alchemy.worker_name": a.workerName ?? STATE_STORE_SCRIPT_NAME,
-      "alchemy.tail": a.tail,
+      "alchemy.follow": a.follow,
       "alchemy.limit": a.limit,
     }),
   )(
-    Effect.fn(function* ({ envFile, profile, workerName, tail, limit, since }) {
-      const services = yield* cloudflareLayers(envFile, profile);
+    Effect.fn(function* ({
+      envFile,
+      profile,
+      workerName,
+      follow,
+      limit,
+      since,
+    }) {
+      const profileName = yield* resolveProfileName(envFile, profile);
+      const services = yield* cloudflareLayers(envFile, profileName);
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
 
       yield* Effect.gen(function* () {
@@ -594,8 +728,8 @@ const stateLogsCommand = Command.make(
         const formatLine = (line: { timestamp: Date; message: string }) =>
           `${formatLocalTimestamp(line.timestamp)} [${scriptName}] ${line.message}`;
 
-        if (tail) {
-          yield* Console.log(`Tailing ${scriptName}...`);
+        if (follow) {
+          yield* (yield* CliKit.CliKit).output.info(`Tailing ${scriptName}...`);
           yield* telemetry
             .tailScript({ accountId, scriptName })
             .pipe(Stream.runForEach((line) => Console.log(formatLine(line))));
@@ -629,13 +763,17 @@ const stateLogsCommand = Command.make(
       }).pipe(Effect.provide(services));
     }),
   ),
+).pipe(
+  Command.withDescription("Stream or fetch logs from the state-store worker"),
 );
 
 const stateCommand = Command.make("state", {}).pipe(
+  Command.withDescription("Manage the Cloudflare-hosted state store"),
   Command.withSubcommands([stateLogsCommand]),
 );
 
 export const cloudflareCommand = Command.make("cloudflare", {}).pipe(
+  Command.withDescription("Manage Cloudflare provider prerequisites"),
   Command.withSubcommands([
     bootstrapCommand,
     teardownCommand,

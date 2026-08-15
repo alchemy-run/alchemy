@@ -16,19 +16,21 @@ import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
+import * as CliKit from "../../Cli/CliKit/index.ts";
 import * as Plan from "../../Plan.ts";
 import { Stage } from "../../Stage.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
+import { stackOutputsView } from "../views/StackOutputs.tsx";
 
 import {
-  dryRun as dryRunFlag,
+  config,
   envFile,
+  exitDeclined,
   force,
   importStack,
   instrumentCommand,
   profile,
-  script,
   stage,
   yes,
 } from "./_shared.ts";
@@ -46,7 +48,6 @@ export const ExecStackOptions = Schema.Struct({
   adopt: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
-export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
 
 const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.stage": args.stage,
@@ -67,6 +68,11 @@ const adopt = Flag.boolean("adopt").pipe(
   Flag.withDefault(false),
 );
 
+const destroyPreview = Flag.boolean("destroy").pipe(
+  Flag.withDescription("Preview destruction of the selected stack and stage"),
+  Flag.withDefault(false),
+);
+
 export const execStack = Effect.fn(function* ({
   main,
   stage,
@@ -79,8 +85,6 @@ export const execStack = Effect.fn(function* ({
   dev = false,
   adopt = false,
 }: ExecStackOptions) {
-  const stackEffect = yield* importStack(main);
-
   const services = Layer.mergeAll(
     Layer.effect(
       AlchemyContext,
@@ -118,12 +122,46 @@ export const execStack = Effect.fn(function* ({
 
   yield* Effect.gen(function* () {
     const cli = yield* CLI.Cli;
-    const stack = yield* stackEffect;
+    const kit = yield* CliKit.CliKit;
+    const operation = destroy ? "destroy" : dev ? "dev" : "deploy";
+    const { stack, updatePlan } = yield* Effect.acquireUseRelease(
+      kit.terminal.input
+        ? kit.live.progress({
+            label: `Preparing ${operation}`,
+            detail: `stage ${stage}`,
+          })
+        : Effect.succeed(undefined),
+      (progress) =>
+        Effect.gen(function* () {
+          if (progress !== undefined) {
+            yield* progress.update({
+              label: "Loading stack",
+              detail: main,
+            });
+          }
+          const stackEffect = yield* importStack(main);
+          if (progress !== undefined) {
+            yield* progress.update({
+              label: "Evaluating stack",
+              detail: stage,
+            });
+          }
+          const stack = yield* stackEffect;
+          if (progress !== undefined) {
+            yield* progress.update({
+              label: destroy ? "Planning destruction" : "Planning changes",
+              detail: stage,
+            });
+          }
+          const updatePlan = yield* (
+            destroy ? Plan.destroy(stack) : Plan.make(stack, { force })
+          ).pipe(Effect.provide(stack.services));
+          return { stack, updatePlan };
+        }),
+      (progress) => progress?.close ?? Effect.void,
+    );
 
     yield* Effect.gen(function* () {
-      const updatePlan = destroy
-        ? yield* Plan.destroy(stack)
-        : yield* Plan.make(stack, { force });
       if (dryRun) {
         yield* cli.displayPlan(updatePlan);
       } else {
@@ -137,7 +175,7 @@ export const execStack = Effect.fn(function* ({
         if (!yes && hasChanges) {
           const approved = yield* cli.approvePlan(updatePlan);
           if (!approved) {
-            return;
+            return yield* exitDeclined;
           }
         }
         // In dev, a failed apply must not drain the keep-alive below:
@@ -162,7 +200,7 @@ export const execStack = Effect.fn(function* ({
         const outputs = yield* applyPlan;
 
         if (outputs !== undefined) {
-          yield* Console.log(outputs);
+          yield* kit.output.print(stackOutputsView(outputs));
         }
 
         if (dev) {
@@ -176,9 +214,8 @@ export const execStack = Effect.fn(function* ({
 export const deployCommand = Command.make(
   "deploy",
   {
-    dryRun: dryRunFlag,
     force,
-    main: script,
+    main: config,
     envFile,
     stage,
     yes,
@@ -186,13 +223,12 @@ export const deployCommand = Command.make(
     adopt,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
-);
+).pipe(Command.withDescription("Deploy a stack"));
 
 export const destroyCommand = Command.make(
   "destroy",
   {
-    dryRun: dryRunFlag,
-    main: script,
+    main: config,
     envFile,
     stage,
     yes,
@@ -207,15 +243,16 @@ export const destroyCommand = Command.make(
       destroy: true,
     }),
   ),
-);
+).pipe(Command.withDescription("Destroy a deployed stack"));
 
 export const planCommand = Command.make(
   "plan",
   {
-    main: script,
+    main: config,
     envFile,
     stage,
     profile,
+    destroy: destroyPreview,
   },
   instrumentCommand(
     "plan",
@@ -223,8 +260,7 @@ export const planCommand = Command.make(
   )((args) =>
     execStack({
       ...args,
-      // plan is the same as deploy with dryRun always set to true
       dryRun: true,
     }),
   ),
-);
+).pipe(Command.withDescription("Preview changes to a stack"));

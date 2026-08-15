@@ -3,6 +3,7 @@ import type { RpcProxyApi } from "@/Local/RpcServer.ts";
 import {
   layerServer,
   RpcSpawner,
+  LOGS_PATH,
   type RpcSpawnPayload,
 } from "@/Local/RpcSpawner.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
@@ -10,8 +11,10 @@ import { describe, expect, it } from "alchemy-test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -30,6 +33,10 @@ const FIXTURE_TS_URL = new URL(
 ).toString();
 const CRASH_FIXTURE_TS_URL = new URL(
   "./fixtures/rpc-server-crash.ts",
+  import.meta.url,
+).toString();
+const LOGS_FIXTURE_TS_URL = new URL(
+  "./fixtures/rpc-server-logs.ts",
   import.meta.url,
 ).toString();
 
@@ -154,6 +161,51 @@ describe(`Local.RpcSpawner (runtime=${typeof globalThis.Bun !== "undefined" ? "b
             times: 4,
           }),
         );
+      }).pipe(Effect.provide(services)),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a /logs subscriber receives sidecar stdout and stderr as ndjson",
+    () =>
+      Effect.gen(function* () {
+        const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+        const client = yield* HttpClient.HttpClient;
+
+        // Subscribe BEFORE spawning (headers received = subscription
+        // registered server-side) — with a subscriber connected, the
+        // spawner must route sidecar output here instead of its console.
+        const response = yield* client.get(new URL(LOGS_PATH, url).toString());
+        const collector = yield* response.stream.pipe(
+          Stream.decodeText,
+          Stream.splitLines,
+          Stream.map(
+            (line) => JSON.parse(line) as { channel: string; line?: string },
+          ),
+          // drop heartbeats (no `line`) and any non-fixture noise
+          Stream.filter(
+            (entry): entry is { channel: string; line: string } =>
+              entry.line?.startsWith("fixture-") ?? false,
+          ),
+          Stream.take(6),
+          Stream.runCollect,
+          Effect.forkScoped,
+        );
+
+        const wsUrl = yield* post(url, samplePayload(LOGS_FIXTURE_TS_URL));
+        expect(wsUrl).toMatch(/^ws:\/\//);
+
+        const received = Array.from(
+          yield* Fiber.join(collector).pipe(
+            Effect.timeout(Duration.seconds(20)),
+          ),
+        );
+        const channels = new Set(received.map((entry) => entry.channel));
+        expect(
+          received.every((entry) => entry.line.startsWith("fixture-")),
+        ).toBe(true);
+        expect(channels.has("stdout")).toBe(true);
+        expect(channels.has("stderr")).toBe(true);
       }).pipe(Effect.provide(services)),
     { timeout: 60_000 },
   );

@@ -4,7 +4,7 @@ description: Run your stack in development mode with hot reloading — resources
 ---
 
 ```sh
-alchemy dev [file] [options]
+alchemy dev [options]
 ```
 
 Run your stack in development mode with hot reloading. Resources are deployed to the cloud while Workers run in the local dev runtime; file changes trigger automatic rebuilds and hot reloads.
@@ -23,9 +23,9 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 | ------------------- | ------------------------------------------------------------------ |
 | `--stage <name>`    | Stage to use for dev (defaults to `dev_$USER`)                     |
 | `--force`           | Force updates for resources that would otherwise no-op             |
-| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`)  |
+| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`) |
 | `--env-file <path>` | Load environment variables from a file                             |
-| `[file]`            | Stack file to run (defaults to `alchemy.run.ts`)                   |
+| `--config, -c <file>`            | Stack file to run (defaults to `alchemy.run.ts`)                   |
 
 ## Examples
 
@@ -39,7 +39,7 @@ alchemy dev --stage dev
 
 ## Where next
 
-- [tail](/cli/tail) — stream live logs from deployed resources
+- [logs](/cli/logs) — fetch past logs, or stream live with `--follow`
 - [logs](/cli/logs) — fetch past log entries
 - [deploy](/cli/deploy) — deploy for real
 - [Local development](/environments/local-development) — how dev mode works under the hood
