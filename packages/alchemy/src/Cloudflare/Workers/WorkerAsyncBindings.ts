@@ -50,9 +50,9 @@ import {
   isSelfUrl,
   isWorker,
   type Worker,
-  type WorkerAccessConfig,
   type WorkerProps,
 } from "./Worker.ts";
+import type { WorkerAccessConfig } from "./WorkerAccess.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
