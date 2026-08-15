@@ -42,6 +42,7 @@ import {
 } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isSecretKey } from "./SecretKey.ts";
+import { isInherit } from "./Inherit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import {
@@ -509,6 +510,14 @@ const toBinding = (
     return {
       type: "version_metadata",
       name: bindingName,
+    };
+  } else if (isInherit(binding)) {
+    // Cloudflare's upload API accepts only the literal "latest" as the
+    // inherit source (error 10057). The env key is the binding name.
+    return {
+      type: "inherit",
+      name: bindingName,
+      versionId: "latest",
     };
   } else if (isSelfUrl(binding)) {
     // The Worker's own URL. The provider lowers this sentinel into a

@@ -41,6 +41,7 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
+import { bindingsInheritFor } from "./Inherit.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
@@ -711,12 +712,14 @@ const putWorkerScript = (params: {
   files: workers.PutScriptRequest["files"];
 }) =>
   Effect.gen(function* () {
+    const bindingsInherit = bindingsInheritFor(params.metadata.bindings);
     if (params.dispatchNamespace) {
       return yield* wfp
         .putDispatchNamespaceScript({
           accountId: params.accountId,
           dispatchNamespace: params.dispatchNamespace,
           scriptName: params.scriptName,
+          bindingsInherit,
           metadata:
             params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
           files: params.files,
@@ -732,6 +735,7 @@ const putWorkerScript = (params: {
       .putScript({
         accountId: params.accountId,
         scriptName: params.scriptName,
+        bindingsInherit,
         metadata: params.metadata,
         files: params.files,
       })
@@ -2776,6 +2780,7 @@ export const LiveWorkerProvider = () =>
           .createScriptVersion({
             accountId,
             scriptName: parentName,
+            bindingsInherit: bindingsInheritFor(metadataBindings),
             metadata: {
               mainModule: bundle.main!,
               bindings: metadataBindings,
@@ -3503,6 +3508,7 @@ export const LiveWorkerProvider = () =>
             .createScriptVersion({
               accountId,
               scriptName: name,
+              bindingsInherit: bindingsInheritFor(metadata.bindings),
               metadata: {
                 mainModule: metadata.mainModule!,
                 bindings: metadata.bindings,
@@ -4363,6 +4369,34 @@ export const LiveWorkerProvider = () =>
           // no placeholder is needed for circular bindings either. (`news`
           // is raw here — `version.parent` may be an unresolved ref, but its
           // *presence* is statically known.)
+          const hasInheritBindings = bindings.some((binding) =>
+            (binding.data.bindings ?? []).some(
+              (item) => item.type === "inherit",
+            ),
+          );
+          // Inherit copies the latest *uploaded* version. A placeholder stub
+          // would become that latest and strip every inherited name. Skip the
+          // stub so reconcile inherits from the real previous upload (or fails
+          // closed if this script has no prior version).
+          if (hasInheritBindings) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker precreate: skipping stub for inherit worker ${id}`,
+            );
+            return {
+              workerId: name,
+              workerName: name,
+              namespace: undefined,
+              logpush: undefined,
+              url: undefined,
+              tags: undefined,
+              durableObjectNamespaces: {},
+              accountId,
+              urls: [],
+              domain: undefined,
+              routes: [],
+              crons: [],
+            } satisfies Worker["Attributes"];
+          }
           if (news.version?.parent != null) {
             yield* Effect.logInfo(
               `Cloudflare Worker precreate: skipping stub for version worker ${id}`,

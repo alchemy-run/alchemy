@@ -40,6 +40,7 @@ import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
+import type { InheritBinding } from "./InheritBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { Worker } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
@@ -124,34 +125,36 @@ export type GetBindingType<T> =
                                                   ? StreamBinding
                                                   : T extends HyperdriveNs.Connection
                                                     ? Hyperdrive
-                                                    : T extends VersionMetadataBinding
-                                                      ? WorkerVersionMetadata
-                                                      : T extends WorkerLoaderResource
-                                                        ? WorkerLoader
-                                                        : T extends WorkflowLike<
-                                                              infer Params
-                                                            >
-                                                          ? Workflow<Params>
-                                                          : T extends DurableObjectLike
-                                                            ? DurableObjectNamespace<
-                                                                Exclude<
-                                                                  T["Shape"],
-                                                                  undefined
-                                                                >
+                                                    : T extends InheritBinding
+                                                      ? unknown
+                                                      : T extends VersionMetadataBinding
+                                                        ? WorkerVersionMetadata
+                                                        : T extends WorkerLoaderResource
+                                                          ? WorkerLoader
+                                                          : T extends WorkflowLike<
+                                                                infer Params
                                                               >
-                                                            : T extends
-                                                                  | VpcService
-                                                                  | VpcServiceLookup
-                                                              ? Fetcher
+                                                            ? Workflow<Params>
+                                                            : T extends DurableObjectLike
+                                                              ? DurableObjectNamespace<
+                                                                  Exclude<
+                                                                    T["Shape"],
+                                                                    undefined
+                                                                  >
+                                                                >
                                                               : T extends
-                                                                    | PipelinesNs.Stream
-                                                                    | PipelinesNs.LegacyPipeline
-                                                                ? Pipeline
-                                                                : T extends Redacted<any>
-                                                                  ? // redacteds are always stored as secret_text, so are always string
-                                                                    // we JSON.stringify when not a Redacted<string>
-                                                                    string
-                                                                  : T;
+                                                                    | VpcService
+                                                                    | VpcServiceLookup
+                                                                ? Fetcher
+                                                                : T extends
+                                                                      | PipelinesNs.Stream
+                                                                      | PipelinesNs.LegacyPipeline
+                                                                  ? Pipeline
+                                                                  : T extends Redacted<any>
+                                                                    ? // redacteds are always stored as secret_text, so are always string
+                                                                      // we JSON.stringify when not a Redacted<string>
+                                                                      string
+                                                                    : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

@@ -1340,6 +1340,32 @@ export const isSelf = (value: unknown): value is Self =>
  * for a comprehensive walkthrough of all binding types (R2, D1,
  * Durable Objects, Assets, and more).
  *
+ * @section Inheriting bindings
+ * Use `Cloudflare.Workers.Inherit()` for a code-only deploy that must keep a named
+ * binding from the previous upload without supplying or reading its
+ * value. Alchemy emits `{ type: "inherit", version_id: "latest" }` and
+ * sends `bindings_inherit=strict`. Cloudflare copies the binding from
+ * the latest *uploaded* version of this script — not necessarily the
+ * version serving 100% of traffic — and fails the upload if that
+ * version does not have the name.
+ *
+ * Exact version IDs are rejected by the Cloudflare upload API
+ * (error 10057). Do not put inherit under {@link WorkerVersionOptions};
+ * that surface is rollout/preview (`parent`, `traffic`, `alias`).
+ *
+ * `alchemy dev` cannot inherit from Cloudflare version history;
+ * local start fails closed.
+ *
+ * @example Preserve a separately custodied secret
+ * ```typescript
+ * yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: {
+ *     API_TOKEN: Cloudflare.Workers.Inherit(),
+ *   },
+ * });
+ * ```
+ *
  * @example Defining an async Worker in your stack
  * ```typescript
  * // alchemy.run.ts

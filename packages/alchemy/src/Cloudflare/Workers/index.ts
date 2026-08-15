@@ -16,6 +16,8 @@ export * from "./Fetch.ts";
 export * from "./GitHubRepositoryEventSource.ts";
 export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
+export * from "./Inherit.ts";
+export * from "./InheritBinding.ts";
 export * from "./LocalWorkerProvider.ts";
 export * from "./ObservabilityDestination.ts";
 export * from "./RateLimit.ts";

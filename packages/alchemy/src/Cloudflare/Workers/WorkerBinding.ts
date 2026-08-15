@@ -38,6 +38,7 @@ import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
+import type { InheritBinding } from "./InheritBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
@@ -199,6 +200,7 @@ export type WorkerBindingResource =
   | WorkerEntrypointBinding
   | WorkerLoader
   | VersionMetadataBinding
+  | InheritBinding
   // The Worker's own URL (`Worker.URL`).
   | URLEffect
   // A Worker-only binding lifted by `.pipe(Alchemy.remote())`.
