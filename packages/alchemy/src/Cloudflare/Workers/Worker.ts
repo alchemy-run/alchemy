@@ -338,7 +338,8 @@ export interface WorkerDomainConfig {
    * The canonical hostname (e.g. `"example.com"`). Attached to the Worker
    * as a Cloudflare custom domain — DNS record and edge certificate are
    * managed automatically. The Cloudflare zone is inferred from the
-   * hostname and must already exist in the account.
+   * hostname unless {@link zoneId}, {@link zone}, or {@link zoneName} is
+   * set. The zone must already exist in the account.
    *
    * When set, `https://<name>` is the Worker's primary `url` output.
    */
@@ -359,6 +360,23 @@ export interface WorkerDomainConfig {
    * `urls`.
    */
   redirects?: string[];
+  /**
+   * Cloudflare zone ID for every hostname in this config. Equivalent to
+   * Wrangler's `zone_id`. Wins over {@link zone} / {@link zoneName}.
+   * When omitted, each hostname's zone is looked up by name
+   * (`GET /zones?name=`), not by listing the account's first page of zones.
+   */
+  zoneId?: string;
+  /**
+   * Cloudflare zone name, e.g. `"example.com"`. Equivalent to Wrangler's
+   * `zone_name`.
+   */
+  zoneName?: string;
+  /**
+   * Zone reference — a zone ID, zone name, or `{ zoneId, name? }` object.
+   * Alternative to {@link zoneId} / {@link zoneName}.
+   */
+  zone?: ZoneReference;
 }
 
 export interface WorkerRouteConfig {
@@ -815,8 +833,9 @@ export interface WorkerProps<
   /**
    * The Worker's custom domain: one canonical hostname, plus optional
    * `aliases` that also serve the Worker and `redirects` that 301 to the
-   * canonical name. A bare string is shorthand for `{ name }`. The
-   * Cloudflare zone is inferred from each hostname — the zone must already
+   * canonical name. A bare string is shorthand for `{ name }`. Pin the
+   * zone with `zoneId` / `zone` / `zoneName` (same as {@link routes});
+   * otherwise each hostname is looked up by name. The zone must already
    * exist in the account.
    *
    * When set, `https://<name>` becomes the Worker's primary `url` output,
@@ -1079,7 +1098,12 @@ export type Worker<Bindings = any> = Resource<
      * when no custom domain is configured.
      */
     domain:
-      | { name: string; aliases: string[]; redirects: string[] }
+      | {
+          name: string;
+          aliases: string[];
+          redirects: string[];
+          zone?: ZoneReference;
+        }
       | undefined;
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
@@ -1632,6 +1656,7 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./src/api.ts",
  *   domain: {
  *     name: "example.com",
+ *     zoneId: "<YOUR_ZONE_ID>",
  *     aliases: ["www.example.com"],
  *     redirects: ["old.example.com"], // 301 → https://example.com
  *   },

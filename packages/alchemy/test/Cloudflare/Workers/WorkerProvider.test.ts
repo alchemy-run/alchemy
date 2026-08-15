@@ -3,6 +3,7 @@ import {
   getDurableObjectTagMap,
   normalizeStateDomains,
   resolveWorkerDomain,
+  resolveWorkerDomainZone,
   resolveWorkersDev,
   shouldObserveWorkerCrons,
   shouldObserveWorkerDomains,
@@ -144,6 +145,39 @@ describe("WorkerProvider", () => {
         expect(result.failure._tag).toEqual("WorkerDomainConfigError");
       }
     });
+
+    test("carries zoneId / zone / zoneName pins", () => {
+      const zoneId = "0123456789abcdef0123456789abcdef";
+      expect(
+        resolve({
+          name: "app.example.com",
+          zoneId,
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: [],
+        redirects: [],
+        zone: zoneId,
+      });
+      expect(
+        resolve({
+          name: "app.example.com",
+          zoneName: "example.com",
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: [],
+        redirects: [],
+        zone: "example.com",
+      });
+      expect(
+        resolveWorkerDomainZone({
+          zoneId,
+          zoneName: "ignored.com",
+          zone: "also-ignored.com",
+        }),
+      ).toEqual(zoneId);
+    });
   });
 
   describe("stateWorkerDomain", () => {
@@ -160,6 +194,21 @@ describe("WorkerProvider", () => {
         name: "app.example.com",
         aliases: ["www.example.com"],
         redirects: ["old.example.com"],
+      });
+      expect(
+        stateWorkerDomain({
+          domain: {
+            name: "app.example.com",
+            aliases: [],
+            redirects: [],
+            zoneId: "0123456789abcdef0123456789abcdef",
+          },
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: [],
+        redirects: [],
+        zone: "0123456789abcdef0123456789abcdef",
       });
     });
 
