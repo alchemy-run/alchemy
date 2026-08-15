@@ -282,9 +282,12 @@ const makeAwsFinishTarget = (config: ViteAwsTargetConfig = {}): ViteTarget =>
               input: entrySourcePath,
               platform: "node",
               resolve: {
-                conditionNames: effectActive
-                  ? ["bun", "node", "import", "module"]
-                  : ["node", "import", "module"],
+                // Never "bun": react-dom (and other vite-camp server deps)
+                // ship bun-flavored conditional exports whose Bun-only
+                // ReadableStream extensions crash Lambda's Node runtime
+                // ("source.type 'direct'"). alchemy resolves its built lib
+                // through "import", which is what the deploy wants anyway.
+                conditionNames: ["node", "import", "module"],
               },
               external: [/^@aws-sdk\//, /^node:/],
               // The generated entry probes the framework namespace for the
