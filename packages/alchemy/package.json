@@ -150,6 +150,12 @@
       "worker": "./src/Cli/InkCLI.tsx",
       "import": "./lib/Cli/InkCLI.js"
     },
+    "./Cli/CliKit": {
+      "types": "./lib/Cli/CliKit/index.d.ts",
+      "bun": "./src/Cli/CliKit/index.ts",
+      "worker": "./src/Cli/CliKit/index.ts",
+      "import": "./lib/Cli/CliKit/index.js"
+    },
     "./Cloudflare": {
       "types": "./lib/Cloudflare/index.d.ts",
       "bun": "./src/Cloudflare/index.ts",
