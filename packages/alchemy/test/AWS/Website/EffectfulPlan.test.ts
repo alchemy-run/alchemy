@@ -4,7 +4,7 @@ import {
   makeEffectFrameworkSite,
   prepareServerWrapperEntry,
 } from "@/AWS/Website/FrameworkSite.ts";
-import { SERVE_SHELL_KEY } from "@/Serve/constants.ts";
+import { SERVE_BRIDGE_KEY } from "@/Serve/constants.ts";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
@@ -1087,7 +1087,7 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
       ShellPlanVite,
       ShellPlanViteSsr,
     ]) {
-      const shell = (cls as any)[SERVE_SHELL_KEY];
+      const shell = (cls as any)[SERVE_BRIDGE_KEY];
       expect(shell).toBeDefined();
       expect(typeof shell.match).toBe("function");
       expect(typeof shell.dispose).toBe("function");

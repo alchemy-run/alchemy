@@ -22,7 +22,7 @@
  */
 import * as AWS from "@/AWS";
 import { makeFunctionFetchHandler } from "@/AWS/Lambda/HttpServer.ts";
-import { makeWebsiteHandlers } from "@/AWS/Lambda/WebsiteHandlers.ts";
+import { makeWebsiteHandlers } from "@/AWS/Lambda/ServeBridge.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

@@ -11,7 +11,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -173,36 +173,18 @@ export const viteDefaults = (props: ViteProps | EffectViteProps) => {
 };
 
 /**
- * Deploy a [Vite](https://vite.dev) app to AWS — the parity twin of
- * `Cloudflare.Website.Vite` for both Vite shapes:
+ * Deploy a [Vite](https://vite.dev) app to AWS, in either Vite shape:
  *
- * - **SPA** (the default): the Vite build uploads to a private S3 bucket
- *   behind CloudFront (SPA fallback on), and an optional Effect program
- *   deploys as an effect-native server Lambda that the edge router
- *   consults FIRST for `server.routes`, so a static file can never shadow
- *   an API path.
+ * - **SPA** (the default): the `vite build` output uploads to S3 behind
+ *   CloudFront with SPA fallback on.
  * - **SSR** (`ssr: true`): for vite-plugin frameworks (TanStack Start,
- *   SolidStart, ...) — the project's own `vite.config.*` builds through
- *   the vite Environment API, the server environment's entry runs on a
- *   streaming Lambda Function URL, and the client environment's assets
- *   (prerendered pages included) upload to S3 behind CloudFront.
+ *   SolidStart, ...) — the server entry runs on a streaming Lambda
+ *   Function URL, client assets upload to S3 behind CloudFront. Requires
+ *   `@alchemy.run/frontend-frameworks` in your project.
  *
- * The SPA arm is a thin convention layer over {@link StaticSite}:
- * `rootDir` is the Vite project, the build is `vite build` into `dist/`,
- * dev runs `vite dev` (both resolved against the project's own
- * `node_modules/.bin`), and `spa` defaults to `true` — override `build`,
- * `dev`, or `spa` to diverge. Everything else (domains, Router
- * attachment, invalidation, the effectful server) is `StaticSite`
- * verbatim.
- *
- * The SSR arm builds through `@alchemy.run/frontend-frameworks/vite` with
- * the `@alchemy.run/frontend-frameworks/vite/aws` deploy target (the
- * package must be installed in your project): the build loads the
- * PROJECT's own vite and `vite.config.*` — framework plugins included —
- * so the deployed server graph is exactly what `vite build` produces,
- * wrapped in a generated streaming Lambda entry. Under `alchemy dev` the
- * site is vite's own dev server (native HMR) and no cloud resources are
- * declared.
+ * The SPA arm is a thin convention layer over {@link StaticSite} — domains,
+ * Router attachment, invalidation, and the effectful server all work the
+ * same. Under `alchemy dev` the site is vite's own dev server.
  *
  * @resource
  * @product Website
@@ -239,65 +221,90 @@ export const viteDefaults = (props: ViteProps | EffectViteProps) => {
  * ```
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * backend from the same deployment. The browser is untrusted — it talks
- * through a surface you define on `fetch` (an effect `HttpApi` schema is
- * the natural fit for a SPA; a vite-plugin framework's server functions
- * are the natural fit for SSR), while the program's non-`fetch` methods
- * stay a trusted-caller RPC surface (in-process `createClient(Site)` from
- * server code, invoke-style bindings from sibling functions).
- *
- * On the SSR arm the program threads into the framework's server Lambda
- * in collect-only mode: bindings collect env vars and IAM at deploy time
- * while the framework-built bundle ships as-is, and the CloudFront edge
- * router forwards `server.routes` (default `["/api/*"]`) to the server
- * BEFORE the static-asset manifest. Delivery is the auto-inject (wrapper)
- * tier — the AWS deploy target's generated Lambda entry composes the
- * effect `fetch` ahead of the framework handler inside the single
- * streaming wrap, and `alchemy dev` mounts the same dispatch as a
- * middleware in front of vite's dev server; `server: { takeover: false }`
- * forces the explicit tier (`alchemy/Serve` mounted by hand).
- *
- * The program's non-`fetch` surface — an SQS consumer registered with
- * `SQS.consumeQueueMessages`, and other event sources — rides a
- * **sibling effect Lambda** (`<SiteId>-Handlers`) deployed automatically
- * from the same module.
- *
- * @example Vite SPA with a schema'd backend
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — see examples/aws-vite for the full HttpApi flagship
+ * // src/backend.ts
+ * import { GetItem, GetItemHttp, Table } from "alchemy/AWS/DynamoDB";
+ * import { Vite } from "alchemy/AWS/Website";
+ * import * as Effect from "effect/Effect";
+ *
+ * export const Visits = Table("Visits", {
+ *   partitionKey: "pk",
+ *   attributes: { pk: "S" },
+ * });
+ *
  * export default class Site extends Vite<Site>()(
  *   "Site",
- *   { main: import.meta.url },
- *   Effect.gen(function* () {
- *     const bucket = yield* Data;
- *     return {
- *       fetch: // HttpApiBuilder-served router over the shared schema
- *       visits: () => // trusted-caller method
- *     };
- *   }),
- * ) {}
- * ```
- *
- * @example TanStack Start with a typed backend
- * ```typescript
- * // src/backend.ts — see examples/aws-tanstack; the browser reaches the
- * // backend through TanStack server functions dispatching
- * // `createClient(Site)` in-process.
- * export default class Site extends Vite<Site>()(
- *   "Website",
  *   { ssr: true, main: import.meta.url },
  *   Effect.gen(function* () {
- *     const getItem = yield* DynamoDB.GetItem(yield* Visits);
+ *     const getItem = yield* GetItem(yield* Visits);
  *     return {
  *       visits: () =>
  *         getItem({ Key: { pk: { S: "count" } } }).pipe(
  *           Effect.map((result) => Number(result.Item?.count?.N ?? "0")),
  *         ),
  *     };
- *   }).pipe(Effect.provide(DynamoDB.GetItemHttp)),
+ *   }).pipe(Effect.provide(GetItemHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — on the SSR arm it runs
+ * inside the framework's server Lambda; on the SPA arm it deploys as its
+ * own effect-native Lambda. Bindings collect env vars and IAM at deploy
+ * time, and `main: import.meta.url` anchors the module so the server
+ * bundle can re-import it. Use narrow subpath imports
+ * (`alchemy/AWS/DynamoDB`) — never the `alchemy/AWS` barrel — from a site
+ * module. See `examples/aws-vite` (SPA + `HttpApi`) and
+ * `examples/aws-tanstack` for full projects.
+ *
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
+ * ```typescript
+ * export default class Site extends Vite<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/pages"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): the
+ * edge router consults it before the static-asset manifest, so a static
+ * file can never shadow an API path — even under SPA fallback. Exclusion
+ * globs (`"!/api/pages"`) hand a path back to the framework. The same
+ * routing runs in front of vite's dev server during `alchemy dev`.
+ *
+ * @section Calling RPC Methods
+ * @example From server code
+ * ```typescript
+ * // e.g. inside a TanStack Start server function
+ * import { createClient } from "alchemy/Client";
+ * import Backend from "../src/backend.ts";
+ *
+ * const backend = createClient(Backend);
+ * const count = await backend.visits();
+ * ```
+ * Non-`fetch` methods are RPC methods for trusted server code — dispatch
+ * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
+ * backend through `fetch` — mount a schema-validated surface (effect
+ * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ *
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * On the SSR arm event handlers deploy on a sibling Lambda
+ * (`<SiteId>-Handlers`) built from the same module; on the SPA arm they
+ * attach to the site's own Lambda. Delivery engages on deploy —
+ * `alchemy dev` does not dispatch queue events locally.
  */
 export const Vite: {
   <Self>(): {
@@ -397,7 +404,7 @@ export const Vite: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeShell(effectClass(makeVite(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeVite(id, props, impl)))
     : makeVite(id, props, impl)) as any;
 
 const viteSsrConfig = (props: ViteSsrProps): FrameworkSiteConfig => ({

@@ -5,7 +5,7 @@
  * core delegates every `App.render` through it, prod and dev, on every
  * adapter) to a generated wrapper module (the Cloudflare shape shown; the
  * `"node"`/AWS arm calls `makeWebsiteHandlers` from
- * `alchemy/AWS/Lambda/WebsiteHandlers` instead — see `platform` below):
+ * `alchemy/AWS/Lambda/ServeBridge` instead — see `platform` below):
  *
  * ```js
  * import { FetchState, astro } from "astro/fetch";
@@ -166,7 +166,7 @@ const OPTIMIZE_EXCLUDES = [
  * Marks a user fetch file that already mounts the alchemy runtime bridge
  * (the explicit tier): the serve sentinel literal, an `alchemy/Serve`
  * import specifier, or the AWS serve shell
- * (`alchemy/AWS/Lambda/WebsiteHandlers`). Any one makes the wrapper
+ * (`alchemy/AWS/Lambda/ServeBridge`). Any one makes the wrapper
  * generator stand down.
  */
 const mountsServe = (source: string): boolean =>
@@ -199,7 +199,7 @@ export interface EffectFetchablePluginOptions {
    *   dynamic-import ladder inside the vite module runner. Applies to the
    *   `ssr` environment only.
    * - `"node"` (the AWS Lambda / Node target): the wrapper calls
-   *   `makeWebsiteHandlers` from `alchemy/AWS/Lambda/WebsiteHandlers` —
+   *   `makeWebsiteHandlers` from `alchemy/AWS/Lambda/ServeBridge` —
    *   the AWS serve shell (Credentials/Region layer recipe, Lambda
    *   shutdown extension, sentinel literal) — which resolves the alchemy
    *   env from `process.env` (the Lambda sandbox env, or the dev-server
@@ -342,7 +342,7 @@ export const createEffectFetchablePlugin = (
           return {
             code: [
               `globalThis.__ALCHEMY_RUNTIME__ = true;`,
-              `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
+              `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
               fallback.imports,
               `import Site from ${JSON.stringify(mainPath)};`,
               `const site = makeWebsiteHandlers({ site: Site, routes: ${JSON.stringify(options.routes)} });`,

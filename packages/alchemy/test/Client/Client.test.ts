@@ -29,7 +29,7 @@ import {
   RpcPrerenderError,
 } from "@/Client/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import { SERVE_SHELL_KEY } from "@/Serve/constants.ts";
+import { SERVE_BRIDGE_KEY } from "@/Serve/constants.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -235,14 +235,14 @@ describe("serve-shell runtime seam (AWS classes)", () => {
     () =>
       restoringRuntimeFlag(async () => {
         // A backend class carrying a cloud-flavored serve shell under
-        // SERVE_SHELL_KEY — the shape AWS Website classes attach at class
-        // construction (lambdaServeShell). The in-process dispatch must
+        // SERVE_BRIDGE_KEY — the shape AWS Website classes attach at class
+        // construction (lambdaServeBridge). The in-process dispatch must
         // build the runtime THROUGH the shell (Lambda/Node recipe), never
         // the default Cloudflare-flavored bridge.
         const seen: Array<Record<string, unknown>> = [];
         const ShellSite = Object.assign(function ShellSite() {}, {
           "~alchemy/Id": "ShellSite",
-          [SERVE_SHELL_KEY]: {
+          [SERVE_BRIDGE_KEY]: {
             match: () => Promise.resolve(undefined),
             runtime: (_site: object, env: Record<string, unknown>) => {
               seen.push(env);

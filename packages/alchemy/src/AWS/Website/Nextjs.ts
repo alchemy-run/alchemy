@@ -32,7 +32,7 @@ import { AssetDeployment } from "./AssetDeployment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { CurrentRegion } from "../Region.ts";
 import {
-  attachLambdaServeShell,
+  attachLambdaServeBridge,
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   deploySiblingHandlers,
@@ -237,19 +237,14 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
 /**
  * Deploy a Next.js application to AWS with the OpenNext
  * (`@opennextjs/aws`) serverless topology: the SSR server on a streaming
- * Lambda Function URL, static assets in S3 behind CloudFront's KV-manifest
- * edge router, the ISR/fetch cache in a dedicated S3 bucket, a dedicated
- * image optimization Lambda routed at `/_next/image`, and ISR revalidation
- * through an SQS FIFO queue plus a DynamoDB tag-cache table.
+ * Lambda Function URL, static assets in S3 behind CloudFront, image
+ * optimization at `/_next/image`, and ISR revalidation through SQS +
+ * DynamoDB.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/nextjs/aws` (the
- * `@opennextjs/aws` pipeline) — both it and `@opennextjs/aws` must be
- * installed in your project. When the project has no `open-next.config.ts`,
- * a minimal default with the streaming server wrapper is generated.
- *
- * During `alchemy dev` the site is Next's own dev server (`next dev`) and
- * no cloud resources are declared; `Alchemy.remote()` opts back into the
- * full live deployment.
+ * Requires `@alchemy.run/frontend-frameworks` and `@opennextjs/aws` in
+ * your project. A project's own `open-next.config.ts` keeps working.
+ * During `alchemy dev` the site is the real `next dev`; `Alchemy.remote()`
+ * opts back into the full live deployment.
  *
  * @resource
  * @section Creating Next.js Sites
@@ -286,55 +281,9 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * ```
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * API from the same site: the program threads into the OpenNext server
- * Lambda in collect-only mode (bindings collect env vars and IAM at deploy
- * time) while the OpenNext-built bundle ships as-is, and the CloudFront
- * edge router forwards `server.routes` (default `["/api/*"]`) to the
- * server BEFORE the static-asset manifest. The program must live in a
- * dedicated module whose default export is the class
- * (`main: import.meta.url`) — nothing else: alchemy derives an OpenNext
- * config under `.alchemy/generated/<id>/` whose custom wrapper composes
- * the effect fetch ahead of Next's router (inside the single streaming
- * wrap), so no route file or config edit is needed. Inside `server.routes`
- * the effect fetch is authoritative — its 404s are real 404s and Next
- * routes inside the claim are shadowed (use exclusion globs like
- * `"!/api/hello"` to carve them out); outside the claim Next serves.
- * A project's own `open-next.config.ts` keeps working: it is imported and
- * spread into the derived config, with only `default.override.wrapper`
- * re-pointed (non-streaming or custom wrappers, the edge runtime, and
- * external middleware refuse loudly at build time).
- *
- * `alchemy dev` matches this byte-for-byte: the dev server is the real
- * `next dev` (Turbopack) embedded through Next's custom-server API in an
- * alchemy-owned Node child, with the same Serve dispatch running ahead of
- * Next's handler — strict route ownership, identical route precedence in
- * dev and deploy. Editing the backend module hot-swaps the effect
- * handlers in place (no dev-server restart); `next.config` edits still
- * need an `alchemy dev` restart.
- *
- * The impl's non-`fetch` methods are **RPC methods** — the typed method
- * surface for trusted callers: value-import the backend in server
- * components and call `createClient(Backend)` from `alchemy/Client` for
- * direct in-process dispatch. Client components are untrusted — they
- * reach the backend through the `fetch` handler (mount a
- * schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
- * under `server.routes`).
- *
- * The program's non-`fetch` surface — an SQS consumer registered with
- * `SQS.consumeQueueMessages`, and other event sources — rides a
- * **sibling effect Lambda** (`<SiteId>-Handlers`) deployed automatically
- * from the same module: event sources register their mappings and IAM
- * against the sibling, shared capabilities collect env and IAM onto both
- * functions, and a fetch-only program deploys no sibling at all. Event
- * delivery engages on deploy — `alchemy dev` does not dispatch queue
- * events locally.
- *
- * @example Next.js site with an effect-native API
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
- * // Next bundle graph; never import the `alchemy/AWS` provider barrel
- * // from a site module.
+ * // src/backend.ts
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { Nextjs } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
@@ -355,26 +304,64 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — it runs inside the
+ * OpenNext server Lambda, and its bindings collect env vars and IAM at
+ * deploy time. `main: import.meta.url` anchors the module so the server
+ * bundle can re-import it; no route file or config edit is needed. Use
+ * narrow subpath imports (`alchemy/AWS/S3`) — never the `alchemy/AWS`
+ * barrel — from a site module.
  *
- * @example Calling it from a server component (createClient)
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
  * ```typescript
- * // a server component — value-import the backend; dispatch is direct
- * // and in-process, no HTTP hop.
+ * export default class Site extends Nextjs<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/pages"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * them its responses — 404s included — are final and Next routes are
+ * shadowed; outside them Next serves. Exclusion globs (`"!/api/pages"`)
+ * hand a path back to Next. `alchemy dev` applies the same route
+ * precedence in front of `next dev`.
+ *
+ * @section Calling RPC Methods
+ * @example From a server component
+ * ```typescript
  * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  *
  * const backend = createClient(Backend);
- *
  * const text = await backend.hello();
  * ```
+ * Non-`fetch` methods are RPC methods for trusted server code (server
+ * components, route handlers) — dispatch is in-process, no HTTP hop.
+ * Client components are untrusted: they reach the backend through `fetch`
+ * — mount a schema-validated surface (effect `HttpApi` / `@effect/rpc`)
+ * under `server.routes`.
  *
- * @example Escape hatch: mounting the program yourself
- * Auto-injection stands down whenever the Next route tree already mounts
- * `alchemy/Serve` explicitly (or with `server: { takeover: false }`), so a
- * hand-written catch-all route handler keeps working unchanged — use it
- * when you need to customize the mount itself. Dispatch then happens
- * inside Next's router, so more-specific user routes win over the
- * catch-all:
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
+ * from the same module. Delivery engages on deploy — `alchemy dev` does
+ * not dispatch queue events locally.
+ *
+ * @section Mounting The Program Yourself
+ * @example Catch-all route handler
  * ```typescript
  * // app/api/[[...slug]]/route.ts
  * import { toRouteHandler } from "alchemy/Next";
@@ -385,6 +372,9 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *          handler as PATCH, handler as DELETE, handler as HEAD,
  *          handler as OPTIONS };
  * ```
+ * An explicit mount in the route tree (or `server: { takeover: false }`)
+ * stands the automatic delivery down; dispatch then happens inside Next's
+ * router, so more-specific user routes win over the catch-all.
  */
 export const Nextjs: {
   <Self>(): {
@@ -441,7 +431,7 @@ export const Nextjs: {
         // The class carries the AWS serve shell so `Serve.make(Site)` (and
         // the `toRouteHandler` mount built on it) dispatches through the
         // Lambda/Node layer recipe instead of the Cloudflare bridge.
-        attachLambdaServeShell(effectClass(makeNextjs(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeNextjs(id, props, impl)))
     : makeNextjs(id, props, impl)) as any;
 
 const makeNextjs = (

@@ -64,7 +64,7 @@ export interface AstroAwsConfig {
    * its `fetch` owns. The adapter integration pre-resolves Astro's
    * `virtual:astro:fetchable` to a generated wrapper that runs the effect
    * program first for `routes` (via the AWS serve shell,
-   * `alchemy/AWS/Lambda/WebsiteHandlers`) and falls back to Astro's own
+   * `alchemy/AWS/Lambda/ServeBridge`) and falls back to Astro's own
    * pipeline — in the production `ssr` build (bundled self-contained into
    * `dist/server`) and in Astro's own Node dev server alike. The
    * build-time prerenderer keeps astro's default fetchable, so

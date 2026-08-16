@@ -316,10 +316,10 @@
       "import": "./lib/Client/index.js"
     },
     "./Serve/Worker": {
-      "types": "./lib/Serve/Worker.d.ts",
-      "bun": "./src/Serve/Worker.ts",
-      "worker": "./src/Serve/Worker.ts",
-      "import": "./lib/Serve/Worker.js"
+      "types": "./lib/Cloudflare/Workers/ServeWorkerEntry.d.ts",
+      "bun": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
+      "worker": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
+      "import": "./lib/Cloudflare/Workers/ServeWorkerEntry.js"
     },
     "./SvelteKit": {
       "types": "./lib/Serve/SvelteKit.d.ts",

@@ -279,7 +279,7 @@ export const makeEffectDevPlugin = (
         ? (isAws
             ? [
                 `import Site from ${JSON.stringify(mainPath)};`,
-                `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
+                `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
                 // Env resolves from process.env (the sidecar process the
                 // dev server runs in — `alchemy dev` lowered the packed
                 // binding env + stack markers into it). The middleware

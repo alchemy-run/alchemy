@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -58,16 +58,11 @@ export interface EffectOctaneProps extends OctaneProps {
 
 /**
  * Deploy an [OctaneJS](https://octanejs.dev) application to AWS: Octane's
- * SSR server on a streaming Lambda Function URL, static assets in S3, and a
- * CloudFront distribution whose edge router serves uploaded files from S3
- * and forwards everything else to the server.
+ * SSR server on a streaming Lambda Function URL, static assets in S3, and
+ * CloudFront routing between them.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/octane` with the
- * `@alchemy.run/frontend-frameworks/octane/aws` deploy target — the project's
- * own `vite build` (with `@octanejs/vite-plugin`) produces the
- * self-contained node server bundle, and the target's finishing pass wraps
- * its fetch handler as a streaming Lambda handler. The project's
- * `octane.config.ts` must select the AWS marker adapter:
+ * Requires `@alchemy.run/frontend-frameworks` in your project, and the
+ * project's `octane.config.ts` must select the AWS adapter:
  *
  * ```ts
  * import { aws } from "@alchemy.run/frontend-frameworks/octane/aws-adapter";
@@ -75,7 +70,6 @@ export interface EffectOctaneProps extends OctaneProps {
  *
  * export default defineConfig({
  *   adapter: aws(),
- *   // ...
  * });
  * ```
  *
@@ -114,27 +108,9 @@ export interface EffectOctaneProps extends OctaneProps {
  * ```
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * API from the same site: the program threads into the server Lambda in
- * collect-only mode (bindings collect env vars and IAM at deploy time)
- * while the Octane-built bundle ships as-is, and the CloudFront edge
- * router forwards `server.routes` (default `["/api/*"]`) to the server
- * BEFORE the static-asset manifest. The program must live in a dedicated
- * module whose default export is the class (`main: import.meta.url`) and
- * be mounted in Octane's server entry via `alchemy/Serve`.
- *
- * The impl's non-`fetch` methods are **RPC methods** — the typed method
- * surface for trusted callers: value-import the backend in server code
- * and call `createClient(Backend)` from `alchemy/Client` for direct
- * in-process dispatch. Browser code is untrusted — it reaches the
- * backend through the `fetch` handler (mount a schema-validated surface
- * like effect `HttpApi` / `@effect/rpc` on it under `server.routes`).
- *
- * @example Octane site with an effect-native API
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
- * // Octane server graph; never import the `alchemy/AWS` provider barrel
- * // from a site module.
+ * // src/backend.ts
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { Octane } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
@@ -155,18 +131,58 @@ export interface EffectOctaneProps extends OctaneProps {
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — it runs inside the
+ * server Lambda, and its bindings collect env vars and IAM at deploy
+ * time. `main: import.meta.url` anchors the module so the server bundle
+ * can re-import it; mount the program in Octane's server entry via
+ * `alchemy/Serve`. Use narrow subpath imports (`alchemy/AWS/S3`) — never
+ * the `alchemy/AWS` barrel — from a site module.
  *
- * @example Calling it from server code (createClient)
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
  * ```typescript
- * // server code — value-import the backend; dispatch is direct and
- * // in-process, no HTTP hop.
+ * export default class Site extends Octane<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/pages"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * them its responses — 404s included — are final; outside them Octane
+ * serves. Exclusion globs (`"!/api/pages"`) hand a path back to Octane.
+ *
+ * @section Calling RPC Methods
+ * @example From server code
+ * ```typescript
  * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  *
  * const backend = createClient(Backend);
- *
  * const text = await backend.hello();
  * ```
+ * Non-`fetch` methods are RPC methods for trusted server code — dispatch
+ * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
+ * backend through `fetch` — mount a schema-validated surface (effect
+ * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ *
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
+ * from the same module. Delivery engages on deploy — `alchemy dev` does
+ * not dispatch queue events locally.
  */
 export const Octane: {
   <Self>(): {
@@ -230,7 +246,7 @@ export const Octane: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeShell(effectClass(makeOctane(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeOctane(id, props, impl)))
     : makeOctane(id, props, impl)) as any;
 
 const octaneConfig = (): FrameworkSiteConfig => ({

@@ -11,7 +11,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -103,20 +103,13 @@ export interface EffectAstroProps extends AstroProps {
 }
 
 /**
- * Deploy an [Astro](https://astro.build) application to AWS: the server
- * bundle on a streaming Lambda Function URL, static assets (prerendered
- * pages included) in S3, and a CloudFront distribution whose edge router
- * serves uploaded files from S3 and forwards everything else to the server.
+ * Deploy an [Astro](https://astro.build) application to AWS: the server on
+ * a streaming Lambda Function URL, static assets (prerendered pages
+ * included) in S3, and CloudFront routing between them.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/astro` with the
- * `@alchemy.run/frontend-frameworks/astro/aws` deploy target (a wrangler-free
- * AWS Lambda adapter is injected — your `astro.config.*` must not declare
- * one) — the package must be installed in your project.
- *
- * Pages render on demand by default (`output: "server"`); pages that
- * `export const prerender = true` are prerendered at build time and served
- * from S3. With `astro: { output: "static" }` every page is prerendered
- * and the deploy is assets-only — no Lambda.
+ * Requires `@alchemy.run/frontend-frameworks` in your project. The AWS
+ * Lambda adapter is injected for you — your `astro.config.*` must not
+ * declare one.
  *
  * @resource
  * @section Creating Astro Sites
@@ -126,6 +119,9 @@ export interface EffectAstroProps extends AstroProps {
  *   rootDir: "./app",
  * });
  * ```
+ * Pages render on demand by default; pages that
+ * `export const prerender = true` are prerendered at build time and served
+ * from S3.
  *
  * @example Custom Domain
  * ```typescript
@@ -147,6 +143,8 @@ export interface EffectAstroProps extends AstroProps {
  *   errorPage: "404.html",
  * });
  * ```
+ * `output: "static"` prerenders every page and deploys assets-only — no
+ * Lambda (and therefore no Effect program).
  *
  * @section Server Configuration
  * @example Tune The Server Function
@@ -163,47 +161,9 @@ export interface EffectAstroProps extends AstroProps {
  * ```
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * API from the same site: the program threads into the server Lambda in
- * collect-only mode (bindings collect env vars and IAM at deploy time,
- * exactly like an effect Lambda) while the framework-built bundle ships
- * as-is, and the CloudFront edge router forwards `server.routes` (default
- * `["/api/*"]`) to the server BEFORE the static-asset manifest. The
- * program must live in a dedicated module whose default export is the
- * class, anchored by `main: import.meta.url`. Delivery is automatic: the
- * AWS deploy target pre-resolves Astro's `virtual:astro:fetchable` to a
- * generated wrapper that routes by `server.routes` — inside the routes
- * the effect `fetch` is authoritative (an `HttpRouter` miss renders as
- * its own 404, never delegation), outside them Astro's own pipeline
- * serves; hand a path back to Astro with an exclusion glob
- * (`routes: ["/api/*", "!/api/foo"]`) — in the production build and in
- * `astro dev` alike. An existing `src/fetch.ts`
- * is composed as the fallback, or — if it already mounts the alchemy
- * bridge — wins outright (`server: { takeover: false }` forces that
- * explicit tier).
- *
- * The impl's non-`fetch` methods are **RPC methods** — the typed method
- * surface for trusted callers: value-import the backend in the
- * frontmatter of non-prerendered pages and call `createClient(Backend)`
- * from `alchemy/Client` for direct in-process dispatch. Browser code is
- * untrusted — it reaches the backend through the `fetch` handler (mount
- * a schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
- * under `server.routes`).
- *
- * The program's non-`fetch` surface — an SQS consumer registered with
- * `SQS.consumeQueueMessages`, and other event sources — rides a
- * **sibling effect Lambda** (`<SiteId>-Handlers`) deployed automatically
- * from the same module: event sources register their mappings and IAM
- * against the sibling, shared capabilities collect env and IAM onto both
- * functions, and a fetch-only program deploys no sibling at all. Event
- * delivery engages on deploy — `alchemy dev` does not dispatch queue
- * events locally.
- *
- * @example Astro site with an effect-native API
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
- * // Astro server graph; never import the `alchemy/AWS` provider barrel
- * // from a site module.
+ * // src/backend.ts
  * import { GetItem, GetItemHttp, Table } from "alchemy/AWS/DynamoDB";
  * import { Astro } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
@@ -215,10 +175,7 @@ export interface EffectAstroProps extends AstroProps {
  *
  * export default class Site extends Astro<Site>()(
  *   "Site",
- *   {
- *     rootDir: ".",
- *     main: import.meta.url,
- *   },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const getItem = yield* GetItem(yield* Visits);
  *     return {
@@ -230,18 +187,61 @@ export interface EffectAstroProps extends AstroProps {
  *   }).pipe(Effect.provide(GetItemHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — it runs inside the site's
+ * server Lambda, and its bindings collect env vars and IAM at deploy time.
+ * `main: import.meta.url` anchors the module so the server bundle can
+ * re-import it. Use narrow subpath imports (`alchemy/AWS/DynamoDB`) —
+ * never the `alchemy/AWS` barrel — from a site module.
  *
- * @example Calling it from page frontmatter (createClient)
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
  * ```typescript
- * // the frontmatter of a non-prerendered page — value-import the
- * // backend; dispatch is direct and in-process, no HTTP hop.
+ * export default class Site extends Astro<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/pages"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * them its responses — 404s included — are final; outside them Astro
+ * serves. Exclusion globs (`"!/api/pages"`) hand a path back to Astro.
+ * The same routing applies in `astro dev`.
+ *
+ * @section Calling RPC Methods
+ * @example From page frontmatter
+ * ```typescript
+ * ---
  * import { createClient } from "alchemy/Client";
- * import Backend from "../src/backend.ts";
+ * import Backend from "../backend.ts";
  *
  * const backend = createClient(Backend);
- *
  * const item = await backend.visits();
+ * ---
  * ```
+ * Non-`fetch` methods are RPC methods for trusted server code (the
+ * frontmatter of non-prerendered pages) — dispatch is in-process, no HTTP
+ * hop. Browser code is untrusted: it reaches the backend through `fetch` —
+ * mount a schema-validated surface (effect `HttpApi` / `@effect/rpc`)
+ * under `server.routes`.
+ *
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
+ * from the same module. Delivery engages on deploy — `alchemy dev` does
+ * not dispatch queue events locally.
  */
 export const Astro: {
   <Self>(): {
@@ -305,7 +305,7 @@ export const Astro: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeShell(effectClass(makeAstro(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeAstro(id, props, impl)))
     : makeAstro(id, props, impl)) as any;
 
 const makeAstro = (

@@ -22,16 +22,13 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as ServerRequest from "effect/unstable/http/HttpServerRequest";
-import { getSiteRuntime, markRuntime } from "../Serve/Bridge.ts";
-import { SERVE_SHELL_KEY } from "../Serve/constants.ts";
+import { markRuntime } from "../Serve/Bridge.ts";
 import { hasStackMarkers, resolveServeEnv } from "../Serve/Env.ts";
 import { rpcMethodsOf } from "../Serve/Rpc.ts";
-import type { ServeShell } from "../Serve/Serve.ts";
+import { bridgeOf } from "../Serve/Serve.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import { RpcError, RpcPrerenderError } from "./Errors.ts";
 import { resolveHeaders, type ServerClientOptions } from "./Core.ts";
-
-const noopPin = (): void => {};
 
 /**
  * Invoke one backend method in-process. Resolves the method's success
@@ -68,17 +65,15 @@ export const invokeServerMethod = async (
         "move the call behind a request-time seam.",
     });
   }
-  // Cloud-flavored runtime: an AWS Website class carries a serve shell
-  // whose `runtime` builds the Lambda/Node layer recipe (credentials
-  // chain, Node services); without a shell the default
-  // (Cloudflare-flavored) bridge applies.
-  const shell = (site as Record<string, unknown>)[SERVE_SHELL_KEY] as
-    | ServeShell
-    | undefined;
-  const runtime =
-    shell?.runtime !== undefined
-      ? await shell.runtime(site, env)
-      : await getSiteRuntime(site, env, noopPin);
+  // Cloud-flavored runtime: the class-carried serve bridge's `runtime`
+  // seam builds the same memoized instance runtime as the fetch path
+  // (Lambda/Node credentials chain on AWS, workerd leaf tags on
+  // Cloudflare). Classes from factories that do not stamp yet take the
+  // lazy Cloudflare fallback, mirroring `Serve.make`.
+  const bridge =
+    bridgeOf(site) ??
+    (await import("../Cloudflare/Workers/ServeBridge.ts")).workerServeBridge;
+  const runtime = await bridge.runtime!(site, env);
   const fn = rpcMethodsOf(runtime.shape())[method];
   if (fn === undefined) {
     throw new RpcError({

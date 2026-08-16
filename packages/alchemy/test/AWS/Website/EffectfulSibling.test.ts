@@ -321,5 +321,5 @@ describe.concurrent("sibling-function non-fetch delivery (plan)", () => {
 });
 
 // The AWS serve shell dispatch tests (process-exclusive) live in
-// test/Serve/ServeShellDispatch.test.ts — an exclusive test in this live
+// test/Serve/ServeBridgeDispatch.test.ts — an exclusive test in this live
 // CloudFront directory FIFO-barriers the whole run.

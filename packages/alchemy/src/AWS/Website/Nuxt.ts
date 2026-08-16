@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -57,13 +57,10 @@ export interface EffectNuxtProps extends NuxtProps {
 
 /**
  * Deploy a Nuxt application to AWS: the nitro server on a streaming Lambda
- * Function URL, static assets (prerendered pages included) in S3, and a
- * CloudFront distribution whose edge router serves uploaded files from S3
- * and forwards everything else to the server.
+ * Function URL, static assets (prerendered pages included) in S3, and
+ * CloudFront routing between them.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/nuxt` with the
- * `@alchemy.run/frontend-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
- * streaming enabled) — both must be installed in your project.
+ * Requires `@alchemy.run/frontend-frameworks` in your project.
  *
  * @resource
  * @section Creating Nuxt Sites
@@ -100,42 +97,9 @@ export interface EffectNuxtProps extends NuxtProps {
  * ```
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * API from the same site: the program threads into the server Lambda in
- * collect-only mode (bindings collect env vars and IAM at deploy time)
- * while the nitro-built bundle ships as-is, and the CloudFront edge router
- * forwards `server.routes` (default `["/api/*"]`) to the server BEFORE the
- * static-asset manifest. The program must live in a dedicated module whose
- * default export is the class (`main: import.meta.url`) — nothing else:
- * alchemy generates the mounting middleware itself
- * (`.alchemy/nuxt/<id>/effect-handler.mjs`, injected through
- * `nitro.handlers`), and nitro compiles it into the deployed Lambda bundle
- * and the `nuxt dev` server alike. Inside `server.routes` the effect fetch
- * is authoritative — its 404s are real 404s; outside them nitro's own
- * handlers serve.
- *
- * The impl's non-`fetch` methods are **RPC methods** — the typed method
- * surface for trusted callers: value-import the backend in server routes
- * / `useAsyncData` server branches and call `createClient(Backend)` from
- * `alchemy/Client` for direct in-process dispatch. Browser code is
- * untrusted — it reaches the backend through the `fetch` handler (mount
- * a schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
- * under `server.routes`).
- *
- * The program's non-`fetch` surface — an SQS consumer registered with
- * `SQS.consumeQueueMessages`, and other event sources — rides a
- * **sibling effect Lambda** (`<SiteId>-Handlers`) deployed automatically
- * from the same module: event sources register their mappings and IAM
- * against the sibling, shared capabilities collect env and IAM onto both
- * functions, and a fetch-only program deploys no sibling at all. Event
- * delivery engages on deploy — `alchemy dev` does not dispatch queue
- * events locally.
- *
- * @example Nuxt site with an effect-native API
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
- * // nitro bundle graph; never import the `alchemy/AWS` provider barrel
- * // from a site module.
+ * // src/backend.ts
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { Nuxt } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
@@ -156,24 +120,63 @@ export interface EffectNuxtProps extends NuxtProps {
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — it runs inside the
+ * server Lambda, and its bindings collect env vars and IAM at deploy
+ * time. `main: import.meta.url` anchors the module so the server bundle
+ * can re-import it; no route file or config edit is needed. Use narrow
+ * subpath imports (`alchemy/AWS/S3`) — never the `alchemy/AWS` barrel —
+ * from a site module.
  *
- * @example Calling it from a server route (createClient)
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
  * ```typescript
- * // a server route or `useAsyncData` server branch — value-import the
- * // backend; dispatch is direct and in-process, no HTTP hop.
+ * export default class Site extends Nuxt<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/pages"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * them its responses — 404s included — are final; outside them nitro's
+ * own handlers serve. Exclusion globs (`"!/api/pages"`) hand a path back
+ * to nitro. The same routing applies in `nuxt dev`.
+ *
+ * @section Calling RPC Methods
+ * @example From a server route
+ * ```typescript
+ * // a server route or `useAsyncData` server branch
  * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  *
  * const backend = createClient(Backend);
- *
  * const text = await backend.hello();
  * ```
+ * Non-`fetch` methods are RPC methods for trusted server code — dispatch
+ * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
+ * backend through `fetch` — mount a schema-validated surface (effect
+ * `HttpApi` / `@effect/rpc`) under `server.routes`.
  *
- * @example Escape hatch: mounting the program yourself
- * Auto-injection stands down whenever the `server/` tree already mounts
- * `alchemy/Serve` explicitly (or with `server: { takeover: false }`), so
- * a hand-written `server/middleware` mount keeps working unchanged — use
- * it when you need to customize the mount itself:
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
+ * from the same module. Delivery engages on deploy — `alchemy dev` does
+ * not dispatch queue events locally.
+ *
+ * @section Mounting The Program Yourself
+ * @example Server middleware mount
  * ```typescript
  * // server/middleware/alchemy.ts
  * import { toEventHandler } from "alchemy/Nitro";
@@ -181,6 +184,8 @@ export interface EffectNuxtProps extends NuxtProps {
  *
  * export default toEventHandler(Site);
  * ```
+ * An explicit mount in the `server/` tree (or
+ * `server: { takeover: false }`) stands the automatic delivery down.
  */
 export const Nuxt: {
   <Self>(): {
@@ -247,7 +252,7 @@ export const Nuxt: {
         // The class carries the AWS serve shell so `Serve.make(Site)` (and
         // the `toEventHandler` nitro mount built on it) dispatches through
         // the Lambda/Node layer recipe instead of the Cloudflare bridge.
-        attachLambdaServeShell(effectClass(makeNuxt(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeNuxt(id, props, impl)))
     : makeNuxt(id, props, impl)) as any;
 
 const nuxtConfig = (id: string, props: NuxtProps): FrameworkSiteConfig => ({

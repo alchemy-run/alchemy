@@ -12,9 +12,9 @@
  * live here with the sub-second suites instead.
  */
 import * as AWS from "@/AWS";
-import { lambdaServeShell } from "@/AWS/Lambda/WebsiteHandlers.ts";
+import { lambdaServeBridge } from "@/AWS/Lambda/ServeBridge.ts";
 import * as Serve from "@/Serve/Serve.ts";
-import { SERVE_SHELL_KEY } from "@/Serve/constants.ts";
+import { SERVE_BRIDGE_KEY } from "@/Serve/constants.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -35,8 +35,8 @@ describe.concurrent("AWS serve shell dispatch", () => {
       { main: import.meta.url },
       Effect.succeed(okFetch),
     ) {}
-    expect((NextSite as any)[SERVE_SHELL_KEY]).toBe(lambdaServeShell);
-    expect((NuxtSite as any)[SERVE_SHELL_KEY]).toBe(lambdaServeShell);
+    expect((NextSite as any)[SERVE_BRIDGE_KEY]).toBe(lambdaServeBridge);
+    expect((NuxtSite as any)[SERVE_BRIDGE_KEY]).toBe(lambdaServeBridge);
   });
 
   /**
@@ -62,7 +62,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
         const calls: Array<{ site: object; url: string }> = [];
         const site = {
           "~alchemy/Id": "FakeSite",
-          [SERVE_SHELL_KEY]: {
+          [SERVE_BRIDGE_KEY]: {
             match: (s: object, request: Request) => {
               calls.push({ site: s, url: request.url });
               return Promise.resolve(new Response("from-shell"));

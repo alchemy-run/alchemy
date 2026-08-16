@@ -47,7 +47,7 @@ import {
   compactCloudFrontFunctionCode,
 } from "./cfcode.ts";
 import {
-  attachLambdaServeShell,
+  attachLambdaServeBridge,
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   validateImplAnchor,
@@ -353,12 +353,6 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *
  * @example Host-Matched Router Attachment
  * ```typescript
- * // The site serves for docs.example.com on the router. On a same-stack
- * // router that owns a domain, this declaration alone provisions the
- * // hostname end-to-end: the site binds it onto the router's distribution
- * // (alias), certificate (SAN), and Route 53 record set. Wildcard
- * // patterns and cross-stack router refs register KV host-matching only —
- * // those hostnames must be covered by the router's own domain.
  * const site = yield* StaticSite("Docs", {
  *   path: "./docs",
  *   domain: {
@@ -367,37 +361,16 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *   },
  * });
  * ```
+ * On a same-stack router that owns a domain, this declaration alone
+ * provisions the hostname end-to-end (distribution alias, certificate
+ * SAN, Route 53 record). Wildcard patterns and cross-stack router refs
+ * register host-matching only — those hostnames must be covered by the
+ * router's own domain.
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * API from the same site: the program deploys as an `AWS.Lambda.Function`
- * (bindings collect env vars and IAM at deploy time, exactly like an
- * effect Lambda), and the generated CloudFront edge router forwards
- * `server.routes` (default `["/api/*"]`) to it BEFORE the static-asset
- * manifest — an uploaded file can never shadow an API path, and the API
- * stays reachable under `spa: true`. The program must live in a dedicated
- * module whose default export is the class, anchored by
- * `main: import.meta.url`.
- *
- * The impl's non-`fetch` methods are **RPC methods** — the typed method
- * surface for trusted callers (in-process dispatch via the value-form
- * `createClient(Backend)` from `alchemy/Client`, and AWS invoke-style
- * bindings). The static frontend is untrusted: it talks to the backend
- * through the `fetch` handler — mount a schema-validated surface (effect
- * `HttpApi` / `@effect/rpc`) on it under `server.routes`.
- *
- * The program is a full effect Lambda, so its non-`fetch` surface — an
- * SQS consumer registered with `SQS.consumeQueueMessages`, and other
- * event sources — attaches directly to the site's own function (no
- * sibling function, unlike the framework composites). Event delivery
- * engages on deploy — `alchemy dev` does not dispatch queue events
- * locally.
- *
- * @example Static site with an effect-native API
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — narrow subpath imports keep the IaC engine out of any
- * // graph that re-imports this module; never import the `alchemy/AWS`
- * // provider barrel from a site module.
+ * // src/backend.ts
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { StaticSite } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
@@ -423,6 +396,60 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — it deploys as an
+ * `AWS.Lambda.Function`, and its bindings collect env vars and IAM at
+ * deploy time. `main: import.meta.url` anchors the module so the Lambda
+ * bundle can re-import it. Use narrow subpath imports (`alchemy/AWS/S3`)
+ * — never the `alchemy/AWS` barrel — from a site module.
+ *
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
+ * ```typescript
+ * export default class Site extends StaticSite<Site>()(
+ *   "Site",
+ *   {
+ *     path: "./dist",
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/static"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): the
+ * edge router forwards them to the Lambda before the static-asset
+ * manifest, so an uploaded file can never shadow an API path — even
+ * under `spa: true`. Exclusion globs (`"!/api/static"`) hand a path back
+ * to the static site.
+ *
+ * @section Calling RPC Methods
+ * @example From trusted server code
+ * ```typescript
+ * import { createClient } from "alchemy/Client";
+ * import Backend from "./backend.ts";
+ *
+ * const backend = createClient(Backend);
+ * const text = await backend.hello();
+ * ```
+ * Non-`fetch` methods are RPC methods for trusted callers (in-process
+ * dispatch, AWS invoke-style bindings). The static frontend is untrusted:
+ * it talks to the backend through `fetch` — mount a schema-validated
+ * surface (effect `HttpApi` / `@effect/rpc`) under `server.routes`.
+ *
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * Event sources attach directly to the site's own Lambda (no sibling
+ * function, unlike the framework composites). Delivery engages on deploy
+ * — `alchemy dev` does not dispatch queue events locally.
  */
 export const StaticSite: {
   <Self>(): {
@@ -476,7 +503,7 @@ export const StaticSite: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeShell(effectClass(makeStaticSite(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeStaticSite(id, props, impl)))
     : makeStaticSite(id, props, impl)) as any;
 
 const makeStaticSite = (

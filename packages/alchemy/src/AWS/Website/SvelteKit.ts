@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -61,13 +61,10 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
 /**
  * Deploy a SvelteKit application to AWS: kit's SSR server on a streaming
  * Lambda Function URL, static assets (prerendered pages included) in S3,
- * and a CloudFront distribution whose edge router serves uploaded files
- * from S3 and forwards everything else to the server.
+ * and CloudFront routing between them.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/sveltekit` with the
- * `@alchemy.run/frontend-frameworks/sveltekit/aws` deploy target (an in-memory
- * kit adapter emitting a streaming Lambda handler) — both must be
- * installed in your project.
+ * Requires `@alchemy.run/frontend-frameworks` in your project; the kit
+ * adapter is provided for you.
  *
  * @resource
  * @section Creating SvelteKit Sites
@@ -104,49 +101,9 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * ```
  *
  * @section Effectful Site
- * Pass an Effect program as the third argument to serve an effect-native
- * API from the same site: the program threads into the server Lambda in
- * collect-only mode (bindings collect env vars and IAM at deploy time),
- * and the CloudFront edge router forwards `server.routes` (default
- * `["/api/*"]`) to the server BEFORE the static-asset manifest. The
- * program must live in a dedicated module whose default export is the
- * class (`main: import.meta.url`).
- *
- * Delivery is the auto-inject (wrapper) tier: the AWS deploy target's
- * generated Lambda entry routes by `server.routes` between the effect
- * fetch (authoritative inside the routes — an `HttpRouter` miss renders
- * as its own 404, never delegation; hand a path back to kit with an
- * exclusion glob like `routes: ["/api/*", "!/api/foo"]`) and kit's own
- * `respond` — inside the single streaming handler wrap, so streamed
- * effect responses ride the Function URL's `RESPONSE_STREAM` pipe — and
- * `alchemy dev` mounts the same dispatch as a middleware in front of
- * kit's Vite dev server (dev bindings hit the real cloud with your
- * ambient credentials). An explicit `alchemy/SvelteKit` mount in
- * `hooks.server.ts` makes the generated arm stand down, and
- * `server: { takeover: false }` forces the explicit tier outright.
- *
- * The impl's non-`fetch` methods are **RPC methods** — the typed method
- * surface for trusted callers: value-import the backend in
- * `+page.server.ts` `load` functions and call `createClient(Backend)`
- * from `alchemy/Client` for direct in-process dispatch. Browser code is
- * untrusted — it reaches the backend through the `fetch` handler (mount
- * a schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
- * under `server.routes`).
- *
- * The program's non-`fetch` surface — an SQS consumer registered with
- * `SQS.consumeQueueMessages`, and other event sources — rides a
- * **sibling effect Lambda** (`<SiteId>-Handlers`) deployed automatically
- * from the same module: event sources register their mappings and IAM
- * against the sibling, shared capabilities collect env and IAM onto both
- * functions, and a fetch-only program deploys no sibling at all. Event
- * delivery engages on deploy — `alchemy dev` does not dispatch queue
- * events locally.
- *
- * @example SvelteKit site with an effect-native API
+ * @example Add an Effect backend
  * ```typescript
- * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
- * // kit server graph; never import the `alchemy/AWS` provider barrel
- * // from a site module.
+ * // src/backend.ts
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { SvelteKit } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
@@ -167,18 +124,61 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
+ * Pass an Effect program as the third argument — it runs inside the
+ * server Lambda, and its bindings collect env vars and IAM at deploy
+ * time. `main: import.meta.url` anchors the module so the server bundle
+ * can re-import it. Use narrow subpath imports (`alchemy/AWS/S3`) — never
+ * the `alchemy/AWS` barrel — from a site module.
  *
- * @example Calling it from a `+page.server.ts` load (createClient)
+ * @section Server Routes
+ * @example Claim paths for the effect fetch
  * ```typescript
- * // server-side load — value-import the backend; dispatch is direct
- * // and in-process, no HTTP hop.
+ * export default class Site extends SvelteKit<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*", "!/api/pages"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     return { fetch: HttpServerResponse.text("hello") };
+ *   }),
+ * ) {}
+ * ```
+ * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * them its responses — 404s included — are final; outside them kit
+ * serves. Exclusion globs (`"!/api/pages"`) hand a path back to kit. The
+ * same routing runs in front of kit's Vite dev server during
+ * `alchemy dev`. An explicit `alchemy/SvelteKit` mount in
+ * `hooks.server.ts` (or `server: { takeover: false }`) stands the
+ * automatic delivery down.
+ *
+ * @section Calling RPC Methods
+ * @example From a `+page.server.ts` load
+ * ```typescript
  * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  *
  * const backend = createClient(Backend);
- *
  * const text = await backend.hello();
  * ```
+ * Non-`fetch` methods are RPC methods for trusted server code — dispatch
+ * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
+ * backend through `fetch` — mount a schema-validated surface (effect
+ * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ *
+ * @section Event Sources
+ * @example Consume an SQS queue
+ * ```typescript
+ * export const Jobs = SQS.Queue("Jobs");
+ *
+ * // inside the Effect program:
+ * yield* SQS.consumeQueueMessages(yield* Jobs, (records) =>
+ *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
+ * );
+ * ```
+ * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
+ * from the same module. Delivery engages on deploy — `alchemy dev` does
+ * not dispatch queue events locally.
  */
 export const SvelteKit: {
   <Self>(): {
@@ -242,7 +242,7 @@ export const SvelteKit: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeShell(effectClass(makeSvelteKit(id, props, impl)))
+        attachLambdaServeBridge(effectClass(makeSvelteKit(id, props, impl)))
     : makeSvelteKit(id, props, impl)) as any;
 
 const svelteKitConfig = (props: SvelteKitProps): FrameworkSiteConfig => ({

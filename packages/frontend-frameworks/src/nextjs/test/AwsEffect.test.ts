@@ -82,7 +82,7 @@ describe("generateEffectEntrySource", () => {
   it("exports the serve shell and the site module from one graph", () => {
     const source = generateEffectEntrySource("/abs/project/app/backend.ts");
     expect(source).toContain(
-      'export { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";',
+      'export { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";',
     );
     expect(source).toContain(
       'export { default } from "/abs/project/app/backend.ts";',

@@ -1,6 +1,7 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -307,14 +308,28 @@ export const CachePolicyProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
-          const current = yield* getById(output.cachePolicyId);
-          if (!current) return;
-          yield* cloudfront
-            .deleteCachePolicy({
-              Id: output.cachePolicyId,
-              IfMatch: current.etag,
-            })
-            .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.void));
+          // CloudFront reports the policy associated for a short window
+          // after its distribution's behaviors are deleted (eventual
+          // consistency) — retry CachePolicyInUse with a fresh etag each
+          // attempt, bounded.
+          yield* Effect.gen(function* () {
+            const current = yield* getById(output.cachePolicyId);
+            if (!current) return;
+            yield* cloudfront
+              .deleteCachePolicy({
+                Id: output.cachePolicyId,
+                IfMatch: current.etag,
+              })
+              .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.void));
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "CachePolicyInUse",
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(30),
+              ]),
+            }),
+          );
         }),
       };
     }),

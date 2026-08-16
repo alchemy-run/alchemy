@@ -1,24 +1,38 @@
 /**
- * The shared `alchemy/Serve` runtime bridge core (DESIGN §3.3, §6.4).
+ * The shared `alchemy/Serve` runtime bridge CORE (DESIGN §3.3, §6.4) —
+ * cloud-neutral by construction. Everything delicate about bridging lives
+ * here, exactly once:
  *
- * One lazy, WeakMap-memoized isolate-scope layer build per Website class per
- * process (mirroring `Cloudflare/Workers/WorkerBridge.ts`), and a fresh
- * request `Scope` per event settled via `waitUntil` when the call site has
- * one and inline before the response otherwise (Lambda semantics).
+ *   - one lazy, WeakMap-memoized instance-lifetime layer build per Website
+ *     class per process, with failure healing (only success is memoized —
+ *     a transient init failure resets the memo and heals on the next
+ *     event) and in-flight-build pinning (workerd drops a promise's
+ *     continuations if its origin request context has ended)
+ *   - the instance-scope lifecycle: never closed on workerd (no teardown
+ *     hook), drained by ONE process-level SIGTERM listener elsewhere
+ *     (Lambda's Shutdown window, dev-server exits), and closeable per
+ *     class via {@link BridgeCore.dispose} (dev-server hot swap)
+ *   - the per-event request `Scope` and its settle strategy: registered
+ *     with `waitUntil` when the event has one (workerd — the request's
+ *     IoContext dies at response-return), settled inline before the
+ *     response tail otherwise (Lambda semantics — request finalizers block
+ *     the stream end), unless a streaming response ejected the scope to a
+ *     new owner
+ *   - route/world authority: the env-marker guard declines build-time
+ *     prerender worlds without touching I/O, and within its routes the
+ *     effect fetch is AUTHORITATIVE — every outcome, including a
+ *     `RouteNotFound` failure rendered as the effect's own 404, is final;
+ *     delegation to the framework is purely a `server.routes` decision
+ *     made by the caller BEFORE the effect fetch is invoked
  *
- * Within its routes the effect fetch is AUTHORITATIVE: every outcome of the
- * effect — including a `RouteNotFound` failure, which the standard request
- * pipeline (`safeHttpEffect`'s `causeResponse`) renders as the effect's own
- * 404 response — is the final answer. Delegation to the framework is purely
- * a `server.routes` decision made by the caller (`Serve.make`, the wrapper
- * entries) BEFORE the effect fetch is invoked; there is no response-based
- * fallback protocol.
- *
- * Everything here runs *inside* the deployed function (or a dev server /
- * prerenderer importing the framework entry) — never in the engine's plan
- * process. Layer builds are guarded by the env-marker check in `Env.ts`, so
- * a build-time prerender world (no `ALCHEMY_STACK_NAME`) declines without
- * touching any I/O.
+ * What varies per cloud is a {@link BridgeRecipe}: the service layers
+ * (leaf tags only — this module must stay importable by every foreign
+ * bundler on every cloud), the platform selection, the request-pipeline
+ * adapter, per-event layers, and an optional init hook. The recipes live
+ * with their clouds — `Cloudflare/Workers/ServeBridge.ts` and
+ * `AWS/Lambda/ServeBridge.ts` — and are stamped on Website classes under
+ * `SERVE_BRIDGE_KEY`, so each rides its site module's own import graph and
+ * this core never imports either cloud.
  */
 
 import * as Cause from "effect/Cause";
@@ -27,27 +41,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-// Leaf tag modules, NOT the engine modules: `CloudflareEnvironment.ts`
-// reaches the OAuth client (`node:http`) and `Stack.ts` reaches
-// `Util/Node.ts` (`node:net`) — module-scope `node:*` externals are fatal
-// in foreign-bundled workerd server bundles (see the platform note in
-// `buildSiteRuntime`).
-import { CloudflareEnvironment } from "../Cloudflare/CloudflareEnvironmentTag.ts";
-import { makeRequestEffect } from "../Cloudflare/Workers/HttpServer.ts";
-// The RuntimeEnvironment leaf, NOT Worker.ts: the bridge is compiled by
-// foreign bundlers (Next/turbopack, nitro rollup), and Worker.ts's provider
-// import graph reaches the workerd native binary through the local-runtime
-// chain — unparseable there.
-import {
-  WorkerEnvironment,
-  WorkerExecutionContext,
-  deferredExecutionContext,
-  fromExecutionContext,
-} from "../Cloudflare/Workers/RuntimeEnvironment.ts";
 import { isScopeEjected } from "../Http.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
@@ -55,11 +50,11 @@ import { Self } from "../Self.ts";
 import { StackTag as Stack } from "../StackTag.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import type { SERVE_SENTINEL } from "./constants.ts";
-import { envString, hasStackMarkers, resolveServeEnv } from "./Env.ts";
+import { envString, hasStackMarkers } from "./Env.ts";
 
 // The wiring-handshake sentinel, written as a literal (type-checked against
 // `constants.ts`) so the exact byte sequence provably survives bundling and
-// minification into any foreign server bundle that imports the bridge — the
+// minification into any foreign server bundle that imports a bridge — the
 // deploy-time sentinel scan greps the built bundle for it. The global marker
 // itself is inert (unlike `__ALCHEMY_RUNTIME__`, which is only stamped at
 // bridge-construction time — see `markRuntime`).
@@ -74,9 +69,9 @@ const SENTINEL: typeof SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
  * even when the framework's bundler defined nothing.
  *
  * Deliberately NOT a module-evaluation side effect: `alchemy/Serve` is
- * imported by the user's `src/backend.ts`, which the engine also imports at plan
- * time — a module-eval flag would poison the plan world (DESIGN §5.3 world
- * 1 requires the flag unset there).
+ * imported by the user's `src/backend.ts`, which the engine also imports at
+ * plan time — a module-eval flag would poison the plan world (DESIGN §5.3
+ * world 1 requires the flag unset there).
  */
 export const markRuntime = (): void => {
   globalThis.__ALCHEMY_RUNTIME__ = true;
@@ -86,8 +81,7 @@ export interface ServeOptions {
   /**
    * Explicit env when the framework hands it over (kit
    * `event.platform.env`, nitro `event.context.cloudflare.env`). Default
-   * resolution: guarded `cloudflare:workers` env →
-   * `getCloudflareContext()`-shaped globals → `process.env`.
+   * resolution is the recipe's env ladder.
    */
   env?: unknown;
   /**
@@ -98,207 +92,16 @@ export interface ServeOptions {
 }
 
 /**
- * The isolate-lifetime artifacts of one site build: the built service
+ * The instance-lifetime artifacts of one site build: the built service
  * Context, a thunk for the user's impl shape (populated once `serve` has
- * run during init), and the telemetry Layer override registered during init.
+ * run during init), and the telemetry Layer override registered during
+ * init.
  */
 export interface SiteRuntime {
   readonly context: Context.Context<any>;
   readonly shape: () => Record<string, any> | undefined;
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
 }
-
-/**
- * Close the isolate scope in Lambda's Shutdown window (SIGTERM + 500 ms) so
- * init-level finalizers run before the sandbox dies. Best-effort: where
- * alchemy owns the entry (`FunctionBundle`'s generated entry) the extension
- * registration guarantees the window; on explicit mounts inside a
- * framework-owned entry this `process.on` is all we can do. Never
- * registered on workerd — there is no isolate-teardown hook, and the scope
- * deliberately never closes there.
- */
-const registerInstanceShutdown = (scope: Scope.Closeable): void => {
-  if (
-    (globalThis as { navigator?: { userAgent?: string } }).navigator
-      ?.userAgent === "Cloudflare-Workers"
-  ) {
-    return;
-  }
-  const proc = (globalThis as { process?: any }).process;
-  if (typeof proc?.on !== "function") {
-    return;
-  }
-  proc.on("SIGTERM", () => {
-    void Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => {});
-  });
-};
-
-/**
- * Build the isolate-lifetime layer stack for a Website class against a
- * resolved env — the same recipe `WorkerBridge.getSharedBuild` uses, with
- * the env injected from the resolution ladder instead of the
- * `cloudflare:workers` importable env (the bridge may be running in a
- * Lambda sandbox or a Node dev server).
- */
-const buildSiteRuntime = async (
-  site: object,
-  env: Record<string, unknown>,
-): Promise<SiteRuntime> => {
-  const tag = Self as any as Context.Service<
-    never,
-    { RuntimeContext: BaseRuntimeContext }
-  >;
-
-  const layer = makeEntrypointLayer(tag, site);
-
-  // Platform by world. On workerd the Node platform must stay OUT of the
-  // graph entirely: the bridge rides the value-form `createClient` graph
-  // into framework server bundles (Next/turbopack, nitro rollup), which
-  // externalize `node:*` imports that OpenNext/nitro's runtime loaders
-  // cannot satisfy — a static NodeServices import 500s every SSR dispatch
-  // ("Failed to load external module node:process"). The dynamic import
-  // below is only evaluated in Node worlds (framework dev servers,
-  // prerenderers), where platform-node genuinely exists.
-  const basePlatform = Layer.mergeAll(
-    FetchHttpClient.layer,
-    Logger.layer([Logger.consolePretty()]),
-  );
-  const platform =
-    typeof navigator !== "undefined" &&
-    navigator.userAgent === "Cloudflare-Workers"
-      ? basePlatform
-      : Layer.mergeAll(
-          (await import("@effect/platform-node/NodeServices")).layer,
-          basePlatform,
-        );
-
-  const globalContext = layer.pipe(
-    Layer.provideMerge(
-      Layer.succeed(Stack, {
-        name: envString(env.ALCHEMY_STACK_NAME) ?? "",
-        stage: envString(env.ALCHEMY_STAGE) ?? "",
-        bindings: {},
-        resources: {},
-        actions: {},
-      }),
-    ),
-    Layer.provideMerge(platform),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        ConfigProvider.orElse(
-          ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-          // Auto-bound `Config` values arrive in `env` as
-          // `{"_tag":"Redacted","value":...}` markers; reify them so a
-          // `Config` re-read inside a request handler decodes the raw
-          // source value instead of the marker JSON.
-          reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env),
-        ),
-      ),
-    ),
-    Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
-    // Init-phase ExecutionContext: yieldable from the site's top-level
-    // closure; its RuntimeContext-colored methods defer to the real
-    // per-event context provided in `runSiteFetch`.
-    Layer.provideMerge(
-      Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
-    ),
-    Layer.provideMerge(
-      Layer.succeed(
-        CloudflareEnvironment,
-        // @ts-expect-error - mirrors WorkerBridge: only this property is
-        // needed and available at runtime
-        Effect.succeed({
-          account: env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
-        }),
-      ),
-    ),
-    Layer.provideMerge(
-      Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
-    ),
-  );
-
-  // Isolate-lifetime scope for the layer build: never closed on workerd
-  // (no teardown hook), best-effort SIGTERM close elsewhere.
-  const instanceScope = Scope.makeUnsafe();
-  registerInstanceShutdown(instanceScope);
-  const memoMap = Layer.makeMemoMapUnsafe();
-
-  return Effect.runPromise(
-    Layer.buildWithMemoMap(globalContext, memoMap, instanceScope).pipe(
-      // Strip the build's memo map from the exposed context so a Layer the
-      // user `Effect.provide`s inside a handler builds per event instead of
-      // sharing one instance across concurrent events.
-      Effect.map(Context.omit(Layer.CurrentMemoMap)),
-      Effect.flatMap((context) =>
-        tag.pipe(
-          Effect.map((instance): SiteRuntime => {
-            const runtimeContext = instance.RuntimeContext;
-            return {
-              context,
-              shape: () => {
-                if (typeof runtimeContext.shape !== "function") {
-                  throw new Error(
-                    `alchemy/Serve: the ${runtimeContext.Type} platform does ` +
-                      "not expose a runtime fetch surface yet — only " +
-                      "Cloudflare Website/Worker classes are supported by " +
-                      "this release (AWS Website support lands with the " +
-                      "hybrid Function mode).",
-                  );
-                }
-                return runtimeContext.shape() as
-                  | Record<string, any>
-                  | undefined;
-              },
-              telemetry: () => runtimeContext.telemetry,
-            };
-          }),
-          Effect.provideContext(context),
-        ),
-      ),
-    ),
-  );
-};
-
-/**
- * One isolate-lifetime layer build per Website class, lazily created on the
- * first matched request and shared by every subsequent event. Only success
- * is memoized — a transient init failure resets the memo and heals on the
- * next event. The env captured by the first successful build wins for the
- * lifetime of the process (env objects are stable per instance on every
- * supported host).
- *
- * The constraint this WeakMap key implies: never import the site class via
- * inconsistent specifiers within one framework graph — two module ids mean
- * two keys and two layer stacks.
- */
-const siteBuilds = new WeakMap<
-  object,
-  (pin: (promise: Promise<unknown>) => unknown) => Promise<SiteRuntime>
->();
-
-export const getSiteRuntime = (
-  site: object,
-  env: Record<string, unknown>,
-  pin: (promise: Promise<unknown>) => unknown,
-): Promise<SiteRuntime> => {
-  let shared = siteBuilds.get(site);
-  if (shared === undefined) {
-    let built: Promise<SiteRuntime> | undefined;
-    shared = (pin) => {
-      const promise = (built ??= buildSiteRuntime(site, env).catch((error) => {
-        built = undefined;
-        throw error;
-      }));
-      // Every awaiting event must pin the in-flight build: workerd drops a
-      // promise's continuations if its origin request context has ended.
-      pin(promise.catch(() => {}));
-      return promise;
-    };
-    siteBuilds.set(site, shared);
-  }
-  return shared(pin);
-};
 
 export interface SiteFetchOptions {
   waitUntil?: (promise: Promise<unknown>) => void;
@@ -307,123 +110,376 @@ export interface SiteFetchOptions {
 }
 
 /**
- * Run one fetch event against a built site: fresh request `Scope`, the
- * production request pipeline (`makeRequestEffect`), and per-event
- * telemetry. The effect fetch is authoritative — a `RouteNotFound` failure
- * renders as the effect's own 404 response through the standard pipeline.
- * Resolves the web `Response`, or `undefined` only when the site exposes no
- * fetch handler.
+ * The cloud-specific half of a serve bridge. Kept deliberately thin — a
+ * recipe supplies layers and adapters, never lifecycle logic. Every recipe
+ * module must obey the leaf-import discipline: only leaf tag modules and
+ * request-pipeline adapters, no engine modules, no `node:*` at module
+ * scope — recipes are compiled by foreign bundlers into workerd and Lambda
+ * server bundles alike.
  */
-export const runSiteFetch = (
-  runtime: SiteRuntime,
-  request: Request,
-  options?: SiteFetchOptions,
-): Promise<Response | undefined> => {
-  const fetchHandler = runtime.shape()?.fetch;
-  if (fetchHandler === undefined) {
-    return Promise.resolve(undefined);
+export interface BridgeRecipe {
+  /**
+   * Resolve the env for this world: the explicit override from the mount,
+   * else the cloud's ladder (workerd importable env / framework globals /
+   * `process.env`). Returning an env WITHOUT stack markers declines the
+   * world (the core checks — build-time prerender/SSG).
+   */
+  resolveEnv(
+    explicit?: unknown,
+  ):
+    | Promise<Record<string, unknown> | undefined>
+    | Record<string, unknown>
+    | undefined;
+  /**
+   * The cloud's service layers over the shared entry recipe: leaf tags
+   * only (e.g. `WorkerEnvironment` + deferred `ExecutionContext` +
+   * `CloudflareEnvironment`, or `Credentials.fromChain()` +
+   * `Region.fromEnv()`).
+   */
+  layers(env: Record<string, unknown>): Layer.Layer<any, any, any>;
+  /**
+   * World-selected platform layer. Async so a Node-world recipe can
+   * dynamic-import `platform-node` — a static import is fatal in
+   * foreign-bundled workerd server bundles.
+   */
+  platform(): Layer.Layer<any, any, any> | Promise<Layer.Layer<any, any, any>>;
+  /**
+   * Adapt one request + fetch handler into the cloud's production request
+   * pipeline effect (stream-preserving).
+   */
+  requestEffect(
+    request: Request,
+    handler: Effect.Effect<any, any, any>,
+  ): Effect.Effect<any, any, any>;
+  /**
+   * Per-event layers that must shadow the instance build (e.g. the real —
+   * or synthesized — workerd ExecutionContext). Default: none.
+   */
+  eventLayers?(options: SiteFetchOptions): Layer.Layer<any, any, any>;
+  /**
+   * Awaited before every build and dispatch (e.g. the Lambda internal
+   * extension registration that buys the SIGTERM Shutdown window).
+   */
+  init?(): Promise<unknown>;
+}
+
+/**
+ * Every live instance-lifetime scope in this process, drained by ONE
+ * process-level SIGTERM listener (registered on the first build, never on
+ * workerd). One listener — not one per build — so a dev server hot-swapping
+ * site classes (a fresh class per edit, each with its own layer build)
+ * never accumulates listeners toward `MaxListenersExceededWarning`.
+ */
+const instanceScopes = new Set<Scope.Closeable>();
+let sigtermRegistered = false;
+
+const registerInstanceScope = (scope: Scope.Closeable): void => {
+  instanceScopes.add(scope);
+  if (
+    (globalThis as { navigator?: { userAgent?: string } }).navigator
+      ?.userAgent === "Cloudflare-Workers"
+  ) {
+    // No isolate-teardown hook on workerd; the scope deliberately never
+    // closes there.
+    return;
   }
-  return runSiteHandler(runtime, request, fetchHandler, options);
-};
-
-const runSiteHandler = async (
-  runtime: SiteRuntime,
-  request: Request,
-  handler: Effect.Effect<any, any, any>,
-  options?: SiteFetchOptions,
-): Promise<Response | undefined> => {
-  const scope = Scope.makeUnsafe();
-
-  const executionContextLayer =
-    options?.executionContext !== undefined
-      ? Layer.succeed(
-          WorkerExecutionContext,
-          fromExecutionContext(options.executionContext as any),
-        )
-      : options?.waitUntil !== undefined
-        ? Layer.succeed(
-            WorkerExecutionContext,
-            // Synthesize a minimal ExecutionContext from the adapter's
-            // waitUntil so `ctx.waitUntil`-colored user code works on
-            // entries that never see the real workerd context.
-            fromExecutionContext({
-              waitUntil: (promise: Promise<unknown>) =>
-                options.waitUntil!(promise),
-              passThroughOnException: () => {},
-            } as any),
-          )
-        : Layer.empty;
-
-  const exit = await makeRequestEffect(request as any, handler).pipe(
-    // Per-event services take precedence over the built isolate context:
-    // the real (or synthesized) WorkerExecutionContext shadows the deferred
-    // one, and the fresh request `Scope` is what `Effect.addFinalizer` in a
-    // handler attaches to.
-    Effect.provide(
-      Layer.mergeAll(
-        executionContextLayer,
-        Layer.succeed(Scope.Scope, scope),
-        Layer.effectContext(
-          buildEventTelemetry(runtime.context, scope, runtime.telemetry()),
-        ),
-      ).pipe(Layer.provideMerge(Layer.succeedContext(runtime.context))),
-    ),
-    Effect.runPromiseExit,
-  );
-
-  // Settle the request scope — unless a streaming response ejected it, in
-  // which case its new owner closes it when the stream finishes. With a
-  // waitUntil the close rides past the response; otherwise it settles
-  // inline before returning (Lambda semantics — request finalizers block
-  // the response tail).
-  if (!isScopeEjected(scope)) {
-    const close = new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-      Effect.runPromise(Scope.close(scope, Exit.void)),
-    );
-    const waitUntil =
-      options?.waitUntil ??
-      (
-        options?.executionContext as
-          | { waitUntil?: (promise: Promise<unknown>) => void }
-          | undefined
-      )?.waitUntil?.bind(options?.executionContext);
-    if (waitUntil !== undefined) {
-      waitUntil(close);
-    } else {
-      await close;
+  const proc = (globalThis as { process?: any }).process;
+  if (sigtermRegistered || typeof proc?.on !== "function") {
+    return;
+  }
+  sigtermRegistered = true;
+  proc.on("SIGTERM", () => {
+    for (const live of instanceScopes) {
+      void Effect.runPromise(Scope.close(live, Exit.void)).catch(() => {});
     }
-  }
-
-  if (exit._tag !== "Success") {
-    throw Cause.squash(exit.cause);
-  }
-  return exit.value as Response;
+    instanceScopes.clear();
+  });
 };
 
 const noopPin = (): void => {};
 
-/**
- * The explicit-tier entry: resolve the env ladder, apply the four-worlds
- * guard, lazily build the site, and run the fetch effect. Resolves
- * `undefined` on decline (no env markers or no fetch handler) so the
- * caller falls through to the framework. Route gating happens in the
- * caller (`Serve.make`) — a request that reaches this function is inside
- * the effect's claim, and the effect's answer (404s included) is final.
- */
-export const matchSite = async (
-  site: object,
-  request: Request,
-  options?: ServeOptions,
-): Promise<Response | undefined> => {
-  markRuntime();
-  const env = await resolveServeEnv(options?.env);
-  if (!hasStackMarkers(env)) {
-    return undefined;
-  }
-  const runtime = await getSiteRuntime(
-    site,
-    env,
-    options?.waitUntil ?? noopPin,
-  );
-  return runSiteFetch(runtime, request, { waitUntil: options?.waitUntil });
+/** The per-recipe bridge machinery — see the module doc. */
+export interface BridgeCore {
+  /**
+   * The lazily-built, memoized instance runtime for a site class (the
+   * value-form `createClient` seam reuses this so backend methods resolve
+   * the same layer stack as the fetch path).
+   */
+  getRuntime(
+    site: object,
+    env: Record<string, unknown>,
+    pin?: (promise: Promise<unknown>) => unknown,
+  ): Promise<SiteRuntime>;
+  /**
+   * Run one fetch event against a built site. Resolves the web `Response`,
+   * or `undefined` only when the site exposes no fetch handler.
+   */
+  runFetch(
+    runtime: SiteRuntime,
+    request: Request,
+    options?: SiteFetchOptions,
+  ): Promise<Response | undefined>;
+  /**
+   * The full match: resolve env, apply the world guard, lazily build, run
+   * the fetch. Resolves `undefined` on decline (no env markers or no fetch
+   * handler) so the caller falls through to the framework. Route gating
+   * happens in the caller — a request that reaches `match` is inside the
+   * effect's claim, and the effect's answer (404s included) is final.
+   */
+  match(
+    site: object,
+    request: Request,
+    options?: ServeOptions,
+  ): Promise<Response | undefined>;
+  /**
+   * Tear down the per-class runtime built for `site`: evict the memo and
+   * close the instance-lifetime scope (init-level finalizers run).
+   * Idempotent; a never-dispatched class resolves immediately.
+   *
+   * This is the invalidation half of effect-handler hot reload in dev
+   * servers: a cache-busted re-import produces a fresh class identity
+   * whose first matched request lazily builds a fresh stack — but the OLD
+   * generation's build, scope, and SIGTERM registration would otherwise be
+   * retained for the process lifetime (node's module registry pins every
+   * re-imported namespace, so `WeakMap` entries keyed by old classes are
+   * never reclaimed).
+   */
+  dispose(site: object): Promise<void>;
+}
+
+export const makeBridgeCore = (recipe: BridgeRecipe): BridgeCore => {
+  /**
+   * One instance-lifetime layer build per Website class, lazily created on
+   * the first matched request and shared by every subsequent event. Only
+   * success is memoized — a transient init failure resets the memo and
+   * heals on the next event. The env captured by the first successful
+   * build wins for the lifetime of the process (env objects are stable per
+   * instance on every supported host).
+   *
+   * The constraint this WeakMap key implies: never import the site class
+   * via inconsistent specifiers within one framework graph — two module
+   * ids mean two keys and two layer stacks.
+   */
+  const siteBuilds = new WeakMap<
+    object,
+    (pin: (promise: Promise<unknown>) => unknown) => Promise<SiteRuntime>
+  >();
+
+  /**
+   * The instance-lifetime scope of each site's build, for {@link dispose}.
+   * Registered as soon as the build starts so a dispose during a failing
+   * build still closes the scope.
+   */
+  const siteScopes = new WeakMap<object, Scope.Closeable>();
+
+  const buildSiteRuntime = async (
+    site: object,
+    env: Record<string, unknown>,
+  ): Promise<SiteRuntime> => {
+    const tag = Self as any as Context.Service<
+      never,
+      { RuntimeContext: BaseRuntimeContext }
+    >;
+
+    const layer = makeEntrypointLayer(tag, site);
+    const platform = await recipe.platform();
+
+    const entryLayer = layer.pipe(
+      Layer.provideMerge(
+        Layer.succeed(Stack, {
+          name: envString(env.ALCHEMY_STACK_NAME) ?? "",
+          stage: envString(env.ALCHEMY_STAGE) ?? "",
+          bindings: {},
+          resources: {},
+          actions: {},
+        }),
+      ),
+      Layer.provideMerge(recipe.layers(env)),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.orElse(
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+            // Auto-bound `Config` values arrive in `env` as
+            // `{"_tag":"Redacted","value":...}` markers; reify them so a
+            // `Config` re-read inside a request handler decodes the raw
+            // source value instead of the marker JSON.
+            reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env),
+          ),
+        ),
+      ),
+      Layer.provideMerge(
+        Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
+      ),
+    );
+
+    // Instance-lifetime scope for the layer build: never closed on workerd
+    // (no teardown hook), best-effort SIGTERM close elsewhere, and
+    // closeable per class via `dispose`.
+    const instanceScope = Scope.makeUnsafe();
+    registerInstanceScope(instanceScope);
+    siteScopes.set(site, instanceScope);
+    const memoMap = Layer.makeMemoMapUnsafe();
+
+    return Effect.runPromise(
+      (
+        Layer.buildWithMemoMap(
+          entryLayer,
+          memoMap,
+          instanceScope,
+        ) as Effect.Effect<Context.Context<any>>
+      ).pipe(
+        // Strip the build's memo map from the exposed context so a Layer
+        // the user `Effect.provide`s inside a handler builds per event
+        // instead of sharing one instance across concurrent events.
+        Effect.map(Context.omit(Layer.CurrentMemoMap)),
+        Effect.flatMap((context) =>
+          tag.pipe(
+            Effect.map((instance): SiteRuntime => {
+              const runtimeContext = instance.RuntimeContext;
+              return {
+                context,
+                shape: () =>
+                  runtimeContext.shape?.() as Record<string, any> | undefined,
+                telemetry: () => runtimeContext.telemetry,
+              };
+            }),
+            Effect.provideContext(context),
+          ),
+        ),
+      ),
+    );
+  };
+
+  const getRuntime = (
+    site: object,
+    env: Record<string, unknown>,
+    pin: (promise: Promise<unknown>) => unknown = noopPin,
+  ): Promise<SiteRuntime> => {
+    let shared = siteBuilds.get(site);
+    if (shared === undefined) {
+      let built: Promise<SiteRuntime> | undefined;
+      shared = (pin) => {
+        const promise = (built ??= buildSiteRuntime(site, env).catch(
+          (error) => {
+            built = undefined;
+            throw error;
+          },
+        ));
+        // Every awaiting event must pin the in-flight build: workerd drops
+        // a promise's continuations if its origin request context has
+        // ended.
+        pin(promise.catch(() => {}));
+        return promise;
+      };
+      siteBuilds.set(site, shared);
+    }
+    return shared(pin);
+  };
+
+  const runHandler = async (
+    runtime: SiteRuntime,
+    request: Request,
+    handler: Effect.Effect<any, any, any>,
+    options?: SiteFetchOptions,
+  ): Promise<Response | undefined> => {
+    const scope = Scope.makeUnsafe();
+
+    const exit = await recipe.requestEffect(request, handler).pipe(
+      // Per-event services take precedence over the built instance
+      // context: the recipe's event layers (e.g. the real or synthesized
+      // ExecutionContext) shadow their init-phase stand-ins, and the fresh
+      // request `Scope` is what `Effect.addFinalizer` in a handler
+      // attaches to.
+      Effect.provide(
+        Layer.mergeAll(
+          recipe.eventLayers?.(options ?? {}) ?? Layer.empty,
+          Layer.succeed(Scope.Scope, scope),
+          Layer.effectContext(
+            buildEventTelemetry(runtime.context, scope, runtime.telemetry()),
+          ),
+        ).pipe(Layer.provideMerge(Layer.succeedContext(runtime.context))),
+      ),
+      Effect.runPromiseExit,
+    );
+
+    // Settle the request scope — unless a streaming response ejected it,
+    // in which case its new owner closes it when the stream finishes. With
+    // a waitUntil the close rides past the response; otherwise it settles
+    // inline before returning (Lambda semantics — request finalizers block
+    // the response tail).
+    if (!isScopeEjected(scope)) {
+      const close = new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+        Effect.runPromise(Scope.close(scope, Exit.void)),
+      );
+      const waitUntil =
+        options?.waitUntil ??
+        (
+          options?.executionContext as
+            | { waitUntil?: (promise: Promise<unknown>) => void }
+            | undefined
+        )?.waitUntil?.bind(options?.executionContext);
+      if (waitUntil !== undefined) {
+        waitUntil(close);
+      } else {
+        await close.catch(() => {});
+      }
+    }
+
+    if (exit._tag !== "Success") {
+      throw Cause.squash(exit.cause);
+    }
+    return exit.value as Response;
+  };
+
+  const runFetch = (
+    runtime: SiteRuntime,
+    request: Request,
+    options?: SiteFetchOptions,
+  ): Promise<Response | undefined> => {
+    const fetchHandler = runtime.shape()?.fetch;
+    if (fetchHandler === undefined) {
+      return Promise.resolve(undefined);
+    }
+    return runHandler(runtime, request, fetchHandler, options);
+  };
+
+  const match = async (
+    site: object,
+    request: Request,
+    options?: ServeOptions,
+  ): Promise<Response | undefined> => {
+    markRuntime();
+    const env = await recipe.resolveEnv(options?.env);
+    // The four-worlds guard (DESIGN §5.3): no stack markers means a
+    // build-time prerender/SSG world — decline without building layers.
+    if (!hasStackMarkers(env)) {
+      return undefined;
+    }
+    await recipe.init?.();
+    const runtime = await getRuntime(site, env!, options?.waitUntil);
+    return runFetch(runtime, request, {
+      waitUntil: options?.waitUntil,
+    });
+  };
+
+  const dispose = async (site: object): Promise<void> => {
+    const build = siteBuilds.get(site);
+    siteBuilds.delete(site);
+    if (build !== undefined) {
+      // Settle the in-flight build first so the scope close below observes
+      // every registered finalizer (a failed build already cleared
+      // itself).
+      await build(noopPin).catch(() => undefined);
+    }
+    const scope = siteScopes.get(site);
+    if (scope !== undefined) {
+      siteScopes.delete(site);
+      instanceScopes.delete(scope);
+      await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => {});
+    }
+  };
+
+  return { getRuntime, runFetch, match, dispose };
 };

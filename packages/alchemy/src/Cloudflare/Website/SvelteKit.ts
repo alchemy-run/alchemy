@@ -6,6 +6,7 @@ import type { Named, Tag } from "../../Named.ts";
 import type { MakeShape, PlatformServices } from "../../Platform.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import { attachWorkerServeBridge } from "../Workers/ServeBridge.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
@@ -352,7 +353,7 @@ export const SvelteKit: {
   id === undefined
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
-          ? effectClass(SvelteKit(id, propsEff))
+          ? attachWorkerServeBridge(effectClass(SvelteKit(id, propsEff)))
           : SvelteKit(id, propsEff, impl)
     : (Worker as any)(
         id,

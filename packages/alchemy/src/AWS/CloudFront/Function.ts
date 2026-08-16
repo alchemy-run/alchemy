@@ -317,7 +317,13 @@ export const FunctionProvider = () =>
             ),
             Effect.retry({
               while: isFunctionDeletePending,
-              schedule: cappedCloudFrontRetrySchedule,
+              // Association release after a distribution delete takes
+              // MINUTES (same class as CachePolicyInUse) — the 2s-capped
+              // provisioning schedule's ~48s budget exhausts too early.
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(30),
+              ]),
             }),
           );
         }),

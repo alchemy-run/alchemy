@@ -3,6 +3,12 @@
 /**
  * CloudFront Function injection code ported from SST's Router component.
  * These are JavaScript code strings that get injected into CloudFront Function handlers.
+ *
+ * The target runtime is cloudfront-js-2.0, which validates syntax at deploy
+ * time and supports only: ES5.1 statements, `const`/`let`, `async`/`await`,
+ * arrow functions, template literals, rest parameters, and modern
+ * Array/Object/String prototype methods. It does NOT support `for-of`,
+ * classes, spread, or destructuring — never emit those in generated code.
  */
 
 /**
@@ -35,12 +41,12 @@ export const buildHostRedirectInjection = ({
   if (!to || (hosts.length === 0 && !cloudfrontDefault)) return "";
   const conditions = [
     ...(hosts.length > 0
-      ? [`${JSON.stringify(hosts)}.indexOf(redirectHost) !== -1`]
+      ? [`${JSON.stringify(hosts)}.includes(redirectHost)`]
       : []),
     ...(cloudfrontDefault ? [`redirectHost.endsWith(".cloudfront.net")`] : []),
   ];
   return `
-  var redirectHost = event.request.headers.host.value;
+  const redirectHost = event.request.headers.host.value;
   if (${conditions.join(" || ")}) {
     return buildHostRedirectResponse(${JSON.stringify(to)});
   }`;
@@ -52,10 +58,16 @@ const CLOUDFRONT_FUNCTION_SAFE_HEADER_LIMIT = 10240 - 512;
  * Compact generated CloudFront Function code to stay under the service's
  * 10 KB code limit: drop whole-line `//` comments, leading indentation,
  * and repeated blank lines. Safe for this code by construction — the
- * cloudfront-functions runtime (cf2.0) has no template literals, so no
- * generated or user-injected line carries semantic leading whitespace,
- * and only lines that START with `//` are dropped (string contents like
- * "https://…" are untouched).
+ * generated code deliberately contains no multiline template literals
+ * (all string building uses concatenation), so no generated or
+ * user-injected line carries semantic leading whitespace, and only lines
+ * that START with `//` are dropped (string contents like "https://…" are
+ * untouched), making line-by-line trimming semantics-preserving. A
+ * general-purpose minifier is deliberately NOT used here: the
+ * cloudfront-js-2.0 runtime validates syntax at deploy time and rejects
+ * anything outside its supported feature set, so the artifact must stay
+ * hand-auditable against that feature list rather than pass through a
+ * rewriter that could emit unsupported constructs.
  */
 export const compactCloudFrontFunctionCode = (code: string): string =>
   code
@@ -67,11 +79,11 @@ export const compactCloudFrontFunctionCode = (code: string): string =>
 
 export const CF_ROUTER_INJECTION = `
 async function routeSite(kvNamespace, metadata) {
-  if (metadata.redirect && metadata.redirect.hosts.indexOf(event.request.headers.host.value) !== -1) {
+  if (metadata.redirect && metadata.redirect.hosts.includes(event.request.headers.host.value)) {
     return buildHostRedirectResponse(metadata.redirect.to);
   }
 
-  var baselessUri = metadata.base
+  const baselessUri = metadata.base
     ? event.request.uri.replace(metadata.base, "")
     : event.request.uri;
 
@@ -81,42 +93,32 @@ async function routeSite(kvNamespace, metadata) {
   // runWorkerFirst), and so /api/* reaches the server even under spa mode.
   if (metadata.serverRoutes && metadata.servers && matchesServerRoute(baselessUri, metadata.serverRoutes)) {
     setForwardedHost();
-    for (var srKey in event.request.querystring) {
-      if (srKey.includes("/")) {
-        event.request.querystring[encodeURIComponent(srKey)] = event.request.querystring[srKey];
-        delete event.request.querystring[srKey];
-      }
-    }
+    encodeSlashedQuerystringKeys();
     if (isRequestHeaderTooLarge()) return buildOversizedHeadersResponse();
     setUrlOrigin(findNearestServer(metadata.servers), metadata.origin);
     return;
   }
 
   try {
-    var u = decodeURIComponent(baselessUri);
-    var postfixes = u.endsWith("/")
+    const u = decodeURIComponent(baselessUri);
+    const postfixes = u.endsWith("/")
       ? ["index.html"]
       : ["", ".html", "/index.html"];
-    var v = await Promise.any(postfixes.map(function(p) { return cf.kvs().get(kvNamespace + ":" + u + p).then(function() { return p; }); }));
+    const v = await Promise.any(postfixes.map((p) => cf.kvs().get(kvNamespace + ":" + u + p).then(() => p)));
     event.request.uri = metadata.s3.dir + event.request.uri + v;
     setS3Origin(metadata.s3.domain);
     return;
   } catch (e) {}
 
-  if (metadata.s3 && metadata.s3.routes) {
-    for (var i=0, l=metadata.s3.routes.length; i<l; i++) {
-      var route = metadata.s3.routes[i];
-      if (baselessUri.startsWith(route)) {
-        event.request.uri = metadata.s3.dir + event.request.uri;
-        if (event.request.uri.endsWith("/")) {
-          event.request.uri += "index.html";
-        } else if (!event.request.uri.split("/").pop().includes(".")) {
-          event.request.uri += "/index.html";
-        }
-        setS3Origin(metadata.s3.domain);
-        return;
-      }
+  if (metadata.s3 && metadata.s3.routes && metadata.s3.routes.some((route) => baselessUri.startsWith(route))) {
+    event.request.uri = metadata.s3.dir + event.request.uri;
+    if (event.request.uri.endsWith("/")) {
+      event.request.uri += "index.html";
+    } else if (!event.request.uri.split("/").pop().includes(".")) {
+      event.request.uri += "/index.html";
     }
+    setS3Origin(metadata.s3.domain);
+    return;
   }
 
   if (metadata.custom404 && !metadata.errorResponseCode) {
@@ -140,40 +142,39 @@ async function routeSite(kvNamespace, metadata) {
 
   if (metadata.servers && !metadata.serverRoutesOnly) {
     setForwardedHost();
-    for (var key in event.request.querystring) {
-      if (key.includes("/")) {
-        event.request.querystring[encodeURIComponent(key)] = event.request.querystring[key];
-        delete event.request.querystring[key];
-      }
-    }
+    encodeSlashedQuerystringKeys();
     if (isRequestHeaderTooLarge()) return buildOversizedHeadersResponse();
     setUrlOrigin(findNearestServer(metadata.servers), metadata.origin);
   }
 
+  function encodeSlashedQuerystringKeys() {
+    Object.keys(event.request.querystring).forEach((key) => {
+      if (key.includes("/")) {
+        event.request.querystring[encodeURIComponent(key)] = event.request.querystring[key];
+        delete event.request.querystring[key];
+      }
+    });
+  }
+
   function matchesServerRoute(uri, routes) {
-    for (var i = 0; i < routes.exclude.length; i++) {
-      if (new RegExp(routes.exclude[i]).test(uri)) return false;
-    }
-    for (var i = 0; i < routes.include.length; i++) {
-      if (new RegExp(routes.include[i]).test(uri)) return true;
-    }
-    return false;
+    if (routes.exclude.some((r) => new RegExp(r).test(uri))) return false;
+    return routes.include.some((r) => new RegExp(r).test(uri));
   }
 
   function findNearestServer(servers) {
     if (servers.length === 1) return servers[0][0];
-    var h = event.request.headers;
-    var lat = h["cloudfront-viewer-latitude"] && h["cloudfront-viewer-latitude"].value;
-    var lon = h["cloudfront-viewer-longitude"] && h["cloudfront-viewer-longitude"].value;
+    const h = event.request.headers;
+    const lat = h["cloudfront-viewer-latitude"] && h["cloudfront-viewer-latitude"].value;
+    const lon = h["cloudfront-viewer-longitude"] && h["cloudfront-viewer-longitude"].value;
     if (!lat || !lon) return servers[0][0];
-    return servers.map(function(s) { return { distance: haversineDistance(lat, lon, s[1], s[2]), host: s[0] }; }).sort(function(a,b) { return a.distance - b.distance; })[0].host;
+    return servers.map((s) => ({ distance: haversineDistance(lat, lon, s[1], s[2]), host: s[0] })).sort((a, b) => a.distance - b.distance)[0].host;
   }
 
   function haversineDistance(lat1, lon1, lat2, lon2) {
-    var toRad = function(a) { return a * Math.PI / 180; };
-    var dLat = toRad(lat2 - lat1);
-    var dLon = toRad(lon2 - lon1);
-    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+    const toRad = (a) => a * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
     return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
@@ -191,24 +192,24 @@ async function routeSite(kvNamespace, metadata) {
   }
 
   function getRequestHeaderSize() {
-    var size = 0;
-    for (var key in event.request.headers) {
-      var header = event.request.headers[key];
+    let size = 0;
+    Object.keys(event.request.headers).forEach((key) => {
+      const header = event.request.headers[key];
       if (header.multiValue) {
-        for (var i=0; i<header.multiValue.length; i++) size += key.length + header.multiValue[i].value.length + 4;
+        header.multiValue.forEach((h) => { size += key.length + h.value.length + 4; });
       } else if (header.value) {
         size += key.length + header.value.length + 4;
       }
-    }
-    var cookies = [];
-    for (var key in event.request.cookies) {
-      var cookie = event.request.cookies[key];
+    });
+    const cookies = [];
+    Object.keys(event.request.cookies).forEach((key) => {
+      const cookie = event.request.cookies[key];
       if (cookie.multiValue) {
-        for (var i=0; i<cookie.multiValue.length; i++) cookies.push(key + "=" + cookie.multiValue[i].value);
+        cookie.multiValue.forEach((c) => { cookies.push(key + "=" + c.value); });
       } else {
         cookies.push(key + "=" + cookie.value);
       }
-    }
+    });
     if (cookies.length) size += 10 + cookies.join("; ").length;
     return size;
   }
@@ -219,15 +220,15 @@ function setForwardedHost() {
 }
 
 function serializeQuerystring() {
-  var parts = [];
-  for (var key in event.request.querystring) {
-    var q = event.request.querystring[key];
+  const parts = [];
+  Object.keys(event.request.querystring).forEach((key) => {
+    const q = event.request.querystring[key];
     if (q.multiValue) {
-      for (var i = 0; i < q.multiValue.length; i++) parts.push(key + "=" + q.multiValue[i].value);
+      q.multiValue.forEach((m) => { parts.push(key + "=" + m.value); });
     } else {
       parts.push(q.value === "" ? key : key + "=" + q.value);
     }
-  }
+  });
   return parts.length ? "?" + parts.join("&") : "";
 }
 
@@ -244,7 +245,7 @@ function buildHostRedirectResponse(toHost) {
 
 function setUrlOrigin(urlHost, override) {
   setForwardedHost();
-  var origin = {
+  const origin = {
     domainName: urlHost,
     customOriginConfig: {
       port: 443,
@@ -267,7 +268,7 @@ function setS3Origin(s3Domain, override) {
   delete event.request.headers["Cookies"];
   delete event.request.headers["cookies"];
   delete event.request.cookies;
-  var origin = {
+  const origin = {
     domainName: s3Domain,
     originAccessControlConfig: {
       enabled: true,

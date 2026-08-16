@@ -21,7 +21,7 @@
  * bridge construction does), which is process-global state — they take the
  * runner's whole-process write lock via `{ exclusive: true }` and restore
  * the flag in `finally`. The bridge modules that stamp at module evaluation
- * (`@/Serve/Worker.ts`) are imported dynamically inside those tests for the
+ * (`@/Cloudflare/Workers/ServeWorkerEntry.ts`) are imported dynamically inside those tests for the
  * same reason.
  */
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -346,7 +346,8 @@ describe("makeWebsiteExports", () => {
     "routes decide who serves: effect inside (authoritative), framework outside",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteExports } = await import("@/Serve/Worker.ts");
+        const { makeWebsiteExports } =
+          await import("@/Cloudflare/Workers/ServeWorkerEntry.ts");
 
         class StubEntrypoint {
           constructor(
@@ -414,7 +415,8 @@ describe("makeWebsiteExports", () => {
     "exclusion glob routes to the framework",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteExports } = await import("@/Serve/Worker.ts");
+        const { makeWebsiteExports } =
+          await import("@/Cloudflare/Workers/ServeWorkerEntry.ts");
 
         class StubEntrypoint {
           constructor(

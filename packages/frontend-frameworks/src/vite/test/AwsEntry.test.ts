@@ -56,7 +56,7 @@ describe("generateLambdaEntry", () => {
       },
     });
     expect(entry).toContain(
-      `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/WebsiteHandlers';`,
+      `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/ServeBridge';`,
     );
     expect(entry).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,

@@ -30,17 +30,10 @@ import {
 import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
 
 /**
- * Shared CloudFront front door with KV-based dynamic routing.
+ * Shared CloudFront front door: one distribution that many sites and
+ * origins route through, matched at the edge by host pattern and path
+ * prefix.
  *
- * `Router` owns a single CloudFront distribution with a placeholder origin.
- * Routes are registered lazily via KV entries. A CloudFront Function reads the
- * KV store at the edge and dynamically sets the origin using
- * `cf.updateRequestOrigin()`.
- *
- * Sites register themselves by writing their file manifest and metadata into
- * the Router's KV store. The Router's CF function matches incoming requests to
- * routes by host pattern and path prefix, then delegates to `routeSite()` for
- * static site routing or directly sets URL/S3 origins.
  * @resource
  * @section Creating Routers
  * @example Basic Router
@@ -68,8 +61,6 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  *   invalidation: { paths: "all", wait: true },
  * });
  *
- * // The site registers itself in the Router's KV store; no new
- * // distribution is created.
  * const docs = yield* AWS.Website.StaticSite("DocsSite", {
  *   path: "./docs/dist",
  *   domain: {
@@ -78,6 +69,8 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  *   },
  * });
  * ```
+ * The site registers itself into the Router's routing table; no new
+ * distribution is created.
  */
 export const Router = Effect.fn("AWS.Website.Router")(
   function* (id: string, props: RouterProps) {

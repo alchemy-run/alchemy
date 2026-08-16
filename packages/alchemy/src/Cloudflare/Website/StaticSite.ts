@@ -16,6 +16,7 @@ import {
   isYieldableEffectLike,
   type YieldableEffectLike,
 } from "../../Util/effect.ts";
+import { attachWorkerServeBridge } from "../Workers/ServeBridge.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
@@ -360,7 +361,7 @@ export const StaticSite: {
 } = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
     ? (id: string, propsEff: any, impl?: any) =>
-        effectClass(makeStaticSite(id, propsEff, impl))
+        attachWorkerServeBridge(effectClass(makeStaticSite(id, propsEff, impl)))
     : makeStaticSite(id, propsEff, impl)) as any;
 
 const makeStaticSite = <

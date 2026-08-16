@@ -46,7 +46,7 @@ describe("EffectDev plugin", () => {
     const load = plugin.load as (id: string) => string | undefined;
     const code = load("\0virtual:alchemy-vite-effect");
     expect(code).toContain(
-      `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
+      `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
     );
     expect(code).toContain(`import Site from "/abs/project/src/site.ts";`);
     // The middleware gates `server.routes` before dispatching, so the

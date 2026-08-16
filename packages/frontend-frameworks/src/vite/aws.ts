@@ -125,7 +125,7 @@ export const generateLambdaEntry = (options: {
   const effect = options.effect;
   const effectImports =
     effect !== undefined
-      ? `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/WebsiteHandlers';\n` +
+      ? `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/ServeBridge';\n` +
         `import __alchemy_site from ${JSON.stringify(effect.main)};\n`
       : "";
   const exports =

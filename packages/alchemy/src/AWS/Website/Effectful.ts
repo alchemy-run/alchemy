@@ -22,15 +22,14 @@ import {
 } from "../../Namespace.ts";
 import type { MainRpc, PlatformServices } from "../../Platform.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { SERVE_SHELL_KEY } from "../../Serve/constants.ts";
-import { Stack } from "../../Stack.ts";
+import { retractResource, Stack } from "../../Stack.ts";
 import {
   Function as LambdaFunction,
   type FunctionProps,
   type FunctionRuntimeContext,
   type FunctionServices,
 } from "../Lambda/Function.ts";
-import { lambdaServeShell } from "../Lambda/WebsiteHandlers.ts";
+export { attachLambdaServeBridge } from "../Lambda/ServeBridge.ts";
 
 /**
  * A Website fetch handler's effect type: `HttpEffect` widened with
@@ -263,7 +262,7 @@ export const siblingHandlersId = (siteId: string): string =>
 
 /**
  * Opt-in env var the `alchemy/Serve` Lambda bridge
- * (`AWS/Lambda/WebsiteHandlers.ts`) honors: when set, capability clients
+ * (`AWS/Lambda/ServeBridge.ts`) honors: when set, capability clients
  * built by the bridge target this local AWS emulator gateway with the
  * emulator's fixed dummy identity instead of `Credentials.fromChain()`.
  *
@@ -286,20 +285,6 @@ export const LOCAL_AWS_ENDPOINT_ENV = "ALCHEMY_AWS_ENDPOINT_URL";
  * `DEFAULT_LOCAL_ENDPOINT` in `AWS/AuthProvider.ts`).
  */
 export const DEFAULT_LOCAL_AWS_ENDPOINT = "http://localhost:4566";
-
-/**
- * Attach the AWS Lambda/Node serve shell to an effectful Website class so
- * `Serve.make(Site)` — and the framework mounts built on it
- * (`toRouteHandler`, `toEventHandler`) — dispatches through the Lambda
- * layer recipe (`Credentials.fromChain()` / `Region.fromEnv()` /
- * `process.env` markers) instead of the Cloudflare-flavored default
- * bridge. The shell rides the site module's own import graph into any
- * bundle containing the class. Called by the AWS Website constructs'
- * class arms.
- * @internal
- */
-export const attachLambdaServeShell = <T>(cls: T): T =>
-  Object.assign(cls as object, { [SERVE_SHELL_KEY]: lambdaServeShell }) as T;
 
 /**
  * A no-op `bind` mirroring the dual call forms of `Resource.bind` — the
@@ -432,14 +417,12 @@ export const deploySiblingHandlers = Effect.fn("AWS.Website.SiblingHandlers")(
     );
 
     if (listeners === 0) {
-      // Fetch-only program: retract the sibling's row and binding rows so
-      // no extra Lambda deploys. Nothing else can reference it — the
-      // composite never exposes it and no event source declared against
-      // it. Resources declared inside the impl stay (the site evaluation
+      // Fetch-only program: retract the speculative sibling so no extra
+      // Lambda deploys. Nothing else can reference it — the composite
+      // never exposes it and no event source declared against it.
+      // Resources declared inside the impl stay (the site evaluation
       // shares them).
-      const stack = yield* Stack;
-      delete stack.resources[sibling.FQN];
-      delete stack.bindings[sibling.FQN];
+      retractResource(yield* Stack, sibling.FQN);
       return { sibling: undefined, siteImpl } satisfies SiblingHandlers;
     }
 

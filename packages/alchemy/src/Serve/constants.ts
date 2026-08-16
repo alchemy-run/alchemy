@@ -30,17 +30,17 @@ export const SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
 export const SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
 
 /**
- * Static property key under which a Website class may carry its own
- * cloud-specific serve shell — the runtime half `Serve.make` dispatches to
- * instead of the default (Cloudflare-flavored) bridge in `Bridge.ts`.
+ * Static property key under which a Website class carries its
+ * cloud-specific serve bridge — the runtime half `Serve.make` dispatches
+ * matched requests to.
  *
- * AWS Website classes attach the Lambda/Node shell
- * (`AWS/Lambda/WebsiteHandlers.ts`) here at class construction, so the
- * shell rides the *site module's own import graph* into whatever bundle
+ * Both clouds attach their bridge here at class construction
+ * (`Cloudflare/Workers/ServeBridge.ts`, `AWS/Lambda/ServeBridge.ts`), so
+ * each rides the *site module's own import graph* into whatever bundle
  * contains the site — the `alchemy/Serve` core never has to import (and
  * foreign bundlers never have to carry) both clouds' runtime recipes.
  *
- * The value is a {@link ServeShell}-shaped object (see `Serve.ts`). Pure
+ * The value is a {@link ServeBridge}-shaped object (see `Serve.ts`). Pure
  * data — safe to import anywhere.
  */
-export const SERVE_SHELL_KEY = "~alchemy/Serve/shell";
+export const SERVE_BRIDGE_KEY = "~alchemy/Serve/bridge";

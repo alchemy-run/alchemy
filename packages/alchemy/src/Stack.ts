@@ -206,6 +206,28 @@ export interface StackSpec<Output = any> {
   output: Output;
 }
 
+/**
+ * Retract a speculatively-declared resource from a stack under
+ * construction — the sanctioned way for a composite to withdraw a
+ * declaration it made only to OBSERVE the user program's evaluation
+ * (e.g. an effectful Website's sibling Handlers Lambda, declared so
+ * event-source listeners have a host to register against, then
+ * retracted when the evaluation registered none).
+ *
+ * Contract: only the declaring composite may retract, only during stack
+ * evaluation (before plan), and only when nothing else can reference the
+ * row — no exposed handle, no binding FROM another resource. Both the
+ * resource row and its collected binding rows are withdrawn.
+ * @internal
+ */
+export const retractResource = (
+  stack: Pick<StackSpec, "resources" | "bindings">,
+  fqn: string,
+): void => {
+  delete stack.resources[fqn];
+  delete stack.bindings[fqn];
+};
+
 export interface CompiledStack<
   Output = any,
   Services = any,

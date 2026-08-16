@@ -15,13 +15,8 @@
  */
 
 import * as Data from "effect/Data";
-import {
-  markRuntime,
-  matchSite,
-  type ServeOptions,
-  type SiteRuntime,
-} from "./Bridge.ts";
-import { SERVE_SHELL_KEY, type SERVE_MOUNT_MARKER } from "./constants.ts";
+import { markRuntime, type ServeOptions, type SiteRuntime } from "./Bridge.ts";
+import { SERVE_BRIDGE_KEY, type SERVE_MOUNT_MARKER } from "./constants.ts";
 
 // The explicit-mount marker, written as a literal (type-checked against
 // `constants.ts`) so the exact byte sequence provably survives bundling and
@@ -40,21 +35,21 @@ export { SERVE_MOUNT_MARKER, SERVE_SENTINEL } from "./constants.ts";
 export { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 
 /**
- * A cloud-specific serve shell a Website class may carry under
- * {@link SERVE_SHELL_KEY}: the runtime half {@link make} dispatches matched
- * requests to instead of the default (Cloudflare-flavored) bridge. AWS
- * Website classes attach the Lambda/Node shell here at class construction
- * so it rides the site module's own import graph — `alchemy/Serve` never
- * statically imports both clouds' runtime recipes.
+ * A cloud-specific serve bridge a Website class carries under
+ * {@link SERVE_BRIDGE_KEY}: the runtime half {@link make} dispatches
+ * matched requests to. Both clouds attach theirs at class construction
+ * (`attachWorkerServeBridge`, `attachLambdaServeBridge`) so each rides the
+ * site module's own import graph — `alchemy/Serve` never statically
+ * imports either cloud's runtime recipe.
  */
-export interface ServeShell {
+export interface ServeBridge {
   match(
     site: object,
     request: Request,
     options?: ServeOptions,
   ): Promise<Response | undefined>;
   /**
-   * Tear down the shell's per-class runtime for `site` — close the
+   * Tear down the bridge's per-class runtime for `site` — close the
    * instance-lifetime layer scope and evict the per-class memos. Used by
    * dev servers that hot-swap the site class (cache-busted re-import →
    * fresh class identity): without eviction every reloaded generation
@@ -62,18 +57,30 @@ export interface ServeShell {
    */
   dispose?(site: object): Promise<void>;
   /**
-   * Build (memoized per class) the site's isolate runtime against a
-   * resolved env — the cloud-flavored twin of `Serve/Bridge.ts`'s
-   * `getSiteRuntime`. Consulted by `alchemy/Client`'s value form so an
-   * in-process dispatch on an AWS class builds the Lambda/Node layer
-   * recipe (credentials chain, Node services) instead of the default
-   * Cloudflare-flavored bridge.
+   * Build (memoized per class) the site's instance runtime against a
+   * resolved env — the `BridgeCore.getRuntime` seam. Consulted by
+   * `alchemy/Client`'s value form so an in-process dispatch builds the
+   * same cloud-flavored layer recipe as the fetch path.
    */
   runtime?(site: object, env: Record<string, unknown>): Promise<SiteRuntime>;
 }
 
-const shellOf = (site: object): ServeShell | undefined =>
-  (site as Record<string, unknown>)[SERVE_SHELL_KEY] as ServeShell | undefined;
+export const bridgeOf = (site: object): ServeBridge | undefined =>
+  (site as Record<string, unknown>)[SERVE_BRIDGE_KEY] as
+    | ServeBridge
+    | undefined;
+
+/**
+ * Fallback for classes constructed by a factory that does not stamp a
+ * bridge yet (plain `Cloudflare.Worker` extends-form classes). Loaded
+ * lazily so the neutral `alchemy/Serve` static graph carries neither
+ * cloud; foreign bundlers chunk the dynamic import. Slated for removal
+ * once every class factory stamps `SERVE_BRIDGE_KEY`.
+ */
+const fallbackBridge = (): Promise<ServeBridge> =>
+  import("../Cloudflare/Workers/ServeBridge.ts").then(
+    (mod) => mod.workerServeBridge,
+  );
 
 /**
  * Any effectful Website Platform class — the value default-exported by the
@@ -204,10 +211,10 @@ export const make = <S extends AnyWebsiteClass>(
   const routes = defaults?.routes ?? DEFAULT_SERVER_ROUTES;
   const merged = (options?: ServeOptions): ServeOptions | undefined =>
     defaults === undefined ? options : { ...defaults, ...options };
-  // A class carrying its own cloud-specific shell (AWS Lambda/Node) is
-  // served by that shell; everything else takes the default bridge.
-  const shell = shellOf(site);
-  const match = (
+  // The class-carried cloud bridge serves every matched request; classes
+  // from factories that do not stamp yet take the lazy fallback.
+  const bridge = bridgeOf(site);
+  const match = async (
     request: Request,
     options?: ServeOptions,
   ): Promise<Response | undefined> => {
@@ -216,11 +223,13 @@ export const make = <S extends AnyWebsiteClass>(
     // the effect fetch is never invoked; inside it the effect's answer
     // (404s included) is final.
     if (!matchRoutes(routes, pathname)) {
-      return Promise.resolve(undefined);
+      return undefined;
     }
-    return shell !== undefined
-      ? shell.match(site, request, merged(options))
-      : matchSite(site, request, merged(options));
+    return (bridge ?? (await fallbackBridge())).match(
+      site,
+      request,
+      merged(options),
+    );
   };
   return {
     match,
@@ -239,19 +248,19 @@ export const make = <S extends AnyWebsiteClass>(
 
 /**
  * Tear down the runtime built for a Website class by a previous
- * {@link make} handle: the class's cloud shell closes its
+ * {@link make} handle: the class's cloud bridge closes its
  * instance-lifetime layer scope (init finalizers run) and evicts its
- * per-class memos. A class without a shell (the default Cloudflare
- * bridge) resolves immediately — its builds are keyed by a `WeakMap` and
- * reclaimed with the class.
+ * per-class memos.
  *
  * Dev-server machinery: called after a hot swap (cache-busted re-import
  * of the backend module → fresh class → fresh `make` handle) retires the
  * previous generation, once its in-flight requests settle.
  */
-export const dispose = <S extends AnyWebsiteClass>(site: S): Promise<void> => {
-  const shell = shellOf(site);
-  return shell?.dispose !== undefined ? shell.dispose(site) : Promise.resolve();
+export const dispose = async <S extends AnyWebsiteClass>(
+  site: S,
+): Promise<void> => {
+  const bridge = bridgeOf(site) ?? (await fallbackBridge());
+  return bridge.dispose !== undefined ? bridge.dispose(site) : undefined;
 };
 
 export class ServeExportsUnavailableError extends Data.TaggedError(

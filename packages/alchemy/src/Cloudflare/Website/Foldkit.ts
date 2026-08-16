@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
+import { attachWorkerServeBridge } from "../Workers/ServeBridge.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -208,7 +209,8 @@ export const Foldkit: {
   >;
 } = ((id?: any, propsEff?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Foldkit(id, propsEff))
+    ? (id: string, propsEff: any) =>
+        attachWorkerServeBridge(effectClass(Foldkit(id, propsEff)))
     : Worker(
         id,
         Effect.map(

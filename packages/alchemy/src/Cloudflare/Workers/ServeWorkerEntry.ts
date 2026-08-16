@@ -28,16 +28,18 @@
  */
 
 import * as Effect from "effect/Effect";
-import cloudflare_workers from "../Cloudflare/Workers/cloudflare_workers.ts";
-import { makeDurableObjectBridge } from "../Cloudflare/Workers/DurableObjectBridge.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
+import { makeDurableObjectBridge } from "./DurableObjectBridge.ts";
+import { getWorkerExport, makeWorkerBridge } from "./WorkerBridge.ts";
+import { markRuntime } from "../../Serve/Bridge.ts";
 import {
-  getWorkerExport,
-  makeWorkerBridge,
-} from "../Cloudflare/Workers/WorkerBridge.ts";
-import { markRuntime, runSiteFetch } from "./Bridge.ts";
-import { envString, hasStackMarkers, workersEnvOrEmpty } from "./Env.ts";
-import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
-import type { AnyWebsiteClass } from "./Serve.ts";
+  envString,
+  hasStackMarkers,
+  workersEnvOrEmpty,
+} from "../../Serve/Env.ts";
+import { DEFAULT_SERVER_ROUTES, matchRoutes } from "../../Serve/Routes.ts";
+import type { AnyWebsiteClass } from "../../Serve/Serve.ts";
+import { workerServeCore } from "./ServeBridge.ts";
 
 markRuntime();
 
@@ -142,7 +144,7 @@ export const makeWebsiteExports = (
           return frameworkFetch(request, env, ctx);
         }
         const built = await build((promise) => ctx.waitUntil(promise));
-        const matched = await runSiteFetch(
+        const matched = await workerServeCore.runFetch(
           {
             context: built.context,
             shape: built.shape,

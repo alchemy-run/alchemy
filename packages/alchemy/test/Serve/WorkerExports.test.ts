@@ -1,5 +1,5 @@
 /**
- * Unit coverage for the entry-level wrapper seam in `@/Serve/Worker.ts`
+ * Unit coverage for the entry-level wrapper seam in `@/Cloudflare/Workers/ServeWorkerEntry.ts`
  * (pure-local, no cloud):
  *   - `makeWebsiteEntryExports` fetch: verbatim delegation to the
  *     framework-delivered handler — no route gating, no env-marker guard
@@ -12,7 +12,7 @@
  *     resolve, typed failures envelope-encode, unknown methods reject
  *   - `DurableObjectBridge` is a per-class factory over the given base
  *
- * Same process-global discipline as `Serve.test.ts`: `@/Serve/Worker.ts`
+ * Same process-global discipline as `Serve.test.ts`: `@/Cloudflare/Workers/ServeWorkerEntry.ts`
  * stamps `globalThis.__ALCHEMY_RUNTIME__` at module evaluation, so every
  * test imports it dynamically under `{ exclusive: true }` and restores the
  * flag in `finally`.
@@ -96,7 +96,8 @@ describe("makeWebsiteEntryExports", () => {
     "fetch delegates verbatim to the framework-delivered handler",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteEntryExports } = await import("@/Serve/Worker.ts");
+        const { makeWebsiteEntryExports } =
+          await import("@/Cloudflare/Workers/ServeWorkerEntry.ts");
 
         const calls: { request: Request; env: unknown; ctx: unknown }[] = [];
         const WebsiteWorker = makeWebsiteEntryExports(StubEntrypoint, {
@@ -135,7 +136,8 @@ describe("makeWebsiteEntryExports", () => {
     "non-fetch handlers ride the bridge dispatch to registered listeners",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteEntryExports } = await import("@/Serve/Worker.ts");
+        const { makeWebsiteEntryExports } =
+          await import("@/Cloudflare/Workers/ServeWorkerEntry.ts");
 
         const WebsiteWorker = makeWebsiteEntryExports(StubEntrypoint, {
           site: EntrySite,
@@ -168,7 +170,8 @@ describe("makeWebsiteEntryExports", () => {
     "workerd JS-RPC dispatch comes from the underlying bridge proxy",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteEntryExports } = await import("@/Serve/Worker.ts");
+        const { makeWebsiteEntryExports } =
+          await import("@/Cloudflare/Workers/ServeWorkerEntry.ts");
 
         const WebsiteWorker = makeWebsiteEntryExports(StubEntrypoint, {
           site: EntrySite,
@@ -217,7 +220,8 @@ describe("DurableObjectBridge (wrapper entry)", () => {
     "returns a per-class factory extending the given base",
     () =>
       restoringRuntimeFlag(async () => {
-        const { DurableObjectBridge } = await import("@/Serve/Worker.ts");
+        const { DurableObjectBridge } =
+          await import("@/Cloudflare/Workers/ServeWorkerEntry.ts");
 
         class BaseDO {
           constructor(

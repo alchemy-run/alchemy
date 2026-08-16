@@ -25,7 +25,7 @@ describe("generateLambdaEntry effect arm (AWS)", () => {
       },
     });
     expect(entry).toContain(
-      `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/WebsiteHandlers';`,
+      `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/ServeBridge';`,
     );
     expect(entry).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,
@@ -66,7 +66,7 @@ describe("EffectDev aws arm", () => {
     const load = plugin.load as (id: string) => string | undefined;
     const code = load("\0virtual:alchemy-sveltekit-effect");
     expect(code).toContain(
-      `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
+      `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
     );
     expect(code).toContain(`import Site from "/abs/project/src/site.ts";`);
     // The middleware gates `server.routes` before dispatching, so the
