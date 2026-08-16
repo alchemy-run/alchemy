@@ -73,48 +73,30 @@ const _complete: Registry<typeof GeneralEngineer> = {
 
 type ReviewNames = AI.ToolNames<typeof ReviewBotLive>;
 
-// the full surface: inline tools AND class-tool splices
-const _reviewNames: ReviewNames[] = [
-  "add_comment",
-  "submit_review",
-  "comment",
-  "sync_checkout",
-  "readDiff",
-  "readIssue",
-];
+// the typed surface is the CLASS-TOOL splices (they ride the Layer's
+// requirement channel); inline tools (add_comment, submit_review,
+// comment, sync_checkout) carry no tag and are RUNTIME-ONLY
+const _reviewNames: ReviewNames[] = ["readDiff", "readIssue"];
 
 // @ts-expect-error — not on the wire
 const _unknownReview: ReviewNames = "not_a_tool";
+
+// @ts-expect-error — inline tools do not surface on the type
+const _inlineInvisible: ReviewNames = "add_comment";
 
 const _readDiff: AI.ToolInput<typeof ReviewBotLive, "readDiff"> = {
   pr: { owner: "o", repository: "r", number: 1, url: "https://x" },
 };
 
-// @ts-expect-error — sync_checkout has no renderer
+// @ts-expect-error — readIssue has no renderer
 const _incompleteReview: Registry<typeof ReviewBotLive> = {
-  add_comment: () => 1,
-  submit_review: () => 1,
-  comment: () => 1,
   readDiff: () => 1,
-  readIssue: () => 1,
 };
 
 const _completeReview: Registry<typeof ReviewBotLive> = {
   // input is the tool's ACTUAL parameter type, not Record<string, any>
-  add_comment: (input) => (
-    input.path satisfies string,
-    input.line satisfies number,
-    input.startLine satisfies number | undefined,
-    1
-  ),
-  submit_review: (input) => (
-    input.verdict satisfies "approve" | "request_changes",
-    1
-  ),
-  comment: (input) => (input.message satisfies string, 1),
   readDiff: (input) => (input.pr.number satisfies number, 1),
   readIssue: (input) => (input.issue.number satisfies number, 1),
-  sync_checkout: () => 1,
 };
 
 // a SKILL's teaching carries its own wire — its tools never surface on

@@ -232,16 +232,34 @@ const RefLink = ({ refValue }: { refValue: any }) => {
 };
 
 /**
- * Cards for the ReviewBot's OWN wire, typed straight off the charter:
- * `ReviewBotLive`'s TYPE carries every tool its prose can mention
- * (mention-is-presence, lifted into the type system), and the
- * annotation holds this object to it: mention a new tool in the
- * charter without adding its card → this object errors, naming the
- * missing tool; each renderer's `input` is that tool's ACTUAL
- * parameter type. The import is type-only: erased at build, no
- * server code reaches the browser bundle.
+ * Cards for the ReviewBot's wire. The compiler-checked half is the
+ * CLASS-TOOL surface (`readDiff`, `readIssue` — the tags on
+ * `ReviewBotLive`'s requirement channel): forget one of those cards
+ * and this object errors, naming the missing tool. The bot's INLINE
+ * tools (`add_comment`, `submit_review`, `comment`, `sync_checkout`)
+ * carry no tag — they are runtime-only, so their cards and input
+ * shapes are declared by hand here and must be kept in step with the
+ * charter. The import is type-only: erased at build, no server code
+ * reaches the browser bundle.
  */
-const REVIEW_BOT: Renderers<typeof ReviewBotLive> = {
+const REVIEW_BOT: Renderers<typeof ReviewBotLive> & {
+  add_comment: (input: {
+    path: string;
+    line: number;
+    startLine?: number;
+    message: string;
+  }) => ToolCallView;
+  submit_review: (
+    input: { verdict: "approve" | "request_changes"; message: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  comment: (input: { message: string }) => ToolCallView;
+  sync_checkout: (
+    input: unknown,
+    output: string | undefined,
+    running: boolean,
+  ) => ToolCallView;
+} = {
   readDiff: (input, output) => {
     const stat = output === undefined ? undefined : diffStat(output);
     const split = output === undefined ? undefined : splitDiffOutput(output);
@@ -333,14 +351,15 @@ const REVIEW_BOT: Renderers<typeof ReviewBotLive> = {
 
 /**
  * Cards for the Engineer's wire, typed straight off the charter:
- * `GeneralEngineer`'s TYPE carries every tool its prose can mention
- * (mention-is-presence, lifted into the type system — alchemy/AI/Wire.ts),
- * and the annotation holds this object to it. Two guarantees, both
- * compiler-enforced: mention a new tool in the charter without adding
- * its card → this object errors, naming the missing tool; each
- * renderer's `input` is that tool's ACTUAL parameter type. The import
- * of `GeneralEngineer` is type-only: erased at build, no server code
- * reaches the browser bundle.
+ * every class tool `GeneralEngineer`'s prose mentions rides its
+ * requirement channel (mention-is-presence, lifted into the type
+ * system — `AI.ToolNames` / `AI.ToolInput`), and the annotation holds
+ * this object to it. Two guarantees, both compiler-enforced: mention
+ * a new tool in the charter without adding its card → this object
+ * errors, naming the missing tool; each renderer's `input` is that
+ * tool's ACTUAL parameter type. The import of `GeneralEngineer` is
+ * type-only: erased at build, no server code reaches the browser
+ * bundle.
  */
 const CODER: Renderers<typeof GeneralEngineer> = {
   bash: (input, output, running) => {

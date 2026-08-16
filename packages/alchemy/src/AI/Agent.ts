@@ -2,7 +2,6 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { DispatchTool } from "./Dispatch.ts";
 import {
   layer,
   type Charter,
@@ -11,7 +10,7 @@ import {
   type TurnServices,
 } from "./Driver.ts";
 import { fragment, type Fragment, type Services } from "./Fragment.ts";
-import type { Tool, ToolImpl, ToolParameters } from "./Tool.ts";
+import type { Tool, ToolParameters } from "./Tool.ts";
 
 // ─────────────────────────── the Actor ────────────────────────────
 
@@ -194,14 +193,10 @@ export interface Agent<Name extends string = string, Self = unknown> {
     <const Refs extends any[]>(
       template: TemplateStringsArray,
       ...refs: Refs
-    ): WiredLayer<
-      Self,
-      Driver | Exclude<Services<Refs>, TurnServices>,
-      FragmentTools<Refs>
-    >;
+    ): Layer.Layer<Self, never, Driver | Exclude<Services<Refs>, TurnServices>>;
     <C extends Charter>(
       charter: C,
-    ): WiredLayer<Self, Driver | CharterServices<C>, CharterTools<C>>;
+    ): Layer.Layer<Self, never, Driver | CharterServices<C>>;
   };
   /**
    * Instances are branded with the agent's name so distinct agents
@@ -264,21 +259,26 @@ export const isAgent = (value: unknown): value is Agent<any, any> =>
 /**
  * One tool call that can appear on an agent's transcript, as a type.
  * Mention-is-presence is a runtime law — a charter's toolkit is
- * exactly what its prose splices — and because {@link Fragment}
- * retains its refs' types, the same law holds in the type system:
- * {@link CharterTools} extracts every tool a charter can mention, and
- * a UI can prove renderer coverage against it the same way
- * `Layer.provide` proves service coverage.
+ * exactly what its prose splices — and because every `Tool<Self>`
+ * class splice rides the Layer's REQUIREMENT channel (its physics
+ * must be provided), the same law holds in the type system: a `make`
+ * Layer's `RIn` names every class tool the teaching can mention, and
+ * {@link ToolNames} / {@link ToolInput} read it LAZILY — nothing is
+ * computed or branded at layer construction.
  *
- * The core exposes only the FACTS — {@link WireTool},
- * {@link ToolNames}, {@link ToolInput}, the {@link WiredLayer} brand.
- * What a consumer builds on them (a renderer registry, a
- * wire-protocol codec, a docs generator) is userland:
+ * Type against the `make` result (the un-provided teaching):
+ * `Layer.provide` consumes the requirements the surface is read from,
+ * exactly as it consumes them for service coverage.
+ *
+ * Inline tools (`yield* AI.Tool("x")`…`(impl)`) and dispatch doors
+ * carry no tag, so they are RUNTIME-ONLY: invisible to this surface.
+ * A tool that wants compiler-checked renderer coverage is a
+ * `Tool<Self>` class.
  *
  * ```ts
  * // ui — type-only import (erased at build); the app owns its
  * // registry type:
- * import type { EngineerLive } from "../src/Engineer.ts";
+ * import type { GeneralEngineer } from "../src/Engineer.ts";
  *
  * type Renderers<L> = {
  *   [Name in AI.ToolNames<L> & string]: (
@@ -294,92 +294,17 @@ export interface WireTool<Name extends string = string, Input = any> {
 }
 
 /**
- * The wire contribution of ONE splice:
- *
- * - an inline {@link ToolImpl} contributes its tool's name + params;
- * - a `Tool<Self>` class splice contributes the same (the tag rides
- *   the requirement channel separately — see `Services`);
- * - a {@link DispatchTool} (door) contributes its name + params;
- * - a nested fragment (raw or effect-valued — nested `AI.fragment`, a
- *   component's turn value) contributes ITS tools, recursively, so
- *   conditional branches accumulate: every tool any branch could
- *   mention is on the wire type, whether or not this tick renders it;
- * - everything else (parameters, agents, skills, plain values)
- *   contributes nothing. A skill's tools are encapsulated behind the
- *   skill's own layer, mirroring `Services` — cover them with a
- *   registry for the skill pack, composed alongside the agent's.
+ * The wire-tool union of an agent/skill `make` Layer, derived from its
+ * requirement channel: each `Tool<Self>` tag in `RIn` is an instance
+ * type extending `Tool<Name, Refs>`, which carries everything the
+ * surface needs.
  */
-export type RefWireTools<R> =
-  R extends ToolImpl<infer T, any, any>
-    ? T extends Tool<infer Name, infer Refs>
+export type WireToolsOf<L> =
+  L extends Layer.Layer<any, any, infer RIn>
+    ? RIn extends Tool<infer Name extends string, infer Refs>
       ? WireTool<Name, ToolParameters<Refs[number]>>
       : never
-    : // a Tool<Self> CLASS splice: matched on its identifying members,
-      // not the Tool interface itself — `class X extends AI.Tool<X>()(…)`
-      // yields a constructor type that drops the interface's call
-      // signatures, so a full `extends Tool<…>` never matches a class
-      R extends {
-          "~alchemy/Kind": "Tool";
-          "~alchemy/Name": infer Name extends string;
-          refs: infer Refs extends any[];
-        }
-      ? WireTool<Name, ToolParameters<Refs[number]>>
-      : R extends DispatchTool<infer Name, infer Refs>
-        ? WireTool<Name, ToolParameters<Refs[number]>>
-        : R extends Fragment<infer Refs>
-          ? FragmentTools<Refs>
-          : R extends Effect.Effect<infer A, any, any>
-            ? A extends Fragment<infer Refs>
-              ? FragmentTools<Refs>
-              : never
-            : never;
-
-/** Folds a fragment's splices into its wire-tool union. */
-export type FragmentTools<Refs extends ReadonlyArray<unknown>> =
-  Refs[number] extends infer A ? RefWireTools<A> : never;
-
-/**
- * The wire-tool union of a full charter (init → turn): tools mentioned
- * by a static fragment, a TURN effect's fragment, or a `TurnFn`'s
- * fragment. Distributes over unions, so a charter whose init returns
- * different turns on different branches accumulates all of them.
- */
-export type CharterTools<C> =
-  C extends Effect.Effect<infer A, any, any> ? TurnTools<A> : never;
-
-type TurnTools<A> =
-  A extends Fragment<infer Refs>
-    ? FragmentTools<Refs>
-    : A extends Effect.Effect<infer F, any, any>
-      ? F extends Fragment<infer Refs>
-        ? FragmentTools<Refs>
-        : never
-      : A extends (input: never) => Effect.Effect<infer F, any, any>
-        ? F extends Fragment<infer Refs>
-          ? FragmentTools<Refs>
-          : never
-        : never;
-
-/**
- * A Layer branded (phantom — nothing exists at runtime) with the wire
- * surface of the agent it implements. `Agent.make` returns this, so
- * `typeof SomeAgentLive` is all a UI needs to know every tool that can
- * appear on the transcript.
- */
-export interface WiredLayer<
-  ROut,
-  RIn,
-  Tools extends WireTool,
-> extends Layer.Layer<ROut, never, RIn> {
-  readonly "~alchemy/WireTools"?: Tools;
-}
-
-/** The wire-tool union carried by a {@link WiredLayer}. */
-export type WireToolsOf<L> = L extends {
-  readonly "~alchemy/WireTools"?: (infer T) | undefined;
-}
-  ? Extract<T, WireTool>
-  : never;
+    : never;
 
 /** The tool NAMES on an agent layer's wire — a union of literals. */
 export type ToolNames<L> = WireToolsOf<L>["name"];

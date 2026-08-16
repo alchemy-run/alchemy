@@ -334,13 +334,15 @@ same bridge is the RLM configuration.
 
 ### 2c-ii. The wire surface as a TYPE — consumers prove coverage
 
-Mention-is-presence holds in the type system on the OUTPUT side too,
-not just the R channel (§2). `Fragment<Refs>` retains its splices'
-types, and `Agent.make` / `Skill.make` return a `WiredLayer` branded
-(phantom — nothing at runtime) with the union of every tool the prose
-can mention: inline `ToolImpl`s, `Tool` class splices, doors, nested
-fragments — conditional branches accumulate, exactly as they do on the
-requirement channel (`AI/Wire.ts`).
+Mention-is-presence holds in the type system through the R channel
+(§2): every `Tool<Self>` class the prose splices rides the `make`
+Layer's requirement channel (its physics must be provided), and the
+wire surface is read LAZILY from that channel — nothing is computed or
+branded at layer construction. Consumers type against the un-provided
+`make` result (`Layer.provide` consumes the requirements the surface
+is read from). Inline `ToolImpl`s and doors carry no tag and are
+runtime-only: a tool that wants compiler-checked coverage is a
+`Tool<Self>` class.
 
 The driver exposes only the FACTS — `AI.ToolNames<L>` (a union of
 literal names) and `AI.ToolInput<L, Name>` (that tool's parameter type,

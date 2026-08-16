@@ -6,26 +6,6 @@ import type { Eval } from "./Eval.ts";
 import type { Tools } from "./Tools.ts";
 
 /**
- * The `"./tools.js"` adapter: re-shape the evaluator's raw async
- * bridges into Effect-returning capabilities. A rejected bridge call
- * carries the tool's DECLARED failure (`_tag` intact — in-process it
- * is the failure value itself; across an isolate it is reconstructed
- * from JSON), and `tryPromise`'s identity catch makes it the Effect's
- * typed failure channel, so `Effect.catchTag("TheTag", …)` works
- * inside the program.
- */
-const toolsAdapter = (names: ReadonlyArray<string>): string =>
-  typescript`
-    import * as Effect from "effect/Effect";
-    import * as raw from "./tools.raw.js";
-
-    const lift = (call) => (input) =>
-      Effect.tryPromise({ try: () => call(input), catch: (error) => error });
-
-    ${names.map((name) => `export const ${name} = lift(raw.${name});`).join("\n")}
-  `;
-
-/**
  * CODEMODE, EFFECT convention — the model writes a COMPLETE module
  * that default-exports an `Effect` program: capabilities imported
  * from `"./tools.js"` are Effect-returning, composed with
@@ -92,3 +72,23 @@ export const CodeModeEffect = (
       ${signatures}
     `,
   });
+
+/**
+ * The `"./tools.js"` adapter: re-shape the evaluator's raw async
+ * bridges into Effect-returning capabilities. A rejected bridge call
+ * carries the tool's DECLARED failure (`_tag` intact — in-process it
+ * is the failure value itself; across an isolate it is reconstructed
+ * from JSON), and `tryPromise`'s identity catch makes it the Effect's
+ * typed failure channel, so `Effect.catchTag("TheTag", …)` works
+ * inside the program.
+ */
+const toolsAdapter = (names: ReadonlyArray<string>): string =>
+  typescript`
+    import * as Effect from "effect/Effect";
+    import * as raw from "./tools.raw.js";
+
+    const lift = (call) => (input) =>
+      Effect.tryPromise({ try: () => call(input), catch: (error) => error });
+
+    ${names.map((name) => `export const ${name} = lift(raw.${name});`).join("\n")}
+  `;

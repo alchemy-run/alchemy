@@ -32,9 +32,9 @@ export interface Fragment<
   readonly template: TemplateStringsArray;
   /**
    * The splices, with their TYPES retained — mention-is-presence as a
-   * type-level fact: `Wire.FragmentTools` extracts every tool/door a
-   * fragment mentions, so a UI can prove renderer coverage against
-   * the charter's actual surface (see Wire.ts).
+   * type-level fact: a spliced `Tool<Self>` class charges the host
+   * Layer's requirement channel, from which `AI.ToolNames` /
+   * `AI.ToolInput` read the wire surface (see Agent.ts).
    */
   readonly refs: Refs;
 }
