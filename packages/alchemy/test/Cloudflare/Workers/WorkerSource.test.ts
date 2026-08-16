@@ -145,10 +145,14 @@ describe("resolveSource", () => {
   it.effect("rejects source combined with main/script/vite", () =>
     provide(
       Effect.gen(function* () {
+        // `main` only competes with `source` for EXTERNAL workers — an
+        // impl-carrying Worker's `main: import.meta.url` anchors the Effect
+        // program's module, not the bundle entry (see resolveSource).
         const result = yield* Effect.result(
           resolveSource({
             source: { provider: providerModule, devMode: "bundle" },
             main: "./worker.ts",
+            isExternal: true,
           }),
         );
         expect(result._tag).toBe("Failure");
@@ -158,6 +162,20 @@ describe("resolveSource", () => {
             '"main"',
           );
         }
+      }),
+    ),
+  );
+
+  it.effect("allows source with an impl-anchoring main (isExternal unset)", () =>
+    provide(
+      Effect.gen(function* () {
+        const result = yield* Effect.result(
+          resolveSource({
+            source: { provider: providerModule, devMode: "bundle" },
+            main: "./worker.ts",
+          }),
+        );
+        expect(result._tag).toBe("Success");
       }),
     ),
   );
