@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Sink from "effect/Sink";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Raised when a batch API keeps reporting entries as unprocessed after the
@@ -74,7 +75,7 @@ export const makeBatchedSink = <In, Out, Err>(
 ): Sink.Sink<void, In, never, Err | BatchRetryExhaustedError<In>> => {
   const schedule =
     options.retrySchedule ??
-    Schedule.max([Schedule.recurs(5), Schedule.exponential("200 millis")]);
+    Schedule.max([Schedule.recurs(5), cappedExponential("200 millis")]);
 
   const onRejected =
     options.onRejected ??

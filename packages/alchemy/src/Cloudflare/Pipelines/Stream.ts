@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const StreamTypeId = "Cloudflare.Pipelines.Stream" as const;
 type StreamTypeId = typeof StreamTypeId;
@@ -368,7 +369,7 @@ export const StreamProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "StreamInUse",
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              cappedExponential("500 millis"),
               Schedule.recurs(8),
             ]),
           }),

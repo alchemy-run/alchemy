@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface NetworkAclEntryProps {
   /**
@@ -399,7 +400,7 @@ export const NetworkAclEntryProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "EntryNotYetVisible",
               schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
+                cappedExponential("500 millis"),
                 Schedule.recurs(8),
               ]),
             }),

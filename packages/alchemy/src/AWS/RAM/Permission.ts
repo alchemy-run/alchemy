@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * The policy template of a customer managed permission — the actions a
@@ -376,7 +377,7 @@ export const PermissionProvider = () =>
               Effect.retry({
                 while: (e): boolean =>
                   e._tag === "OperationNotPermittedException",
-                schedule: Schedule.exponential("2 seconds"),
+                schedule: cappedExponential("2 seconds"),
                 times: 8,
               }),
               Effect.catchTag("UnknownResourceException", () => Effect.void),

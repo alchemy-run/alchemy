@@ -17,6 +17,7 @@ import {
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { StreamArn } from "./Stream.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type ConsumerName = string;
 
@@ -196,7 +197,7 @@ const adoptExistingConsumer = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConsumerRegistryNotConsistent",
-      schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(8)]),
+      schedule: Schedule.max([cappedExponential(250), Schedule.recurs(8)]),
     }),
     Effect.catchTag("ConsumerRegistryNotConsistent", () =>
       Effect.fail(
@@ -226,7 +227,7 @@ const waitForConsumerStatus = (
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "ConsumerStatusNotReady" || e._tag === "ParseError",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
+      schedule: Schedule.max([cappedExponential(500), Schedule.recurs(60)]),
     }),
   );
 
@@ -240,7 +241,7 @@ const waitForConsumerDeleted = (consumerArn: string) =>
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "ConsumerStillExists" || e._tag === "ParseError",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
+      schedule: Schedule.max([cappedExponential(500), Schedule.recurs(60)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -322,7 +323,7 @@ export const StreamConsumerProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "ResourceNotFoundException",
               schedule: Schedule.max([
-                Schedule.exponential(500),
+                cappedExponential(500),
                 Schedule.recurs(8),
               ]),
             }),

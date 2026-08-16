@@ -12,6 +12,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Alerting.Webhook" as const;
 type TypeId = typeof TypeId;
@@ -216,7 +217,7 @@ export const NotificationWebhookProvider = () =>
               while: (e) => e._tag === "WebhookTestFailed",
               schedule: Schedule.max([
                 Schedule.min([
-                  Schedule.exponential("1 second"),
+                  cappedExponential("1 second"),
                   Schedule.spaced("5 seconds"),
                 ]),
                 Schedule.recurs(24),
@@ -255,7 +256,7 @@ export const NotificationWebhookProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
               schedule: Schedule.max([
-                Schedule.exponential("1 second"),
+                cappedExponential("1 second"),
                 Schedule.recurs(5),
               ]),
             }),

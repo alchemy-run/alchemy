@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type ScheduledActionName = string;
 
@@ -317,7 +318,7 @@ export const ScheduledActionProvider = () =>
                 while: (error) => error._tag === "ResourceContentionFault",
                 schedule: Schedule.max([
                   Schedule.recurs(5),
-                  Schedule.exponential("250 millis"),
+                  cappedExponential("250 millis"),
                 ]),
               }),
             );

@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { cappedExponential } from "../../Util/Retry.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
@@ -823,7 +824,7 @@ export const makeImageSource = Effect.gen(function* () {
       yield* docker.image.push(imageUri, credentials, platform).pipe(
         Effect.retry({
           while: (): boolean => true,
-          schedule: Schedule.exponential("2 seconds"),
+          schedule: cappedExponential("2 seconds"),
           times: 3,
         }),
       );

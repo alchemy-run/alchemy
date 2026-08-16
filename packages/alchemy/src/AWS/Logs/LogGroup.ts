@@ -14,6 +14,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type LogGroupName = string;
 export type LogGroupArn =
@@ -412,7 +413,7 @@ export const LogGroupProvider = () =>
                 while: (error) =>
                   error._tag === "OperationAbortedException" ||
                   error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
+                schedule: cappedExponential(100),
                 times: 8,
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -426,7 +427,7 @@ export const LogGroupProvider = () =>
                 while: (error) =>
                   error._tag === "OperationAbortedException" ||
                   error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
+                schedule: cappedExponential(100),
                 times: 8,
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),

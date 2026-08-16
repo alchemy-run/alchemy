@@ -34,6 +34,7 @@ import {
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type InstanceId<ID extends string = string> = `i-${ID}`;
 export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
@@ -557,7 +558,7 @@ export const InstanceProvider = () =>
               error instanceof InstanceStateMismatch ||
               isPendingInstanceLookupError(error),
             schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
+              cappedExponential("250 millis"),
               Schedule.recurs(8),
             ]),
           }),
@@ -787,7 +788,7 @@ export const InstanceProvider = () =>
                 Effect.retry({
                   while: isPendingInstanceProfileError,
                   schedule: Schedule.max([
-                    Schedule.exponential("500 millis"),
+                    cappedExponential("500 millis"),
                     Schedule.recurs(8),
                   ]),
                 }),

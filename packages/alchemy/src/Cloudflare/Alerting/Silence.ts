@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Alerting.Silence" as const;
 type TypeId = typeof TypeId;
@@ -252,7 +253,7 @@ export const SilenceProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "SilencePending",
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              cappedExponential("500 millis"),
               Schedule.recurs(8),
             ]),
           }),

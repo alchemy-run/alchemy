@@ -23,6 +23,7 @@ import {
   localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
   isResourceOfType(value, "Cloudflare.Queues.Queue");
@@ -216,7 +217,7 @@ export const ProviderLive = () =>
           Effect.retry({
             while: (e) => e._tag === "QueueInUseByEventNotification",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              cappedExponential("1 second"),
               Schedule.recurs(8),
             ]),
           }),
@@ -467,7 +468,7 @@ export const ProviderLocal = () =>
                 Effect.retry({
                   while: (e) => e._tag === "QueueInUseByEventNotification",
                   schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
+                    cappedExponential("1 second"),
                     Schedule.recurs(8),
                   ]),
                 }),

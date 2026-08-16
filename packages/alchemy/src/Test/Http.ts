@@ -12,6 +12,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import { cappedExponential } from "../Util/Retry.ts";
 
 /**
  * A freshly-deployed Cloudflare Worker is not instantly reachable over HTTP.
@@ -66,7 +67,7 @@ export const executeWhenReady = (
       Effect.retry({
         while: (error) => error instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
+          cappedExponential("500 millis"),
           Schedule.recurs(options?.times ?? 20),
         ]),
       }),
@@ -98,7 +99,7 @@ export interface EdgeGuardOptions {
 }
 
 const defaultGuardSchedule = Schedule.min([
-  Schedule.exponential("500 millis"),
+  cappedExponential("500 millis"),
   Schedule.spaced("3 seconds"),
 ]);
 

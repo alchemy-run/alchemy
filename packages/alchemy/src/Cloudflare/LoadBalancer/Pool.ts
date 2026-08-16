@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.LoadBalancer.Pool" as const;
 type TypeId = typeof TypeId;
@@ -337,7 +338,7 @@ export const PoolProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "PoolInUse",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              cappedExponential("1 second"),
               Schedule.recurs(6),
             ]),
           }),

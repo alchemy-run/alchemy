@@ -20,6 +20,7 @@ import {
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type SubnetId<ID extends string = string> = `subnet-${ID}`;
 export const SubnetId = <ID extends string>(id: ID): ID & SubnetId<ID> =>
@@ -418,7 +419,7 @@ export const SubnetProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "InvalidVpcID.NotFound",
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
                 Effect.map((createResult) => {
                   const newSubnetId = createResult.Subnet!

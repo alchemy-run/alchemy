@@ -23,6 +23,7 @@ import {
   script,
   yes,
 } from "./_shared.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const includeFlag = Flag.string("include").pipe(
   Flag.withDescription(
@@ -588,7 +589,7 @@ const nukeCommand = Command.make(
           );
 
       const retrySchedule = Schedule.min([
-        Schedule.exponential("1 second"),
+        cappedExponential("1 second"),
         Schedule.spaced("15 seconds"),
       ]);
 

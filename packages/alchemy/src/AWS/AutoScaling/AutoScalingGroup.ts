@@ -17,6 +17,7 @@ import type {
   LaunchTemplateName,
   LaunchTemplate as LaunchTemplateResource,
 } from "./LaunchTemplate.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type AutoScalingGroupName = string;
 
@@ -488,7 +489,7 @@ export const AutoScalingGroupProvider = () =>
                 while: () => true,
                 schedule: Schedule.max([
                   Schedule.recurs(8),
-                  Schedule.exponential("250 millis"),
+                  cappedExponential("250 millis"),
                 ]),
               }),
             );
@@ -564,7 +565,7 @@ export const AutoScalingGroupProvider = () =>
                 (error as Error).message === "AutoScalingGroupStillExists",
               schedule: Schedule.max([
                 Schedule.recurs(12),
-                Schedule.exponential("250 millis"),
+                cappedExponential("250 millis"),
               ]),
             }),
           );

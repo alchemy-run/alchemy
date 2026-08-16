@@ -32,6 +32,7 @@ import type {
   DatabaseConnectionWithSecrets,
   PrismaSecretConnection,
 } from "./Types.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 export interface ConnectionProps {
   /**
@@ -311,7 +312,7 @@ const uniqueConnection = (
 class GeneratedConnectionNotVisible extends Error {}
 
 const generatedConnectionRecoverySchedule = Schedule.max([
-  Schedule.exponential("250 millis"),
+  cappedExponential("250 millis"),
   Schedule.recurs(6),
 ]);
 

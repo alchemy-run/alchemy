@@ -8,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface AdapterProps {
   /**
@@ -131,7 +132,7 @@ const throttleRetry = <A, E extends { readonly _tag: string }, R>(
       while: (e): boolean =>
         e._tag === "ProvisionedThroughputExceededException" ||
         e._tag === "ThrottlingException",
-      schedule: Schedule.exponential("1 second"),
+      schedule: cappedExponential("1 second"),
       times: 5,
     }),
   );

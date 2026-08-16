@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * The SQL query and table configurations for a data export.
@@ -197,10 +198,7 @@ const retryThrottling = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(5),
-    ]),
+    schedule: Schedule.max([cappedExponential("1 second"), Schedule.recurs(5)]),
   });
 
 export const ExportProvider = () =>

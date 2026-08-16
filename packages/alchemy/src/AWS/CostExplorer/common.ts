@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { diffTags } from "../../Tags.ts";
 import { Region } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 // Cost Explorer is a global service served exclusively from the us-east-1
 // endpoint. Every control-plane call must target that region regardless of
@@ -17,10 +18,7 @@ export const CE_REGION = "us-east-1" as const;
 // Rate limit exceeded`. Retry it with capped exponential backoff, bounded
 // (~47s total) so a genuine quota LimitExceeded still surfaces quickly.
 const ceThrottleRetrySchedule = Schedule.max([
-  Schedule.min([
-    Schedule.exponential("1 second"),
-    Schedule.spaced("8 seconds"),
-  ]),
+  Schedule.min([cappedExponential("1 second"), Schedule.spaced("8 seconds")]),
   Schedule.recurs(8),
 ]);
 

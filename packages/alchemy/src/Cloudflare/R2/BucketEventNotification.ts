@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Bucket } from "./Bucket.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.R2.BucketEventNotification" as const;
 type TypeId = typeof TypeId;
@@ -457,7 +458,7 @@ export const BucketEventNotificationProvider = () =>
 // before the event-notification endpoints accept it. Retry only that narrow
 // not-found lag with a bounded budget.
 const r2EventNotificationConsistencySchedule = Schedule.max([
-  Schedule.exponential(250),
+  cappedExponential(250),
   Schedule.recurs(6),
 ]);
 

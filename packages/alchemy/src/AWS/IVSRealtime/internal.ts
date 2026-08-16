@@ -2,6 +2,7 @@ import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { diffTags } from "../../Tags.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * IVS Real-Time wire tags allow `undefined` values in the record type —
@@ -76,8 +77,5 @@ export const retryWhileThrottled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([cappedExponential("1 second"), Schedule.recurs(6)]),
   });

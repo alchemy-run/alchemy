@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { fetchObservedTags, syncResourceTags, toTagList } from "./internal.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * VPC configuration provisioned for a {@link Host} whose self-managed
@@ -294,7 +295,7 @@ export const HostProvider = () =>
           yield* codeconnections.deleteHost({ HostArn: output.hostArn }).pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "ResourceUnavailableException",
-              schedule: Schedule.exponential("2 seconds"),
+              schedule: cappedExponential("2 seconds"),
               times: 8,
             }),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),

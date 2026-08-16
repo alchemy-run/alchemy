@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import type { Providers } from "../Providers.ts";
 import type { WebsiteTextEncoding } from "./shared.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface AssetFileOption {
   /**
@@ -447,7 +448,7 @@ const retryForBucketReadiness = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.retry({
       while: isMissingBucket,
       schedule: Schedule.max([
-        Schedule.exponential("100 millis"),
+        cappedExponential("100 millis"),
         Schedule.recurs(30),
       ]).pipe(
         Schedule.modifyDelay(({ duration }) =>

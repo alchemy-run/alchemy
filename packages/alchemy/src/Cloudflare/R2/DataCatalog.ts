@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.R2.DataCatalog" as const;
 type TypeId = typeof TypeId;
@@ -374,7 +375,7 @@ export const DataCatalogProvider = () =>
 // A freshly-created bucket (or freshly-enabled catalog) can briefly 404 on
 // the r2-catalog endpoints before the warehouse propagates.
 const catalogConsistencySchedule = Schedule.max([
-  Schedule.exponential(100),
+  cappedExponential(100),
   Schedule.recurs(5),
 ]);
 

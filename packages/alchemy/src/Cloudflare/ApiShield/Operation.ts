@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.ApiShield.Operation" as const;
 type TypeId = typeof TypeId;
@@ -160,7 +161,7 @@ export const OperationProvider = () =>
             // the blip, then skip zones the token genuinely can't read.
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
-              schedule: Schedule.exponential("500 millis"),
+              schedule: cappedExponential("500 millis"),
               times: 5,
             }),
             Effect.catchTag("Forbidden", () =>

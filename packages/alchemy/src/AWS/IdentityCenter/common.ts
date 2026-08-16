@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Unwrap an identity-store sensitive field. Distilled decodes
@@ -29,7 +30,7 @@ export const retryIdentityCenter = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         error?._tag === "ConflictException" ||
         error?._tag === "ThrottlingException" ||
         error?._tag === "InternalServerException",
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+      schedule: Schedule.max([cappedExponential(200), Schedule.recurs(8)]),
     }),
   );
 

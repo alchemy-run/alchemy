@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../../Diff.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const DEFAULT_MAXIMUM_RETRY_ATTEMPTS = 2;
 const DEFAULT_MAXIMUM_EVENT_AGE_SECONDS = 21_600;
@@ -38,7 +39,7 @@ const retryOnConflict = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "ResourceConflictException",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+      schedule: Schedule.max([cappedExponential(500), Schedule.recurs(10)]),
     }),
   );
 
@@ -143,7 +144,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
             "The function execution role does not have permissions to call",
           ) ??
             false)),
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+      schedule: Schedule.max([cappedExponential(500), Schedule.recurs(10)]),
     }),
   );
 });

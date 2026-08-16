@@ -33,6 +33,7 @@ import { recordsEqual } from "../Util/equal.ts";
 import { runPgMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 const DEFAULT_REGION: NeonRegion = "aws-us-east-1";
 const DEFAULT_PG_VERSION: NeonPgVersion = 17;
@@ -556,7 +557,7 @@ export const waitForOperations = (
             );
           },
           schedule: Schedule.max([
-            Schedule.exponential(Duration.millis(500), 1.5),
+            cappedExponential(Duration.millis(500), 1.5),
             Schedule.recurs(60),
           ]),
         }),

@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { AWSEnvironment } from "./Environment.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 /**
  * Tag key used to identify the alchemy assets bucket.
@@ -251,13 +252,13 @@ export const createAssetsBucket = Effect.gen(function* () {
       Effect.retry({
         while: (e): boolean =>
           e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
-        schedule: Schedule.exponential(100),
+        schedule: cappedExponential(100),
       }),
     );
 
   yield* s3.headBucket({ Bucket: bucketName }).pipe(
     Effect.retry({
-      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
+      schedule: Schedule.max([cappedExponential(100), Schedule.recurs(10)]),
     }),
   );
 

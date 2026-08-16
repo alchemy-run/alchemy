@@ -13,6 +13,7 @@ import {
   type StateService,
 } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 /**
  * Persisted shape of an HTTP state store endpoint — `{ url, authToken }`.
@@ -226,7 +227,7 @@ const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
     // the issue isn't transient and we'd rather surface a hard
     // failure than block the deploy indefinitely.
     schedule: Schedule.max([
-      Schedule.min([Schedule.exponential(100), Schedule.spaced("2 seconds")]),
+      Schedule.min([cappedExponential(100), Schedule.spaced("2 seconds")]),
       Schedule.recurs(5),
     ]),
   });

@@ -9,6 +9,7 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import createIgnore from "@alchemy.run/node-utils/ignore";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -549,7 +550,7 @@ export const uploadAssets = Effect.fn(function* (
       while: (error): boolean =>
         error._tag === "Unauthorized" ||
         error._tag === "AssetUploadSessionError",
-      schedule: Schedule.exponential("1 second"),
+      schedule: cappedExponential("1 second"),
       times: 3,
     }),
   );

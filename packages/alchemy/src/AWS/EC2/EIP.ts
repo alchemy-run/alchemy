@@ -9,6 +9,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type EIPArn =
   `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
@@ -366,7 +367,7 @@ export const EIPProvider = () =>
                   );
                 },
                 schedule: Schedule.max([
-                  Schedule.exponential(1000, 1.5),
+                  cappedExponential(1000, 1.5),
                   Schedule.recurs(20),
                 ]).pipe(
                   Schedule.tap(({ attempt }) =>

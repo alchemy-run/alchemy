@@ -20,6 +20,7 @@ import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type BucketName = string;
 export type BucketArn = `arn:aws:s3:::${BucketName}`;
@@ -539,7 +540,7 @@ export const BucketProvider = () =>
                   while: (e) =>
                     e._tag === "OperationAborted" ||
                     e._tag === "ServiceUnavailable",
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
               );
           }
@@ -562,7 +563,7 @@ export const BucketProvider = () =>
                 while: (e) =>
                   e._tag === "OperationAborted" ||
                   e._tag === "ServiceUnavailable",
-                schedule: Schedule.exponential(100),
+                schedule: cappedExponential(100),
               }),
             );
         }
@@ -570,7 +571,7 @@ export const BucketProvider = () =>
         // Wait for bucket to exist (eventual consistency)
         yield* Effect.retry(
           s3.headBucket({ Bucket: bucketName }),
-          Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
+          Schedule.max([cappedExponential(100), Schedule.recurs(10)]),
         );
         yield* Effect.logInfo(
           `S3 Bucket create: bucket is available ${bucketName}`,
@@ -1610,7 +1611,7 @@ export const BucketProvider = () =>
                     e._tag === "BucketNotEmpty" ||
                     e._tag === "BucketHasAccessPointsAttached",
                   schedule: Schedule.max([
-                    Schedule.exponential(250),
+                    cappedExponential(250),
                     Schedule.recurs(7),
                   ]),
                 }),

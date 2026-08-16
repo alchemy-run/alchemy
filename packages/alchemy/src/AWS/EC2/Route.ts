@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { RouteTableId } from "./RouteTable.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface RouteProps {
   /**
@@ -368,7 +369,7 @@ export const RouteProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "InvalidRouteTableID.NotFound",
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
               );
             yield* session.note(`Route created: ${dest}`);
@@ -377,7 +378,7 @@ export const RouteProvider = () =>
               Effect.tapError(Effect.log),
               Effect.retry({
                 while: (e) => e._tag === "InvalidRouteTableID.NotFound",
-                schedule: Schedule.exponential(100),
+                schedule: cappedExponential(100),
               }),
             );
             yield* session.note(`Route target updated: ${dest}`);

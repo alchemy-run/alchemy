@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Application type literal — every value Cloudflare's Access service
@@ -348,7 +349,7 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
         e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
       schedule: Schedule.max([
         Schedule.min([
-          Schedule.exponential("1 second", 1.5),
+          cappedExponential("1 second", 1.5),
           Schedule.spaced("5 seconds"),
         ]),
         Schedule.recurs(12),

@@ -7,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Deleting a service-linked role is asynchronous: `deleteServiceLinkedRole`
@@ -173,7 +174,7 @@ export const ServiceLinkedRoleProvider = () =>
               error._tag === "LimitExceededException" ||
               error._tag === "ServiceFailureException",
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              cappedExponential("500 millis"),
               Schedule.recurs(6),
             ]),
           }),

@@ -20,6 +20,7 @@ import {
   unresolvedProjectIdOf,
 } from "./Refs.ts";
 import type { SourceRepository as ApiSourceRepository } from "./Types.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 export interface SourceRepositoryProps {
   /**
@@ -199,7 +200,7 @@ const attrsFrom = (
 class SourceRepositoryLinkNotReady extends Error {}
 
 const sourceRepositoryConsistencySchedule = Schedule.max([
-  Schedule.exponential("250 millis"),
+  cappedExponential("250 millis"),
   Schedule.recurs(5),
 ]);
 

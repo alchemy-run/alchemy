@@ -24,6 +24,7 @@ import { toWireHours } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type StreamRecord = lambda.KinesisStreamRecord;
 
@@ -423,7 +424,7 @@ const waitForStreamActive = (streamName: string) =>
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "StreamNotActive" || e._tag === "ParseError",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
+      schedule: Schedule.max([cappedExponential(500), Schedule.recurs(60)]),
     }),
   );
 
@@ -437,7 +438,7 @@ const waitForStreamDeleted = (streamName: string) =>
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "StreamStillExists" || e._tag === "ParseError",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
+      schedule: Schedule.max([cappedExponential(500), Schedule.recurs(60)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -533,7 +534,7 @@ export const StreamProvider = () =>
                 Effect.catchTag("ResourceInUseException", () => Effect.void),
                 Effect.retry({
                   while: (e: any) => e._tag === "LimitExceededException",
-                  schedule: Schedule.exponential(1000),
+                  schedule: cappedExponential(1000),
                 }),
               );
 

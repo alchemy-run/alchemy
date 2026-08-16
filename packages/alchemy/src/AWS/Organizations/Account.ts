@@ -14,6 +14,7 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type AccountId = string;
 export type AccountArn = string;
@@ -404,6 +405,6 @@ const retryAccountManagement = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       while: (error: any) =>
         error?._tag === "TooManyRequestsException" ||
         error?._tag === "InternalServerException",
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+      schedule: Schedule.max([cappedExponential(200), Schedule.recurs(8)]),
     }),
   );

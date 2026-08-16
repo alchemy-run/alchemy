@@ -12,6 +12,7 @@ import {
   matchesDetectorIdentity,
   retryConcurrent,
 } from "./common.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 class AnomalyDetectorNotVisible extends Data.TaggedError(
   "AnomalyDetectorNotVisible",
@@ -123,7 +124,7 @@ const toDeleteRequest = (
 };
 
 const detectorReadinessSchedule = Schedule.max([
-  Schedule.exponential(200),
+  cappedExponential(200),
   Schedule.recurs(8),
 ]);
 

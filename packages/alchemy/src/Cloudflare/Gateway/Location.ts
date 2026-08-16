@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Gateway.Location" as const;
 type TypeId = typeof TypeId;
@@ -267,7 +268,7 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              schedule: cappedExponential("500 millis"),
               times: 8,
             }),
           );
@@ -313,7 +314,7 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              schedule: cappedExponential("500 millis"),
               times: 8,
             }),
           );

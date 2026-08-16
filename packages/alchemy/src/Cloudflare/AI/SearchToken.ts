@@ -12,6 +12,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.AI.SearchToken" as const;
 type TypeId = typeof TypeId;
@@ -334,7 +335,7 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "InvalidTokenCredentials",
-      schedule: Schedule.exponential("1 second"),
+      schedule: cappedExponential("1 second"),
       times: 6,
     }),
   );

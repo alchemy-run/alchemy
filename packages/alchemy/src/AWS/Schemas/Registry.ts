@@ -15,6 +15,7 @@ import {
 } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import { syncSchemasTags } from "./internal.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface RegistryProps {
   /**
@@ -301,7 +302,7 @@ export const RegistryProvider = () =>
                 e._tag === "InternalServerErrorException" ||
                 e._tag === "ServiceUnavailableException",
               schedule: Schedule.max([
-                Schedule.exponential(500),
+                cappedExponential(500),
                 Schedule.recurs(8),
               ]),
             }),

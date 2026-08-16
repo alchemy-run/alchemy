@@ -24,6 +24,7 @@ import {
   stringifyPolicyDocument,
   toTagRecord,
 } from "./common.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type RoleName = string;
 export type RoleArn = `arn:aws:iam::${AccountID}:role/${RoleName}`;
@@ -40,7 +41,7 @@ const invalidPrincipalRetry = {
   while: (e: { _tag: string; message?: string }) =>
     e._tag === "MalformedPolicyDocumentException" &&
     (e.message?.includes("Invalid principal") ?? false),
-  schedule: Schedule.exponential("2 seconds"),
+  schedule: cappedExponential("2 seconds"),
   times: 5,
 } as const;
 
@@ -732,7 +733,7 @@ export const RoleProvider = () =>
                   error._tag === "LimitExceededException" ||
                   error._tag === "ServiceFailureException",
                 schedule: Schedule.max([
-                  Schedule.exponential("250 millis"),
+                  cappedExponential("250 millis"),
                   Schedule.recurs(8),
                 ]),
               }),

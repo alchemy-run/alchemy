@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Pipelines.Pipeline" as const;
 type TypeId = typeof TypeId;
@@ -176,7 +177,7 @@ export const PipelineProvider = () =>
         yield* getPipeline(accountId, observed.id).pipe(
           Effect.repeat({
             schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
+              cappedExponential("250 millis"),
               Schedule.recurs(8),
             ]),
             until: (p) => p === undefined,
@@ -198,7 +199,7 @@ export const PipelineProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "TableNotFound",
               schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
+                cappedExponential("500 millis"),
                 Schedule.recurs(6),
               ]),
             }),

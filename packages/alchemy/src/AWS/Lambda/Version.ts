@@ -13,6 +13,7 @@ import { Stage } from "../../Stage.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type { Providers } from "../Providers.ts";
 import type { Function } from "./Function.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface VersionProps {
   /**
@@ -565,7 +566,7 @@ export const VersionProvider = () =>
                 error._tag === "PreconditionFailedException" ||
                 error._tag === "ResourceConflictException",
               schedule: Schedule.max([
-                Schedule.exponential("250 millis"),
+                cappedExponential("250 millis"),
                 Schedule.recurs(8),
               ]),
             }),

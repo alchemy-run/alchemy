@@ -80,6 +80,7 @@ import type {
   EnvironmentVariable as ApiEnvironmentVariable,
   PrismaRegionId,
 } from "./Types.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
 
 type ObservedDeployment = Omit<ApiDeployment, "createdAt"> & {
@@ -838,7 +839,7 @@ const stopTrackedDevProcess = Effect.fn(function* (processKey: string) {
 });
 
 const projectConsistencySchedule = Schedule.max([
-  Schedule.exponential(Duration.millis(500)),
+  cappedExponential(Duration.millis(500)),
   Schedule.recurs(6),
 ]);
 

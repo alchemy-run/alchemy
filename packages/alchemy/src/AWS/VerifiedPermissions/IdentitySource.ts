@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const unwrap = (v: string | Redacted.Redacted<string> | undefined) =>
   v === undefined ? undefined : Redacted.isRedacted(v) ? Redacted.value(v) : v;
@@ -372,7 +373,7 @@ export const IdentitySourceProvider = () =>
                 Effect.retry({
                   while: (e): boolean => e._tag === "ResourceNotFoundException",
                   schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
+                    cappedExponential("1 second"),
                     Schedule.recurs(5),
                   ]),
                 }),

@@ -25,6 +25,7 @@ import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type TableName = string;
 
@@ -684,7 +685,7 @@ export const TableProvider = () =>
             Effect.retry({
               while: isRetryableControlPlaneError,
               schedule: Schedule.max([
-                Schedule.exponential(100),
+                cappedExponential(100),
                 Schedule.recurs(30),
               ]),
             }),
@@ -705,7 +706,7 @@ export const TableProvider = () =>
                 e._tag === "ContinuousBackupsUnavailableException" ||
                 isRetryableControlPlaneError(e),
               schedule: Schedule.max([
-                Schedule.exponential(250),
+                cappedExponential(250),
                 Schedule.recurs(30),
               ]),
             }),
@@ -737,7 +738,7 @@ export const TableProvider = () =>
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([
-              Schedule.exponential(250),
+              cappedExponential(250),
               Schedule.recurs(15),
             ]),
           }),
@@ -750,7 +751,7 @@ export const TableProvider = () =>
             Effect.retry({
               while: isRetryableControlPlaneError,
               schedule: Schedule.max([
-                Schedule.exponential(250),
+                cappedExponential(250),
                 Schedule.recurs(15),
               ]),
             }),
@@ -762,7 +763,7 @@ export const TableProvider = () =>
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([
-              Schedule.exponential(250),
+              cappedExponential(250),
               Schedule.recurs(15),
             ]),
           }),
@@ -829,7 +830,7 @@ export const TableProvider = () =>
             Effect.retry({
               while: isRetryableControlPlaneError,
               schedule: Schedule.max([
-                Schedule.exponential(250),
+                cappedExponential(250),
                 Schedule.recurs(15),
               ]),
             }),
@@ -855,7 +856,7 @@ export const TableProvider = () =>
             Effect.retry({
               while: isRetryableControlPlaneError,
               schedule: Schedule.max([
-                Schedule.exponential(250),
+                cappedExponential(250),
                 Schedule.recurs(15),
               ]),
             }),
@@ -878,7 +879,7 @@ export const TableProvider = () =>
             Effect.retry({
               while: isRetryableControlPlaneError,
               schedule: Schedule.max([
-                Schedule.exponential(250),
+                cappedExponential(250),
                 Schedule.recurs(15),
               ]),
             }),
@@ -1011,7 +1012,7 @@ export const TableProvider = () =>
             Effect.retry({
               while: isRetryableControlPlaneError,
               schedule: Schedule.max([
-                Schedule.exponential(250),
+                cappedExponential(250),
                 Schedule.recurs(15),
               ]),
             }),
@@ -1278,7 +1279,7 @@ export const TableProvider = () =>
               Effect.retry({
                 while: isRetryableReadError,
                 schedule: Schedule.max([
-                  Schedule.exponential(250),
+                  cappedExponential(250),
                   Schedule.recurs(30),
                 ]),
               }),
@@ -1300,7 +1301,7 @@ export const TableProvider = () =>
                   Effect.retry({
                     while: isRetryableReadError,
                     schedule: Schedule.max([
-                      Schedule.exponential(250),
+                      cappedExponential(250),
                       Schedule.recurs(30),
                     ]),
                   }),
@@ -1313,7 +1314,7 @@ export const TableProvider = () =>
                   Effect.retry({
                     while: (e) => e._tag === "InternalServerError",
                     schedule: Schedule.max([
-                      Schedule.exponential(250),
+                      cappedExponential(250),
                       Schedule.recurs(30),
                     ]),
                   }),
@@ -1329,7 +1330,7 @@ export const TableProvider = () =>
                   Effect.retry({
                     while: isRetryableReadError,
                     schedule: Schedule.max([
-                      Schedule.exponential(250),
+                      cappedExponential(250),
                       Schedule.recurs(30),
                     ]),
                   }),
@@ -1590,7 +1591,7 @@ export const TableProvider = () =>
                       e._tag === "ThrottlingException" ||
                       e._tag === "ValidationException",
                     schedule: Schedule.max([
-                      Schedule.exponential(250).pipe(Schedule.jittered),
+                      cappedExponential(250).pipe(Schedule.jittered),
                       Schedule.recurs(12),
                     ]),
                   }),
@@ -1741,7 +1742,7 @@ export const TableProvider = () =>
                   while: (e) =>
                     e._tag === "LimitExceededException" ||
                     e._tag === "InternalServerError",
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
                 // A peer reconciler created the table between our observe and
                 // create; describe it and continue with the sync path.

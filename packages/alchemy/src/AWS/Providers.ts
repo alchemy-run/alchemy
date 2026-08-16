@@ -225,6 +225,7 @@ import * as VpcLattice from "./VpcLattice/index.ts";
 import * as WAFv2 from "./WAFv2/index.ts";
 import * as Website from "./Website/index.ts";
 import * as XRay from "./XRay/index.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "AWS",
@@ -1870,7 +1871,7 @@ const awsRetryFactory: RetryFactory = (lastError) => {
     // the network-flake recovery materially more robust.
     schedule: Schedule.max([
       pipe(
-        Schedule.exponential(Duration.millis(200), 2),
+        cappedExponential(Duration.millis(200), 2),
         Schedule.modifyDelay(
           Effect.fn(function* ({ duration }) {
             const error = yield* Ref.get(lastError);

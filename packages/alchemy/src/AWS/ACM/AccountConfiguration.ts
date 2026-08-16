@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface AccountConfigurationProps {
   /**
@@ -130,7 +131,7 @@ export const AccountConfigurationProvider = () =>
                 Effect.retry({
                   while: (e): boolean => e._tag === "ThrottlingException",
                   schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
+                    cappedExponential("1 second"),
                     Schedule.recurs(5),
                   ]),
                 }),

@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Tags.ZoneResourceTags" as const;
 type TypeId = typeof TypeId;
@@ -22,7 +23,7 @@ type TypeId = typeof TypeId;
 const targetVisibleRetry = {
   while: (e: { _tag: string }) => e._tag === "ZoneTagResourceNotFound",
   schedule: Schedule.max([
-    Schedule.exponential("500 millis"),
+    cappedExponential("500 millis"),
     Schedule.recurs(10),
   ]),
 } as const;

@@ -32,6 +32,7 @@ import {
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
@@ -1193,7 +1194,7 @@ const resolveDurableObjectApplicationRecovery = ({
 // retry (~150s total), which both blows test budgets and needlessly stalls the
 // update→create fallback when the target is genuinely gone.
 const containerApplicationReadinessSchedule = Schedule.max([
-  Schedule.min([Schedule.exponential(150), Schedule.spaced("3 seconds")]),
+  Schedule.min([cappedExponential(150), Schedule.spaced("3 seconds")]),
   Schedule.recurs(10),
 ]);
 

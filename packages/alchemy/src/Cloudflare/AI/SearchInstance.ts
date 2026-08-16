@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.AI.Search" as const;
 type TypeId = typeof TypeId;
@@ -820,7 +821,7 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // polling detects within 6s of propagation completing while still
       // covering a long total window.
       schedule: Schedule.min([
-        Schedule.exponential("1 second", 1.5),
+        cappedExponential("1 second", 1.5),
         Schedule.spaced("6 seconds"),
       ]),
       times: 22,

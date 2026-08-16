@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Schedule from "effect/Schedule";
 import { diffTags, normalizeTags } from "../../Tags.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * AppSync serializes control-plane mutations per API; concurrent resolver /
@@ -21,7 +22,7 @@ export const retryConcurrentModification = <A, E extends { _tag: string }, R>(
     while: (error: E) => error._tag === "ConcurrentModificationException",
     schedule: Schedule.max([
       pipe(
-        Schedule.exponential(Duration.seconds(1), 2),
+        cappedExponential(Duration.seconds(1), 2),
         Schedule.modifyDelay(({ duration }) =>
           Effect.succeed(
             Duration.isGreaterThan(duration, Duration.seconds(8))

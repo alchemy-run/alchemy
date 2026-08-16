@@ -10,6 +10,7 @@ import { createInternalTags, diffTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { BudgetSubscriber } from "./Budget.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * The threshold that triggers a budget action.
@@ -440,7 +441,7 @@ export const BudgetActionProvider = () =>
                   while: (e): boolean =>
                     e._tag === "InvalidParameterException" ||
                     e._tag === "AccessDeniedException",
-                  schedule: Schedule.exponential("2 seconds"),
+                  schedule: cappedExponential("2 seconds"),
                   times: 6,
                 }),
               );
@@ -465,7 +466,7 @@ export const BudgetActionProvider = () =>
                 .pipe(
                   Effect.retry({
                     while: (e): boolean => e._tag === "ResourceLockedException",
-                    schedule: Schedule.exponential("2 seconds"),
+                    schedule: cappedExponential("2 seconds"),
                     times: 6,
                   }),
                 );
@@ -490,7 +491,7 @@ export const BudgetActionProvider = () =>
               // An action mid-execution is briefly locked; wait it out.
               Effect.retry({
                 while: (e): boolean => e._tag === "ResourceLockedException",
-                schedule: Schedule.exponential("2 seconds"),
+                schedule: cappedExponential("2 seconds"),
                 times: 6,
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),

@@ -2,6 +2,7 @@ import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { diffTags } from "../../Tags.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Flatten the wire `Tag[]` list into a plain string record.
@@ -65,8 +66,5 @@ export const retrySmsVoiceThrottled = <
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([cappedExponential("1 second"), Schedule.recurs(6)]),
   });

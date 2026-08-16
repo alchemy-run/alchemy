@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 // CloudFront KeyValueStore APIs are only available from us-east-1, even when
 // the distribution using the store lives elsewhere.
@@ -31,7 +32,7 @@ const isKvsNotReady = (error: unknown) => {
 };
 
 export const cappedKvsRetrySchedule = Schedule.max([
-  Schedule.exponential("100 millis"),
+  cappedExponential("100 millis"),
   Schedule.recurs(24),
 ]).pipe(
   Schedule.modifyDelay(({ duration }) =>

@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type SubscriptionDistribution = logs.Distribution;
 
@@ -289,7 +290,7 @@ export const SubscriptionFilterProvider = () =>
                 while: (error) =>
                   error._tag === "OperationAbortedException" ||
                   error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
+                schedule: cappedExponential(100),
                 times: 8,
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),

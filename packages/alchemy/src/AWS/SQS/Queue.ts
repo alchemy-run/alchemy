@@ -15,6 +15,7 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type QueueName = string;
 export type QueueArn = `arn:aws:sqs:${RegionID}:${AccountID}:${QueueName}`;
@@ -694,7 +695,7 @@ export const QueueProvider = () =>
               Effect.retry({
                 while: (error) => error._tag === "RequestThrottled",
                 schedule: Schedule.max([
-                  Schedule.exponential("500 millis"),
+                  cappedExponential("500 millis"),
                   Schedule.recurs(6),
                 ]),
               }),

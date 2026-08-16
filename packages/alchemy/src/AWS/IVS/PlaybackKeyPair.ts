@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryWhileThrottled, syncIvsTags, toTagRecord } from "./internal.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface PlaybackKeyPairProps {
   /**
@@ -97,7 +98,7 @@ const retryDeleteInternalServer = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (error) => error._tag === "InternalServerException",
     schedule: Schedule.max([
-      Schedule.exponential("500 millis"),
+      cappedExponential("500 millis"),
       Schedule.recurs(6),
     ]),
   });

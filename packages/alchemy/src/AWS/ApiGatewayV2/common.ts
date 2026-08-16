@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Schedule from "effect/Schedule";
 import { diffTags, normalizeTags } from "../../Tags.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * API Gateway v2 ARN helpers. Unlike most services the resource ARNs used
@@ -53,7 +54,7 @@ export const retryOnTooManyRequests = <A, E extends { _tag: string }, R>(
       error._tag === "ConflictException",
     schedule: Schedule.max([
       pipe(
-        Schedule.exponential(Duration.seconds(1), 2),
+        cappedExponential(Duration.seconds(1), 2),
         Schedule.modifyDelay(({ duration }) =>
           Effect.succeed(
             Duration.isGreaterThan(duration, Duration.seconds(20))

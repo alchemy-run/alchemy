@@ -19,6 +19,7 @@ import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
+import { cappedExponential } from "../Util/Retry.ts";
 
 export type SocketAddress = cf.SocketAddress;
 
@@ -101,7 +102,7 @@ export const fromCloudflareFetcher = (
       }),
       Effect.retry({
         while: (error) => error instanceof HandlerNotReady,
-        schedule: Schedule.exponential("100 millis"),
+        schedule: cappedExponential("100 millis"),
         times: 8,
       }),
       Effect.catch((error) =>

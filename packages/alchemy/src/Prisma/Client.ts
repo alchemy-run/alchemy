@@ -69,6 +69,7 @@ import type {
   StartDeploymentResult,
   Workspace,
 } from "./Types.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -568,7 +569,7 @@ const retryTransient = <A, E, R>(
         isRetryableRequest(method, path) &&
         isRetryableStatus(e.status),
       schedule: Schedule.max([
-        Schedule.exponential("100 millis"),
+        cappedExponential("100 millis"),
         Schedule.recurs(4),
       ]),
     }),

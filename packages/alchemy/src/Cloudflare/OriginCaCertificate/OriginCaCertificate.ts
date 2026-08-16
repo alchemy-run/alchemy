@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { findZoneByName, listAllZones } from "../Zone/lookup.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.OriginCaCertificate.OriginCaCertificate" as const;
 type TypeId = typeof TypeId;
@@ -297,7 +298,7 @@ export const OriginCaCertificateProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "CertificateRevocationFailed",
-            schedule: Schedule.exponential("500 millis"),
+            schedule: cappedExponential("500 millis"),
             times: 6,
           }),
           Effect.catchTag("CertificateNotFound", () => Effect.void),

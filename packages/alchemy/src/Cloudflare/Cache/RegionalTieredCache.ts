@@ -8,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Cache.RegionalTieredCache" as const;
 type TypeId = typeof TypeId;
@@ -115,10 +116,7 @@ const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
 // `Unauthorized`/`Forbidden`. Retry with exponential backoff capped at 5s,
 // bounded to ~8 attempts so a persistently-failing call still fails fast.
 const transientAuthRetrySchedule = Schedule.max([
-  Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("5 seconds"),
-  ]),
+  Schedule.min([cappedExponential("500 millis"), Schedule.spaced("5 seconds")]),
   Schedule.recurs(8),
 ]);
 

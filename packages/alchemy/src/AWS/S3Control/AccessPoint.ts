@@ -12,6 +12,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Block-public-access settings for an access point. Unlike buckets, AWS
@@ -231,7 +232,7 @@ const retryWhileAccessPointNotYetDeleted = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "AccessPointNotYetDeleted",
-    schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(6)]),
+    schedule: Schedule.max([cappedExponential(500), Schedule.recurs(6)]),
   });
 
 export const AccessPointProvider = () =>

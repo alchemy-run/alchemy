@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { TableBucketArn } from "./TableBucket.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface NamespaceProps {
   /**
@@ -153,7 +154,7 @@ export const NamespaceProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "NotFoundException",
               schedule: Schedule.max([
-                Schedule.exponential(500),
+                cappedExponential(500),
                 Schedule.recurs(8),
               ]),
             }),
@@ -182,7 +183,7 @@ export const NamespaceProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "ConflictException",
             schedule: Schedule.max([
-              Schedule.exponential(500),
+              cappedExponential(500),
               Schedule.recurs(8),
             ]),
           }),

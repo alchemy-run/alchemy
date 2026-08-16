@@ -12,6 +12,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Pipelines.Sink" as const;
 type TypeId = typeof TypeId;
@@ -349,7 +350,7 @@ export const SinkProvider = () =>
         yield* getSink(accountId, observed.id).pipe(
           Effect.repeat({
             schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
+              cappedExponential("250 millis"),
               Schedule.recurs(8),
             ]),
             until: (s) => s === undefined,
@@ -460,7 +461,7 @@ const deleteSink = (accountId: string, sinkId: string) =>
     Effect.retry({
       while: (e) => e._tag === "SinkInUse",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        cappedExponential("500 millis"),
         Schedule.recurs(8),
       ]),
     }),

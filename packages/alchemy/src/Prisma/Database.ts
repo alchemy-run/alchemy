@@ -34,6 +34,7 @@ import type {
   PrismaRegionId,
   PrismaSecretConnection,
 } from "./Types.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 export interface DatabaseDev {
   /**
@@ -284,7 +285,7 @@ const findDatabaseByName = (
 class GeneratedDatabaseNotVisible extends Error {}
 
 const generatedDatabaseRecoverySchedule = Schedule.max([
-  Schedule.exponential("250 millis"),
+  cappedExponential("250 millis"),
   Schedule.recurs(6),
 ]);
 

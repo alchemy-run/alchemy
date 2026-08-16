@@ -11,6 +11,7 @@ import {
   type StampedMigrationsState,
 } from "../../SQL/Migrations/index.ts";
 import { readSqlFile, splitSqlStatements } from "../../SQL/SqlFile.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
 
@@ -157,7 +158,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              cappedExponential("500 millis"),
               Schedule.recurs(5),
             ]),
           }),

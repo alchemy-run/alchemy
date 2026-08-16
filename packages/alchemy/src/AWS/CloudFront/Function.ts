@@ -7,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface FunctionProps {
   /**
@@ -338,7 +339,7 @@ const isKeyValueStoreAssociationPending = (error: { message?: string }) => {
 };
 
 const cappedCloudFrontRetrySchedule = Schedule.max([
-  Schedule.exponential("100 millis"),
+  cappedExponential("100 millis"),
   Schedule.recurs(24),
 ]).pipe(
   Schedule.modifyDelay(({ duration }) =>

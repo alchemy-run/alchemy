@@ -69,6 +69,7 @@ import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
 import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
@@ -1288,7 +1289,7 @@ export const LiveWorkerProvider = () =>
               Effect.retry({
                 while: (error) => error._tag === "WorkerNotFound",
                 schedule: Schedule.max([
-                  Schedule.exponential(200),
+                  cappedExponential(200),
                   Schedule.recurs(15),
                 ]),
               }),
@@ -1441,7 +1442,7 @@ export const LiveWorkerProvider = () =>
                 Effect.retry({
                   while: (error) => error._tag === "WorkerNotFound",
                   schedule: Schedule.max([
-                    Schedule.exponential(200),
+                    cappedExponential(200),
                     Schedule.recurs(15),
                   ]),
                 }),
@@ -1963,7 +1964,7 @@ export const LiveWorkerProvider = () =>
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
                   schedule: Schedule.max([
-                    Schedule.exponential(200),
+                    cappedExponential(200),
                     Schedule.recurs(15),
                   ]),
                 }),
@@ -2164,7 +2165,7 @@ export const LiveWorkerProvider = () =>
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
             schedule: Schedule.max([
-              Schedule.exponential(100),
+              cappedExponential(100),
               Schedule.recurs(20),
             ]),
           }),
@@ -3810,7 +3811,7 @@ export const LiveWorkerProvider = () =>
                 error._tag === "InternalServerError" ||
                 error._tag === "UnknownCloudflareError",
               schedule: Schedule.max([
-                Schedule.exponential(200),
+                cappedExponential(200),
                 Schedule.recurs(15),
               ]),
             }),
@@ -4699,7 +4700,7 @@ export const LiveWorkerProvider = () =>
                   e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
                 schedule: Schedule.max([
-                  Schedule.exponential(1000),
+                  cappedExponential(1000),
                   Schedule.recurs(5),
                 ]),
               }),

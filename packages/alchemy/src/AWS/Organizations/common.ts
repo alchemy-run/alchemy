@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type OrganizationsTags = Record<string, string>;
 
@@ -55,7 +56,7 @@ export const retryOrganizations = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         error?._tag === "TooManyRequestsException" ||
         error?._tag === "ServiceException" ||
         error?._tag === "FinalizingOrganizationException",
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+      schedule: Schedule.max([cappedExponential(200), Schedule.recurs(8)]),
     }),
   );
 

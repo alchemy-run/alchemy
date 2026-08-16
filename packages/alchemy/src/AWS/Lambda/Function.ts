@@ -53,6 +53,7 @@ import {
 } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
@@ -1430,10 +1431,7 @@ export const FunctionProvider = () =>
         while: (e: any) =>
           e._tag === "ResourceConflictException" ||
           e._tag === "TooManyRequestsException",
-        schedule: Schedule.max([
-          Schedule.exponential(100),
-          Schedule.recurs(30),
-        ]),
+        schedule: Schedule.max([cappedExponential(100), Schedule.recurs(30)]),
       }) as <A, R, Err>(
         self: Effect.Effect<A, Err, R>,
       ) => Effect.Effect<A, Err, R>;
@@ -1669,7 +1667,7 @@ export const FunctionProvider = () =>
                   while: (e) =>
                     e._tag === "ResourceConflictException" ||
                     isRolePropagationError(e),
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
               );
               yield* Effect.logDebug(`updated function code ${id}`);
@@ -1704,7 +1702,7 @@ export const FunctionProvider = () =>
                   while: (e) =>
                     e._tag === "ResourceConflictException" ||
                     isRolePropagationError(e),
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
               );
               yield* Effect.logDebug(`updated function configuration ${id}`);
@@ -1971,7 +1969,7 @@ export const FunctionProvider = () =>
             Effect.map((f) => f.FunctionUrl),
             Effect.retry({
               while: (e: any) => e._tag === "ResourceConflictException",
-              schedule: Schedule.exponential(100),
+              schedule: cappedExponential(100),
             }),
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed(undefined),
@@ -2491,7 +2489,7 @@ export const FunctionProvider = () =>
                   error._tag === "OperationAbortedException" ||
                   error._tag === "ServiceUnavailableException",
                 schedule: Schedule.max([
-                  Schedule.exponential("250 millis"),
+                  cappedExponential("250 millis"),
                   Schedule.recurs(8),
                 ]),
               }),

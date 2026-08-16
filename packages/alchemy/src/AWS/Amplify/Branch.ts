@@ -17,6 +17,7 @@ import {
 } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Deployment stage of an Amplify branch.
@@ -179,7 +180,7 @@ export const BranchProvider = () =>
           // side-effect free, so retry the typed tag with bounded backoff.
           Effect.retry({
             while: (e): boolean => e._tag === "TimeoutException",
-            schedule: Schedule.exponential("2 seconds"),
+            schedule: cappedExponential("2 seconds"),
             times: 3,
           }),
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),

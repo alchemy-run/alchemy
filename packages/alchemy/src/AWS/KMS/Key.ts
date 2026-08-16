@@ -16,6 +16,7 @@ import {
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type KeyId = string;
 export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;
@@ -657,6 +658,6 @@ class KmsKeyNotConverged extends Error {
 }
 
 const kmsRetrySchedule = Schedule.max([
-  Schedule.exponential(250),
+  cappedExponential(250),
   Schedule.recurs(7),
 ]);

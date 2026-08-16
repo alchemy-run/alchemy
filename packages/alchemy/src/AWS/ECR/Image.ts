@@ -13,6 +13,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Docker login credentials for the account's private ECR registry, in the
@@ -88,7 +89,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
   yield* docker.image.push(options.imageUri, credentials).pipe(
     Effect.retry({
       while: (): boolean => true,
-      schedule: Schedule.exponential("2 seconds"),
+      schedule: cappedExponential("2 seconds"),
       times: 3,
     }),
   );

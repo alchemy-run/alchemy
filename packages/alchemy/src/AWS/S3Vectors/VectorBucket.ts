@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 /**
  * Server-side encryption configuration for a vector bucket. Immutable —
@@ -326,7 +327,7 @@ export const VectorBucketProvider = () =>
                 e._tag === "ConflictException" ||
                 e._tag === "ServiceUnavailableException",
               schedule: Schedule.max([
-                Schedule.exponential(500),
+                cappedExponential(500),
                 Schedule.recurs(8),
               ]),
             }),

@@ -12,6 +12,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface SnippetProps {
   /**
@@ -260,7 +261,7 @@ export const SnippetProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "SnippetInUse",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              cappedExponential("1 second"),
               Schedule.recurs(8),
             ]),
           }),

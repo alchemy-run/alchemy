@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type CloudWatchTags = Record<string, string>;
 
@@ -89,7 +90,7 @@ export const retryConcurrent = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         error?._tag === "ConcurrentModificationException" ||
         error?._tag === "ConflictException" ||
         error?._tag === "LimitExceededException",
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+      schedule: Schedule.max([cappedExponential(200), Schedule.recurs(8)]),
     }),
   );
 

@@ -51,6 +51,7 @@ import {
   EncryptionKeySecretName,
   TokenValue,
 } from "./Token.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
@@ -766,10 +767,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
         // Cap the exponential delay at 2s so 15 retries stay within
         // ~30s instead of doubling unboundedly.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential(200),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([cappedExponential(200), Schedule.spaced("2 seconds")]),
           Schedule.recurs(15),
         ]),
       }),

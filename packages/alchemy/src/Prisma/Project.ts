@@ -27,6 +27,7 @@ import type {
   PrismaRegionId,
   Project as ApiProject,
 } from "./Types.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 export interface ProjectProps {
   /**
@@ -171,7 +172,7 @@ const findProjectByName = (client: PrismaManagementClient, name: string) =>
 class GeneratedProjectNotVisible extends Error {}
 
 const generatedProjectRecoverySchedule = Schedule.max([
-  Schedule.exponential("250 millis"),
+  cappedExponential("250 millis"),
   Schedule.recurs(6),
 ]);
 
@@ -212,7 +213,7 @@ const defaultDatabase = (client: PrismaManagementClient, projectId: string) =>
 class DefaultDatabaseConsistencyError extends Error {}
 
 const defaultDatabaseConsistencySchedule = Schedule.max([
-  Schedule.exponential("250 millis"),
+  cappedExponential("250 millis"),
   Schedule.recurs(6),
 ]);
 

@@ -7,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface ProfilePermissionProps {
   /**
@@ -129,7 +130,7 @@ const listAllPermissions = Effect.fn(function* (profileName: string) {
 /** Concurrent policy edits bump the revision id — re-observe and retry. */
 const conflictRetry = {
   while: (e: { _tag: string }): boolean => e._tag === "ConflictException",
-  schedule: Schedule.exponential("500 millis"),
+  schedule: cappedExponential("500 millis"),
   times: 5,
 } as const;
 

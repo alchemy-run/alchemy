@@ -49,6 +49,7 @@ import {
   makeFunctionBundler,
   type FunctionBundleResult,
 } from "./FunctionBundle.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export const FlociFunctionProvider = () =>
   makeDevWatchProvider<Function, FunctionProps, Function["Attributes"]>(
@@ -135,7 +136,7 @@ export const FlociFunctionProvider = () =>
               }).pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "ResourceConflictException",
-                  schedule: Schedule.exponential(50),
+                  schedule: cappedExponential(50),
                   times: 8,
                 }),
               );

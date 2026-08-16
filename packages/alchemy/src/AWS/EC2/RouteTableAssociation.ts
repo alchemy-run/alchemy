@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SubnetId } from "./Subnet.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type RouteTableAssociationId<ID extends string = string> =
   `rtbassoc-${ID}`;
@@ -257,7 +258,7 @@ export const RouteTableAssociationProvider = () =>
                   while: (e) =>
                     e._tag === "InvalidRouteTableID.NotFound" ||
                     e._tag === "InvalidSubnetID.NotFound",
-                  schedule: Schedule.exponential(100),
+                  schedule: cappedExponential(100),
                 }),
               );
             const associationId =

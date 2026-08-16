@@ -14,6 +14,7 @@ import {
   type EventInvokeConfig,
 } from "./EventInvokeConfig.ts";
 import type { Version } from "./Version.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface AliasProps {
   /**
@@ -169,7 +170,7 @@ export const AliasProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "ResourceConflictException",
             schedule: Schedule.max([
-              Schedule.exponential(500),
+              cappedExponential(500),
               Schedule.recurs(10),
             ]),
           }),

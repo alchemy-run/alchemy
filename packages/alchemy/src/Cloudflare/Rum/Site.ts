@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Rum.Site" as const;
 type TypeId = typeof TypeId;
@@ -235,7 +236,7 @@ export const SiteProvider = () =>
         observed = yield* rum.getSiteInfo({ accountId, siteId: siteTag }).pipe(
           Effect.retry({
             while: (e) => e._tag === "SiteNotFound",
-            schedule: Schedule.exponential("250 millis"),
+            schedule: cappedExponential("250 millis"),
             times: 5,
           }),
         );

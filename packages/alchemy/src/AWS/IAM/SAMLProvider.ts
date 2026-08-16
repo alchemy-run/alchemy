@@ -9,6 +9,7 @@ import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unwrapRedactedString } from "./common.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface SAMLProviderProps {
   /**
@@ -78,7 +79,7 @@ export const SAMLProvider = Resource<SAMLProvider>("AWS.IAM.SAMLProvider");
 // well-formed metadata document never fails persistently, so this never masks a
 // genuine bad-input error for longer than the small budget.
 const transientWriteSchedule = Schedule.max([
-  Schedule.exponential(500).pipe(Schedule.jittered),
+  cappedExponential(500).pipe(Schedule.jittered),
   Schedule.recurs(6),
 ]);
 const isTransientWriteError = (error: {

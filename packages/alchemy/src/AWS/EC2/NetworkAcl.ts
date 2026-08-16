@@ -12,6 +12,7 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type NetworkAclId<ID extends string = string> = `acl-${ID}`;
 export const NetworkAclId = <ID extends string>(
@@ -336,7 +337,7 @@ export const NetworkAclProvider = () =>
                   return e._tag === "DependencyViolation";
                 },
                 schedule: Schedule.max([
-                  Schedule.exponential(1000, 1.5),
+                  cappedExponential(1000, 1.5),
                   Schedule.recurs(15),
                 ]).pipe(
                   Schedule.tap(({ attempt }) =>

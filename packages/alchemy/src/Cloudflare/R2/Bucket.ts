@@ -12,6 +12,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
@@ -1218,7 +1219,7 @@ export const BucketProvider = () =>
 // that narrow `NoSuchBucket` lag here; not-found sub-resources are still
 // treated as terminal for idempotent deletes.
 const r2BucketEndpointConsistencySchedule = Schedule.max([
-  Schedule.exponential(100),
+  cappedExponential(100),
   Schedule.recurs(5),
 ]);
 
@@ -1226,7 +1227,7 @@ const r2BucketEndpointConsistencySchedule = Schedule.max([
 // bucket's public-access policy) can return a transient 500 ("Failed to access
 // or modify the bucket policy"). Ride out the blip with a short bounded retry.
 const r2TransientServerErrorSchedule = Schedule.max([
-  Schedule.exponential("500 millis"),
+  cappedExponential("500 millis"),
   Schedule.recurs(6),
 ]);
 

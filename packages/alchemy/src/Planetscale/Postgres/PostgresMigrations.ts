@@ -11,6 +11,7 @@ import {
   type StampedMigrationsState,
 } from "../../SQL/Migrations/index.ts";
 import { readSqlFile } from "../../SQL/SqlFile.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 // `pg` is an optional peer dependency — loaded lazily so importing the
 // Planetscale provider never requires the driver unless migrations run.
@@ -160,7 +161,7 @@ const withTemporaryPostgresRole = <A, E, R>(
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              cappedExponential("500 millis"),
               Schedule.recurs(5),
             ]),
           }),

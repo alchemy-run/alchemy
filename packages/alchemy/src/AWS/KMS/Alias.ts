@@ -11,6 +11,7 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { KeyArn, KeyId } from "./Key.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type AliasName = `alias/${string}`;
 export type AliasArn = `arn:aws:kms:${RegionID}:${AccountID}:${AliasName}`;
@@ -227,6 +228,6 @@ const isKmsEventuallyConsistent = (error: { _tag: string }) =>
   error._tag === "NotFoundException";
 
 const kmsRetrySchedule = Schedule.max([
-  Schedule.exponential(250),
+  cappedExponential(250),
   Schedule.recurs(7),
 ]);

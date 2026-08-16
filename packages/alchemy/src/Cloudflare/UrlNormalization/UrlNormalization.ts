@@ -8,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.UrlNormalization.UrlNormalization" as const;
 type TypeId = typeof TypeId;
@@ -157,7 +158,7 @@ export const UrlNormalizationProvider = () =>
               while: (e) => e._tag === "Forbidden",
               schedule: Schedule.max([
                 Schedule.min([
-                  Schedule.exponential("500 millis"),
+                  cappedExponential("500 millis"),
                   Schedule.spaced("5 seconds"),
                 ]),
                 Schedule.recurs(8),

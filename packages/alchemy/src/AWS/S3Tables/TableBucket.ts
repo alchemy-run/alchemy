@@ -9,6 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export type TableBucketArn =
   `arn:aws:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
@@ -196,7 +197,7 @@ export const TableBucketProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "NotFoundException",
             schedule: Schedule.max([
-              Schedule.exponential(500),
+              cappedExponential(500),
               Schedule.recurs(8),
             ]),
           }),
@@ -283,10 +284,7 @@ export const TableBucketProvider = () =>
             e._tag === "ConflictException" ||
             e._tag === "TooManyRequestsException" ||
             e._tag === "InternalServerErrorException",
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([cappedExponential(500), Schedule.recurs(8)]),
         }),
         Effect.catchTag("NotFoundException", () => Effect.void),
       );

@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AWSEnvironment } from "./Environment.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 /**
  * Refresh assumed-role credentials this long before they actually expire, so a
@@ -89,7 +90,7 @@ export const makeAssumeRoleResolver = (options: {
             while: (error) =>
               (error as { name?: string }).name === "AccessDeniedException" ||
               (error as { _tag?: string })._tag === "AccessDeniedException",
-            schedule: Schedule.exponential("1 second"),
+            schedule: cappedExponential("1 second"),
             times: 8,
           }),
         );

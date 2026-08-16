@@ -9,6 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { fetchObservedTags, syncResourceTags, toTagList } from "./internal.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface RepositoryLinkProps {
   /**
@@ -240,7 +241,7 @@ export const RepositoryLinkProvider = () =>
               Effect.retry({
                 while: (e): boolean =>
                   e._tag === "SyncConfigurationStillExistsException",
-                schedule: Schedule.exponential("2 seconds"),
+                schedule: cappedExponential("2 seconds"),
                 times: 8,
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),

@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 const TypeId = "Cloudflare.Addressing.BgpPrefix" as const;
 type TypeId = typeof TypeId;
@@ -262,7 +263,7 @@ export const BgpPrefixProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "BgpPrefixNotFound",
-              schedule: Schedule.exponential("2 seconds"),
+              schedule: cappedExponential("2 seconds"),
               times: 5,
             }),
           );

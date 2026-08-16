@@ -8,6 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export interface LexiconProps {
   /**
@@ -141,7 +142,7 @@ export const LexiconProvider = () =>
             e._tag === "ThrottlingException" ||
             e._tag === "ServiceUnavailable" ||
             e._tag === "ServiceFailureException",
-          schedule: Schedule.exponential("500 millis"),
+          schedule: cappedExponential("500 millis"),
           times: 5,
         });
 

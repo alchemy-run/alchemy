@@ -8,6 +8,7 @@ import {
   lookupAssetsBucket,
   lookupAssetsBuckets,
 } from "./Assets.ts";
+import { cappedExponential } from "../Util/Retry.ts";
 
 /**
  * Bootstrap the AWS environment by creating the assets bucket.
@@ -40,10 +41,7 @@ export const destroyBootstrap = Effect.fn(function* () {
       Effect.retry({
         while: (e) =>
           e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
-        schedule: Schedule.max([
-          Schedule.exponential(100),
-          Schedule.recurs(10),
-        ]),
+        schedule: Schedule.max([cappedExponential(100), Schedule.recurs(10)]),
       }),
     );
   }

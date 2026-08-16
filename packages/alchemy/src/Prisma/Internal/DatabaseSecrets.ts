@@ -8,6 +8,7 @@ import {
 } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { Database, PrismaSecretConnection } from "../Types.ts";
+import { cappedExponential } from "../../Util/Retry.ts";
 
 export const hasCanonicalConnectionSecrets = (
   secrets: PrismaSecretConnection,
@@ -61,7 +62,7 @@ export const mergeConnectionSecrets = (
 class DatabaseCredentialsNotReady extends Error {}
 
 const databaseCredentialsSchedule = Schedule.max([
-  Schedule.exponential("250 millis"),
+  cappedExponential("250 millis"),
   Schedule.recurs(6),
 ]);
 
