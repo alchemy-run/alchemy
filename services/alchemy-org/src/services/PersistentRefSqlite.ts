@@ -1,14 +1,3 @@
-/**
- * `PersistentRef.Store` over bun:sqlite — the LOCAL durability half of
- * the bootstrap's restart surface (designs/ai/bootstrap.md §3): refs
- * written through this store survive the reload cycle (process exit +
- * resurrection), so run state persists while behavior code changes.
- *
- * Same physics decisions as {@link LedgerSqlite}: no finalizer (layer
- * construction is isolate-scoped; sqlite commits per statement; the
- * OS closing the fd at exit is enough), one file, keys flattened with
- * the canonical {@link PersistentRef.pathKey} encoding.
- */
 import { Database as SqliteDatabase } from "bun:sqlite";
 import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
@@ -21,6 +10,16 @@ CREATE TABLE IF NOT EXISTS refs (
 )`;
 
 /**
+ * `PersistentRef.Store` over bun:sqlite — the LOCAL durability half of
+ * the bootstrap's restart surface (designs/ai/bootstrap.md §3): refs
+ * written through this store survive the reload cycle (process exit +
+ * resurrection), so run state persists while behavior code changes.
+ *
+ * Same physics decisions as {@link LedgerSqlite}: no finalizer (layer
+ * construction is isolate-scoped; sqlite commits per statement; the
+ * OS closing the fd at exit is enough), one file, keys flattened with
+ * the canonical {@link PersistentRef.pathKey} encoding.
+ *
  * Values are wrapped (`{ v: encoded }`) so `undefined` round-trips:
  * `JSON.stringify({ v: undefined })` is `"{}"`, which parses back to
  * `undefined` — while a legitimate `null` stays `null`.

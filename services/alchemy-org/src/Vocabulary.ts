@@ -1,8 +1,3 @@
-/**
- * Shared vocabulary of the org: the typed Parameters that tools and
- * charters interpolate. A Parameter's template is its description;
- * description and schema are one artifact.
- */
 import * as AI from "alchemy/AI";
 import * as S from "effect/Schema";
 
@@ -10,6 +5,11 @@ import * as S from "effect/Schema";
 // (number | "NaN" | "Infinity" | "-Infinity") and Anthropic hard-caps
 // union-typed parameters per request (16) — a toolkit of refs blows
 // through it. Issue/PR numbers are integers anyway.
+/**
+ * Shared vocabulary of the org: the typed Parameters that tools and
+ * charters interpolate. A Parameter's template is its description;
+ * description and schema are one artifact.
+ */
 export const IssueRef = S.Struct({
   owner: S.String,
   repository: S.String,

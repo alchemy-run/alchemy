@@ -1,3 +1,16 @@
+import * as AI from "alchemy/AI";
+import * as Effect from "effect/Effect";
+import {
+  Bash,
+  EditFile,
+  Glob,
+  Grep,
+  ListDirectory,
+  ReadFile,
+  ReadOutput,
+  WriteFile,
+} from "./tools/index.ts";
+
 /**
  * The CODER — a minimal coding agent, the whole product in one file:
  *
@@ -15,19 +28,6 @@
  *   capability envelope; there is no merge button, no GitHub write,
  *   no network beyond what bash reaches).
  */
-import * as AI from "alchemy/AI";
-import * as Effect from "effect/Effect";
-import {
-  Bash,
-  EditFile,
-  Glob,
-  Grep,
-  ListDirectory,
-  ReadFile,
-  ReadOutput,
-  WriteFile,
-} from "./tools/index.ts";
-
 export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
 export const GeneralEngineer = Engineer.make(

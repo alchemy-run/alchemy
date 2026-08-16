@@ -1,5 +1,11 @@
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import { Artifacts } from "./Artifacts.ts";
+
 /**
- * The LOCAL physics of {@link ToolOutputStore}: artifacts are files
+ * The LOCAL physics of {@link Artifacts}: artifacts are files
  * in an OS temp directory. Host paths never reach the model — tools
  * return opaque IDs consumed by `ReadOutput`.
  *
@@ -9,14 +15,8 @@
  * deleting the store out from under every long-lived run that pipes
  * tool output through it. The OS owns temp cleanup.
  */
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import { ToolOutputStore } from "./ToolOutputStore.ts";
-
-export const ToolOutputStoreLocal = Layer.effect(
-  ToolOutputStore,
+export const ArtifactsLocal = Layer.effect(
+  Artifacts,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;

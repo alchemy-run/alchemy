@@ -1,17 +1,20 @@
 /**
- * The spill net's contract (lib/Spill.ts): presentation stays direct
- * (each mention keeps its provider tool), oversized SUCCESS strings
- * are parked in the ToolOutputStore behind a head preview + readOutput
- * id, bounded results and failures pass through verbatim.
+ * The spill net's contract (lib/SpillingTools.ts): presentation stays
+ * direct (each mention keeps its provider tool), oversized SUCCESS
+ * strings are parked in the Artifacts behind a head preview + a
+ * readOutput id, bounded results and failures pass through verbatim —
+ * and the net injects its own `readOutput` wire tool so the ticket is
+ * always redeemable.
  */
 import * as AI from "alchemy/AI";
 import { BunServices } from "@effect/platform-bun";
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { SpillTools } from "../src/lib/Spill.ts";
-import { ToolOutputStore } from "../src/lib/ToolOutputStore.ts";
-import { ToolOutputStoreLocal } from "../src/lib/ToolOutputStoreLocal.ts";
+import { SpillingTools } from "../src/lib/SpillingTools.ts";
+import { Artifacts } from "../src/lib/Artifacts.ts";
+import { ArtifactsLocal } from "../src/lib/ArtifactsLocal.ts";
+import { ReadOutputLive } from "../src/tools/ReadOutput.ts";
 
 const mention = (
   name: string,
@@ -30,7 +33,7 @@ test("oversized output spills to an artifact; bounded output passes through", as
   await Effect.runPromise(
     Effect.gen(function* () {
       const engine = yield* AI.Tools;
-      const store = yield* ToolOutputStore;
+      const artifacts = yield* Artifacts;
 
       const fat = "x".repeat(100) + "\n";
       const presented = yield* engine.present([
@@ -38,10 +41,12 @@ test("oversized output spills to an artifact; bounded output passes through", as
         mention("unbounded", fat.repeat(1000)), // ~101 KB
       ]);
 
-      // presentation stays DIRECT: one provider tool per mention
+      // presentation stays DIRECT: one provider tool per mention,
+      // plus the net's own redemption door
       expect(presented.tools.map((tool) => tool.name)).toEqual([
         "bounded",
         "unbounded",
+        "readOutput",
       ]);
 
       // under the cap: verbatim
@@ -54,12 +59,23 @@ test("oversized output spills to an artifact; bounded output passes through", as
       expect(big).toContain("[Output truncated:");
       const id = big.match(/Full output: (output-\d+-\w+)/)?.[1];
       expect(id).toBeDefined();
-      const retained = yield* store.read(id!);
+      const retained = yield* artifacts.read(id!);
       expect(retained.length).toBe(101_000);
+
+      // the ticket is redeemable through the net's OWN readOutput —
+      // no charter mention required
+      const paged = (yield* presented.handlers.readOutput!({
+        outputId: id!,
+        offset: 1,
+        limit: 5,
+      })) as string;
+      expect(paged).toContain("x".repeat(100));
+      expect(paged).toContain("Use offset=6 to continue.");
     }).pipe(
       Effect.provide(
-        Layer.mergeAll(SpillTools, Layer.empty).pipe(
-          Layer.provideMerge(ToolOutputStoreLocal),
+        Layer.mergeAll(SpillingTools, Layer.empty).pipe(
+          Layer.provide(ReadOutputLive),
+          Layer.provideMerge(ArtifactsLocal),
         ),
       ),
       Effect.provide(BunServices.layer),

@@ -1,16 +1,3 @@
-/**
- * The approval gate's CLOUDFLARE physics (the durable sibling of
- * `ApprovalsLocal`): pending requests are D1 rows, so the gate
- * works across a stateless Worker fleet — a tool asking inside one
- * session's Durable Object and the operator answering through any
- * Worker instance agree in the database.
- *
- * `ask` POLLS its row (there is no cross-isolate Deferred): a bounded
- * `Effect.repeat` until the operator answers or the window closes —
- * fail CLOSED, same contract as local. Answered/expired rows are
- * deleted by the asker (the one reader), so `pending` stays the live
- * list.
- */
 import * as D1 from "alchemy/Cloudflare/D1";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -33,6 +20,19 @@ CREATE TABLE IF NOT EXISTS approvals (
 const POLL_EVERY = "2 seconds";
 const POLL_TIMES = 150;
 
+/**
+ * The approval gate's CLOUDFLARE physics (the durable sibling of
+ * `ApprovalsLocal`): pending requests are D1 rows, so the gate
+ * works across a stateless Worker fleet — a tool asking inside one
+ * session's Durable Object and the operator answering through any
+ * Worker instance agree in the database.
+ *
+ * `ask` POLLS its row (there is no cross-isolate Deferred): a bounded
+ * `Effect.repeat` until the operator answers or the window closes —
+ * fail CLOSED, same contract as local. Answered/expired rows are
+ * deleted by the asker (the one reader), so `pending` stays the live
+ * list.
+ */
 export const ApprovalsD1 = Layer.effect(
   Approvals,
   Effect.gen(function* () {

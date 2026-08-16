@@ -1,3 +1,17 @@
+import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+
+const MARKER = ".alchemy-workspace.json";
+
+interface Marker {
+  readonly key: string;
+  readonly branch: string;
+  readonly remote: Git.Remote;
+}
+
 /**
  * `Git.Checkouts` over the session {@link AI.Sandbox} — the checkout
  * capability for placements whose driver has no filesystem (a session
@@ -16,20 +30,6 @@
  * `sleepAfter`); public remotes only for now — the org's sandbox repo
  * is public, and pushes are not part of the review pipeline.
  */
-import * as AI from "alchemy/AI";
-import * as Git from "alchemy/Git";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-
-const MARKER = ".alchemy-workspace.json";
-
-interface Marker {
-  readonly key: string;
-  readonly branch: string;
-  readonly remote: Git.Remote;
-}
-
 export const CheckoutsSandbox = Layer.effect(
   Git.Checkouts,
   Effect.gen(function* () {

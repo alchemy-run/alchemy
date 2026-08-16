@@ -1,9 +1,3 @@
-/**
- * GitHub-style hover preview for issue/PR references: state pill,
- * repo#number, relative time, title, author + avatar, and (for PRs)
- * `+adds −dels` / file-count chips. Metadata is fetched lazily from
- * the public GitHub API on first hover and cached for the session.
- */
 import {
   CircleCheck,
   CircleDot,
@@ -242,6 +236,11 @@ const CardBody = ({
 };
 
 /**
+ * GitHub-style hover preview for issue/PR references: state pill,
+ * repo#number, relative time, title, author + avatar, and (for PRs)
+ * `+adds −dels` / file-count chips. Metadata is fetched lazily from
+ * the public GitHub API on first hover and cached for the session.
+ *
  * Wrap a ref link: hovering shows the GitHub preview card. `repo` is
  * `owner/name`; the trigger renders your children unchanged.
  */

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { truncateHead } from "../lib/Output.ts";
-import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
+import { Artifacts } from "../lib/Artifacts.ts";
 
 const pattern = AI.Parameter("pattern", S.String)`
 Glob pattern such as "*.ts", "**/*.json", or
@@ -36,7 +36,7 @@ export const GlobLive = Layer.effect(
   Glob,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    const store = yield* ToolOutputStore;
+    const artifacts = yield* Artifacts;
     return ((input: { pattern: string; path?: string; limit?: number }) =>
       Effect.gen(function* () {
         const max = input.limit ?? 1000;
@@ -72,7 +72,7 @@ export const GlobLive = Layer.effect(
           maxBytes: MAX_BYTES,
         });
         if (!preview.truncated) return preview.text;
-        const artifact = yield* store.create("glob");
+        const artifact = yield* artifacts.create("glob");
         yield* artifact.append(cleaned);
         return `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} paths shown. Full output: ${artifact.id}]`;
       })) as never;

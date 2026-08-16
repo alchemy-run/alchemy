@@ -1,10 +1,3 @@
-/**
- * Per-tool transcript cards — a REGISTRY keyed by tool name (the
- * OpenCode pattern), each renderer producing a one-line verb summary
- * (the pi/Codex pattern: `$ cmd`, `Read path`, `Edit path +3 −1`)
- * with expandable per-tool detail. Unknown tools fall back to the
- * generic collapsible card.
- */
 import {
   AlarmClock,
   CircleCheck,
@@ -46,7 +39,14 @@ const clamp = (text: string, max: number): string =>
 const countLines = (text: string): number =>
   text.length === 0 ? 0 : text.split("\n").length;
 
-/** bash output: "exit: N\n--- stdout ---\n…\n--- stderr ---\n…" */
+/**
+ * Per-tool transcript cards — a REGISTRY keyed by tool name (the
+ * OpenCode pattern), each renderer producing a one-line verb summary
+ * (the pi/Codex pattern: `$ cmd`, `Read path`, `Edit path +3 −1`)
+ * with expandable per-tool detail. Unknown tools fall back to the
+ * generic collapsible card.
+ *
+ bash output: "exit: N\n--- stdout ---\n…\n--- stderr ---\n…" */
 const parseBashOutput = (
   raw: string,
 ): { exit: number | undefined; stdout: string; stderr: string } => {

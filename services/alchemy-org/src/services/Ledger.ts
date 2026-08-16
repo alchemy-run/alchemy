@@ -1,3 +1,22 @@
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+
+/**
+ * The answer to an `offer`: `accepted` — first sighting of `(queue,
+ * key)`, the caller creates the run (`send`); `duplicate` — already
+ * admitted (a webhook redelivery, a poll re-observation, or a live
+ * run's conversation moving), the caller steers.
+ *
+ * OPEN QUESTION (factory-components.md §3.1 finding 2, deliberately
+ * not built yet): the canon's re-admission door (settled key ⇒ new
+ * fold-seeded run) needs `offer` to report "settled" DISTINCTLY from
+ * "duplicate" — a three-valued answer (`accepted | duplicate |
+ * settled`). All three physics below already persist settlement, so
+ * widening the union is a contract change only; the re-admission test
+ * decides it when that slice lands.
+ */
+export type OfferStatus = "accepted" | "duplicate";
+
 /**
  * The Ledger — the org's BOOK OF RECORD, its own `Context.Service`
  * with per-environment physics (the components doctrine: environments
@@ -30,25 +49,6 @@
  * kernel Layer's job, retry is `Effect.retry` at the call site (see
  * the factory-components design: keep the name Ledger).
  */
-import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
-
-/**
- * The answer to an `offer`: `accepted` — first sighting of `(queue,
- * key)`, the caller creates the run (`send`); `duplicate` — already
- * admitted (a webhook redelivery, a poll re-observation, or a live
- * run's conversation moving), the caller steers.
- *
- * OPEN QUESTION (factory-components.md §3.1 finding 2, deliberately
- * not built yet): the canon's re-admission door (settled key ⇒ new
- * fold-seeded run) needs `offer` to report "settled" DISTINCTLY from
- * "duplicate" — a three-valued answer (`accepted | duplicate |
- * settled`). All three physics below already persist settlement, so
- * widening the union is a contract change only; the re-admission test
- * decides it when that slice lands.
- */
-export type OfferStatus = "accepted" | "duplicate";
-
 export class Ledger extends Context.Service<
   Ledger,
   {

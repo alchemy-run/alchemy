@@ -1,3 +1,8 @@
+import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
 /**
  * The model — Anthropic over HTTP, the SAME layer on every substrate:
  * `Config.redacted` reads the key from the deploying shell locally and
@@ -9,11 +14,6 @@
  * Anthropic's strict tool-calling grammar caps union-typed parameters
  * per request and a real toolkit cannot fit (DriverCore.compileTool).
  */
-import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
-import * as Config from "effect/Config";
-import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-
 export const Model = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
   config: {

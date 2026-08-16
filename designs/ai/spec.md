@@ -1233,7 +1233,7 @@ return yield* AI.fragment`
   1. **Spill at result time** — oversized tool output parked behind a
      preview + retrieval id; best-effort (a spill failure keeps the
      inline original, never fails the call). Shipped in userland as a
-     `Tools` wrapper (`alchemy-org/src/lib/Spill.ts`) — the seam
+     `Tools` wrapper (`alchemy-org/src/lib/SpillingTools.ts`) — the seam
      already exposes every mention's handler, so no new core surface.
   2. **Deterministic tool-result pruning** — head/middle/tail shrink
      of oversized results, each replacement logged with the shadowed

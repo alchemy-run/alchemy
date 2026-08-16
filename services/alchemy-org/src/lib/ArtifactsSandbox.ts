@@ -1,21 +1,21 @@
+import * as AI from "alchemy/AI";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Artifacts } from "./Artifacts.ts";
+
+const DIR = ".tool-output";
+
 /**
  * The artifact store over the session {@link AI.Sandbox} — the
- * Cloudflare sibling of `ToolOutputStoreLocal` (which needs a
+ * Cloudflare sibling of `ArtifactsLocal` (which needs a
  * host filesystem the Durable Object doesn't have). Artifacts are
  * files under `.tool-output/` on the session's OWN machine: written
  * where the output was produced, readable by `readOutput`, and
  * recycled with the container. Host paths still never reach the
  * model — tools return opaque IDs.
  */
-import * as AI from "alchemy/AI";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { ToolOutputStore } from "./ToolOutputStore.ts";
-
-const DIR = ".tool-output";
-
-export const ToolOutputStoreSandbox = Layer.effect(
-  ToolOutputStore,
+export const ArtifactsSandbox = Layer.effect(
+  Artifacts,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
     let next = 1;

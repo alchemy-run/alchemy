@@ -1,12 +1,12 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Ledger } from "./Ledger.ts";
+
 /**
  * The in-memory physics of {@link Ledger} — tests. Rows and metadata
  * live in process maps: nothing survives a restart, which is exactly
  * the point (each test starts from an empty book).
  */
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { Ledger } from "./Ledger.ts";
-
 export const LedgerMemory: Layer.Layer<Ledger> = Layer.sync(Ledger, () => {
   const rows = new Map<string, "open" | "settled">();
   const meta = new Map<string, unknown>();

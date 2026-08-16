@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { truncateHead } from "../lib/Output.ts";
-import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
+import { Artifacts } from "../lib/Artifacts.ts";
 import { pattern } from "../Vocabulary.ts";
 
 const pathParam = AI.Parameter("path", S.optionalKey(S.String))`
@@ -74,7 +74,7 @@ export const GrepLive = Layer.effect(
   Grep,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    const store = yield* ToolOutputStore;
+    const artifacts = yield* Artifacts;
 
     return ((input: {
       pattern: string;
@@ -137,7 +137,7 @@ export const GrepLive = Layer.effect(
           maxBytes: MAX_BYTES,
         });
         if (!preview.truncated) return preview.text;
-        const artifact = yield* store.create("grep");
+        const artifact = yield* artifacts.create("grep");
         yield* artifact.append(cleaned);
         return `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} lines shown. Full output: ${artifact.id}]`;
       })) as never;

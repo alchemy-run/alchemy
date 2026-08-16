@@ -1,3 +1,6 @@
+import { File, PatchDiff, type BaseCodeOptions } from "@pierre/diffs/react";
+import { Component, memo, useMemo, type ReactNode } from "react";
+
 /**
  * Code + diff rendering on @pierre/diffs — Shiki-highlighted, shadow
  * DOM–scoped, space-efficient. Two cards:
@@ -8,11 +11,8 @@
  * - {@link DiffCard}: a unified diff rendered from a patch string
  *   (ReadDiff tool output) — line numbers, word-level inline
  *   highlights, compact hunk separators.
- */
-import { File, PatchDiff, type BaseCodeOptions } from "@pierre/diffs/react";
-import { Component, memo, useMemo, type ReactNode } from "react";
-
-/** Markdown language tag → file extension (Shiki detects by name). */
+ *
+ Markdown language tag → file extension (Shiki detects by name). */
 const EXTENSION: Record<string, string> = {
   typescript: "ts",
   ts: "ts",
@@ -52,7 +52,8 @@ const BASE: BaseCodeOptions = {
   themeType: "dark",
 };
 
-/** A highlighted snippet — fenced markdown blocks, inline tool code. */
+/** A highlighted snippet — fenced markdown blocks, inline tool code.
+ */
 export const CodeCard = memo(
   ({ code, language }: { code: string; language: string | undefined }) => {
     const file = useMemo(

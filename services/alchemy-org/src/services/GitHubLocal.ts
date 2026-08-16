@@ -1,11 +1,3 @@
-/**
- * GitHub local bindings — as the review bot's GitHub APP when
- * `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` are configured, otherwise
- * Octokit via the alchemy profile (`alchemy login`). The app identity
- * is what lets the bot post real REQUEST_CHANGES verdicts on pull
- * requests the operator authored (GitHub forbids self-verdicts).
- * Worker code must not import this module.
- */
 import * as Auth from "alchemy/Auth";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
@@ -48,6 +40,14 @@ export const Credentials = Layer.unwrap(
   }),
 );
 
+/**
+ * GitHub local bindings — as the review bot's GitHub APP when
+ * `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` are configured, otherwise
+ * Octokit via the alchemy profile (`alchemy login`). The app identity
+ * is what lets the bot post real REQUEST_CHANGES verdicts on pull
+ * requests the operator authored (GitHub forbids self-verdicts).
+ * Worker code must not import this module.
+ */
 export const GitHubLocal = Layer.mergeAll(
   GitHub.CreateIssueCommentLocal,
   GitHub.CreatePullRequestLocal,

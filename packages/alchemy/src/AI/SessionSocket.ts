@@ -1,19 +1,19 @@
-/**
- * The SESSION SOCKET — the wire under `Sessions.attach`: one
- * bidirectional protocol for a session's live view (replay durable
- * observations from a cursor, tail live ones, submit inputs back),
- * spoken identically by every placement. The server half
- * ({@link handleSessionSocketFrame} over a {@link SessionSocketHost})
- * keeps the wire from drifting between substrates; the client half
- * ({@link SessionSocketTransport}) adapts it to the AI SDK's
- * `ChatTransport` for `useChat`.
- */
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import * as Effect from "effect/Effect";
 import type { SessionObservation } from "./Events.ts";
 import { makeChunkTranslator } from "./UIMessage.ts";
 
-/** Frames a client sends to an attached session. */
+/**
+ * Frames a client sends to an attached session — one half of the
+ * SESSION SOCKET, the wire under `Sessions.attach`: one bidirectional
+ * protocol for a session's live view (replay durable observations
+ * from a cursor, tail live ones, submit inputs back), spoken
+ * identically by every placement. The server half
+ * ({@link handleSessionSocketFrame} over a {@link SessionSocketHost})
+ * keeps the wire from drifting between substrates; the client half
+ * ({@link SessionSocketTransport}) adapts it to the AI SDK's
+ * `ChatTransport` for `useChat`.
+ */
 export type SessionSocketClientFrame =
   | {
       /** Replay durable observations with `seq >= fromSeq`, then a

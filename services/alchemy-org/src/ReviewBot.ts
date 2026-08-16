@@ -1,3 +1,18 @@
+import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
+import * as GitHub from "alchemy/GitHub";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as S from "effect/Schema";
+import { testAlchemy } from "./Repos.ts";
+import { Approvals } from "./services/Approvals.ts";
+import { Ledger } from "./services/Ledger.ts";
+import { QualityAssurance } from "./skills/QualityAssurance.ts";
+import { ReadDiff, ReadIssue } from "./tools/index.ts";
+import { message, path } from "./Vocabulary.ts";
+
 /**
  * The REVIEW BOT — the whole review pipeline, in one file:
  *
@@ -17,21 +32,6 @@
  * - {@link ReviewBotEvents} — the router: GitHub events → sessions.
  *   Routing is code, not charter.
  */
-import * as AI from "alchemy/AI";
-import * as Git from "alchemy/Git";
-import * as GitHub from "alchemy/GitHub";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
-import * as S from "effect/Schema";
-import { testAlchemy } from "./Repos.ts";
-import { Approvals } from "./services/Approvals.ts";
-import { Ledger } from "./services/Ledger.ts";
-import { QualityAssurance } from "./skills/QualityAssurance.ts";
-import { ReadDiff, ReadIssue } from "./tools/index.ts";
-import { message, path } from "./Vocabulary.ts";
-
 export class ReviewBot extends AI.Agent<ReviewBot>()("ReviewBot") {}
 
 /**
@@ -50,7 +50,8 @@ const line = AI.Parameter("line", S.Int)`
 The line in the pull request's HEAD version of the file that the
 comment is anchored to — the LAST line when commenting a range. It
 must be a line the diff shows (added or context); GitHub rejects
-anchors outside the diff.`;
+anchors outside the diff.
+`;
 
 const startLine = AI.Parameter("startLine", S.optionalKey(S.Int))`
 For a multi-line comment: the FIRST line of the range (strictly less
@@ -93,6 +94,67 @@ interface PendingComment {
   readonly start_line?: number;
   readonly body: string;
 }
+
+/**
+ * The WIRING: every pull-request event reaches its own durable
+ * session. `send` admits on first sight of a key and enqueues
+ * thereafter; merge/close settles the session and releases its
+ * checkout. The Ledger dedupes deliveries by content (polling
+ * redelivers; the same event must not wake a round twice).
+ */
+export const ReviewBotEvents = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const bot = yield* ReviewBot;
+    const ledger = yield* Ledger;
+    const checkouts = yield* Git.Checkouts;
+
+    yield* GitHub.consumeRepositoryEvents(
+      testAlchemy,
+      {
+        events: [
+          GitHub.IssueCommented,
+          GitHub.PullRequestClosed,
+          GitHub.PullRequestMerged,
+          GitHub.PullRequestOpened,
+        ],
+      },
+      Effect.fn(function* (event) {
+        const { status } = yield* ledger.offer(
+          "reviews",
+          JSON.stringify(event), // delivery identity: the content itself
+          event,
+        );
+        if (status === "duplicate") return;
+        const repo = `${event.repository.owner.login}/${event.repository.name}`;
+
+        switch (event._tag) {
+          case "PullRequestOpened":
+            return yield* bot.send(event, {
+              key: `${repo}#${event.pullRequest.number}`,
+            });
+          case "IssueCommented": {
+            // only PULL REQUEST comments concern the bot — and never
+            // its own (the signature marks them)
+            if (!GitHub.isPullRequestComment(event)) return;
+            if (event.comment.body?.includes(SIGNATURE)) return;
+            return yield* bot.send(event, {
+              key: `${repo}#${event.issue.number}`,
+            });
+          }
+          case "PullRequestMerged":
+          case "PullRequestClosed": {
+            const key = `${repo}#${event.pullRequest.number}`;
+            yield* bot.settle(key, event);
+            // a settled review's worktree is garbage — drop it
+            return yield* checkouts
+              .release(key)
+              .pipe(Effect.catchTag("Git.GitError", () => Effect.void));
+          }
+        }
+      }),
+    );
+  }),
+);
 
 export const ReviewBotLive = ReviewBot.make(
   Effect.gen(function* () {
@@ -290,67 +352,5 @@ export const ReviewBotLive = ReviewBot.make(
       carries no verdict, and you hold no merge button. Comments you
       posted yourself may echo back as events: they are your own
       words — never reply to them.`;
-  }),
-);
-
-/**
- * The WIRING: every pull-request event reaches its own durable
- * session. `send` admits on first sight of a key and enqueues
- * thereafter; merge/close settles the session and releases its
- * checkout. The Ledger dedupes deliveries by content (polling
- * redelivers; the same event must not wake a round twice).
- */
-export const ReviewBotEvents = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const bot = yield* ReviewBot;
-    const ledger = yield* Ledger;
-    const checkouts = yield* Git.Checkouts;
-
-    yield* GitHub.consumeRepositoryEvents(
-      testAlchemy,
-      {
-        events: [
-          GitHub.IssueCommented,
-          GitHub.PullRequestClosed,
-          GitHub.PullRequestMerged,
-          GitHub.PullRequestOpened,
-        ],
-      },
-      (event) =>
-        Effect.gen(function* () {
-          const { status } = yield* ledger.offer(
-            "reviews",
-            JSON.stringify(event), // delivery identity: the content itself
-            event,
-          );
-          if (status === "duplicate") return;
-          const repo = `${event.repository.owner.login}/${event.repository.name}`;
-
-          switch (event._tag) {
-            case "PullRequestOpened":
-              return yield* bot.send(event, {
-                key: `${repo}#${event.pullRequest.number}`,
-              });
-            case "IssueCommented": {
-              // only PULL REQUEST comments concern the bot — and never
-              // its own (the signature marks them)
-              if (!GitHub.isPullRequestComment(event)) return;
-              if (event.comment.body?.includes(SIGNATURE)) return;
-              return yield* bot.send(event, {
-                key: `${repo}#${event.issue.number}`,
-              });
-            }
-            case "PullRequestMerged":
-            case "PullRequestClosed": {
-              const key = `${repo}#${event.pullRequest.number}`;
-              yield* bot.settle(key, event);
-              // a settled review's worktree is garbage — drop it
-              return yield* checkouts
-                .release(key)
-                .pipe(Effect.catchTag("Git.GitError", () => Effect.void));
-            }
-          }
-        }),
-    );
   }),
 );

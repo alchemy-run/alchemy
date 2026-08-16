@@ -1,24 +1,3 @@
-/**
- * The org, deployed — a Cloudflare Worker hosting both agents over
- * Cloudflare physics (the mirror of Server.ts):
- *
- * - sessions   → Durable Objects (`services/DriverCloudflare.ts`)
- * - the board  → D1 (`SessionIndexD1`), fed by the driver's stream
- * - GitHub     → `*Http` bindings (a PersonalAccessToken bound as a
- *                Worker secret) + a REAL repository webhook (push
- *                delivery — the polling latency disappears)
- * - dedupe     → the Ledger on D1
- * - approvals  → D1 rows (the operator answers from any instance)
- * - the tools  → each session's OWN container (`SandboxContainerSession`),
- *                started on first use, recycled after idle
- * - checkouts  → git INSIDE that container (`CheckoutsSandbox`)
- *
- * The same HTTP surface as the local server (Routes.ts) plus the
- * substrate's own doors: the GitHub webhook path is claimed by the
- * event-source binding BEFORE this fetch handler, and
- * `/attach/:term/:key` upgrades a WebSocket into the session's own
- * Durable Object.
- */
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
@@ -29,8 +8,8 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
-import { SpillTools } from "./lib/Spill.ts";
-import { ToolOutputStoreSandbox } from "./lib/ToolOutputStoreSandbox.ts";
+import { SpillingTools } from "./lib/SpillingTools.ts";
+import { ArtifactsSandbox } from "./lib/ArtifactsSandbox.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { orgRoutes } from "./Routes.ts";
 import { ApprovalsD1 } from "./services/ApprovalsD1.ts";
@@ -40,6 +19,7 @@ import { LedgerD1 } from "./services/LedgerD1.ts";
 import { CheckoutsSandbox } from "./services/CheckoutsSandbox.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import { ReadDiffLive, ReadIssueLive } from "./tools/index.ts";
+import { ReadOutputLive } from "./tools/ReadOutput.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
 /** Each session's own machine, resolved at CALL time from the session
@@ -51,14 +31,15 @@ const SandboxSession = Cloudflare.AI.SandboxContainerSession({
 
 /** The artifact store on that same machine (readOutput reads what the
  *  spill net and the bash tool parked). */
-const Store = ToolOutputStoreSandbox;
+const Store = ArtifactsSandbox;
 
 const Toolbox = Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
   Layer.provide(Store),
   Layer.provide(SandboxSession),
 );
 
-const Spill = SpillTools.pipe(
+const Spill = SpillingTools.pipe(
+  Layer.provide(ReadOutputLive),
   Layer.provide(Store),
   Layer.provide(SandboxSession),
 );
@@ -113,6 +94,27 @@ const Org = Layer.mergeAll(EngineerWorker, ReviewBotWorker).pipe(
   Layer.orDie,
 );
 
+/**
+ * The org, deployed — a Cloudflare Worker hosting both agents over
+ * Cloudflare physics (the mirror of Server.ts):
+ *
+ * - sessions   → Durable Objects (`services/DriverCloudflare.ts`)
+ * - the board  → D1 (`SessionIndexD1`), fed by the driver's stream
+ * - GitHub     → `*Http` bindings (a PersonalAccessToken bound as a
+ *                Worker secret) + a REAL repository webhook (push
+ *                delivery — the polling latency disappears)
+ * - dedupe     → the Ledger on D1
+ * - approvals  → D1 rows (the operator answers from any instance)
+ * - the tools  → each session's OWN container (`SandboxContainerSession`),
+ *                started on first use, recycled after idle
+ * - checkouts  → git INSIDE that container (`CheckoutsSandbox`)
+ *
+ * The same HTTP surface as the local server (Routes.ts) plus the
+ * substrate's own doors: the GitHub webhook path is claimed by the
+ * event-source binding BEFORE this fetch handler, and
+ * `/attach/:term/:key` upgrades a WebSocket into the session's own
+ * Durable Object.
+ */
 export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
   "OrgWorker",
   {

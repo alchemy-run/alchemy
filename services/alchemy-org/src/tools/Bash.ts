@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { truncateTail } from "../lib/Output.ts";
-import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
+import { Artifacts } from "../lib/Artifacts.ts";
 import { command } from "../Vocabulary.ts";
 
 const timeout = AI.Parameter(
@@ -38,7 +38,7 @@ export const BashLive = Layer.effect(
   Bash,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    const store = yield* ToolOutputStore;
+    const artifacts = yield* Artifacts;
 
     // Show a bounded preview; retain the complete (sandbox-retained)
     // output as an opaque artifact readable with readOutput.
@@ -51,7 +51,7 @@ export const BashLive = Layer.effect(
         if (!preview.truncated && !dropped) {
           return { text: preview.text, note: "" };
         }
-        const artifact = yield* store.create(label);
+        const artifact = yield* artifacts.create(label);
         yield* artifact.append(text);
         return {
           text: preview.text,

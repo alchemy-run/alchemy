@@ -1,3 +1,16 @@
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+
+export type ApprovalOutcome = "allowed-once" | "rejected" | "unavailable";
+
+export interface ApprovalRequest {
+  readonly id: string;
+  readonly session: { readonly term: string; readonly key: string };
+  /** What the operator is approving — one human-readable line. */
+  readonly action: string;
+  readonly at: number;
+}
+
 /**
  * The APPROVAL GATE — the org's human-in-the-loop seam, USERLAND by
  * design: tools are Effects, so a dangerous tool gates itself by
@@ -14,19 +27,6 @@
  * review pipeline's value is autonomy. Arm it with `ORG_APPROVALS=ask`
  * — every gated tool then parks until the operator answers in the UI.
  */
-import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
-
-export type ApprovalOutcome = "allowed-once" | "rejected" | "unavailable";
-
-export interface ApprovalRequest {
-  readonly id: string;
-  readonly session: { readonly term: string; readonly key: string };
-  /** What the operator is approving — one human-readable line. */
-  readonly action: string;
-  readonly at: number;
-}
-
 export class Approvals extends Context.Service<
   Approvals,
   {

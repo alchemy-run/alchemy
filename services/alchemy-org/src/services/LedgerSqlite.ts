@@ -1,7 +1,3 @@
-/**
- * The Ledger's bun:sqlite physics — its OWN module so `bun:sqlite`
- * never enters the Worker bundle (LedgerD1.ts mirrors the split).
- */
 import { Database as SqliteDatabase } from "bun:sqlite";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,7 +5,10 @@ import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
 
 
 /**
- * bun:sqlite physics. `INSERT OR IGNORE` against the `(queue, key)`
+ * The Ledger's bun:sqlite physics — its OWN module so `bun:sqlite`
+ * never enters the Worker bundle (LedgerD1.ts mirrors the split).
+ *
+ * `INSERT OR IGNORE` against the `(queue, key)`
  * primary key is the transaction: the row count says whether THIS
  * offer was the first. Deterministic delivery/identity keys make the
  * dedupe hold across process restarts over the same file.

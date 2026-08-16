@@ -1,10 +1,3 @@
-/**
- * The LOCAL physics of {@link Approvals}: one process, pending
- * requests in memory, the answer window on the process clock. The
- * durable placement ({@link ApprovalsD1}) swaps this Layer — the
- * contract in Approvals.ts is what tools and the HTTP surface
- * write to.
- */
 import * as Config from "effect/Config";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -18,6 +11,13 @@ import {
 /** How long an armed request waits before failing closed. */
 const ANSWER_WINDOW = "5 minutes";
 
+/**
+ * The LOCAL physics of {@link Approvals}: one process, pending
+ * requests in memory, the answer window on the process clock. The
+ * durable placement ({@link ApprovalsD1}) swaps this Layer — the
+ * contract in Approvals.ts is what tools and the HTTP surface
+ * write to.
+ */
 export const ApprovalsLocal = Layer.effect(
   Approvals,
   Effect.gen(function* () {

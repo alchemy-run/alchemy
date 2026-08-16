@@ -1,27 +1,3 @@
-/**
- * The org, running on your machine — an Effectful {@link Local.Vite}
- * service hosting both agents as a detached local process:
- *
- * - the ENGINEER — the resident coding agent, one durable chat per
- *   thread, working the operator's own checkout;
- * - the REVIEW BOT — the pipeline over the sandbox repository: every
- *   pull request opened there admits a durable review session that
- *   checks out `pull/N/head`, verifies by reading and RUNNING, and
- *   posts one review.
- *
- * Both interpret on the SAME driver assembly (services/Driver.ts:
- * sqlite session storage + the Anthropic LanguageModel + the session
- * index riding the event stream), under one HTTP surface (Routes.ts),
- * with the UI built by Vite and served from the same address.
- *
- * Long-lived machinery (the GitHub poller, driver run loops)
- * registers on the process Scope — so plain `Effect.provide(Org)` is
- * enough; the fibers survive init returning. GitHub credentials
- * resolve from the alchemy profile (`alchemy login`) or the GitHub
- * App env (`GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY`); running
- * additionally needs `ANTHROPIC_API_KEY` in the operator's
- * environment (the reconciler passes the shell env through).
- */
 import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
@@ -34,8 +10,8 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
-import { SpillTools } from "./lib/Spill.ts";
-import { ToolOutputStoreLocal } from "./lib/ToolOutputStoreLocal.ts";
+import { SpillingTools } from "./lib/SpillingTools.ts";
+import { ArtifactsLocal } from "./lib/ArtifactsLocal.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { orgRoutes } from "./Routes.ts";
 import { ApprovalsLocal } from "./services/ApprovalsLocal.ts";
@@ -45,6 +21,7 @@ import { Credentials, GitHubLocal } from "./services/GitHubLocal.ts";
 import { LedgerSqlite } from "./services/LedgerSqlite.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import { ReadDiffLive, ReadIssueLive } from "./tools/index.ts";
+import { ReadOutputLive } from "./tools/ReadOutput.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
 /** A directory setting: the named Config when set, else the default
@@ -95,17 +72,21 @@ const CheckoutsLive = Layer.unwrap(
 const Toolbox = Layer.unwrap(
   Effect.map(workspaceRoot, (fallback) =>
     Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
-      Layer.provide(ToolOutputStoreLocal),
+      Layer.provide(ArtifactsLocal),
       Layer.provide(AI.SandboxLocal),
       Layer.provide(Workspace.perRun({ fallback })),
     ),
   ),
 );
 
-/** The SPILL NET (lib/Spill.ts): oversized tool output is retained
- *  as a readOutput artifact instead of flooding the context. ONE
- *  instance over the same store the tools' own policies use. */
-const Spill = SpillTools.pipe(Layer.provide(ToolOutputStoreLocal));
+/** The SPILL NET (lib/SpillingTools.ts): oversized tool output is
+ *  retained as a readOutput artifact instead of flooding the context.
+ *  ONE instance over the same store the tools' own policies use, with
+ *  the same ReadOutput implementation as its redemption door. */
+const Spill = SpillingTools.pipe(
+  Layer.provide(ReadOutputLive),
+  Layer.provide(ArtifactsLocal),
+);
 
 /** The engineer over the shared toolbox and driver. */
 const EngineerLocal = GeneralEngineer.pipe(
@@ -143,6 +124,30 @@ export const Org = Layer.mergeAll(EngineerLocal, ReviewBotLocal).pipe(
   Layer.orDie,
 );
 
+/**
+ * The org, running on your machine — an Effectful {@link Local.Vite}
+ * service hosting both agents as a detached local process:
+ *
+ * - the ENGINEER — the resident coding agent, one durable chat per
+ *   thread, working the operator's own checkout;
+ * - the REVIEW BOT — the pipeline over the sandbox repository: every
+ *   pull request opened there admits a durable review session that
+ *   checks out `pull/N/head`, verifies by reading and RUNNING, and
+ *   posts one review.
+ *
+ * Both interpret on the SAME driver assembly (services/Driver.ts:
+ * sqlite session storage + the Anthropic LanguageModel + the session
+ * index riding the event stream), under one HTTP surface (Routes.ts),
+ * with the UI built by Vite and served from the same address.
+ *
+ * Long-lived machinery (the GitHub poller, driver run loops)
+ * registers on the process Scope — so plain `Effect.provide(Org)` is
+ * enough; the fibers survive init returning. GitHub credentials
+ * resolve from the alchemy profile (`alchemy login`) or the GitHub
+ * App env (`GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY`); running
+ * additionally needs `ANTHROPIC_API_KEY` in the operator's
+ * environment (the reconciler passes the shell env through).
+ */
 export default class OrgServer extends Local.Vite<OrgServer>()(
   "Engineer",
   {

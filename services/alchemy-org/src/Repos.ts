@@ -1,3 +1,5 @@
+import * as GitHub from "alchemy/GitHub";
+
 /**
  * The repository the org manages — the resource IS the export: an
  * un-yielded `GitHub.Repository(...)` constructor Effect at module
@@ -14,8 +16,6 @@
  * codebases. Pointing the pipeline at the real alchemy repositories is
  * a one-line change to this file once the loop has proven itself.
  */
-import * as GitHub from "alchemy/GitHub";
-
 export const testAlchemy = GitHub.Repository("test-alchemy", {
   owner: "alchemy-run",
   name: "test-alchemy",

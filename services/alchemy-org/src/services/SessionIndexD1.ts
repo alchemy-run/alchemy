@@ -1,11 +1,3 @@
-/**
- * `AI.SessionIndex` over D1 — the board's rows in the org database
- * (the mirror of SessionIndexSqlite.ts). Ingest runs wherever the
- * driver's `Events` emits — inside session Durable Objects — and
- * the HTTP surface lists from Worker handlers; D1 is the one place
- * they all agree. Summaries ONLY: transcripts live in each session's
- * own DO storage; the live tail rides its socket.
- */
 import * as AI from "alchemy/AI";
 import * as D1 from "alchemy/Cloudflare/D1";
 import * as Effect from "effect/Effect";
@@ -25,6 +17,14 @@ CREATE TABLE IF NOT EXISTS session_index (
   first_input TEXT
 )`;
 
+/**
+ * `AI.SessionIndex` over D1 — the board's rows in the org database
+ * (the mirror of SessionIndexSqlite.ts). Ingest runs wherever the
+ * driver's `Events` emits — inside session Durable Objects — and
+ * the HTTP surface lists from Worker handlers; D1 is the one place
+ * they all agree. Summaries ONLY: transcripts live in each session's
+ * own DO storage; the live tail rides its socket.
+ */
 export const SessionIndexD1 = Layer.effect(
   AI.SessionIndex,
   Effect.gen(function* () {

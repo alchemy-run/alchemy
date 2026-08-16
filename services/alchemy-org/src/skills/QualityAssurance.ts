@@ -1,8 +1,3 @@
-/**
- * The QualityAssurance skill — verifying a change against the real
- * checkout: search, read, and run. Deliberately NO editor: judge, not
- * author, as a type-level fact.
- */
 import * as AI from "alchemy/AI";
 import {
   Bash,
@@ -13,6 +8,11 @@ import {
   ReadOutput,
 } from "../tools/index.ts";
 
+/**
+ * The QualityAssurance skill — verifying a change against the real
+ * checkout: search, read, and run. Deliberately NO editor: judge, not
+ * author, as a type-level fact.
+ */
 export class QualityAssurance extends AI.Skill<QualityAssurance>()(
   "QualityAssurance",
 ) {}

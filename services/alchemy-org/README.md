@@ -88,7 +88,7 @@ graph the agent descends as the work demands:
   its contract: GitHub-binding physics (business rules like
   merge-needs-approval), local Workspace physics (FileSystem/shell).
 - `src/lib/` — `Patch.ts` (the apply-patch grammar: types, pure
-  parser, guarded apply), `ProcessRunner.ts`, `ToolOutputStore.ts`,
+  parser, guarded apply), `ProcessRunner.ts`, `Artifacts.ts`,
   `Output.ts`.
 - `src/Ledger.ts` — the dedupe/liveness + metadata seam
   (Memory | Sqlite | D1); PR→issue links live here.

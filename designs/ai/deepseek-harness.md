@@ -100,8 +100,8 @@ their agent loop is a config row, as our `Driver` is a Layer.
    *best-effort*: a spill failure keeps the inline original). Our
    translation needed **no new seam**: `ToolEngine.present` already
    sees every mention with its live handler, so the org's spill net is
-   a userland engine layer (`services/alchemy-org/src/lib/Spill.ts`)
-   over the existing `ToolOutputStore`. Tools with tailored policies
+   a userland engine layer (`services/alchemy-org/src/lib/SpillingTools.ts`)
+   over the existing `Artifacts` store. Tools with tailored policies
    (bash per-channel tails, grep caps, readFile paging) keep them; the
    net catches the unbounded (`readDiff` dropped its data-discarding
    60k cutoff). One core enabler: `ToolMention.tool` passes the

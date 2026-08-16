@@ -1,9 +1,3 @@
-/**
- * The BOARD — the review pipeline's domain projection over the
- * generic session summaries ({@link AI.SessionIndex}): one ReviewBot
- * session per pull request, keyed `owner/repo#N`. GitHub's open-PR
- * list (when available) supplies titles and states for the sidebar.
- */
 import type * as AI from "alchemy/AI";
 
 export interface BoardPullRequest {
@@ -21,6 +15,12 @@ export interface Board {
   readonly prs: Array<BoardPullRequest>;
 }
 
+/**
+ * The BOARD — the review pipeline's domain projection over the
+ * generic session summaries ({@link AI.SessionIndex}): one ReviewBot
+ * session per pull request, keyed `owner/repo#N`. GitHub's open-PR
+ * list (when available) supplies titles and states for the sidebar.
+ */
 export const buildBoard = (
   repo: string,
   sessions: ReadonlyArray<AI.SessionSummary>,

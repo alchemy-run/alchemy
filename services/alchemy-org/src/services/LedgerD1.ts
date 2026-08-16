@@ -1,3 +1,9 @@
+import * as D1 from "alchemy/Cloudflare/D1";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
+import { inWorker, orgDatabase } from "./OrgDatabase.ts";
+
 /**
  * The Ledger's D1 physics — its own module (the mirror of
  * LedgerSqlite.ts): the local process never bundles Cloudflare's D1
@@ -7,12 +13,6 @@
  * instance's memory — so a stateless, concurrent Worker fleet and a
  * laptop process run identical drive code.
  */
-import * as D1 from "alchemy/Cloudflare/D1";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
-import { inWorker, orgDatabase } from "./OrgDatabase.ts";
-
 export const LedgerD1 = Layer.effect(
   Ledger,
   Effect.gen(function* () {
