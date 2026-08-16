@@ -110,6 +110,37 @@ export interface SiteFetchOptions {
 }
 
 /**
+ * A cloud-specific serve bridge a Website class carries under
+ * `SERVE_BRIDGE_KEY`: the runtime half `Serve.make` dispatches matched
+ * requests to. Lives HERE (not `Serve.ts`) so graphs that only need
+ * dispatch — the value-form `createClient` (`Client/Server.ts`) — never
+ * pull in the mount-marker module: the `__ALCHEMY_SERVE_MOUNT_v1__`
+ * literal must appear in a server bundle ONLY on an explicit mount, or
+ * the framework generators' stand-down scan reads a false mount and
+ * skips wrapper injection (deploying a bare framework handler with no
+ * queue/scheduled exports).
+ */
+export interface ServeBridge {
+  match(
+    site: object,
+    request: Request,
+    options?: ServeOptions,
+  ): Promise<Response | undefined>;
+  /** Tear down the bridge's per-class runtime for `site`. */
+  dispose?(site: object): Promise<void>;
+  /**
+   * Build (memoized per class) the site's instance runtime against a
+   * resolved env — the `BridgeCore.getRuntime` seam for `alchemy/Client`.
+   */
+  runtime?(site: object, env: Record<string, unknown>): Promise<SiteRuntime>;
+}
+
+export const bridgeOf = (site: object): ServeBridge | undefined =>
+  (site as Record<string, unknown>)["~alchemy/Serve/bridge"] as
+    | ServeBridge
+    | undefined;
+
+/**
  * The cloud-specific half of a serve bridge. Kept deliberately thin — a
  * recipe supplies layers and adapters, never lifecycle logic. Every recipe
  * module must obey the leaf-import discipline: only leaf tag modules and

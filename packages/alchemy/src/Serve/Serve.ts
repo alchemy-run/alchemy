@@ -16,7 +16,7 @@
 
 import * as Data from "effect/Data";
 import { markRuntime, type ServeOptions, type SiteRuntime } from "./Bridge.ts";
-import { SERVE_BRIDGE_KEY, type SERVE_MOUNT_MARKER } from "./constants.ts";
+import { type SERVE_MOUNT_MARKER } from "./constants.ts";
 
 // The explicit-mount marker, written as a literal (type-checked against
 // `constants.ts`) so the exact byte sequence provably survives bundling and
@@ -34,41 +34,8 @@ export type { ServeOptions } from "./Bridge.ts";
 export { SERVE_MOUNT_MARKER, SERVE_SENTINEL } from "./constants.ts";
 export { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 
-/**
- * A cloud-specific serve bridge a Website class carries under
- * {@link SERVE_BRIDGE_KEY}: the runtime half {@link make} dispatches
- * matched requests to. Both clouds attach theirs at class construction
- * (`attachWorkerServeBridge`, `attachLambdaServeBridge`) so each rides the
- * site module's own import graph — `alchemy/Serve` never statically
- * imports either cloud's runtime recipe.
- */
-export interface ServeBridge {
-  match(
-    site: object,
-    request: Request,
-    options?: ServeOptions,
-  ): Promise<Response | undefined>;
-  /**
-   * Tear down the bridge's per-class runtime for `site` — close the
-   * instance-lifetime layer scope and evict the per-class memos. Used by
-   * dev servers that hot-swap the site class (cache-busted re-import →
-   * fresh class identity): without eviction every reloaded generation
-   * leaks its layer stack for the process lifetime.
-   */
-  dispose?(site: object): Promise<void>;
-  /**
-   * Build (memoized per class) the site's instance runtime against a
-   * resolved env — the `BridgeCore.getRuntime` seam. Consulted by
-   * `alchemy/Client`'s value form so an in-process dispatch builds the
-   * same cloud-flavored layer recipe as the fetch path.
-   */
-  runtime?(site: object, env: Record<string, unknown>): Promise<SiteRuntime>;
-}
-
-export const bridgeOf = (site: object): ServeBridge | undefined =>
-  (site as Record<string, unknown>)[SERVE_BRIDGE_KEY] as
-    | ServeBridge
-    | undefined;
+import { bridgeOf, type ServeBridge } from "./Bridge.ts";
+export { bridgeOf, type ServeBridge } from "./Bridge.ts";
 
 /**
  * Fallback for classes constructed by a factory that does not stamp a

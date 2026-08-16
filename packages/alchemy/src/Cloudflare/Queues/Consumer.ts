@@ -678,11 +678,13 @@ const toObserved = (c: {
     ? { consumerId: c.consumerId, scriptName: c.scriptName ?? undefined }
     : undefined;
 
-// ~60s budget — Worker reconcile uploads typically land in 2–10s,
-// but a fresh container/asset deploy can stretch that.
+// ~3min budget — Worker reconcile uploads typically land in 2-10s, but
+// a fresh multi-MB framework worker (Next.js server bundles run ~6MB)
+// can take over a minute before the consumers API sees its `queue`
+// export (observed 65s+ live, 2026-08-16).
 const queueHandlerReadinessSchedule = Schedule.max([
   Schedule.spaced("2 seconds"),
-  Schedule.recurs(30),
+  Schedule.recurs(90),
 ]);
 
 export const ConsumerProviderLocal = () =>

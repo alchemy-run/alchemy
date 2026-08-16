@@ -64,6 +64,44 @@ describe("serve bridge core", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
+  it.effect(
+    "the value-form client graph never reaches the mount-marker module",
+    () =>
+      Effect.gen(function* () {
+        // `__ALCHEMY_SERVE_MOUNT_v1__` in a built server bundle means "the
+        // user explicitly mounted alchemy/Serve" — the framework
+        // generators' stand-down scan then SKIPS wrapper injection. The
+        // marker literal lives only in Serve/Serve.ts, so Client/Server.ts
+        // (which rides every createClient backend graph) must never
+        // statically import it. Regression: 2026-08-16, bridgeOf imported
+        // from Serve.ts put the marker in every value-form backend bundle
+        // and the CF nextjs/sveltekit workers deployed WITHOUT their
+        // queue exports.
+        const fs = yield* FileSystem.FileSystem;
+        const seen = new Set<string>();
+        const queue = ["Client/Server.ts"];
+        while (queue.length > 0) {
+          const rel = queue.pop()!;
+          if (seen.has(rel)) continue;
+          seen.add(rel);
+          const source = yield* fs
+            .readFileString(NodePath.join(SRC, rel))
+            .pipe(Effect.orElseSucceed(() => ""));
+          for (const match of source.matchAll(
+            /^(?:import|export)[^;'"]*?from\s+"(\.[^"]+)";?/gms,
+          )) {
+            queue.push(
+              NodePath.normalize(
+                NodePath.join(NodePath.dirname(rel), match[1]),
+              ).replaceAll("\\", "/"),
+            );
+          }
+        }
+        expect(seen.has("Serve/Serve.ts")).toBe(false);
+        expect(seen.size).toBeGreaterThan(3);
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("both cloud recipes exist and stamp the same bridge key", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
