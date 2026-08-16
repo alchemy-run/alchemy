@@ -703,6 +703,19 @@ const retryableScriptPut = (
  *
  * @internal
  */
+/**
+ * Resolve a script's immutable ID (Cloudflare's script "tag") by name.
+ * Neither the settings endpoints nor GET /content expose it, so scan the
+ * account's script listing lazily and stop at the first match.
+ */
+const findScriptTag = (accountId: string, scriptName: string) =>
+  workers.listScripts.items({ accountId }).pipe(
+    Stream.filter((script) => script.id === scriptName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((script) => script?.tag ?? undefined),
+  );
+
 const putWorkerScript = (params: {
   accountId: string;
   scriptName: string;
@@ -2904,11 +2917,14 @@ export const LiveWorkerProvider = () =>
           ...(versionedUrl ? [versionedUrl] : []),
         ];
         return {
-          workerId: parentName,
+          // A version worker never owns a script — carry the *parent*
+          // script's immutable ID (its preview URLs are protected through
+          // the parent).
+          workerId:
+            output?.workerId !== undefined && output.workerId !== parentName
+              ? output.workerId
+              : yield* findScriptTag(accountId, parentName),
           workerName: parentName,
-          // A version worker never owns a script; protect its preview URLs
-          // through the parent Worker's scriptTag instead.
-          scriptTag: undefined,
           namespace: undefined,
           logpush: undefined,
           url: urls[0],
@@ -3625,9 +3641,10 @@ export const LiveWorkerProvider = () =>
         // reconciliation.
         if (dispatchNamespace) {
           return {
-            workerId: worker.id ?? name,
+            workerId:
+              worker.tag ??
+              (output?.workerId !== name ? output?.workerId : undefined),
             workerName: name,
-            scriptTag: worker.tag ?? output?.scriptTag,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
             url: undefined,
@@ -3873,12 +3890,16 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         return {
-          workerId: worker.id ?? name,
+          // The immutable script ID. The gradual-rollout branch deploys via
+          // the versions API (no script PUT response), and rows persisted by
+          // older releases carried the script *name* here — both fall back
+          // to a lazy listing lookup.
+          workerId:
+            worker.tag ??
+            (output?.workerId !== undefined && output.workerId !== name
+              ? output.workerId
+              : yield* findScriptTag(accountId, name)),
           workerName: name,
-          // The gradual-rollout branch deploys via the versions API (no
-          // script PUT response); the immutable tag is stable, so the cached
-          // value carries over.
-          scriptTag: worker.tag ?? output?.scriptTag,
           namespace: undefined,
           logpush: worker.logpush ?? undefined,
           url: urls[0],
@@ -4081,7 +4102,7 @@ export const LiveWorkerProvider = () =>
       });
 
       return Worker.Provider.of({
-        stables: ["workerId", "workerName", "scriptTag"],
+        stables: ["workerId", "workerName"],
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* yield* CloudflareEnvironment;
@@ -4116,9 +4137,8 @@ export const LiveWorkerProvider = () =>
                         ? [
                             {
                               accountId,
-                              workerId: script.id,
+                              workerId: script.tag ?? undefined,
                               workerName: script.id,
-                              scriptTag: script.tag ?? undefined,
                               namespace: undefined,
                               logpush: script.logpush ?? undefined,
                               url: undefined,
@@ -4311,9 +4331,8 @@ export const LiveWorkerProvider = () =>
             // `workerId` is always stable across an update; seed it so it
             // survives now that `diff.stables` overrides `provider.stables`
             // rather than being merged with it.
-            // `workerId` and the immutable script tag are always stable
-            // across an update.
-            const stables: string[] = ["workerId", "scriptTag"];
+            // The immutable script ID is always stable across an update.
+            const stables: string[] = ["workerId"];
             if (oldWorkerName === workerName) {
               stables.push("workerName");
             }
@@ -4385,9 +4404,8 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: skipping stub for version worker ${id}`,
             );
             return {
-              workerId: name,
+              workerId: undefined,
               workerName: name,
-              scriptTag: undefined,
               namespace: undefined,
               logpush: undefined,
               url: undefined,
@@ -4413,11 +4431,8 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: skipping stub for dispatch-namespace worker ${name}`,
             );
             return {
-              workerId: name,
+              workerId: undefined,
               workerName: name,
-              // The placeholder upload's tag isn't captured; reconcile's
-              // full deploy records the real immutable id right after.
-              scriptTag: undefined,
               namespace:
                 typeof news.namespace === "string" ? news.namespace : undefined,
               logpush: undefined,
@@ -4613,11 +4628,10 @@ export const LiveWorkerProvider = () =>
           }
 
           return {
-            workerId: name,
+            // The placeholder upload's tag isn't captured here; reconcile's
+            // full deploy records the immutable ID right after.
+            workerId: undefined,
             workerName: name,
-            // The placeholder upload's tag isn't captured; reconcile's full
-            // deploy records the real immutable id right after.
-            scriptTag: undefined,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
             url: undefined,
@@ -4683,11 +4697,15 @@ export const LiveWorkerProvider = () =>
               );
               const attrs = {
                 accountId,
-                workerId: workerName,
-                workerName,
                 // Not observable from the settings endpoint; carry the
-                // cached immutable id forward (backfilled by deploys).
-                scriptTag: output?.scriptTag,
+                // cached immutable ID forward (rows persisted by older
+                // releases carried the script name — treat those as
+                // unknown; the next deploy heals them).
+                workerId:
+                  output?.workerId !== workerName
+                    ? output?.workerId
+                    : undefined,
+                workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
                 url: undefined,
@@ -4813,11 +4831,15 @@ export const LiveWorkerProvider = () =>
             );
             const attrs = {
               accountId,
-              workerId: workerName,
+              // The settings endpoint doesn't expose the immutable ID;
+              // reuse the cached value, falling back to a lazy listing
+              // lookup for unknown/legacy rows (older releases persisted
+              // the script *name* here) so adoption records the real ID.
+              workerId:
+                output?.workerId !== undefined && output.workerId !== workerName
+                  ? output.workerId
+                  : yield* findScriptTag(accountId, workerName),
               workerName,
-              // Not observable from the settings endpoint; carry the cached
-              // immutable id forward (backfilled by deploys).
-              scriptTag: output?.scriptTag,
               namespace: undefined,
               logpush: settings.logpush ?? undefined,
               url: urls[0],

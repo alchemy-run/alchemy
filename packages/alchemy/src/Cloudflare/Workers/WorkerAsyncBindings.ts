@@ -5,6 +5,7 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import * as Namespace from "../../Namespace.ts";
+import { defaultProviderMode } from "../../ProviderMode.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import {
   Application,
@@ -72,7 +73,13 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   // enrolled Worker's destinations, including at create time, where
   // Cloudflare requires a self-hosted app to be born with a domain or
   // destinations.
-  if (props.access) {
+  //
+  // Skipped when this Worker runs locally (`alchemy dev`): a local worker
+  // has no cloud script (no immutable ID to enroll), and Access cannot
+  // front a localhost URL — the `dev.access` stub covers the runtime
+  // instead. A Worker opted out via `Alchemy.remote()` enrolls normally.
+  const accessHostMode = resource.Mode ?? (yield* defaultProviderMode);
+  if (props.access && accessHostMode !== "local") {
     const accessInput = props.access;
     // The shared form is the application itself — as the module-scope
     // declaration Effect (`const App = Cloudflare.Access.Application(...)`)
@@ -101,12 +108,12 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
     const previews = isApplication(access) || access.previews !== false;
     yield* application.bind(`enroll:${resource.FQN}`, {
       destinations: [
-        { type: "worker", workerId: resource.scriptTag.as<string>() },
+        { type: "worker", workerId: resource.workerId.as<string>() },
         ...(previews
           ? [
               {
                 type: "preview_worker" as const,
-                workerId: resource.scriptTag.as<string>(),
+                workerId: resource.workerId.as<string>(),
               },
             ]
           : []),

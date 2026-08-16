@@ -1134,18 +1134,18 @@ export type Worker<Bindings = any> = Resource<
   WorkerTypeId,
   WorkerProps<Bindings>,
   {
-    workerId: string;
-    workerName: string;
     /**
-     * The immutable id Cloudflare assigns to this Worker's script (the
-     * script "tag" — shown as the Worker ID in the dashboard). This is the
-     * `workerId` a `Cloudflare.Access.Application` worker destination
-     * expects (see `Cloudflare.Access.worker(...)`). `undefined` for a
-     * version worker (protect its previews through the parent Worker) and
-     * for state persisted before this attribute existed (backfilled on the
-     * next deploy).
+     * The immutable ID Cloudflare assigns to this Worker's script — a hex
+     * value like `c81a2d22c29840ed9d61681a3270dbff`, shown as the Worker ID
+     * in the dashboard and the identifier Access `worker` destinations key
+     * on. Stable across every update; changes only when the script is
+     * replaced. For the script *name*, use {@link workerName}. `undefined`
+     * when no cloud script exists yet (`alchemy dev`, pre-create stubs) —
+     * a version worker carries its parent script's ID.
      */
-    scriptTag: string | undefined;
+    workerId: string | undefined;
+    /** The script name, e.g. `"api"` — the classic API's identifier. */
+    workerName: string;
     /**
      * The Workers for Platforms dispatch namespace this Worker was deployed
      * into, or `undefined` for a regular account-level Worker.

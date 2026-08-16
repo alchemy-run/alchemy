@@ -124,12 +124,12 @@ test.provider(
       // The Worker enrolled itself: worker + preview destinations keyed by
       // its immutable script id, contributed through the application's
       // binding contract.
-      expect(worker.scriptTag).toBeDefined();
+      expect(worker.workerId).toBeDefined();
       expect(app.destinations).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             type: "worker",
-            workerId: worker.scriptTag,
+            workerId: worker.workerId,
           }),
         ]),
       );
@@ -137,11 +137,11 @@ test.provider(
         expect.arrayContaining([
           expect.objectContaining({
             type: "worker",
-            workerId: worker.scriptTag,
+            workerId: worker.workerId,
           }),
           expect.objectContaining({
             type: "preview_worker",
-            workerId: worker.scriptTag,
+            workerId: worker.workerId,
           }),
         ]),
       );
@@ -163,7 +163,7 @@ test.provider(
       expect(liveAfter.policies![0].id).toBe(inlinePolicyId);
       expect(
         (liveAfter.destinations ?? []).filter(
-          (d) => d.workerId === worker.scriptTag,
+          (d) => d.workerId === worker.workerId,
         ),
       ).toHaveLength(2);
 
@@ -224,7 +224,7 @@ test.provider(
       expect(app!.policies![0].reusable).toBe(false);
       // `previews: false` — production destination only.
       expect(app!.destinations).toEqual([
-        expect.objectContaining({ type: "worker", workerId: worker.scriptTag }),
+        expect.objectContaining({ type: "worker", workerId: worker.workerId }),
       ]);
 
       // Unauthenticated requests are intercepted.
@@ -265,19 +265,19 @@ test.provider(
         appId: app.applicationId,
       })) as unknown as LiveApp;
       const workerDestinations = (live.destinations ?? []).filter(
-        (d) => d.workerId === a.scriptTag || d.workerId === b.scriptTag,
+        (d) => d.workerId === a.workerId || d.workerId === b.workerId,
       );
       expect(workerDestinations).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ type: "worker", workerId: a.scriptTag }),
+          expect.objectContaining({ type: "worker", workerId: a.workerId }),
           expect.objectContaining({
             type: "preview_worker",
-            workerId: a.scriptTag,
+            workerId: a.workerId,
           }),
-          expect.objectContaining({ type: "worker", workerId: b.scriptTag }),
+          expect.objectContaining({ type: "worker", workerId: b.workerId }),
           expect.objectContaining({
             type: "preview_worker",
-            workerId: b.scriptTag,
+            workerId: b.workerId,
           }),
         ]),
       );
@@ -297,14 +297,14 @@ test.provider(
         appId: app.applicationId,
       })) as unknown as LiveApp;
       const remaining = (liveAfter.destinations ?? []).filter(
-        (d) => d.workerId === a.scriptTag || d.workerId === b.scriptTag,
+        (d) => d.workerId === a.workerId || d.workerId === b.workerId,
       );
       expect(remaining).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ type: "worker", workerId: a.scriptTag }),
+          expect.objectContaining({ type: "worker", workerId: a.workerId }),
           expect.objectContaining({
             type: "preview_worker",
-            workerId: a.scriptTag,
+            workerId: a.workerId,
           }),
         ]),
       );

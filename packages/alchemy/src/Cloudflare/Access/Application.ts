@@ -49,10 +49,10 @@ export type ApplicationType =
  * - `via_mcp_server_portal` — routes via a managed MCP server portal.
  * - `worker` / `preview_worker` — a specific Cloudflare Worker's production
  *   traffic (custom domains, routes, `workers.dev`) or its version preview
- *   URLs, keyed by the Worker's immutable script id (its `scriptTag`
- *   attribute). Usually you don't write these by hand — set the `access`
- *   prop on the `Cloudflare.Worker` instead, and the Worker enrolls itself
- *   into the application.
+ *   URLs, keyed by the Worker's immutable ID (its `workerId` attribute).
+ *   Usually you don't write these by hand — set the `access` prop on the
+ *   `Cloudflare.Worker` instead, and the Worker enrolls itself into the
+ *   application.
  * - `all_workers` / `all_preview_workers` — every Worker on the account
  *   (including ones created later), production or preview traffic
  *   respectively. Hostname-level policies take precedence over Worker-level
