@@ -1,0 +1,23 @@
+{
+  "name": "@monorepo-frontends/nextjs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "catalog:frameworks",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@opennextjs/aws": "catalog:frameworks",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "^6.0.3"
+  }
+}

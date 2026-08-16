@@ -1,0 +1,10 @@
+node_modules/
+.alchemy/
+dist/
+.next/
+.nuxt/
+.output/
+.open-next/
+.svelte-kit/
+.astro/
+next-env.d.ts

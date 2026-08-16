@@ -1,0 +1,18 @@
+{
+  "name": "@monorepo-frontends/sveltekit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "catalog:frameworks",
+    "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+    "@types/node": "^24.12.0",
+    "svelte": "catalog:frameworks",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

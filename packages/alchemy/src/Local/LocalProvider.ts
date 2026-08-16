@@ -293,26 +293,31 @@ export const make = <
       // finalizers (killing the processes).
       const rootScope = yield* Effect.scope;
 
-      // Keyed by logical id: a restart replaces the entry, a replacement's
-      // new generation overwrites it (and the old generation's delete is
-      // gated on `instanceId` so it cannot kill the successor).
+      // Keyed by FQN (namespace path + logical id): a restart replaces the
+      // entry, a replacement's new generation overwrites it (and the old
+      // generation's delete is gated on `instanceId` so it cannot kill the
+      // successor). The LOGICAL id alone is NOT unique — several composites
+      // in one stack routinely declare the same-named child (four Websites
+      // each own a `Server("Build", ...)`), and an id-keyed registry makes
+      // every reconcile tear down the PREVIOUS sibling's running instance
+      // as a spurious "config change" (#monorepo-frontends).
       const instances = new Map<string, Instance<R["Attributes"]>>();
 
-      // Serializes reconcile/delete per logical id so a restart can never
+      // Serializes reconcile/delete per FQN so a restart can never
       // interleave with another restart or a delete and leak a scope.
       const locks = new Map<string, Semaphore.Semaphore>();
-      const lock = (id: string) => {
-        let semaphore = locks.get(id);
+      const lock = (fqn: string) => {
+        let semaphore = locks.get(fqn);
         if (!semaphore) {
           semaphore = Semaphore.makeUnsafe(1);
-          locks.set(id, semaphore);
+          locks.set(fqn, semaphore);
         }
         return semaphore;
       };
       const withLock = <A, E, RR>(
-        id: string,
+        fqn: string,
         effect: Effect.Effect<A, E, RR>,
-      ) => Semaphore.withPermits(lock(id), 1)(effect);
+      ) => Semaphore.withPermits(lock(fqn), 1)(effect);
 
       const resolveDesired = Effect.fn(function* (
         input: LocalProviderInput<R>,
@@ -337,8 +342,8 @@ export const make = <
       ) {
         const token = {};
         const invalidate = Effect.sync(() => {
-          if (instances.get(input.id)?.token === token) {
-            instances.delete(input.id);
+          if (instances.get(input.fqn)?.token === token) {
+            instances.delete(input.fqn);
           }
         });
         const scope = yield* Scope.fork(rootScope);
@@ -348,7 +353,7 @@ export const make = <
           session,
           invalidate,
         }).pipe(Effect.forkDetach, Scope.provide(scope));
-        instances.set(input.id, {
+        instances.set(input.fqn, {
           instanceId: input.instanceId,
           config,
           configHash,
@@ -404,7 +409,7 @@ export const make = <
             bindings: newBindings as ResourceBinding<R["Binding"]>[],
           };
           const { config, configHash } = yield* resolveDesired(input);
-          const existing = instances.get(id);
+          const existing = instances.get(fqn);
           if (existing && existing.configHash === configHash) {
             return { action: "noop" } satisfies Diff;
           }
@@ -431,7 +436,7 @@ export const make = <
           session: ScopedPlanStatusSession;
         }) {
           return yield* withLock(
-            id,
+            fqn,
             Effect.gen(function* () {
               const input: LocalProviderInput<R> = {
                 id,
@@ -441,7 +446,7 @@ export const make = <
                 bindings,
               };
               const { config, configHash } = yield* resolveDesired(input);
-              const existing = instances.get(id);
+              const existing = instances.get(fqn);
               if (existing) {
                 if (existing.configHash === configHash) {
                   yield* Effect.log(
@@ -456,7 +461,7 @@ export const make = <
                   `[${id}] Changes detected, restarting instance`,
                 );
                 yield* teardown(existing);
-                instances.delete(id);
+                instances.delete(fqn);
               }
               return yield* startInstance(input, session, config, configHash);
             }),
@@ -464,24 +469,26 @@ export const make = <
         }),
         delete: Effect.fn(function* ({
           id,
+          fqn,
           instanceId,
         }: {
           id: string;
+          fqn: string;
           instanceId: string;
         }) {
           yield* withLock(
-            id,
+            fqn,
             Effect.gen(function* () {
-              const existing = instances.get(id);
+              const existing = instances.get(fqn);
               if (existing && existing.instanceId !== instanceId) {
                 // A replacement's new generation is registered under this
-                // logical id — the old generation's delete must not touch
-                // it (nor the cross-restart state `stop` would clean up).
+                // FQN — the old generation's delete must not touch it
+                // (nor the cross-restart state `stop` would clean up).
                 return;
               }
               if (existing) {
                 yield* teardown(existing);
-                instances.delete(id);
+                instances.delete(fqn);
               }
               // Runs even when nothing is registered: cross-restart state
               // (proxies, restart hooks) and out-of-session cleanup (e.g.

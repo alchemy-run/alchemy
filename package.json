@@ -67,6 +67,7 @@
       "examples/*",
       "examples/monorepo-single-stack/*",
       "examples/monorepo-multi-stack/*",
+      "examples/monorepo-frontends/packages/*",
       "benchmark/*",
       "distilled/packages/*",
       "fixtures/*"

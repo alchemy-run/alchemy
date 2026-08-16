@@ -1,0 +1,15 @@
+---
+// On-demand SSR: rendered by the Lambda (or the dev server) on every
+// request. `/` is outside `server.routes`, so Astro serves it.
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>monorepo-frontends: Astro</title>
+  </head>
+  <body>
+    <h1>Astro in a monorepo</h1>
+    <p data-testid="marker">monorepo-astro-page</p>
+  </body>
+</html>

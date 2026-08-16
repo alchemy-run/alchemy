@@ -1,0 +1,16 @@
+{
+  "name": "@monorepo-frontends/nuxt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "nitropack": "catalog:frameworks",
+    "nuxt": "catalog:frameworks",
+    "typescript": "catalog:"
+  }
+}
