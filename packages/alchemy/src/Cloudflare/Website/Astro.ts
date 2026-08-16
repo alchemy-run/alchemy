@@ -51,6 +51,12 @@ export interface AstroProps<
    */
   sessionKVBindingName?: string | false;
   /**
+   * Runtime used to prerender static pages. `"workerd"` renders them in the
+   * production Worker runtime; `"node"` uses Astro's stock Node prerenderer.
+   * @default "workerd"
+   */
+  prerenderEnvironment?: "workerd" | "node";
+  /**
    * Serializable Astro config merged into the in-memory configuration.
    * The project's `astro.config.*` file loads natively; astro merges
    * these options OVER it (scalars override the file). The Cloudflare
@@ -304,6 +310,7 @@ export const Astro: {
                 // source provider can skip its session-driver wiring on
                 // opt-out.
                 sessionKVBindingName: props.sessionKVBindingName,
+                prerenderEnvironment: props.prerenderEnvironment,
                 // Server output is the documented default: astro's own
                 // zero-config default is `"static"`, which would prerender
                 // every page at build time inside workerd — where the
