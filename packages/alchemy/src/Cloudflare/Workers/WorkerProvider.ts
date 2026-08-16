@@ -4356,7 +4356,14 @@ export const LiveWorkerProvider = () =>
             oldWorkerName === workerName &&
             newDoClassNames.length === oldDoClassNames.length &&
             newDoClassNames.every((name, i) => name === oldDoClassNames[i]);
+          // Rows persisted by older releases carried the script *name* in
+          // `workerId` (interrupted precreates a provisional ""). Plan one
+          // update even when nothing else changed, so reconcile re-records
+          // the immutable Worker ID.
+          const legacyWorkerId =
+            cachedWorkerId(output.workerId, output.workerName) === undefined;
           if (
+            legacyWorkerId ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -4370,11 +4377,11 @@ export const LiveWorkerProvider = () =>
               accountId,
             ))
           ) {
-            // `workerId` is always stable across an update; seed it so it
-            // survives now that `diff.stables` overrides `provider.stables`
-            // rather than being merged with it.
-            // The immutable script ID is always stable across an update.
-            const stables: string[] = ["workerId"];
+            // The immutable script ID is always stable across an update —
+            // except the healing update above, where its value is about to
+            // change from the legacy shape to the real ID (downstream
+            // consumers must see the fresh value).
+            const stables: string[] = legacyWorkerId ? [] : ["workerId"];
             if (oldWorkerName === workerName) {
               stables.push("workerName");
             }

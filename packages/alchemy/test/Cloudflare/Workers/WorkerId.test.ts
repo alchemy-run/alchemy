@@ -65,7 +65,7 @@ test.provider(
 );
 
 test.provider(
-  "legacy state carrying the script name in workerId heals on the next update",
+  "legacy state carrying the script name in workerId heals on a no-change redeploy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -108,11 +108,12 @@ test.provider(
         },
       });
 
-      // The next update must not trust the legacy value: reconcile records
+      // A NO-CHANGE redeploy must heal: diff detects the legacy shape and
+      // plans an update even though no prop changed, and reconcile records
       // the real immutable ID again (from the upload response).
-      const v2 = yield* deployWith("v2");
-      expect(v2.workerId).toEqual(realId);
-      expect(v2.workerId).not.toEqual(v2.workerName);
+      const healed = yield* deployWith("v1");
+      expect(healed.workerId).toEqual(realId);
+      expect(healed.workerId).not.toEqual(healed.workerName);
 
       yield* stack.destroy();
     }).pipe(logLevel),
