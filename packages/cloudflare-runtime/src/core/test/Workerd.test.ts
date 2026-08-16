@@ -12,37 +12,45 @@ import * as PortHelpers from "./helpers/port.ts";
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
 layer(services)((it) => {
-  it.effect("spawns a workerd process", () =>
-    Effect.gen(function* () {
-      const workerd = yield* Workerd.Workerd;
-      const result = yield* workerd.serve({
-        sockets: [
-          {
-            name: "test",
-            address: "localhost:0",
-            service: { name: "test" },
-          },
-        ],
-        services: [
-          {
-            name: "test",
-            worker: {
-              compatibilityDate: "2026-03-10",
-              modules: [
-                {
-                  name: "main.js",
-                  esModule:
-                    "export default { fetch: () => new Response('Hello, world!') };",
+  it.effect(
+    "spawns a workerd process",
+    () =>
+      Effect.gen(function* () {
+        const workerd = yield* Workerd.Workerd;
+        // Bounded like every stage below: a slow boot must surface as a
+        // typed TimeoutError, never as an external vitest interrupt (which
+        // wedges the shared layer runtime for the remaining tests).
+        const result = yield* workerd
+          .serve({
+            sockets: [
+              {
+                name: "test",
+                address: "localhost:0",
+                service: { name: "test" },
+              },
+            ],
+            services: [
+              {
+                name: "test",
+                worker: {
+                  compatibilityDate: "2026-03-10",
+                  modules: [
+                    {
+                      name: "main.js",
+                      esModule:
+                        "export default { fetch: () => new Response('Hello, world!') };",
+                    },
+                  ],
                 },
-              ],
-            },
-          },
-        ],
-      });
-      expect(result).toMatchObject({
-        test: expect.any(Number),
-      });
-    }),
+              },
+            ],
+          })
+          .pipe(Effect.timeout(20_000));
+        expect(result).toMatchObject({
+          test: expect.any(Number),
+        });
+      }),
+    { timeout: 120_000 },
   );
 
   it.effect("fails on invalid worker configuration", () =>
@@ -204,6 +212,12 @@ layer(services)((it) => {
   // retries died instantly ("All fibers interrupted without error"). With
   // per-stage bounds a load blip surfaces as a fast, typed failure naming
   // the stage, which vitest's CI retry budget can actually absorb.
+  //
+  // The OUTER test budget must dwarf the summed stage bounds: on a starved
+  // runner (2026-08-16: this vitest worker spent 71s just importing) timers
+  // fire late, so ~40s of nominal bounds stretched past the 60s budget and
+  // the external interrupt won again — wedging the runtime exactly as
+  // before. 180s keeps the typed stage failure first at ~4x dilation.
   it.effect(
     "shuts down workerd when its scope closes",
     () =>
@@ -264,7 +278,7 @@ layer(services)((it) => {
         );
         assert(Exit.isSuccess(free));
       }),
-    { timeout: 60_000 },
+    { timeout: 180_000 },
   );
   // Pins the invariant the shutdown test's de-flake relies on: a TYPED
   // failure leaves the shared layer runtime healthy, so a vitest retry gets
@@ -318,7 +332,7 @@ layer(services)((it) => {
         );
         expect(yield* Effect.promise(() => response.text())).toBe("retried");
       }),
-    { timeout: 60_000, retry: 2 },
+    { timeout: 180_000, retry: 2 },
   );
   // Pins the persistent-wedge failure mode: against a server that accepts
   // connections but never responds (the shape of the CI wedge — workerd's

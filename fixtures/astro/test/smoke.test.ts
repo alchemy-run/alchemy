@@ -17,7 +17,13 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(response?.status()).toBe(200);
       await expect(page.locator("#mode")).toHaveText("on-demand");
       await expect(page.locator("#binding")).toHaveText(FIXTURE_VALUE);
-      await page.evaluate(() => document.fonts.ready);
+      // The dev server can full-reload the page once shortly after first
+      // paint (cold-start dependency optimization). Locator assertions
+      // re-query through that, but a bare `page.evaluate` dies with
+      // "Execution context was destroyed" — retry it through the reload.
+      await expect(async () => {
+        await page.evaluate(() => document.fonts.ready);
+      }).toPass();
 
       await expect(page).toHaveScreenshot("index.png", {
         animations: "disabled",
