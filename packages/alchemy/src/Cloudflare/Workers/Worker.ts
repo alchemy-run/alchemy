@@ -987,13 +987,16 @@ export interface WorkerProps<
          */
         cf?: Record<string, unknown>;
         /**
-         * Simulate Cloudflare Access locally (the alchemy equivalent of
-         * wrangler's `access.dev` config). When set, `ctx.access` is
-         * defined under `alchemy dev` with this audience and identity —
-         * letting you exercise identity-aware logic without deploying.
-         * Omit to simulate unauthenticated requests (`ctx.access` is
-         * `undefined`). Ignored on deploy: production `ctx.access` is
-         * populated by Cloudflare when the request passes through Access.
+         * Stub the authenticated Access state in local dev. In production,
+         * `ctx.access` is populated by Cloudflare's edge after a request
+         * passes the Access login wall — locally there is no edge and no
+         * login, so without this stub `ctx.access` is always `undefined`
+         * and identity-dependent code paths can't run. When set, every
+         * request served by `alchemy dev` behaves as if this one user had
+         * logged in: `ctx.access` carries the given audience and
+         * `getIdentity()` resolves the given identity. Omit to simulate
+         * unauthenticated requests. Inert on deploy — the deployed Worker
+         * always gets the real edge-populated `ctx.access`.
          */
         access?: {
           /**
