@@ -3,10 +3,20 @@ import {
   resolveZoneId,
   zoneNameCandidates,
 } from "@/Cloudflare/Zone/lookup.ts";
+import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 describe("Cloudflare zone lookup", () => {
+  const withoutCredentials = <A, E>(effect: Effect.Effect<A, E, Credentials>) =>
+    effect.pipe(
+      Effect.provideService(
+        Credentials,
+        Effect.die("explicit zone IDs must not resolve credentials"),
+      ),
+      Effect.runSync,
+    );
+
   test("zoneNameCandidates walks hostname labels longest-first", () => {
     expect(zoneNameCandidates("app.example.com")).toEqual([
       "app.example.com",
@@ -25,7 +35,7 @@ describe("Cloudflare zone lookup", () => {
     const zoneId = "0123456789abcdef0123456789abcdef";
     expect(isId(zoneId)).toBe(true);
     expect(
-      Effect.runSync(
+      withoutCredentials(
         resolveZoneId({
           accountId: "account",
           zone: zoneId,
@@ -34,7 +44,7 @@ describe("Cloudflare zone lookup", () => {
       ),
     ).toEqual(zoneId);
     expect(
-      Effect.runSync(
+      withoutCredentials(
         resolveZoneId({
           accountId: "account",
           zone: { zoneId, name: "example.com" },

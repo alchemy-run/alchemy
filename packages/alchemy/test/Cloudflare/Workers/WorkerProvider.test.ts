@@ -5,6 +5,7 @@ import {
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
+  shouldRecreateWorkerDomainAttachment,
   shouldObserveWorkerCrons,
   shouldObserveWorkerDomains,
   shouldObserveWorkerRoutes,
@@ -178,6 +179,18 @@ describe("WorkerProvider", () => {
         }),
       ).toEqual(zoneId);
     });
+
+    test("recreates an existing attachment only for a changed explicit zone", () => {
+      expect(shouldRecreateWorkerDomainAttachment("live-zone", undefined)).toBe(
+        false,
+      );
+      expect(
+        shouldRecreateWorkerDomainAttachment("live-zone", "live-zone"),
+      ).toBe(false);
+      expect(
+        shouldRecreateWorkerDomainAttachment("live-zone", "desired-zone"),
+      ).toBe(true);
+    });
   });
 
   describe("stateWorkerDomain", () => {
@@ -209,6 +222,22 @@ describe("WorkerProvider", () => {
         aliases: [],
         redirects: [],
         zone: "0123456789abcdef0123456789abcdef",
+      });
+      expect(
+        stateWorkerDomain({
+          domain: {
+            name: "app.example.com",
+            aliases: [],
+            redirects: [],
+            zoneId: 42,
+            zoneName: "example.com",
+          },
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: [],
+        redirects: [],
+        zone: "example.com",
       });
     });
 

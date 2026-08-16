@@ -479,22 +479,45 @@ export interface ResolvedWorkerDomain {
   zone?: ZoneReference;
 }
 
+const isZoneReference = (value: unknown): value is ZoneReference => {
+  if (typeof value === "string") return true;
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { zoneId?: unknown; name?: unknown };
+  return (
+    typeof candidate.zoneId === "string" &&
+    (candidate.name === undefined || typeof candidate.name === "string")
+  );
+};
+
 /** Collapse Worker.domain zone pin fields to one {@link ZoneReference}. */
 export const resolveWorkerDomainZone = (
   config:
     | {
-        readonly zoneId?: string;
-        readonly zoneName?: string;
-        readonly zone?: ZoneReference;
+        readonly zoneId?: unknown;
+        readonly zoneName?: unknown;
+        readonly zone?: unknown;
       }
     | undefined,
 ): ZoneReference | undefined => {
   if (config === undefined) return undefined;
-  if (config.zoneId !== undefined) return config.zoneId;
-  if (config.zone !== undefined) return config.zone;
-  if (config.zoneName !== undefined) return config.zoneName;
+  if (typeof config.zoneId === "string") return config.zoneId;
+  if (isZoneReference(config.zone)) return config.zone;
+  if (typeof config.zoneName === "string") return config.zoneName;
   return undefined;
 };
+
+/** Whether an existing attachment must move to satisfy an explicit zone pin. */
+export const shouldRecreateWorkerDomainAttachment = (
+  liveZoneId: string,
+  desiredZoneId: string | undefined,
+): boolean => desiredZoneId !== undefined && liveZoneId !== desiredZoneId;
+
+// After deleting a custom-domain attachment, Cloudflare can briefly retain
+// ownership of the hostname and reject the replacement with code 100116.
+const workerDomainConflictSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(8),
+]);
 
 // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
 // Cloudflare API receives the form it stores domains in. `new URL(...)`
@@ -1324,12 +1347,28 @@ export const LiveWorkerProvider = () =>
           // clear message rather than silently re-routing traffic.
           const attachDomain = Effect.fn(function* (hostname: string) {
             const live = liveByHostname.get(hostname);
-            if (live) {
+            const desiredZoneId =
+              zone === undefined
+                ? undefined
+                : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
+            if (
+              live &&
+              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
+            ) {
               return {
                 hostname: live.hostname,
                 id: live.id,
                 zoneId: live.zoneId,
               };
+            }
+
+            if (live) {
+              // Cloudflare cannot change the zone of an existing custom
+              // domain in place. Delete only this still-desired attachment,
+              // then recreate it below with the explicitly requested zone.
+              yield* workers
+                .deleteDomain({ accountId, domainId: live.id })
+                .pipe(Effect.catchTag("DomainNotFound", () => Effect.void));
             }
 
             // Not attached to this Worker — but it could still belong
@@ -1358,11 +1397,9 @@ export const LiveWorkerProvider = () =>
               );
             }
 
-            const zoneId = yield* inferZoneIdForHostname(
-              hostname,
-              zoneCache,
-              zone,
-            );
+            const zoneId =
+              desiredZoneId ??
+              (yield* inferZoneIdForHostname(hostname, zoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
@@ -1381,6 +1418,10 @@ export const LiveWorkerProvider = () =>
                     Schedule.exponential(200),
                     Schedule.recurs(15),
                   ]),
+                }),
+                Effect.retry({
+                  while: (error) => error._tag === "HostnameAlreadyInUse",
+                  schedule: workerDomainConflictSchedule,
                 }),
               );
             return {
