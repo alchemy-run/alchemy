@@ -179,7 +179,7 @@
       },
       "workers": {
         "@cloudflare/unenv-preset": "^2.16.0",
-        "@cloudflare/workers-types": "^5.20260704.1",
+        "@cloudflare/workers-types": "^5.20260812.1",
         "miniflare": "^4.20260701.0",
         "unenv": "^2.0.0-rc.24",
         "workerd": "1.20260704.1"

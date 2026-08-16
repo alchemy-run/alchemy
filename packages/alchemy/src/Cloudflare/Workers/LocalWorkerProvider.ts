@@ -549,11 +549,18 @@ export const LocalWorkerProvider = () =>
         selfUrl: string | undefined,
       ) {
         const { accountId } = yield* cloudflareEnv;
-        return yield* materializeRuntimeBindings(config, {
-          accountId,
-          selfUrl,
-          stack: { name: stack.name, stage: stack.stage },
-        });
+        return yield* materializeRuntimeBindings(
+          {
+            ...config,
+            devAccess:
+              config.dev.mode === "external" ? undefined : config.dev.access,
+          },
+          {
+            accountId,
+            selfUrl,
+            stack: { name: stack.name, stage: stack.stage },
+          },
+        );
       });
 
       // Latest successful serve per worker id, so runtime wiring changes
@@ -1028,6 +1035,7 @@ export const LocalWorkerProvider = () =>
                         hasAssets: worker.hasAssets,
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
+                        devAccess: worker.dev.access,
                         durableObjectNamespaces: worker.durableObjectNamespaces,
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
@@ -1196,7 +1204,10 @@ export const LocalWorkerProvider = () =>
                   port: news.dev?.port ?? DEFAULT_DEV_PORT,
                 }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
-            workerId: name,
+            // No cloud script exists in dev — fabricate a `dev:`-marked
+            // identity (the shared local-provider convention, and the
+            // legacy-row mode marker; see LOCAL_ID_PREFIX).
+            workerId: `dev:${name}`,
             workerName: name,
             namespace: undefined,
             logpush: undefined,
@@ -1229,7 +1240,7 @@ export const LocalWorkerProvider = () =>
             yield* closeWorkerd(id);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
-              workerId: config.name,
+              workerId: `dev:${config.name}`,
               workerName: config.name,
               namespace: undefined,
               logpush: undefined,
@@ -1298,7 +1309,7 @@ export const LocalWorkerProvider = () =>
           // are not served by this session, so they don't appear.
           const urls = yield* resolveLocalUrls(serverUrl);
           return {
-            workerId: config.name,
+            workerId: `dev:${config.name}`,
             workerName: config.name,
             namespace: undefined,
             logpush: undefined,

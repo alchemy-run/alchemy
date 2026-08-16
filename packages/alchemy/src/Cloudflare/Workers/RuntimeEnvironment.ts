@@ -22,6 +22,10 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import {
+  resolveAccessContext,
+  type WorkerExecutionContextAccess,
+} from "./WorkerAccess.ts";
 
 export class WorkerEnvironment extends Context.Service<
   WorkerEnvironment,
@@ -69,6 +73,16 @@ export class WorkerExecutionContext extends Context.Service<
      */
     readonly cache: WorkerExecutionContextCache;
     /**
+     * The Cloudflare Access context for the current request (`ctx.access`),
+     * or `undefined` when the request did not pass through Access. Under
+     * `alchemy dev` the Worker's `dev.access` config simulates it.
+     */
+    readonly access: Effect.Effect<
+      WorkerExecutionContextAccess | undefined,
+      never,
+      RuntimeContext
+    >;
+    /**
      * The raw workerd ExecutionContext, for interop with async APIs.
      */
     readonly raw: cf.ExecutionContext;
@@ -77,8 +91,10 @@ export class WorkerExecutionContext extends Context.Service<
 
 export const fromExecutionContext = (
   ctx: cf.ExecutionContext,
+  env?: Record<string, unknown>,
 ): WorkerExecutionContext["Service"] => ({
   raw: ctx,
+  access: Effect.sync(() => resolveAccessContext(ctx, env)),
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
@@ -141,6 +157,17 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
       liveExecutionContext.pipe(
         Effect.flatMap((live) => live.cache.purge(options)),
       ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
+  },
+  // A getter so this module-level literal doesn't eagerly reference
+  // `liveExecutionContext` before its declaration below.
+  get access() {
+    return liveExecutionContext.pipe(
+      Effect.flatMap((live) => live.access),
+    ) as Effect.Effect<
+      WorkerExecutionContextAccess | undefined,
+      never,
+      RuntimeContext
+    >;
   },
 };
 

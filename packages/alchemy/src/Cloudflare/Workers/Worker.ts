@@ -37,6 +37,12 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
+import {
+  resolveAccessContext,
+  type WorkerAccessConfig,
+  type WorkerAccessIdentity,
+  type WorkerExecutionContextAccess,
+} from "./WorkerAccess.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
@@ -528,6 +534,40 @@ export interface WorkerProps<
    */
   workersDev?: boolean | WorkersDevConfig;
   /**
+   * Protect this Worker with Cloudflare Access. Two forms:
+   *
+   * **Dedicated** — `{ policies, ... }` declares an Access application
+   * owned by this Worker (namespaced under it as `<Worker>/Access`),
+   * created, updated, and deleted with it:
+   * ```ts
+   * access: {
+   *   policies: [
+   *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
+   *   ],
+   * }
+   * ```
+   *
+   * **Shared** — pass a `Cloudflare.Access.Application` directly to enroll
+   * into it. Access policies are application-wide: every enrolled Worker
+   * is gated by the same policy set:
+   * ```ts
+   * access: TeamOnly
+   * ```
+   *
+   * Either way the Worker's `worker` destination — and a `preview_worker`
+   * destination unless `previews: false` (dedicated form) — is pushed onto
+   * the application, covering custom domains, routes, the `workers.dev`
+   * URL, and version preview URLs. Removing the prop (or deleting the
+   * Worker) un-enrolls it.
+   *
+   * At runtime, read the authenticated identity from `ctx.access` via
+   * `Cloudflare.Access.Context`; under `alchemy dev`, simulate it with
+   * `dev: { access: ... }`. Also accepted by every `Cloudflare.Website.*`
+   * framework. See the
+   * [Protect a Worker with Access](/cloudflare/security/access) guide.
+   */
+  access?: WorkerAccessConfig;
+  /**
    * Static assets to serve. Can be:
    * - A string path to the assets directory
    * - An AssetsProps object with directory and config
@@ -845,6 +885,30 @@ export interface WorkerProps<
          * different edge location.
          */
         cf?: Record<string, unknown>;
+        /**
+         * Stub the authenticated Access state in local dev. In production,
+         * `ctx.access` is populated by Cloudflare's edge after a request
+         * passes the Access login wall — locally there is no edge and no
+         * login, so without this stub `ctx.access` is always `undefined`
+         * and identity-dependent code paths can't run. When set, every
+         * request served by `alchemy dev` behaves as if this one user had
+         * logged in: `ctx.access` carries the given audience and
+         * `getIdentity()` resolves the given identity. Omit to simulate
+         * unauthenticated requests. Inert on deploy — the deployed Worker
+         * always gets the real edge-populated `ctx.access`.
+         */
+        access?: {
+          /**
+           * Simulated Access application audience (AUD) tag.
+           * @default "dev"
+           */
+          aud?: string;
+          /**
+           * Simulated identity returned by `ctx.access.getIdentity()`,
+           * e.g. `{ email: "dev@example.com" }`.
+           */
+          identity?: WorkerAccessIdentity;
+        };
       }
     | {
         /**
@@ -969,7 +1033,19 @@ export type Worker<Bindings = any> = Resource<
   WorkerTypeId,
   WorkerProps<Bindings>,
   {
+    /**
+     * The immutable ID Cloudflare assigns to this Worker's script — a hex
+     * value like `c81a2d22c29840ed9d61681a3270dbff`, shown as the Worker ID
+     * in the dashboard and the identifier Access `worker` destinations key
+     * on. Stable across every update; changes only when the script is
+     * replaced. For the script *name*, use {@link workerName}. A version
+     * worker carries its parent script's ID. Under `alchemy dev` there is
+     * no cloud script, so the local provider generates a `dev:`-prefixed
+     * ID instead (switching between dev and deploy replaces the resource,
+     * so the two identities never mix).
+     */
     workerId: string;
+    /** The script name, e.g. `"api"` — the classic API's identifier. */
     workerName: string;
     /**
      * The Workers for Platforms dispatch namespace this Worker was deployed
@@ -1458,6 +1534,61 @@ const finalizeWorkerProps = (
  * @resource
  * @product Workers
  * @category Workers & Compute
+ * @section Protect with Access
+ * Put Cloudflare Access in front of the Worker with the `access` prop —
+ * unauthenticated requests are redirected to your team's login page, and
+ * handlers read the authenticated identity from `ctx.access` via
+ * `Cloudflare.Access.Context`. See the
+ * [Protect a Worker with Access](/cloudflare/security/access) guide.
+ *
+ * @example Dedicated application — per-Worker policies
+ * The `{ policies }` form declares an Access application owned by this
+ * Worker (namespaced under it as `<Worker>/Access`), created, updated,
+ * and deleted with it:
+ * ```typescript
+ * export default Cloudflare.Worker(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     access: {
+ *       policies: [
+ *         { decision: "allow", include: [{ emailDomain: "example.com" }] },
+ *       ],
+ *     },
+ *     // simulate the authenticated state under `alchemy dev`
+ *     dev: { access: { aud: "dev", identity: { email: "dev@example.com" } } },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const access = yield* Cloudflare.Access.Context;
+ *         const identity = yield* access!.getIdentity();
+ *         return yield* HttpServerResponse.json({ email: identity?.email });
+ *       }),
+ *     };
+ *   }),
+ * );
+ * ```
+ *
+ * @example Shared application — one policy set, many Workers
+ * Pass a `Cloudflare.Access.Application` directly to enroll into it.
+ * Access policies are application-wide: every enrolled Worker is gated
+ * by the same policy set.
+ * ```typescript
+ * const TeamOnly = Cloudflare.Access.Application("TeamOnly", {
+ *   type: "self_hosted",
+ *   policies: [
+ *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
+ *   ],
+ * });
+ *
+ * export default Cloudflare.Worker(
+ *   "Api",
+ *   { main: import.meta.url, access: TeamOnly },
+ *   /* ... *​/
+ * );
+ * ```
+ *
  * @section Async Workers
  * You don't have to use Effect for your runtime code. If you create
  * a Worker resource with `main` pointing at a file but provide no

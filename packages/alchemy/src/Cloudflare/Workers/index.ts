@@ -35,6 +35,7 @@ export * from "./VersionMetadata.ts";
 export * from "./VersionMetadataBinding.ts";
 export * from "./WebSocket.ts";
 export * from "./Worker.ts";
+export * from "./WorkerAccess.ts";
 export * from "./WorkerBinding.ts";
 export * from "./WorkerBridge.ts";
 export * from "./WorkerEntrypoint.ts";
