@@ -1171,8 +1171,10 @@ export const LocalWorkerProvider = () =>
                   port: news.dev?.port ?? DEFAULT_DEV_PORT,
                 }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
-            // No cloud script exists in dev — there is no immutable ID.
-            workerId: undefined,
+            // No cloud script exists in dev — fabricate a `dev:`-marked
+            // identity (the shared local-provider convention, and the
+            // legacy-row mode marker; see LOCAL_ID_PREFIX).
+            workerId: `dev:${name}`,
             workerName: name,
             namespace: undefined,
             logpush: undefined,
@@ -1205,7 +1207,7 @@ export const LocalWorkerProvider = () =>
             yield* closeWorkerd(id);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
-              workerId: undefined,
+              workerId: `dev:${config.name}`,
               workerName: config.name,
               namespace: undefined,
               logpush: undefined,
@@ -1274,7 +1276,7 @@ export const LocalWorkerProvider = () =>
           // are not served by this session, so they don't appear.
           const urls = yield* resolveLocalUrls(serverUrl);
           return {
-            workerId: undefined,
+            workerId: `dev:${config.name}`,
             workerName: config.name,
             namespace: undefined,
             logpush: undefined,

@@ -108,12 +108,12 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
     const previews = isApplication(access) || access.previews !== false;
     yield* application.bind(`enroll:${resource.FQN}`, {
       destinations: [
-        { type: "worker", workerId: resource.workerId.as<string>() },
+        { type: "worker", workerId: resource.workerId },
         ...(previews
           ? [
               {
                 type: "preview_worker" as const,
-                workerId: resource.workerId.as<string>(),
+                workerId: resource.workerId,
               },
             ]
           : []),

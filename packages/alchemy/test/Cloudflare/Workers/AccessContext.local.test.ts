@@ -77,8 +77,10 @@ test.provider("dev.access simulates ctx.access locally", (stack) =>
     // deploy ran.
     expect(deployed.authed.url).toMatch(/^http:\/\/localhost:\d+$/);
     expect(deployed.anon.url).toMatch(/^http:\/\/localhost:\d+$/);
-    // No cloud script exists in dev — there is no immutable Worker ID.
-    expect(deployed.authed.workerId).toBeUndefined();
+    // No cloud script exists in dev — the local provider fabricates a
+    // `dev:`-marked identity (mode switches replace the resource, so the
+    // two identities never mix).
+    expect(deployed.authed.workerId).toMatch(/^dev:/);
 
     const authed = yield* getJsonReady(deployed.authed.url!);
     expect(authed).toEqual({

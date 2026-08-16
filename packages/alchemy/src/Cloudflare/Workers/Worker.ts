@@ -1139,11 +1139,13 @@ export type Worker<Bindings = any> = Resource<
      * value like `c81a2d22c29840ed9d61681a3270dbff`, shown as the Worker ID
      * in the dashboard and the identifier Access `worker` destinations key
      * on. Stable across every update; changes only when the script is
-     * replaced. For the script *name*, use {@link workerName}. `undefined`
-     * when no cloud script exists yet (`alchemy dev`, pre-create stubs) —
-     * a version worker carries its parent script's ID.
+     * replaced. For the script *name*, use {@link workerName}. A version
+     * worker carries its parent script's ID. Under `alchemy dev` there is
+     * no cloud script, so the local provider generates a `dev:`-prefixed
+     * ID instead (switching between dev and deploy replaces the resource,
+     * so the two identities never mix).
      */
-    workerId: string | undefined;
+    workerId: string;
     /** The script name, e.g. `"api"` — the classic API's identifier. */
     workerName: string;
     /**
