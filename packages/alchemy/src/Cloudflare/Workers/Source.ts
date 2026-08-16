@@ -21,6 +21,7 @@ import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
+import type { WorkerInheritConfigError } from "./Inherit.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
@@ -190,7 +191,8 @@ export type SourceError =
   | Bundle.BundleError
   | ValidationError
   | PlatformError
-  | SourceProviderError;
+  | SourceProviderError
+  | WorkerInheritConfigError;
 
 /**
  * A Worker source provider: supplies the static assets, the server

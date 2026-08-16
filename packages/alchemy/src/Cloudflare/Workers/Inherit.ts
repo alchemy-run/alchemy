@@ -129,6 +129,9 @@ export interface InheritWireBinding {
   readonly type: "inherit";
   readonly name: string;
   readonly versionId?: string;
+  readonly text?: unknown;
+  readonly json?: unknown;
+  readonly value?: unknown;
 }
 
 export const isInheritWireBinding = (

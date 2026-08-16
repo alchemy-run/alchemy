@@ -4,7 +4,14 @@ import type { Json } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
+import * as Namespace from "../../Namespace.ts";
+import { defaultProviderMode } from "../../ProviderMode.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
+import {
+  Application,
+  isApplication,
+  type Application as AccessApplication,
+} from "../Access/Application.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -52,6 +59,7 @@ import {
   type Worker,
   type WorkerProps,
 } from "./Worker.ts";
+import type { WorkerAccessApplication } from "./WorkerAccess.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -60,6 +68,59 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
+  // Access enrollment (`access` prop): push this Worker's
+  // `worker`/`preview_worker` destinations onto the application's binding
+  // contract. The application deploys with — and converges on — every
+  // enrolled Worker's destinations, including at create time, where
+  // Cloudflare requires a self-hosted app to be born with a domain or
+  // destinations.
+  //
+  // Skipped when this Worker runs locally (`alchemy dev`): a local worker
+  // has no cloud script (no immutable ID to enroll), and Access cannot
+  // front a localhost URL — the `dev.access` stub covers the runtime
+  // instead. A Worker opted out via `Alchemy.remote()` enrolls normally.
+  const accessHostMode = resource.Mode ?? (yield* defaultProviderMode);
+  if (props.access && accessHostMode !== "local") {
+    const accessInput = props.access;
+    // The shared form is the application itself — as the module-scope
+    // declaration Effect (`const App = Cloudflare.Access.Application(...)`)
+    // or an already-yielded resource. Resolve the yieldable spelling first,
+    // then discriminate.
+    const access = (
+      isYieldableEffectLike(accessInput) && !Output.isOutput(accessInput)
+        ? yield* accessInput as Effect.Effect<unknown>
+        : accessInput
+    ) as AccessApplication | InputProps<WorkerAccessApplication>;
+    const application = isApplication(access)
+      ? access
+      : // Dedicated form: declare an application owned by this Worker —
+        // per-Worker Access configuration means a per-Worker application
+        // (Cloudflare attaches policies to applications, not Workers). It
+        // lives in the Worker's namespace: `<Worker>/Access`.
+        yield* Application("Access", {
+          type: "self_hosted",
+          name: access.name,
+          policies: access.policies,
+          sessionDuration: access.sessionDuration,
+          allowedIdps: access.allowedIdps,
+          autoRedirectToIdentity: access.autoRedirectToIdentity,
+          appLauncherVisible: access.appLauncherVisible,
+        }).pipe(Namespace.push(resource.LogicalId));
+    const previews = isApplication(access) || access.previews !== false;
+    yield* application.bind(`enroll:${resource.FQN}`, {
+      destinations: [
+        { type: "worker", workerId: resource.workerId },
+        ...(previews
+          ? [
+              {
+                type: "preview_worker" as const,
+                workerId: resource.workerId,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
   if (props.env) {
     for (const bindingName in props.env) {
       // @ts-expect-error

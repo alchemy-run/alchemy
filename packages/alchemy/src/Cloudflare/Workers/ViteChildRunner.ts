@@ -52,6 +52,7 @@ const program = Effect.scoped(
       hasAssets,
       bindingDescriptors,
       devRemote,
+      devAccess,
       ...runtimeWorker
     } = config.worker;
     const bindings = yield* materializeRuntimeBindings(
@@ -61,6 +62,7 @@ const program = Effect.scoped(
         hasAssets,
         bindingDescriptors,
         devRemote,
+        devAccess,
       },
       {
         accountId: config.accountId,

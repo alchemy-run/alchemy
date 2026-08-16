@@ -712,6 +712,55 @@ const retryableScriptPut = (
  *
  * @internal
  */
+/**
+ * A cached `workerId` attribute usable as the immutable script ID — rules
+ * out the legacy shape (older releases persisted the script *name*), the
+ * `dev:`-marked local identity, and the precreate stub's provisional `""`.
+ */
+const cachedWorkerId = (
+  value: string | undefined,
+  scriptName: string,
+): string | undefined =>
+  value !== undefined &&
+  value !== "" &&
+  value !== scriptName &&
+  !value.startsWith("dev:")
+    ? value
+    : undefined;
+
+export class WorkerIdNotFound extends Data.TaggedError("WorkerIdNotFound")<{
+  scriptName: string;
+  message: string;
+}> {}
+
+/**
+ * Resolve a script's immutable Worker ID (carried as `tag` on Cloudflare's
+ * wire) by script name. Neither the settings endpoints nor GET /content
+ * expose it, so scan the account's script listing lazily and stop at the
+ * first match. The listing is eventually consistent, so a missing entry is
+ * retried briefly before failing.
+ */
+const findWorkerId = (accountId: string, scriptName: string) =>
+  workers.listScripts.items({ accountId }).pipe(
+    Stream.filter((script) => script.id === scriptName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.flatMap((script) =>
+      script?.tag != null
+        ? Effect.succeed(script.tag)
+        : Effect.fail(
+            new WorkerIdNotFound({
+              scriptName,
+              message: `Cloudflare Worker: could not resolve the immutable ID of script '${scriptName}' from the account listing`,
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "WorkerIdNotFound",
+      schedule: Schedule.max([Schedule.spaced(2000), Schedule.recurs(3)]),
+    }),
+  );
+
 const putWorkerScript = (params: {
   accountId: string;
   scriptName: string;
@@ -2512,7 +2561,7 @@ export const LiveWorkerProvider = () =>
             ),
           );
         const latestUploaded = listed.items?.[0]?.id;
-        if (latestUploaded === undefined || latestUploaded.length === 0) {
+        if (latestUploaded == null || latestUploaded.length === 0) {
           return yield* new WorkerInheritConfigError({
             message: `Inherit requires an existing upload of '${scriptName}' to copy from.`,
           });
@@ -2703,6 +2752,7 @@ export const LiveWorkerProvider = () =>
             ["placement", news.placement],
             ["limits", news.limits],
             ["workersDev", news.workersDev],
+            ["access", news.access],
             ["vite", news.vite],
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
@@ -2981,7 +3031,12 @@ export const LiveWorkerProvider = () =>
           ...(versionedUrl ? [versionedUrl] : []),
         ];
         return {
-          workerId: parentName,
+          // A version worker never owns a script — carry the *parent*
+          // script's immutable ID (its preview URLs are protected through
+          // the parent).
+          workerId:
+            cachedWorkerId(output?.workerId, parentName) ??
+            (yield* findWorkerId(accountId, parentName)),
           workerName: parentName,
           namespace: undefined,
           logpush: undefined,
@@ -3551,7 +3606,12 @@ export const LiveWorkerProvider = () =>
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
         let deploymentId: string | undefined;
-        let worker: { id?: string | null; logpush?: boolean | null };
+        let worker: {
+          id?: string | null;
+          logpush?: boolean | null;
+          /** The immutable script id (Cloudflare's script "tag"). */
+          tag?: string | null;
+        };
         // A gradual rollout (`version.traffic` < 100) deploys through the
         // versions API instead of the full-cutover script PUT. That's only
         // possible when the script already has a live deployment to split
@@ -3709,7 +3769,15 @@ export const LiveWorkerProvider = () =>
         // reconciliation.
         if (dispatchNamespace) {
           return {
-            workerId: worker.id ?? name,
+            workerId:
+              worker.tag ??
+              cachedWorkerId(output?.workerId, name) ??
+              (yield* Effect.fail(
+                new WorkerIdNotFound({
+                  scriptName: name,
+                  message: `Cloudflare Worker: the dispatch-namespace upload for '${name}' did not return the script's immutable ID`,
+                }),
+              )),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
@@ -3956,7 +4024,14 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         return {
-          workerId: worker.id ?? name,
+          // The immutable script ID. The gradual-rollout branch deploys via
+          // the versions API (no script PUT response), and rows persisted by
+          // older releases carried the script *name* here — both fall back
+          // to a lazy listing lookup.
+          workerId:
+            worker.tag ??
+            cachedWorkerId(output?.workerId, name) ??
+            (yield* findWorkerId(accountId, name)),
           workerName: name,
           namespace: undefined,
           logpush: worker.logpush ?? undefined,
@@ -4195,7 +4270,9 @@ export const LiveWorkerProvider = () =>
                         ? [
                             {
                               accountId,
-                              workerId: script.id,
+                              // Practically always present; an empty value
+                              // is healed by the per-script read.
+                              workerId: script.tag ?? "",
                               workerName: script.id,
                               namespace: undefined,
                               logpush: script.logpush ?? undefined,
@@ -4372,7 +4449,14 @@ export const LiveWorkerProvider = () =>
             oldWorkerName === workerName &&
             newDoClassNames.length === oldDoClassNames.length &&
             newDoClassNames.every((name, i) => name === oldDoClassNames[i]);
+          // Rows persisted by older releases carried the script *name* in
+          // `workerId` (interrupted precreates a provisional ""). Plan one
+          // update even when nothing else changed, so reconcile re-records
+          // the immutable Worker ID.
+          const legacyWorkerId =
+            cachedWorkerId(output.workerId, output.workerName) === undefined;
           if (
+            legacyWorkerId ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -4386,10 +4470,11 @@ export const LiveWorkerProvider = () =>
               accountId,
             ))
           ) {
-            // `workerId` is always stable across an update; seed it so it
-            // survives now that `diff.stables` overrides `provider.stables`
-            // rather than being merged with it.
-            const stables: string[] = ["workerId"];
+            // The immutable script ID is always stable across an update —
+            // except the healing update above, where its value is about to
+            // change from the legacy shape to the real ID (downstream
+            // consumers must see the fresh value).
+            const stables: string[] = legacyWorkerId ? [] : ["workerId"];
             if (oldWorkerName === workerName) {
               stables.push("workerName");
             }
@@ -4461,7 +4546,10 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: skipping stub for version worker ${id}`,
             );
             return {
-              workerId: name,
+              // Provisional: a version worker resolves its parent's
+              // immutable ID at reconcile — nothing observes this stub row
+              // (version workers have no circular bindings).
+              workerId: "",
               workerName: name,
               namespace: undefined,
               logpush: undefined,
@@ -4488,7 +4576,10 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: skipping stub for dispatch-namespace worker ${name}`,
             );
             return {
-              workerId: name,
+              // Provisional: reconcile records the real immutable ID from
+              // the dispatch upload — nothing observes this stub row (user
+              // workers are dispatched by name, never bound circularly).
+              workerId: "",
               workerName: name,
               namespace:
                 typeof news.namespace === "string" ? news.namespace : undefined,
@@ -4592,6 +4683,7 @@ export const LiveWorkerProvider = () =>
             });
           }
 
+          let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
             // `read` + AdoptPolicy. Either we own it (matching tags) or
@@ -4609,7 +4701,7 @@ export const LiveWorkerProvider = () =>
                   `export class ${className} extends DurableObject {}`,
               )
               .join("\n")}`;
-            yield* putWorkerScript({
+            placeholder = yield* putWorkerScript({
               accountId,
               scriptName: name,
               dispatchNamespace,
@@ -4693,7 +4785,11 @@ export const LiveWorkerProvider = () =>
           }
 
           return {
-            workerId: name,
+            // The placeholder upload's tag (or, when adopting an existing
+            // script, the listing lookup); reconcile re-records it after
+            // the full deploy.
+            workerId:
+              placeholder?.tag ?? (yield* findWorkerId(accountId, name)),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
@@ -4760,7 +4856,29 @@ export const LiveWorkerProvider = () =>
               );
               const attrs = {
                 accountId,
-                workerId: workerName,
+                // Rows persisted by older releases carried the script name
+                // here — treat those as unknown and fetch the real ID from
+                // the dispatch-namespace script endpoint.
+                workerId:
+                  cachedWorkerId(output?.workerId, workerName) ??
+                  (yield* wfp
+                    .getDispatchNamespaceScript({
+                      accountId,
+                      dispatchNamespace,
+                      scriptName: workerName,
+                    })
+                    .pipe(
+                      Effect.flatMap((r) =>
+                        r.script?.tag != null
+                          ? Effect.succeed(r.script.tag)
+                          : Effect.fail(
+                              new WorkerIdNotFound({
+                                scriptName: workerName,
+                                message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
+                              }),
+                            ),
+                      ),
+                    )),
                 workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
@@ -4887,7 +5005,13 @@ export const LiveWorkerProvider = () =>
             );
             const attrs = {
               accountId,
-              workerId: workerName,
+              // The settings endpoint doesn't expose the immutable ID;
+              // reuse the cached value, falling back to a lazy listing
+              // lookup for unknown/legacy rows (older releases persisted
+              // the script *name* here) so adoption records the real ID.
+              workerId:
+                cachedWorkerId(output?.workerId, workerName) ??
+                (yield* findWorkerId(accountId, workerName)),
               workerName,
               namespace: undefined,
               logpush: settings.logpush ?? undefined,
