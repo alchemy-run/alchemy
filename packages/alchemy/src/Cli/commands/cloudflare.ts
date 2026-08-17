@@ -16,7 +16,7 @@ import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CloudflareAccess from "../../Cloudflare/Access.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
-import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironmentLayers.ts";
+import * as CloudflareEnvironment from "../../Cloudflare/Auth/AuthProvider.ts";
 import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";

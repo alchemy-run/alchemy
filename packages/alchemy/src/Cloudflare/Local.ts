@@ -2,7 +2,7 @@ import * as Layer from "effect/Layer";
 import { DockerLive } from "../Docker/Docker.ts";
 import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
-import * as CloudflareEnvironment from "./CloudflareEnvironmentLayers.ts";
+import * as CloudflareEnvironment from "./Auth/AuthProvider.ts";
 import { LocalContainerProvider } from "./Containers/LocalContainerProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { ProviderLocal as D1ProviderLocal } from "./D1/Database.ts";

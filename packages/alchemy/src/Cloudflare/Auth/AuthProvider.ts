@@ -14,6 +14,12 @@ import {
   type ConfigureContext,
 } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
+import * as Config from "effect/Config";
+import * as Option from "effect/Option";
+import { getAuthProvider } from "../../Auth/AuthProvider.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../../Auth/Profile.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+export { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -803,3 +809,41 @@ export const OAUTH_ENDPOINTS = {
   token: "https://dash.cloudflare.com/oauth2/token",
   revoke: "https://dash.cloudflare.com/oauth2/revoke",
 };
+
+const CLOUDFLARE_ACCOUNT_ID = Config.string("CLOUDFLARE_ACCOUNT_ID");
+
+export const fromEnv = () =>
+  Layer.effect(
+    CloudflareEnvironment,
+    Effect.gen(function* () {
+      const accountId = yield* CLOUDFLARE_ACCOUNT_ID.pipe(
+        Config.option,
+        Config.map(Option.getOrUndefined),
+      );
+      return { account: accountId } as any;
+    }),
+  );
+
+export const fromProfile = () =>
+  Layer.effect(
+    CloudflareEnvironment,
+    Effect.gen(function* () {
+      const profile = yield* AlchemyProfile;
+      const auth = yield* getAuthProvider<
+        CloudflareAuthConfig,
+        CloudflareResolvedCredentials
+      >(CLOUDFLARE_AUTH_PROVIDER_NAME);
+      const profileName = yield* ALCHEMY_PROFILE;
+      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+      // `loadOrConfigure` reads the persisted config under the canonical
+      // provider name (`Cloudflare`); only runs `configure` (and persists the
+      // result) if no stored config exists.
+      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
+        Effect.flatMap((config) =>
+          auth.read(profileName, config as CloudflareAuthConfig),
+        ),
+        Effect.orDie,
+        Effect.cached,
+      );
+    }),
+  );

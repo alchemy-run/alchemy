@@ -37,7 +37,7 @@ import {
 } from "../../Telemetry/Metrics.ts";
 import * as Clank from "../../Util/Clank.ts";
 import * as Access from "../Access.ts";
-import * as CloudflareEnvironment from "../CloudflareEnvironmentLayers.ts";
+import * as CloudflareEnvironment from "../Auth/AuthProvider.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import {
