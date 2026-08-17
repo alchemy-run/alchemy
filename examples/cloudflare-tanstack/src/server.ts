@@ -43,8 +43,9 @@ export default {
       return new Response("forbidden", { status: 403 });
     }
 
-    // Effect API first (undefined = "not mine"), then the framework
-    // serves pages, assets, and TanStack server functions.
+    // `site.fetch` resolves the Response for paths the mount claims and
+    // `undefined` for everything else (the ServeHandle.fetch contract —
+    // decline, not error), so `??` composes the framework as fallback.
     return (
       (await site.fetch(request, env, ctx)) ??
       framework.fetch(request, env, ctx)

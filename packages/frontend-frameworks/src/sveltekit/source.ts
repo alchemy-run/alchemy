@@ -137,6 +137,17 @@ export interface SourceDevContext extends SourceContext {
   readonly worker: {
     readonly name: string;
     readonly bindings: ReadonlyArray<unknown>;
+    /** DO namespace configs (className/sql) for the hosted platform. */
+    readonly durableObjectNamespaces?: ReadonlyArray<unknown> | undefined;
+    /** Workflows hosted by this worker (PHYSICAL workflowName + className). */
+    readonly workflows?:
+      | ReadonlyArray<{
+          readonly workflowName: string;
+          readonly className: string;
+        }>
+      | undefined;
+    /** Queue consumers (opaque; possibly an Effect in the host's dialect). */
+    readonly queueConsumers?: unknown;
   };
   /**
    * The host's pre-built `Context<RuntimeServices>` (opaque here). Handed
@@ -789,15 +800,43 @@ export const makeSvelteKitSource = (
       return { input: hash, additionalWorkspaces: workspaces };
     }),
     dev: Effect.fnUntraced(function* (ctx: SourceDevContext) {
+      // The hooks.server.ts mount serves effect routes natively in kit's
+      // dev server — its four-worlds guard needs the stack markers
+      // `putWorker` appends in prod, and its platform half (DO/Workflow
+      // classes, queue consumers) is hosted in the dev platform proxy's
+      // workerd (Serve/DESIGN.md tier B dev).
+      const effect = resolveEffectEntry(ctx);
+      const queueConsumers = Effect.isEffect(ctx.worker.queueConsumers)
+        ? yield* ctx.worker.queueConsumers
+        : ctx.worker.queueConsumers;
       const framework = yield* makeSvelteKit(
         frameworkOptions(ctx, {
-          env: resolveDevEnvOverrides(ctx.env),
+          env: {
+            ...resolveDevEnvOverrides(ctx.env),
+            ALCHEMY_PHASE: "runtime",
+            ALCHEMY_STACK_NAME: ctx.stack.name,
+            ALCHEMY_STAGE: ctx.stack.stage,
+          },
           bindings: ctx.worker.bindings,
           // The host's runtime stack (includes remote-bindings support) —
           // the dev platform proxy is hosted in it instead of the
           // credential-free internal layer, so `Alchemy.remote()` bindings
           // resolve in dev.
           services: ctx.runtimeContext,
+          ...(effect !== undefined
+            ? {
+                hostedPlatform: {
+                  main: effect.main,
+                  durableObjects: effect.durableObjects ?? [],
+                  workflows: effect.workflows ?? [],
+                  durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
+                  // PHYSICAL workflow names — the binding hook subscribes
+                  // by the deployed name, not the class name.
+                  workflowConfigs: ctx.worker.workflows ?? [],
+                  queueConsumers,
+                },
+              }
+            : undefined),
         }),
       );
       const server = yield* framework

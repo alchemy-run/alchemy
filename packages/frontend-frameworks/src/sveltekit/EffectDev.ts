@@ -328,6 +328,13 @@ export const makeEffectDevPlugin = (
           ).join("\n")
         : undefined,
     configureServer(server) {
+      // Cloudflare: the user's hooks.server.ts mount owns effect dispatch
+      // in dev (Serve/DESIGN.md) — no front middleware, or the mount's
+      // gates would be bypassed for the routes it claims. AWS keeps the
+      // middleware until its own mount story lands (phase 4).
+      if (!isAws) {
+        return;
+      }
       // Mounted synchronously in `configureServer`, so it runs BEFORE
       // kit's own middleware (kit mounts in the deferred post hook) —
       // the dev analogue of the shim dispatching effect routes before

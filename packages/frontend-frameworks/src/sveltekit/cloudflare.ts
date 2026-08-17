@@ -95,6 +95,10 @@ export const makeCloudflareTarget = (
                 services: context.dev.services,
                 compatibilityDate: config.compatibilityDate,
                 compatibilityFlags: config.compatibilityFlags,
+                // Tier B dev (Serve/DESIGN.md): the site's platform half,
+                // hosted inside the proxy workerd so DO/Workflow classes
+                // and queue consumers run with real semantics.
+                hostedPlatform: context.dev.hostedPlatform as never,
               },
             }
           : undefined),

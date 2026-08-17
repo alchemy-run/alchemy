@@ -120,7 +120,22 @@ const describeEnv = (env: Env): { bindings: Array<EnvBindingDescriptor> } => {
 // Chain evaluation (`/call` and the target resolution of `/fetch`)
 // ---------------------------------------------------------------------------
 
+/**
+ * A Workflow `Instance` (workerd `InstanceImpl`): duck-typed — id plus the
+ * instance surface. Encoded as its id; the Node client rehydrates a facade
+ * whose methods chain through the binding's idempotent `get(id)`.
+ */
+const isWorkflowInstanceLike = (value: unknown): value is { id: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { id?: unknown }).id === "string" &&
+  typeof (value as { status?: unknown }).status === "function" &&
+  typeof (value as { sendEvent?: unknown }).sendEvent === "function";
+
 const encodeWorkerValue = (value: unknown): EncodedValue | undefined => {
+  if (isWorkflowInstanceLike(value)) {
+    return { $: "workflow-instance", id: value.id };
+  }
   if (
     typeof value === "object" &&
     value !== null &&

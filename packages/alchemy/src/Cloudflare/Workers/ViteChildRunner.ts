@@ -115,6 +115,7 @@ const program = Effect.scoped(
               worker: {
                 bindings,
                 durableObjectNamespaces: config.worker.durableObjectNamespaces,
+                workflows: config.worker.workflows ?? [],
                 hyperdrives: config.worker.hyperdrives,
                 queueConsumers: Effect.succeed(config.worker.queueConsumers),
                 assets: config.worker.assets,

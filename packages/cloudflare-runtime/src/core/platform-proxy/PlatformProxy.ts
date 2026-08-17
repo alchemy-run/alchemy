@@ -63,7 +63,9 @@ import type {
   BindingHooks,
   DurableObjectNamespace,
   Module,
+  Workflow,
 } from "../RuntimeWorker.ts";
+import type { QueueConsumer } from "../bindings/queue/QueueOptions.shared.ts";
 import type { ConnectedPlatformProxy, ConnectInfo } from "./connect.ts";
 import { connect } from "./connect.ts";
 import { BINDING_PLATFORM_PROXY_TOKEN } from "./PlatformProxyProtocol.shared.ts";
@@ -108,6 +110,18 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
   readonly modules?: ReadonlyArray<Module>;
   /** Durable Object namespaces implemented by `modules`. */
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  /**
+   * Workflows whose `WorkflowEntrypoint` class is exported by the first
+   * user module — hosts the local engine next to the proxy so workflow
+   * bindings resolve during dev.
+   */
+  readonly workflows?: ReadonlyArray<Workflow>;
+  /**
+   * Queues the hosted user module consumes: the composed entry delegates
+   * `queue()` (and `scheduled()`) to the user module's default export, so
+   * local brokers deliver into it with the usual batching semantics.
+   */
+  readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
 }
 
 export interface PlatformProxyInstance<
@@ -133,9 +147,17 @@ const makeModules = Effect.fnUntraced(function* (
 ) {
   const proxyWorker = yield* Effect.promise(ProxyWorker.worker);
   const userModules = options.modules ?? [];
-  const classNames = (options.durableObjectNamespaces ?? []).map(
-    (namespace) => namespace.className,
-  );
+  // DO classes AND workflow classes: the local workflow engine binds each
+  // workflow's class as a NAMED ENTRYPOINT of this worker, so both sets
+  // must be re-exported from the composed entry.
+  const classNames = [
+    ...new Set([
+      ...(options.durableObjectNamespaces ?? []).map(
+        (namespace) => namespace.className,
+      ),
+      ...(options.workflows ?? []).map((workflow) => workflow.className),
+    ]),
+  ];
   const userEntry = userModules[0]?.name;
   if (classNames.length > 0 && userEntry === undefined) {
     return yield* new ConfigError({
@@ -145,8 +167,28 @@ const makeModules = Effect.fnUntraced(function* (
       detail: { classNames },
     });
   }
+  const delegate = userEntry !== undefined;
   const entry = [
-    `export { default } from "./${proxyWorker.main}";`,
+    ...(delegate
+      ? [
+          // The proxy protocol keeps `fetch`; non-fetch events (queue
+          // batches from the local broker, cron fires) delegate to the
+          // user module's default export — class-form (constructed once
+          // per isolate with (ctx, env)) or object-form alike.
+          `import __proxy from "./${proxyWorker.main}";`,
+          `import __user from "./${userEntry}";`,
+          `let __instance;`,
+          `const __target = (env, ctx) =>`,
+          `  typeof __user === "function"`,
+          `    ? (__instance ??= new __user(ctx, env))`,
+          `    : (__user?.default ?? __user);`,
+          `export default {`,
+          `  ...__proxy,`,
+          `  queue: (batch, env, ctx) => __target(env, ctx).queue(batch, env, ctx),`,
+          `  scheduled: (event, env, ctx) => __target(env, ctx).scheduled(event, env, ctx),`,
+          `};`,
+        ]
+      : [`export { default } from "./${proxyWorker.main}";`]),
     ...(classNames.length > 0 && userEntry !== undefined
       ? [`export { ${classNames.join(", ")} } from "./${userEntry}";`]
       : []),
@@ -203,6 +245,12 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
     ] as unknown as B,
     modules,
     durableObjectNamespaces: options.durableObjectNamespaces,
+    ...(options.workflows !== undefined
+      ? { workflows: options.workflows }
+      : {}),
+    ...(options.queueConsumers !== undefined
+      ? { queueConsumers: options.queueConsumers }
+      : {}),
   });
   const connectInfo: ConnectInfo = { url: url.href, token };
   const connected = yield* connectToInstance<Env>(connectInfo);

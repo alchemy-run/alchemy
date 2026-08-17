@@ -132,6 +132,11 @@ export interface DevContext extends SourceContext {
     readonly durableObjectNamespaces: (RuntimeDurableObject & {
       uniqueKey: string;
     })[];
+    /** Workflows hosted by this worker (physical workflowName + className). */
+    readonly workflows: ReadonlyArray<{
+      readonly workflowName: string;
+      readonly className: string;
+    }>;
     readonly hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     /** Re-read on each (re)start so late-registered consumers are observed. */
     readonly queueConsumers: Effect.Effect<RuntimeQueueConsumer[]>;

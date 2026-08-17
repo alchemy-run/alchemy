@@ -60,6 +60,16 @@ export const startViteChild = (
           stdout: "pipe",
           stderr: "pipe",
           extendEnv: true,
+          // The dev child IS the runtime world: the serve bridge's env
+          // ladder falls back to `process.env`, and its four-worlds guard
+          // (and the value-form client) need the stack markers `putWorker`
+          // appends in prod. Without them, `createClient` dispatch from
+          // framework server code reads as a prerender world and refuses.
+          env: {
+            ALCHEMY_PHASE: "runtime",
+            ALCHEMY_STACK_NAME: config.stack.name,
+            ALCHEMY_STAGE: config.stack.stage,
+          },
           killSignal: "SIGKILL",
         },
       ),

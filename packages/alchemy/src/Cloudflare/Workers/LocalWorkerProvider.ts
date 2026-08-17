@@ -1148,6 +1148,7 @@ export const LocalWorkerProvider = () =>
           worker: {
             bindings: worker.workerBindings,
             durableObjectNamespaces: worker.durableObjectNamespaces,
+            workflows: worker.workflows,
             hyperdrives: worker.hyperdrives,
             queueConsumers: getQueueConsumers(worker.name),
             assets: yield* toRuntimeAssets(worker.assets),

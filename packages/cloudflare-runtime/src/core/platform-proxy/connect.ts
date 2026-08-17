@@ -230,6 +230,44 @@ const decodeNodeValue = (
 };
 
 /**
+ * A Workflow `Instance` facade: methods chain through the binding's
+ * IDEMPOTENT `get(id)` on every call (`create` ran exactly once, worker
+ * side — only its id crossed the boundary).
+ */
+const makeWorkflowInstanceFacade = (
+  client: ProxyClient,
+  binding: string,
+  id: string,
+): unknown => {
+  const call = (method: string, args: ReadonlyArray<unknown> = []) =>
+    callBinding(client, binding, [
+      { method: "get", args: [id] },
+      { method, args: [...args] },
+    ]);
+  return {
+    id,
+    status: () => call("status"),
+    pause: () => call("pause"),
+    resume: () => call("resume"),
+    restart: () => call("restart"),
+    terminate: () => call("terminate"),
+    sendEvent: (event: unknown) => call("sendEvent", [event]),
+  };
+};
+
+/** `decodeNodeValue` plus the call-context decodings (workflow instances). */
+const makeCallDecoder =
+  (client: ProxyClient, binding: string) =>
+  (encoded: EncodedValue): { readonly value: unknown } | undefined => {
+    if (encoded.$ === "workflow-instance") {
+      return {
+        value: makeWorkflowInstanceFacade(client, binding, encoded.id),
+      };
+    }
+    return decodeNodeValue(encoded);
+  };
+
+/**
  * Rehydrate an `R2Object` / `R2ObjectBody`: the plain fields plus, when the
  * worker captured a `get` result's content, a body stream and the buffering
  * accessors (`arrayBuffer`/`bytes`/`text`/`json`/`blob`). `writeHttpMetadata`
@@ -327,7 +365,7 @@ const callBinding = async (
   switch (kind) {
     case "json": {
       const { value } = (await response.json()) as { value: EncodedValue };
-      return decodeValue(value, decodeNodeValue);
+      return decodeValue(value, makeCallDecoder(client, binding));
     }
     case "bytes": {
       const buffer = await response.arrayBuffer();

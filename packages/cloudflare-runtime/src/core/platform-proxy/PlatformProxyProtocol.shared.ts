@@ -76,6 +76,12 @@ export type EncodedValue =
     }
   | { readonly $: "chain"; readonly chain: Array<EncodedChainSegment> }
   /**
+   * A Workflow `Instance` (rich class the generic rules reject). Only the
+   * id crosses the boundary; the Node side rehydrates a facade whose
+   * methods chain through `get(id)` — idempotent, unlike `create`.
+   */
+  | { readonly $: "workflow-instance"; readonly id: string }
+  /**
    * An `R2Object` / `R2ObjectBody` (rich class instances the generic object
    * rules reject). Fields are the plain data properties (key, etag, size,
    * uploaded, httpMetadata, …); `body` carries a `get` result's content so

@@ -126,6 +126,13 @@ export interface SvelteKitAdapterContext {
          * remote()-lowered bindings; without it the platform is local-only.
          */
         readonly services?: unknown;
+        /**
+         * The site's platform half for the dev proxy to HOST (opaque to
+         * the framework half — the Cloudflare target bundles it into the
+         * proxy workerd so DO/Workflow classes and queue consumers run
+         * with real semantics in dev). See Serve/DESIGN.md tier B dev.
+         */
+        readonly hostedPlatform?: unknown;
       }
     | undefined;
 }
@@ -259,6 +266,8 @@ export interface SvelteKitOptions {
          * remote()-lowered bindings; without it the platform is local-only.
          */
         readonly services?: unknown;
+        /** See {@link SvelteKitAdapterContext} — opaque hosted platform. */
+        readonly hostedPlatform?: unknown;
       }
     | undefined;
 }
@@ -603,6 +612,7 @@ export const make: (
         env: options?.dev?.env,
         bindings: options?.dev?.bindings,
         services: options?.dev?.services,
+        hostedPlatform: options?.dev?.hostedPlatform,
       },
     });
     // Registered before the server is acquired so it runs after the server

@@ -7,6 +7,7 @@ import * as KV from "alchemy/Cloudflare/KV";
 import * as Queues from "alchemy/Cloudflare/Queues";
 import { SvelteKit } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -148,8 +149,12 @@ export default class Site extends SvelteKit<Site>()(
       }, Effect.orDie),
     };
   }).pipe(
-    Effect.provide(KV.ReadWriteNamespaceBinding),
-    Effect.provide(Queues.WriteQueueBinding),
-    Effect.provide(Queues.EventSourceLive),
+    Effect.provide(
+      Layer.mergeAll(
+        KV.ReadWriteNamespaceBinding,
+        Queues.WriteQueueBinding,
+        Queues.EventSourceLive,
+      ),
+    ),
   ),
 ) {}
