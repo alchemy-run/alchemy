@@ -78,27 +78,12 @@ export const makeFunctionFetchHandler = <Req = never>(
 >) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return (webRequest: Request) =>
-    Effect.gen(function* () {
-      const request = HttpServerRequest.fromWeb(webRequest);
-      // `toHandled` exposes the final response through this callback, not
-      // its return value (mirrors the Worker bridge's
-      // `toHandledWebResponse`). It also applies the tracer middleware, so
-      // the `http.server` root span matches the buffered bridge's.
-      const context = yield* Effect.context();
-      const webResponse = yield* Deferred.make<Response>();
-      yield* EffectHttp.toHandled(safeHandler, (req, response) =>
-        Deferred.succeed(
-          webResponse,
-          HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
-            withoutBody: req.method === "HEAD",
-            context,
-          }),
-        ),
-      ).pipe(
-        Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      );
-      return yield* Deferred.await(webResponse);
-    }) as any;
+    Http.toHandledWebResponse(safeHandler).pipe(
+      Effect.provideService(
+        HttpServerRequest.HttpServerRequest,
+        HttpServerRequest.fromWeb(webRequest),
+      ),
+    ) as any;
 };
 
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {

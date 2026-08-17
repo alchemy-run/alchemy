@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -12,6 +13,7 @@ import {
   type HttpServerError,
 } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export type HttpEffect<Req = never> = Effect.Effect<
@@ -69,6 +71,34 @@ export class HttpServer extends Context.Service<
     ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest> | Scope>;
   }
 >()("HttpServer") {}
+
+/**
+ * Run a safe HTTP effect through `EffectHttp.toHandled` and resolve the
+ * web `Response`: the final response arrives via the callback (not the
+ * return value), the tracer middleware is applied so the `http.server`
+ * root span is uniform across bridges, streaming responses transfer the
+ * request scope to the stream (`scopeTransferToStream` — its end closes
+ * the scope), and HEAD responses drop their body. The ONE copy of this
+ * dance — both cloud request pipelines (`Cloudflare/Workers/HttpServer`,
+ * `AWS/Lambda/HttpServer`) build on it.
+ */
+export const toHandledWebResponse = <Req>(
+  handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
+): Effect.Effect<Response, never, any> =>
+  Effect.gen(function* () {
+    const context = yield* Effect.context();
+    const webResponse = yield* Deferred.make<Response>();
+    yield* EffectHttp.toHandled(handler, (request, response) =>
+      Deferred.succeed(
+        webResponse,
+        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
+          withoutBody: request.method === "HEAD",
+          context,
+        }),
+      ),
+    );
+    return yield* Deferred.await(webResponse);
+  }) as any;
 
 export const safeHttpEffect = <Req = never>(
   handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,

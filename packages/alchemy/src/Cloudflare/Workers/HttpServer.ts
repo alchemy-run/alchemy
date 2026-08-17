@@ -1,11 +1,8 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
 import { Request } from "./Request.ts";
 // `isWorkerEvent` comes from the RuntimeEnvironment leaf (NOT Worker.ts):
@@ -47,7 +44,7 @@ export const makeRequestEffect = <Req = never>(
         }),
     });
 
-    return yield* toHandledWebResponse(safeHandler).pipe(
+    return yield* Http.toHandledWebResponse(safeHandler).pipe(
       Effect.provide([
         Layer.succeed(HttpServerRequest.HttpServerRequest, request),
         Layer.succeed(Request, webRequest as any),
@@ -55,27 +52,5 @@ export const makeRequestEffect = <Req = never>(
     );
   }) as any;
 };
-
-const toHandledWebResponse = <Req>(
-  handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
-) =>
-  Effect.gen(function* () {
-    // `toHandled` exposes the final response through this callback, not its
-    // return value. Keep the assignment isolated here so callers get Response.
-    const context = yield* Effect.context();
-    const webResponse = yield* Deferred.make<Response>();
-
-    yield* EffectHttp.toHandled(handler, (request, response) =>
-      Deferred.succeed(
-        webResponse,
-        // Conversion to web response with options matches `EffectHttp.toWebHandler`'s callback.
-        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
-          withoutBody: request.method === "HEAD",
-          context,
-        }),
-      ),
-    );
-    return yield* Deferred.await(webResponse);
-  });
 
 export { isScopeEjected } from "../../Http.ts";
