@@ -35,7 +35,7 @@ export const decodeCloudWatchLogsEvent = (
   Effect.try({
     try: () =>
       JSON.parse(
-        gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString("utf8"),
+        gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString(),
       ) as LogsSubscriptionPayload,
     catch: (cause) =>
       new Error("failed to decode CloudWatch Logs subscription payload", {
