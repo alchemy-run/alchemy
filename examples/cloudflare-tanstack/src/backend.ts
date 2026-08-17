@@ -133,6 +133,14 @@ export default class Site extends Website.Vite<Site>()(
           return yield* HttpServerResponse.json(status);
         }
 
+        // Queue producer over HTTP (the dev leg can't compute Start's
+        // production server-fn hashes; the RPC path stays covered live).
+        if (url.pathname === "/api/enqueue") {
+          const message = url.searchParams.get("m") ?? "job";
+          yield* jobs.send(message, { contentType: "text" }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ sent: message });
+        }
+
         // KV observability for the async legs (consumer, finalizer, WF).
         if (url.pathname === "/api/kv") {
           const key = url.searchParams.get("key") ?? "";
