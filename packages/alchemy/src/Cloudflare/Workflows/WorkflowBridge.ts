@@ -193,5 +193,12 @@ const toWorkflowStepConfig = (
   options: WorkflowTaskOptions<any, any, any>,
 ): WorkflowStepConfig | undefined => {
   if (!options.retries && !options.timeout) return undefined;
-  return { retries: options.retries, timeout: options.timeout };
+  // Omit absent keys entirely: workerd's engine duration-parses whatever
+  // keys are present, and a present-but-undefined `timeout` throws
+  // `TypeError: Cannot read properties of undefined (reading 'match')`
+  // inside the workflow run (surfacing as an errored instance).
+  return {
+    ...(options.retries !== undefined ? { retries: options.retries } : {}),
+    ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+  };
 };

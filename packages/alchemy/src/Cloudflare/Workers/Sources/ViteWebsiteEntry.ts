@@ -112,15 +112,65 @@ const generateWebsiteEntry = (
 ): string => {
   const doClasses = entry.exports.filter((e) => e.kind === "durableObject");
   const wfClasses = entry.exports.filter((e) => e.kind === "workflow");
-  if (wfClasses.length > 0) {
-    // The `alchemy/Serve/Worker` shell exposes a DurableObject bridge but no
-    // Workflow bridge yet; emitting a class that cannot run would fail at
-    // workerd startup with a much worse message.
-    throw new Error(
-      `Workflow exports (${wfClasses.map((e) => e.name).join(", ")}) are not ` +
-        `yet supported on effectful Website wrapper delivery. Deploy the ` +
-        `Workflow on a dedicated Cloudflare.Worker instead.`,
-    );
+  // Platform class exports (DESIGN.md "Generated entries"): identical in
+  // both entry forms — printed from plan-time registration, sharing the
+  // one-per-isolate layer build with the default export's bridge.
+  const classExports = [
+    ...(doClasses.length > 0
+      ? [
+          `const __alchemyDurableObjectBridge = DurableObjectBridge(DurableObject, { site: Site });`,
+          ...doClasses.map(
+            (e) =>
+              `export class ${e.name} extends __alchemyDurableObjectBridge(${JSON.stringify(e.name)}) {}`,
+          ),
+        ]
+      : []),
+    ...(wfClasses.length > 0
+      ? [
+          `const __alchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });`,
+          ...wfClasses.map(
+            (e) =>
+              `export class ${e.name} extends __alchemyWorkflowBridge(${JSON.stringify(e.name)}) {}`,
+          ),
+        ]
+      : []),
+  ];
+  const cfImports = [
+    "DurableObject",
+    "WorkerEntrypoint",
+    ...(wfClasses.length > 0 ? ["WorkflowEntrypoint"] : []),
+  ];
+  if (entry.entryPath !== undefined) {
+    // USER-ENTRY FORM (DESIGN.md tier A): the user's mount file owns HTTP
+    // composition verbatim — no route gate, no framework thunk here. The
+    // wrapper only adds what the entry cannot: queue/scheduled/RPC bridge
+    // dispatch and the platform class exports.
+    return [
+      // Evaluates first: stamps __ALCHEMY_RUNTIME__ at module evaluation.
+      `import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";`,
+      `import { ${cfImports.join(", ")} } from "cloudflare:workers";`,
+      `import * as __alchemyUserEntry from ${JSON.stringify(toSpecifier(entry.entryPath))};`,
+      `import Site from ${JSON.stringify(toSpecifier(entry.mainPath))};`,
+      `const __alchemyEntryTarget = __alchemyUserEntry.default ?? __alchemyUserEntry;`,
+      `const __alchemyUserFetch =`,
+      `  typeof __alchemyEntryTarget.fetch === "function"`,
+      `    ? __alchemyEntryTarget.fetch.bind(__alchemyEntryTarget)`,
+      `    : typeof __alchemyEntryTarget === "function"`,
+      `      ? __alchemyEntryTarget`,
+      `      : undefined;`,
+      `if (__alchemyUserFetch === undefined) {`,
+      `  throw new Error(${JSON.stringify(
+        `server.entry module (${entry.entryPath}) must default-export a ` +
+          `{ fetch } handler (or a fetch function)`,
+      )});`,
+      `}`,
+      `export default makeWebsiteEntryExports(WorkerEntrypoint, {`,
+      `  site: Site,`,
+      `  fetch: __alchemyUserFetch,`,
+      `});`,
+      ...classExports,
+      "",
+    ].join("\n");
   }
   const framework = frameworkEntry
     ? // The framework graph loads lazily on first fallback.
@@ -139,23 +189,15 @@ const generateWebsiteEntry = (
 })`;
   return [
     // Evaluates first: stamps __ALCHEMY_RUNTIME__ at module evaluation.
-    `import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
-    `import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";`,
+    `import { makeWebsiteExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";`,
+    `import { ${cfImports.join(", ")} } from "cloudflare:workers";`,
     `import Site from ${JSON.stringify(toSpecifier(entry.mainPath))};`,
     `export default makeWebsiteExports(WorkerEntrypoint, {`,
     `  site: Site,`,
     `  routes: ${JSON.stringify(entry.routes)},`,
     `  framework: ${framework},`,
     `});`,
-    ...(doClasses.length > 0
-      ? [
-          `const __alchemyDurableObjectBridge = DurableObjectBridge(DurableObject, { site: Site });`,
-          ...doClasses.map(
-            (e) =>
-              `export class ${e.name} extends __alchemyDurableObjectBridge(${JSON.stringify(e.name)}) {}`,
-          ),
-        ]
-      : []),
+    ...classExports,
     "",
   ].join("\n");
 };

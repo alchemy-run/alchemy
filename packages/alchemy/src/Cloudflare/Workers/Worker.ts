@@ -453,10 +453,34 @@ export interface WorkerVersionOptions {
  */
 export interface WorkerServerOptions {
   /**
+   * Path (or `file://` URL / `import.meta.url`) of YOUR worker entry — the
+   * mount file that owns HTTP composition (see Serve/DESIGN.md):
+   *
+   * ```ts
+   * // src/server.ts
+   * import framework from "@tanstack/react-start/server-entry";
+   * import { mount } from "alchemy/Serve";
+   * import Site from "./backend.ts";
+   * const site = mount(Site);
+   * export default {
+   *   fetch: async (req, env, ctx) =>
+   *     (await site.fetch(req, env, ctx)) ?? framework.fetch(req, env, ctx),
+   * };
+   * ```
+   *
+   * When set, the generated wrapper grafts this module's `fetch` verbatim
+   * (your mount decides routing — the `routes` gate is not applied) and
+   * still delivers the platform surface next to it: queue/scheduled/RPC
+   * dispatch and the DO/Workflow class exports the program registered.
+   * Relative paths resolve against the directory of `main`.
+   */
+  entry?: string;
+  /**
    * Path globs the Effect program's `fetch` handler owns. Compiled into
    * `assets.runWorkerFirst` rules (merged with any user rules) so matching
    * requests route through the Worker ahead of the static-asset layer.
    * `["/*"]` is middleware mode — the Effect fetch sees every request.
+   * Ignored when {@link entry} is set — the entry's own mount decides.
    * @default ["/api/*"]
    */
   routes?: string[];

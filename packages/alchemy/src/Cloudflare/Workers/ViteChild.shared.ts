@@ -40,6 +40,12 @@ export interface ViteEffectEntry {
    * wrapper re-imports the Website class from here inside workerd.
    */
   readonly mainPath: string;
+  /**
+   * Absolute filesystem path of the USER's worker entry (`server.entry`,
+   * the mount file) — when present the wrapper grafts its `fetch` verbatim
+   * and `routes` is not applied (the entry's mount decides routing).
+   */
+  readonly entryPath?: string | undefined;
   /** Path globs the Effect fetch owns (`server.routes`, default `/api/*`). */
   readonly routes: string[];
   /**
@@ -73,8 +79,25 @@ export const makeViteEffectEntry = (
   } catch {
     mainPath = props.main;
   }
+  mainPath = nodePath.resolve(mainPath);
+  const entry = props.server?.entry;
+  let entryPath: string | undefined;
+  if (entry !== undefined) {
+    let p: string;
+    try {
+      p = fileURLToPath(entry);
+    } catch {
+      p = entry;
+    }
+    // Relative entries anchor to the backend module's directory, so the
+    // pair travels together (`main: import.meta.url`, `entry: "./server.ts"`).
+    entryPath = nodePath.isAbsolute(p)
+      ? p
+      : nodePath.resolve(nodePath.dirname(mainPath), p);
+  }
   return {
-    mainPath: nodePath.resolve(mainPath),
+    mainPath,
+    entryPath,
     routes: props.server?.routes ?? [...DEFAULT_SERVER_ROUTES],
     exports: Object.entries(props.exports ?? {}).flatMap(
       ([name, entry]): ViteEffectEntry["exports"] =>

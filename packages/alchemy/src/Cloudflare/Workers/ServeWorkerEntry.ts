@@ -30,6 +30,7 @@
 import * as Effect from "effect/Effect";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { makeDurableObjectBridge } from "./DurableObjectBridge.ts";
+import { makeWorkflowBridge } from "../Workflows/WorkflowBridge.ts";
 import { getWorkerExport, makeWorkerBridge } from "./WorkerBridge.ts";
 import { markRuntime } from "../../Serve/Bridge.ts";
 import {
@@ -229,6 +230,25 @@ export const DurableObjectBridge = (
   options: { site: AnyWebsiteClass },
 ): ((className: string) => any) =>
   makeDurableObjectBridge(Base, {
+    entrypoint: options.site as any,
+    stack: lazyStack,
+  });
+
+/**
+ * Workflow bridge factory for wrapper entries — the `WorkflowEntrypoint`
+ * counterpart of {@link DurableObjectBridge}, sharing the same
+ * one-per-isolate layer build (keyed on the site class).
+ *
+ * ```ts
+ * const Bridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });
+ * export class ReportWorkflow extends Bridge("ReportWorkflow") {}
+ * ```
+ */
+export const WorkflowBridge = (
+  Base: any,
+  options: { site: AnyWebsiteClass },
+): ((className: string) => any) =>
+  makeWorkflowBridge(Base, {
     entrypoint: options.site as any,
     stack: lazyStack,
   });

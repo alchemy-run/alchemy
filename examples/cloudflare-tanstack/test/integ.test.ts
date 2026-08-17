@@ -24,7 +24,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the static-asset manifest is still propagating, requests can serve a
 // stale or placeholder body with a 200 — the status alone can't distinguish
 // "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -33,17 +34,17 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
     }
     return body;
   },
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+  Effect.retry({
+    while: (error) => error instanceof AssetNotReady,
+    schedule: Schedule.max([
+      Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
       ]),
-    }),
-  );
+      Schedule.recurs(20),
+    ]),
+  }),
+);
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -84,10 +85,7 @@ const callServerFn = (base: string, name: string, data?: unknown) =>
     if (data !== undefined) {
       const payload = yield* Effect.promise(() => toJSONAsync({ data }));
       request = request.pipe(
-        HttpClientRequest.bodyText(
-          JSON.stringify(payload),
-          "application/json",
-        ),
+        HttpClientRequest.bodyText(JSON.stringify(payload), "application/json"),
       );
     }
     return yield* executeWhenReady(request);
@@ -149,7 +147,9 @@ test(
     // server-rendered HTML.
     const html = yield* getBodyWhenReady(base, "Server-rendered visits:");
     expect(html).toContain("Server-rendered visits:");
-    const count = html.match(/data-testid="count"[^>]*>(?:<!--[^>]*-->)?\s*(\d+)/);
+    const count = html.match(
+      /data-testid="count"[^>]*>(?:<!--[^>]*-->)?\s*(\d+)/,
+    );
     expect(count).not.toBeNull();
     expect(Number(count![1])).toBeGreaterThanOrEqual(0);
     // The queue section's initial state is server-rendered the same way
@@ -215,6 +215,138 @@ test(
     expect(html).toContain(marker);
   }),
   { timeout: 180_000 },
+);
+
+test(
+  "custom entry: /healthz answered in the entry, ahead of both worlds",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const res = yield* getWhenReady(`${base}/healthz`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("ok");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "custom entry: the admin gate runs ahead of the effect fetch",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    // Warm first so the cold-start window can't masquerade as the gate.
+    yield* getWhenReady(`${base}/healthz`);
+
+    const client = yield* HttpClient.HttpClient;
+    // No key → the entry's gate answers before either world.
+    const denied = yield* client.get(`${base}/api/admin/anything`);
+    expect(denied.status).toBe(403);
+    expect(yield* denied.text).toBe("forbidden");
+
+    // With the key the gate passes and the EFFECT fetch is authoritative
+    // for /api/* — its own 404 (empty body), never the framework's page.
+    const passed = yield* client.execute(
+      HttpClientRequest.get(`${base}/api/admin/anything`).pipe(
+        HttpClientRequest.setHeader("x-admin-key", "letmein"),
+      ),
+    );
+    expect(passed.status).toBe(404);
+    expect(yield* passed.text).not.toContain("<html");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "durable object: same name routes to the same instance (monotonic)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const name = `it-${crypto.randomUUID().slice(0, 8)}`;
+
+    const first = yield* getWhenReady(`${base}/api/do/increment?name=${name}`);
+    expect(first.status).toBe(200);
+    const a = ((yield* first.json) as { next: number }).next;
+
+    const second = yield* getWhenReady(`${base}/api/do/increment?name=${name}`);
+    const b = ((yield* second.json) as { next: number }).next;
+    expect(b).toBe(a + 1);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "durable object: streaming RPC forwarded onto a streaming response",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const res = yield* getWhenReady(`${base}/api/do/ticks?n=4`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer runs after the response (waitUntil settle)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const marker = `fin-${crypto.randomUUID().slice(0, 8)}`;
+
+    const res = yield* getWhenReady(`${base}/api/finalizer?v=${marker}`);
+    expect(res.status).toBe(200);
+
+    // The finalizer rode ctx.waitUntil — observable shortly after.
+    const client = yield* HttpClient.HttpClient;
+    const value = yield* Effect.gen(function* () {
+      const kv = yield* client.get(`${base}/api/kv?key=finalizer-last`);
+      return ((yield* kv.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "workflow: durable steps run to completion and land the KV marker",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const marker = `wf-${crypto.randomUUID().slice(0, 8)}`;
+
+    const started = yield* getWhenReady(
+      `${base}/api/workflow/start?marker=${marker}`,
+    );
+    expect(started.status).toBe(200);
+    const { id } = (yield* started.json) as { id: string };
+    expect(id).toBeString();
+
+    const client = yield* HttpClient.HttpClient;
+    const status = yield* Effect.gen(function* () {
+      const res = yield* client.get(`${base}/api/workflow/status?id=${id}`);
+      // A just-created instance (or a propagation-window response) can
+      // serialize as null — treat it as "not yet" and keep polling.
+      return (yield* res.json) as { status: string } | null;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s?.status === "complete" || s?.status === "errored",
+        times: 45,
+      }),
+    );
+    expect(status?.status).toBe("complete");
+
+    const kv = yield* client.get(`${base}/api/kv?key=workflow-last`);
+    const { value } = (yield* kv.json) as { value: string | null };
+    expect(value).toBe(`report:${marker}`);
+  }),
+  { timeout: 240_000 },
 );
 
 test(
