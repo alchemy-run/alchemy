@@ -13,6 +13,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -1254,6 +1255,67 @@ export const LiveWorkerProvider = () =>
           enabled: desired.enabled,
           previewsEnabled: desired.previewsEnabled,
         });
+      });
+
+      class WorkersDevRoutePending extends Data.TaggedError(
+        "WorkersDevRoutePending",
+      )<{ message: string }> {}
+
+      /**
+       * Wait until the stable workers.dev URL actually serves the script.
+       * Enabling the subdomain registers the route asynchronously: until it
+       * propagates, the edge answers 404 with body `error code: 1042` —
+       * observed to exceed 60s in the tail. Reconcile owns this wait so
+       * "created" means "serving" (the reconciler doctrine's wait-for-active),
+       * instead of every consumer re-discovering the window. Routed does NOT
+       * mean healthy: only the 1042 routing miss (and transport/DNS errors on
+       * a first-ever subdomain) count as pending — the script's own responses,
+       * 404s included, end the wait.
+       */
+      const waitForWorkersDevRoute = Effect.fn(function* (url: string) {
+        const client = yield* HttpClient.HttpClient;
+        yield* Effect.logDebug(
+          `Worker reconcile: waiting for ${url} to route (workers.dev propagation)`,
+        );
+        yield* client.get(url).pipe(
+          Effect.flatMap((response) =>
+            response.status === 404
+              ? response.text.pipe(
+                  Effect.flatMap((body) =>
+                    body.startsWith("error code: 1042")
+                      ? Effect.fail(
+                          new WorkersDevRoutePending({
+                            message: `${url} is not routed yet (error 1042)`,
+                          }),
+                        )
+                      : Effect.void,
+                  ),
+                )
+              : Effect.void,
+          ),
+          Effect.scoped,
+          // A wedged read must count as "not routed yet", never hang the
+          // deploy; transport/DNS errors are expected on a first-ever
+          // account subdomain.
+          Effect.timeout(10_000),
+          Effect.catchIf(
+            (error) =>
+              error._tag === "TimeoutError" || isHttpClientError(error),
+            () =>
+              Effect.fail(
+                new WorkersDevRoutePending({
+                  message: `${url} is not reachable yet`,
+                }),
+              ),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "WorkersDevRoutePending",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(90),
+            ]),
+          }),
+        );
       });
 
       const normalizeCrons = (crons: string[] | undefined): string[] =>
@@ -3884,6 +3946,11 @@ export const LiveWorkerProvider = () =>
               ]),
             }),
           );
+
+          if (workersDev.enabled) {
+            const stableUrl = `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev/`;
+            yield* waitForWorkersDevRoute(stableUrl);
+          }
         }
         // Custom domains are managed only when `domain` is declared on props
         // (#942): an omitted `domain` leaves live attachments alone — and
