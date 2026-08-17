@@ -586,6 +586,26 @@
         "typescript": "catalog:",
       },
     },
+    "examples/aws-website-foldkit": {
+      "name": "aws-website-foldkit",
+      "version": "0.0.0",
+      "dependencies": {
+        "effect": "catalog:",
+        "foldkit": "^0.137.0",
+      },
+      "devDependencies": {
+        "@alchemy.run/frontend-frameworks": "workspace:*",
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "@foldkit/vite-plugin": "^0.11.3",
+        "@tailwindcss/vite": "catalog:",
+        "@types/node": "^24.12.0",
+        "alchemy": "workspace:*",
+        "tailwindcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
     "examples/aws-website-nextjs": {
       "name": "aws-website-nextjs",
       "version": "0.0.0",
@@ -4253,6 +4273,8 @@
 
     "aws-website-astro": ["aws-website-astro@workspace:examples/aws-website-astro"],
 
+    "aws-website-foldkit": ["aws-website-foldkit@workspace:examples/aws-website-foldkit"],
+
     "aws-website-nextjs": ["aws-website-nextjs@workspace:examples/aws-website-nextjs"],
 
     "aws-website-nuxt": ["aws-website-nuxt@workspace:examples/aws-website-nuxt"],
@@ -7235,6 +7257,8 @@
 
     "astro/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
+    "aws-website-foldkit/@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
+
     "aws-website-nextjs/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "aws-website-nuxt/@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
@@ -8422,6 +8446,8 @@
     "astro/sharp/@img/sharp-win32-ia32": ["@img/sharp-win32-ia32@0.35.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YYEhx9PImCC7T0tI8JDMi4DB9LwLCXCU5OWNYEXAxh5Q1ShKkyC6byxzoBJ3gEFDnH2lQckWuDe70G7mB2XJog=="],
 
     "astro/sharp/@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.2", "", { "os": "win32", "cpu": "x64" }, "sha512-imoOyBcoM/iiUr4J6VPpCNjPnjvP/Gks95898yB8YqoGGYmHYbOyCuNv9FMhFgtaiHFGbHW8bxKqRV6VjtXThQ=="],
+
+    "aws-website-foldkit/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 
     "aws-website-nuxt/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 

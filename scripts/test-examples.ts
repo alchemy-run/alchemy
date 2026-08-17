@@ -19,6 +19,7 @@ const examples = [
   "./examples/aws-ecs",
   "./examples/aws-lambda",
   "./examples/aws-website-astro",
+  "./examples/aws-website-foldkit",
   "./examples/aws-website-nextjs",
   "./examples/aws-website-nuxt",
   "./examples/aws-website-sveltekit",

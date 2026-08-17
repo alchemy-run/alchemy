@@ -1,0 +1,199 @@
+---
+title: Foldkit
+description: Deploy a Foldkit app to AWS with AWS.Website.Foldkit — the client-only Vite build on S3 + CloudFront, SPA deep links at the edge, and Vite's own dev server under alchemy dev.
+sidebar:
+  order: 15
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+[Foldkit](https://foldkit.dev) is an Elm-architecture frontend
+framework built on Effect. Its apps are client-only Vite projects —
+the Foldkit Vite plugin only adds HMR and devtools wiring — so
+`AWS.Website.Foldkit` deploys them with a single declaration: no
+build command, no output directory, no CDK, no CloudFormation.
+
+The deployment is assets-only: Alchemy runs your project's own
+`vite build` and uploads the client output to a private S3 bucket
+served through CloudFront. No Lambda is created. Client-side routing
+is assumed, so deep links fall back to `index.html` without you
+configuring anything.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks`; the resource loads its `/vite`
+and `/vite/aws` exports from your project at deploy time. It is only
+used at build time, so a dev dependency is enough:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Configure Vite
+
+Your Vite config stays what Foldkit's setup gives you:
+
+```typescript
+// vite.config.ts
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [foldkit()],
+  optimizeDeps: {
+    entries: ["src/entry.ts"],
+  },
+});
+```
+
+Alchemy runs Vite programmatically on the project root with this
+config as-is — the Foldkit plugin and the rest of your setup are
+preserved, and nothing platform-specific is injected. The build's
+output is plain static files.
+
+:::note[Pinned Effect versions]
+Foldkit pins its `effect` peer dependency to an exact version.
+Alchemy runs your app's own Vite build with your app's own
+`node_modules`, so that pin is between Foldkit and your package
+manager — Alchemy imposes no Effect version on your frontend.
+:::
+
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack):
+
+```typescript
+// alchemy.run.ts
+import * as AWS from "alchemy/AWS";
+
+export const Website = AWS.Website.Foldkit("Foldkit");
+```
+
+For an app in a subdirectory of a monorepo, point `rootDir` at it:
+
+```typescript
+export const Website = AWS.Website.Foldkit("Foldkit", {
+  rootDir: "applications/web",
+});
+```
+
+## Add it to the Stack
+
+Yield the site from your Stack and return its URL — see
+[examples/aws-website-foldkit](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-website-foldkit)
+for the checked-in example:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "AwsWebsiteFoldkitExample",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Website;
+
+    return {
+      url: site.url,
+    };
+  }),
+);
+```
+
+Alchemy builds the client assets and serves them from CloudFront at
+the returned `url`.
+
+## Deep links
+
+A Foldkit app that uses URL routing (`Runtime.makeApplication` with
+`route`, `onUrlRequest`, and `onUrlChange`) resolves routes on the
+client, so a deep link like `/counter/42` arrives at the edge as a
+request for a file that doesn't exist.
+
+`Foldkit` answers unmatched paths with the index page (200) by
+default — the Foldkit runtime resolves the route once the app boots.
+A Foldkit app that ships a real 404 page can opt out:
+
+```typescript
+export const Website = AWS.Website.Foldkit("Foldkit", {
+  spa: false,
+  errorPage: "404.html",
+});
+```
+
+## Environment variables
+
+A Foldkit SPA has no server, so anything it needs from the
+environment is baked into the bundle at build time by Vite's own
+[env handling](https://vite.dev/guide/env-and-mode): `VITE_`-prefixed
+variables from the build's process environment and the project's
+`.env` files are inlined as `import.meta.env.VITE_*`.
+
+Type them for your Foldkit code with Vite's standard `ImportMetaEnv`
+augmentation:
+
+```typescript
+// src/vite-env.d.ts
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string;
+}
+```
+
+Anything dynamic — values that come from other resources in your
+Stack — must come from a route the app fetches at runtime instead;
+compose an API behind the same domain with a
+[`Router`](/aws/frontend/static-site#compose-sites-with-a-router).
+
+## Custom domain
+
+```typescript
+export const Website = AWS.Website.Foldkit("Foldkit", {
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```
+
+Alchemy provisions the ACM certificate and the Route 53 alias
+records. To serve the app next to an API (or other sites) on one
+CloudFront distribution, attach it to a shared
+[`Router`](/aws/frontend/static-site#compose-sites-with-a-router)
+with `domain: { router }`.
+
+## Local dev
+
+`alchemy dev` runs the app's own Vite dev server, so Foldkit's HMR
+with state preservation and its devtools wiring work unchanged.
+`site.url` is the local address and no AWS resources are created;
+wrap the site in `Alchemy.remote()` to deploy the real infrastructure
+even during dev.
+
+Pin the dev server's address when several apps run in one Stack:
+
+```typescript
+export const Website = AWS.Website.Foldkit("Foldkit", {
+  dev: { host: "127.0.0.1", port: 5180, strictPort: true },
+});
+```

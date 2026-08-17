@@ -32,6 +32,8 @@ export default defineConfig([
       "octane/source": "src/octane/source.ts",
       "sveltekit/index": "src/sveltekit/index.ts",
       "sveltekit/aws": "src/sveltekit/aws.ts",
+      "vite/index": "src/vite/index.ts",
+      "vite/aws": "src/vite/aws.ts",
       "sveltekit/cloudflare": "src/sveltekit/cloudflare.ts",
       "sveltekit/source": "src/sveltekit/source.ts",
       "waku/index": "src/waku/index.ts",
