@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "effect": "catalog:",
-    "foldkit": "^0.137.0"
+    "foldkit": "^0.147.0"
   },
   "devDependencies": {
-    "@foldkit/vite-plugin": "^0.11.3",
+    "@foldkit/vite-plugin": "^0.15.0",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
     "alchemy": "workspace:*",
