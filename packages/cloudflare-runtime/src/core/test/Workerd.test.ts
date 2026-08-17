@@ -4,10 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
+import * as Random from "effect/Random";
 import * as Schedule from "effect/Schedule";
 import * as NodeNet from "node:net";
 import * as Workerd from "../workerd/Workerd.ts";
-import * as PortHelpers from "./helpers/port.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
@@ -223,6 +223,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         let port = 0;
+        const sentinel = `workerd-shutdown-${yield* Random.nextInt}`;
         yield* Effect.gen(function* () {
           const workerd = yield* Workerd.Workerd;
           const ports = yield* workerd
@@ -242,8 +243,7 @@ layer(services)((it) => {
                     modules: [
                       {
                         name: "main.js",
-                        esModule:
-                          "export default { fetch: () => new Response('ok') };",
+                        esModule: `export default { fetch: () => new Response('${sentinel}') };`,
                       },
                     ],
                   },
@@ -259,24 +259,28 @@ layer(services)((it) => {
               signal: AbortSignal.timeout(10_000),
             }),
           );
-          expect(yield* Effect.promise(() => response.text())).toBe("ok");
+          expect(yield* Effect.promise(() => response.text())).toBe(sentinel);
         }).pipe(Effect.scoped);
 
-        // Prove shutdown by LISTENING on exactly the address workerd held.
-        // (`PortHelpers.check` sweeps seven hosts — 0.0.0.0, ::, localhost,
-        // … — any of which a concurrently-running test project can occupy
-        // at this port number, failing the probe for reasons unrelated to
-        // workerd.) Closing the scope kills workerd, but the OS releases
-        // the listener a moment after the process exits — a single
-        // immediate probe races that on loaded CI runners (observed on
-        // macos-latest), so retry briefly (bounded).
-        const free = yield* PortHelpers.occupy(port, "127.0.0.1").pipe(
-          Effect.scoped,
-          Effect.catchDefect(Effect.fail),
-          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
-          Effect.exit,
+        // Linux may immediately give this ephemeral port to another workerd
+        // spawned by a concurrently-running test. Port occupancy therefore
+        // cannot identify whether *this* process survived scope closure.
+        // Probe the unique response instead: refusal, timeout, or a different
+        // body all prove the original process is no longer serving here.
+        const stopped = yield* Effect.tryPromise(async () => {
+          const response = await fetch(`http://127.0.0.1:${port}/`, {
+            signal: AbortSignal.timeout(1_000),
+          });
+          return (await response.text()) !== sentinel;
+        }).pipe(
+          Effect.catch(() => Effect.succeed(true)),
+          Effect.filterOrFail(
+            (stopped) => stopped,
+            () => new Error("the scoped workerd is still serving requests"),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 20 }),
         );
-        assert(Exit.isSuccess(free));
+        assert(stopped);
       }),
     { timeout: 180_000 },
   );
