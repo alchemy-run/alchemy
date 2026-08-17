@@ -420,7 +420,7 @@ export const Astro: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(Astro(id, propsEff)))
-          : Astro(id, propsEff, impl)
+          : workerServeBridge.attach(Astro(id, propsEff, impl))
     : (Worker as any)(
         id,
         Effect.gen(function* () {

@@ -420,7 +420,7 @@ export const Nuxt: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(Nuxt(id, propsEff)))
-          : Nuxt(id, propsEff, impl)
+          : workerServeBridge.attach(Nuxt(id, propsEff, impl))
     : (Worker as any)(
         id,
         Effect.gen(function* () {

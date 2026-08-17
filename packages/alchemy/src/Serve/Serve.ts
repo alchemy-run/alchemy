@@ -40,16 +40,26 @@ import { bridgeOf, type ServeBridge } from "./Bridge.ts";
 export { bridgeOf, type ServeBridge } from "./Bridge.ts";
 
 /**
+ * Defeats static resolution by foreign bundlers (same trick as the Nitro
+ * adapter): the mount now rides USER source through framework builds
+ * (hooks.server.ts, server entries), and a statically-analyzable dynamic
+ * import here would drag the Cloudflare bridge graph — including the
+ * unresolvable `cloudflare:workers` specifier — into every such build.
+ */
+const DO_NOT_BUNDLE = "";
+
+/**
  * Fallback for classes constructed by a factory that does not stamp a
  * bridge yet (plain `Cloudflare.Worker` extends-form classes). Loaded
- * lazily so the neutral `alchemy/Serve` static graph carries neither
- * cloud; foreign bundlers chunk the dynamic import. Slated for removal
- * once every class factory stamps `SERVE_BRIDGE_KEY`.
+ * lazily AND opaquely: every Website arm stamps `SERVE_BRIDGE_KEY`, so
+ * inside framework bundles this never fires — it only resolves in
+ * node/bun worlds where alchemy's own module graph is importable. Slated
+ * for removal once every class factory stamps.
  */
 const fallbackBridge = (): Promise<ServeBridge> =>
-  import("../Cloudflare/Workers/ServeBridge.ts").then(
-    (mod) => mod.workerServeBridge,
-  );
+  import(
+    /* @vite-ignore */ `${DO_NOT_BUNDLE}../Cloudflare/Workers/ServeBridge.ts`
+  ).then((mod) => mod.workerServeBridge);
 
 /**
  * Any effectful Website Platform class — the value default-exported by the

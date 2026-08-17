@@ -354,7 +354,7 @@ export const SvelteKit: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(SvelteKit(id, propsEff)))
-          : SvelteKit(id, propsEff, impl)
+          : workerServeBridge.attach(SvelteKit(id, propsEff, impl))
     : (Worker as any)(
         id,
         Effect.gen(function* () {

@@ -394,7 +394,7 @@ export const Vite: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(Vite(id, propsEff)))
-          : Vite(id, propsEff, impl)
+          : workerServeBridge.attach(Vite(id, propsEff, impl))
     : impl === undefined
       ? Worker(
           id,

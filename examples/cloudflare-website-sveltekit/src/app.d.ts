@@ -5,6 +5,8 @@ declare global {
   namespace App {
     interface Platform {
       env?: Record<string, unknown>;
+      /** The per-request workerd ExecutionContext (production only). */
+      ctx?: { waitUntil(promise: Promise<unknown>): void };
     }
   }
 }

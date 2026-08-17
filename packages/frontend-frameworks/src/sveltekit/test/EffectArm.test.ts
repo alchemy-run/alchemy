@@ -31,21 +31,23 @@ describe("generateWorkerShim effect arm", () => {
     expect(plain).not.toContain("alchemy/Serve");
   });
 
-  it("wraps kit in makeWebsiteExports with the site module and routes", () => {
+  it("grafts kit's handler verbatim via makeWebsiteEntryExports (additive)", () => {
     expect(effect).toContain(
-      `import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
+      `import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";`,
     );
     expect(effect).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,
     );
     expect(effect).toContain(
-      "export default makeWebsiteExports(WorkerEntrypoint, {",
+      "export default makeWebsiteEntryExports(WorkerEntrypoint, {",
     );
-    expect(effect).toContain(`routes: ["/api/*"],`);
-    // kit stays reachable as the fallback — never a second listener.
+    // Kit's handler — with the user's hooks.server.ts mount inside — IS
+    // the one fetch handler; the shim never route-gates or intercepts.
     expect(effect).toContain(
-      "framework: () => Promise.resolve({ default: kit_handler }),",
+      "fetch: (request, env, ctx) => kit_handler.fetch(request, env, ctx),",
     );
+    expect(effect).not.toContain("makeWebsiteExports(");
+    expect(effect).not.toContain("routes:");
     expect(effect).not.toContain("export default kit_handler;");
   });
 
@@ -58,14 +60,17 @@ describe("generateWorkerShim effect arm", () => {
     );
   });
 
-  it("re-exports Workflow bridge classes with the baked stack identity", () => {
+  it("re-exports Workflow bridge classes (lazy stack identity)", () => {
+    // WorkflowBridge resolves the stack from env markers at layer-build
+    // time (lazyStack) — nothing is baked into the shim.
     expect(effect).toContain(
-      `import { makeWorkflowBridge } from "alchemy/Cloudflare";`,
+      "const __alchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: __alchemy_site });",
     );
     expect(effect).toContain(
       'export class Flow extends __alchemyWorkflowBridge("Flow") {}',
     );
-    expect(effect).toContain('stack: { name: "my-stack", stage: "dev" }');
+    expect(effect).not.toContain("makeWorkflowBridge");
+    expect(effect).not.toContain("stack: {");
   });
 
   it("omits DO/Workflow scaffolding when the site exports none", () => {
@@ -75,7 +80,7 @@ describe("generateWorkerShim effect arm", () => {
       assetsBinding: "ASSETS",
       effect: { main: "/abs/src/site.ts", routes: ["/api/*"] },
     });
-    expect(fetchOnly).toContain("makeWebsiteExports(WorkerEntrypoint");
+    expect(fetchOnly).toContain("makeWebsiteEntryExports(WorkerEntrypoint");
     expect(fetchOnly).not.toContain("DurableObjectBridge");
     expect(fetchOnly).not.toContain("makeWorkflowBridge");
   });

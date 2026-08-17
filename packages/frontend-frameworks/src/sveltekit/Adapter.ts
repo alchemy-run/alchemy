@@ -33,7 +33,6 @@ import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { scanForExplicitServeMount } from "./EffectDev.ts";
 
 // Re-exported for callers that historically imported the scan from the
 // adapter module (it moved to the cloud-agnostic `EffectDev.ts` so the AWS
@@ -211,19 +210,12 @@ export const makeCloudflareAdapter = (
     async adapt(builder: Builder) {
       const root = options.root ?? process.cwd();
       const assetsBinding = options.assetsBinding ?? "ASSETS";
-      // Effectful wrapper delivery: stand down when kit's server graph
-      // already mounts alchemy/Serve explicitly (the explicit tier wins —
-      // never two bridges on one worker).
-      const explicitServeMount =
-        options.effect !== undefined &&
-        scanForExplicitServeMount(builder.getServerDirectory());
-      if (explicitServeMount) {
-        builder.log.minor(
-          "alchemy: explicit alchemy/Serve mount detected in the server " +
-            "graph - the generated worker shim's effect arm stands down",
-        );
-      }
-      const effect = explicitServeMount ? undefined : options.effect;
+      // Effectful wrapper delivery is ADDITIVE-ONLY (Serve/DESIGN.md): the
+      // shim grafts kit's handler verbatim — the user's hooks.server.ts
+      // mount owns HTTP — and only contributes the platform surface. Two
+      // bridges on one worker is no longer possible, so nothing is
+      // detected or stood down.
+      const effect = options.effect;
       const dest = builder.getBuildDirectory("cloudflare");
       const tmp = builder.getBuildDirectory("cloudflare-tmp");
 

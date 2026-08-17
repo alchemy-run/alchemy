@@ -154,36 +154,32 @@ const effectImports = (effect: WorkerShimEffectOptions): string => {
   const hasWf = (effect.workflows?.length ?? 0) > 0;
   return [
     `import { WorkerEntrypoint${hasDo ? ", DurableObject" : ""}${hasWf ? ", WorkflowEntrypoint" : ""} } from 'cloudflare:workers';`,
-    `import { makeWebsiteExports${hasDo ? ", DurableObjectBridge" : ""} } from "alchemy/Serve/Worker";`,
-    ...(hasWf
-      ? [`import { makeWorkflowBridge } from "alchemy/Cloudflare";`]
-      : []),
+    `import { makeWebsiteEntryExports${hasDo ? ", DurableObjectBridge" : ""}${hasWf ? ", WorkflowBridge" : ""} } from "alchemy/Serve/Worker";`,
     `import __alchemy_site from ${JSON.stringify(effect.main)};`,
   ].join("\n");
 };
 
 /**
  * The effect arm's exports: the `makeWebsiteExports` wrapper as the default
- * export (Effect fetch for `routes` — dispatched before the pragma-cache /
- * asset checks inside `kit_handler`, authoritative within the routes — kit
- * serves only paths outside them; full non-fetch handler surface from the
- * Worker bridge dispatch), plus DO / Workflow bridge class re-exports
- * sharing the one-per-isolate build.
+ * export: ADDITIVE-ONLY (Serve/DESIGN.md). Kit's `kit_handler` — with the
+ * user's `hooks.server.ts` mount inside it — is grafted verbatim as the
+ * one fetch handler; the wrapper contributes only what a hook cannot: the
+ * non-fetch handler surface (queue/scheduled/RPC via the Worker bridge
+ * dispatch) plus DO / Workflow bridge class exports sharing the
+ * one-per-isolate build. HTTP dispatch order, gates, and effect routing
+ * are the mount's code, never generated.
  */
 const effectExports = (effect: WorkerShimEffectOptions): string => {
   const doClasses = effect.durableObjects ?? [];
   const wfClasses = effect.workflows ?? [];
   return [
-    "// Effectful Website wrapper (alchemy auto-inject tier): the Effect",
-    "// fetch owns the routes below and runs BEFORE kit_handler's",
-    "// pragma-cache/asset checks — effect responses are never edge-cached",
-    "// by the shim. Only paths outside the routes fall through to kit.",
-    "export default makeWebsiteExports(WorkerEntrypoint, {",
+    "// Effectful Website wrapper (additive): kit's handler — including",
+    "// the user's hooks.server.ts mount — serves ALL HTTP verbatim; the",
+    "// wrapper adds the platform surface (queue/scheduled/RPC dispatch",
+    "// and the class exports below) from the program's registrations.",
+    "export default makeWebsiteEntryExports(WorkerEntrypoint, {",
     "  site: __alchemy_site,",
-    ...(effect.routes !== undefined
-      ? [`  routes: ${JSON.stringify(effect.routes)},`]
-      : []),
-    "  framework: () => Promise.resolve({ default: kit_handler }),",
+    "  fetch: (request, env, ctx) => kit_handler.fetch(request, env, ctx),",
     "});",
     ...(doClasses.length > 0
       ? [
@@ -196,7 +192,7 @@ const effectExports = (effect: WorkerShimEffectOptions): string => {
       : []),
     ...(wfClasses.length > 0
       ? [
-          `const __alchemyWorkflowBridge = makeWorkflowBridge(WorkflowEntrypoint, { entrypoint: __alchemy_site, stack: { name: ${JSON.stringify(effect.stack?.name ?? "")}, stage: ${JSON.stringify(effect.stack?.stage ?? "")} } });`,
+          "const __alchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: __alchemy_site });",
           ...wfClasses.map(
             (name) =>
               `export class ${name} extends __alchemyWorkflowBridge(${JSON.stringify(name)}) {}`,

@@ -312,7 +312,7 @@ export const Waku: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(Waku(id, propsEff)))
-          : Waku(id, propsEff, impl)
+          : workerServeBridge.attach(Waku(id, propsEff, impl))
     : (Worker as any)(
         id,
         Effect.gen(function* () {

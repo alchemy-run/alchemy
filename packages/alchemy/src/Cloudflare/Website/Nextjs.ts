@@ -450,7 +450,7 @@ export const Nextjs: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(Nextjs(id, propsEff)))
-          : Nextjs(id, propsEff, impl)
+          : workerServeBridge.attach(Nextjs(id, propsEff, impl))
     : (Worker as any)(
         id,
         Effect.gen(function* () {

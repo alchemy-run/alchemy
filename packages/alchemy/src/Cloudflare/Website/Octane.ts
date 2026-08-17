@@ -293,7 +293,7 @@ export const Octane: {
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
           ? workerServeBridge.attach(effectClass(Octane(id, propsEff)))
-          : Octane(id, propsEff, impl)
+          : workerServeBridge.attach(Octane(id, propsEff, impl))
     : (Worker as any)(
         id,
         Effect.gen(function* () {
