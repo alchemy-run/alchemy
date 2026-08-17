@@ -35,7 +35,7 @@ export * from "./Resource.ts";
 export * as Schema from "./Schema.ts";
 export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";
-export { Stack } from "./Stack.ts";
+export { Stack } from "./StackBuilder.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
 export * as Sync from "./Sync.ts";
@@ -57,3 +57,4 @@ export {
   type RuntimeContext as RuntimeContextInterface,
 } from "./RuntimeContext.ts";
 export type * from "./Stack.ts";
+export type * from "./StackBuilder.ts";

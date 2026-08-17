@@ -11,7 +11,7 @@ import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
 // (Telemetry → Client/Serve) that foreign bundlers compile into workerd
 // server bundles, where Stack.ts's engine closure (`node:os`, `node:net`)
 // is fatal at module scope.
-import { StackTag as Stack } from "./StackTag.ts";
+import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
 import { isPlainData, isPrimitive, type Primitive } from "./Util/data.ts";

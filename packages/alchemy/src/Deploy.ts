@@ -5,7 +5,11 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import type { Input } from "./Input.ts";
 import * as Plan from "./Plan.ts";
-import { evalStack, type CompiledStack, type StackEffect } from "./Stack.ts";
+import {
+  evalStack,
+  type CompiledStack,
+  type StackEffect,
+} from "./StackBuilder.ts";
 import { Stage } from "./Stage.ts";
 
 export const deploy = <A>({

@@ -13,7 +13,7 @@
 import { apply } from "@/Apply";
 import { provideFreshArtifactStore } from "@/Artifacts";
 import * as Plan from "@/Plan";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import { InMemoryService, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";

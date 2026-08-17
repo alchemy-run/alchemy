@@ -8,7 +8,7 @@ import {
   type HostRuntimeContext,
   ServerHost,
 } from "@/Server/Process.ts";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";

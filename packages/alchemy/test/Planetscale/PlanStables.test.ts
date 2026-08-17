@@ -1,6 +1,6 @@
 import * as Plan from "@/Plan";
 import * as Planetscale from "@/Planetscale";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import {
   InMemoryService,

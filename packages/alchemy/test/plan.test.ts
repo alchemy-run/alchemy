@@ -9,7 +9,7 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
 import type { ResourceBinding } from "@/Resource";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import {
   InMemoryService,

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "pathe";
 import { describe, expect, test } from "alchemy-test";
 import { importStack } from "../../src/Cli/commands/_shared";
-import { evalStack } from "../../src/Stack";
+import { evalStack } from "../../src/StackBuilder";
 import * as TestCore from "../../src/Test/Core";
 import { TestLayers } from "../test.resources";
 

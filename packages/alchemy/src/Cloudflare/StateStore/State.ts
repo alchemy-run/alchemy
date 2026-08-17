@@ -22,7 +22,7 @@ import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
 import { RandomProvider } from "../../Random.ts";
-import * as Alchemy from "../../Stack.ts";
+import * as Alchemy from "../../StackBuilder.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
   checkHttpStateStoreAuth,

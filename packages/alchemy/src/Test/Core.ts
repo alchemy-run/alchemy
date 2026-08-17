@@ -26,10 +26,10 @@ import * as Plan from "../Plan.ts";
 import {
   type CompiledStack,
   make as makeStack,
-  Stack,
   type StackEffect,
   type StackServices,
-} from "../Stack.ts";
+} from "../StackBuilder.ts";
+import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";

@@ -23,7 +23,7 @@ import { Self } from "./Self.ts";
 // (Output → Telemetry → Client/Serve) compiled into workerd server
 // bundles, where Stack.ts's engine closure (`node:os`, `node:net`) is
 // fatal at module scope.
-import { StackTag as Stack } from "./StackTag.ts";
+import { Stack } from "./Stack.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   Type: R["Type"];

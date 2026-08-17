@@ -16,7 +16,7 @@
  */
 import * as AWS from "@/AWS";
 import { Certificate, CertificateProvider } from "@/AWS/ACM/Certificate.ts";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";

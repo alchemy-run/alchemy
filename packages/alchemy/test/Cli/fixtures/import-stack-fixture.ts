@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Stack } from "@/Stack.ts";
+import { Stack } from "@/StackBuilder.ts";
 import * as State from "@/State/index.ts";
 import { TestLayers } from "../../test.resources.ts";
 

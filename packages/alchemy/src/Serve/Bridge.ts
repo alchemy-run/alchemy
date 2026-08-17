@@ -47,7 +47,7 @@ import { isScopeEjected } from "../Http.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
-import { StackTag as Stack } from "../StackTag.ts";
+import { Stack } from "../Stack.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import type { SERVE_SENTINEL } from "./constants.ts";
 import { envString, hasStackMarkers } from "./Env.ts";

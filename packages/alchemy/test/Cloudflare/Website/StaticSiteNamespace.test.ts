@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Namespace from "@/Namespace.ts";
-import * as Stack from "@/Stack.ts";
+import * as Stack from "@/StackBuilder.ts";
 import { Stage } from "@/Stage.ts";
 import { inMemoryState, type State } from "@/State";
 import * as Test from "@/Test/Alchemy";

@@ -30,7 +30,7 @@ import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../../Prisma/AuthProvider.ts";
-import * as Stack from "../../Stack.ts";
+import * as Stack from "../../StackBuilder.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";

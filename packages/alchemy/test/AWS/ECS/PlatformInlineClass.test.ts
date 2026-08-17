@@ -3,7 +3,7 @@ import { createContainerRuntimeContext } from "@/AWS/ECS/Task.ts";
 import { isResolved } from "@/Diff.ts";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider.ts";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";

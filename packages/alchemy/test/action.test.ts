@@ -1,6 +1,6 @@
 import { Action } from "@/Action";
 import * as Plan from "@/Plan";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import {
   InMemoryService,

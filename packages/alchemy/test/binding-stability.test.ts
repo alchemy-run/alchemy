@@ -19,7 +19,7 @@ import { provideFreshArtifactStore } from "@/Artifacts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import type { ResourceBinding } from "@/Resource";
-import * as Stack from "@/Stack";
+import * as Stack from "@/StackBuilder";
 import { Stage } from "@/Stage";
 import { encodeState, InMemoryService, reviveState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
