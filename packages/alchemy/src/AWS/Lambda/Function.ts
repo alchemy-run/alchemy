@@ -741,25 +741,12 @@ const finalizeFunctionProps = (
  * ```
  *
  * @section Framework Server Functions (collect-only)
- * Combining an Effect implementation with a **prebuilt framework
- * artifact** (`bundle: false`) puts the Function in *collect-only* mode:
- * the framework's own build output (nitro's `.output/server`, OpenNext's
- * server functions, ...) deploys byte-for-byte as the Lambda code, while
- * the Effect program runs at plan time only — its capability bindings
- * collect env vars, IAM policy statements, and VPC/EFS requests onto the
- * function. At runtime the program is re-imported and served *inside*
- * the framework bundle through the `alchemy/Serve` bridge.
+ * An Effect impl + a prebuilt artifact (`bundle: false`) = collect-only
+ * mode: bindings collect env/IAM at plan time, the framework bundle
+ * ships as-is, and the program serves inside it via `alchemy/Serve`.
+ * The effectful `AWS.Website.*` composites drive this — prefer those.
  *
- * This mode is what the effectful `AWS.Website.*` composites drive under
- * the hood — reach for those rather than wiring it by hand. `server`
- * configures the delegation: `server.routes` is the URL space the
- * effect `fetch` owns (consumed by the Website composites' CloudFront
- * edge router and the runtime bridge's dispatch), `server.verify`
- * controls the deploy-time sentinel scan proving the framework bundle
- * actually mounts the bridge, and `server.takeover` opts out of
- * automatic entry takeover where a framework integration supports it.
- *
- * @example Collect-only server Lambda (what a Website composite deploys)
+ * @example Collect-only server Lambda
  * ```typescript
  * const server = yield* AWS.Lambda.Function(
  *   "Server",
@@ -768,7 +755,7 @@ const finalizeFunctionProps = (
  *     bundle: false,
  *     server: { routes: ["/api/*"] },
  *   },
- *   impl, // plan time: bindings collect env + IAM onto this function
+ *   impl,
  * );
  * ```
  *
