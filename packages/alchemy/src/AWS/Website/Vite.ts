@@ -11,7 +11,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
+import { lambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -404,7 +404,7 @@ export const Vite: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeBridge(effectClass(makeVite(id, props, impl)))
+        lambdaServeBridge.attach(effectClass(makeVite(id, props, impl)))
     : makeVite(id, props, impl)) as any;
 
 const viteSsrConfig = (props: ViteSsrProps): FrameworkSiteConfig => ({

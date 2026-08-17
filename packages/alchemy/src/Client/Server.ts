@@ -72,7 +72,7 @@ export const invokeServerMethod = async (
   const bridge =
     bridgeOf(site) ??
     (await import("../Cloudflare/Workers/ServeBridge.ts")).workerServeBridge;
-  const runtime = await bridge.runtime!(site, env);
+  const runtime = await bridge.runtime(site, env);
   const fn = rpcMethodsOf(runtime.shape())[method];
   if (fn === undefined) {
     throw new RpcError({

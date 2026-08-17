@@ -25,7 +25,7 @@ describe("generateLambdaEntry effect arm (AWS)", () => {
       },
     });
     expect(entry).toContain(
-      `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/ServeBridge';`,
+      `import { lambdaServeBridge } from 'alchemy/AWS/Lambda/ServeBridge';`,
     );
     expect(entry).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,
@@ -66,14 +66,14 @@ describe("EffectDev aws arm", () => {
     const load = plugin.load as (id: string) => string | undefined;
     const code = load("\0virtual:alchemy-sveltekit-effect");
     expect(code).toContain(
-      `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
+      `import { lambdaServeBridge } from "alchemy/AWS/Lambda/ServeBridge";`,
     );
     expect(code).toContain(`import Site from "/abs/project/src/site.ts";`);
     // The middleware gates `server.routes` before dispatching, so the
     // handlers claim everything they receive ("/*") — a narrower claim
     // here would shadow a broader construct claim.
     expect(code).toContain(
-      `export const handle = makeWebsiteHandlers({ site: Site, routes: ["/*"] });`,
+      `export const handle = lambdaServeBridge.handlers({ site: Site, routes: ["/*"] });`,
     );
     expect(code).not.toContain(`"alchemy/Serve"`);
   });

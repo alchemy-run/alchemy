@@ -9,9 +9,9 @@
  * globalThis.__ALCHEMY_RUNTIME__ = true;
  * import { handler as frameworkFetch } from "./entry.js";
  * import { toLambdaHandler } from "./aws-lambda.mjs";
- * import { makeWebsiteHandlers } from "./alchemy-effect.mjs"; // prebundle
+ * import { lambdaServeBridge } from "./alchemy-effect.mjs"; // prebundle
  * import Site from "./site.mjs";
- * const site = makeWebsiteHandlers({ site: Site, routes: ["/api/*"] });
+ * const site = lambdaServeBridge.handlers({ site: Site, routes: ["/api/*"] });
  * export const handler = toLambdaHandler(async (request) =>
  *   (await site.match(request)) ?? frameworkFetch(request));
  * ```
@@ -170,48 +170,6 @@ export interface WebsiteHandlers {
 }
 
 /**
- * Build the site-match half of a generated AWS wrapper entry: strict route
- * ownership — the effect fetch serves `routes` (its answers, 404s
- * included, are final), the framework serves everything else.
- *
- * Runtime-only — constructing the handlers stamps
- * `globalThis.__ALCHEMY_RUNTIME__` (so every `host.bind` guard in the
- * re-imported `src/backend.ts` is a no-op) and registers the internal
- * Lambda extension once.
- */
-export const makeWebsiteHandlers = (
-  options: WebsiteHandlersOptions,
-): WebsiteHandlers => {
-  globalThis.__ALCHEMY_RUNTIME__ = true;
-  void recipe.init!();
-
-  const routes = options.routes ?? DEFAULT_SERVER_ROUTES;
-
-  const match = async (request: Request): Promise<Response | undefined> => {
-    const pathname = new URL(request.url).pathname;
-    const env = await recipe.resolveEnv(options.env);
-    // Cheap pre-gates BEFORE the core touches the layer build: the
-    // four-worlds guard and strict route ownership.
-    if (!hasStackMarkers(env)) {
-      return undefined;
-    }
-    if (!matchRoutes(routes, pathname)) {
-      return undefined;
-    }
-    return core.match(options.site as object, request, { env });
-  };
-
-  return {
-    match,
-    fetch: async (request, fetchOptions) =>
-      (await match(request)) ??
-      (fetchOptions?.fallback !== undefined
-        ? fetchOptions.fallback(request)
-        : new Response("Not Found", { status: 404 })),
-  };
-};
-
-/**
  * The class-carried serve bridge for AWS-hosted Website classes (attached
  * under `SERVE_BRIDGE_KEY` by the effectful AWS Website constructs at
  * class construction). `Serve.make` — and therefore the framework mounts
@@ -233,28 +191,45 @@ export const lambdaServeBridge = {
   ): Promise<Response | undefined> =>
     core.match(site, request, { env: options?.env }),
   dispose: (site: object): Promise<void> => core.dispose(site),
-  runtime: (
-    site: object,
-    env: Record<string, unknown>,
-  ): Promise<SiteRuntime> => core.getRuntime(site, env),
+  runtime: (site: object, env: Record<string, unknown>): Promise<SiteRuntime> =>
+    core.getRuntime(site, env),
+  /** Stamp this bridge on a Website class (the AWS construct class arms). */
+  attach: <T>(cls: T): T =>
+    Object.assign(cls as object, {
+      [SERVE_BRIDGE_KEY]: lambdaServeBridge,
+    }) as T,
+  /**
+   * The generated AWS wrapper entry's site-match half: strict route
+   * ownership — the effect fetch serves `routes` (answers final, 404s
+   * included), the framework serves everything else.
+   */
+  handlers: (options: WebsiteHandlersOptions): WebsiteHandlers => {
+    globalThis.__ALCHEMY_RUNTIME__ = true;
+    void recipe.init!();
+
+    const routes = options.routes ?? DEFAULT_SERVER_ROUTES;
+
+    const match = async (request: Request): Promise<Response | undefined> => {
+      const pathname = new URL(request.url).pathname;
+      const env = await recipe.resolveEnv(options.env);
+      // Cheap pre-gates BEFORE the core touches the layer build: the
+      // four-worlds guard and strict route ownership.
+      if (!hasStackMarkers(env)) {
+        return undefined;
+      }
+      if (!matchRoutes(routes, pathname)) {
+        return undefined;
+      }
+      return core.match(options.site as object, request, { env });
+    };
+
+    return {
+      match,
+      fetch: async (request, fetchOptions) =>
+        (await match(request)) ??
+        (fetchOptions?.fallback !== undefined
+          ? fetchOptions.fallback(request)
+          : new Response("Not Found", { status: 404 })),
+    };
+  },
 };
-
-/**
- * Attach the AWS Lambda/Node serve bridge to an effectful Website class.
- * Mirrors `attachWorkerServeBridge`; called by the AWS Website constructs'
- * class arms (via `AWS/Website/Effectful.ts`).
- * @internal
- */
-export const attachLambdaServeBridge = <T>(cls: T): T =>
-  Object.assign(cls as object, {
-    [SERVE_BRIDGE_KEY]: lambdaServeBridge,
-  }) as T;
-
-/**
- * Tear down the per-class runtime built for `site` — see
- * {@link BridgeCore.dispose}. Kept as a named export for the dev servers'
- * hot-reload invalidation half (`Serve.dispose` routes here through the
- * class-carried bridge).
- */
-export const disposeWebsiteRuntime = (site: object): Promise<void> =>
-  core.dispose(site);

@@ -7,7 +7,7 @@ import type { Named, Tag } from "../../Named.ts";
 import type { MakeShape, PlatformServices } from "../../Platform.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
-import { attachWorkerServeBridge } from "../Workers/ServeBridge.ts";
+import { workerServeBridge } from "../Workers/ServeBridge.ts";
 import type { Container } from "../Containers/Container.ts";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
@@ -419,7 +419,7 @@ export const Astro: {
   id === undefined
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
-          ? attachWorkerServeBridge(effectClass(Astro(id, propsEff)))
+          ? workerServeBridge.attach(effectClass(Astro(id, propsEff)))
           : Astro(id, propsEff, impl)
     : (Worker as any)(
         id,

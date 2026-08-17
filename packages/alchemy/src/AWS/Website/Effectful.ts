@@ -29,7 +29,7 @@ import {
   type FunctionRuntimeContext,
   type FunctionServices,
 } from "../Lambda/Function.ts";
-export { attachLambdaServeBridge } from "../Lambda/ServeBridge.ts";
+export { lambdaServeBridge } from "../Lambda/ServeBridge.ts";
 
 /**
  * A Website fetch handler's effect type: `HttpEffect` widened with

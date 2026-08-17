@@ -408,7 +408,7 @@ const wrapper = async (handler, converter) => {
   const { makeWebsiteHandlers, default: Site } = await import(
     "./${EFFECT_MODULE_NAME}"
   );
-  const site = makeWebsiteHandlers({ site: Site, routes: ROUTES });
+  const site = lambdaServeBridge.handlers({ site: Site, routes: ROUTES });
   const composed = async (internalEvent, options) => {
     // Strict route ownership + the four-worlds env guard live
     // inside match; undefined means "the framework serves".

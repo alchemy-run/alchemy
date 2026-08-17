@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
+import { lambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -252,7 +252,7 @@ export const Nuxt: {
         // The class carries the AWS serve shell so `Serve.make(Site)` (and
         // the `toEventHandler` nitro mount built on it) dispatches through
         // the Lambda/Node layer recipe instead of the Cloudflare bridge.
-        attachLambdaServeBridge(effectClass(makeNuxt(id, props, impl)))
+        lambdaServeBridge.attach(effectClass(makeNuxt(id, props, impl)))
     : makeNuxt(id, props, impl)) as any;
 
 const nuxtConfig = (id: string, props: NuxtProps): FrameworkSiteConfig => ({

@@ -227,7 +227,7 @@ export const dispose = async <S extends AnyWebsiteClass>(
   site: S,
 ): Promise<void> => {
   const bridge = bridgeOf(site) ?? (await fallbackBridge());
-  return bridge.dispose !== undefined ? bridge.dispose(site) : undefined;
+  return bridge.dispose(site);
 };
 
 export class ServeExportsUnavailableError extends Data.TaggedError(

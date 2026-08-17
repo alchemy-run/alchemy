@@ -6,7 +6,7 @@ import type { Named, Tag } from "../../Named.ts";
 import type { MakeShape, PlatformServices } from "../../Platform.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
-import { attachWorkerServeBridge } from "../Workers/ServeBridge.ts";
+import { workerServeBridge } from "../Workers/ServeBridge.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
@@ -449,7 +449,7 @@ export const Nextjs: {
   id === undefined
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
-          ? attachWorkerServeBridge(effectClass(Nextjs(id, propsEff)))
+          ? workerServeBridge.attach(effectClass(Nextjs(id, propsEff)))
           : Nextjs(id, propsEff, impl)
     : (Worker as any)(
         id,

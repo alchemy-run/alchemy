@@ -32,7 +32,7 @@ import { AssetDeployment } from "./AssetDeployment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { CurrentRegion } from "../Region.ts";
 import {
-  attachLambdaServeBridge,
+  lambdaServeBridge,
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   deploySiblingHandlers,
@@ -431,7 +431,7 @@ export const Nextjs: {
         // The class carries the AWS serve shell so `Serve.make(Site)` (and
         // the `toRouteHandler` mount built on it) dispatches through the
         // Lambda/Node layer recipe instead of the Cloudflare bridge.
-        attachLambdaServeBridge(effectClass(makeNextjs(id, props, impl)))
+        lambdaServeBridge.attach(effectClass(makeNextjs(id, props, impl)))
     : makeNextjs(id, props, impl)) as any;
 
 const makeNextjs = (

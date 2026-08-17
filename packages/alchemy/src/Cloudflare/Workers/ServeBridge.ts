@@ -105,9 +105,6 @@ const recipe: BridgeRecipe = {
 
 const core = makeBridgeCore(recipe);
 
-/** The core, for the workerd wrapper entry (`ServeWorkerEntry.ts`). */
-export const workerServeCore = core;
-
 /**
  * The class-carried serve bridge for Cloudflare-hosted Worker/Website
  * classes — the `ServeBridge`-shaped object `Serve.make` (and the
@@ -124,16 +121,11 @@ export const workerServeBridge = {
   dispose: (site: object): Promise<void> => core.dispose(site),
   runtime: (site: object, env: Record<string, unknown>): Promise<SiteRuntime> =>
     core.getRuntime(site, env),
+  /** The workerd wrapper entry's seam (`ServeWorkerEntry.ts`). */
+  runFetch: core.runFetch,
+  /** Stamp this bridge on a Worker/Website class (the class factories). */
+  attach: <T>(cls: T): T =>
+    Object.assign(cls as object, {
+      [SERVE_BRIDGE_KEY]: workerServeBridge,
+    }) as T,
 };
-
-/**
- * Attach the Cloudflare serve bridge to a Worker/Website class so
- * `Serve.make(Site)` — and the framework mounts built on it — dispatches
- * through the workerd layer recipe. Mirrors the AWS constructs'
- * `attachLambdaServeBridge`; called by the Cloudflare class factories.
- * @internal
- */
-export const attachWorkerServeBridge = <T>(cls: T): T =>
-  Object.assign(cls as object, {
-    [SERVE_BRIDGE_KEY]: workerServeBridge,
-  }) as T;

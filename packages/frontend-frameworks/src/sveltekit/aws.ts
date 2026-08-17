@@ -91,7 +91,7 @@ export interface LambdaEntryEffectOptions {
  * `site.match(request) ?? respond(request)` — effect dispatch happens at
  * the fetch layer BEFORE the single `awslambda.streamifyResponse` wrap, so
  * streamed effect bodies ride the exact same streaming pipe as kit's own
- * responses. `makeWebsiteHandlers` (alchemy's AWS serve shell) owns the
+ * responses. `lambdaServeBridge.handlers` (alchemy's AWS serve shell) owns the
  * routes gate (strict route ownership: inside the routes the effect
  * fetch's answer — 404s included — is final; `match` resolves `undefined`
  * only for paths outside the routes), the four-worlds env guard, and the
@@ -110,7 +110,7 @@ export const generateLambdaEntry = (options: {
   const effect = options.effect;
   const effectImports =
     effect !== undefined
-      ? `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/ServeBridge';\n` +
+      ? `import { lambdaServeBridge } from 'alchemy/AWS/Lambda/ServeBridge';\n` +
         `import __alchemy_site from ${JSON.stringify(effect.main)};\n`
       : "";
   const exports =
@@ -120,7 +120,7 @@ export const generateLambdaEntry = (options: {
 // composed at the fetch layer, ahead of the single ${wrap} wrap, so
 // streamed effect bodies ride the same streaming pipe as kit's.
 // Only paths outside the routes fall through to kit.
-const __alchemy_handlers = makeWebsiteHandlers({
+const __alchemy_handlers = lambdaServeBridge.handlers({
   site: __alchemy_site,${
     effect.routes !== undefined
       ? `\n  routes: ${JSON.stringify(effect.routes)},`

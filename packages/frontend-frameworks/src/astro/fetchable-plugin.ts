@@ -4,7 +4,7 @@
  * `virtual:astro:fetchable` (the `fetchFile` advanced-routing seam — astro
  * core delegates every `App.render` through it, prod and dev, on every
  * adapter) to a generated wrapper module (the Cloudflare shape shown; the
- * `"node"`/AWS arm calls `makeWebsiteHandlers` from
+ * `"node"`/AWS arm calls `lambdaServeBridge.handlers` from
  * `alchemy/AWS/Lambda/ServeBridge` instead — see `platform` below):
  *
  * ```js
@@ -199,7 +199,7 @@ export interface EffectFetchablePluginOptions {
    *   dynamic-import ladder inside the vite module runner. Applies to the
    *   `ssr` environment only.
    * - `"node"` (the AWS Lambda / Node target): the wrapper calls
-   *   `makeWebsiteHandlers` from `alchemy/AWS/Lambda/ServeBridge` —
+   *   `lambdaServeBridge.handlers` from `alchemy/AWS/Lambda/ServeBridge` —
    *   the AWS serve shell (Credentials/Region layer recipe, Lambda
    *   shutdown extension, sentinel literal) — which resolves the alchemy
    *   env from `process.env` (the Lambda sandbox env, or the dev-server
@@ -330,7 +330,7 @@ export const createEffectFetchablePlugin = (
                 call: "astro(new FetchState(request))",
               };
         if (platform === "node") {
-          // The AWS Lambda / Node arm: `makeWebsiteHandlers` is the AWS
+          // The AWS Lambda / Node arm: `lambdaServeBridge.handlers` is the AWS
           // serve shell — Credentials.fromChain() / Region.fromEnv() layer
           // recipe (the chain also resolves the developer's ambient
           // profile under `alchemy dev`), the Lambda shutdown extension,
@@ -342,10 +342,10 @@ export const createEffectFetchablePlugin = (
           return {
             code: [
               `globalThis.__ALCHEMY_RUNTIME__ = true;`,
-              `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
+              `import { lambdaServeBridge } from "alchemy/AWS/Lambda/ServeBridge";`,
               fallback.imports,
               `import Site from ${JSON.stringify(mainPath)};`,
-              `const site = makeWebsiteHandlers({ site: Site, routes: ${JSON.stringify(options.routes)} });`,
+              `const site = lambdaServeBridge.handlers({ site: Site, routes: ${JSON.stringify(options.routes)} });`,
               `export default {`,
               `  async fetch(request) {`,
               `    return (await site.match(request)) ?? (await ${fallback.call});`,

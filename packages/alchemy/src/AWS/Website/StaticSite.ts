@@ -47,7 +47,7 @@ import {
   compactCloudFrontFunctionCode,
 } from "./cfcode.ts";
 import {
-  attachLambdaServeBridge,
+  lambdaServeBridge,
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   validateImplAnchor,
@@ -503,7 +503,7 @@ export const StaticSite: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeBridge(effectClass(makeStaticSite(id, props, impl)))
+        lambdaServeBridge.attach(effectClass(makeStaticSite(id, props, impl)))
     : makeStaticSite(id, props, impl)) as any;
 
 const makeStaticSite = (

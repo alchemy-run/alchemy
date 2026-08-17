@@ -127,12 +127,12 @@ export interface ServeBridge {
     options?: ServeOptions,
   ): Promise<Response | undefined>;
   /** Tear down the bridge's per-class runtime for `site`. */
-  dispose?(site: object): Promise<void>;
+  dispose(site: object): Promise<void>;
   /**
    * Build (memoized per class) the site's instance runtime against a
    * resolved env — the `BridgeCore.getRuntime` seam for `alchemy/Client`.
    */
-  runtime?(site: object, env: Record<string, unknown>): Promise<SiteRuntime>;
+  runtime(site: object, env: Record<string, unknown>): Promise<SiteRuntime>;
 }
 
 export const bridgeOf = (site: object): ServeBridge | undefined =>

@@ -11,7 +11,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
+import { lambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -305,7 +305,7 @@ export const Astro: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeBridge(effectClass(makeAstro(id, props, impl)))
+        lambdaServeBridge.attach(effectClass(makeAstro(id, props, impl)))
     : makeAstro(id, props, impl)) as any;
 
 const makeAstro = (

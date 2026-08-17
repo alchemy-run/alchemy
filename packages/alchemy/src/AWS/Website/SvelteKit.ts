@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import { attachLambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
+import { lambdaServeBridge, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -242,7 +242,7 @@ export const SvelteKit: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        attachLambdaServeBridge(effectClass(makeSvelteKit(id, props, impl)))
+        lambdaServeBridge.attach(effectClass(makeSvelteKit(id, props, impl)))
     : makeSvelteKit(id, props, impl)) as any;
 
 const svelteKitConfig = (props: SvelteKitProps): FrameworkSiteConfig => ({

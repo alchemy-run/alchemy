@@ -22,7 +22,7 @@
  */
 import * as AWS from "@/AWS";
 import { makeFunctionFetchHandler } from "@/AWS/Lambda/HttpServer.ts";
-import { makeWebsiteHandlers } from "@/AWS/Lambda/ServeBridge.ts";
+import { lambdaServeBridge } from "@/AWS/Lambda/ServeBridge.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -166,7 +166,7 @@ describe("makeWebsiteHandlers", () => {
     "routes decide who serves: effect inside (authoritative), decline outside",
     () =>
       restoringRuntimeFlag(async () => {
-        const site = makeWebsiteHandlers({
+        const site = lambdaServeBridge.handlers({
           site: FetchSite,
           routes: ["/api/*"],
           env: markers,
@@ -222,7 +222,7 @@ describe("makeWebsiteHandlers", () => {
     "exclusion glob routes to the framework",
     () =>
       restoringRuntimeFlag(async () => {
-        const site = makeWebsiteHandlers({
+        const site = lambdaServeBridge.handlers({
           site: FetchSite,
           routes: ["/api/*", "!/api/hello*"],
           env: markers,
@@ -252,7 +252,7 @@ describe("makeWebsiteHandlers", () => {
         class NeverBuilt {
           static readonly LogicalId = "NeverBuilt";
         }
-        const site = makeWebsiteHandlers({
+        const site = lambdaServeBridge.handlers({
           site: NeverBuilt as any,
           routes: ["/api/*"],
           env: { NOT_ALCHEMY: "1" },
@@ -268,7 +268,10 @@ describe("makeWebsiteHandlers", () => {
     "omitted routes default to DEFAULT_SERVER_ROUTES (/api/*)",
     () =>
       restoringRuntimeFlag(async () => {
-        const site = makeWebsiteHandlers({ site: FetchSite, env: markers });
+        const site = lambdaServeBridge.handlers({
+          site: FetchSite,
+          env: markers,
+        });
         const hit = await site.match(new Request("http://localhost/api/hello"));
         expect(await hit!.text()).toBe("hi from effect");
         // Outside the default claim → decline (the framework serves).

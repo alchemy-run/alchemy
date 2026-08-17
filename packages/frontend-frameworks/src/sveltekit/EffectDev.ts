@@ -174,7 +174,7 @@ export interface EffectDevPluginArgs {
    * The deploy target's platform id (`DeployTarget.platform`). Selects the
    * serve bridge the virtual module mounts:
    *
-   * - `"aws"` — `makeWebsiteHandlers` (alchemy's AWS Lambda serve shell):
+   * - `"aws"` — `lambdaServeBridge.handlers` (alchemy's AWS Lambda serve shell):
    *   env resolves from `process.env` (the sidecar process `alchemy dev`
    *   lowered the packed binding env + stack markers into) and the layer
    *   recipe carries `Credentials.fromChain()` / `Region.fromEnv()`, so
@@ -307,14 +307,14 @@ export const makeEffectDevPlugin = (
         ? (isAws
             ? [
                 `import Site from ${JSON.stringify(mainPath)};`,
-                `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";`,
+                `import { lambdaServeBridge } from "alchemy/AWS/Lambda/ServeBridge";`,
                 // Env resolves from process.env (the sidecar process the
                 // dev server runs in — `alchemy dev` lowered the packed
                 // binding env + stack markers into it). The middleware
                 // gates `server.routes` before dispatching, so the
                 // handlers claim everything they receive — a default
                 // claim here would shadow a broader construct claim.
-                `export const handle = makeWebsiteHandlers({ site: Site, routes: ["/*"] });`,
+                `export const handle = lambdaServeBridge.handlers({ site: Site, routes: ["/*"] });`,
                 `export default Site;`,
               ]
             : [
@@ -352,7 +352,7 @@ export const makeEffectDevPlugin = (
           )) as unknown as VirtualEffectModule;
           let response: Response | undefined;
           if (isAws) {
-            // AWS: `makeWebsiteHandlers` resolves env from `process.env`
+            // AWS: `lambdaServeBridge.handlers` resolves env from `process.env`
             // itself (the sidecar process carries the lowered binding env
             // + stack markers) — no platform proxy exists on this target.
             response = await mod.handle.match(toWebRequest(req, url));

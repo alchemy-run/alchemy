@@ -138,7 +138,7 @@ export const distilledAws = (
         }
         // Effectful-Website delivery: pre-resolve `virtual:astro:fetchable`
         // to the generated effect wrapper — the AWS/Node arm mounts the
-        // AWS serve shell (`makeWebsiteHandlers`), applying to the `ssr`
+        // AWS serve shell (`lambdaServeBridge.handlers`), applying to the `ssr`
         // (production build; bundled self-contained into `dist/server`)
         // and `astro` (Node dev server) environments. Stands down when the
         // user's own fetch file already mounts the bridge.

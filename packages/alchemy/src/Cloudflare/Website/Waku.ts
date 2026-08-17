@@ -6,7 +6,7 @@ import type { Named, Tag } from "../../Named.ts";
 import type { MakeShape, PlatformServices } from "../../Platform.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
-import { attachWorkerServeBridge } from "../Workers/ServeBridge.ts";
+import { workerServeBridge } from "../Workers/ServeBridge.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
@@ -311,7 +311,7 @@ export const Waku: {
   id === undefined
     ? (id: string, propsEff: any, impl?: any) =>
         impl === undefined
-          ? attachWorkerServeBridge(effectClass(Waku(id, propsEff)))
+          ? workerServeBridge.attach(effectClass(Waku(id, propsEff)))
           : Waku(id, propsEff, impl)
     : (Worker as any)(
         id,

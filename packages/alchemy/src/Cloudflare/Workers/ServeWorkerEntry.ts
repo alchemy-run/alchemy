@@ -39,7 +39,7 @@ import {
 } from "../../Serve/Env.ts";
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "../../Serve/Routes.ts";
 import type { AnyWebsiteClass } from "../../Serve/Serve.ts";
-import { workerServeCore } from "./ServeBridge.ts";
+import { workerServeBridge } from "./ServeBridge.ts";
 
 markRuntime();
 
@@ -144,7 +144,7 @@ export const makeWebsiteExports = (
           return frameworkFetch(request, env, ctx);
         }
         const built = await build((promise) => ctx.waitUntil(promise));
-        const matched = await workerServeCore.runFetch(
+        const matched = await workerServeBridge.runFetch(
           {
             context: built.context,
             shape: built.shape,
