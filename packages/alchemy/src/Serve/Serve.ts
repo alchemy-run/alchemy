@@ -1,15 +1,17 @@
 /**
- * The public `alchemy/Serve` surface (DESIGN §3.3) — the explicit-tier
- * runtime helper mounted in framework server entries:
+ * The public `alchemy/Serve` surface (see ./DESIGN.md) — `mount`, the one
+ * user-facing runtime API. Mounted in the server entry (or framework hook)
+ * the user owns:
  *
  * ```ts
  * // src/server.ts (TanStack shown — any fetch-shaped entry)
- * import handler from "@tanstack/react-start/server-entry";
- * import { Serve } from "alchemy/Serve";
- * import Site from "./src/backend.ts";
- * const site = Serve.toHandler(Site);
+ * import framework from "@tanstack/react-start/server-entry";
+ * import { mount } from "alchemy/Serve";
+ * import Site from "./backend.ts";
+ * const site = mount(Site);
  * export default {
- *   fetch: async (req) => (await site.match(req)) ?? handler.fetch(req),
+ *   fetch: async (req, env, ctx) =>
+ *     (await site.fetch(req, env, ctx)) ?? framework.fetch(req, env, ctx),
  * };
  * ```
  */
@@ -61,21 +63,34 @@ export interface AnyWebsiteClass {
 }
 
 /**
- * Construction options for {@link make}: the shared per-call
+ * The slice of workerd's `ExecutionContext` the mount consumes. Structural
+ * so entries type-check against any host's context object (workerd's real
+ * ExecutionContext, a synthesized adapter context) without a `cloudflare`
+ * type dependency.
+ */
+export interface ExecutionContextLike {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+/**
+ * Construction options for {@link mount}: the shared per-call
  * {@link ServeOptions} defaults plus the handle's route claim.
  */
-export interface MakeOptions extends ServeOptions {
+export interface MountOptions extends ServeOptions {
   /**
-   * Path globs the effect fetch owns (the construct's `server.routes`,
-   * `runWorkerFirst` dialect: `*` matches any run including `/`, leading
-   * `!` excludes and exclusions win). Requests outside the claim resolve
-   * `undefined` without invoking the effect fetch — the framework serves
-   * them. Inside the claim the effect fetch is authoritative: its
-   * responses (404s included) are final.
+   * Path globs the effect fetch owns (`runWorkerFirst` dialect: `*`
+   * matches any run including `/`, leading `!` excludes and exclusions
+   * win). Requests outside the claim resolve `undefined` without invoking
+   * the effect fetch — the framework serves them. Inside the claim the
+   * effect fetch is authoritative: its responses (404s included) are
+   * final.
    * @default DEFAULT_SERVER_ROUTES (["/api/*"])
    */
   routes?: readonly string[];
 }
+
+/** @deprecated Renamed {@link MountOptions}. */
+export type MakeOptions = MountOptions;
 
 export interface ServeHandle {
   /**
@@ -83,25 +98,34 @@ export interface ServeHandle {
    * the request is outside the handle's `routes` claim, when the resolved
    * env carries no alchemy stack markers (build-time prerender/SSG
    * worlds), or when the site has no fetch handler — the caller falls
-   * through to the framework. Inside the routes the effect fetch is
-   * authoritative: a `RouteNotFound` failure (an `HttpRouter` miss)
-   * renders as the effect's own 404 response, never delegation.
+   * through to the framework (`?? framework.fetch(...)`). Inside the
+   * routes the effect fetch is authoritative: a `RouteNotFound` failure
+   * (an `HttpRouter` miss) renders as the effect's own 404 response,
+   * never delegation.
+   *
+   * `env` and `ctx` are whatever the caller's position in the world
+   * provides — both optional, and their absence selects the correct
+   * semantics for hosts that lack them:
+   * - `env` omitted → resolved from the cloud's ladder (workerd importable
+   *   env / framework globals / `process.env`).
+   * - `ctx` omitted → the request scope settles INLINE before the
+   *   response resolves (Lambda, dev servers, prerender). Present → scope
+   *   finalizers ride `ctx.waitUntil` (workerd semantics).
+   */
+  fetch(
+    request: Request,
+    env?: unknown,
+    ctx?: ExecutionContextLike,
+  ): Promise<Response | undefined>;
+  /**
+   * Options-bag form of {@link fetch} — the internal seam the framework
+   * adapters and dev dispatch drive.
+   * @deprecated Use `fetch(request, env?, ctx?)`.
    */
   match(
     request: Request,
     options?: ServeOptions,
   ): Promise<Response | undefined>;
-  /**
-   * {@link match} with a mandatory response — for entries where the user
-   * module IS the handler. Declined requests go to `fallback`, or a plain
-   * 404 when none is given.
-   */
-  fetch(
-    request: Request,
-    options?: ServeOptions & {
-      fallback?: (request: Request) => Promise<Response>;
-    },
-  ): Promise<Response>;
 }
 
 /**
@@ -125,54 +149,50 @@ export interface ServeHandle {
  * stack markers (build-time prerender/SSG worlds), `match` declines
  * every request instead of building the runtime.
  *
- * Prefer the per-framework mounts where one exists — `toHandler`
- * (`alchemy/Next`), `toHandler` (`alchemy/Nitro`),
- * `toHandler` (`alchemy/SvelteKit`), `toHandler`
- * (`alchemy/Astro`) — and reach for `make` in any other
- * fetch-shaped server entry.
+ * Mount in whatever file the framework lets you own — your server entry
+ * (TanStack, Vite, React Router, Astro) or its hook (SvelteKit's
+ * `handle`, a Next catch-all route file, a Nitro middleware). The
+ * composition (`?? framework.fetch(...)`, `?? resolve(event)`) is your
+ * code: dispatch order, gates, and custom routes are ordinary statements
+ * around `site.fetch`.
  *
  * @binding
  * @product Serve
  *
  * @section Mounting in a fetch-shaped entry
- * `match` resolves `undefined` only when the request is outside the
+ * `site.fetch` resolves `undefined` only when the request is outside the
  * routes claim (or the env carries no alchemy markers), so the entry
  * composes the framework handler as the fallback.
  *
  * @example TanStack Start server entry (src/server.ts)
  * ```typescript
- * import handler from "@tanstack/react-start/server-entry";
- * import * as Serve from "alchemy/Serve";
- * import Site from "./src/backend.ts";
+ * import framework from "@tanstack/react-start/server-entry";
+ * import { mount } from "alchemy/Serve";
+ * import Site from "./backend.ts";
  *
- * const site = Serve.toHandler(Site);
+ * const site = mount(Site);
  *
  * export default {
- *   fetch: async (request: Request) =>
- *     (await site.match(request)) ?? handler.fetch(request),
+ *   fetch: async (request: Request, env: unknown, ctx: ExecutionContext) =>
+ *     (await site.fetch(request, env, ctx)) ?? framework.fetch(request, env, ctx),
  * };
  * ```
  *
- * @section The handler owns the entry
- * Use `fetch` instead of `match` when the mounting module IS the
- * handler — declined requests go to the optional `fallback`, or a plain
- * 404.
- *
- * @example Standalone fetch entry
+ * @example SvelteKit hook (src/hooks.server.ts)
  * ```typescript
- * import * as Serve from "alchemy/Serve";
- * import Site from "./src/backend.ts";
+ * import { mount } from "alchemy/Serve";
+ * import Site from "$lib/backend.ts";
  *
- * const site = Serve.toHandler(Site);
+ * const site = mount(Site);
  *
- * export default {
- *   fetch: (request: Request) => site.fetch(request),
- * };
+ * export const handle = async ({ event, resolve }) =>
+ *   (await site.fetch(event.request, event.platform?.env, event.platform?.ctx)) ??
+ *   resolve(event);
  * ```
  */
-export const toHandler = <S extends AnyWebsiteClass>(
+export const mount = <S extends AnyWebsiteClass>(
   site: S,
-  defaults?: MakeOptions,
+  defaults?: MountOptions,
 ): ServeHandle => {
   markRuntime();
   const routes = defaults?.routes ?? DEFAULT_SERVER_ROUTES;
@@ -199,23 +219,33 @@ export const toHandler = <S extends AnyWebsiteClass>(
     );
   };
   return {
+    fetch: (request, env, ctx) =>
+      match(
+        request,
+        env === undefined && ctx === undefined
+          ? undefined
+          : {
+              ...(env !== undefined ? { env } : {}),
+              // Bind through a closure (not `.bind`) so synthesized
+              // adapter contexts with getter-backed waitUntil work too.
+              ...(ctx !== undefined
+                ? {
+                    waitUntil: (promise: Promise<unknown>) =>
+                      ctx.waitUntil(promise),
+                  }
+                : {}),
+            },
+      ),
     match,
-    fetch: async (request, options) => {
-      const matched = await match(request, options);
-      if (matched !== undefined) {
-        return matched;
-      }
-      if (options?.fallback !== undefined) {
-        return options.fallback(request);
-      }
-      return new Response("Not Found", { status: 404 });
-    },
   };
 };
 
+/** @deprecated Renamed {@link mount}. */
+export const toHandler = mount;
+
 /**
  * Tear down the runtime built for a Website class by a previous
- * {@link make} handle: the class's cloud bridge closes its
+ * {@link mount} handle: the class's cloud bridge closes its
  * instance-lifetime layer scope (init finalizers run) and evicts its
  * per-class memos.
  *
@@ -240,7 +270,7 @@ export class ServeExportsUnavailableError extends Data.TaggedError(
  * Full exports surface (fetch/queue/scheduled + DO bridge classes) for
  * user-authored custom entries. Ships in a later phase — until then the
  * construct-generated wrapper (auto tier) delivers non-fetch handlers, and
- * {@link make} delivers fetch on explicit mounts.
+ * {@link mount} delivers fetch on explicit mounts.
  */
 export const exports = <S extends AnyWebsiteClass>(_site: S): never => {
   throw new ServeExportsUnavailableError({
@@ -248,6 +278,6 @@ export const exports = <S extends AnyWebsiteClass>(_site: S): never => {
       "Serve.exports is not available yet: the full exports surface for " +
       "custom entries (queue/scheduled/DO classes) ships in a later phase. " +
       "Use the construct-generated wrapper (auto tier) for non-fetch " +
-      "handlers, or mount Serve.toHandler(Site) for fetch-only delivery.",
+      "handlers, or mount(Site) for fetch-only delivery.",
   });
 };

@@ -304,38 +304,66 @@ describe("Serve.make", () => {
   );
 
   it(
-    "fetch answers path-miss declines via fallback or 404",
+    "fetch declines with undefined outside the claim; in-claim misses are its own 404",
     () =>
       restoringRuntimeFlag(async () => {
-        const { toHandler: make } = await import("@/Serve/index.ts");
-        const handle = make(TestSite);
+        const { mount } = await import("@/Serve/index.ts");
+        const site = mount(TestSite);
 
-        // Outside the claim → the fallback serves.
-        const fromFallback = await handle.fetch(
+        // Outside the claim → undefined; the caller's `??` composes the
+        // framework fallback (the mount-file contract).
+        const declined = await site.fetch(
           new Request("http://localhost/assets/app.js"),
-          {
-            env: markers,
-            fallback: async () => new Response("framework", { status: 200 }),
-          },
+          markers,
         );
-        expect(await fromFallback.text()).toBe("framework");
+        expect(declined).toBeUndefined();
+        const composed =
+          declined ?? new Response("framework", { status: 200 });
+        expect(await composed.text()).toBe("framework");
 
-        const notFound = await handle.fetch(
-          new Request("http://localhost/assets/app.js"),
-          { env: markers },
-        );
-        expect(notFound.status).toBe(404);
-
-        // Inside the claim the effect's 404 wins — the fallback is never
-        // consulted for an in-claim router miss.
-        const insideMiss = await handle.fetch(
+        // Inside the claim the effect fetch is authoritative — a router
+        // miss renders the effect's own 404, never `undefined`.
+        const insideMiss = await site.fetch(
           new Request("http://localhost/api/unknown"),
-          {
-            env: markers,
-            fallback: async () => new Response("framework", { status: 200 }),
-          },
+          markers,
         );
-        expect(insideMiss.status).toBe(404);
+        expect(insideMiss?.status).toBe(404);
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it(
+    "fetch routes a passed ctx's waitUntil to request-scope settle",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const { mount } = await import("@/Serve/index.ts");
+        const site = mount(TestSite);
+
+        // A ctx whose waitUntil records registrations: the workerd settle
+        // path registers the request scope's close there instead of
+        // blocking the response.
+        const settled: Promise<unknown>[] = [];
+        const ctx = {
+          waitUntil: (promise: Promise<unknown>) => {
+            settled.push(promise);
+          },
+        };
+        const response = await site.fetch(
+          new Request("http://localhost/api/hello"),
+          markers,
+          ctx,
+        );
+        expect(response?.status).toBe(200);
+        expect(settled.length).toBeGreaterThan(0);
+        await Promise.all(settled);
+
+        // Without a ctx the scope settles inline — the response resolves
+        // with no deferred work left behind.
+        const inline = await site.fetch(
+          new Request("http://localhost/api/hello"),
+          markers,
+        );
+        expect(inline?.status).toBe(200);
       }),
     { exclusive: true, timeout: 60_000 },
   );

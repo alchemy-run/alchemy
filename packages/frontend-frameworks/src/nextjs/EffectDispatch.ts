@@ -40,12 +40,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** The structural slice of `alchemy/Serve` (`Serve/Serve.ts`) we drive. */
 interface ServeModule {
-  readonly make: (
-    site: object,
-    options?: { readonly routes?: readonly string[] },
-  ) => {
-    readonly match: (request: Request) => Promise<Response | undefined>;
-  };
+  /** `mount` today; older alchemy versions exported `toHandler`/`make`. */
+  readonly mount?: ServeMount;
+  readonly toHandler?: ServeMount;
+  readonly make?: ServeMount;
   readonly dispose?: (site: object) => Promise<void>;
   readonly matchRoutes: (
     routes: readonly string[],
@@ -53,6 +51,28 @@ interface ServeModule {
   ) => boolean;
   readonly DEFAULT_SERVER_ROUTES: readonly string[];
 }
+
+type ServeMount = (
+  site: object,
+  options?: { readonly routes?: readonly string[] },
+) => {
+  readonly match: (request: Request) => Promise<Response | undefined>;
+};
+
+/**
+ * Resolve the mount constructor across alchemy versions — the serve module
+ * is resolved from the ENGINE's alchemy (see the module doc's identity
+ * contract), which may predate or postdate this package.
+ */
+const serveMountOf = (serve: ServeModule): ServeMount => {
+  const mount = serve.mount ?? serve.toHandler ?? serve.make;
+  if (mount === undefined) {
+    throw new Error(
+      "The resolved alchemy/Serve module exports none of mount/toHandler/make",
+    );
+  }
+  return mount;
+};
 
 /** Plain-JSON dispatch config (crosses the dev-child argv boundary). */
 export interface EffectDispatchConfig {
@@ -201,7 +221,7 @@ export const createEffectDispatch = async (
     }
     return {
       site,
-      handle: serve.make(site, { routes }),
+      handle: serveMountOf(serve)(site, { routes }),
       pending: 0,
       retired: false,
     };
