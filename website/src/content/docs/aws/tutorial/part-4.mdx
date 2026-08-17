@@ -17,14 +17,14 @@ the infrastructure.
 ## The default stage
 
 You've been using stages all along. If you don't pass `--stage`,
-Alchemy deploys to **`dev_$USER`** (e.g. `dev_sam`):
+Alchemy deploys to a safe form of **`dev-$USER`** (e.g. `dev-sam`):
 
 ```sh
 $ whoami
 sam
 
 $ bun alchemy deploy
-# deploys to stage `dev_sam`
+# deploys to stage `dev-sam`
 ```
 
 Each developer on your team automatically gets a personal sandbox
@@ -32,8 +32,10 @@ without any config. The resolution order is:
 
 1. `--stage <name>` flag
 2. `$STAGE` environment variable
-3. `dev_${USER}` (or `dev_${USERNAME}` on Windows)
-4. `dev_unknown` if no user is set
+3. `dev-` plus a hostname-safe form of `$USER` (or `$USERNAME` on Windows)
+
+Alchemy adds a stable hash if it must change or shorten the user name. If no
+user name is available, pass `--stage`.
 
 ## Deploy a second stage
 
@@ -58,7 +60,7 @@ Proceed?
 
 Everything is created fresh — a new bucket, a new function, a new
 Function URL — because `staging` has never been deployed before.
-Your `dev_sam` deployment is untouched.
+Your `dev-sam` deployment is untouched.
 
 ## How stages isolate
 
@@ -67,7 +69,7 @@ Each stage gets its own:
 - **State** — the persisted record of what's deployed, kept
   separately per stage in the `AWS.state()` S3 bucket
 - **Physical names** — `myapp-prod-bucket-7d4e` vs
-  `myapp-dev_sam-bucket-9b2c`; the stage is baked into every
+  `myapp-dev-sam-bucket-9b2c`; the stage is baked into every
   generated resource name
 - **Logs and metrics** — scoped per deployed function
 
@@ -162,7 +164,7 @@ alchemy deploy --stage pr-42 --profile default
 
 You now have:
 
-- A personal `dev_<user>` stage that every plain `alchemy deploy`
+- A personal `dev-<user>` stage that every plain `alchemy deploy`
   targets
 - A `staging` stage deployed (and destroyed) with `--stage`
 - Per-stage Lambda memory via `Stack.useSync`

@@ -33,7 +33,7 @@ By default, state is stored on disk in the `.alchemy/` directory:
 .alchemy/
   state/
     MyApp/
-      dev_sam/
+      dev-sam/
         Bucket.json
         Worker.json
 ```
@@ -45,7 +45,7 @@ echo ".alchemy/" >> .gitignore
 ```
 
 Local state works for solo development. Each developer gets their own
-state via their default stage (`dev_$USER`).
+state via their default stage (`dev-<safe-user>`).
 
 ## Remote state
 

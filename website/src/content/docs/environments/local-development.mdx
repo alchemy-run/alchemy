@@ -38,7 +38,7 @@ Three things happen:
 
 Resources whose provider has no local implementation (a Hyperdrive,
 a Vectorize index) deploy to the real cloud, into your personal
-[stage](/environments/stages) (`dev_$USER` by default), so your loop
+[stage](/environments/stages) (`dev-<safe-user>` by default), so your loop
 never collides with teammates or prod. A stack that mixes emulated
 and live-only resources just works.
 
@@ -186,6 +186,6 @@ To automate the deploy side, see the [CI guide](/environments/ci).
 ## Where next
 
 - [CI](/environments/ci) — deploy the same stack from GitHub Actions with PR previews.
-- [Stages](/environments/stages) — how `dev_$USER`, `pr-42`, and `prod` stay isolated.
+- [Stages](/environments/stages) — how `dev-<safe-user>`, `pr-42`, and `prod` stay isolated.
 - [Dev servers](/command/dev-servers) — run any framework dev server as a `Command.Dev` resource in the dev loop.
 - [Local Providers](/infrastructure-as-code/local-provider) — build the local implementation of a resource.

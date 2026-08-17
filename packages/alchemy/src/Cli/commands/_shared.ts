@@ -7,7 +7,6 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as S from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
@@ -36,16 +35,19 @@ import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
+import { defaultStageName, StageName } from "../StageName.ts";
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
-  Config.withDefault("unknown"),
+  Config.option,
+  Effect.map(Option.getOrUndefined),
+  Effect.mapError((cause) => new CliError.UserError({ cause })),
 );
 
-export const STAGE = Config.string("STAGE").pipe(
+export const STAGE = Config.schema(StageName, "STAGE").pipe(
   Config.option,
-  (a) => a,
   Effect.map(Option.getOrUndefined),
+  Effect.mapError((cause) => new CliError.UserError({ cause })),
 );
 
 /**
@@ -100,32 +102,22 @@ export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   );
 
 export const stage = Flag.string("stage").pipe(
-  Flag.withSchema(S.String.check(S.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
-  Flag.withDescription("Stage to deploy to, defaults to dev_${USER}"),
+  Flag.withSchema(StageName),
+  Flag.withDescription(
+    "Stage to deploy to, defaults to a safe form of dev-$USER",
+  ),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
   Flag.mapEffect(
-    Effect.fn(function* (stage) {
-      if (stage) {
-        return stage;
+    Effect.fn(function* (flag) {
+      if (flag !== undefined) {
+        return flag;
       }
-      return yield* STAGE.pipe(
-        Effect.catch(() =>
-          Effect.fail(
-            new CliError.MissingOption({
-              option: "stage",
-            }),
-          ),
-        ),
-        Effect.flatMap((s) =>
-          s === undefined
-            ? USER.pipe(
-                Effect.map((user) => `dev_${user}`),
-                Effect.catch(() => Effect.succeed("unknown")),
-              )
-            : Effect.succeed(s),
-        ),
-      );
+      const configured = yield* STAGE;
+      if (configured !== undefined) {
+        return configured;
+      }
+      return yield* defaultStageName(yield* USER);
     }),
   ),
 );

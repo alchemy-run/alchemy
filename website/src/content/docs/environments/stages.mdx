@@ -1,6 +1,6 @@
 ---
 title: Stages
-description: Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+description: Stages are isolated instances of a Stack — dev-sam, staging, prod, pr-42 — each with their own state and physical names.
 sidebar:
   hidden: true
 ---
@@ -13,30 +13,49 @@ dedicated environment — all from one program.
 
 ## The default stage
 
-If you don't pass `--stage`, alchemy uses **`dev_$USER`** (e.g.
-`dev_sam`). Each developer on your team automatically gets a
-personal stage without any config.
+If you don't pass `--stage`, alchemy uses a safe form of **`dev-$USER`**
+(e.g. `dev-sam`). Each developer on your team automatically gets a personal
+stage without any config.
 
 ```sh
 $ whoami
 sam
 
 $ alchemy deploy
-# deploys to stage `dev_sam`
+# deploys to stage `dev-sam`
 ```
 
 The resolution order is:
 
 1. `--stage <name>` flag
 2. `$STAGE` environment variable
-3. `dev_${USER}` (or `dev_${USERNAME}` on Windows)
-4. `dev_unknown` if no user is set
+3. `dev-` plus a hostname-safe form of `$USER` (or `$USERNAME` on Windows)
+
+Alchemy adds a stable hash if it must change or shorten the user name:
+
+```text
+user      → dev-user
+User Name → dev-user-name-vfu5atwc
+user_name → dev-user-name-fygq4agu
+```
+
+If no user name is available, pass `--stage`.
+
+:::caution[Changed default stage]
+Older Alchemy releases used `dev_$USER`. Pass the old name explicitly to keep
+using or destroy that stage:
+
+```sh
+alchemy deploy --stage dev_sam
+alchemy destroy --stage dev_sam
+```
+:::
 
 ## Common stage patterns
 
 | Stage             | Purpose                                  |
 | ----------------- | ---------------------------------------- |
-| `dev_<user>`      | Per-developer sandbox (default)          |
+| `dev-<user>`      | Per-developer sandbox (default)          |
 | `pr-<n>`          | Per-pull-request preview environment     |
 | `staging`         | Shared pre-production                    |
 | `prod`            | Production                               |
@@ -56,14 +75,14 @@ Each stage gets its own:
 
 - **State file** — the persisted record of what's deployed
 - **Physical names** — `myapp-prod-bucket-abc123` vs
-  `myapp-dev_sam-bucket-9b2c`
+  `myapp-dev-sam-bucket-9b2c`
 - **Logs and metrics** — scoped per deployed function/worker
 
 Because of this, deploying or destroying one stage **never touches**
 another:
 
 ```sh
-$ alchemy deploy --stage dev_sam     # -> myapp-dev_sam-photos-a3f1
+$ alchemy deploy --stage dev-sam     # -> myapp-dev-sam-photos-a3f1
 $ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
 $ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
 
