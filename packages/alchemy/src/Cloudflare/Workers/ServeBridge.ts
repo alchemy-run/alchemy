@@ -8,8 +8,8 @@
  *
  * Leaf-import discipline (this module is compiled by foreign bundlers —
  * Next/turbopack, nitro rollup — into workerd server bundles):
- *   - `CloudflareEnvironmentTag`, NOT `CloudflareEnvironment.ts` (which
- *     reaches the OAuth client's `node:http`)
+ *   - `CloudflareEnvironment.ts` is the leaf service module (the OAuth-
+ *     reaching Layer factories live in `CloudflareEnvironmentLayers.ts`)
  *   - `RuntimeEnvironment`, NOT `Worker.ts` (whose provider import graph
  *     reaches the workerd native binary through the local-runtime chain)
  *   - `platform-node` only via dynamic import, evaluated exclusively in
@@ -22,7 +22,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { CloudflareEnvironment } from "../CloudflareEnvironmentTag.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   makeBridgeCore,
   type BridgeRecipe,
@@ -122,10 +122,8 @@ export const workerServeBridge = {
     options?: ServeOptions,
   ): Promise<Response | undefined> => core.match(site, request, options),
   dispose: (site: object): Promise<void> => core.dispose(site),
-  runtime: (
-    site: object,
-    env: Record<string, unknown>,
-  ): Promise<SiteRuntime> => core.getRuntime(site, env),
+  runtime: (site: object, env: Record<string, unknown>): Promise<SiteRuntime> =>
+    core.getRuntime(site, env),
 };
 
 /**

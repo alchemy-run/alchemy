@@ -37,7 +37,7 @@ import * as Calls from "./Calls/index.ts";
 import * as CertificateAuthorities from "./CertificateAuthorities/index.ts";
 import * as ClientCertificate from "./ClientCertificate/index.ts";
 import * as CloudConnector from "./CloudConnector/index.ts";
-import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
+import * as CloudflareEnvironment from "./CloudflareEnvironmentLayers.ts";
 import * as CloudforceOne from "./CloudforceOne/index.ts";
 import * as Connectivity from "./Connectivity/index.ts";
 import * as Containers from "./Containers/index.ts";
