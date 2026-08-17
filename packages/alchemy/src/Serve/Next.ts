@@ -5,9 +5,9 @@
  *
  * ```ts
  * // app/api/[[...slug]]/route.ts
- * import { toRouteHandler } from "alchemy/Next";
+ * import { toHandler } from "alchemy/Next";
  * import Site from "@/site";
- * const handler = toRouteHandler(Site);
+ * const handler = toHandler(Site);
  * export { handler as GET, handler as POST, handler as PUT,
  *          handler as PATCH, handler as DELETE, handler as HEAD,
  *          handler as OPTIONS };
@@ -24,7 +24,11 @@
  */
 
 import { cloudflareContextSymbol } from "./Env.ts";
-import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
+import {
+  toHandler as makeHandle,
+  type AnyWebsiteClass,
+  type MakeOptions,
+} from "./Serve.ts";
 
 /**
  * Mount an effectful Website as a Next.js app-router catch-all route
@@ -48,20 +52,17 @@ import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
  * @section Mounting the catch-all route
  * @example app/api/[[...slug]]/route.ts
  * ```typescript
- * import { toRouteHandler } from "alchemy/Next";
+ * import { toHandler } from "alchemy/Next";
  * import Site from "../../../src/backend.ts";
  *
- * const handler = toRouteHandler(Site);
+ * const handler = toHandler(Site);
  * export { handler as GET, handler as POST, handler as PUT,
  *          handler as PATCH, handler as DELETE, handler as HEAD,
  *          handler as OPTIONS };
  * ```
  */
-export const toRouteHandler = (
-  site: AnyWebsiteClass,
-  options?: MakeOptions,
-) => {
-  const handle = make(site, options);
+export const toHandler = (site: AnyWebsiteClass, options?: MakeOptions) => {
+  const handle = makeHandle(site, options);
   return async (request: Request): Promise<Response> => {
     const cloudflareContext = (globalThis as Record<PropertyKey, any>)[
       cloudflareContextSymbol

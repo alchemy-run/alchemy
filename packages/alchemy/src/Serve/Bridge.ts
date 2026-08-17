@@ -63,7 +63,7 @@ const SENTINEL: typeof SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
 
 /**
  * Stamp the runtime flag. Called synchronously when a bridge is constructed
- * (`Serve.make`, `makeWebsiteExports`, the framework adapters) — always
+ * (`Serve.toHandler`, `makeWebsiteExports`, the framework adapters) — always
  * before any init Effect can run, so every
  * `if (!globalThis.__ALCHEMY_RUNTIME__)` bind guard is a no-op at runtime
  * even when the framework's bundler defined nothing.
@@ -111,7 +111,7 @@ export interface SiteFetchOptions {
 
 /**
  * A cloud-specific serve bridge a Website class carries under
- * `SERVE_BRIDGE_KEY`: the runtime half `Serve.make` dispatches matched
+ * `SERVE_BRIDGE_KEY`: the runtime half `Serve.toHandler` dispatches matched
  * requests to. Lives HERE (not `Serve.ts`) so graphs that only need
  * dispatch — the value-form `createClient` (`Client/Server.ts`) — never
  * pull in the mount-marker module: the `__ALCHEMY_SERVE_MOUNT_v1__`

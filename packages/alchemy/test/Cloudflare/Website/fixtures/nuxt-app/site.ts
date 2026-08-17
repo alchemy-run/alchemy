@@ -14,7 +14,7 @@ export const EffectKv = Cloudflare.KV.Namespace("NuxtEffectKv");
  * The Nuxt effect entry takeover shape (DESIGN Amendment §2.1.2), dev
  * flavor: an effectful `Cloudflare.Website.Nuxt` whose Effect program owns
  * `/api/*`. In dev the program is mounted as an alchemy-generated nitro
- * middleware (routes-scoped `toEventHandler`) inside nitro's dev SSR
+ * middleware (routes-scoped `toHandler`) inside nitro's dev SSR
  * worker thread; the KV capability resolves through the platform proxy to
  * the local simulator. Exercises:
  *

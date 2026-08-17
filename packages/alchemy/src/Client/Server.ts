@@ -68,7 +68,7 @@ export const invokeServerMethod = async (
   // seam builds the same memoized instance runtime as the fetch path
   // (Lambda/Node credentials chain on AWS, workerd leaf tags on
   // Cloudflare). Classes from factories that do not stamp yet take the
-  // lazy Cloudflare fallback, mirroring `Serve.make`.
+  // lazy Cloudflare fallback, mirroring `Serve.toHandler`.
   const bridge =
     bridgeOf(site) ??
     (await import("../Cloudflare/Workers/ServeBridge.ts")).workerServeBridge;

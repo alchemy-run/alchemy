@@ -299,10 +299,10 @@ program via `alchemy/Serve`.
 | Vite (TanStack Start, …) | automatic | — |
 | Astro | automatic | automatic |
 | SvelteKit | automatic | automatic |
-| Nuxt | automatic | one-file mount — `server/middleware/alchemy.ts` with [`toEventHandler`](/providers/serve/toeventhandler) |
-| Next.js | automatic (`next dev` HMR uses the explicit mount) | one-file mount — `app/api/[[...slug]]/route.ts` with [`toRouteHandler`](/providers/serve/toroutehandler) |
-| Waku | later release | one-file mount — `Serve.make` in the server entry |
-| Octane | later release | one-file mount — `Serve.make` in the server entry |
+| Nuxt | automatic | one-file mount — `server/middleware/alchemy.ts` with [`toHandler`](/providers/serve/toeventhandler) |
+| Next.js | automatic (`next dev` HMR uses the explicit mount) | one-file mount — `app/api/[[...slug]]/route.ts` with [`toHandler`](/providers/serve/toroutehandler) |
+| Waku | later release | one-file mount — `Serve.toHandler` in the server entry |
+| Octane | later release | one-file mount — `Serve.toHandler` in the server entry |
 
 The explicit mounts are always available as an escape hatch, even where
 delivery is automatic — mounting one makes the generated arm stand down,
@@ -310,10 +310,10 @@ and `server: { takeover: false }` forces the explicit tier outright:
 
 ```typescript
 // Next.js — app/api/[[...slug]]/route.ts (both clouds)
-import { toRouteHandler } from "alchemy/Next";
+import { toHandler } from "alchemy/Next";
 import Site from "../../../src/backend.ts";
 
-const handler = toRouteHandler(Site);
+const handler = toHandler(Site);
 export { handler as GET, handler as POST, handler as PUT,
          handler as PATCH, handler as DELETE, handler as HEAD,
          handler as OPTIONS };
@@ -321,14 +321,14 @@ export { handler as GET, handler as POST, handler as PUT,
 
 ```typescript
 // Nuxt — server/middleware/alchemy.ts (both clouds)
-import { toEventHandler } from "alchemy/Nitro";
+import { toHandler } from "alchemy/Nitro";
 import Site from "../../src/backend.ts";
 
-export default toEventHandler(Site);
+export default toHandler(Site);
 ```
 
 For any other fetch-shaped server entry, compose
-[`Serve.make`](/providers/serve/make) yourself:
+[`Serve.toHandler`](/providers/serve/make) yourself:
 
 ```typescript
 // src/server.ts (TanStack Start shown)
@@ -336,7 +336,7 @@ import handler from "@tanstack/react-start/server-entry";
 import * as Serve from "alchemy/Serve";
 import Site from "./src/backend.ts";
 
-const site = Serve.make(Site);
+const site = Serve.toHandler(Site);
 export default {
   fetch: async (req: Request) => (await site.match(req)) ?? handler.fetch(req),
 };
@@ -523,7 +523,7 @@ unchanged.
   collect env/IAM at plan time
 - [`createClient`](/providers/client/createclient) — the typed
   frontend→backend bridge
-- [`Serve.make`](/providers/serve/make) — the runtime bridge
+- [`Serve.toHandler`](/providers/serve/make) — the runtime bridge
 - Construct reference:
   [Cloudflare Vite](/providers/cloudflare/website/vite),
   [Cloudflare StaticSite](/providers/cloudflare/website/staticsite),

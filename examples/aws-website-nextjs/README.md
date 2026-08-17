@@ -101,7 +101,7 @@ imported and extended).
 - Everything under `public/` deploys as static assets.
 - To expose a public HTTP API of your own (for untrusted clients),
   define an effect `HttpApi` schema and mount it — e.g. via
-  `toRouteHandler` from `alchemy/Next` in a catch-all route.
+  `toHandler` from `alchemy/Next` in a catch-all route.
 
 The integration packages must be installed in the project (the source
 provider is loaded dynamically at deploy time):

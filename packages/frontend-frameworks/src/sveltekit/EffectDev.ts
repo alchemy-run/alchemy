@@ -106,7 +106,7 @@ export const matchServerRoutes = (
 
 /**
  * Signals of an explicit `alchemy/Serve` mount inside kit's built server
- * graph (`hooks.server.ts` importing `alchemy/SvelteKit`'s `toHandle`
+ * graph (`hooks.server.ts` importing `alchemy/SvelteKit`'s `toHandler`
  * etc.): either the explicit-MOUNT marker byte literal (embedded by
  * `alchemy/src/Serve/Serve.ts`, the module only explicit mounts import,
  * when it was bundled into the output) or an import of an `alchemy/Serve`

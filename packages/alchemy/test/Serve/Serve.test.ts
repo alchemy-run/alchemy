@@ -170,7 +170,7 @@ describe("Serve.make", () => {
     "declines without alchemy env markers (four-worlds guard)",
     () =>
       restoringRuntimeFlag(async () => {
-        const { make } = await import("@/Serve/index.ts");
+        const { toHandler: make } = await import("@/Serve/index.ts");
         // A fake class proves no layer build is attempted on decline.
         class NeverBuilt {
           static readonly LogicalId = "NeverBuilt";
@@ -194,7 +194,7 @@ describe("Serve.make", () => {
     "declines outside the routes claim without invoking the effect fetch",
     () =>
       restoringRuntimeFlag(async () => {
-        const { make } = await import("@/Serve/index.ts");
+        const { toHandler: make } = await import("@/Serve/index.ts");
         // A fake class proves no layer build is attempted on a path miss —
         // the default claim is DEFAULT_SERVER_ROUTES (["/api/*"]).
         class NeverBuilt {
@@ -226,7 +226,7 @@ describe("Serve.make", () => {
     "the effect fetch is authoritative inside the routes (RouteNotFound is its own 404)",
     () =>
       restoringRuntimeFlag(async () => {
-        const { make } = await import("@/Serve/index.ts");
+        const { toHandler: make } = await import("@/Serve/index.ts");
         const handle = make(TestSite);
 
         const hit = await handle.match(
@@ -279,7 +279,7 @@ describe("Serve.make", () => {
     "exclusion globs carve paths back out to the framework",
     () =>
       restoringRuntimeFlag(async () => {
-        const { make } = await import("@/Serve/index.ts");
+        const { toHandler: make } = await import("@/Serve/index.ts");
         const handle = make(TestSite, {
           routes: ["/api/*", "!/api/hello*"],
         });
@@ -307,7 +307,7 @@ describe("Serve.make", () => {
     "fetch answers path-miss declines via fallback or 404",
     () =>
       restoringRuntimeFlag(async () => {
-        const { make } = await import("@/Serve/index.ts");
+        const { toHandler: make } = await import("@/Serve/index.ts");
         const handle = make(TestSite);
 
         // Outside the claim → the fallback serves.

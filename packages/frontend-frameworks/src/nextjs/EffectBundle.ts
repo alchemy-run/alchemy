@@ -28,7 +28,7 @@
  *    uploads) so esbuild never re-processes rolldown output.
  *
  * **Stand-down rule**: when the user already mounted the bridge explicitly
- * (`toRouteHandler` in a catch-all route — the `"__ALCHEMY_SERVE_MOUNT_v1__"`
+ * (`toHandler` in a catch-all route — the `"__ALCHEMY_SERVE_MOUNT_v1__"`
  * mount marker appears in the OpenNext build output), the takeover stands
  * down and the framework-built artifact deploys unchanged.
  */
@@ -86,8 +86,8 @@ const EFFECT_ENTRY_SOURCE_NAME = "alchemy-effect-entry.mjs";
  * The explicit-mount marker embedded by the PUBLIC `alchemy/Serve` surface
  * (structural mirror of `alchemy/src/Serve/constants.ts` — this package
  * deliberately does not import alchemy). Its presence in the OpenNext build
- * output means the user mounted the bridge explicitly (`toRouteHandler` /
- * `Serve.make`) and the takeover must stand down. Deliberately NOT the
+ * output means the user mounted the bridge explicitly (`toHandler` /
+ * `Serve.toHandler`) and the takeover must stand down. Deliberately NOT the
  * bridge's `__ALCHEMY_SERVE_v1__` sentinel: the bridge module also rides
  * the value-form `createClient` graph (server components importing the
  * backend), so that literal appears in EVERY effectful site's OpenNext
@@ -187,7 +187,7 @@ export const effectMainToPath = (mainPath: string): string =>
 /**
  * Scan the OpenNext-owned build outputs for the `alchemy/Serve` sentinel —
  * NOT alchemy's own generated files, which always embed it. A hit means the
- * user compiled an explicit bridge mount (e.g. `toRouteHandler` in a
+ * user compiled an explicit bridge mount (e.g. `toHandler` in a
  * catch-all route) into the app.
  */
 export const scanForServeSentinel = Effect.fn(function* (

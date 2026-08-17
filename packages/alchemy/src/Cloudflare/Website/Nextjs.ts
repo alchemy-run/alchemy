@@ -304,7 +304,7 @@ export interface NextjsProps<
  * zero user files (fetch only: DO/queue surfaces and site-module edits
  * still need `preview`, which rebuilds the artifact).
  * `server: { takeover: false }` forces the explicit
- * `toRouteHandler` tier everywhere (mounting it explicitly also makes the
+ * `toHandler` tier everywhere (mounting it explicitly also makes the
  * takeover stand down on deploy).
  *
  * @example Effectful Next.js site (src/backend.ts)

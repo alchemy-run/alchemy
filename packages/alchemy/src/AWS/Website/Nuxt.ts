@@ -179,10 +179,10 @@ export interface EffectNuxtProps extends NuxtProps {
  * @example Server middleware mount
  * ```typescript
  * // server/middleware/alchemy.ts
- * import { toEventHandler } from "alchemy/Nitro";
+ * import { toHandler } from "alchemy/Nitro";
  * import Site from "../../src/backend.ts";
  *
- * export default toEventHandler(Site);
+ * export default toHandler(Site);
  * ```
  * An explicit mount in the `server/` tree (or
  * `server: { takeover: false }`) stands the automatic delivery down.
@@ -249,8 +249,8 @@ export const Nuxt: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        // The class carries the AWS serve shell so `Serve.make(Site)` (and
-        // the `toEventHandler` nitro mount built on it) dispatches through
+        // The class carries the AWS serve shell so `Serve.toHandler(Site)` (and
+        // the `toHandler` nitro mount built on it) dispatches through
         // the Lambda/Node layer recipe instead of the Cloudflare bridge.
         lambdaServeBridge.attach(effectClass(makeNuxt(id, props, impl)))
     : makeNuxt(id, props, impl)) as any;

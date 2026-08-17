@@ -224,17 +224,17 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/nuxt/")) {
     return (
       `// server/middleware/alchemy.ts\n` +
-      `import { toEventHandler } from "alchemy/Nitro";\n` +
+      `import { toHandler } from "alchemy/Nitro";\n` +
       `import Site from "../../site.ts";\n` +
-      `export default toEventHandler(Site);`
+      `export default toHandler(Site);`
     );
   }
   if (provider.includes("/nextjs/")) {
     return (
       `// app/api/[[...slug]]/route.ts\n` +
-      `import { toRouteHandler } from "alchemy/Next";\n` +
+      `import { toHandler } from "alchemy/Next";\n` +
       `import Site from "@/site";\n` +
-      `const handler = toRouteHandler(Site);\n` +
+      `const handler = toHandler(Site);\n` +
       `export { handler as GET, handler as POST, handler as PUT, handler as PATCH,\n` +
       `         handler as DELETE, handler as HEAD, handler as OPTIONS };`
     );
@@ -242,24 +242,24 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/sveltekit/")) {
     return (
       `// src/hooks.server.ts\n` +
-      `import { toHandle } from "alchemy/SvelteKit";\n` +
+      `import { toHandler } from "alchemy/SvelteKit";\n` +
       `import Site from "./site.ts";\n` +
-      `export const handle = toHandle(Site);`
+      `export const handle = toHandler(Site);`
     );
   }
   if (provider.includes("/astro/")) {
     return (
       `// src/fetch.ts\n` +
-      `import { toFetchable } from "alchemy/Astro";\n` +
+      `import { toHandler } from "alchemy/Astro";\n` +
       `import Site from "./site.ts";\n` +
-      `export default toFetchable(Site);`
+      `export default toHandler(Site);`
     );
   }
   return (
     `// your framework's server entry (the module the deployed bundle is built from)\n` +
     `import { Serve } from "alchemy/Serve";\n` +
     `import Site from "./site.ts";\n` +
-    `const site = Serve.make(Site);\n` +
+    `const site = Serve.toHandler(Site);\n` +
     `export default {\n` +
     `  fetch: async (request) => (await site.match(request)) ?? frameworkHandler.fetch(request),\n` +
     `};`

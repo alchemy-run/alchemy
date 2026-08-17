@@ -6,15 +6,19 @@
  * ```ts
  * // src/hooks.server.ts
  * import { sequence } from "@sveltejs/kit/hooks";
- * import { toHandle } from "alchemy/SvelteKit";
+ * import { toHandler } from "alchemy/SvelteKit";
  * import Site from "./src/backend.ts";
- * export const handle = sequence(toHandle(Site));
+ * export const handle = sequence(toHandler(Site));
  * ```
  *
  * Structural types only — alchemy does not depend on `@sveltejs/kit`.
  */
 
-import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
+import {
+  toHandler as makeHandle,
+  type AnyWebsiteClass,
+  type MakeOptions,
+} from "./Serve.ts";
 
 export interface SvelteKitRequestEvent {
   request: Request;
@@ -52,14 +56,14 @@ export interface SvelteKitHandleInput<Event extends SvelteKitRequestEvent> {
  * @example src/hooks.server.ts
  * ```typescript
  * import { sequence } from "@sveltejs/kit/hooks";
- * import { toHandle } from "alchemy/SvelteKit";
+ * import { toHandler } from "alchemy/SvelteKit";
  * import Site from "./src/backend.ts";
  *
- * export const handle = sequence(toHandle(Site));
+ * export const handle = sequence(toHandler(Site));
  * ```
  */
-export const toHandle = (site: AnyWebsiteClass, options?: MakeOptions) => {
-  const handle = make(site, options);
+export const toHandler = (site: AnyWebsiteClass, options?: MakeOptions) => {
+  const handle = makeHandle(site, options);
   return async <Event extends SvelteKitRequestEvent>({
     event,
     resolve,

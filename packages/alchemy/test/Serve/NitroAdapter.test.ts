@@ -61,13 +61,13 @@ const echoed = async (response: Response | undefined) => {
   return response!.text();
 };
 
-describe("alchemy/Nitro toEventHandler", () => {
+describe("alchemy/Nitro toHandler", () => {
   it(
     "a server-preset mock req (stashed body, no stream) delivers the body",
     () =>
       restoringRuntimeFlag(async () => {
-        const { toEventHandler } = await import("@/Serve/Nitro.ts");
-        const handler = toEventHandler(NitroSite, { env: markers });
+        const { toHandler } = await import("@/Serve/Nitro.ts");
+        const handler = toHandler(NitroSite, { env: markers });
 
         // The nitro aws-lambda shape: a mock IncomingMessage carrying the
         // decoded event body as a property; streaming it yields nothing.
@@ -97,8 +97,8 @@ describe("alchemy/Nitro toEventHandler", () => {
     "a real socket-backed req streams its body into the effect fetch",
     () =>
       restoringRuntimeFlag(async () => {
-        const { toEventHandler } = await import("@/Serve/Nitro.ts");
-        const handler = toEventHandler(NitroSite, { env: markers });
+        const { toHandler } = await import("@/Serve/Nitro.ts");
+        const handler = toHandler(NitroSite, { env: markers });
 
         const req = Readable.from([Buffer.from('{"from":"stream"}')]) as any;
         req.method = "POST";
@@ -120,8 +120,8 @@ describe("alchemy/Nitro toEventHandler", () => {
     "a workerd event's web request passes through verbatim",
     () =>
       restoringRuntimeFlag(async () => {
-        const { toEventHandler } = await import("@/Serve/Nitro.ts");
-        const handler = toEventHandler(NitroSite, { env: markers });
+        const { toHandler } = await import("@/Serve/Nitro.ts");
+        const handler = toHandler(NitroSite, { env: markers });
 
         const event = {
           web: {

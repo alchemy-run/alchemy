@@ -78,10 +78,10 @@ export interface DevServerOptions {
   readonly logging?: WorkerdLogging | undefined;
   /**
    * Effectful front dispatch: offer each request to the Effect program
-   * (`Serve.make(Site).match` — strict route ownership, the deployed
+   * (`Serve.toHandler(Site).match` — strict route ownership, the deployed
    * wrapper's exact gate) BEFORE Next's request handler. This is
    * what makes the `hmr` dev mode serve effect routes with zero user
-   * files — the explicit `toRouteHandler` mount is no longer required.
+   * files — the explicit `toHandler` mount is no longer required.
    * Env resolves through the planted `getCloudflareContext()` contract
    * (the serve bridge's env ladder), so bindings ride the platform proxy.
    */

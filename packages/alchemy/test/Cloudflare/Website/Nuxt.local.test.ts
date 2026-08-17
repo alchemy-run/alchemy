@@ -266,7 +266,7 @@ describe.concurrent("Nuxt dev", () => {
   // ─────────────────────────────────────────────────────────────────────
   // Effect entry takeover (DESIGN Amendment §2.1.2), dev half: the impl's
   // fetch is auto-mounted as an alchemy-generated nitro middleware
-  // (routes-scoped `alchemy/Nitro` toEventHandler) inside nitro's
+  // (routes-scoped `alchemy/Nitro` toHandler) inside nitro's
   // dev SSR worker thread — zero framework-file edits. The KV capability
   // collected at plan resolves through the platform proxy to the LOCAL
   // simulator (`dev:` namespace id — proof no cloud call ran). Non-fetch
@@ -372,10 +372,10 @@ describe.concurrent("Nuxt dev", () => {
         yield* fs.writeFileString(
           path.join(middlewareDir, "alchemy-mount.ts"),
           [
-            `import { toEventHandler } from "alchemy/Nitro";`,
+            `import { toHandler } from "alchemy/Nitro";`,
             `import Site from "../../site.ts";`,
             ``,
-            `export default toEventHandler(Site, { routes: ["/api/effect/*"] });`,
+            `export default toHandler(Site, { routes: ["/api/effect/*"] });`,
             ``,
           ].join("\n"),
         );

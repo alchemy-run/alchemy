@@ -187,15 +187,15 @@ describe("generateDerivedOpenNextConfig", () => {
 });
 
 describe("scanForExplicitNextServeMount", () => {
-  it("detects a toRouteHandler mount in app/", () => {
+  it("detects a toHandler mount in app/", () => {
     const root = makeTempDir();
     const routeDir = NodePath.join(root, "app", "api", "[[...slug]]");
     NodeFs.mkdirSync(routeDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(routeDir, "route.ts"),
-      'import { toRouteHandler } from "alchemy/Next";\n' +
+      'import { toHandler } from "alchemy/Next";\n' +
         'import Site from "../../backend.ts";\n' +
-        "const handler = toRouteHandler(Site);\n" +
+        "const handler = toHandler(Site);\n" +
         "export { handler as GET, handler as POST };\n",
     );
     expect(scanForExplicitNextServeMount(root)).toBe(true);
@@ -207,7 +207,7 @@ describe("scanForExplicitNextServeMount", () => {
     NodeFs.mkdirSync(routeDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(routeDir, "route.ts"),
-      'import { toRouteHandler } from "alchemy/Next";\n',
+      'import { toHandler } from "alchemy/Next";\n',
     );
     expect(scanForExplicitNextServeMount(root)).toBe(true);
   });

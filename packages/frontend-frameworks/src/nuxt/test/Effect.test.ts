@@ -38,7 +38,7 @@ describe("renderEffectHandler", () => {
   it("carries the routes claim (exclusions included) into the handler", () => {
     expect(source).toContain('"/backend/*"');
     expect(source).toContain('"!/backend/health"');
-    expect(source).toContain("toEventHandler(Site, { routes })");
+    expect(source).toContain("toHandler(Site, { routes })");
   });
 
   it("pre-gates on the routes claim alone (no reserved rpc path)", () => {
@@ -66,9 +66,9 @@ describe("scanForExplicitServeMount", () => {
     NodeFs.mkdirSync(middlewareDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(middlewareDir, "alchemy.ts"),
-      'import { toEventHandler } from "alchemy/Nitro";\n' +
+      'import { toHandler } from "alchemy/Nitro";\n' +
         'import Site from "../../src/site.ts";\n' +
-        "export default toEventHandler(Site);\n",
+        "export default toHandler(Site);\n",
     );
     await expect(scan(NodePath.join(root, "server"))).resolves.toBe(true);
   });

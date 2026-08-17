@@ -7,9 +7,9 @@
  * ```ts
  * // src/fetch.ts
  * import { FetchState, astro } from "astro/fetch";
- * import { toFetchable } from "alchemy/Astro";
+ * import { toHandler } from "alchemy/Astro";
  * import Site from "./src/backend.ts";
- * const site = toFetchable(Site, { routes: ["/api/*"] });
+ * const site = toHandler(Site, { routes: ["/api/*"] });
  * export default {
  *   async fetch(request: Request): Promise<Response> {
  *     return (
@@ -28,10 +28,14 @@
  * fetch is authoritative: its responses, 404s included, are final.
  */
 
-import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
+import {
+  toHandler as makeHandle,
+  type AnyWebsiteClass,
+  type MakeOptions,
+} from "./Serve.ts";
 
 /**
- * Options for {@link toFetchable} — {@link MakeOptions} verbatim: the
+ * Options for {@link toHandler} — {@link MakeOptions} verbatim: the
  * per-call serve options plus the `routes` claim (default `["/api/*"]`).
  */
 export type AstroFetchableOptions = MakeOptions;
@@ -69,10 +73,10 @@ export interface AstroFetchable {
  * @example src/fetch.ts
  * ```typescript
  * import { FetchState, astro } from "astro/fetch";
- * import { toFetchable } from "alchemy/Astro";
+ * import { toHandler } from "alchemy/Astro";
  * import Site from "./src/backend.ts";
  *
- * const site = toFetchable(Site, { routes: ["/api/*"] });
+ * const site = toHandler(Site, { routes: ["/api/*"] });
  *
  * export default {
  *   async fetch(request: Request): Promise<Response> {
@@ -83,13 +87,13 @@ export interface AstroFetchable {
  * };
  * ```
  */
-export const toFetchable = (
+export const toHandler = (
   site: AnyWebsiteClass,
   options?: AstroFetchableOptions,
 ): AstroFetchable => {
   // `make` owns the route gate (default DEFAULT_SERVER_ROUTES): `match`
   // resolves `undefined` on path-miss without invoking the effect fetch.
-  const handle = make(site, options);
+  const handle = makeHandle(site, options);
   return {
     fetch: (request) => handle.match(request, options),
   };

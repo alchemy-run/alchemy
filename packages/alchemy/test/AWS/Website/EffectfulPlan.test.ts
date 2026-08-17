@@ -903,7 +903,7 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
             );
           }),
         );
-        // The explicit tier: the user's own `toRouteHandler` mount
+        // The explicit tier: the user's own `toHandler` mount
         // (compiled by Next) serves — no dispatch options reach the dev
         // child.
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
@@ -1024,7 +1024,7 @@ describe.concurrent("prepareServerWrapperEntry", () => {
 
 // ─────────────────────────────────────────────────────────────────────
 // The Lambda serve shell rides EVERY effectful class arm: the shell is
-// attached at class construction (no deploy involved), so `Serve.make` —
+// attached at class construction (no deploy involved), so `Serve.toHandler` —
 // and the framework mounts built on it — dispatches through the
 // Lambda/Node layer recipe instead of the Cloudflare-flavored bridge.
 // ─────────────────────────────────────────────────────────────────────

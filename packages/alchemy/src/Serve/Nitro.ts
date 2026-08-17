@@ -5,9 +5,9 @@
  *
  * ```ts
  * // server/middleware/alchemy.ts
- * import { toEventHandler } from "alchemy/Nitro";
+ * import { toHandler } from "alchemy/Nitro";
  * import Site from "../../site";
- * export default toEventHandler(Site);
+ * export default toHandler(Site);
  * ```
  *
  * The handler answers requests inside `options.routes` (default
@@ -18,7 +18,11 @@
  * not depend on `h3`.
  */
 
-import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
+import {
+  toHandler as makeHandle,
+  type AnyWebsiteClass,
+  type MakeOptions,
+} from "./Serve.ts";
 
 /** Defeats static resolution of the specifier by foreign bundlers. */
 const DO_NOT_BUNDLE = "";
@@ -116,17 +120,14 @@ const toWebRequest = async (
  * @section Mounting the middleware
  * @example server/middleware/alchemy.ts
  * ```typescript
- * import { toEventHandler } from "alchemy/Nitro";
+ * import { toHandler } from "alchemy/Nitro";
  * import Site from "../../src/backend.ts";
  *
- * export default toEventHandler(Site);
+ * export default toHandler(Site);
  * ```
  */
-export const toEventHandler = (
-  site: AnyWebsiteClass,
-  options?: MakeOptions,
-) => {
-  const handle = make(site, options);
+export const toHandler = (site: AnyWebsiteClass, options?: MakeOptions) => {
+  const handle = makeHandle(site, options);
   const handler = async (
     event: NitroEventLike,
   ): Promise<Response | undefined> => {

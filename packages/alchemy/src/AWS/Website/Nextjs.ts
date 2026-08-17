@@ -364,10 +364,10 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * @example Catch-all route handler
  * ```typescript
  * // app/api/[[...slug]]/route.ts
- * import { toRouteHandler } from "alchemy/Next";
+ * import { toHandler } from "alchemy/Next";
  * import Site from "../../backend.ts";
  *
- * const handler = toRouteHandler(Site);
+ * const handler = toHandler(Site);
  * export { handler as GET, handler as POST, handler as PUT,
  *          handler as PATCH, handler as DELETE, handler as HEAD,
  *          handler as OPTIONS };
@@ -428,8 +428,8 @@ export const Nextjs: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        // The class carries the AWS serve shell so `Serve.make(Site)` (and
-        // the `toRouteHandler` mount built on it) dispatches through the
+        // The class carries the AWS serve shell so `Serve.toHandler(Site)` (and
+        // the `toHandler` mount built on it) dispatches through the
         // Lambda/Node layer recipe instead of the Cloudflare bridge.
         lambdaServeBridge.attach(effectClass(makeNextjs(id, props, impl)))
     : makeNextjs(id, props, impl)) as any;
@@ -546,7 +546,7 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
     // options (the dev restart surface): backend edits hot-reload inside
     // the child (watch + cache-busted re-import), they don't restart
     // `next dev`. `takeover: false` forces the explicit tier — the user's
-    // own `toRouteHandler` mount, compiled by Next, serves instead.
+    // own `toHandler` mount, compiled by Next, serves instead.
     const devEffect =
       impl !== undefined &&
       (props as EffectNextjsProps).server?.takeover !== false

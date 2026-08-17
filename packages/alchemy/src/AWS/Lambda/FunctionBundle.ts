@@ -170,9 +170,9 @@ export const makeFunctionBundler = Effect.gen(function* () {
             `Effect program with "external" runtime delivery, but the shipped ` +
             `server directory (${dir}) never mounts the alchemy/Serve bridge ` +
             `— the program's handlers would be dead code. Mount it in the ` +
-            `framework's server entry (e.g. \`Serve.make(Site)\` in a ` +
-            `fetch-shaped entry, \`toRouteHandler(Site)\` in a Next.js ` +
-            `catch-all route, \`toEventHandler(Site)\` in a Nuxt server ` +
+            `framework's server entry (e.g. \`Serve.toHandler(Site)\` in a ` +
+            `fetch-shaped entry, \`toHandler(Site)\` in a Next.js ` +
+            `catch-all route, \`toHandler(Site)\` in a Nuxt server ` +
             `middleware), or set \`server: { verify: false }\` to skip this ` +
             `check.`,
           functionId: options.requireServeSentinel.functionId,

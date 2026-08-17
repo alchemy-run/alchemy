@@ -107,7 +107,7 @@ const core = makeBridgeCore(recipe);
 
 /**
  * The class-carried serve bridge for Cloudflare-hosted Worker/Website
- * classes — the `ServeBridge`-shaped object `Serve.make` (and the
+ * classes — the `ServeBridge`-shaped object `Serve.toHandler` (and the
  * framework mounts built on it) dispatches matched requests to, and whose
  * `runtime` seam hands the value-form `createClient` the same memoized
  * instance runtime as the fetch path.

@@ -4,10 +4,10 @@
  * Cloudflare `hmr` dev server (`DevServer.ts`, in the vite dev child).
  *
  * One listener, no proxy: the dev http server offers each request to the
- * effect program FIRST (`Serve.make(Site).match` — strict route
+ * effect program FIRST (`Serve.toHandler(Site).match` — strict route
  * ownership, byte-for-byte the deployed wrapper's gate) and falls
  * through to Next's `getRequestHandler()` on a decline. This erases the
- * explicit `toRouteHandler` mount from both clouds' `next dev` stories.
+ * explicit `toHandler` mount from both clouds' `next dev` stories.
  *
  * Module-identity contract: the serve surface is imported from
  * {@link EffectDispatchConfig.serveModule} — a path the ALCHEMY ENGINE

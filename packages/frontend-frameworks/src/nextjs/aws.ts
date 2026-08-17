@@ -193,7 +193,7 @@ export const OPENNEXT_TESTED_RANGE = "4.x";
 
 /**
  * Signals of an explicit `alchemy/Serve` mount in the user's Next route
- * trees (`toRouteHandler` in a catch-all route handler): the explicit-mount
+ * trees (`toHandler` in a catch-all route handler): the explicit-mount
  * marker byte literal (embedded by `alchemy/src/Serve/Serve.ts`, the module
  * only explicit mounts import) or an `alchemy/Serve` import specifier.
  * Deliberately NOT the bridge's `__ALCHEMY_SERVE_v1__` sentinel: the bridge

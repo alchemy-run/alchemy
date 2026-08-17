@@ -9,9 +9,9 @@
  *
  * ```js
  * import { FetchState, astro } from "astro/fetch";
- * import { toFetchable } from "alchemy/Astro";
+ * import { toHandler } from "alchemy/Astro";
  * import Site from "/abs/path/to/site.ts";
- * const site = toFetchable(Site, { routes: ["/api/*"] });
+ * const site = toHandler(Site, { routes: ["/api/*"] });
  * export default {
  *   async fetch(request) {
  *     return (await site.fetch(request)) ?? astro(new FetchState(request));
@@ -361,11 +361,11 @@ export const createEffectFetchablePlugin = (
         return {
           code: [
             `globalThis.__ALCHEMY_RUNTIME__ = true;`,
-            `import { toFetchable } from "alchemy/Astro";`,
+            `import { toHandler } from "alchemy/Astro";`,
             `import { env as __alchemyWorkerEnv } from "cloudflare:workers";`,
             fallback.imports,
             `import Site from ${JSON.stringify(mainPath)};`,
-            `const site = toFetchable(Site, { routes: ${JSON.stringify(options.routes)}, env: __alchemyWorkerEnv });`,
+            `const site = toHandler(Site, { routes: ${JSON.stringify(options.routes)}, env: __alchemyWorkerEnv });`,
             `export default {`,
             `  async fetch(request) {`,
             `    return (await site.fetch(request)) ?? (await ${fallback.call});`,

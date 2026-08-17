@@ -172,15 +172,15 @@ export interface WebsiteHandlers {
 /**
  * The class-carried serve bridge for AWS-hosted Website classes (attached
  * under `SERVE_BRIDGE_KEY` by the effectful AWS Website constructs at
- * class construction). `Serve.make` — and therefore the framework mounts
- * `toRouteHandler` (Next.js) and `toEventHandler` (Nuxt/nitro) —
+ * class construction). `Serve.toHandler` — and therefore the framework mounts
+ * `toHandler` (Next.js) and `toHandler` (Nuxt/nitro) —
  * dispatches matched requests here, so the layer recipe carries
  * `Credentials.fromChain()` / `Region.fromEnv()` for SDK-backed capability
  * clients. Its `runtime` seam hands the value-form `createClient` the
  * Lambda/Node-flavored instance runtime (same per-class memo as the fetch
  * path).
  *
- * `Serve.make` owns the `server.routes` gate and only dispatches requests
+ * `Serve.toHandler` owns the `server.routes` gate and only dispatches requests
  * inside the claim — no second gate here.
  */
 export const lambdaServeBridge = {

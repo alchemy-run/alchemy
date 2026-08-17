@@ -1,8 +1,8 @@
 /**
- * `Serve.make` dispatch through a class-carried serve shell (the Lambda
+ * `Serve.toHandler` dispatch through a class-carried serve shell (the Lambda
  * shell the effectful AWS website arms stamp on their classes).
  *
- * These are process-exclusive unit tests: `Serve.make` stamps
+ * These are process-exclusive unit tests: `Serve.toHandler` stamps
  * `globalThis.__ALCHEMY_RUNTIME__` process-wide (by design — real runtimes
  * never plan), which would flip concurrently-running plan tests into the
  * runtime branch. They lived in test/AWS/Website/EffectfulSibling.test.ts,
@@ -40,7 +40,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
   });
 
   /**
-   * `Serve.make` stamps `globalThis.__ALCHEMY_RUNTIME__` process-wide (by
+   * `Serve.toHandler` stamps `globalThis.__ALCHEMY_RUNTIME__` process-wide (by
    * design — real runtimes never plan). In the shared test process that flag
    * flips concurrently-running plan tests into the runtime branch, so these
    * tests take the whole-process write lock (`exclusive`) and restore the
@@ -56,7 +56,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
   };
 
   it(
-    "Serve.make dispatches to a class-carried shell",
+    "Serve.toHandler dispatches to a class-carried shell",
     () =>
       restoringRuntimeFlag(async () => {
         const calls: Array<{ site: object; url: string }> = [];
@@ -69,7 +69,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
             },
           },
         };
-        const handle = Serve.make(site as any);
+        const handle = Serve.toHandler(site as any);
         const response = await handle.match(new Request("http://x/api/a"));
         expect(await response!.text()).toBe("from-shell");
         expect(calls).toHaveLength(1);
@@ -87,7 +87,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
           { main: import.meta.url },
           Effect.succeed(okFetch),
         ) {}
-        const handle = Serve.make(DeclineSite as any, {
+        const handle = Serve.toHandler(DeclineSite as any, {
           // No ALCHEMY_STACK_NAME: the four-worlds guard must decline
           // without building any layers (a `next build` prerender world).
           env: { SOME_VAR: "1" },

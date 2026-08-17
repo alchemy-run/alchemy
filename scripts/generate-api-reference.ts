@@ -891,7 +891,15 @@ async function main() {
       // Mirror the source directory structure; name the page after the
       // tagged declaration (e.g. Cloudflare.AI.Search/AiSearchInstance.md).
       const relDir = path.dirname(entry.relativePath);
-      const outputRelative = path.join(relDir, `${primary.name}.md`);
+      // Page identity is the MODULE (its source file basename), not the
+      // exported symbol: the framework mounts deliberately share one
+      // export name (`toHandler`) across `alchemy/{Serve,Next,Nitro,
+      // Astro,SvelteKit}`, and the module is what a reader imports.
+      // Files whose basename is generic (`index`) keep the symbol name.
+      const fileBase = path.basename(entry.relativePath).replace(/\.tsx?$/, "");
+      const pageName =
+        fileBase === "index" || fileBase === "" ? primary.name : fileBase;
+      const outputRelative = path.join(relDir, `${pageName}.md`);
 
       const existing = seen.get(outputRelative);
       if (existing) {
@@ -923,7 +931,7 @@ async function main() {
       pageEntries.push({
         provider: segments[0] ?? "",
         service: segments.length > 2 ? segments[1] : "",
-        resource: primary.name,
+        resource: pageName,
         category: primary.category,
         product: primary.product,
         link: `/providers/${normalizeSlashes(outputRelative)

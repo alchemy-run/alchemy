@@ -591,7 +591,7 @@ export const make = (
           // wrapper-delivery effect entry (and the host-resolved serve
           // module), the dev server dispatches `server.routes` to the
           // Effect program before Next's handler — the explicit
-          // `toRouteHandler` mount is no longer required.
+          // `toHandler` mount is no longer required.
           // An external-entry Worker (explicit tier / `takeover: false`)
           // has no effect entry, so the dispatch stands down.
           const effect =

@@ -7,7 +7,7 @@
  * import handler from "@tanstack/react-start/server-entry";
  * import { Serve } from "alchemy/Serve";
  * import Site from "./src/backend.ts";
- * const site = Serve.make(Site);
+ * const site = Serve.toHandler(Site);
  * export default {
  *   fetch: async (req) => (await site.match(req)) ?? handler.fetch(req),
  * };
@@ -125,9 +125,9 @@ export interface ServeHandle {
  * stack markers (build-time prerender/SSG worlds), `match` declines
  * every request instead of building the runtime.
  *
- * Prefer the per-framework mounts where one exists — `toRouteHandler`
- * (`alchemy/Next`), `toEventHandler` (`alchemy/Nitro`),
- * `toHandle` (`alchemy/SvelteKit`), `toFetchable`
+ * Prefer the per-framework mounts where one exists — `toHandler`
+ * (`alchemy/Next`), `toHandler` (`alchemy/Nitro`),
+ * `toHandler` (`alchemy/SvelteKit`), `toHandler`
  * (`alchemy/Astro`) — and reach for `make` in any other
  * fetch-shaped server entry.
  *
@@ -145,7 +145,7 @@ export interface ServeHandle {
  * import * as Serve from "alchemy/Serve";
  * import Site from "./src/backend.ts";
  *
- * const site = Serve.make(Site);
+ * const site = Serve.toHandler(Site);
  *
  * export default {
  *   fetch: async (request: Request) =>
@@ -163,14 +163,14 @@ export interface ServeHandle {
  * import * as Serve from "alchemy/Serve";
  * import Site from "./src/backend.ts";
  *
- * const site = Serve.make(Site);
+ * const site = Serve.toHandler(Site);
  *
  * export default {
  *   fetch: (request: Request) => site.fetch(request),
  * };
  * ```
  */
-export const make = <S extends AnyWebsiteClass>(
+export const toHandler = <S extends AnyWebsiteClass>(
   site: S,
   defaults?: MakeOptions,
 ): ServeHandle => {
@@ -248,6 +248,6 @@ export const exports = <S extends AnyWebsiteClass>(_site: S): never => {
       "Serve.exports is not available yet: the full exports surface for " +
       "custom entries (queue/scheduled/DO classes) ships in a later phase. " +
       "Use the construct-generated wrapper (auto tier) for non-fetch " +
-      "handlers, or mount Serve.make(Site) for fetch-only delivery.",
+      "handlers, or mount Serve.toHandler(Site) for fetch-only delivery.",
   });
 };

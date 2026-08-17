@@ -111,7 +111,7 @@ describe("scanForExplicitServeMount", () => {
     NodeFs.mkdirSync(chunks, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(chunks, "hooks.server.js"),
-      'import { toHandle } from "alchemy/SvelteKit";\n',
+      'import { toHandler } from "alchemy/SvelteKit";\n',
     );
     expect(scanForExplicitServeMount(NodePath.join(dir, "specifier"))).toBe(
       true,
