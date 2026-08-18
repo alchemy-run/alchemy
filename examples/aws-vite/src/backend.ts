@@ -10,6 +10,7 @@ import { QueueEventSource } from "alchemy/AWS/Lambda/QueueEventSource";
 import * as S3 from "alchemy/AWS/S3";
 import * as SQS from "alchemy/AWS/SQS";
 import { Vite } from "alchemy/AWS/Website";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -57,19 +58,6 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 });
 
 /**
- * Optional Route 53 / ACM config, read at plan time (inert inside the
- * deployed Lambda). Set these before deploying for a custom domain:
- * - WEBSITE_DOMAIN=app.example.com
- * - WEBSITE_ZONE_ID=Z1234567890
- * - WEBSITE_ALIASES=www.app.example.com
- */
-const domainName = process.env.WEBSITE_DOMAIN;
-const hostedZoneId = process.env.WEBSITE_ZONE_ID;
-const domainAliases = process.env.WEBSITE_ALIASES?.split(",")
-  .map((part) => part.trim())
-  .filter(Boolean);
-
-/**
  * One deployment serves both halves: the Vite build uploads to S3 behind
  * CloudFront, and the Effect program deploys as an effect-native Lambda
  * that the edge router consults FIRST for `server.routes` (default
@@ -83,22 +71,43 @@ const domainAliases = process.env.WEBSITE_ALIASES?.split(",")
  */
 export default class Site extends Vite<Site>()(
   "Site",
-  {
-    // The Vite conventions are the defaults: `npx vite build` → dist/,
-    // `npx vite dev` under `alchemy dev`, spa fallback on.
-    main: import.meta.url,
-    invalidation: {
-      paths: "all",
-    },
-    domain:
-      domainName && hostedZoneId
-        ? { name: domainName, hostedZoneId, aliases: domainAliases }
-        : undefined,
-    tags: {
-      Example: "aws-vite",
-      Surface: "website",
-    },
-  },
+  // Props are an Effect: the optional Route 53 / ACM config resolves
+  // through effect/Config at plan time (inert inside the deployed
+  // Lambda). Set WEBSITE_DOMAIN / WEBSITE_ZONE_ID (and optionally
+  // WEBSITE_ALIASES, comma-separated) before deploying a custom domain.
+  Effect.gen(function* () {
+    const domainName = yield* Config.string("WEBSITE_DOMAIN").pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    const hostedZoneId = yield* Config.string("WEBSITE_ZONE_ID").pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    const domainAliases = yield* Config.string("WEBSITE_ALIASES").pipe(
+      Effect.map((aliases) =>
+        aliases
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean),
+      ),
+      Effect.orElseSucceed(() => undefined),
+    );
+    return {
+      // The Vite conventions are the defaults: `npx vite build` → dist/,
+      // `npx vite dev` under `alchemy dev`, spa fallback on.
+      main: import.meta.url,
+      invalidation: {
+        paths: "all" as const,
+      },
+      domain:
+        domainName !== undefined && hostedZoneId !== undefined
+          ? { name: domainName, hostedZoneId, aliases: domainAliases }
+          : undefined,
+      tags: {
+        Example: "aws-vite",
+        Surface: "website",
+      },
+    };
+  }),
   Effect.gen(function* () {
     const bucket = yield* Data;
     const getObject = yield* S3.GetObject(bucket);
@@ -199,7 +208,13 @@ export default class Site extends Vite<Site>()(
       processed,
     };
   }).pipe(
-    Effect.provide([S3.GetObjectHttp, S3.PutObjectHttp, SQS.SendMessageHttp]),
-    Effect.provide(QueueEventSource),
+    Effect.provide(
+      Layer.mergeAll(
+        S3.GetObjectHttp,
+        S3.PutObjectHttp,
+        SQS.SendMessageHttp,
+        QueueEventSource,
+      ),
+    ),
   ),
 ) {}

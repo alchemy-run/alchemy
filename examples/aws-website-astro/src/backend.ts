@@ -14,6 +14,7 @@ import * as SQS from "alchemy/AWS/SQS";
 import { Astro } from "alchemy/AWS/Website";
 import { remote } from "alchemy/ProviderMode";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 /**
@@ -76,13 +77,13 @@ export default class Site extends Astro<Site>()(
 
     /** Read one string attribute from a keyed item (undefined when unset). */
     const readItem = Effect.fn(function* (pk: string, attr: "count" | "value") {
-        const current = yield* getItem({
-          Key: { pk: { S: pk } },
-          ConsistentRead: true,
-        }).pipe(Effect.orDie);
-        const item = current.Item?.[attr];
-        return item && "N" in item ? item.N : item?.S;
-      });
+      const current = yield* getItem({
+        Key: { pk: { S: pk } },
+        ConsistentRead: true,
+      }).pipe(Effect.orDie);
+      const item = current.Item?.[attr];
+      return item && "N" in item ? item.N : item?.S;
+    });
 
     // The async leg's CONSUMER — a queue listener on the SAME class. At
     // plan time this deploys the sibling effect Lambda (`Astro-Handlers`)
@@ -92,8 +93,11 @@ export default class Site extends Astro<Site>()(
     // where the `processed` RPC method reads them back.
     yield* SQS.consumeQueueMessages(queue, (records) =>
       records.pipe(
-        Stream.runForEach(Effect.fn(function* (record) {
-            const count = Number((yield* readItem("processed-count", "count")) ?? "0");
+        Stream.runForEach(
+          Effect.fn(function* (record) {
+            const count = Number(
+              (yield* readItem("processed-count", "count")) ?? "0",
+            );
             yield* putItem({
               Item: {
                 pk: { S: "processed-count" },
@@ -111,41 +115,43 @@ export default class Site extends Astro<Site>()(
     return {
       /** Read the visit counter (0 when unset). */
       visits: Effect.fn(function* () {
-          const current = yield* getItem({
-            Key: { pk: { S: "count" } },
-            ConsistentRead: true,
-          }).pipe(Effect.orDie);
-          return Number(current.Item?.count?.N ?? "0");
-        }),
+        const current = yield* getItem({
+          Key: { pk: { S: "count" } },
+          ConsistentRead: true,
+        }).pipe(Effect.orDie);
+        return Number(current.Item?.count?.N ?? "0");
+      }),
       /** Increment the counter, persist it, and return the new count. */
       bump: Effect.fn(function* () {
-          const current = yield* getItem({
-            Key: { pk: { S: "count" } },
-            ConsistentRead: true,
-          }).pipe(Effect.orDie);
-          const count = Number(current.Item?.count?.N ?? "0") + 1;
-          yield* putItem({
-            Item: { pk: { S: "count" }, count: { N: String(count) } },
-          }).pipe(Effect.orDie);
-          return count;
-        }),
+        const current = yield* getItem({
+          Key: { pk: { S: "count" } },
+          ConsistentRead: true,
+        }).pipe(Effect.orDie);
+        const count = Number(current.Item?.count?.N ?? "0") + 1;
+        yield* putItem({
+          Item: { pk: { S: "count" }, count: { N: String(count) } },
+        }).pipe(Effect.orDie);
+        return count;
+      }),
       /** Send a message to the queue (called by the `enqueue` action). */
       enqueue: Effect.fn(function* (message: string) {
-          yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
-        }),
+        yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
+      }),
       /** Read the consumer's async state (called by the `processed` action). */
       processed: Effect.fn(function* () {
-          const count = yield* readItem("processed-count", "count");
-          const last = yield* readItem("processed-last", "value");
-          return { count: Number(count ?? "0"), last: last ?? null };
-        }),
+        const count = yield* readItem("processed-count", "count");
+        const last = yield* readItem("processed-last", "value");
+        return { count: Number(count ?? "0"), last: last ?? null };
+      }),
     };
   }).pipe(
-    Effect.provide([
-      DynamoDB.GetItemHttp,
-      DynamoDB.PutItemHttp,
-      SQS.SendMessageHttp,
-    ]),
-    Effect.provide(QueueEventSource),
+    Effect.provide(
+      Layer.mergeAll(
+        DynamoDB.GetItemHttp,
+        DynamoDB.PutItemHttp,
+        SQS.SendMessageHttp,
+        QueueEventSource,
+      ),
+    ),
   ),
 ) {}

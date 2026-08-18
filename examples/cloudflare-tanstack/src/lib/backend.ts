@@ -6,9 +6,9 @@
 // per-request-correct (methods can read the caller's cookies via
 // `HttpServerRequest`).
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { createClient, type RpcClient } from "alchemy/Client";
+import { createClient } from "alchemy/Client";
 import Backend from "../backend.ts";
 
-export const backend: RpcClient<typeof Backend> = createClient(Backend, {
+export const backend = createClient(Backend, {
   headers: getRequestHeaders,
 });

@@ -3,8 +3,7 @@ import { cn } from "../../lib/utils";
 
 const variants = {
   default: "bg-slate-900 text-slate-50 hover:bg-slate-900/90",
-  outline:
-    "border border-slate-200 bg-white text-slate-900 hover:bg-slate-100",
+  outline: "border border-slate-200 bg-white text-slate-900 hover:bg-slate-100",
 } as const;
 
 export function Button({

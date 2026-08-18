@@ -86,10 +86,10 @@ export default class Site extends Nextjs<Site>()(
         retryDelay: "2 seconds",
       },
       (stream) =>
-        Stream.runForEach(stream, Effect.fn(function* (msg) {
-            const count = Number(
-              (yield* visits.get("processed-count")) ?? "0",
-            );
+        Stream.runForEach(
+          stream,
+          Effect.fn(function* (msg) {
+            const count = Number((yield* visits.get("processed-count")) ?? "0");
             yield* visits.put("processed-count", String(count + 1));
             yield* visits.put("processed-last", String(msg.body));
           }, Effect.orDie),
@@ -101,13 +101,13 @@ export default class Site extends Nextjs<Site>()(
       // HTTP) by the value form of `createClient` from trusted server
       // code: the async server component and the server actions.
       visits: Effect.fn(function* () {
-          return Number((yield* visits.get("count")) ?? "0");
-        }, Effect.orDie),
+        return Number((yield* visits.get("count")) ?? "0");
+      }, Effect.orDie),
       bump: Effect.fn(function* () {
-          const count = Number((yield* visits.get("count")) ?? "0") + 1;
-          yield* visits.put("count", String(count));
-          return count;
-        }, Effect.orDie),
+        const count = Number((yield* visits.get("count")) ?? "0") + 1;
+        yield* visits.put("count", String(count));
+        return count;
+      }, Effect.orDie),
       // The async leg's producer (called by the `enqueueJob` server
       // action) — sends a message to the queue; the consumer above
       // catches up asynchronously.
@@ -117,10 +117,10 @@ export default class Site extends Nextjs<Site>()(
           .pipe(Effect.asVoid, Effect.orDie),
       // Read the consumer's async state (the `getProcessed` server action).
       processed: Effect.fn(function* () {
-          const count = yield* visits.get("processed-count");
-          const last = yield* visits.get("processed-last");
-          return { count: Number(count ?? "0"), last: last ?? null };
-        }, Effect.orDie),
+        const count = yield* visits.get("processed-count");
+        const last = yield* visits.get("processed-last");
+        return { count: Number(count ?? "0"), last: last ?? null };
+      }, Effect.orDie),
     };
   }).pipe(
     Effect.provide(KV.ReadWriteNamespaceBinding),

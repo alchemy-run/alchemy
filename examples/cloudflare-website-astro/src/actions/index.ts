@@ -2,23 +2,24 @@
 // and owns the wire (`POST /_actions/<name>`), and each handler calls the
 // backend through the trusted, in-process value form of `createClient` —
 // schema-less RPC never crosses the trust boundary itself.
-import { defineAction, type ActionAPIContext } from "astro:actions";
+import { defineAction } from "astro:actions";
 import { createClient } from "alchemy/Client";
 import { z } from "astro/zod";
 import Backend from "../backend.ts";
 
-const backend = (ctx: ActionAPIContext) =>
-  createClient(Backend, { headers: ctx.request.headers });
+// ONE in-process client at module scope: value-form RPC needs no headers
+// (a method that must self-authorize takes them explicitly).
+const backend = createClient(Backend);
 
 export const server = {
   bump: defineAction({
-    handler: (_input, ctx) => backend(ctx).bump(),
+    handler: () => backend.bump(),
   }),
   enqueue: defineAction({
     input: z.object({ message: z.string().min(1).max(256) }),
-    handler: ({ message }, ctx) => backend(ctx).enqueue(message),
+    handler: ({ message }) => backend.enqueue(message),
   }),
   processed: defineAction({
-    handler: (_input, ctx) => backend(ctx).processed(),
+    handler: () => backend.processed(),
   }),
 };

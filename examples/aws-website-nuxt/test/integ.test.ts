@@ -34,7 +34,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the asset manifest and CloudFront edge caches are still
 // propagating, a 200 body can be stale — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -43,17 +44,17 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
     }
     return body;
   },
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+  Effect.retry({
+    while: (error) => error instanceof AssetNotReady,
+    schedule: Schedule.max([
+      Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
       ]),
-    }),
-  );
+      Schedule.recurs(20),
+    ]),
+  }),
+);
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
@@ -105,12 +106,12 @@ test(
 test(
   "serves the plain nitro api route",
   Effect.gen(function* () {
-    // /api/hello touches no backend — nitro's own handler answers in the
+    // /api/jobs is nitro's own route calling the effectful backend in the
     // same Lambda, alongside the routes that dispatch the backend. This
     // pins the coexistence contract end-to-end.
     const url = yield* base;
-    const body = yield* getBodyWhenReady(`${url}/api/hello`, "from nitro");
-    expect(JSON.parse(body)).toEqual({ hello: "from nitro" });
+    const body = yield* getBodyWhenReady(`${url}/api/jobs`, "count");
+    expect(JSON.parse(body)).toHaveProperty("count");
   }),
   { timeout: 180_000 },
 );

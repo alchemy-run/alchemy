@@ -67,7 +67,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the static-asset manifest is still propagating, Cloudflare serves a
 // managed "content signals" robots.txt with a 200 — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -75,18 +76,18 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+  },
+  Effect.retry({
+    while: (error) => error instanceof AssetNotReady,
+    schedule: Schedule.max([
+      Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
       ]),
-    }),
-  );
+      Schedule.recurs(20),
+    ]),
+  }),
+);
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -141,12 +142,13 @@ test(
   "serves the dynamic API route",
   Effect.gen(function* () {
     const url = yield* base;
-    // Next's own App Router route handler — the backend claims no HTTP
-    // paths, so all of /api/* stays Next's.
-    const res = yield* getWhenReady(`${url}/api/hello`);
+    // Next's own App Router route handler, calling the effectful backend
+    // through the module-scope value-form client — the backend claims no
+    // HTTP paths, so all of /api/* stays Next's.
+    const res = yield* getWhenReady(`${url}/api/jobs`);
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { hello: string };
-    expect(body.hello).toBe("world");
+    const body = (yield* res.json) as { count: number };
+    expect(body.count).toBeGreaterThanOrEqual(0);
   }),
   { timeout: 180_000 },
 );

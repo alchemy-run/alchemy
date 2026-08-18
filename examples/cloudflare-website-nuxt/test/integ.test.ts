@@ -33,7 +33,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the static-asset manifest is still propagating, Cloudflare serves a
 // managed "content signals" robots.txt with a 200 — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -42,17 +43,17 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
     }
     return body;
   },
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+  Effect.retry({
+    while: (error) => error instanceof AssetNotReady,
+    schedule: Schedule.max([
+      Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
       ]),
-    }),
-  );
+      Schedule.recurs(20),
+    ]),
+  }),
+);
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -117,9 +118,9 @@ test(
   "nitro serves its own api routes in the same Worker",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/hello touches no backend — plain nitro, same Worker.
-    const body = yield* getBodyWhenReady(`${url}/api/hello`, "from nitro");
-    expect(JSON.parse(body)).toEqual({ hello: "from nitro" });
+    // /api/jobs is nitro's own route calling the effectful backend.
+    const body = yield* getBodyWhenReady(`${url}/api/jobs`, "count");
+    expect(JSON.parse(body)).toHaveProperty("count");
 
     // /api/visits dispatches the backend method in-process and answers
     // with the KV-backed count.

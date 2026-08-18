@@ -40,7 +40,10 @@ export default function VisitsCard({ initial }: { initial: number }) {
           Bump visits
         </Button>
         {bumped !== null && (
-          <p className="mt-4 text-sm text-muted-foreground" data-testid="bumped">
+          <p
+            className="mt-4 text-sm text-muted-foreground"
+            data-testid="bumped"
+          >
             Client bump →{" "}
             <span className="font-medium text-foreground">{bumped}</span>
           </p>

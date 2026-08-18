@@ -9,7 +9,7 @@
  *                       whatever the framework bound — never hard-coded)
  *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about` (prerendered route) serves
- *   - API route       → `/api/hello` serves the nitro handler
+ *   - API route       → `/api/jobs` serves the nitro handler (backed by the effectful backend)
  *   - backend route   → `POST /api/visits` (the nitro route dispatching
  *                       the backend in-process via createClient) serves
  *                       against the real DynamoDB table, and the useFetch
@@ -158,10 +158,10 @@ test(
     expect(about.status).toBe(200);
 
     // Nitro API route serves through the dev server.
-    const hello = (await (
-      await fetchOk(new URL("/api/hello", url))
-    ).json()) as { hello: string };
-    expect(hello).toEqual({ hello: "from nitro" });
+    const hello = (await (await fetchOk(new URL("/api/jobs", url))).json()) as {
+      hello: string;
+    };
+    expect(hello).toHaveProperty("count");
 
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();

@@ -63,8 +63,7 @@ async function sendToQueue() {
     <div>
       <h1 class="text-3xl font-bold tracking-tight">Nuxt on AWS</h1>
       <p class="mt-2 text-muted-foreground">
-        One Lambda serves the app and the backend; a sibling consumes the
-        queue.
+        One Lambda serves the app and the backend; a sibling consumes the queue.
       </p>
     </div>
     <Card>

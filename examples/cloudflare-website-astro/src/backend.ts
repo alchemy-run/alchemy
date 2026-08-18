@@ -7,6 +7,7 @@ import * as KV from "alchemy/Cloudflare/KV";
 import * as Queues from "alchemy/Cloudflare/Queues";
 import { Astro } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 /**
@@ -75,10 +76,10 @@ export default class Site extends Astro<Site>()(
         retryDelay: "2 seconds",
       },
       (stream) =>
-        Stream.runForEach(stream, Effect.fn(function* (msg) {
-            const count = Number(
-              (yield* visits.get("processed-count")) ?? "0",
-            );
+        Stream.runForEach(
+          stream,
+          Effect.fn(function* (msg) {
+            const count = Number((yield* visits.get("processed-count")) ?? "0");
             yield* visits.put("processed-count", String(count + 1));
             yield* visits.put("processed-last", String(msg.body));
           }, Effect.orDie),
@@ -90,13 +91,13 @@ export default class Site extends Astro<Site>()(
       // `createClient(Backend)` from Astro frontmatter (SSR) and from the
       // Astro Action handlers in src/actions/index.ts.
       visits: Effect.fn(function* () {
-          return Number((yield* visits.get("count")) ?? "0");
-        }, Effect.orDie),
+        return Number((yield* visits.get("count")) ?? "0");
+      }, Effect.orDie),
       bump: Effect.fn(function* () {
-          const count = Number((yield* visits.get("count")) ?? "0") + 1;
-          yield* visits.put("count", String(count));
-          return count;
-        }, Effect.orDie),
+        const count = Number((yield* visits.get("count")) ?? "0") + 1;
+        yield* visits.put("count", String(count));
+        return count;
+      }, Effect.orDie),
       // The async leg's producer (called by the `enqueue` action) — sends
       // a message to the queue; the consumer above catches up
       // asynchronously.
@@ -106,14 +107,18 @@ export default class Site extends Astro<Site>()(
           .pipe(Effect.asVoid, Effect.orDie),
       // Read the consumer's async state (called by the `processed` action).
       processed: Effect.fn(function* () {
-          const count = yield* visits.get("processed-count");
-          const last = yield* visits.get("processed-last");
-          return { count: Number(count ?? "0"), last: last ?? null };
-        }, Effect.orDie),
+        const count = yield* visits.get("processed-count");
+        const last = yield* visits.get("processed-last");
+        return { count: Number(count ?? "0"), last: last ?? null };
+      }, Effect.orDie),
     };
   }).pipe(
-    Effect.provide(KV.ReadWriteNamespaceBinding),
-    Effect.provide(Queues.WriteQueueBinding),
-    Effect.provide(Queues.EventSourceLive),
+    Effect.provide(
+      Layer.mergeAll(
+        KV.ReadWriteNamespaceBinding,
+        Queues.WriteQueueBinding,
+        Queues.EventSourceLive,
+      ),
+    ),
   ),
 ) {}
