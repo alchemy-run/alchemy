@@ -5,10 +5,11 @@ import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthProvid
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { InstanceId } from "@/InstanceId.ts";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Provider } from "@/Provider.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import { State } from "@/State";
+import { type ResourceState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import {
   apiTokenCredentials,
@@ -25,6 +26,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 
@@ -254,6 +256,145 @@ test.provider(
       yield* stack.destroy();
       yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
     }).pipe(logLevel),
+);
+
+// The incident behind https://github.com/alchemy-run/alchemy/issues/1248,
+// end to end against a real bucket: `retain` is added to an
+// already-deployed bucket (a props-identical, noop deploy), the bucket's
+// declaration then moves away, and the old stack's orphan sweep must leave
+// both the bucket and its objects untouched.
+//
+// A bucket cannot be renamed in place — R2 has no rename API, and the
+// provider's `diff` orders a REPLACE on a name change — so "moving" a
+// bucket is always: drop the state row here, adopt the same physical bucket
+// there. Retain is what makes that safe.
+test.provider(
+  "a retained bucket outlives its declaration with its objects intact",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const bucketName = "alchemy-test-retained-move";
+
+      // A retained bucket is alchemy's to forget, not to delete, so an
+      // interrupted earlier run can leave a NON-EMPTY bucket behind — which
+      // the leading `stack.destroy()` could never reclaim on its own (that
+      // is the whole point of the protection under test). Reclaim it out of
+      // band first, then let destroy drain any state row pointing at it.
+      yield* forceDeleteBucket(accountId, bucketName);
+      yield* stack.destroy();
+
+      // ── 1. deploy with the DEFAULT policy, then put an object in it ──
+      const origin = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("Origin", { name: bucketName });
+        }),
+      );
+      expect(origin.bucketName).toEqual(bucketName);
+      yield* putObject(accountId, bucketName, "precious.txt", "irreplaceable");
+      yield* listKeysWhenReady(accountId, bucketName, 1);
+      expect(yield* removalPolicyOf(stack, "Origin")).toEqual("destroy");
+
+      // ── 2. add `retain`, props otherwise identical ──
+      // The policy is a declaration decoration, not a prop, so the plan is a
+      // noop — and the noop path is the only pass that can persist it.
+      const retained = Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("Origin", { name: bucketName }).pipe(
+          RemovalPolicy.retain(),
+        );
+      });
+      const plan = yield* stack.plan(retained);
+      expect(
+        (Object.values(plan.resources) as { action: string }[])[0]?.action,
+      ).toEqual("noop");
+      yield* stack.deploy(retained);
+      expect(yield* removalPolicyOf(stack, "Origin")).toEqual("retain");
+
+      // ── 3. the declaration moves away — the old stack sweeps ──
+      yield* stack.destroy();
+
+      // The state row is dropped either way; only the physical bucket
+      // survives. That is why the bug was silent.
+      expect(yield* stateOf(stack, "Origin")).toBeUndefined();
+      const survivor = yield* r2.getBucket({ accountId, bucketName });
+      expect(survivor.name).toEqual(bucketName);
+      expect(yield* listKeysWhenReady(accountId, bucketName, 1)).toEqual([
+        "precious.txt",
+      ]);
+
+      // ── 4. it lands in its new home by adopting the same bucket ──
+      // (Same stack, new logical id — the engine cannot tell that apart from
+      // the same declaration in a different stack: both `read` the bucket by
+      // name and adopt it.) `forceDestroy` is set here purely so the final
+      // teardown reclaims the test bucket.
+      const moved = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("Destination", {
+            name: bucketName,
+            forceDestroy: true,
+          });
+        }),
+      );
+      expect(moved.bucketName).toEqual(bucketName);
+      expect(yield* listKeysWhenReady(accountId, bucketName, 1)).toEqual([
+        "precious.txt",
+      ]);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucketName, accountId);
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+// The other half of a move: a retained bucket whose REPLACEMENT is ordered
+// (an explicit name change, the only way to "rename" an R2 bucket). The old
+// generation must be left standing, objects and all.
+test.provider(
+  "replacing a retained bucket leaves the old generation and its objects",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const oldName = "alchemy-test-retained-replace-old";
+      const newName = "alchemy-test-retained-replace-new";
+
+      // Same reason as above: retained leftovers from an interrupted run are
+      // never reclaimed by the engine.
+      yield* forceDeleteBucket(accountId, oldName);
+      yield* forceDeleteBucket(accountId, newName);
+      yield* stack.destroy();
+
+      const declare = (name: string) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("Renamed", { name }).pipe(
+            RemovalPolicy.retain(),
+          );
+        });
+
+      yield* stack.deploy(declare(oldName));
+      yield* putObject(accountId, oldName, "precious.txt", "irreplaceable");
+      yield* listKeysWhenReady(accountId, oldName, 1);
+
+      // A name change is a replacement: new bucket created, state re-pointed.
+      const replaced = yield* stack.deploy(declare(newName));
+      expect(replaced.bucketName).toEqual(newName);
+      yield* getBucketWhenReady(newName, accountId);
+
+      // Retain covers the replacement's old generation too — the bucket is
+      // dropped from state, never deleted, and its objects are still there.
+      const old = yield* r2.getBucket({ accountId, bucketName: oldName });
+      expect(old.name).toEqual(oldName);
+      expect(yield* listKeysWhenReady(accountId, oldName, 1)).toEqual([
+        "precious.txt",
+      ]);
+
+      yield* stack.destroy();
+
+      // Retained buckets are alchemy's to forget, not to delete, so this
+      // suite reclaims both out of band.
+      yield* forceDeleteBucket(accountId, oldName);
+      yield* forceDeleteBucket(accountId, newName);
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 test.provider("lifecycle rules are added, updated, and removed", (stack) =>
@@ -702,6 +843,49 @@ const listKeysWhenReady = Effect.fn(function* (
 });
 
 class ListLagError extends Data.TaggedError("ListLagError") {}
+
+const stateOf = Effect.fn(function* (
+  stack: { name: string; state: Layer.Layer<State> },
+  fqn: string,
+) {
+  return yield* Effect.gen(function* () {
+    const state = yield* yield* State;
+    return (yield* state.get({ stack: stack.name, stage: "test", fqn })) as
+      | ResourceState
+      | undefined;
+  }).pipe(Effect.provide(stack.state));
+});
+
+const removalPolicyOf = Effect.fn(function* (
+  stack: { name: string; state: Layer.Layer<State> },
+  fqn: string,
+) {
+  return (yield* stateOf(stack, fqn))?.removalPolicy;
+});
+
+/**
+ * Empty and delete a bucket out of band. Needed only for buckets a test
+ * deliberately RETAINED: alchemy has forgotten them by design, so nothing
+ * else will ever reclaim them.
+ */
+const forceDeleteBucket = Effect.fn(function* (
+  accountId: string,
+  bucketName: string,
+) {
+  yield* r2.listObjects.items({ accountId, bucketName, perPage: 1000 }).pipe(
+    Stream.filter(
+      (o): o is typeof o & { key: string } => typeof o.key === "string",
+    ),
+    Stream.map((o) => o.key),
+    Stream.runForEachArray((chunk) =>
+      r2.deleteObjects({ accountId, bucketName, body: [...chunk] }),
+    ),
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+  );
+  yield* r2
+    .deleteBucket({ accountId, bucketName })
+    .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
+});
 
 // ── destructive deletes require explicit opt-in ────────────────────────
 //
