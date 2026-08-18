@@ -87,6 +87,7 @@ const signingContext = (credentials: BucketCredentials) =>
             accessKeyId: Redacted.make(accessKeyId),
             secretAccessKey,
             sessionToken: undefined,
+            region: BUCKET_SIGNING_REGION,
           }),
         ),
         Layer.succeed(Region.Region, Effect.succeed(BUCKET_SIGNING_REGION)),
