@@ -91,7 +91,7 @@ export type Schema = Resource<
  *
  * const branch = yield* Neon.Branch("app-branch", {
  *   project,
- *   migrationsDir: schema.out,
+ *   migrations: schema,
  * });
  * ```
  *

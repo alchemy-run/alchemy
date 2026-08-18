@@ -288,13 +288,12 @@ type ObservedCatchAll =
   | emailRouting.PutRuleCatchAllResponse;
 
 const normalizeActions = (actions: ObservedCatchAll["actions"]): Action[] =>
-  (actions ?? []).map(
-    (a): Action =>
-      a.type === "drop"
-        ? { type: "drop" }
-        : a.type === "forward"
-          ? { type: "forward", value: [...(a.value ?? [])] }
-          : { type: "worker", value: [...(a.value ?? [])] },
+  (actions ?? []).map((a): Action =>
+    a.type === "drop"
+      ? { type: "drop" }
+      : a.type === "forward"
+        ? { type: "forward", value: [...(a.value ?? [])] }
+        : { type: "worker", value: [...(a.value ?? [])] },
   );
 
 const actionsEqual = (a: Action[], b: Action[]): boolean =>

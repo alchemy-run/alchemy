@@ -409,7 +409,7 @@ export const VpcOriginProvider = () =>
               Effect.catchTag("CannotDeleteEntityWhileInUse", (error) =>
                 Effect.fail(
                   new VpcOriginStillInUse({
-                    message: error.Message ?? "VPC origin still in use",
+                    message: error.message ?? "VPC origin still in use",
                   }),
                 ),
               ),

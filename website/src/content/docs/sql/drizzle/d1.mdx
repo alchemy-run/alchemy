@@ -65,7 +65,7 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 
 `Drizzle.Schema` diffs the schema module on each deploy and writes
 pending migration SQL to `out`. Passing `schema.out` as the
-database's `migrationsDir` creates the dependency edge: generate
+database's `migrations` prop creates the dependency edge: generate
 first, apply second, in one `alchemy deploy`:
 
 ```typescript
@@ -82,8 +82,7 @@ export const Database = Effect.gen(function* () {
   });
 
   return yield* Cloudflare.D1.Database("app-db", {
-    migrationsDir: schema.out,
-    migrationsTable: "drizzle_migrations",
+    migrations: schema,
   });
 });
 ```

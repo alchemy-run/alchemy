@@ -5,8 +5,11 @@ description: Replace raw pg with Drizzle's effect-postgres integration, manage y
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const drizzleDeps = `drizzle-orm@^1.0.0-rc.4 @effect/sql-pg pg`;
-export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.4 @types/pg`;
+{/* TODO: update to plain 1.0.0-rc.5 (or stable) once drizzle publishes it —
+    1.0.0-rc.5-ab785fc is a WIP rc5-branch build, pinned exactly because
+    rc.4 breaks against effect >= 4.0.0-rc.110. */}
+export const drizzleDeps = `drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg`;
+export const drizzleDevDeps = `drizzle-kit@1.0.0-rc.5-ab785fc @types/pg`;
 export const mysqlDeps = `@effect/sql-mysql2 mysql2`;
 
 The previous tutorial wired your Worker to Neon Postgres through
@@ -104,10 +107,18 @@ Add `drizzle-orm`, `@effect/sql-pg`, and `pg` as runtime deps and
   </TabItem>
 </Tabs>
 
+:::caution
+The exact `1.0.0-rc.5-ab785fc` pin is deliberate: it's a pre-release
+build from drizzle's rc5 branch and currently the only drizzle release
+compatible with `effect >= 4.0.0-rc.110` — `1.0.0-rc.4` crashes at
+import time against it. Don't widen the version range until drizzle
+publishes a proper `1.0.0-rc.5` (or stable `1.0.0`).
+:::
+
 ## Add `Drizzle.Schema` to your Db effect
 
 Inline the schema resource directly into `NeonDb` — its `out`
-output becomes the input to `Neon.Branch`'s `migrationsDir`, so
+output becomes the input to `Neon.Branch`'s `migrations`, so
 alchemy automatically schedules `Drizzle.Schema` *before* the
 branch resource each deploy:
 
@@ -128,7 +139,7 @@ export const NeonDb = Effect.gen(function* () {
 -  const branch = yield* Neon.Branch("app-branch", { project });
 +  const branch = yield* Neon.Branch("app-branch", {
 +    project,
-+    migrationsDir: schema.out,
++    migrations: schema,
 +  });
 -  return { project, branch };
 +  return { project, branch, schema };
@@ -159,7 +170,7 @@ wrappers around queries:
 ```typescript
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
@@ -299,8 +310,8 @@ Add a column or a table to `src/schema.ts` and run
 1. Diffs the new schema against the latest snapshot.
 2. Writes a *new* migration directory with just the delta SQL.
 3. `Neon.Branch` notices the new file, runs it inside a
-   transaction, and records it in the `neon_migrations` tracking
-   table so it's not re-applied.
+   transaction, and records it in the `__alchemy_migrations`
+   tracking table so it's not re-applied.
 
 Roll back simply by reverting your schema change and redeploying —
 or by spinning up a `Neon.Branch` that forks from a point-in-time
@@ -337,7 +348,7 @@ import * as Layer from "effect/Layer";
 
 Then rebuild `src/Db.ts` around a PlanetScale Postgres database,
 branch, and role. `Drizzle.Schema` is unchanged, and
-`Planetscale.PostgresBranch` accepts the same `migrationsDir`
+`Planetscale.PostgresBranch` accepts the same `migrations`
 contract `Neon.Branch` did — it scans the directory and applies
 pending migrations transactionally on every deploy:
 
@@ -361,7 +372,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
 
   const branch = yield* Planetscale.PostgresBranch("app-branch", {
     database,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   const role = yield* Planetscale.PostgresRole("app-role", {
@@ -461,7 +472,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
   const branch = yield* Planetscale.MySQLBranch("app-branch", {
     database,
     isProduction: false,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   const password = yield* Planetscale.MySQLPassword("app-password", {
@@ -493,7 +504,7 @@ At runtime, `Drizzle.MySQL` is the drop-in sibling of
 ```typescript
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "alchemy/Drizzle/MySQL";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";

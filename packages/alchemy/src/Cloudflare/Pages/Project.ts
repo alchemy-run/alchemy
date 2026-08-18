@@ -358,17 +358,15 @@ export const ProjectProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map(
-              (project): ProjectAttributes => ({
-                projectId: project.id,
-                accountId,
-                name: project.name,
-                subdomain: project.subdomain ?? `${project.name}.pages.dev`,
-                domains: [...(project.domains ?? [])],
-                productionBranch: project.productionBranch,
-                createdOn: project.createdOn,
-              }),
-            ),
+            (page.result ?? []).map((project): ProjectAttributes => ({
+              projectId: project.id,
+              accountId,
+              name: project.name,
+              subdomain: project.subdomain ?? `${project.name}.pages.dev`,
+              domains: [...(project.domains ?? [])],
+              productionBranch: project.productionBranch,
+              createdOn: project.createdOn,
+            })),
           ),
         ),
       );

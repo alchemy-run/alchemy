@@ -56,7 +56,7 @@ export interface GenerateDataKeyRequest extends Omit<
  * // Envelope encryption pairs GenerateDataKey with Decrypt — provide
  * // both HTTP layers on the Function's init Effect.
  * export default EnvelopeFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const key = yield* AWS.KMS.Key("DataKey");
  *     const generateDataKey = yield* AWS.KMS.GenerateDataKey(key);

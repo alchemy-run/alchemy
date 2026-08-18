@@ -28,7 +28,7 @@ Three things happen:
 
 1. **Emulatable services run locally** — KV Namespaces, R2 Buckets,
    D1 Databases, and Queues are created as local simulators with
-   `dev:`-prefixed ids. No cloud calls. D1 applies `migrationsDir`
+   `dev:`-prefixed ids. No cloud calls. D1 applies `migrations`
    and `importFiles` against the local database.
 2. **Workers run locally in workerd** — your code executes in
    workerd, the same runtime used in production, with bindings wired
@@ -112,7 +112,7 @@ Resources adapt their behavior in dev mode:
   instead of deploying to the edge
 - **Vite dev servers** — integrate with Alchemy's dev server for
   frontend hot reloading alongside your backend
-- **D1 Databases** — emulate locally, with `migrationsDir` and
+- **D1 Databases** — emulate locally, with `migrations` and
   `importFiles` applied to the local database on every reconcile
 
 A resource emulates locally when its provider ships a local

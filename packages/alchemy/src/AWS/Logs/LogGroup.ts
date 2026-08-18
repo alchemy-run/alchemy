@@ -206,14 +206,13 @@ export const LogGroupProvider = () =>
                   const tags = yield* logs
                     .listTagsForResource({ resourceArn: tagArn })
                     .pipe(
-                      Effect.map(
-                        (r): Record<string, string> =>
-                          Object.fromEntries(
-                            Object.entries(r.tags ?? {}).filter(
-                              (entry): entry is [string, string] =>
-                                typeof entry[1] === "string",
-                            ),
+                      Effect.map((r): Record<string, string> =>
+                        Object.fromEntries(
+                          Object.entries(r.tags ?? {}).filter(
+                            (entry): entry is [string, string] =>
+                              typeof entry[1] === "string",
                           ),
+                        ),
                       ),
                       Effect.catchTag("ResourceNotFoundException", () =>
                         Effect.succeed({} as Record<string, string>),
@@ -362,14 +361,13 @@ export const LogGroupProvider = () =>
           const observedTags = yield* logs
             .listTagsForResource({ resourceArn: arn })
             .pipe(
-              Effect.map(
-                (r): Record<string, string> =>
-                  Object.fromEntries(
-                    Object.entries(r.tags ?? {}).filter(
-                      (entry): entry is [string, string] =>
-                        typeof entry[1] === "string",
-                    ),
+              Effect.map((r): Record<string, string> =>
+                Object.fromEntries(
+                  Object.entries(r.tags ?? {}).filter(
+                    (entry): entry is [string, string] =>
+                      typeof entry[1] === "string",
                   ),
+                ),
               ),
               Effect.catch(() => Effect.succeed({} as Record<string, string>)),
             );

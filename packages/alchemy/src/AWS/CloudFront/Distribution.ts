@@ -8,7 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 
@@ -295,7 +295,7 @@ export interface DistributionOriginGroup {
 }
 
 const isFunctionAssociationPending = (error: cloudfront.InvalidArgument) => {
-  const message = error.Message ?? "";
+  const message = error.message ?? "";
   return (
     message.includes("FunctionAssociationArn") &&
     message.includes("not found or is not published")
@@ -396,6 +396,44 @@ export interface DistributionProps {
   tags?: Record<string, string>;
 }
 
+/**
+ * Binding contract of {@link Distribution}: composites contribute additional
+ * alternate domain names without a circular input prop (e.g. a site attached
+ * to an `AWS.Website.Router` binds its hostnames onto the Router's
+ * distribution). Bound aliases are merged with the declared `aliases` prop
+ * at reconcile time; the viewer certificate must cover them.
+ */
+export type DistributionBinding = {
+  /**
+   * Additional alternate domain names (CNAMEs) attached to the
+   * distribution.
+   */
+  aliases?: string[];
+};
+
+/**
+ * Union of declared and bound aliases (see {@link DistributionBinding}),
+ * deduped, preserving declared order first. Tolerates both `{ sid, data }`
+ * rows (provider lifecycle) and bare binding payloads.
+ * @internal
+ */
+const resolveEffectiveAliases = (
+  declared: string[] | undefined,
+  bindings:
+    | ReadonlyArray<DistributionBinding | ResourceBinding<DistributionBinding>>
+    | undefined,
+): string[] | undefined => {
+  const bound = (bindings ?? []).flatMap((binding) =>
+    "data" in binding && binding.data !== undefined
+      ? ((binding as ResourceBinding<DistributionBinding>).data.aliases ?? [])
+      : ((binding as DistributionBinding).aliases ?? []),
+  );
+  if (bound.length === 0) {
+    return declared;
+  }
+  return [...new Set([...(declared ?? []), ...bound])];
+};
+
 export interface Distribution extends Resource<
   "AWS.CloudFront.Distribution",
   DistributionProps,
@@ -449,7 +487,7 @@ export interface Distribution extends Resource<
      */
     tags: Record<string, string>;
   },
-  never,
+  DistributionBinding,
   Providers
 > {}
 
@@ -535,6 +573,16 @@ export const DistributionProvider = () =>
           `CloudFront Distribution wait: polling deployment for ${distributionId}`,
         );
         return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
+          // Bound each poll — a wedged read must count as "not deployed
+          // yet" and retry, never hang the deploy (see the delete-wait).
+          Effect.timeout(30_000),
+          Effect.catchTag("TimeoutError", () =>
+            Effect.fail(
+              new DistributionPendingDeployment({
+                message: `Timed out reading distribution ${distributionId} while polling deployment`,
+              }),
+            ),
+          ),
           Effect.map((response) => response.Distribution),
           Effect.flatMap((distribution) =>
             distribution?.Status === "Deployed"
@@ -670,7 +718,23 @@ export const DistributionProvider = () =>
         return yield* Effect.logInfo(
           `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
         ).pipe(
-          Effect.andThen(() => getCurrent(distributionId)),
+          // Bound each poll: a single wedged HTTP read (stale keep-alive
+          // socket) otherwise hangs the whole destroy — observed as a
+          // disable-wait that logged one poll and then sat silent past a
+          // 60-minute test budget. Timeout counts as "not ready yet" and
+          // rides the same bounded retry.
+          Effect.andThen(() =>
+            getCurrent(distributionId).pipe(
+              Effect.timeout(30_000),
+              Effect.catchTag("TimeoutError", () =>
+                Effect.fail(
+                  new DistributionPendingDeletionReadiness({
+                    message: `Timed out reading distribution ${distributionId} while waiting for deletion readiness`,
+                  }),
+                ),
+              ),
+            ),
+          ),
           Effect.flatMap(
             Effect.fn(function* (current) {
               if (!current) {
@@ -796,10 +860,18 @@ export const DistributionProvider = () =>
         reconcile: Effect.fn(function* ({
           id,
           instanceId,
-          news,
+          news: _news,
           output,
           session,
+          bindings,
         }) {
+          // Fold bound aliases (see `DistributionBinding`) into the desired
+          // props up front so both the create and update paths (`toConfig`)
+          // attach them uniformly.
+          const news: typeof _news = {
+            ..._news,
+            aliases: resolveEffectiveAliases(_news.aliases, bindings),
+          };
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
@@ -916,7 +988,7 @@ export const DistributionProvider = () =>
                             Effect.fail(
                               new DistributionFunctionAssociationPending({
                                 message:
-                                  error.Message ??
+                                  error.message ??
                                   "CloudFront function association pending",
                               }),
                             ),
@@ -988,7 +1060,7 @@ export const DistributionProvider = () =>
                           Effect.fail(
                             new DistributionFunctionAssociationPending({
                               message:
-                                error.Message ??
+                                error.message ??
                                 "CloudFront function association pending",
                             }),
                           ),

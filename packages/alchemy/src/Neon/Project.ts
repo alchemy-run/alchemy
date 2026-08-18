@@ -22,17 +22,18 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  hashImports,
-  hashMigrations,
-  listSqlFiles,
-  readSqlFile,
-} from "../SQL/SqlFile.ts";
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "../SQL/Migrations/index.ts";
+import { hashImports, hashMigrations, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
-import { applyMigrations, runSql } from "./Migrations.ts";
+import { runPgMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 
-const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 const DEFAULT_REGION: NeonRegion = "aws-us-east-1";
 const DEFAULT_PG_VERSION: NeonPgVersion = 17;
 
@@ -105,17 +106,17 @@ export type ProjectProps = {
    */
   enableLogicalReplication?: boolean;
   /**
-   * Directory containing `.sql` migration files. Files are sorted by their
-   * numeric prefix (e.g. `0001_init.sql`) and applied in order against the
-   * default branch's primary database.
-   */
-  migrationsDir?: string;
-  /**
-   * Name of the table used to track applied migrations.
+   * SQL migrations to apply against the default branch's primary database.
+   * Accepts a directory path, a `Drizzle.Schema` resource, or
+   * `{ dir, table? }`.
    *
-   * @default "neon_migrations"
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy: the old tool's applied history is
+   * copied into Alchemy's table and the old table is left frozen. No
+   * baselining required.
    */
-  migrationsTable?: string;
+  migrations?: MigrationsInput;
   /**
    * Paths to additional `.sql` files to apply after migrations. Each file
    * is hashed; only files whose contents change are re-applied on
@@ -197,7 +198,7 @@ type ProjectAttributes = Project["Attributes"];
  * @example Apply migrations and seed files
  * ```typescript
  * const project = yield* Neon.Project("my-project", {
- *   migrationsDir: "./migrations",
+ *   migrations: "./migrations",
  *   importFiles: ["./seed/users.sql"],
  * });
  * ```
@@ -264,17 +265,8 @@ export const ProjectProvider = () =>
       ) {
         return { action: "update" } as const;
       }
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update" } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update" } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update" } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -306,8 +298,8 @@ export const ProjectProvider = () =>
       if (!match) return undefined;
       return yield* hydrateProjectAttributes(match, {
         defaultBranchName: olds?.defaultBranchName,
-        migrationsDir: olds?.migrationsDir,
-        migrationsTable: olds?.migrationsTable,
+        migrationsDir: (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable: (olds && migrationsInputOf(olds))?.table,
       });
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
@@ -403,17 +395,14 @@ export const ProjectProvider = () =>
           });
 
       const connectionUri = Redacted.make(projectInfo.connectionUri);
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
-        ? yield* runMigrations(
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* runPgMigrations({
             connectionUri,
-            news.migrationsDir,
-            migrationsTable,
-          )
-        : (output?.migrationsHashes ?? {});
+            input: migrationsInput,
+            stamped: stampedOf(output),
+          })
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* runImports(
             connectionUri,
@@ -425,9 +414,7 @@ export const ProjectProvider = () =>
 
       return {
         ...projectInfo,
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
       };
     }),
@@ -688,25 +675,6 @@ const hydrateProjectAttributes = (
       migrationsHashes: {},
       importHashes: {},
     } satisfies ProjectAttributes;
-  });
-
-const runMigrations = (
-  connectionUri: Redacted.Redacted<string>,
-  migrationsDir: string,
-  migrationsTable: string,
-) =>
-  Effect.gen(function* () {
-    const files = yield* listSqlFiles(migrationsDir);
-    if (files.length > 0) {
-      yield* applyMigrations({
-        connectionUri,
-        migrationsTable,
-        migrationsFiles: files,
-      });
-    }
-    const hashes: Record<string, string> = {};
-    for (const file of files) hashes[file.id] = file.hash;
-    return hashes;
   });
 
 const runImports = (

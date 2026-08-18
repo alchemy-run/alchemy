@@ -2,10 +2,8 @@
 /** @effect-diagnostics missingEffectError:off */
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
@@ -42,9 +40,14 @@ import {
   tryFindProviderByType,
   type ProviderService,
 } from "./Provider.ts";
-import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import {
+  defaultProviderMode,
+  stampedMode,
+  type ProviderMode,
+} from "./ProviderMode.ts";
 import {
   isResource,
+  missingImplementation,
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
@@ -62,6 +65,7 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
+import { isPlainData, mapPlainData } from "./Util/data.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -118,9 +122,31 @@ export interface BaseNode<
   bindings: BindingNode<R["Binding"]>[];
 }
 
+/**
+ * Base for the apply-side nodes (create/update/replace/noop) — the nodes a
+ * DECLARED resource plans to. Only these can carry a rename: a `Delete`
+ * node is an orphaned row with no declaration, so nothing can claim to
+ * have renamed it (migrating rows are excluded from the orphan pass
+ * entirely).
+ */
+export interface ApplyNodeBase<
+  R extends ResourceLike<string> = ResourceLike<string>,
+> extends BaseNode<R> {
+  /**
+   * Set when this resource's persisted row was found under former FQNs
+   * (`renamedFrom(...)`) — the migration source (no row at the current FQN
+   * yet) and/or stale leftovers from interrupted migrations (same
+   * `instanceId` as the resource's row; a rename chain with repeated
+   * partial failures can leave several). Apply persists the move up-front,
+   * before any lifecycle operation runs: commit `state` at the current
+   * FQN, then delete every former row.
+   */
+  renamedFrom?: string[] | undefined;
+}
+
 export interface Create<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "create";
   props: R["Props"];
   state: CreatingResourceState | undefined;
@@ -128,7 +154,7 @@ export interface Create<
 
 export interface Update<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "update";
   /** True while this is the first reconcile after a cold adoption. */
   adopting?: boolean;
@@ -152,14 +178,14 @@ export interface Delete<
 
 export interface NoopUpdate<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "noop";
   state: CreatedResourceState | UpdatedResourceState;
 }
 
 export interface Replace<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "replace";
   props: any;
   deleteFirst: boolean;
@@ -274,6 +300,23 @@ export const make = <A>(
     const resources = Object.values(stack.resources);
     const actions = Object.values(stack.actions ?? {});
 
+    // A bare platform tag yields a forward reference registered with
+    // `undefined` props (and `RequiresImplementation`); its `.make(props,
+    // impl)` Layer repairs the props when it builds (in either order — the
+    // #874 circular env-tag pattern). Props still `undefined` after the
+    // whole program evaluated means the tag was yielded but its Layer was
+    // never provided — fail fast naming the class and its Layer instead of
+    // letting a provider read `undefined` props (#1054). Plain resources
+    // may legitimately be yielded without props (a reference to
+    // already-deployed state), so the check is scoped to platform tags.
+    for (const resource of resources) {
+      if (resource.RequiresImplementation && resource.Props === undefined) {
+        yield* Effect.die(
+          missingImplementation(resource.Type, resource.LogicalId),
+        );
+      }
+    }
+
     // TODO(sam): rename terminology to Stack
     const stackName = stack.name;
     const stage = stack.stage;
@@ -322,17 +365,20 @@ export const make = <A>(
 
     /**
      * Has this resource switched provider modes since it was last
-     * reconciled? Rows without a persisted mode (legacy rows, or rows
-     * written by a mode-agnostic provider) are assumed to already be in
-     * the current run's mode — no replacement churn.
+     * reconciled? Rows without a persisted mode were written by a
+     * pre-provider-mode engine (or a provider that only became dual-mode
+     * later) — their physical resource is LIVE unless its attrs carry a
+     * `dev:` identity marker proving it was reconciled locally (see
+     * {@link stampedMode}). A dev run replaces unstamped live rows exactly
+     * like stamped live rows; live runs replace unstamped marker rows.
      */
     const hasModeSwitched = (
       mode: ProviderMode | undefined,
       oldState: ResourceState | undefined,
     ): boolean =>
       mode !== undefined &&
-      oldState?.providerMode !== undefined &&
-      oldState.providerMode !== mode;
+      oldState !== undefined &&
+      stampedMode(oldState) !== mode;
 
     const resourceFqns = yield* state.list({
       stack: stackName,
@@ -344,6 +390,211 @@ export const make = <A>(
       ),
       { concurrency: "unbounded" },
     );
+
+    // Snapshot of every persisted row, keyed by FQN. The rename resolution
+    // below reads from this map instead of issuing per-FQN `state.get`s —
+    // every renamedFrom-decorated resource (each StaticSite carries one
+    // forever) would otherwise add two round-trips per resource to every
+    // plan against a remote state store. Plan is read-only, so the
+    // snapshot cannot go stale within this run.
+    const persistedRows = new Map(
+      resourceFqns.map((fqn, i) => [fqn, oldResources[i]]),
+    );
+
+    // ── FQN renames ──────────────────────────────────────────────────────
+    // Map every former FQN claimed via `renamedFrom(...)` to its claimant's
+    // current FQN. Two resources claiming the same former FQN is ambiguous
+    // and fatal. A former FQN MAY still be actively declared — that is the
+    // "old id reused by a new resource" case: the rename claim wins the
+    // row (it is an explicit user statement that the row was theirs), and
+    // the reusing resource plans a fresh create.
+    const formerFqnClaims = new Map<string, string>();
+    for (const resource of resources) {
+      for (const formerFqn of resource.FormerFqns ?? []) {
+        if (formerFqn === resource.FQN) continue;
+        const claimant = formerFqnClaims.get(formerFqn);
+        if (claimant !== undefined && claimant !== resource.FQN) {
+          return yield* Effect.die(
+            new Error(
+              `Resources '${claimant}' and '${resource.FQN}' both claim ` +
+                `former FQN '${formerFqn}' via renamedFrom(...). A former ` +
+                "FQN can migrate to exactly one resource — remove the " +
+                "decoration from one of them.",
+            ),
+          );
+        }
+        formerFqnClaims.set(formerFqn, resource.FQN);
+      }
+    }
+
+    // Resolve every rename migration up-front against the state snapshot,
+    // BEFORE any node is built — other resources' planning depends on the
+    // outcome (a resource declared at a former FQN whose row is migrating
+    // away must start from scratch).
+    //
+    // For each renamer, in former-id declaration order (most recent
+    // first):
+    //
+    // - `source` is the row that defines the resource's physical identity:
+    //   the row at its own FQN when present AND type-matching, otherwise
+    //   the first type-matching former row (→ `moved`).
+    // - every OTHER type-matching former row sharing `source.instanceId`
+    //   is a leftover from an interrupted migration (only migration copies
+    //   instanceIds) — collected for state-only cleanup.
+    // - former rows with a different instanceId belong to someone else and
+    //   are left to normal orphan handling; former rows with a different
+    //   resourceType (modulo registered type-aliases) can never be this
+    //   resource's row and are skipped entirely.
+    // - a FOREIGN-typed row at the renamer's own FQN blocks the migration
+    //   fatally: landing the migrated row there would silently abandon
+    //   that row's cloud resource.
+    const renameMigrations = new Map<
+      string,
+      { row: ResourceState; renamedFrom: string[]; moved: boolean }
+    >();
+    const migratedRowFqns = new Set<string>();
+
+    const resolveRenamer = Effect.fn(function* (resource: ResourceLike) {
+      const provider = Option.getOrUndefined(
+        yield* tryFindProviderByType(resource.Type),
+      );
+      const allowedTypes = new Set([
+        resource.Type,
+        ...(provider?.aliases ?? []),
+      ]);
+      const persisted = persistedRows.get(resource.FQN);
+      const persistedRow = isActionState(persisted)
+        ? undefined
+        : (persisted as ResourceState | undefined);
+      // A row at this resource's own FQN that a PREVIOUSLY RESOLVED
+      // renamer claimed (a same-deploy shift: A→B while B→C — C took the
+      // row at B) is moving away: it is not ours to keep and it does not
+      // block the migration landing here.
+      const rowTaken = migratedRowFqns.has(resource.FQN);
+      const ownRow =
+        !rowTaken &&
+        persistedRow !== undefined &&
+        allowedTypes.has(persistedRow.resourceType)
+          ? persistedRow
+          : undefined;
+
+      let source: ResourceState | undefined = ownRow;
+      let adopted: ResourceState | undefined = ownRow;
+      const renamedFrom: string[] = [];
+      for (const formerFqn of resource.FormerFqns!) {
+        if (formerFqnClaims.get(formerFqn) !== resource.FQN) continue;
+        // The same former id may be listed twice (or resolve identically);
+        // collect each former row once.
+        if (renamedFrom.includes(formerFqn)) continue;
+        const formerPersisted = persistedRows.get(formerFqn);
+        if (formerPersisted === undefined || isActionState(formerPersisted)) {
+          continue;
+        }
+        const formerRow = formerPersisted as ResourceState;
+        if (!allowedTypes.has(formerRow.resourceType)) continue;
+        if (source === undefined) {
+          source = formerRow;
+          adopted = {
+            ...formerRow,
+            fqn: resource.FQN,
+            logicalId: resource.LogicalId,
+            namespace: resource.Namespace,
+          } as ResourceState;
+          renamedFrom.push(formerFqn);
+        } else if (source.instanceId === formerRow.instanceId) {
+          renamedFrom.push(formerFqn);
+        }
+      }
+      if (renamedFrom.length === 0) return;
+      if (persistedRow !== undefined && ownRow === undefined && !rowTaken) {
+        return yield* Effect.die(
+          new Error(
+            `Cannot migrate '${renamedFrom[0]}' to '${resource.FQN}': a ` +
+              `state row of a different type ('${persistedRow.resourceType}') ` +
+              `already occupies '${resource.FQN}'. Migrating over it would ` +
+              "silently abandon that row's cloud resource. Delete or " +
+              "rename the conflicting resource first, then re-deploy.",
+          ),
+        );
+      }
+      renameMigrations.set(resource.FQN, {
+        row: adopted!,
+        renamedFrom,
+        moved: adopted !== ownRow,
+      });
+      for (const formerFqn of renamedFrom) migratedRowFqns.add(formerFqn);
+    });
+
+    // Resolve renamers in claim-dependency order: when resource R's OWN
+    // FQN is claimed as a former id by resource S (a same-deploy shift:
+    // A→B while B→C), S must resolve first — whether S takes R's row
+    // decides whether R still owns it, or falls back to ITS former rows.
+    // Iterate to fixpoint; anything left is a claim CYCLE (a swap: A⇄B),
+    // which cannot be persisted safely — the migrations would overwrite
+    // and delete each other's rows — and dies loudly.
+    let pendingRenamers = resources.filter((r) => r.FormerFqns?.length);
+    const resolvedRenamers = new Set<string>();
+    while (pendingRenamers.length > 0) {
+      const ready = pendingRenamers.filter((resource) => {
+        const claimant = formerFqnClaims.get(resource.FQN);
+        return claimant === undefined || resolvedRenamers.has(claimant);
+      });
+      if (ready.length === 0) {
+        return yield* Effect.die(
+          new Error(
+            `Rename cycle detected among [${pendingRenamers
+              .map((r) => `'${r.FQN}'`)
+              .join(
+                ", ",
+              )}]: their renamedFrom(...) declarations claim each other's ` +
+              "FQNs. Swapping ids in one deploy is not supported — rename " +
+              "through a temporary id across two deploys instead.",
+          ),
+        );
+      }
+      for (const resource of ready) {
+        yield* resolveRenamer(resource);
+        resolvedRenamers.add(resource.FQN);
+      }
+      pendingRenamers = pendingRenamers.filter(
+        (r) => !resolvedRenamers.has(r.FQN),
+      );
+    }
+
+    /**
+     * Fetch the persisted row for a declared resource, resolving renames
+     * (see the pre-computed `renameMigrations` above):
+     *
+     * - a renamer plans from its migrated row (`renamedFrom` rides onto
+     *   the plan node; apply persists the move before any lifecycle op)
+     * - a resource declared at a former FQN whose row is migrating away
+     *   starts from scratch — the row is NOT its state, whatever the FQN
+     *   says
+     */
+    const getPersistedRow = Effect.fn(function* (
+      resource: Pick<ResourceLike, "FQN">,
+    ) {
+      const migration = renameMigrations.get(resource.FQN);
+      if (migration !== undefined) {
+        return {
+          row: migration.row,
+          renamedFrom: migration.renamedFrom,
+          renameMoved: migration.moved,
+        };
+      }
+      const persisted = yield* state.get({
+        stack: stackName,
+        stage: stage,
+        fqn: resource.FQN,
+      });
+      const row = isActionState(persisted)
+        ? undefined
+        : (persisted as ResourceState | undefined);
+      if (row !== undefined && migratedRowFqns.has(resource.FQN)) {
+        return { row: undefined, renamedFrom: undefined, renameMoved: false };
+      }
+      return { row, renamedFrom: undefined, renameMoved: false };
+    });
 
     const resolvedResources: Record<string, Effect.Effect<any>> = {};
 
@@ -368,16 +619,10 @@ export const make = <A>(
               const props = materializeStableRefs(
                 yield* resolveInput(resource.Props),
               );
-              const persisted = yield* state.get({
-                stack: stackName,
-                stage: stage,
-                fqn: resource.FQN,
-              });
-              const oldState: ResourceState | undefined = isActionState(
-                persisted,
-              )
-                ? undefined
-                : (persisted as ResourceState | undefined);
+              // Falls back to the row at a former FQN (`renamedFrom`) so a
+              // renamed resource's stable attributes keep flowing to
+              // downstream diffs across the migration.
+              const { row: oldState } = yield* getPersistedRow(resource);
 
               if (!oldState || oldState.status === "creating") {
                 return resourceExpr;
@@ -485,7 +730,15 @@ export const make = <A>(
      * `reconcile`. This is the value plan nodes carry; the diff-facing view
      * is derived from it by {@link materializeStableRefs}.
      */
-    const resolveInput = (input: any): Effect.Effect<any, Config.ConfigError> =>
+    const resolveInput = (
+      input: any,
+      // Ancestor chain of the current walk. A value that appears on its own
+      // ancestor path is a true cycle and is cut to `undefined` (a cycle can
+      // never persist or serialize anyway); an immutable per-level set (not
+      // a shared visited-set) keeps legitimately-shared diamond references
+      // intact and is race-free under `concurrency: "unbounded"` (#1082).
+      ancestors: ReadonlySet<object> = new Set(),
+    ): Effect.Effect<any, Config.ConfigError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
@@ -498,17 +751,7 @@ export const make = <A>(
           // providers receive a resolved value instead of a Config object.
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
-          return yield* resolveInput(yield* input);
-        } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
-          // Opaque values that are resolved downstream. We don't walk them
-          // because it would strip their prototype, resulting in a plain object
-          // that downstream consumers can't interpret. Redacted additionally
-          // stays wrapped to preserve the secrecy boundary.
-          return input;
-        } else if (Array.isArray(input)) {
-          return yield* Effect.all(input.map(resolveInput), {
-            concurrency: "unbounded",
-          });
+          return yield* resolveInput(yield* input, ancestors);
         } else if (isResource(input)) {
           // Resource objects have dynamic properties (path, hash, etc.) that are
           // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
@@ -521,17 +764,37 @@ export const make = <A>(
             // upstream) — keep it evaluable for Apply.
             return resolved;
           }
-          return yield* resolveInput(resolved);
-        } else if (typeof input === "object") {
+          return yield* resolveInput(resolved, ancestors);
+        } else if (isPlainData(input)) {
+          if (ancestors.has(input)) {
+            return undefined;
+          }
+          const nested = new Set(ancestors).add(input);
+          if (Array.isArray(input)) {
+            return yield* Effect.all(
+              input.map((item) => resolveInput(item, nested)),
+              { concurrency: "unbounded" },
+            );
+          }
           return Object.fromEntries(
             yield* Effect.all(
               Object.entries(input).map(([key, value]) =>
-                resolveInput(value).pipe(Effect.map((value) => [key, value])),
+                resolveInput(value, nested).pipe(
+                  Effect.map((value) => [key, value]),
+                ),
               ),
               { concurrency: "unbounded" },
             ),
           );
         }
+        // Everything else is an opaque leaf returned by identity: Duration,
+        // Redacted, Date, and effect runtime values (a Worker's `exports`
+        // carries each DO's `constructor` Effect and captured `services`
+        // Context). Rebuilding a class instance entry-by-entry would strip
+        // its prototype, and effect ≥4.0.0-beta.103's Context is cyclic
+        // (#1082). Redacted additionally stays wrapped to preserve the
+        // secrecy boundary. This sits after `Config.isConfig` on purpose —
+        // Configs are Effects but must still resolve.
         return input;
       });
 
@@ -550,26 +813,26 @@ export const make = <A>(
      * the upstream's fresh non-stable attributes (e.g. a Lambda Version's
      * `version` number — #993's alias promotion bug).
      */
-    const materializeStableRefs = (input: any): any => {
+    const materializeStableRefs = (
+      input: any,
+      // Ancestor-path cycle guard — see resolveInput (#1082). Sync DFS, so
+      // add/delete around the recursion is race-free.
+      ancestors: WeakSet<object> = new WeakSet(),
+    ): any => {
       // Expr checks come first: Output proxies are callable, so a plain
       // `typeof input === "object"` guard would let them slip through.
       if (Output.isResourceExpr(input) && input.stables) {
-        return materializeStableRefs(input.stables);
+        return materializeStableRefs(input.stables, ancestors);
       } else if (Output.isExpr(input)) {
         // Genuinely unknown (e.g. a creating upstream) — nothing to show diff.
         return input;
-      } else if (!input || typeof input !== "object") {
+      } else if (!input || !isPlainData(input)) {
+        // Primitives and non-plain instances (Duration, Redacted, Date,
+        // Effect/Layer/Context) are leaves — see isPlainData (#1082).
         return input;
-      } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
-        return input;
-      } else if (Array.isArray(input)) {
-        return input.map(materializeStableRefs);
       }
-      return Object.fromEntries(
-        Object.entries(input).map(([key, value]) => [
-          key,
-          materializeStableRefs(value),
-        ]),
+      return mapPlainData(input, ancestors, (child) =>
+        materializeStableRefs(child, ancestors),
       );
     };
 
@@ -848,17 +1111,18 @@ export const make = <A>(
             // `bindingOutputs`, not these plan-time shapes.
             const newBindings: ResourceBinding[] =
               materializeStableRefs(applyBindings);
-            const persisted = yield* state.get({
-              stack: stackName,
-              stage: stage,
-              fqn,
-            });
-            // A Task previously held this FQN. Treat as if there were no
-            // prior state — the Task's row will be reaped by `actionDeletions`
-            // below and the resource starts from scratch.
-            let oldState: ResourceState | undefined = isActionState(persisted)
-              ? undefined
-              : (persisted as ResourceState | undefined);
+            // The row is looked up at the resource's FQN with a fallback to
+            // its former FQNs (`renamedFrom`); a row found under a former
+            // FQN arrives here already remapped to the new identity, and
+            // `renamedFrom` rides onto the plan node so apply persists the
+            // move. (A Task previously holding this FQN is treated as no
+            // prior state — its row is reaped by `actionDeletions` below.)
+            const {
+              row: persistedRow,
+              renamedFrom,
+              renameMoved,
+            } = yield* getPersistedRow(resource);
+            let oldState: ResourceState | undefined = persistedRow;
 
             // Engine-level adoption. When there is no prior state, always
             // consult `provider.read` (if implemented) so the engine — not
@@ -908,8 +1172,20 @@ export const make = <A>(
             // SDK protocol layer. Resources whose props depend on
             // not-yet-created upstreams cannot themselves be pre-existing
             // — there's nothing to adopt.
+            // A resource declared at a former FQN whose row just migrated
+            // away is genuinely NEW by declaration — skip the probe. Its
+            // predecessor's physical resource still carries tags branded
+            // with THIS logical id (the migrated row's reconcile hasn't
+            // re-branded them yet), so a tag-based `read` would find it
+            // and silently adopt the very resource that was renamed away.
+            const reusesMigratedFqn = migratedRowFqns.has(fqn);
             let forceUpdateAfterAdoption = false;
-            if (oldState === undefined && provider.read && isResolved(news)) {
+            if (
+              oldState === undefined &&
+              provider.read &&
+              isResolved(news) &&
+              !reusesMigratedFqn
+            ) {
               const adoptInstanceId = yield* generateInstanceId();
               const readResult = yield* provider
                 .read({
@@ -1002,6 +1278,7 @@ export const make = <A>(
                 bindings: bindingDiffs,
                 downstream,
                 mode,
+                renamedFrom,
               }) as any as T;
 
             // Plan against the persisted state we have, not the ideal final state we
@@ -1142,8 +1419,16 @@ export const make = <A>(
                   // would noop and any drift between the existing cloud
                   // resource and `news` — including foreign-owned tags after a
                   // takeover — would persist).
+                  //
+                  // A row that just migrated from a former FQN (`renameMoved`)
+                  // gets the same treatment: its cloud resource is still
+                  // branded with the OLD logical id's tags, and if the old id
+                  // is being reused by a new resource, leaving them stale
+                  // would let the reuser's future adoption probes match the
+                  // wrong physical resource.
                   Effect.map((diff) =>
-                    forceUpdateAfterAdoption && diff.action === "noop"
+                    (forceUpdateAfterAdoption || renameMoved) &&
+                    diff.action === "noop"
                       ? ({ action: "update" } satisfies UpdateDiff)
                       : diff,
                   ),
@@ -1502,6 +1787,15 @@ export const make = <A>(
             if (isActionState(persisted)) return;
             const oldState = persisted as ResourceState | undefined;
             if (oldState) {
+              // A row being migrated by a rename (`renameMigrations`) is
+              // moving, not orphaned — apply drops it state-only after
+              // committing the migrated row at its new FQN. Rows at former
+              // FQNs that did NOT migrate (foreign type, different
+              // instanceId, unclaimed) are absent from this set and fall
+              // through to normal orphan deletion.
+              if (migratedRowFqns.has(fqn)) {
+                return;
+              }
               const { logicalId } = parseFqn(fqn);
               const resourceType = oldState.resourceType;
               // A "zombie" row references a type with no registered provider
@@ -1512,12 +1806,16 @@ export const make = <A>(
               // and the remediation instead of limping into a partial apply.
               //
               // Orphan deletes resolve the provider variant for the mode
-              // that created the row (`providerMode`), so e.g. a local dev
+              // that created the row (`providerMode`, or the `dev:` marker
+              // inference for legacy unstamped rows), so e.g. a local dev
               // worker's row is deleted by the local provider even during a
-              // live deploy — and vice versa.
+              // live deploy — and vice versa. Unstamped rows are physically
+              // live unless their attrs carry the marker (see stampedMode),
+              // never the run default.
+              const rowMode = stampedMode(oldState);
               const providerOption = yield* tryFindProviderByType(
                 resourceType,
-                oldState.providerMode,
+                rowMode,
               );
               if (Option.isNone(providerOption)) {
                 return yield* Effect.die(
@@ -1548,7 +1846,9 @@ export const make = <A>(
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
                     Adopt: undefined,
+                    RequiresImplementation: undefined,
                     Mode: oldState.providerMode,
+                    FormerFqns: undefined,
                     RuntimeContext: undefined!,
                     Providers: undefined,
                   } as ResourceLike,
@@ -1735,7 +2035,10 @@ export const printPlan = (plan: Plan): string => {
     const downstream = node.state?.downstream?.length
       ? ` → [${node.state?.downstream.join(", ")}]`
       : "";
-    lines.push(`│ [${symbol}] ${id} (${type})${downstream}`);
+    const renamed = node.renamedFrom?.length
+      ? ` (renamed from ${node.renamedFrom.join(", ")})`
+      : "";
+    lines.push(`│ [${symbol}] ${id} (${type})${downstream}${renamed}`);
   }
   if (resourceIds.length === 0) {
     lines.push("│ (none)");

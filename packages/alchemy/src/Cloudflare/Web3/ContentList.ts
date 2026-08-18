@@ -304,15 +304,13 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
       zoneId,
       hostnameId,
       action: (list.action ?? "block") as "block",
-      entries: (entries.entries ?? []).map(
-        (entry): ContentListEntry => ({
-          content: entry.content ?? "",
-          type: (entry.type ?? "cid") as ContentListEntryType,
-          ...(entry.description != null
-            ? { description: entry.description }
-            : {}),
-        }),
-      ),
+      entries: (entries.entries ?? []).map((entry): ContentListEntry => ({
+        content: entry.content ?? "",
+        type: (entry.type ?? "cid") as ContentListEntryType,
+        ...(entry.description != null
+          ? { description: entry.description }
+          : {}),
+      })),
     } satisfies HostnameContentListAttributes;
   }).pipe(
     Effect.catchTag(["Web3HostnameNotFound", "InvalidWeb3HostnameTarget"], () =>

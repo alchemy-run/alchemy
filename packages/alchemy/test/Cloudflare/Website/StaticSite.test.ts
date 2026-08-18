@@ -15,7 +15,7 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -30,6 +30,13 @@ const logLevel = Effect.provideService(
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
 const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
+
+// Read back through `Config.string` by the #796 test below. Set at module
+// load (collection time): `ConfigProvider.fromEnv` snapshots `process.env`
+// when the test harness constructs the provider — BEFORE a test body runs —
+// so setting this inside the test only ever satisfied the NEXT attempt
+// (the failure was masked by the runner's default retry).
+process.env.STATICSITE_ENV_TEST = "from-config";
 
 describe.concurrent("StaticSite", () => {
   test.provider(
@@ -475,7 +482,9 @@ describe.concurrent("StaticSite", () => {
         // asset directory, forever.
         const settled = yield* stack.plan(program());
         expect(actionOf(settled, "NoopSite/Build")).toBe("noop");
-        expect(actionOf(settled, "NoopSite/Worker")).toBe("noop");
+        // The Worker is declared at the site's own id (only Build/Dev are
+        // namespaced under it), so its plan row is keyed `NoopSite`.
+        expect(actionOf(settled, "NoopSite")).toBe("noop");
 
         // ...because the persisted hash is the build's `output` hash — the
         // content hash of the uploaded bytes — and not the `{ input, output }`
@@ -749,10 +758,9 @@ describe.concurrent("StaticSite", () => {
           "#!/bin/bash\nmkdir -p dist\necho dep > dist/dep.txt\n",
         );
 
-        yield* Effect.sync(() => {
-          process.env.STATICSITE_ENV_TEST = "from-config";
-        });
-
+        // `STATICSITE_ENV_TEST` is set at module load (see top of file) —
+        // the harness's ConfigProvider snapshots process.env before the
+        // test body runs.
         yield* stack.deploy(
           Effect.gen(function* () {
             const dep = yield* Command.Build("EnvDep", {
@@ -796,6 +804,123 @@ describe.concurrent("StaticSite", () => {
         expect(envFile).toContain("FROM_NULL=null");
 
         yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // SPA fallback: `assets.notFoundHandling: "single-page-application"`
+  //
+  // An assets-only deploy (no `main`) where Cloudflare's asset layer
+  // answers every request itself: an unmatched deep link must fall back
+  // to `index.html` with a 200 so a client router can boot, while real
+  // assets keep serving their own bytes.
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "StaticSite: SPA not-found handling serves index.html for deep links",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const cwd = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-staticsite-spa-",
+          entries: ["src", "build.sh", ".gitignore"],
+        });
+        // Deterministic marker: the shell content is the assertion target
+        // for both the direct fetch and the deep-link fallback.
+        const marker = "staticsite-spa-shell";
+        yield* fs.writeFileString(
+          path.join(cwd, "src", "index.html"),
+          htmlPage(marker),
+        );
+        // A sibling asset that must keep serving its own bytes, not the
+        // shell, under SPA handling.
+        yield* fs.writeFileString(
+          path.join(cwd, "src", "data.txt"),
+          "staticsite-spa-plain-asset",
+        );
+        // Binary assets whose uploads must carry real content types
+        // (avif/jpeg/webp/woff2 previously fell back to
+        // application/octet-stream).
+        for (const name of [
+          "sample.avif",
+          "sample.jpg",
+          "sample.webp",
+          "sample.woff2",
+        ]) {
+          yield* fs.writeFile(
+            path.join(cwd, "src", name),
+            new Uint8Array([0x00, 0x01, 0x02, 0x03]),
+          );
+        }
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.StaticSite("SpaSite", {
+              command: "bash build.sh",
+              shell: true,
+              cwd,
+              outdir: "dist",
+              workersDev: true,
+              compatibility: { date: "2024-01-01" },
+              // Assets-only (no `main`): with a Worker script in front,
+              // unmatched requests would invoke the Worker instead of the
+              // asset layer's not-found handling.
+              assets: { notFoundHandling: "single-page-application" },
+            });
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        expect(site.hash?.assets).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // The shell serves at its real path.
+        yield* expectUrlContains(`${site.url!}/index.html`, marker, {
+          timeout: "120 seconds",
+          label: "SPA shell at /index.html",
+        });
+
+        // A hard GET to a route that matches no asset falls back to the
+        // shell with a 200 — `expectUrlContains` requires `res.ok`, so a
+        // plain 404 can't satisfy this.
+        yield* expectUrlContains(`${site.url!}/app/deep/route`, marker, {
+          timeout: "60 seconds",
+          label: "deep link falls back to index.html",
+        });
+
+        // A real asset still serves its own bytes, not the shell.
+        const assetBody = yield* expectUrlContains(
+          `${site.url!}/data.txt`,
+          "staticsite-spa-plain-asset",
+          {
+            timeout: "60 seconds",
+            label: "plain asset with SPA handling",
+          },
+        );
+        expect(assetBody).not.toContain(marker);
+
+        // Content types for common binary asset formats survive upload.
+        for (const [name, contentType] of [
+          ["sample.avif", "image/avif"],
+          ["sample.jpg", "image/jpeg"],
+          ["sample.webp", "image/webp"],
+          ["sample.woff2", "font/woff2"],
+        ] as const) {
+          yield* expectUrlHeader(
+            `${site.url!}/${name}`,
+            "content-type",
+            contentType,
+          );
+        }
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
   );

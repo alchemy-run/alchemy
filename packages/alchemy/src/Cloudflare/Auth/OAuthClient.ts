@@ -30,14 +30,16 @@ export interface Authorization {
 }
 
 function generateState(length = 32): string {
-  return crypto.randomBytes(length).toString("base64url");
+  return Buffer.from(crypto.randomBytes(length)).toString("base64url");
 }
 
 function generatePKCE(length = 96): {
   verifier: string;
   challenge: string;
 } {
-  const verifier = crypto.randomBytes(length).toString("base64url");
+  const verifier = Buffer.from(crypto.randomBytes(length)).toString(
+    "base64url",
+  );
   const challenge = crypto
     .createHash("sha256")
     .update(verifier)

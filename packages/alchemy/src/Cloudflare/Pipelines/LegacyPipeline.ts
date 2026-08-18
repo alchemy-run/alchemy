@@ -181,8 +181,8 @@ export type LegacyPipeline = Resource<
  *   destination: {
  *     bucket: bucket.bucketName,
  *     credentials: {
- *       accessKeyId: alchemy.secret.env.R2_ACCESS_KEY_ID,
- *       secretAccessKey: alchemy.secret.env.R2_SECRET_ACCESS_KEY,
+ *       accessKeyId: yield* Config.redacted("R2_ACCESS_KEY_ID"),
+ *       secretAccessKey: yield* Config.redacted("R2_SECRET_ACCESS_KEY"),
  *     },
  *   },
  * });

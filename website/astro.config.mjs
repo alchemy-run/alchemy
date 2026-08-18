@@ -5,33 +5,12 @@ import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
-import { promises as fs, readFileSync } from "node:fs";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
-
-/**
- * The Providers sidebar (Provider → Category → Service → Resource) is generated
- * by `scripts/generate-api-reference.ts` from `@category` JSDoc annotations and
- * written to `src/generated/providers-sidebar.json`. `bun run build:reference`
- * regenerates it before every build. If it hasn't been generated yet (e.g. a
- * fresh `astro dev` before running the generator), fall back to autogenerating
- * from the directory tree so the docs still build.
- */
-function providersSidebar() {
-  try {
-    const json = readFileSync(
-      fileURLToPath(
-        new URL("./src/generated/providers-sidebar.json", import.meta.url),
-      ),
-      "utf8",
-    );
-    return JSON.parse(json);
-  } catch {
-    return undefined;
-  }
-}
+import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
@@ -49,6 +28,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
+      { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
@@ -68,9 +48,8 @@ function providersSidebarEntry() {
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
 function providerResourcesEntry(...providers) {
-  const sidebar = providersSidebar();
-  const entryItems = (provider) => {
-    const group = sidebar?.find((p) => p.label === provider);
+  const entryItems = (/** @type {string} */ provider) => {
+    const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
     return [
       { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
@@ -185,7 +164,12 @@ function buildOutputChecks() {
   return {
     name: "build-output-checks",
     hooks: {
-      "astro:build:done": async ({ dir, logger }) => {
+      "astro:build:done": async (
+        /** @type {{ dir: URL, logger: import("astro").AstroRuntimeLogger }} */ {
+          dir,
+          logger,
+        },
+      ) => {
         const distPath = fileURLToPath(dir);
 
         /** @type {Set<string>} */
@@ -373,7 +357,7 @@ export default defineConfig({
         !page.endsWith(".mdx"),
     }),
     starlight({
-      title: "alchemy",
+      title: "Alchemy",
       favicon: "/favicon.svg",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
@@ -415,6 +399,10 @@ export default defineConfig({
                 {
                   label: "Resources",
                   link: "/infrastructure-as-code/resource",
+                },
+                {
+                  label: "Renaming Resources",
+                  link: "/infrastructure-as-code/renaming",
                 },
                 { label: "Actions", link: "/infrastructure-as-code/action" },
                 {
@@ -682,32 +670,38 @@ export default defineConfig({
                   label: "Overview",
                   link: "/cloudflare/frontend/frontends",
                 },
-                { label: "Vite", link: "/cloudflare/frontend/vite" },
-                {
-                  label: "Static sites",
-                  link: "/cloudflare/frontend/static-site",
-                },
-                { label: "React SPA", link: "/cloudflare/frontend/vite-spa" },
-                {
-                  label: "TanStack Start",
-                  link: "/cloudflare/frontend/tanstack-start",
-                },
+                { label: "Astro", link: "/cloudflare/frontend/astro" },
+                { label: "Foldkit", link: "/cloudflare/frontend/foldkit" },
                 {
                   label: "Full-stack RPC + Drizzle",
                   link: "/cloudflare/frontend/full-stack-tanstack-rpc-drizzle",
                 },
+                { label: "Next.js", link: "/cloudflare/frontend/nextjs" },
+                { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
                 {
                   label: "React Router",
                   link: "/cloudflare/frontend/react-router",
                 },
-                { label: "Vue", link: "/cloudflare/frontend/vue" },
-                { label: "Foldkit", link: "/cloudflare/frontend/foldkit" },
+                { label: "React SPA", link: "/cloudflare/frontend/vite-spa" },
                 {
                   label: "SolidStart",
                   link: "/cloudflare/frontend/solidstart",
                 },
-                { label: "Astro", link: "/cloudflare/frontend/astro" },
-                { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
+                {
+                  label: "Static sites",
+                  link: "/cloudflare/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/cloudflare/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/cloudflare/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/cloudflare/frontend/vite" },
+                { label: "Vue", link: "/cloudflare/frontend/vue" },
+                { label: "Waku", link: "/cloudflare/frontend/waku" },
               ],
             },
             {
@@ -853,8 +847,22 @@ export default defineConfig({
             {
               label: "Frontend",
               items: [
-                { label: "Websites", link: "/aws/frontend/websites" },
-                { label: "Static site", link: "/aws/frontend/static-site" },
+                {
+                  label: "Overview",
+                  link: "/aws/frontend/websites",
+                },
+                { label: "Astro", link: "/aws/frontend/astro" },
+                { label: "Next.js", link: "/aws/frontend/nextjs" },
+                { label: "Nuxt", link: "/aws/frontend/nuxt" },
+                {
+                  label: "Static sites",
+                  link: "/aws/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/aws/frontend/sveltekit",
+                },
+                { label: "Waku", link: "/aws/frontend/waku" },
               ],
             },
             {
@@ -906,6 +914,10 @@ export default defineConfig({
             {
               label: "Email",
               items: [
+                {
+                  label: "Sending & managing email",
+                  link: "/aws/email/sending",
+                },
                 {
                   label: "Receiving inbound email",
                   link: "/aws/email/receiving",
@@ -1028,6 +1040,15 @@ export default defineConfig({
           ],
         },
         {
+          label: "Better Auth",
+          items: [
+            { label: "Overview", link: "/better-auth" },
+            { label: "Database layers", link: "/better-auth/database-layers" },
+            { label: "Migrations", link: "/better-auth/migrations" },
+            providerResourcesEntry("BetterAuth"),
+          ],
+        },
+        {
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
@@ -1134,5 +1155,8 @@ export default defineConfig({
       // (declared as a direct dependency) instead.
       external: ["satteri"],
     },
+  },
+  experimental: {
+    incrementalBuild: true,
   },
 });

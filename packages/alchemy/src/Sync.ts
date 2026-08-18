@@ -15,6 +15,7 @@ import { deepEqual } from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
+import { stampedMode } from "./ProviderMode.ts";
 import type { ResourceLike } from "./Resource.ts";
 import {
   isActionState,
@@ -187,9 +188,10 @@ export const sync = (
 
       // Observe with the provider variant of the mode that created the row —
       // a local dev worker's state must be read by the local provider.
+      // Legacy unstamped rows infer "local" from a `dev:` identity marker.
       const provider = yield* findProviderByType(
         resourceType,
-        old.providerMode,
+        stampedMode(old),
       );
       if (!provider.read) {
         return yield* skip(
@@ -445,7 +447,7 @@ export const plan = (stack: {
       // switches modes — a local ⇄ live switch is a plan-time replacement).
       const provider = yield* findProviderByType(
         persisted.resourceType,
-        persisted.providerMode,
+        stampedMode(persisted),
       );
       const action =
         r.action === "drifted"
@@ -472,6 +474,8 @@ export const plan = (stack: {
           Provider: Provider(persisted.resourceType),
           RemovalPolicy: persisted.removalPolicy,
           Adopt: undefined,
+          RequiresImplementation: undefined,
+          FormerFqns: undefined,
           Mode: persisted.providerMode,
           RuntimeContext: undefined!,
           Providers: undefined,

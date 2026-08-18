@@ -1,9 +1,6 @@
 {
   "files": [],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ],
+  "exclude": ["node_modules", "dist"],
   "references": [
     // distilled (dependencies first so `tsc -b` emits their `lib/` before the
     // packages that consume them — otherwise a clean build races the not-yet-emitted
@@ -26,23 +23,21 @@
     {
       "path": "./distilled/packages/neon/tsconfig.json"
     },
-    // cloudflare-tools (submodule) — reference the composite leaf configs
-    // directly; the per-package tsconfig.json files are non-composite
-    // solution configs that `tsc -b` cannot reference.
+    // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
-      "path": "./cloudflare-tools/packages/cloudflare-rolldown-plugin/tsconfig.json"
+      "path": "./packages/node-utils/tsconfig.json"
     },
     {
-      "path": "./cloudflare-tools/packages/cloudflare-runtime/tsconfig.node.json"
+      "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {
-      "path": "./cloudflare-tools/packages/cloudflare-runtime/tsconfig.workers.json"
+      "path": "./packages/frontend-frameworks/tsconfig.json"
     },
     {
-      "path": "./cloudflare-tools/packages/cloudflare-vite-plugin/tsconfig.node.json"
+      "path": "./packages/floci/tsconfig.json"
     },
     {
-      "path": "./cloudflare-tools/packages/cloudflare-vite-plugin/tsconfig.workers.json"
+      "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
     // {
     //   "path": "./tsconfig.scripts.json"
@@ -91,6 +86,9 @@
       "path": "./examples/aws-lambda-rpc/tsconfig.json"
     },
     {
+      "path": "./examples/aws-dev/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-lambda/tsconfig.json"
     },
     {
@@ -137,6 +135,21 @@
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-waku/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-worker-async/tsconfig.json"

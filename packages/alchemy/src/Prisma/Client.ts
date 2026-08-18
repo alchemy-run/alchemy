@@ -1263,30 +1263,26 @@ function makePrismaClient(): Effect.Effect<
           `/v1/deployments/${pathSegment(id)}/logs`,
           logsQuery(query),
         ).pipe(
-          Effect.map(
-            (url): DeploymentLogsRequest => ({
-              url,
-              headers: {
-                Authorization: Redacted.make(
-                  `Bearer ${Redacted.value(env.serviceToken)}`,
-                ),
-              },
-            }),
-          ),
+          Effect.map((url): DeploymentLogsRequest => ({
+            url,
+            headers: {
+              Authorization: Redacted.make(
+                `Bearer ${Redacted.value(env.serviceToken)}`,
+              ),
+            },
+          })),
         ),
       getBuildLogsRequest: (buildId, query) =>
         buildUrl(`/v1/builds/${pathSegment(buildId)}/logs`, query).pipe(
-          Effect.map(
-            (url): BuildLogsRequest => ({
-              url,
-              headers: {
-                Authorization: Redacted.make(
-                  `Bearer ${Redacted.value(env.serviceToken)}`,
-                ),
-                Accept: "application/x-ndjson",
-              },
-            }),
-          ),
+          Effect.map((url): BuildLogsRequest => ({
+            url,
+            headers: {
+              Authorization: Redacted.make(
+                `Bearer ${Redacted.value(env.serviceToken)}`,
+              ),
+              Accept: "application/x-ndjson",
+            },
+          })),
         ),
 
       listEnvironmentVariables: (query) =>

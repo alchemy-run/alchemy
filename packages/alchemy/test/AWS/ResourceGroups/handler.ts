@@ -29,7 +29,7 @@ const tagOf = <A extends object, E extends { _tag: string; message?: string }>(
 export default RGTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {

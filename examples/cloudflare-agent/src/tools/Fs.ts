@@ -13,8 +13,8 @@ The path to the file to search.`;
 export const contents = AI.Parameter("contents", S.String)`
 The contents of the file to write.`;
 
-export class WriteFile extends AI.Tool<WriteFile>()("writeFile")`
-Create or overwrite a file at the given ${path} with the provided ${contents}.` {}
+export class WriteFile extends (AI.Tool<WriteFile>()("writeFile")`
+Create or overwrite a file at the given ${path} with the provided ${contents}.`) {}
 
 export const Storage = Cloudflare.R2.Bucket("Storage");
 
@@ -37,8 +37,8 @@ export const WriteFileDevBox = Layer.effect(
   }),
 );
 
-export class ReadFile extends AI.Tool("readFile")`
-Read the contents of a file at the given ${path}.` {}
+export class ReadFile extends (AI.Tool("readFile")`
+Read the contents of a file at the given ${path}.`) {}
 
-export class EditFile extends AI.Tool("editFile")`
-Apply a targeted edit to an existing file by replacing an exact string with a new one.` {}
+export class EditFile extends (AI.Tool("editFile")`
+Apply a targeted edit to an existing file by replacing an exact string with a new one.`) {}

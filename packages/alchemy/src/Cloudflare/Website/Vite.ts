@@ -138,6 +138,23 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
+ * {@link Foldkit | Cloudflare.Website.Foldkit} is the same thing with that
+ * default already applied.
+ *
+ * @example Octane SPA
+ * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
+ * routes) is a plain Vite SPA — the `octane()` compiler plugin in the app's
+ * own `vite.config.ts` composes with the injected Cloudflare plugin:
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("Octane", {
+ *   assets: {
+ *     notFoundHandling: "single-page-application",
+ *   },
+ * });
+ * ```
+ * Fullstack Octane apps (routes + SSR in `octane.config.ts`) run their own
+ * two-pass build through Octane's Cloudflare adapter — deploy those with
+ * `Cloudflare.Website.Octane` instead.
  *
  * @section Serving on a Zone Route with a Path Prefix
  * Cloudflare matches static assets against the full request pathname,
@@ -215,10 +232,9 @@ export const Vite: {
         | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -229,10 +245,9 @@ export const Vite: {
       | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers

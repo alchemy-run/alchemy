@@ -21,7 +21,7 @@ export interface BatchGetTracesRequest extends xray.BatchGetTracesRequest {}
  * import * as XRay from "alchemy/AWS/XRay";
  *
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true, tracing: "Active" },
+ *   { main: import.meta.url, functionUrl: true, tracing: "Active" },
  *   Effect.gen(function* () {
  *     // init — bind the operation (grants xray:BatchGetTraces)
  *     const batchGetTraces = yield* XRay.BatchGetTraces();

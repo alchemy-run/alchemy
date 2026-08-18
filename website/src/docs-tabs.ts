@@ -61,6 +61,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Better Auth",
+    href: "/better-auth",
+    prefixes: ["/better-auth", "/providers/betterauth"],
+    slot: "more",
+    category: "Auth",
+    hint: "sessions · plugins · database layers",
+  },
+  {
     label: "Axiom",
     href: "/axiom",
     prefixes: ["/axiom", "/providers/axiom"],

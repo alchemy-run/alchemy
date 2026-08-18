@@ -50,7 +50,7 @@ const branch = yield* Planetscale.PostgresBranch("app-branch", {
 
 `parentBranch` defaults to `"main"` and also accepts another
 `PostgresBranch`, so branches can chain. Branches take the same
-`migrationsDir` / `importFiles` props as the database — see
+`migrations` / `importFiles` props as the database — see
 [Migrations](/planetscale/data/migrations) for how SQL files are hashed
 and applied, and the
 [branch from a shared database](/cloudflare/data/branch-from-shared-database)
@@ -141,7 +141,7 @@ If you need a URL instead of components, `connectionUrl` and
 
 ## Where next
 
-- [Migrations](/planetscale/data/migrations) — `migrationsDir` and
+- [Migrations](/planetscale/data/migrations) — `migrations` and
   `importFiles` on databases and branches.
 - [Hyperdrive](/cloudflare/data/hyperdrive) — edge-pooled connections from
   Workers to your PlanetScale database.

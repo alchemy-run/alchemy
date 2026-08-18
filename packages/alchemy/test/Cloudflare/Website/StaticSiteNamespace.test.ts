@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Namespace from "@/Namespace.ts";
 import * as Stack from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { inMemoryState, type State } from "@/State";
@@ -16,10 +17,10 @@ const { test } = Test.make({
 // `env` — the pattern `examples/cloudflare-tanstack` uses.
 const Cache = Cloudflare.KV.Namespace("Cache", {});
 
-/** Compile the stack and return the FQN of every registered resource. */
-const fqns = <A, Err = never, Req = never>(
+/** Compile the stack and return its registered resources. */
+const compile = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
-): Effect.Effect<string[], Err, State> =>
+): Effect.Effect<Stack.CompiledStack["resources"], Err, State> =>
   effect.pipe(
     // @ts-expect-error - Stack.make's typing erases R unsoundly here
     Stack.make({
@@ -28,9 +29,15 @@ const fqns = <A, Err = never, Req = never>(
       state: inMemoryState(),
     }),
     Effect.provideService(Stage, "test"),
-    Effect.map((stack: Stack.CompiledStack) =>
-      Object.keys(stack.resources).sort(),
-    ),
+    Effect.map((stack: Stack.CompiledStack) => stack.resources),
+  );
+
+/** Compile the stack and return the FQN of every registered resource. */
+const fqns = <A, Err = never, Req = never>(
+  effect: Effect.Effect<A, Err, Req>,
+): Effect.Effect<string[], Err, State> =>
+  compile(effect).pipe(
+    Effect.map((resources) => Object.keys(resources).sort()),
   );
 
 test(
@@ -54,6 +61,31 @@ test(
 );
 
 test(
+  "StaticSite claims its pre-#1053 `<id>/Worker` FQN, including when nested",
+  Effect.gen(function* () {
+    const resources = yield* compile(
+      Effect.gen(function* () {
+        // Top-level site.
+        yield* Cloudflare.Website.StaticSite("Site", {
+          command: "echo build",
+          outdir: "dist",
+          main: "./worker.ts",
+        });
+        // Site nested inside a caller namespace — the former FQN must
+        // resolve under the same `App/` prefix as the site itself.
+        yield* Cloudflare.Website.StaticSite("Nested", {
+          command: "echo build",
+          outdir: "dist",
+          main: "./worker.ts",
+        }).pipe(Namespace.push("App"));
+      }),
+    );
+    expect(resources["Site"]?.FormerFqns).toEqual(["Site/Worker"]);
+    expect(resources["App/Nested"]?.FormerFqns).toEqual(["App/Nested/Worker"]);
+  }),
+);
+
+test(
   "Vite declares env resources in the caller's namespace",
   Effect.gen(function* () {
     const keys = yield* fqns(
@@ -66,5 +98,24 @@ test(
       }),
     );
     expect(keys).toEqual(["Cache", "Site"]);
+  }),
+);
+
+test(
+  "Astro forwards the prerender environment to its source provider",
+  Effect.gen(function* () {
+    const resources = yield* compile(
+      Cloudflare.Website.Astro("Astro", {
+        prerenderEnvironment: "node",
+        sessionKVBindingName: false,
+      }),
+    );
+    expect(resources["Astro"]?.Props.source).toMatchObject({
+      provider: "@alchemy.run/frontend-frameworks/astro/source",
+      devMode: "server",
+      options: {
+        prerenderEnvironment: "node",
+      },
+    });
   }),
 );

@@ -19,10 +19,10 @@
  *
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
-import { open } from "@distilled.cloud/cloudflare-runtime/platform-proxy";
-import { D1 } from "@distilled.cloud/cloudflare-runtime/bindings";
-import { SERVICE_D1 } from "@distilled.cloud/cloudflare-runtime/bindings/d1/D1Options";
-import type { BindingHook } from "@distilled.cloud/cloudflare-runtime/PluginContext";
+import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
+import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
+import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";

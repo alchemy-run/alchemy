@@ -127,12 +127,10 @@ export const PermissionProvider = () =>
                     .filter(
                       (s): s is { Sid: string } => typeof s.Sid === "string",
                     )
-                    .map(
-                      (s): PermissionAttrs => ({
-                        statementId: s.Sid,
-                        eventBusName: busName,
-                      }),
-                    );
+                    .map((s): PermissionAttrs => ({
+                      statementId: s.Sid,
+                      eventBusName: busName,
+                    }));
                 }).pipe(
                   // Bus removed out of band between list and describe — skip.
                   Effect.catchTag("ResourceNotFoundException", () =>

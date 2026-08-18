@@ -22,7 +22,7 @@ export interface StartFlowRequest extends Omit<
  * @example Start an On-Demand Flow Run from a Handler
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const flow = yield* AWS.AppFlow.Flow("CopyFlow", { ... });
  *     // init — bind the operation to the flow

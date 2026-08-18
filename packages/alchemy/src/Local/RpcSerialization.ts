@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { flow } from "effect/Function";
@@ -189,11 +190,33 @@ const serializeRpcArgs = (value: unknown): unknown => {
       value: Redacted.value(value),
     } satisfies RedactedMarker;
   }
+  // Output must be tested BEFORE Effect.isEffect — Output exprs are yieldable
+  // and would otherwise be misclassified as plain Effects.
   if (Output.isOutput(value)) {
     return {
       _tag: "Output",
       description: NodeUtil.inspect(value),
     };
+  }
+  // Runtime-only effect values riding in props (e.g. a Worker's `exports`
+  // carries each DO's `constructor` Effect and captured `services` Context —
+  // passed through prop resolution by identity since #1094). They cannot
+  // cross the wire (function-valued internals kill capnweb) and the sidecar
+  // never runs them (`stripEffects` drops them from `news` provider-side), so
+  // ship a marker that deserializes back into an equivalent leaf: an Effect
+  // that dies loudly if it IS ever run, keeping `isResolved`/`stripEffects`
+  // semantics identical on both sides of the boundary.
+  if (Effect.isEffect(value)) {
+    return {
+      _tag: "~alchemy/Rpc/Effect",
+      description: NodeUtil.inspect(value),
+    } satisfies EffectMarker;
+  }
+  if (Context.isContext(value)) {
+    return {
+      _tag: "~alchemy/Rpc/Context",
+      description: NodeUtil.inspect(value),
+    } satisfies ContextMarker;
   }
   if (typeof value === "function") {
     return null;
@@ -211,6 +234,28 @@ const serializeRpcArgs = (value: unknown): unknown => {
   }
   return value;
 };
+
+interface EffectMarker {
+  readonly _tag: "~alchemy/Rpc/Effect";
+  readonly description: string;
+}
+
+interface ContextMarker {
+  readonly _tag: "~alchemy/Rpc/Context";
+  readonly description: string;
+}
+
+const isEffectMarker = (value: object): value is EffectMarker =>
+  "_tag" in value &&
+  value._tag === "~alchemy/Rpc/Effect" &&
+  "description" in value &&
+  typeof value.description === "string";
+
+const isContextMarker = (value: object): value is ContextMarker =>
+  "_tag" in value &&
+  value._tag === "~alchemy/Rpc/Context" &&
+  "description" in value &&
+  typeof value.description === "string";
 
 const deserializeRpcArgs = (value: unknown): unknown => {
   if (Array.isArray(value)) {
@@ -230,6 +275,19 @@ const deserializeRpcArgs = (value: unknown): unknown => {
         new Output.EffectExpr(Output.VoidExpr, () => Effect.never),
         value.description,
       );
+    } else if (isEffectMarker(value)) {
+      // Rebuild an Effect-typed leaf so `isResolved`/`stripEffects` classify
+      // it exactly like the original; dies loudly if anything ever runs it.
+      const description = value.description;
+      return Effect.suspend(() =>
+        Effect.die(
+          new Error(
+            `An Effect from the resource's props cannot cross the RPC provider boundary and was replaced by a placeholder: ${description}`,
+          ),
+        ),
+      );
+    } else if (isContextMarker(value)) {
+      return Context.empty();
     }
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [

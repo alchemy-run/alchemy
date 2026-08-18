@@ -1,0 +1,176 @@
+onlyBuiltDependencies:
+  - "@parcel/watcher"
+  - esbuild
+  - msgpackr-extract
+  - sharp
+  - workerd
+allowBuilds:
+  "@parcel/watcher": true
+  es5-ext: false
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+  vue-demi: false
+  workerd: true
+packages:
+  - website
+  - packages/*
+  - examples/*
+  - examples/monorepo-single-stack/*
+  - examples/monorepo-multi-stack/*
+  - benchmark/*
+  - distilled/packages/*
+  - fixtures/*
+catalogs:
+  auth:
+    better-auth: ^1.6.2
+  aws:
+    "@aws/durable-execution-sdk-js": ^2.1.0
+    "@aws-crypto/crc32": ^5.2.0
+    "@aws-crypto/util": ^5.2.0
+    "@aws-sdk/credential-providers": ^3.0.0
+    "@aws-sdk/types": ^3.973.1
+    "@smithy/node-config-provider": ^4.0.0
+    "@smithy/shared-ini-file-loader": ^4.3.4
+    "@smithy/types": ^4.8.1
+    "@smithy/util-base64": ^4.3.0
+    "@types/aws-lambda": ^8.10.152
+    aws4fetch: ^1.0.20
+  build:
+    "@vercel/nft": ^1.10.2
+    rolldown: 1.1.5
+    tsdown: ^0.22.4
+    typescript: ^7.0.2
+    vite: ^8.0.7
+  cloudflare:
+    "@cloudflare/containers": ^0.3.7
+    "@cloudflare/puppeteer": ^1.1.0
+    "@cloudflare/vite-plugin": ^1.13.12
+    "@cloudflare/workers-types": 4.20260702.1
+    wrangler: ^4.103.0
+  cloudflare-runtime:
+    "@cloudflare/unenv-preset": ^2.16.0
+    "@cloudflare/vitest-pool-workers": ^0.13.0
+    "@cloudflare/workers-types": ^5.20260812.1
+    "@octanejs/vite-plugin": ">=0.1.22"
+    "@puppeteer/browsers": ^2.10.6
+    "@sveltejs/kit": ">=3.0.0-next.9"
+    "@types/http-cache-semantics": ^4.2.0
+    "@types/ws": ^8.18.1
+    astro: ^7.0.0
+    capnp-es: ^0.0.14
+    capnweb: ^0.8.0
+    esbuild: ^0.28.1
+    fast-glob: ^3.3.2
+    heap-js: ^2.5.0
+    http-cache-semantics: ^4.2.0
+    itty-time: ^2.0.2
+    magic-string: ^0.30.21
+    mime: ^4.0.7
+    miniflare: ^4.20260701.0
+    mysql2: ^3.22.3
+    nuxt: ">=4.5.0"
+    postal-mime: ^2.4.3
+    sharp: ^0.34.5
+    toucan-js: 4.0.0
+    unenv: ^2.0.0-rc.24
+    vite: ^7.0.0 || ^8.0.0
+    workerd: 1.20260704.1
+    ws: ^8.21.0
+  database:
+    "@libsql/client": ^0.17.0
+    "@neondatabase/serverless": ^1.0.1
+    "@types/pg": ^8.20.0
+    drizzle-kit: 1.0.0-rc.5-ab785fc
+    drizzle-orm: 1.0.0-rc.5-ab785fc
+    kysely: ^0.29.4
+    mysql2: ^3.23.2
+    mongodb: ^6.10.0
+    pg: ^8.22.0
+  effect:
+    "@effect/atom-react": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/platform-bun": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/platform-node": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/platform-node-shared": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/sql-d1": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/sql-mysql2": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/sql-pg": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/sql-sqlite-do": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/vitest": ">=4.0.0-rc.110 || >=4.0.0"
+    effect: ">=4.0.0-rc.110 || >=4.0.0"
+  frontend:
+    "@astrojs/internal-helpers": 0.10.1
+    "@astrojs/underscore-redirects": 1.0.3
+    "@foldkit/vite-plugin": ^0.15.0
+    "@octanejs/adapter-cloudflare": 0.0.12
+    "@octanejs/vite-plugin": 0.1.22
+    "@opennextjs/aws": 4.1.0
+    "@opennextjs/cloudflare": 1.20.1
+    "@sveltejs/kit": 3.0.0-next.9
+    "@sveltejs/vite-plugin-svelte": ^7.2.0
+    "@solidjs/meta": ^0.29.4
+    "@solidjs/vite-plugin-nitro-2": ^0.1.0
+    "@tailwindcss/postcss": ^4.1.13
+    "@tailwindcss/vite": ^4.1.13
+    "@tanstack/react-router": ^1.167.4
+    "@tanstack/react-start": ^1.166.15
+    "@vitejs/plugin-react": ^6.0.2
+    "@vitejs/plugin-rsc": ^0.5.27
+    astro: 7.2.0
+    foldkit: ^0.147.0
+    hono: ^4.12.14
+    next: 16.2.10
+    nitropack: 2.13.4
+    nuxt: 4.5.1
+    octane: 0.1.22
+    postcss: ^8.4.49
+    react-dom: ^19.2.7
+    react-router: 7.16.0
+    react-server-dom-webpack: ~19.2.6
+    solid-js: latest
+    solid-devtools: ^0.34.3
+    svelte: ^5.56.6
+    tailwindcss: ^4.1.13
+    vocs: 2.8.2
+    waku: 1.0.0-beta.7
+  shared:
+    "@opentui/core": latest
+    fast-xml-parser: ^5.3.4
+    uuid: ^14.0.0
+    ws: ^8.20.0
+    yaml: ^2.0.0
+  testing:
+    "@playwright/test": ^1.61.1
+    vitest: ^4.1.8
+  tooling:
+    "@types/bun": 1.3.14
+    "@types/node": 26.2.0
+    dedent: ^1.7.0
+    husky: ^9.1.7
+    oxfmt: latest
+    oxlint: latest
+    pathe: ^2.0.3
+    tsx: ^4.20.6
+overrides:
+  "@cloudflare/workers-types": 5.20260812.1
+  effect: 4.0.0-rc.110
+  "@effect/platform-browser": 4.0.0-rc.110
+  drizzle-kit: 1.0.0-rc.5-ab785fc
+  drizzle-orm: 1.0.0-rc.5-ab785fc
+  rolldown: 1.1.5
+patchedDependencies:
+  "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
+  starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
+minimumReleaseAgeExclude:
+  - '@effect/atom-react@4.0.0-rc.110'
+  - '@effect/platform-bun@4.0.0-rc.110'
+  - '@effect/platform-node-shared@4.0.0-rc.110'
+  - '@effect/platform-node@4.0.0-rc.110'
+  - '@effect/sql-d1@4.0.0-rc.110'
+  - '@effect/sql-mysql2@4.0.0-rc.110'
+  - '@effect/sql-pg@4.0.0-rc.110'
+  - '@effect/sql-sqlite-do@4.0.0-rc.110'
+  - '@effect/vitest@4.0.0-rc.110'
+  - '@foldkit/vite-plugin@0.15.0'
+  - effect@4.0.0-rc.110
+  - foldkit@0.147.0

@@ -217,6 +217,23 @@ test.provider.skipIf(!!process.env.FAST)(
         Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
       );
       expect(zoneGone).toBe(true);
+
+      // Delete the imported certificate here, inside the test's 900s budget:
+      // ELB can report ResourceInUseException for minutes after the listener
+      // is gone, and the scope finalizer registered above runs under the
+      // afterAll hook's much smaller budget — relying on it for the happy
+      // path times the hook out and leaks the certificate. The finalizer
+      // stays as a failure-path backup and no-ops once this succeeds.
+      yield* acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceInUseException",
+          schedule: Schedule.max([
+            Schedule.spaced("5 seconds"),
+            Schedule.recurs(60),
+          ]),
+        }),
+        Effect.ignore,
+      );
     }),
   { timeout: 900_000 },
 );
