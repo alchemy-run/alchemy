@@ -22,7 +22,7 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
-import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -729,11 +729,6 @@ export const TableProvider = () =>
           Effect.catchTag("PolicyNotFoundException", () =>
             Effect.succeed(undefined),
           ),
-          // Local emulators (floci/LocalStack) don't implement resource
-          // policies — treat "operation not supported" as "no policy".
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed(undefined),
-          ),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([
@@ -919,12 +914,6 @@ export const TableProvider = () =>
               ),
             ),
           }),
-          // Local emulators (floci/LocalStack) don't implement Contributor
-          // Insights — "operation not supported" means the feature is
-          // effectively disabled.
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed("DISABLED" as const),
-          ),
         );
 
       // Enabling Contributor Insights makes DynamoDB create CloudWatch rules
@@ -952,12 +941,6 @@ export const TableProvider = () =>
                     name.includes(`-${tableName}-`),
                 ),
             ],
-          ),
-          // Local emulators (floci/LocalStack) reject CloudWatch insight
-          // rules with UnsupportedOperation ("not supported by CloudWatch
-          // JSON") — nothing to wait for.
-          Effect.catchTag("UnsupportedOperation", () =>
-            Effect.succeed([] as string[]),
           ),
         );
 
@@ -2082,31 +2065,26 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync Contributor Insights — observed ↔ desired. The floci
-          // emulator does not implement the API (or CloudWatch insight
-          // rules); skip.
-          if (!(yield* AWSEnvironment.isLocalEmulator)) {
-            const desiredInsightsEnabled =
-              news.contributorInsightsEnabled ?? false;
-            const observedInsightsStatus =
+          // Sync Contributor Insights — observed ↔ desired.
+          const desiredInsightsEnabled =
+            news.contributorInsightsEnabled ?? false;
+          const observedInsightsStatus =
+            yield* waitForContributorInsightsSettled(session, tableName);
+          const observedInsightsEnabled = observedInsightsStatus === "ENABLED";
+          if (observedInsightsEnabled !== desiredInsightsEnabled) {
+            yield* session.note(
+              `Table ${tableName}: ${desiredInsightsEnabled ? "enabling" : "disabling"} Contributor Insights`,
+            );
+            yield* updateTableContributorInsights(
+              tableName,
+              desiredInsightsEnabled,
+            );
+            if (!desiredInsightsEnabled) {
+              // Wait for the DISABLE to settle so DynamoDB's rule cleanup
+              // (which fires on the DISABLING→DISABLED transition) runs
+              // while the table still exists — a deleteTable racing this
+              // window strands the CloudWatch rules forever.
               yield* waitForContributorInsightsSettled(session, tableName);
-            const observedInsightsEnabled =
-              observedInsightsStatus === "ENABLED";
-            if (observedInsightsEnabled !== desiredInsightsEnabled) {
-              yield* session.note(
-                `Table ${tableName}: ${desiredInsightsEnabled ? "enabling" : "disabling"} Contributor Insights`,
-              );
-              yield* updateTableContributorInsights(
-                tableName,
-                desiredInsightsEnabled,
-              );
-              if (!desiredInsightsEnabled) {
-                // Wait for the DISABLE to settle so DynamoDB's rule cleanup
-                // (which fires on the DISABLING→DISABLED transition) runs
-                // while the table still exists — a deleteTable racing this
-                // window strands the CloudWatch rules forever.
-                yield* waitForContributorInsightsSettled(session, tableName);
-              }
             }
           }
 
@@ -2154,36 +2132,29 @@ export const TableProvider = () =>
           // cleanup and strands the rules — CloudWatch rejects direct
           // deletion of DynamoDB-managed rules with AccessDenied, so only
           // AWS support can remove them afterwards.
-          //
-          // The floci emulator does not implement Contributor Insights or
-          // CloudWatch insight rules — skip the teardown (and its
-          // DescribeInsightRules call, which floci rejects as
-          // UnsupportedOperation).
-          if (!(yield* AWSEnvironment.isLocalEmulator)) {
-            yield* Effect.gen(function* () {
-              const insightsStatus = yield* waitForContributorInsightsSettled(
-                session,
-                output.tableName,
-              );
-              if (insightsStatus !== "DISABLED") {
-                yield* session.note(
-                  `Table ${output.tableName}: disabling Contributor Insights before delete`,
-                );
-                yield* updateTableContributorInsights(output.tableName, false);
-                yield* waitForContributorInsightsSettled(
-                  session,
-                  output.tableName,
-                );
-              }
-              yield* waitForContributorInsightsRulesDeleted(
-                session,
-                output.tableName,
-              );
-            }).pipe(
-              // Table already gone — nothing to tear down.
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          yield* Effect.gen(function* () {
+            const insightsStatus = yield* waitForContributorInsightsSettled(
+              session,
+              output.tableName,
             );
-          }
+            if (insightsStatus !== "DISABLED") {
+              yield* session.note(
+                `Table ${output.tableName}: disabling Contributor Insights before delete`,
+              );
+              yield* updateTableContributorInsights(output.tableName, false);
+              yield* waitForContributorInsightsSettled(
+                session,
+                output.tableName,
+              );
+            }
+            yield* waitForContributorInsightsRulesDeleted(
+              session,
+              output.tableName,
+            );
+          }).pipe(
+            // Table already gone — nothing to tear down.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
 
           let deleteAttempt = 0;
 

@@ -1,9 +1,8 @@
 /**
  * `AWS.DynamoDB.Table` under `alchemy dev`: the dualized provider deploys
- * the table into the floci emulator. Pins the destroy path that used to
- * fail with `UnsupportedOperation: DescribeInsightRules is not supported
- * by CloudWatch JSON` — the live provider's Contributor Insights cleanup
- * must treat that as "no rules to wait for".
+ * the table into the floci emulator, including Contributor Insights
+ * teardown (`DescribeContributorInsights` + CloudWatch `DescribeInsightRules`)
+ * on destroy.
  *
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
@@ -20,7 +19,7 @@ import {
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
 test.provider.skipIf(!dockerAvailable)(
-  "dev table create/destroy against floci skips CloudWatch insight rules",
+  "dev table create/destroy against floci",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -45,8 +44,6 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(described.status).toBe(200);
 
-      // The regression: destroy used to call CloudWatch DescribeInsightRules
-      // and fail because floci's CloudWatch JSON protocol rejects it.
       yield* stack.destroy();
 
       const after = yield* rawAwsJson({
