@@ -7,13 +7,12 @@
 // service-level subpaths keep the graph to the construct + capability
 // slice.
 import * as KV from "alchemy/Cloudflare/KV";
-import { DurableObject } from "alchemy/Cloudflare/DurableObject";
+import { cron, CronEventSourceLive } from "alchemy/Cloudflare/Cron";
+import {
+  DurableObject,
+  DurableObjectState,
+} from "alchemy/Cloudflare/DurableObject";
 import * as Website from "alchemy/Cloudflare/Website";
-// DEEP-IMPORT LINE (rewritten per-clone by `narrowNextjsSiteImports` in
-// NextjsMount.ts): these three have no narrow package subpath, and the
-// barrel is off-limits to Next's bundler — the tests rewrite this one
-// line to deep relative imports into `packages/alchemy/src`.
-import { cron, CronEventSourceLive, DurableObjectState } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";

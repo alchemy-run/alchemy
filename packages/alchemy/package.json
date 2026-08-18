@@ -174,6 +174,12 @@
       "worker": "./src/Cloudflare/Live.ts",
       "import": "./lib/Cloudflare/Live.js"
     },
+    "./Cloudflare/Cron": {
+      "types": "./lib/Cloudflare/Workers/CronEventSource.d.ts",
+      "bun": "./src/Cloudflare/Workers/CronEventSource.ts",
+      "worker": "./src/Cloudflare/Workers/CronEventSource.ts",
+      "import": "./lib/Cloudflare/Workers/CronEventSource.js"
+    },
     "./Cloudflare/DurableObject": {
       "types": "./lib/Cloudflare/Workers/DurableObject.d.ts",
       "bun": "./src/Cloudflare/Workers/DurableObject.ts",

@@ -20,6 +20,10 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
+// Re-exported so backend modules bundled by framework builds can reach the
+// per-object state service through this leaf subpath instead of the
+// provider barrel (which drags the engine graph into the app bundle).
+export { DurableObjectState } from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
 import {

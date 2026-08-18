@@ -16,45 +16,6 @@ import type * as Path from "effect/Path";
  * (see `hmrSiteSource` in Nextjs.local.test.ts).
  */
 /**
- * Rewrite the cloned `src/site.ts`'s deep-import line to relative imports
- * into `packages/alchemy/src` (the clone sits at
- * `packages/alchemy/.tmp/<dir>/`, so `../../../src` from `src/site.ts` is
- * `packages/alchemy/src`). The checked-in fixture keeps a type-correct
- * `alchemy/Cloudflare` barrel line for the three names that have no
- * narrow package subpath — but Next's bundler must never parse the
- * provider barrel (it drags the engine's vite/esbuild graph), so every
- * test that compiles the site module through Next rewrites the line in
- * its clone first.
- */
-export const narrowNextjsSiteImports = (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  rootDir: string,
-): Effect.Effect<void, unknown> =>
-  Effect.gen(function* () {
-    const sitePath = path.join(rootDir, "src", "site.ts");
-    const source = yield* fs.readFileString(sitePath);
-    const barrelLine = `import { cron, CronEventSourceLive, DurableObjectState } from "alchemy/Cloudflare";`;
-    if (!source.includes(barrelLine)) {
-      return yield* Effect.fail(
-        new Error(
-          `narrowNextjsSiteImports: expected the deep-import line in ${sitePath} — did the fixture's import block change?`,
-        ),
-      );
-    }
-    yield* fs.writeFileString(
-      sitePath,
-      source.replace(
-        barrelLine,
-        [
-          `import { cron, CronEventSourceLive } from "../../../src/Cloudflare/Workers/CronEventSource.ts";`,
-          `import { DurableObjectState } from "../../../src/Cloudflare/Workers/DurableObjectState.ts";`,
-        ].join("\n"),
-      ),
-    );
-  });
-
-/**
  * Shadow `@alchemy.run/cloudflare-runtime` with an inert stub package in
  * the CLONE's `node_modules`, so OpenNext's server esbuild never bundles
  * the local-runtime engine graph.

@@ -17,7 +17,6 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
-  narrowNextjsSiteImports,
   stubCloudflareRuntimeForNextBundling,
   writeNextjsMount,
 } from "./NextjsMount.ts";
@@ -360,7 +359,6 @@ describe.concurrent("Nextjs dev", () => {
         // deep-import line is narrowed so Next's bundler never parses the
         // provider barrel.
         yield* writeNextjsMount(fs, path, rootDir, "site.ts");
-        yield* narrowNextjsSiteImports(fs, path, rootDir);
         yield* stubCloudflareRuntimeForNextBundling(fs, path, rootDir);
 
         // Import the site module from the CLONE: its `main: import.meta.url`
