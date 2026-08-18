@@ -58,7 +58,6 @@ const program = (props?: Partial<Cloudflare.AI.SearchInstanceProps>) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {
       forceDestroy: true,
-      forceDestroy: true,
     });
     const instance = yield* Cloudflare.AI.SearchInstance("Search", {
       source: bucket.bucketName,
@@ -336,7 +335,6 @@ const nsProgram = (props?: Partial<Cloudflare.AI.SearchInstanceProps>) =>
   Effect.gen(function* () {
     const namespace = yield* Cloudflare.AI.SearchNamespace("AiSearchNs", {});
     const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {
-      forceDestroy: true,
       forceDestroy: true,
     });
     const instance = yield* Cloudflare.AI.SearchInstance("Search", {

@@ -81,7 +81,6 @@ const program = (creds: R2Creds, opts: JobOpts) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("LogpushBucket", {
       forceDestroy: true,
-      forceDestroy: true,
     });
     const job = yield* Cloudflare.Logpush.Job("Job", {
       dataset: opts.dataset,

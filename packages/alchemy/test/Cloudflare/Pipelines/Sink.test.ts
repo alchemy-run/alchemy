@@ -72,7 +72,6 @@ test.provider(
           Effect.gen(function* () {
             const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {
               forceDestroy: true,
-              forceDestroy: true,
             });
             return yield* Cloudflare.Pipelines.Sink("ListSink", {
               type: "r2",

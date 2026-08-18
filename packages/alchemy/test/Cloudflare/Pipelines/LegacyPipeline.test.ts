@@ -97,7 +97,6 @@ const legacy = (
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("LegacyBucket", {
       forceDestroy: true,
-      forceDestroy: true,
     });
     const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("Legacy", {
       name: opts.name,
