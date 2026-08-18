@@ -61,7 +61,7 @@ export default Alchemy.Stack(
         paths: "all",
       },
       tags: {
-        Example: "aws-vite",
+        Example: "aws-website-vite",
         Surface: "website",
         Mode: "router",
       },
@@ -81,7 +81,7 @@ export default Alchemy.Stack(
         router,
       },
       tags: {
-        Example: "aws-vite",
+        Example: "aws-website-vite",
         Surface: "website",
       },
     });

@@ -1148,7 +1148,7 @@ importers:
         specifier: 4.0.0-rc.110
         version: 4.0.0-rc.110
 
-  examples/aws-vite:
+  examples/aws-website-vite:
     dependencies:
       '@cloudflare/vite-plugin':
         specifier: catalog:cloudflare
