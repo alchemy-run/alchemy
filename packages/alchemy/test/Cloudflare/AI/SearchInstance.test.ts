@@ -56,7 +56,10 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
 // reverse on destroy).
 const program = (props?: Partial<Cloudflare.AI.SearchInstanceProps>) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {});
+    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {
+      forceDestroy: true,
+      forceDestroy: true,
+    });
     const instance = yield* Cloudflare.AI.SearchInstance("Search", {
       source: bucket.bucketName,
       ...props,
@@ -332,7 +335,10 @@ test.provider(
 const nsProgram = (props?: Partial<Cloudflare.AI.SearchInstanceProps>) =>
   Effect.gen(function* () {
     const namespace = yield* Cloudflare.AI.SearchNamespace("AiSearchNs", {});
-    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {});
+    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {
+      forceDestroy: true,
+      forceDestroy: true,
+    });
     const instance = yield* Cloudflare.AI.SearchInstance("Search", {
       source: bucket.bucketName,
       namespace: namespace.name,

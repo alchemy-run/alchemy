@@ -7,6 +7,7 @@ import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -24,7 +25,9 @@ test.provider("create and delete bucket with default props", (stack) =>
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2.Bucket("DefaultBucket");
+        return yield* Cloudflare.R2.Bucket("DefaultBucket", {
+          forceDestroy: true,
+        });
       }),
     );
 
@@ -53,6 +56,7 @@ test.provider("create, update, delete bucket", (stack) =>
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("TestBucket", {
+          forceDestroy: true,
           name: "test-bucket-initial",
           storageClass: "Standard",
         });
@@ -69,6 +73,7 @@ test.provider("create, update, delete bucket", (stack) =>
     const updatedBucket = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("TestBucket", {
+          forceDestroy: true,
           name: "test-bucket-initial",
           storageClass: "InfrequentAccess",
         });
@@ -106,7 +111,9 @@ test.provider(
       // adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("AdoptableBucket");
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
+            forceDestroy: true,
+          });
         }),
       );
       const bucketName = initial.bucketName;
@@ -127,6 +134,7 @@ test.provider(
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
+            forceDestroy: true,
             name: bucketName,
           });
         }),
@@ -150,58 +158,84 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("destroying a bucket empties its objects first", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider(
+  "destroying a bucket with forceDestroy empties its objects first",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const bucket = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2.Bucket("BucketWithObjects");
-      }),
-    );
-
-    const putObject = (key: string, body: string) =>
-      r2.putObject({
-        accountId,
-        bucketName: bucket.bucketName,
-        objectName: key,
-        contentType: "text/plain",
-        body: new Blob([body], { type: "text/plain" }),
-      });
-    yield* putObject("hello.txt", "hello");
-    yield* putObject("nested/world.txt", "world");
-
-    const before = yield* r2
-      .listObjects({
-        accountId,
-        bucketName: bucket.bucketName,
-        perPage: 1000,
-      })
-      .pipe(
-        Effect.flatMap((page) => {
-          const keys = (page.result ?? [])
-            .map((o) => o.key)
-            .filter((k): k is string => typeof k === "string");
-          return keys.length === 2
-            ? Effect.succeed(keys)
-            : Effect.fail(new ListLagError());
-        }),
-        Effect.retry({
-          while: (e): e is ListLagError => e instanceof ListLagError,
-          schedule: Schedule.max([
-            Schedule.exponential(200),
-            Schedule.recurs(8),
-          ]),
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("BucketWithObjects", {
+            forceDestroy: true,
+          });
         }),
       );
-    expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
 
-    yield* stack.destroy();
+      yield* putObject(accountId, bucket.bucketName, "hello.txt", "hello");
+      yield* putObject(
+        accountId,
+        bucket.bucketName,
+        "nested/world.txt",
+        "world",
+      );
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(logLevel),
+      const before = yield* listKeysWhenReady(accountId, bucket.bucketName, 2);
+      expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
+
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
+);
+
+// Without `forceDestroy`, R2's own refusal to delete a non-empty bucket is
+// the last line of defense for the data in it — alchemy must not empty the
+// bucket to get past it. See https://github.com/alchemy-run/alchemy/issues/1248.
+test.provider(
+  "destroying a non-empty bucket without forceDestroy keeps the objects",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const declaration = Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("ProtectedBucket");
+      });
+
+      const bucket = yield* stack.deploy(declaration);
+
+      yield* putObject(accountId, bucket.bucketName, "keep.txt", "precious");
+      yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
+
+      // R2's own refusal (`BucketNotEmpty`) is what fails the teardown.
+      const destroyed = yield* Effect.result(stack.destroy());
+      expect(Result.isFailure(destroyed)).toBe(true);
+      expect(String(destroyed)).toContain("BucketNotEmpty");
+
+      // Both the bucket and its object survived the teardown.
+      const survived = yield* r2.getBucket({
+        accountId,
+        bucketName: bucket.bucketName,
+      });
+      expect(survived.name).toEqual(bucket.bucketName);
+      const keys = yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
+      expect(keys).toEqual(["keep.txt"]);
+
+      // Opting in lets the same stack tear down for real.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("ProtectedBucket", {
+            forceDestroy: true,
+          });
+        }),
+      );
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
 );
 
 test.provider("lifecycle rules are added, updated, and removed", (stack) =>
@@ -214,6 +248,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
+          forceDestroy: true,
           lifecycleRules: [
             {
               id: "expire-after-30d",
@@ -241,6 +276,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
+          forceDestroy: true,
           lifecycleRules: [
             {
               id: "expire-after-30d",
@@ -277,6 +313,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
+          forceDestroy: true,
           lifecycleRules: [],
         });
       }),
@@ -303,6 +340,7 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("CorsBucket", {
+          forceDestroy: true,
           cors: [
             {
               id: "range-reads",
@@ -339,6 +377,7 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
     yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("CorsBucket", {
+          forceDestroy: true,
           cors: [
             {
               id: "range-reads",
@@ -373,6 +412,7 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
     yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("CorsBucket", {
+          forceDestroy: true,
           cors: [],
         });
       }),
@@ -420,6 +460,7 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("DriftCorsBucket", {
+          forceDestroy: true,
           name: bucketName,
           cors: [rangeReads],
         });
@@ -439,6 +480,7 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
     yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("DriftCorsBucket", {
+          forceDestroy: true,
           name: bucketName,
           cors: [{ ...rangeReads, maxAgeSeconds: 7200 }],
         });
@@ -469,6 +511,7 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
     const adopted = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("DriftCorsBucket", {
+          forceDestroy: true,
           name: bucketName,
           cors: [rangeReads],
         });
@@ -512,6 +555,7 @@ test.provider("cors is applied to the new bucket on replacement", (stack) =>
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("ReplaceCorsBucket", {
+          forceDestroy: true,
           name: oldName,
           cors,
         });
@@ -531,6 +575,7 @@ test.provider("cors is applied to the new bucket on replacement", (stack) =>
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("ReplaceCorsBucket", {
+          forceDestroy: true,
           name: newName,
           cors,
         });
@@ -600,5 +645,42 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+const putObject = (
+  accountId: string,
+  bucketName: string,
+  key: string,
+  body: string,
+) =>
+  r2.putObject({
+    accountId,
+    bucketName,
+    objectName: key,
+    contentType: "text/plain",
+    body: new Blob([body], { type: "text/plain" }),
+  });
+
+// R2's object listing lags a write by a beat — poll until the expected
+// number of keys shows up, then return them.
+const listKeysWhenReady = Effect.fn(function* (
+  accountId: string,
+  bucketName: string,
+  count: number,
+) {
+  return yield* r2.listObjects({ accountId, bucketName, perPage: 1000 }).pipe(
+    Effect.flatMap((page) => {
+      const keys = (page.result ?? [])
+        .map((o) => o.key)
+        .filter((k): k is string => typeof k === "string");
+      return keys.length === count
+        ? Effect.succeed(keys)
+        : Effect.fail(new ListLagError());
+    }),
+    Effect.retry({
+      while: (e): e is ListLagError => e instanceof ListLagError,
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+    }),
+  );
+});
 
 class ListLagError extends Data.TaggedError("ListLagError") {}

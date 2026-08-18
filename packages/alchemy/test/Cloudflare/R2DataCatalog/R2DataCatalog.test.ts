@@ -27,7 +27,10 @@ interface CatalogOpts {
 // orders catalog-after-bucket on deploy (and the reverse on destroy).
 const program = (opts: CatalogOpts = {}) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {});
+    const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {
+      forceDestroy: true,
+      forceDestroy: true,
+    });
     const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
       bucketName: bucket.bucketName,
       ...opts,

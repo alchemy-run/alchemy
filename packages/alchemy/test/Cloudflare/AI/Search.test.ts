@@ -74,7 +74,10 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
 // `yield*` wires the whole pipeline together.
 const program = () =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {});
+    const bucket = yield* Cloudflare.R2.Bucket("AiSearchSource", {
+      forceDestroy: true,
+      forceDestroy: true,
+    });
     const search = yield* Cloudflare.AI.Search("Search", {
       source: bucket,
     });

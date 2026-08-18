@@ -1279,7 +1279,9 @@ if (el) {
           const deploy = (bucketId: string, marker: string) =>
             stack.deploy(
               Effect.gen(function* () {
-                const bucket = yield* Cloudflare.R2.Bucket(bucketId);
+                const bucket = yield* Cloudflare.R2.Bucket(bucketId, {
+                  forceDestroy: true,
+                });
                 const worker = yield* Cloudflare.Website.Vite(
                   "TanStackDevBindings",
                   {
