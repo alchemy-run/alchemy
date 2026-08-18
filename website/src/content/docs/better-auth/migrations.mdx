@@ -31,11 +31,10 @@ Unchanged input ⇒ the Action no-ops without touching the database.
 (`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing), so
 re-running a greenfield or already-migrated database is always safe.
 
-Better Auth 1.7 will **refuse** to add a required column with no default
-to a table that already has rows (for example `account.issuer`). The
-Action fails with Better Auth's message, which points at the
-[1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide)
-backfill. Complete that data step, then re-deploy.
+Adding a required column with no default to a populated table is refused
+(for example `account.issuer`). Complete the
+[upgrade-guide backfill](https://www.better-auth.com/docs/guides/1-7-upgrade-guide)
+before re-deploying.
 
 The host Function/Worker depends on the migration through its
 environment, so first-deploy traffic cannot race the schema.

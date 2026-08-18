@@ -8,9 +8,7 @@ import type { BetterAuthStorageError } from "./Errors.ts";
  * key-value store used for sessions, rate limiting, and OAuth state when
  * configured.
  *
- * Better Auth 1.7 requires all five operations. TTLs are in SECONDS.
- * Custom rate-limit stores (`rateLimit.customStorage`) are a separate
- * Better Auth option and are not this service.
+ * All five operations are required. TTLs are in SECONDS.
  */
 export interface SecondaryStorageService {
   readonly get: (

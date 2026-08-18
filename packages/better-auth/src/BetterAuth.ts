@@ -46,10 +46,6 @@ export interface BetterAuthProps extends Omit<
    * `false` opts out. `true` on a Database layer without migration support
    * (Memory, Drizzle) fails the deploy with a descriptive error.
    *
-   * Better Auth 1.7 refuses to add a required column with no default to a
-   * populated table (notably `account.issuer`). Backfill first using the
-   * [1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
-   *
    * @default true when the Database layer supports migration
    */
   readonly migrate?: boolean;

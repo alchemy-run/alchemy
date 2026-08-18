@@ -31,7 +31,6 @@ interface MigrateInput {
 export interface MigrateOutput {
   tablesCreated: number;
   tablesAltered: number;
-  /** Compound / field indexes created (Better Auth 1.7+). */
   indexesCreated: number;
 }
 
@@ -164,9 +163,6 @@ const runMigrationWith = (
           }),
         catch: (cause) =>
           new BetterAuthMigrationError({
-            // 1.7 refuses required columns with no default on populated
-            // tables (e.g. account.issuer). Surface that message as-is —
-            // it points at the upgrade guide's backfill.
             message:
               cause instanceof UnsafeMigrationError
                 ? cause.message
