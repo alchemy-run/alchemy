@@ -108,15 +108,52 @@ CI, set `CI=true`; the credentials are resolved from the Secrets
 Store on every run via a short-lived edge-preview Worker, so nothing
 needs to be persisted to disk.
 
-### Customizing the worker name
+### Named state stores
 
-By default the state-store Worker is named `alchemy-state-store`.
-Pass `workerName` to use a separate state store — for example, when
-you want a dedicated store per Cloudflare account or per team:
+By default the state-store Worker is named `alchemy-state-store` and
+is a single account-wide service: every stack that uses
+`Cloudflare.state()` on the account shares its Worker, credentials,
+and contract version. Pass `workerName` to use a dedicated store
+instead — for example one per team, or to isolate projects that
+upgrade their `alchemy` dependency on different schedules:
 
 ```typescript
 state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
 ```
+
+A named store is fully independent of the default one:
+
+- its own Worker (and Durable Object state) under the given name
+- its own bearer-token and encryption-key secrets
+  (`AlchemyStateStoreToken_<name>` /
+  `AlchemyStateStoreEncryptionKey_<name>`), so one store's
+  credentials can never read or decrypt another store's state
+- its own credentials cache file
+  (`cloudflare-state-store-<name>.json`)
+
+Bootstrap, upgrade, and teardown of a named store never touch any
+other store on the account. The CLI commands accept the same name:
+
+```bash
+alchemy cloudflare bootstrap --worker-name alchemy-state-store-team-a
+```
+
+### Version upgrades
+
+Each Alchemy release pins the state-store contract version it
+expects and probes the deployed Worker's `/version` on startup:
+
+- **store matches** — attach and continue.
+- **store is older** — Alchemy asks to upgrade it in place (`--yes`
+  accepts automatically; CI fails with instructions instead of
+  prompting). Upgrading a shared store affects every stack using it,
+  so projects that can't upgrade in lockstep should use a named
+  store.
+- **store is newer** — the store was deployed by a newer Alchemy
+  release. The older client **fails closed** before touching
+  anything; `--yes` cannot authorize a downgrade. The only way to
+  downgrade a store is the explicit operator command
+  `alchemy cloudflare bootstrap --force`.
 
 ## State and lifecycle
 

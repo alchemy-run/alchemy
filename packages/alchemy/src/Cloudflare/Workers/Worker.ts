@@ -2368,14 +2368,17 @@ export const Worker: ResourceClassLike<Worker> &
         | WorkerServices
         | Container.Application<any>
         | PlatformServices,
+      PropsReq = never,
     >(
       id: string,
-      props: InputProps<WorkerProps>,
+      props:
+        | InputProps<WorkerProps>
+        | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
     ): Effect.Effect<
       Worker & Rpc<Shape>,
       never,
-      Extract<Req, Container.Application<any>> | Providers
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
     > &
       Named<Id>;
     /**

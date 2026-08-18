@@ -17,10 +17,11 @@ import {
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
 import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
+import { StateStoreWorkerName } from "./Names.ts";
 import Store from "./Store.ts";
 import { AuthToken } from "./Token.ts";
 
-export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
+export { STATE_STORE_SCRIPT_NAME } from "./Names.ts";
 
 /**
  * Version of the deployed Cloudflare State Store worker contract.
@@ -100,15 +101,22 @@ export const STATE_STORE_VERSION = 7 as const;
  */
 export default Worker(
   "Api",
-  {
-    name: STATE_STORE_SCRIPT_NAME,
-    main: import.meta.url,
-    workersDev: true,
-    compatibility: {
-      flags: ["nodejs_compat"],
-      date: "2026-03-17",
-    },
-  },
+  // Effect-valued props: the worker's physical name resolves from the
+  // `StateStoreWorkerName` reference so `Cloudflare.state({ workerName })`
+  // and `bootstrap({ workerName })` can deploy independent named stores.
+  // Un-provided (including inside the deployed bundle, where the name is
+  // irrelevant) it defaults to `alchemy-state-store`.
+  Effect.gen(function* () {
+    return {
+      name: yield* StateStoreWorkerName,
+      main: import.meta.url,
+      workersDev: true,
+      compatibility: {
+        flags: ["nodejs_compat"] as string[],
+        date: "2026-03-17",
+      },
+    };
+  }),
   Effect.gen(function* () {
     const remoteSecret = yield* ReadSecret(AuthToken);
     const store = yield* Store;
