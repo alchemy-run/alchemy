@@ -28,6 +28,8 @@ export const PATH_FETCH = `${PLATFORM_PROXY_PREFIX}/fetch`;
 export const PATH_CACHE_MATCH = `${PLATFORM_PROXY_PREFIX}/cache/match`;
 export const PATH_CACHE_PUT = `${PLATFORM_PROXY_PREFIX}/cache/put`;
 export const PATH_CACHE_DELETE = `${PLATFORM_PROXY_PREFIX}/cache/delete`;
+/** One-shot pickup of a retained nested stream (`?id=<token>`). */
+export const PATH_STREAM = `${PLATFORM_PROXY_PREFIX}/stream`;
 
 /** Text binding carrying the per-instance auth token into the proxy worker. */
 export const BINDING_PLATFORM_PROXY_TOKEN = "__PLATFORM_PROXY_TOKEN__";
@@ -81,6 +83,14 @@ export type EncodedValue =
    * methods chain through `get(id)` — idempotent, unlike `create`.
    */
   | { readonly $: "workflow-instance"; readonly id: string }
+  /**
+   * A `ReadableStream` in a NESTED position (e.g. inside a DO RPC result
+   * envelope — top-level stream results use the `stream` result kind
+   * directly). The worker retains it under a one-shot token; the Node
+   * side rehydrates a ReadableStream that picks it up via
+   * {@link PATH_STREAM}.
+   */
+  | { readonly $: "stream"; readonly id: string }
   /**
    * An `R2Object` / `R2ObjectBody` (rich class instances the generic object
    * rules reject). Fields are the plain data properties (key, etag, size,

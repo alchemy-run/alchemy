@@ -176,12 +176,17 @@ const makeModules = Effect.fnUntraced(function* (
           // user module's default export — class-form (constructed once
           // per isolate with (ctx, env)) or object-form alike.
           `import __proxy from "./${proxyWorker.main}";`,
-          `import __user from "./${userEntry}";`,
+          // Namespace import: a user module hosting only DO/Workflow
+          // classes has no default export, and a default-import would be
+          // a startup SyntaxError.
+          `import * as __userNs from "./${userEntry}";`,
           `let __instance;`,
-          `const __target = (env, ctx) =>`,
-          `  typeof __user === "function"`,
-          `    ? (__instance ??= new __user(ctx, env))`,
-          `    : (__user?.default ?? __user);`,
+          `const __target = (env, ctx) => {`,
+          `  const candidate = __userNs.default ?? __userNs;`,
+          `  return typeof candidate === "function"`,
+          `    ? (__instance ??= new candidate(ctx, env))`,
+          `    : candidate;`,
+          `};`,
           `export default {`,
           `  ...__proxy,`,
           `  queue: (batch, env, ctx) => __target(env, ctx).queue(batch, env, ctx),`,

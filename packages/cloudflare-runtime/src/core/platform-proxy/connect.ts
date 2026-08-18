@@ -47,6 +47,7 @@ import {
   PATH_CALL,
   PATH_ENV,
   PATH_FETCH,
+  PATH_STREAM,
 } from "./PlatformProxyProtocol.shared.ts";
 
 // ---------------------------------------------------------------------------
@@ -255,7 +256,48 @@ const makeWorkflowInstanceFacade = (
   };
 };
 
-/** `decodeNodeValue` plus the call-context decodings (workflow instances). */
+/**
+ * Rehydrate a nested stream: a `ReadableStream` whose bytes arrive from the
+ * proxy's one-shot pickup route the first time it is read. The pickup fetch
+ * starts lazily so decoding a result that is never consumed costs nothing
+ * beyond the worker-side retention window.
+ */
+const makeStreamFacade = (
+  client: ProxyClient,
+  id: string,
+): ReadableStream<Uint8Array> => {
+  let upstream: Promise<ReadableStreamDefaultReader<Uint8Array>> | undefined;
+  const reader = () =>
+    (upstream ??= (async () => {
+      const url = new URL(PATH_STREAM, client.url);
+      url.searchParams.set("id", id);
+      const response = await fetch(url, {
+        headers: { [HEADER_TOKEN]: client.token },
+      });
+      if (!response.ok || response.body === null) {
+        throw new Error(
+          `platform-proxy: stream pickup failed (${response.status})`,
+        );
+      }
+      return response.body.getReader();
+    })());
+  return new ReadableStream<Uint8Array>({
+    pull: async (controller) => {
+      const { done, value } = await (await reader()).read();
+      if (done) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(value);
+    },
+    cancel: async (reason) => {
+      await (await reader()).cancel(reason).catch(() => {});
+    },
+  });
+};
+
+/** `decodeNodeValue` plus the call-context decodings (workflow instances,
+ * nested streams). */
 const makeCallDecoder =
   (client: ProxyClient, binding: string) =>
   (encoded: EncodedValue): { readonly value: unknown } | undefined => {
@@ -263,6 +305,9 @@ const makeCallDecoder =
       return {
         value: makeWorkflowInstanceFacade(client, binding, encoded.id),
       };
+    }
+    if (encoded.$ === "stream") {
+      return { value: makeStreamFacade(client, encoded.id) };
     }
     return decodeNodeValue(encoded);
   };

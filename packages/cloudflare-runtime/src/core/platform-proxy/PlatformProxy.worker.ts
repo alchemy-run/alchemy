@@ -35,6 +35,7 @@ import {
   PATH_CALL,
   PATH_ENV,
   PATH_FETCH,
+  PATH_STREAM,
 } from "./PlatformProxyProtocol.shared.ts";
 
 interface Env {
@@ -119,6 +120,109 @@ const describeEnv = (env: Env): { bindings: Array<EnvBindingDescriptor> } => {
 // ---------------------------------------------------------------------------
 // Chain evaluation (`/call` and the target resolution of `/fetch`)
 // ---------------------------------------------------------------------------
+
+/**
+ * Nested streams (inside DO RPC envelopes and other rich results) are
+ * retained under a one-shot token and picked up by the Node side via
+ * {@link PATH_STREAM}. Unclaimed streams are dropped (and cancelled) after
+ * a minute so an abandoned result cannot pin its request context forever.
+ */
+interface StreamRelay {
+  readonly chunks: Array<Uint8Array>;
+  error: unknown | undefined;
+}
+const retainedStreams = new Map<string, StreamRelay>();
+
+/**
+ * Drain the stream to MEMORY before the call response returns: workerd
+ * pins stream I/O to the creating request's IoContext AND the underlying
+ * RPC session (a DO envelope's body) closes with the call, so a deferred
+ * pump truncates. Draining inline trades streaming latency for
+ * correctness — acceptable for the DEV proxy; unbounded streams are cut
+ * at 64 MiB with an error chunk. Unclaimed relays drop after a minute.
+ */
+const MAX_RELAY_BYTES = 64 * 1024 * 1024;
+const drainToRelay = async (stream: ReadableStream): Promise<string> => {
+  const id = crypto.randomUUID();
+  const relay: StreamRelay = { chunks: [], error: undefined };
+  retainedStreams.set(id, relay);
+  let total = 0;
+  const reader = (stream as ReadableStream<Uint8Array>).getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const bytes =
+        value instanceof Uint8Array
+          ? value
+          : new TextEncoder().encode(String(value));
+      total += bytes.byteLength;
+      if (total > MAX_RELAY_BYTES) {
+        relay.error = new Error(
+          "platform-proxy: nested stream exceeded the 64 MiB dev relay cap",
+        );
+        await reader.cancel().catch(() => {});
+        break;
+      }
+      relay.chunks.push(bytes);
+    }
+  } catch (error) {
+    relay.error = error;
+  }
+  setTimeout(() => retainedStreams.delete(id), 60_000);
+  return id;
+};
+
+/**
+ * Async pre-pass: find every nested ReadableStream in a call result and
+ * drain it, returning an identity map the SYNC encoder consults.
+ */
+const drainNestedStreams = async (
+  value: unknown,
+  ids: Map<ReadableStream, string>,
+  depth = 0,
+): Promise<void> => {
+  if (depth > 8 || value === null || typeof value !== "object") return;
+  if (value instanceof ReadableStream) {
+    if (!ids.has(value)) ids.set(value, await drainToRelay(value));
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) await drainNestedStreams(item, ids, depth + 1);
+    return;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return;
+  for (const item of Object.values(value)) {
+    await drainNestedStreams(item, ids, depth + 1);
+  }
+};
+
+const handleStreamPickup = (request: WorkerRequest): Response => {
+  const id = new URL(request.url).searchParams.get("id") ?? "";
+  const relay = retainedStreams.get(id);
+  if (relay === undefined) {
+    return Response.json(
+      { error: "platform-proxy: unknown or already-claimed stream" },
+      { status: 404 },
+    );
+  }
+  retainedStreams.delete(id);
+  if (relay.error !== undefined) {
+    return Response.json(
+      { error: `platform-proxy: nested stream failed: ${String(relay.error)}` },
+      { status: 500 },
+    );
+  }
+  const total = relay.chunks.reduce((n, c) => n + c.byteLength, 0);
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of relay.chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Response(body);
+};
 
 /**
  * A Workflow `Instance` (workerd `InstanceImpl`): duck-typed — id plus the
@@ -298,6 +402,17 @@ const resultHeaders = (kind: ResultKind, extra?: Record<string, string>) => ({
 });
 
 const encodeResult = async (result: unknown): Promise<Response> => {
+  const streamIds = new Map<ReadableStream, string>();
+  const encodeWithStreams = (value: unknown): EncodedValue | undefined => {
+    if (value instanceof ReadableStream) {
+      const id = streamIds.get(value);
+      // Unreached positions (beyond the pre-pass depth cap) fall through
+      // to the generic unsupported-value error rather than silently
+      // dropping data.
+      return id !== undefined ? { $: "stream", id } : undefined;
+    }
+    return encodeWorkerValue(value);
+  };
   if (result instanceof ReadableStream) {
     return new Response(result, { headers: resultHeaders("stream") });
   }
@@ -318,7 +433,7 @@ const encodeResult = async (result: unknown): Promise<Response> => {
   if (isR2ObjectsLike(result)) {
     // The container is itself a class instance — encode it field-wise.
     const encoded: Record<string, EncodedValue> = {
-      objects: encodeValue(result.objects, encodeWorkerValue),
+      objects: encodeValue(result.objects, encodeWithStreams),
       truncated: encodeValue(result.truncated),
       delimitedPrefixes: encodeValue(result.delimitedPrefixes),
     };
@@ -347,8 +462,9 @@ const encodeResult = async (result: unknown): Promise<Response> => {
       headers: resultHeaders("bytes", { [HEADER_BYTES_KIND]: kind }),
     });
   }
+  await drainNestedStreams(result, streamIds);
   return Response.json(
-    { value: encodeValue(result, encodeWorkerValue) },
+    { value: encodeValue(result, encodeWithStreams) },
     { headers: resultHeaders("json") },
   );
 };
@@ -508,7 +624,11 @@ const handleCacheDelete = (request: WorkerRequest): Response => {
 // ---------------------------------------------------------------------------
 
 export default {
-  async fetch(request: WorkerRequest, env) {
+  async fetch(
+    request: WorkerRequest,
+    env,
+    ctx: { waitUntil(p: Promise<unknown>): void },
+  ) {
     try {
       assertAuthorized(request, env);
       const url = new URL(request.url);
@@ -525,6 +645,8 @@ export default {
           return await handleCachePut(request);
         case PATH_CACHE_DELETE:
           return handleCacheDelete(request);
+        case PATH_STREAM:
+          return handleStreamPickup(request);
         default:
           return Response.json(
             { error: `platform-proxy: unknown route ${url.pathname}` },
