@@ -1,5 +1,6 @@
 import { RuntimeContext } from "alchemy";
 import { describe, expect, it } from "alchemy-test";
+import { getSchema } from "better-auth/db";
 import { organization } from "better-auth/plugins/organization";
 import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
 import * as Effect from "effect/Effect";
@@ -42,6 +43,7 @@ describe("BetterAuth (bun:sqlite)", () => {
       const second = yield* applyMigrations(db.migrate!, baseOptions);
       expect(second.tablesCreated).toBe(0);
       expect(second.tablesAltered).toBe(0);
+      expect(second.indexesCreated).toBe(0);
 
       // verify the core tables actually exist in the file
       const { Database: BunSqlite } = yield* Effect.promise(
@@ -53,10 +55,15 @@ describe("BetterAuth (bun:sqlite)", () => {
           .query("SELECT name FROM sqlite_master WHERE type = 'table'")
           .all() as { name: string }[]
       ).map((row) => row.name);
+      const accountColumns = (
+        raw.query("PRAGMA table_info(account)").all() as { name: string }[]
+      ).map((row) => row.name);
       raw.close();
       for (const table of ["user", "session", "account", "verification"]) {
         expect(tables).toContain(table);
       }
+      // Better Auth 1.7 keys accounts on (issuer, accountId).
+      expect(accountColumns).toContain("issuer");
     }).pipe(provideTestEnv),
   );
 
@@ -108,6 +115,14 @@ describe("BetterAuth (bun:sqlite)", () => {
         plugins: [organization()],
       });
       expect(withPlugin).not.toBe(a);
+
+      const schema = getSchema(baseOptions);
+      expect(schema.account?.fields.issuer).toBeDefined();
+      expect(
+        schema.account?.indexes?.some((index) =>
+          index.columns.includes("issuer"),
+        ),
+      ).toBe(true);
     }).pipe(provideTestEnv),
   );
 });

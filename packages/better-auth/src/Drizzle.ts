@@ -32,7 +32,10 @@ export interface DrizzleLayerConfig {
  *
  * Schema management is yours: this layer has no automatic migration
  * support (`npx @better-auth/cli generate` + your drizzle-kit flow own the
- * tables).
+ * tables). After upgrading Better Auth, regenerate so the schema includes
+ * `account.issuer`, table indexes, and (if you enable
+ * `advanced.database.joins`) relations. With `usePlural: true`, 1.7 uses
+ * singular keys for many-to-one relations.
  *
  * @layer
  * @provides BetterAuth.Database

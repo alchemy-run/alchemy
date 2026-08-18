@@ -41,10 +41,14 @@ export interface BetterAuthProps extends Omit<
    * Deploy-time automatic schema migration. Runs as an internal alchemy
    * Action during `alchemy deploy` (never at plan, never inside the
    * deployed runtime) and re-runs only when the auth schema (plugins,
-   * additional fields) or the target database changes.
+   * additional fields, indexes) or the target database changes.
    *
    * `false` opts out. `true` on a Database layer without migration support
    * (Memory, Drizzle) fails the deploy with a descriptive error.
+   *
+   * Better Auth 1.7 refuses to add a required column with no default to a
+   * populated table (notably `account.issuer`). Backfill first using the
+   * [1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
    *
    * @default true when the Database layer supports migration
    */
@@ -239,6 +243,8 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       const auth = yield* makeAuth;
       // `auth.handler` never rejects for API errors — they come back as
       // error Responses, exactly what a pass-through route wants.
+      // (Better Auth 1.7 also aliases this as `auth.fetch`; we keep the
+      // original name so it doesn't collide with this HttpEffect.)
       const response = yield* Effect.promise(() => auth.handler(webRequest));
       return HttpServerResponse.fromWeb(response);
     });
