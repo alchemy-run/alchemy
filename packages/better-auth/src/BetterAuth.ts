@@ -243,8 +243,6 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       const auth = yield* makeAuth;
       // `auth.handler` never rejects for API errors — they come back as
       // error Responses, exactly what a pass-through route wants.
-      // (Better Auth 1.7 also aliases this as `auth.fetch`; we keep the
-      // original name so it doesn't collide with this HttpEffect.)
       const response = yield* Effect.promise(() => auth.handler(webRequest));
       return HttpServerResponse.fromWeb(response);
     });

@@ -62,7 +62,6 @@ describe("BetterAuth (bun:sqlite)", () => {
       for (const table of ["user", "session", "account", "verification"]) {
         expect(tables).toContain(table);
       }
-      // Better Auth 1.7 keys accounts on (issuer, accountId).
       expect(accountColumns).toContain("issuer");
     }).pipe(provideTestEnv),
   );

@@ -229,14 +229,18 @@ Effect.gen(function* () {
 
 ## Drizzle
 
-Bring your own Drizzle database via Better Auth's official `drizzleAdapter` (optional peer `drizzle-orm`). Schema is yours — generate it with `npx @better-auth/cli generate`; there is no automatic migration for this layer.
+Bring your own Drizzle database via Better Auth's Relations v2 `drizzleAdapter` (optional peers `drizzle-orm` and `@better-auth/drizzle-adapter`). Schema is yours — generate it with `npx auth@latest generate`; there is no automatic migration for this layer.
 
 ```typescript
 import { Drizzle } from "@alchemy.run/better-auth/Drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./auth-schema.ts";
+import { relations } from "./app-schema.ts";
 
-const db = drizzle(pool, { schema });
+const db = drizzle({
+  client: pool,
+  relations: { ...relations, ...schema.authRelations },
+});
 
 Effect.gen(function* () {
   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
@@ -268,4 +272,4 @@ Every SQL layer migrates automatically during `alchemy deploy` via an internal a
 - re-runs only when the auth schema (plugins, additional fields, indexes) or the target database changes,
 - is additive and idempotent (`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing). Existing databases that need a required column without a default (Better Auth 1.7's `account.issuer`) are refused until you backfill — see the [1.7 upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
 
-Opt out with `migrate: false` and manage the schema yourself (`npx @better-auth/cli generate`). Multiple `BetterAuth` instances in one stack: give each a distinct `id` to disambiguate the secret + migration resources.
+Opt out with `migrate: false` and manage the schema yourself (`npx auth@latest generate`). Multiple `BetterAuth` instances in one stack: give each a distinct `id` to disambiguate the secret + migration resources.

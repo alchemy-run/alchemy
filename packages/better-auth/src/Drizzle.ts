@@ -1,5 +1,5 @@
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { RuntimeContext } from "alchemy";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
@@ -10,8 +10,8 @@ export interface DrizzleLayerConfig {
   readonly provider: "pg" | "mysql" | "sqlite";
   /**
    * The drizzle schema containing the Better Auth tables (generate it with
-   * `npx @better-auth/cli generate`). When omitted, the adapter resolves
-   * tables off the db instance's registered schema.
+   * `npx auth@latest generate`). When omitted, the adapter resolves tables
+   * off the db instance's registered schema.
    */
   readonly schema?: Record<string, unknown>;
   /** @default false */
@@ -22,7 +22,7 @@ export interface DrizzleLayerConfig {
 
 /**
  * Use an existing Drizzle database as Better Auth's storage via
- * better-auth's official `drizzleAdapter`.
+ * better-auth's Relations v2 `drizzleAdapter`.
  *
  * Accepts a plain drizzle instance, or an Effect resolving to one for
  * databases that only materialize at runtime. NOTE: alchemy's own
@@ -31,26 +31,29 @@ export interface DrizzleLayerConfig {
  * raw `drizzle(...)` instance instead.
  *
  * Schema management is yours: this layer has no automatic migration
- * support (`npx @better-auth/cli generate` + your drizzle-kit flow own the
- * tables). After upgrading Better Auth, regenerate so the schema includes
- * `account.issuer`, table indexes, and (if you enable
- * `advanced.database.joins`) relations. With `usePlural: true`, 1.7 uses
- * singular keys for many-to-one relations.
+ * support (`npx auth@latest generate` + your drizzle-kit flow own the
+ * tables). Spread generated `authRelations` after your app's
+ * `defineRelations` when constructing the db.
  *
  * @layer
  * @provides BetterAuth.Database
  * @peer drizzle-orm
+ * @peer @better-auth/drizzle-adapter
  * @product Drizzle
  *
  * @section Bringing your own Drizzle db
- * @example Postgres drizzle instance with a generated auth schema
+ * @example Postgres drizzle instance with generated auth relations
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Drizzle } from "@alchemy.run/better-auth/Drizzle";
  * import { drizzle } from "drizzle-orm/node-postgres";
- * import * as schema from "./auth-schema.ts"; // npx @better-auth/cli generate
+ * import * as schema from "./auth-schema.ts";
+ * import { relations } from "./app-schema.ts";
  *
- * const db = drizzle(pool, { schema });
+ * const db = drizzle({
+ *   client: pool,
+ *   relations: { ...relations, ...schema.authRelations },
+ * });
  *
  * Effect.gen(function* () {
  *   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
