@@ -1,14 +1,32 @@
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as Cloudflare from "@/Cloudflare";
+import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthProvider.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
+import { InstanceId } from "@/InstanceId.ts";
+import { Provider } from "@/Provider.ts";
+import { Stack, type StackSpec } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import {
+  apiTokenCredentials,
+  Credentials,
+} from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import { expect } from "alchemy-test";
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -684,3 +702,191 @@ const listKeysWhenReady = Effect.fn(function* (
 });
 
 class ListLagError extends Data.TaggedError("ListLagError") {}
+
+// ── destructive deletes require explicit opt-in ────────────────────────
+//
+// DATA-PROTECTION INVARIANT: `delete` may remove the bucket, but it must
+// NEVER destroy the bucket's CONTENTS unless the user opted in on the
+// resource (`forceDestroy`) or an operator ran `alchemy unsafe nuke`
+// (which passes `force: true`).
+//
+// R2 refuses to delete a non-empty bucket (409 "is not empty", typed
+// `BucketNotEmpty`). That refusal is the last line of defense for
+// production data, and emptying the bucket first silently converts a
+// routine teardown into irreversible data loss — which is what happened
+// in https://github.com/alchemy-run/alchemy/issues/1248, where a stale
+// removal policy orphaned a bucket and the delete wiped 60k objects the
+// API would otherwise have protected.
+//
+// The live test above can only observe that the bucket survived, not that
+// no destructive request was ever issued. These run the REAL provider
+// `delete` against a recording transport and assert on the wire traffic.
+
+type Recorded = { method: string; url: string };
+
+/** Fetch transport that records every request and answers from `respond`. */
+const recordingTransport = (respond: (call: Recorded) => Response) => {
+  const calls: Recorded[] = [];
+  const fetch = async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    calls.push({
+      method: (input instanceof Request ? input.method : init?.method) ?? "GET",
+      url: input instanceof Request ? input.url : String(input),
+    });
+    return respond(calls[calls.length - 1]!);
+  };
+  return {
+    calls,
+    layer: FetchHttpClient.layer.pipe(
+      Layer.provide(
+        Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch),
+      ),
+    ),
+  };
+};
+
+const TEST_ACCOUNT = "test-account-id";
+const INSTANCE_ID = "0123456789abcdef0123456789abcdef";
+
+const testStack: Omit<StackSpec, "output"> = {
+  name: "my-stack",
+  stage: "dev",
+  resources: {},
+  bindings: {},
+  actions: {},
+};
+
+const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
+  Layer.mergeAll(
+    Layer.succeed(
+      CloudflareEnvironment,
+      Effect.succeed({
+        type: "apiToken",
+        apiToken: Redacted.make("test-token"),
+        accountId: TEST_ACCOUNT,
+        source: { type: "env" },
+      } satisfies CloudflareResolvedCredentials),
+    ),
+    Layer.succeed(
+      Credentials,
+      Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+    ),
+    Layer.succeed(
+      LocalRuntimeState,
+      LocalRuntimeState.of({
+        queues: MutableHashMap.empty(),
+        queueConsumers: MutableHashMap.empty(),
+        workerRestarts: MutableHashMap.empty(),
+      }),
+    ),
+    Layer.succeed(Stack, testStack),
+    Layer.succeed(Stage, testStack.stage),
+    Layer.succeed(InstanceId, INSTANCE_ID),
+    Layer.succeed(AlchemyContext, {
+      dotAlchemy: "/tmp/.alchemy-test",
+      dev: false,
+      adopt: false,
+    }),
+    Layer.sync(ArtifactStore, createArtifactStore),
+    NodeServices.layer,
+  ).pipe(Layer.provideMerge(transport));
+
+const stubbedOutput = {
+  bucketName: "my-bucket",
+  storageClass: "Standard" as const,
+  jurisdiction: "default" as const,
+  location: undefined,
+  accountId: TEST_ACCOUNT,
+  domains: [],
+  lifecycleRules: [],
+  cors: [],
+};
+
+/** `DELETE .../r2/buckets/{name}/objects` — the request that wipes data. */
+const objectDeletes = (calls: Recorded[]) =>
+  calls.filter((c) => c.method === "DELETE" && c.url.includes("/objects"));
+
+/** `DELETE .../r2/buckets/{name}` — deleting the bucket itself. */
+const bucketDeletes = (calls: Recorded[]) =>
+  calls.filter(
+    (c) =>
+      c.method === "DELETE" &&
+      c.url.endsWith(`/r2/buckets/${stubbedOutput.bucketName}`),
+  );
+
+/** One object in the bucket, so the empty path has something to delete. */
+const stubResponse = (call: Recorded) =>
+  new Response(
+    JSON.stringify(
+      call.method === "GET" && call.url.includes("/objects")
+        ? { success: true, result: [{ key: "precious.txt" }] }
+        : { success: true, result: {} },
+    ),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+
+/** Run the real provider delete; return every request it made. */
+const recordDelete = (
+  props: { forceDestroy?: boolean },
+  options?: { force?: boolean },
+) =>
+  Effect.gen(function* () {
+    const transport = recordingTransport(stubResponse);
+    yield* Effect.gen(function* () {
+      const provider = yield* Provider<Cloudflare.R2.Bucket>(
+        "Cloudflare.R2.Bucket",
+      );
+      yield* provider.delete({
+        id: "Bucket",
+        fqn: "Bucket",
+        instanceId: INSTANCE_ID,
+        olds: props,
+        output: stubbedOutput,
+        bindings: [] as never,
+        session: {
+          emit: () => Effect.void,
+          done: () => Effect.void,
+          note: () => Effect.void,
+        },
+        force: options?.force,
+      });
+    }).pipe(
+      Effect.provide(Cloudflare.R2.BucketProvider()),
+      Effect.provide(stubbedEnv(transport.layer)),
+    );
+    return transport.calls;
+  });
+
+describe("destructive delete requires explicit opt-in", () => {
+  it.effect("no forceDestroy never empties the bucket", () =>
+    Effect.gen(function* () {
+      const calls = yield* recordDelete({});
+
+      expect(objectDeletes(calls)).toEqual([]);
+      // The bucket delete itself is still attempted — R2 answers 409
+      // "is not empty" (`BucketNotEmpty`), which is the protection.
+      expect(bucketDeletes(calls)).toHaveLength(1);
+    }),
+  );
+
+  it.effect("forceDestroy empties the bucket first", () =>
+    Effect.gen(function* () {
+      const calls = yield* recordDelete({ forceDestroy: true });
+
+      expect(objectDeletes(calls).length).toBeGreaterThan(0);
+      expect(bucketDeletes(calls)).toHaveLength(1);
+    }),
+  );
+
+  // Nuke enumerates buckets from the cloud, so `olds` carries Attributes and
+  // never has `forceDestroy` — the operator's confirmation IS the flag.
+  it.effect("nuke's force empties without the prop", () =>
+    Effect.gen(function* () {
+      const calls = yield* recordDelete({}, { force: true });
+
+      expect(objectDeletes(calls).length).toBeGreaterThan(0);
+    }),
+  );
+});
