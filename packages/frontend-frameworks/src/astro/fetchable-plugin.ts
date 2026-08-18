@@ -126,6 +126,11 @@ const NODE_STUBS: Record<string, string> = {
     "SERVICE_D1",
   ]),
   "@alchemy.run/cloudflare-runtime/core/platform-proxy": inertStub(["open"]),
+  // Reached from alchemy's vite-source module (engine machinery riding the
+  // Website arm's import graph); only ever CALLED host-side.
+  "@alchemy.run/cloudflare-runtime/core/internal/Port": inertStub([
+    "viteSupportsPortZero",
+  ]),
 };
 const STUB_PREFIX = "\0virtual:alchemy:astro-node-stub:";
 
@@ -387,5 +392,44 @@ export const createEffectFetchablePlugin = (
       },
     },
   };
-  return [configPlugin, fetchablePlugin];
+  // PRERENDER exclusion for user mounts: astro core resolves `fetchFile`
+  // (the user's src/fetch.ts) in EVERY environment, but the mount's
+  // alchemy graph must never evaluate in the build-time prerender worker
+  // (module-eval alone can crash it — CJS interop, engine chains). The
+  // prerender fetchable is replaced with a passthrough that runs astro's
+  // own pipeline verbatim, mirroring the exclusion the generated wrapper
+  // always had.
+  const PRERENDER_PASSTHROUGH_ID =
+    "\0virtual:alchemy:astro-prerender-fetchable";
+  const prerenderPlugin: vite.Plugin = {
+    name: "@alchemy.run/frontend-frameworks/astro:effect-prerender-fetchable",
+    enforce: "pre",
+    applyToEnvironment(environment) {
+      return environment.name === "prerender";
+    },
+    resolveId: {
+      filter: {
+        id: new RegExp(
+          `^(?:${FETCHABLE_MODULE_ID}|${PRERENDER_PASSTHROUGH_ID.replace("\0", "\\0")})$`,
+        ),
+      },
+      handler() {
+        return PRERENDER_PASSTHROUGH_ID;
+      },
+    },
+    load: {
+      filter: {
+        id: new RegExp(`^${PRERENDER_PASSTHROUGH_ID.replace("\0", "\\0")}$`),
+      },
+      handler() {
+        return [
+          `import { FetchState, astro } from "astro/fetch";`,
+          `export default {`,
+          `  fetch: (request) => astro(new FetchState(request)),`,
+          `};`,
+        ].join("\n");
+      },
+    },
+  };
+  return [configPlugin, prerenderPlugin, fetchablePlugin];
 };

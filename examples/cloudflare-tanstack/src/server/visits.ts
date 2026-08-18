@@ -20,6 +20,4 @@ export const enqueueJob = createServerFn({ method: "POST" })
   .handler(({ data }) => backend.enqueue(data));
 
 /** Read the queue consumer's processed state. */
-export const getProcessed = createServerFn().handler(() =>
-  backend.processed(),
-);
+export const getProcessed = createServerFn().handler(() => backend.processed());

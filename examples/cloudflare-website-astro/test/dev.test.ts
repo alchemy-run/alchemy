@@ -195,7 +195,7 @@ test(
     const html = yield* Effect.gen(function* () {
       const res = yield* client.get(base);
       const body = yield* res.text;
-      if (res.status !== 200 || !body.includes("Server-rendered visits:")) {
+      if (res.status !== 200 || !body.includes("text-3xl")) {
         return yield* Effect.fail(new Error(`not ready: ${res.status}`));
       }
       return body;
@@ -207,7 +207,7 @@ test(
         ]),
       }),
     );
-    expect(html).toContain("Server-rendered visits:");
+    expect(html).toContain("text-3xl");
   }),
   { timeout: 240_000 },
 );

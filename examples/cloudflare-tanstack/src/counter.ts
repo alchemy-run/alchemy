@@ -1,7 +1,7 @@
 // Narrow subpath imports (never the `alchemy/Cloudflare` barrel): this
 // module joins the TanStack Start vite graph via the backend.
 import * as KV from "alchemy/Cloudflare/KV";
-import * as Workers from "alchemy/Cloudflare/Workers";
+import { DurableObject } from "alchemy/Cloudflare/DurableObject";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -13,7 +13,7 @@ import { Visits } from "./resources.ts";
  * the class export in the generated worker entry all derive from that one
  * registration.
  */
-export class Counter extends Workers.DurableObject<Counter>()(
+export class Counter extends DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
     const kv = yield* KV.ReadWriteNamespace(Visits);

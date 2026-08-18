@@ -1,6 +1,6 @@
 // Narrow subpath imports (never the `alchemy/Cloudflare` barrel).
 import * as KV from "alchemy/Cloudflare/KV";
-import * as Workflows from "alchemy/Cloudflare/Workflows";
+import * as Workflows from "alchemy/Cloudflare/Workflow";
 import * as Effect from "effect/Effect";
 import { Visits } from "./resources.ts";
 

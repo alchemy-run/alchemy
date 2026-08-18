@@ -127,6 +127,8 @@ export interface DevContext extends SourceContext {
     readonly name: string;
     readonly bindings: PluginWorker["bindings"];
     readonly durableObjectNamespaces: PluginWorker["durableObjectNamespaces"];
+    /** Workflows hosted by this worker (physical workflowName + className). */
+    readonly workflows?: PluginWorker["workflows"];
     readonly hyperdrives: PluginWorker["hyperdrives"];
     readonly queueConsumers: Effect.Effect<
       Exclude<PluginWorker["queueConsumers"], undefined>
@@ -1154,6 +1156,11 @@ const makeAstroSourceProvider = (
               name: ctx.worker.name,
               bindings: ctx.worker.bindings,
               durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
+              // The local workflow engine binds each workflow's class as a
+              // named entrypoint of the dev worker — without the configs
+              // the workflow BINDING fails at proxy boot ("Workflow …
+              // not found").
+              workflows: ctx.worker.workflows,
               hyperdrives: ctx.worker.hyperdrives,
               queueConsumers,
               assets: ctx.worker.assets,
