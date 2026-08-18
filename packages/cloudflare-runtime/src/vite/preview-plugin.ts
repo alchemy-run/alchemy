@@ -118,10 +118,17 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
 /**
  * Locate the built entry chunk for the (single) worker input. Entry chunks
  * are emitted as `[name].js` (Vite's server-build default `entryFileNames`);
- * `.mjs` is accepted for configs that override the extension.
+ * `.mjs` is accepted for configs that override the extension. A virtual
+ * input (e.g. `virtual:alchemy:website-entry`) keeps its raw id as the
+ * input NAME, but rolldown sanitizes the emitted FILE name (`:` and other
+ * invalid filename characters become `_`) — probe the sanitized spelling
+ * too.
  */
 const findEntryModule = (directory: string, inputName: string): string => {
-  const candidates = [`${inputName}.js`, `${inputName}.mjs`];
+  const sanitized = inputName.replace(/[\0:*?"<>|]/g, "_");
+  const names =
+    sanitized === inputName ? [inputName] : [inputName, sanitized];
+  const candidates = names.flatMap((name) => [`${name}.js`, `${name}.mjs`]);
   for (const candidate of candidates) {
     if (NodeFs.existsSync(NodePath.join(directory, candidate))) {
       return candidate;

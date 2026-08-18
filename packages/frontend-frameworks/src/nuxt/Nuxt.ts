@@ -12,14 +12,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as NodePath from "node:path";
-import {
-  DEFAULT_EFFECT_ROUTES,
-  effectGeneratedDir,
-  effectMainToPath,
-  renderEffectHandler,
-  writeGeneratedModule,
-} from "./effect.ts";
 import {
   enforceNitroConfig,
   findPresetConflict,
@@ -275,26 +267,28 @@ export interface NuxtTargetConfig {
    */
   readonly nuxt?: Record<string, unknown> | undefined;
   /**
-   * The effect-middleware delivery descriptor the framework half was
+   * The effectful entry-delivery descriptor the framework half was
    * constructed with ({@link NuxtOptions.effect}). Carried on the target
-   * config — JSON-serializable by construction — so wholesale targets that
-   * re-run the framework in a child process (the AWS target) can
-   * reconstruct the framework with the same options.
+   * config — JSON-serializable by construction — so the wholesale AWS
+   * target, which re-runs the framework in a child process, can generate
+   * the single-handler Lambda entry from it.
    */
-  readonly effect?: NuxtEffectMiddleware | undefined;
+  readonly effect?: NuxtEffectEntry | undefined;
 }
 
 /**
- * The effect-middleware delivery descriptor ({@link NuxtOptions.effect}):
- * plain data assembled by alchemy's effectful `Website.Nuxt` composite
- * from the construct's impl anchor. `make()` writes the shared
- * cloud-neutral handler module (`renderEffectHandler`) under
- * `<root>/.alchemy/nuxt/<id>/` and appends it to `nitro.handlers` in both
- * `build` and `dev` — nitro compiles config-injected handlers through the
- * same virtual module as scanned `server/middleware/*` files, so ONE
- * generated module delivers deployed dispatch and dev dispatch alike.
+ * The effectful entry-delivery descriptor ({@link NuxtOptions.effect}):
+ * plain data assembled by alchemy's effectful `AWS.Website.Nuxt`
+ * composite from the construct's impl anchor. Consumed by the AWS deploy
+ * target (Serve/DESIGN.md, AWS single-handler delivery): its build child
+ * writes the generated nitro entry — nitro's aws-lambda streaming handler
+ * grafted verbatim plus `makeFrameworkFunctionHandler`'s non-fetch
+ * dispatch — under `<root>/.alchemy/nuxt/<id>/` and rides it through the
+ * user-entry carriage (`nitro.options.entry`). The framework half never
+ * injects anything: HTTP composition is the user's own
+ * `server/middleware` mount, in dev and prod alike.
  */
-export interface NuxtEffectMiddleware {
+export interface NuxtEffectEntry {
   /**
    * The construct's logical id — names the generated-artifacts directory
    * (`<root>/.alchemy/nuxt/<id>/`).
@@ -305,11 +299,6 @@ export interface NuxtEffectMiddleware {
    * an absolute path or `file://` URL.
    */
   readonly main: string;
-  /**
-   * Path globs the effect fetch owns (`server.routes`).
-   * @default ["/api/*"]
-   */
-  readonly routes?: ReadonlyArray<string> | undefined;
 }
 
 /** Inputs the framework passes when asking the target for its dev platform. */
@@ -443,13 +432,14 @@ export interface NuxtOptions {
    */
   readonly nuxt?: Record<string, unknown> | undefined;
   /**
-   * Effectful-Website middleware delivery ({@link NuxtEffectMiddleware}):
-   * write the generated effect middleware and inject it through
-   * `nitro.handlers` in BOTH `build` and `dev`. AWS delivery path only —
-   * the Cloudflare pipeline uses the additive entry wrapper plus the
-   * user's own `server/middleware` mount.
+   * Effectful single-handler entry delivery ({@link NuxtEffectEntry}):
+   * carried onto the target config for the AWS deploy target, whose build
+   * child generates the composite Lambda entry from it. The framework
+   * half injects nothing — the user's own `server/middleware` mount owns
+   * HTTP in dev and prod (the Cloudflare pipeline rides `main` +
+   * `effectEntry` instead).
    */
-  readonly effect?: NuxtEffectMiddleware | undefined;
+  readonly effect?: NuxtEffectEntry | undefined;
   readonly dev?:
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
@@ -571,45 +561,6 @@ export const make: (
     effect: options?.effect,
   };
 
-  /**
-   * Effect-middleware delivery ({@link NuxtOptions.effect}): write the
-   * shared cloud-neutral handler module under `<root>/.alchemy/nuxt/<id>/`
-   * and return the `nitro.handlers` entry injecting it. The handler's env
-   * conditions admit dev AND the target's own build while excluding the
-   * prerenderer's `nitro-prerender` clone — the alchemy graph never
-   * compiles into (or runs during) prerender.
-   *
-   * This is the AWS delivery path (`NuxtOptions.effect` is only set by
-   * the AWS Nuxt composite; the Cloudflare source rides `main` +
-   * `effectEntry` and the user's own `server/middleware` mount instead).
-   * The former stand-down scan is gone — the stand-down concept died with
-   * the mount design (Serve/DESIGN.md); phase 4 replaces this injection
-   * with the AWS mount story.
-   */
-  const prepareEffectMiddleware = Effect.fnUntraced(function* (
-    root: string,
-    target: NuxtTarget,
-  ) {
-    const effect = options?.effect;
-    if (effect === undefined) {
-      return undefined;
-    }
-    const handlerPath = yield* writeGeneratedModule(
-      NodePath.join(effectGeneratedDir(root, effect.id), "effect-handler.mjs"),
-      renderEffectHandler({
-        sitePath: effectMainToPath(effect.main),
-        routes: effect.routes ?? DEFAULT_EFFECT_ROUTES,
-      }),
-    );
-    return [
-      {
-        middleware: true,
-        handler: handlerPath,
-        env: ["dev", target.nitroPreset],
-      } satisfies NuxtServerHandler,
-    ];
-  });
-
   const resolveTarget = (root: string) =>
     FrameworkCore.resolveDeployTarget<NuxtTarget, NuxtTargetConfig>(
       root,
@@ -656,15 +607,6 @@ export const make: (
       const entry = FrameworkCore.resolveDeployTargetEntry(target, { root });
       const kit = yield* loadNuxtKit(root);
 
-      // Zero-setup effect delivery: the generated middleware is injected
-      // through `nitro.handlers`, which nitro compiles into the production
-      // server bundle exactly as it compiles scanned `server/middleware/*`
-      // files — the same "compiled by the framework itself" property the
-      // explicit mount has, minus the user file.
-      const effectHandlers = yield* prepareEffectMiddleware(root, target).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-      );
-
       // The user's nuxt.config.ts loads natively; our injection rides the
       // highest-priority overrides layer. `ready: false` so hooks registered
       // below actually fire (ready: true runs them inside loadNuxt).
@@ -677,7 +619,6 @@ export const make: (
             overrides: makeNuxtOverrides({
               nitroPreset: target.nitroPreset,
               nuxtConfig: options?.nuxt,
-              nitroHandlers: effectHandlers,
             }),
           }),
         catch: (error) => fail("Failed to load the Nuxt project", error),
@@ -837,17 +778,10 @@ export const make: (
     // package, whose `#nitro-internal-virtual/*` imports only exist
     // inside the dev bundle.
     const nitroPlugins = platform?.nitroPlugins;
-    // Zero-setup effect delivery, dev half: the SAME generated middleware
-    // the production build injects — nitro's dev flow compiles
-    // config-injected handlers into the dev SSR worker through the same
-    // virtual module (the `"dev"` env condition admits it).
-    const effectHandlers = yield* prepareEffectMiddleware(root, target).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-    );
-    const devHandlers = [
-      ...(effectHandlers ?? []),
-      ...(options?.dev?.serverHandlers ?? []),
-    ];
+    // Effect delivery in dev is the user's own `server/middleware` mount —
+    // ordinary app code nitro compiles into the dev SSR worker natively.
+    // Nothing is injected; only embedder-supplied handlers ride through.
+    const devHandlers = [...(options?.dev?.serverHandlers ?? [])];
     const nuxt = yield* Effect.tryPromise({
       try: async () =>
         await kit.loadNuxt({

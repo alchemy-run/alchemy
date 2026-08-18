@@ -237,7 +237,7 @@ export interface EffectStaticSiteProps extends StaticSiteProps {
    */
   main: string;
   /**
-   * Server routing + Lambda tuning. `server.routes` (default `["/api/*"]`)
+   * Server Lambda tuning. The effect claim (`["/api/*"]`)
    * is the URL space the effect `fetch` owns — compiled into the
    * viewer-request CloudFront Function so matching requests reach the
    * server Lambda before the asset manifest, even under `spa: true`.
@@ -274,7 +274,7 @@ export interface StaticSiteAttributes {
  * the effect-native server Lambda.
  */
 export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
-  /** The effect-native `AWS.Lambda.Function` serving `server.routes`. */
+  /** The effect-native `AWS.Lambda.Function` serving the effect claim. */
   server: LambdaFunction;
   /** The server Lambda's Function URL. */
   serverUrl: Input<string | undefined>;
@@ -410,14 +410,13 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *   {
  *     path: "./dist",
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/static"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): the
+ * The effect `fetch` owns the mount's claim (default `["/api/*"]`): the
  * edge router forwards them to the Lambda before the static-asset
  * manifest, so an uploaded file can never shadow an API path — even
  * under `spa: true`. Exclusion globs (`"!/api/static"`) hand a path back
@@ -435,7 +434,7 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  * Non-`fetch` methods are RPC methods for trusted callers (in-process
  * dispatch, AWS invoke-style bindings). The static frontend is untrusted:
  * it talks to the backend through `fetch` — mount a schema-validated
- * surface (effect `HttpApi` / `@effect/rpc`) under `server.routes`.
+ * surface (effect `HttpApi` / `@effect/rpc`) under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue
@@ -604,7 +603,7 @@ const makeEffectStaticSite = (
     const remoted = yield* ProviderModePolicy;
     const props = yield* asEffect(propsEff);
     yield* validateImplAnchor(id, "StaticSite", props.main);
-    const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
+    const routes = DEFAULT_SERVER_ROUTES;
     // Validate the route globs eagerly — a plan-time defect even in dev,
     // where the edge compile never runs.
     yield* compileServerRoutes(id, routes);
@@ -793,7 +792,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
   }
   if (server && props.spa && !server.serverRoutesOnly) {
     return yield* Effect.die(
-      `A site whose server origin answers manifest misses routes them to the server; "spa" does not apply. Scope the server to explicit routes (an effectful site's "server.routes") to combine it with "spa".`,
+      `A site whose server origin answers manifest misses routes them to the server; "spa" does not apply. Scope the server to explicit routes (an effectful site's edge claim) to combine it with "spa".`,
     );
   }
   const compiledServerRoutes = server?.serverRoutes?.length
@@ -1354,7 +1353,7 @@ interface KvSiteMetadata {
    */
   redirect?: { hosts: string[]; to: string } | undefined;
   /**
-   * Compiled `server.routes` (anchored regex sources): matched requests
+   * Compiled effect claim (anchored regex sources): matched requests
    * switch to the server origin BEFORE the manifest lookup — see the
    * `serverRoutes` check in `routeSite` in cfcode.ts.
    */

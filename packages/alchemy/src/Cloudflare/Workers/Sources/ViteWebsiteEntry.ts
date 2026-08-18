@@ -102,7 +102,7 @@ const captureFrameworkEntry = (
 
 /**
  * Generate the wrapper module source. Import order is load-bearing:
- * `alchemy/Serve/Worker` must evaluate before the user's site module so
+ * `alchemy/Cloudflare/Serve` must evaluate before the user's site module so
  * `globalThis.__ALCHEMY_RUNTIME__` is stamped (at that module's evaluation)
  * before any user code can observe it.
  */
@@ -147,7 +147,7 @@ const generateWebsiteEntry = (
     // dispatch and the platform class exports.
     return [
       // Evaluates first: stamps __ALCHEMY_RUNTIME__ at module evaluation.
-      `import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";`,
+      `import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Cloudflare/Serve";`,
       `import { ${cfImports.join(", ")} } from "cloudflare:workers";`,
       `import * as __alchemyUserEntry from ${JSON.stringify(toSpecifier(entry.entryPath))};`,
       `import Site from ${JSON.stringify(toSpecifier(entry.mainPath))};`,
@@ -172,30 +172,46 @@ const generateWebsiteEntry = (
       "",
     ].join("\n");
   }
-  const framework = frameworkEntry
-    ? // The framework graph loads lazily on first fallback.
-      `() => import(${JSON.stringify(toSpecifier(frameworkEntry))})`
-    : // No framework server entry (SPA / assets-only site): requests
-      // outside the effect routes fall through to the static asset layer,
-      // which applies `notFoundHandling` (including the SPA index.html
-      // fallback).
-      `() => Promise.resolve({
-  default: {
-    fetch: (request, env) =>
-      env?.ASSETS
-        ? env.ASSETS.fetch(request)
-        : new Response("Not Found", { status: 404 }),
-  },
-})`;
+  if (frameworkEntry !== undefined) {
+    // A framework server entry with no user mount is the retired implicit
+    // tier (Serve/DESIGN.md: explicit mounts only). Fail the build loudly
+    // with the fix instead of silently gating routes.
+    throw new Error(
+      `Effectful Website: the framework has a server entry ` +
+        `(${frameworkEntry}) but no mount file is configured. You own HTTP ` +
+        `composition — create a server entry that mounts the program:\n\n` +
+        `  // src/server.ts\n` +
+        `  import framework from "<the framework's server entry>";\n` +
+        `  import { mount } from "alchemy/Serve";\n` +
+        `  import Site from "./backend.ts";\n` +
+        `  const site = mount(Site);\n` +
+        `  export default {\n` +
+        `    fetch: async (req, env, ctx) =>\n` +
+        `      (await site.fetch(req, env, ctx)) ?? framework.fetch(req, env, ctx),\n` +
+        `  };\n\n` +
+        `and point the Website at it with \`server: { entry: "./src/server.ts" }\`.`,
+    );
+  }
+  // No framework server entry (SPA / assets-only site): the program IS
+  // the server. Requests outside the effect claim fall through to the
+  // static asset layer, which applies `notFoundHandling` (including the
+  // SPA index.html fallback).
   return [
     // Evaluates first: stamps __ALCHEMY_RUNTIME__ at module evaluation.
-    `import { makeWebsiteExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";`,
+    `import { makeWebsiteExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Cloudflare/Serve";`,
     `import { ${cfImports.join(", ")} } from "cloudflare:workers";`,
     `import Site from ${JSON.stringify(toSpecifier(entry.mainPath))};`,
     `export default makeWebsiteExports(WorkerEntrypoint, {`,
     `  site: Site,`,
     `  routes: ${JSON.stringify(entry.routes)},`,
-    `  framework: ${framework},`,
+    `  framework: () => Promise.resolve({`,
+    `    default: {`,
+    `      fetch: (request, env) =>`,
+    `        env?.ASSETS`,
+    `          ? env.ASSETS.fetch(request)`,
+    `          : new Response("Not Found", { status: 404 }),`,
+    `    },`,
+    `  }),`,
     `});`,
     ...classExports,
     "",
@@ -211,7 +227,7 @@ const generateWebsiteEntry = (
  *    DESIGN §6.2a wrapper (site import + `makeWebsiteExports` + DO stubs);
  * 2. defines `globalThis.__ALCHEMY_RUNTIME__` as `true` in every *worker*
  *    environment (never the client env) so plan-only `host.bind` branches
- *    fold at build time — the wrapper's `alchemy/Serve/Worker` import also
+ *    fold at build time — the wrapper's `alchemy/Cloudflare/Serve` import also
  *    stamps the flag at module evaluation, so correctness holds even where
  *    the define can't reach;
  * 3. captures the framework's own entry-environment input before the

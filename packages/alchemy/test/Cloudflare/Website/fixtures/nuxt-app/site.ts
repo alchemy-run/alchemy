@@ -11,31 +11,30 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const EffectKv = Cloudflare.KV.Namespace("NuxtEffectKv");
 
 /**
- * The Nuxt effect entry takeover shape (DESIGN Amendment §2.1.2), dev
- * flavor: an effectful `Cloudflare.Website.Nuxt` whose Effect program owns
- * `/api/*`. In dev the program is mounted as an alchemy-generated nitro
- * middleware (routes-scoped `toHandler`) inside nitro's dev SSR
- * worker thread; the KV capability resolves through the platform proxy to
- * the local simulator. Exercises:
+ * The effectful Nuxt Website (Serve/DESIGN.md), dev flavor: an effectful
+ * `Cloudflare.Website.Nuxt` whose Effect program owns `/api/*` through
+ * the USER'S mount — a `server/middleware/*.ts` nitro middleware the test
+ * writes into its clone, calling
+ * `mount(Site, { routes: ["/api/*", "!/api/hello"] })` and returning
+ * `site.fetch(toWebRequest(event), ...)` (undefined = nitro serves). The
+ * middleware is ordinary app code nitro compiles into its dev SSR worker
+ * thread; the KV capability resolves through the platform proxy to the
+ * local simulator. Exercises:
  *
  * - `/api/effect/kv` — the effect fetch with the KV binding;
- * - `/api/hello` — carved out of the claim by the `!/api/hello` exclusion
- *   glob, so nitro's own scanned route answers (strict route ownership:
- *   delegation is purely a `server.routes` decision);
+ * - `/api/hello` — carved out of the claim by the mount's `!/api/hello`
+ *   exclusion glob, so nitro's own scanned route answers (strict route
+ *   ownership: delegation is purely the mount's decision);
  * - `/` — Nuxt SSR outside the effect routes.
  *
  * `main: import.meta.url` anchors this module: the engine imports it for
- * plan-time binding collection, and the generated dev middleware (and, on
- * deploy, the generated nitro entry wrapper) re-imports it by path.
+ * plan-time binding collection, and the mount re-imports it by path.
  */
 export default class NuxtEffectSite extends Cloudflare.Website.Nuxt<NuxtEffectSite>()(
   "NuxtEffectSite",
   {
     main: import.meta.url,
     rootDir: import.meta.dirname,
-    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
-    // `/api/hello`, which the exclusion glob routes to nitro's own route.
-    server: { routes: ["/api/*", "!/api/hello"] },
     dev: { port: 0 },
     memo: {
       include: [

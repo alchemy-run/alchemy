@@ -1252,6 +1252,42 @@
         "vite": "catalog:",
       },
     },
+    "examples/monorepo-frontends/packages/tanstack": {
+      "name": "@monorepo-frontends/tanstack",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tanstack/react-router": "^1.167.4",
+        "@tanstack/react-start": "^1.166.15",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^6.0.1",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
+    "examples/monorepo-frontends/packages/vite": {
+      "name": "@monorepo-frontends/vite",
+      "version": "0.0.0",
+      "dependencies": {
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^6.0.1",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
     "examples/monorepo-multi-stack/backend": {
       "name": "@monorepo-multi-stack/backend",
       "version": "0.0.0",
@@ -3026,6 +3062,10 @@
     "@monorepo-frontends/nuxt": ["@monorepo-frontends/nuxt@workspace:examples/monorepo-frontends/packages/nuxt"],
 
     "@monorepo-frontends/sveltekit": ["@monorepo-frontends/sveltekit@workspace:examples/monorepo-frontends/packages/sveltekit"],
+
+    "@monorepo-frontends/tanstack": ["@monorepo-frontends/tanstack@workspace:examples/monorepo-frontends/packages/tanstack"],
+
+    "@monorepo-frontends/vite": ["@monorepo-frontends/vite@workspace:examples/monorepo-frontends/packages/vite"],
 
     "@monorepo-multi-stack/backend": ["@monorepo-multi-stack/backend@workspace:examples/monorepo-multi-stack/backend"],
 

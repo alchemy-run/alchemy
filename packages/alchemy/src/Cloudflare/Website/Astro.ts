@@ -243,14 +243,16 @@ export interface AstroProps<
  * Pass an Effect program as the third argument and ONE Worker serves the
  * Astro app **and** your effect-native handlers. The program's capability
  * bindings (KV, R2, D1, ...) are collected at plan time exactly like an
- * effect Worker's; alchemy pre-resolves Astro's fetchable seam
- * (`virtual:astro:fetchable`) to a generated wrapper that routes by
- * `server.routes` (default `["/api/*"]`): inside the routes the effect
- * fetch is authoritative — an `HttpRouter` miss renders as its own 404,
- * never delegation — and outside them Astro's own pipeline serves
- * without invoking the effect (hand a path back to Astro with an
- * exclusion glob: `routes: ["/api/*", "!/api/foo"]`) — in the
- * production build and in `astro dev` alike. A
+ * effect Worker's. HTTP delivery is your mount — Astro 7's native fetch
+ * entrypoint (`src/fetch.ts`) calls `mount(Site)` from `alchemy/Serve`
+ * and composes `site.fetch(request, env, ctx) ?? astro(...)`: inside the
+ * mount's claim (default `["/api/*"]`; exclusion globs carve paths back
+ * out) the effect fetch is authoritative — an `HttpRouter` miss renders
+ * as its own 404, never delegation — and Astro's own pipeline serves
+ * everything you fall through to, in the production build and in
+ * `astro dev` alike. The generated wrapper entry is additive-only: it
+ * grafts Astro's fetch verbatim and delivers the platform surface
+ * (DO/Workflow class exports, queue/scheduled dispatch) next to it. A
  * declared-static build (`astro: { output: "static" }`) deploys no
  * Worker code and therefore rejects an Effect program at plan time.
  *
@@ -497,18 +499,17 @@ export const Astro: {
                 // file-level `output` is superseded; opt into a fully
                 // prerendered site with `astro: { output: "static" }`.
                 astro: { output: "server", ...props.astro },
-                // Effectful-Website delivery (auto tier): the integration
-                // pre-resolves Astro's `virtual:astro:fetchable` to a
-                // generated wrapper importing the program module — effect
-                // handlers own `server.routes`, Astro's pipeline serves
-                // everything outside them. JSON-serializable by
-                // construction (it crosses the build-child and
-                // dev-sidecar boundaries).
+                // Effectful-Website delivery: the generated wrapper
+                // (additive-only — Astro's fetch, with the user's
+                // src/fetch.ts mount inside, serves ALL HTTP verbatim)
+                // imports the program module for the platform surface.
+                // JSON-serializable by construction (it crosses the
+                // build-child and dev-sidecar boundaries).
                 ...(anchor !== undefined
                   ? {
                       effect: {
                         mainPath: anchor,
-                        routes: props.server?.routes ?? DEFAULT_SERVER_ROUTES,
+                        routes: DEFAULT_SERVER_ROUTES,
                       },
                     }
                   : undefined),

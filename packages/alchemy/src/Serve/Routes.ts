@@ -1,5 +1,5 @@
 /**
- * `server.routes` glob matching — the same path-glob dialect Cloudflare's
+ * Mount-claim glob matching — the same path-glob dialect Cloudflare's
  * `assets.runWorkerFirst` rules use: `*` matches any run of characters
  * (including `/`), and a leading `!` marks an exclusion. Exclusions take
  * precedence over inclusions, mirroring Cloudflare's rule semantics.
@@ -9,10 +9,10 @@
 
 /**
  * The default URL space an effectful Website's `fetch` handler owns when
- * `server.routes` is not configured. Every routes-carrying serve surface
+ * no claim is configured. Every routes-carrying serve surface
  * (`Serve.toHandler`, `makeWebsiteExports`, the
  * framework adapters) falls back to this claim, matching the constructs'
- * own `server.routes` default.
+ * own claim default.
  */
 export const DEFAULT_SERVER_ROUTES = ["/api/*"];
 

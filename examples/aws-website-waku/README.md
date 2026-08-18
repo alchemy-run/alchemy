@@ -1,27 +1,21 @@
 # AWS Website: Waku
 
-Deploys a [Waku](https://waku.gg) app to AWS with `AWS.Website.Waku` — no `waku.config.ts` adapter, no CDK.
+Deploys an **effectful** [Waku](https://waku.gg) app to AWS with `AWS.Website.Waku` — no `waku.config.ts` adapter, no CDK: ONE streaming Lambda serves the Waku frontend AND a typed Effect backend, with the queue consumer dispatching on the SAME function (single-handler delivery, `Serve/DESIGN.md` AWS phase 4).
 
-The resource builds the app with waku's own Vite pipeline and a wrangler-free in-memory AWS adapter: the RSC server bundle deploys on a streaming Lambda Function URL, and the client output (including SSG-prerendered pages and the RSC payloads) deploys to S3 behind CloudFront. Values passed via `server.environment` are readable in server components through waku's `getEnv`.
+The resource builds the app with waku's own Vite pipeline and a wrangler-free in-memory AWS adapter. With an Effect program as the third argument, the generated Lambda entry is `makeFrameworkFunctionHandler({ site, fetch })` from `alchemy/AWS/Serve`: waku's fetch (with the mount middleware inside it) serves ALL HTTP verbatim, and SQS batches dispatch through the program's registered consumer inside the one `streamifyResponse` wrap.
 
-```ts
-const site = yield* AWS.Website.Waku("WakuSite", {
-  server: {
-    environment: {
-      GREETING: "Hello from alchemy",
-    },
-  },
-});
-```
+HTTP composition is YOURS, in waku's own idiom: `src/middleware/mount.ts` (waku's framework hook) mounts the program via `alchemy/Serve` and runs identically under `waku dev`, `alchemy dev`, and on the deployed Lambda. On AWS `site.fetch(request)` takes no env/ctx — env resolves from `process.env` and the request scope settles inline (Lambda semantics).
 
 ## The app
 
-A minimal Waku site — a framework showcase, not a backend demo (no bindings beyond `server.environment`):
+The shared MaxSite fixture program (minus DOs/Workflows, which AWS has no analogue for):
 
-- `src/pages/index.tsx` — dynamic RSC page, rendered by the Lambda on every request; reads `GREETING` via `getEnv`
+- `src/backend.ts` — the Website class: an Effect `fetch` API under `/api/*` (queue producer, streaming route, request-scope finalizer, DynamoDB observability), the SQS consumer on the same Lambda, and RPC methods for the value-form `createClient`
+- `src/middleware/mount.ts` — the mount file: `/healthz` short-circuit, an `x-admin-key` gate, then `site.fetch ?? next()`
+- `src/lib/backend.ts` — the module-scope value-form `createClient`, used by the RSC page during SSR
+- `src/pages/index.tsx` — dynamic RSC page: renders the backend's counters through the value-form client
 - `src/pages/about.tsx` — static page, prerendered at build time and served from S3
 - `src/components/Counter.tsx` — a `"use client"` island hydrated into the server-rendered page
-- `src/components/ui/` — hand-copied shadcn-style components (`button.tsx`, `card.tsx` + the `cn` util) styled with Tailwind CSS v4
 
 ## Commands
 

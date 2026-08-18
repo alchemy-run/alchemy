@@ -23,7 +23,7 @@ describe("makeEntryWrapperSource (Astro entry takeover)", () => {
 
   it("spreads the non-fetch handler surface from the Worker bridge", () => {
     expect(wrapper).toContain(
-      `import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
+      `import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Cloudflare/Serve";`,
     );
     expect(wrapper).toContain(`import Site from "/abs/project/site.ts";`);
     expect(wrapper).toContain(

@@ -28,7 +28,7 @@ const { test } = Test.make({ providers: AWS.providers() });
  * Plan-level coverage for the effectful AWS Website composites (collect-only
  * threading): the impl runs at plan time in the engine process — bindings
  * collect env vars + IAM policy statements onto the composite's server
- * Lambda, `server.routes` threads into the collect-only props and the edge
+ * Lambda, the delivery stamp threads into the collect-only props and the edge
  * `serverRoutes` compile, and the resolved Lambda props are stamped with
  * `runtimeDelivery` — without any build or cloud call. Nothing in this file
  * deploys.
@@ -113,7 +113,6 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         expect(server.props.isExternal).toBeUndefined();
         // The default routes thread into the collect-only server props
         // (the same list compiles into the edge router's serverRoutes).
-        expect(server.props.server.routes).toEqual(["/api/*"]);
         // The fetchable-wrapper inputs ride the framework build options
         // (`targetConfig.effect` -> the AWS deploy target's config).
         const buildTargetConfig = build.props.options?.targetConfig as
@@ -147,7 +146,7 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
   );
 
   test.provider(
-    "custom server.routes / verify / takeover thread into the collect-only props",
+    "server.verify threads into the collect-only props",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -156,28 +155,19 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
               "WakuSite",
               {
                 main: import.meta.url,
-                server: {
-                  routes: ["/rpc/*", "!/rpc/health"],
-                  verify: false,
-                  takeover: false,
-                },
+                server: { verify: false },
               },
               Effect.succeed(okFetch),
             );
           }),
         );
         const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
-        expect(server.props.runtimeDelivery).toBe("external");
-        expect(server.props.server).toMatchObject({
-          routes: ["/rpc/*", "!/rpc/health"],
-          verify: false,
-          takeover: false,
-        });
+        expect(server.props.server).toMatchObject({ verify: false });
       }),
   );
 
   test.provider(
-    "Waku impl arm: explicit tier by default — external delivery, default routes, no effect build options",
+    "Waku impl arm: wrapper tier by default — single-handler delivery with effect build options",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -191,16 +181,14 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         );
         const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
         expect(server).toBeDefined();
-        expect(server.props.runtimeDelivery).toBe("external");
+        expect(server.props.runtimeDelivery).toBe("wrapper");
         expect(server.props.bundle).toBe(false);
-        expect(server.props.server.routes).toEqual(["/api/*"]);
-        // No wrapperEntry/effectOptions on the Waku config: the sentinel
-        // scan enforces the hand-written mount at deploy, and no effect
-        // build options ride the framework build.
+        // The effect inputs ride the framework build options (the deploy
+        // target's finishing pass generates the single-handler entry).
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build).toBeDefined();
-        expect(build.props.options?.effect).toBeUndefined();
-        expect(build.props.options?.effectHash).toBeUndefined();
+        expect(build.props.options?.effect).toBeDefined();
+        expect(build.props.options?.effectHash).toBeDefined();
       }),
   );
 
@@ -223,8 +211,7 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
           expect(server).toBeDefined();
           expect(server.props.runtimeDelivery).toBe("external");
           expect(server.props.bundle).toBe(false);
-          expect(server.props.server.routes).toEqual(["/api/*"]);
-        }
+          }
 
         // Nuxt is the auto-inject (wrapper) tier: the framework
         // integration writes the generated effect middleware under
@@ -245,39 +232,19 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
           expect(server).toBeDefined();
           expect(server.props.runtimeDelivery).toBe("wrapper");
           expect(server.props.bundle).toBe(false);
-          expect(server.props.server.routes).toEqual(["/api/*"]);
           const build = nodeOf(plan, "Build", "AWS.Website.Server");
           expect(build).toBeDefined();
           const options = build.props.options as {
-            effect: { id: string; main: string; routes: string[] };
+            effect: { id: string; main: string };
             effectHash: string;
           };
           expect(options.effect.id).toBe("NuxtSite");
-          // Nuxt keeps the routes-scoped middleware delivery until its
-          // own mount conversion (Serve/DESIGN.md phase 6).
-          expect(options.effect.routes).toEqual(["/api/*"]);
+          // Routing lives in the user's middleware mount — no routes ride
+          // the build options; the descriptor carries the platform-surface
+          // inputs only.
+          expect(options.effect).not.toHaveProperty("routes");
           expect(options.effect.main).toContain("EffectfulPlan.test.ts");
           expect(typeof options.effectHash).toBe("string");
-        }
-
-        // Nuxt stand-down: `takeover: false` forces the explicit tier —
-        // no effect build options, external delivery (the sentinel scan
-        // enforces the hand-written mount at deploy).
-        {
-          const plan = yield* stack.plan(
-            Effect.gen(function* () {
-              yield* AWS.Website.Nuxt(
-                "NuxtOptOut",
-                { main: import.meta.url, server: { takeover: false } },
-                Effect.succeed(okFetch),
-              );
-            }),
-          );
-          const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
-          expect(server.props.runtimeDelivery).toBe("external");
-          const build = nodeOf(plan, "Build", "AWS.Website.Server");
-          expect(build.props.options?.effect).toBeUndefined();
-          expect(build.props.options?.effectHash).toBeUndefined();
         }
 
         // Curried class form: the class is a real Effect and plans the
@@ -335,7 +302,6 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         expect(server).toBeDefined();
         expect(server.props.runtimeDelivery).toBe("wrapper");
         expect(server.props.bundle).toBe(false);
-        expect(server.props.server.routes).toEqual(["/api/*"]);
         // The effect inputs ride the framework build options (the derived
         // config generator consumes them in the build child), and the
         // effect module's content hash keys rebuilds.
@@ -370,30 +336,6 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
   );
 
   test.provider(
-    "Nextjs stand-down: takeover false forces the explicit tier (no derived config)",
-    (stack) =>
-      Effect.gen(function* () {
-        const plan = yield* stack.plan(
-          Effect.gen(function* () {
-            yield* AWS.Website.Nextjs(
-              "NextOptOut",
-              { main: import.meta.url, server: { takeover: false } },
-              Effect.succeed(okFetch),
-            );
-          }),
-        );
-        // External delivery: no effect build options, and the deploy-time
-        // sentinel scan enforces the hand-written alchemy/Next mount.
-        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
-        expect(server.props.runtimeDelivery).toBe("external");
-        expect(server.props.server.takeover).toBe(false);
-        const build = nodeOf(plan, "Build", "AWS.Website.Server");
-        expect(build.props.options?.effect).toBeUndefined();
-        expect(build.props.options?.effectHash).toBeUndefined();
-      }),
-  );
-
-  test.provider(
     "no-impl arms are untouched: external server Lambda, no stamp, no route threading",
     (stack) =>
       Effect.gen(function* () {
@@ -415,23 +357,6 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         });
         expect(nodeOf(plan, "Build", "AWS.Website.Server")).toBeDefined();
       }),
-  );
-
-  test.provider("invalid server.routes fail fast at plan", (stack) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        stack.plan(
-          Effect.gen(function* () {
-            yield* AWS.Website.Nuxt(
-              "BadRoutes",
-              { main: import.meta.url, server: { routes: ["api/*"] } },
-              Effect.succeed(okFetch),
-            );
-          }),
-        ),
-      );
-      expect(defectOf(exit)?._tag).toBe("WebsiteServerRoutingError");
-    }),
   );
 
   test.provider("impl without a main anchor fails fast at plan", (stack) =>
@@ -527,7 +452,6 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         expect(server.props.runtimeDelivery).toBe("wrapper");
         expect(server.props.bundle).toBe(false);
         expect(server.props.handler).toBe("handler");
-        expect(server.props.server.routes).toEqual(["/api/*"]);
         expect(server.props.functionUrl).toMatchObject({
           authType: "NONE",
           invokeMode: "RESPONSE_STREAM",
@@ -550,7 +474,7 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
   );
 
   test.provider(
-    "Vite SSR: viteEnvironments thread into the build options; takeover false stands the wrapper down",
+    "Vite SSR: viteEnvironments thread into the build options",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -561,26 +485,18 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
                 ssr: true,
                 main: import.meta.url,
                 viteEnvironments: { entry: "rsc", children: ["ssr"] },
-                server: { takeover: false },
               },
               Effect.succeed(okFetch),
             );
           }),
         );
         // The environment split reaches the framework integration through
-        // the build options, while `takeover: false` forces the explicit
-        // tier: no effect build options, external delivery (the sentinel
-        // scan enforces the hand-written mount at deploy).
+        // the build options.
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build.props.options?.viteEnvironments).toEqual({
           entry: "rsc",
           children: ["ssr"],
         });
-        expect(build.props.options?.effect).toBeUndefined();
-        expect(build.props.options?.effectHash).toBeUndefined();
-        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
-        expect(server.props.runtimeDelivery).toBe("external");
-        expect(server.props.server.takeover).toBe(false);
       }),
   );
 
@@ -667,49 +583,6 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
       }),
   );
 
-  test.provider(
-    "wrapper tier stands down on takeover: false (external, no generated entry)",
-    (stack) =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-aws-wrapper-optout-",
-        });
-
-        const plan = yield* stack.plan(
-          Effect.gen(function* () {
-            yield* makeEffectFrameworkSite(
-              "OptOutSite",
-              {
-                main: import.meta.url,
-                rootDir: root,
-                server: { takeover: false },
-              },
-              {
-                name: "TestFramework",
-                framework: "@alchemy.run/frontend-frameworks/nuxt",
-                target: "@alchemy.run/frontend-frameworks/nuxt/aws",
-                wrapperEntry: () => "// never generated\n",
-              },
-              Effect.succeed(okFetch),
-            );
-          }),
-        );
-
-        expect(
-          yield* fs.exists(
-            path.join(root, ".alchemy", "generated", "OptOutSite"),
-          ),
-        ).toBe(false);
-        const build = nodeOf(plan, "Build", "AWS.Website.Server");
-        expect(build.props.options?.main).toBeUndefined();
-        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
-        expect(server.props.runtimeDelivery).toBe("external");
-
-        yield* fs.remove(root, { recursive: true });
-      }),
-  );
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -766,15 +639,13 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
         expect(envKeys).toContain("ALCHEMY_STAGE");
         expect(env.ALCHEMY_PHASE).toBeUndefined();
 
-        // Nuxt's wrapper-tier build options ride into the dev Server too:
-        // the framework's `make()` injects the generated effect middleware
-        // into the dev SSR worker from them (`nitro.handlers`), so the
-        // effect fetch dispatches in dev with NO user mount file.
+        // Nuxt's wrapper-tier build options ride into the dev Server too —
+        // the effect descriptor carries the platform-surface inputs (HTTP
+        // is the user's server/middleware mount, compiled by nitro).
         const devOptions = build.props.options as {
-          effect: { id: string; main: string; routes: string[] };
+          effect: { id: string; main: string };
         };
         expect(devOptions.effect.id).toBe("DevSite");
-        expect(devOptions.effect.routes).toEqual(["/api/*"]);
         expect(devOptions.effect.main).toContain("EffectfulPlan.test.ts");
 
         // The effect program deploys as its own effect-native Lambda (the
@@ -862,10 +733,7 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
           Effect.gen(function* () {
             yield* AWS.Website.Nextjs(
               "DevNext",
-              {
-                main: import.meta.url,
-                server: { routes: ["/api/effect/*"] },
-              },
+              { main: import.meta.url },
               Effect.succeed(okFetch),
             );
           }),
@@ -880,30 +748,6 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
       }),
   );
 
-  dev.test.provider(
-    "dev: Nextjs takeover:false stands the dev dispatch down (explicit tier)",
-    (stack) =>
-      Effect.gen(function* () {
-        const plan = yield* stack.plan(
-          Effect.gen(function* () {
-            yield* AWS.Website.Nextjs(
-              "DevNextExplicit",
-              {
-                main: import.meta.url,
-                server: { takeover: false },
-              },
-              Effect.succeed(okFetch),
-            );
-          }),
-        );
-        // The explicit tier: the user's own `toHandler` mount
-        // (compiled by Next) serves — no dispatch options reach the dev
-        // child.
-        const build = nodeOf(plan, "Build", "AWS.Website.Server");
-        expect(build).toBeDefined();
-        expect(build.props.options).toBeUndefined();
-      }),
-  );
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -927,7 +771,6 @@ describe.concurrent("composite artifact sentinel scan (bundler unit)", () => {
             main: unmountedDist,
             handler: "handler",
             bundle: false,
-            server: { routes: ["/api/*"] },
             runtimeDelivery: "external",
           } as any).pipe(Effect.provide(NodeServices.layer)),
         );
@@ -944,7 +787,6 @@ describe.concurrent("composite artifact sentinel scan (bundler unit)", () => {
         main: mountedDist,
         handler: "handler",
         bundle: false,
-        server: { routes: ["/api/*"] },
         runtimeDelivery: "external",
       } as any).pipe(Effect.provide(NodeServices.layer));
       expect(result.identityHash.length).toBeGreaterThan(0);

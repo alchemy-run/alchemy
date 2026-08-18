@@ -28,7 +28,7 @@ describe("generateWorkerShim effect arm", () => {
 
   it("grafts kit's handler verbatim via makeWebsiteEntryExports (additive)", () => {
     expect(effect).toContain(
-      `import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";`,
+      `import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Cloudflare/Serve";`,
     );
     expect(effect).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,

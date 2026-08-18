@@ -171,7 +171,7 @@ export interface EffectNextjsProps extends NextjsProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * Server delivery + Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: NextjsProps["server"] & WebsiteServerOptions;
@@ -315,14 +315,13 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *   "Site",
  *   {
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/pages"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * The effect `fetch` owns the mount's claim (default `["/api/*"]`): inside
  * them its responses — 404s included — are final and Next routes are
  * shadowed; outside them Next serves. Exclusion globs (`"!/api/pages"`)
  * hand a path back to Next. `alchemy dev` applies the same route
@@ -341,7 +340,7 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * components, route handlers) — dispatch is in-process, no HTTP hop.
  * Client components are untrusted: they reach the backend through `fetch`
  * — mount a schema-validated surface (effect `HttpApi` / `@effect/rpc`)
- * under `server.routes`.
+ * under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue
@@ -370,9 +369,8 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *          handler as PATCH, handler as DELETE, handler as HEAD,
  *          handler as OPTIONS };
  * ```
- * An explicit mount in the route tree (or `server: { takeover: false }`)
- * stands the automatic delivery down; dispatch then happens inside Next's
- * router, so more-specific user routes win over the catch-all.
+ * Dispatch happens inside Next's router, so more-specific user routes
+ * win over the catch-all.
  */
 export const Nextjs: {
   <Self>(): {
@@ -457,10 +455,7 @@ const makeNextjs = (
         "Nextjs",
         (props as EffectNextjsProps).main,
       );
-      routes =
-        (props as EffectNextjsProps).server?.routes ?? DEFAULT_SERVER_ROUTES;
-      // Validate the route globs eagerly — a plan-time defect even in dev,
-      // where the edge compile never runs.
+      routes = DEFAULT_SERVER_ROUTES;
       yield* compileServerRoutes(id, routes);
       // Impl-declared resources register at the CALLER's namespace —
       // CF-Worker / effectful-StaticSite parity (the migration contract:
@@ -576,12 +571,9 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
   // non-fetch listener dispatch on the same function. The effect inputs
   // ride the build options (JSON-serializable; they participate in the
   // Server memo hash, and `effectHash` folds the effect module's content
-  // in so effect edits rebuild). `takeover: false` forces the explicit
-  // tier (the artifact deploys with Next's own entry — non-fetch
-  // listeners are then a plan-time error).
+  // in so effect edits rebuild).
   const effectExtra =
-    impl !== undefined &&
-    (props as EffectNextjsProps).server?.takeover !== false
+    impl !== undefined
       ? yield* prepareEffectBuildOptions({
           main: (props as EffectNextjsProps).main,
           routes: routes ?? DEFAULT_SERVER_ROUTES,
@@ -704,12 +696,10 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
   // With an Effect program, the server Lambda runs in collect-only mode:
   // the impl's init evaluates at plan time (bindings collect env + IAM
   // through `attachBindings`) while the OpenNext artifact ships as-is.
-  // Delivery is the auto-inject (wrapper) tier by default — the derived
-  // OpenNext config's function-form wrapper composes the effect fetch at
-  // the InternalEvent layer, inside the one `streamifyResponse` wrap — so
-  // the deploy-time sentinel scan's missing-mount error is retired here;
-  // `server: { takeover: false }` forces the explicit tier back (the scan
-  // then enforces the hand-written `alchemy/Next` mount).
+  // Wrapper delivery: the derived OpenNext config's function-form wrapper
+  // grafts Next's handler (with the user's route-file mount inside) at the
+  // InternalEvent layer, inside the one `streamifyResponse` wrap, and adds
+  // the program's non-fetch listener dispatch next to it.
   const server =
     siteImpl !== undefined
       ? ((yield* (LambdaFunction as any)(
@@ -717,9 +707,7 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
           {
             ...serverProps,
             server: {
-              routes: [...(routes ?? DEFAULT_SERVER_ROUTES)],
               verify: (props as EffectNextjsProps).server?.verify,
-              takeover: (props as EffectNextjsProps).server?.takeover,
             },
             runtimeDelivery: effectExtra !== undefined ? "wrapper" : "external",
           },

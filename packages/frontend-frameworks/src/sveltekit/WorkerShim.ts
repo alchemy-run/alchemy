@@ -55,7 +55,7 @@
 /**
  * The effect arm of the shim (DESIGN §6.2b) — collect-only *wrapper*
  * delivery for an effectful `Cloudflare.Website.SvelteKit`. When present,
- * the shim wraps kit's fetch handler in `alchemy/Serve/Worker`'s
+ * the shim wraps kit's fetch handler in `alchemy/Cloudflare/Serve`'s
  * `makeWebsiteExports`: the Effect fetch owns `routes` and dispatches
  * BEFORE the shim's pragma-cache/static-asset checks — effect responses
  * are never served from (or written to) the shim's edge cache — and only
@@ -154,7 +154,7 @@ const effectImports = (effect: WorkerShimEffectOptions): string => {
   const hasWf = (effect.workflows?.length ?? 0) > 0;
   return [
     `import { WorkerEntrypoint${hasDo ? ", DurableObject" : ""}${hasWf ? ", WorkflowEntrypoint" : ""} } from 'cloudflare:workers';`,
-    `import { makeWebsiteEntryExports${hasDo ? ", DurableObjectBridge" : ""}${hasWf ? ", WorkflowBridge" : ""} } from "alchemy/Serve/Worker";`,
+    `import { makeWebsiteEntryExports${hasDo ? ", DurableObjectBridge" : ""}${hasWf ? ", WorkflowBridge" : ""} } from "alchemy/Cloudflare/Serve";`,
     `import __alchemy_site from ${JSON.stringify(effect.main)};`,
   ].join("\n");
 };

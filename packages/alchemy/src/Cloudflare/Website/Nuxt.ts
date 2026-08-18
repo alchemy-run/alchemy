@@ -229,13 +229,15 @@ export interface NuxtProps<
  * program lives in a dedicated module whose default export is the Website
  * class, anchored by `main: import.meta.url` (exactly like
  * `Cloudflare.Worker`). At plan time the program's capability bindings
- * (KV, R2, D1, ...) are collected onto the Worker; at deploy time alchemy
- * generates a nitro entry wrapper that routes by `server.routes` (default
- * `["/api/*"]`): inside the routes the effect fetch is authoritative —
- * an `HttpRouter` miss renders as its own 404, never delegation — and
- * nitro's own runtime serves everything outside them without invoking
- * the effect. Hand a path back to nitro with an exclusion glob
- * (`routes: ["/api/*", "!/api/foo"]` — exclusions win). Durable Object
+ * (KV, R2, D1, ...) are collected onto the Worker. HTTP delivery is your
+ * mount — a nitro server middleware (`server/middleware/alchemy.ts`)
+ * calls `mount(Site)` from `alchemy/Serve` and returns
+ * `site.fetch(toWebRequest(event), env, ctx)` (returning `undefined`
+ * lets nitro continue): inside the mount's claim (default `["/api/*"]`;
+ * exclusion globs hand paths back to nitro — exclusions win) the effect
+ * fetch is authoritative — an `HttpRouter` miss renders as its own 404,
+ * never delegation. The generated nitro entry wrapper is additive-only:
+ * it delivers the platform surface next to nitro's handler. Durable Object
  * classes and event handlers (cron, queues) declared by the program
  * deploy on the same Worker.
  *
@@ -464,13 +466,7 @@ export const Nuxt: {
                   ? {
                       effect: {
                         main: anchor,
-                        routes: props?.server?.routes ?? DEFAULT_SERVER_ROUTES,
-                        // `takeover: false` opts out of automatic dev
-                        // delivery — the source's dev half stands down
-                        // for the explicit `alchemy/Nitro` mount tier.
-                        ...(props?.server?.takeover !== undefined
-                          ? { takeover: props.server.takeover }
-                          : undefined),
+                        routes: DEFAULT_SERVER_ROUTES,
                       },
                     }
                   : undefined),

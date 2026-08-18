@@ -112,7 +112,7 @@ const core = makeBridgeCore(recipe);
  * Lambda/Node-flavored instance runtime (same per-class memo as the fetch
  * path).
  *
- * `Serve.toHandler` owns the `server.routes` gate and only dispatches requests
+ * the user's mount owns the routes claim and only dispatches requests
  * inside the claim — no second gate here.
  */
 export const lambdaServeBridge = {

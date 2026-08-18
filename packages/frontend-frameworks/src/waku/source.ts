@@ -18,8 +18,11 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
+import type { WakuEffectOptions } from "./effect-entry.ts";
 import { layer as wakuFrameworkLayer } from "./Waku.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +84,18 @@ export interface SourceContext {
   };
   readonly entry:
     | { readonly kind: "external" }
-    | { readonly kind: "effect"; readonly exports: Record<string, unknown> };
+    | {
+        readonly kind: "effect";
+        readonly exports: Record<string, unknown>;
+        /**
+         * Wrapper-delivery carriage (an effectful `Cloudflare.Website.Waku`):
+         * the impl anchor (`props.main` — path or `file://` URL) the
+         * generated wrapper re-imports, plus the effect-claim globs.
+         * Export values are consumed structurally (their `kind` field only).
+         */
+        readonly routes?: ReadonlyArray<string> | undefined;
+        readonly mainPath?: string | undefined;
+      };
   readonly stack: { readonly name: string; readonly stage: string };
   readonly env: Record<string, unknown> | undefined;
   readonly extraOptions: unknown;
@@ -97,6 +111,13 @@ export interface DevContext extends SourceContext {
     readonly durableObjectNamespaces: Array<
       RuntimeDurableObject & { uniqueKey: string }
     >;
+    /** Workflows hosted by this worker (physical workflowName + className). */
+    readonly workflows?:
+      | ReadonlyArray<{
+          readonly workflowName: string;
+          readonly className: string;
+        }>
+      | undefined;
     readonly hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     readonly queueConsumers: Effect.Effect<Array<RuntimeQueueConsumer>>;
     readonly assets: RuntimeAssets | undefined;
@@ -467,6 +488,8 @@ const hashWakuInput = Effect.fn(function* (params: {
   distDir: string;
   memo: WakuMemoOptions | undefined;
   options: WakuSourceOptions;
+  /** Effect-arm change signal ({@link effectHashSignal}); `undefined` for plain sites. */
+  effect?: unknown;
   /** Workspace directories, absolute. */
   workspaces: Iterable<string>;
 }) {
@@ -505,6 +528,8 @@ const hashWakuInput = Effect.fn(function* (params: {
       distDir: params.options.distDir,
       basePath: params.options.basePath,
     },
+    // Build-affecting: routes/class-name/anchor changes rebuild the wrapper.
+    ...(params.effect !== undefined ? { effect: params.effect } : undefined),
   });
   const workspaces = Array.from(params.workspaces).map((workspace) =>
     path
@@ -643,6 +668,8 @@ export interface WakuBuildChildConfig {
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly main: string | undefined;
+  /** Effectful (wrapper) delivery descriptor — plain data (see `effect-entry.ts`). */
+  readonly effect?: WakuEffectOptions | undefined;
   readonly waku: {
     readonly srcDir?: string;
     readonly distDir?: string;
@@ -663,10 +690,72 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
           compatibilityDate: config.compatibilityDate,
           compatibilityFlags: config.compatibilityFlags,
           ...(config.main !== undefined ? { main: config.main } : undefined),
+          ...(config.effect !== undefined
+            ? { effect: config.effect }
+            : undefined),
         }),
       }),
     ),
   );
+
+/** Normalize the impl anchor (path or `file://` URL) to a forward-slash
+ * absolute path (vite/rolldown want `C:/...`-style specifiers on Windows). */
+const effectMainPath = (main: string): string =>
+  (main.startsWith("file://") ? fileURLToPath(main) : main).replaceAll(
+    "\\",
+    "/",
+  );
+
+/**
+ * Derive the effectful (wrapper) delivery descriptor from `ctx.entry` — the
+ * authoritative carrier on build AND dev (the dev child re-derives it from
+ * the serialized wrapper-delivery entry). `undefined` for plain waku sites
+ * and explicit-tier (`runtimeDelivery: "external"`) delivery. Export values
+ * are classified structurally by their `kind` field — the full
+ * DurableObjectExport/WorkflowExport records never cross process
+ * boundaries.
+ */
+const resolveEffectEntry = (
+  ctx: SourceContext,
+): WakuEffectOptions | undefined => {
+  const entry = ctx.entry;
+  if (entry.kind !== "effect" || entry.mainPath === undefined) {
+    return undefined;
+  }
+  const durableObjects: Array<string> = [];
+  const workflows: Array<string> = [];
+  for (const [name, value] of Object.entries(entry.exports ?? {})) {
+    const kind = (value as { readonly kind?: unknown } | null)?.kind;
+    if (kind === "durableObject") {
+      durableObjects.push(name);
+    } else if (kind === "workflow") {
+      workflows.push(name);
+    }
+  }
+  return {
+    main: effectMainPath(entry.mainPath),
+    durableObjects,
+    workflows,
+  };
+};
+
+/**
+ * The machine-independent change signal of the effect arm, folded into the
+ * `input` hash: class names and the anchor path RELATIVE to the project
+ * root (never an absolute path). The site module's content itself is
+ * covered by the project-tree hash.
+ */
+const effectHashSignal = (
+  rootDir: string,
+  effect: WakuEffectOptions | undefined,
+): unknown =>
+  effect === undefined
+    ? undefined
+    : {
+        main: NodePath.relative(rootDir, effect.main).replaceAll("\\", "/"),
+        durableObjects: effect.durableObjects,
+        workflows: effect.workflows,
+      };
 
 const asProviderError = (message: string) => (cause: unknown) =>
   new SourceProviderError({ provider: PROVIDER, message, cause });
@@ -713,6 +802,7 @@ export const makeWakuSourceProvider = (
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
+      const effect = resolveEffectEntry(ctx);
       // The build runs in a child process with cwd = rootDir (waku resolves
       // inputs relative to the cwd); `buildInChild` reconstructs the
       // framework + cloudflare target from this JSON config on the far side.
@@ -728,6 +818,9 @@ export const makeWakuSourceProvider = (
           // the vite plugin's `main` (resolved against the root by
           // `makeWakuPluginOptions`).
           main: options.main,
+          // Effectful (wrapper) delivery: the generated
+          // `virtual:alchemy:website-entry` module becomes the worker entry.
+          effect,
           waku: wakuConfig,
         } satisfies WakuBuildChildConfig,
       }).pipe(
@@ -770,6 +863,7 @@ export const makeWakuSourceProvider = (
             distDir,
             memo: options.memo,
             options,
+            effect: effectHashSignal(rootDir, effect),
             workspaces: output.externalWorkspaces,
           }),
         ],
@@ -791,7 +885,7 @@ export const makeWakuSourceProvider = (
     // Rebuild-free: re-hash the project tree (+ previously-discovered
     // workspaces) — the same recipe as alchemy's vite source. `previous` is
     // only used for the auxiliary workspace list, never to skip recomputation.
-    hash: Effect.fn(function* (_ctx, previous) {
+    hash: Effect.fn(function* (ctx, previous) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       const input = yield* hashWakuInput({
@@ -799,6 +893,7 @@ export const makeWakuSourceProvider = (
         distDir,
         memo: options.memo,
         options,
+        effect: effectHashSignal(rootDir, resolveEffectEntry(ctx)),
         workspaces: (previous?.additionalWorkspaces ?? []).map((workspace) =>
           path.resolve(rootDir, workspace),
         ),
@@ -813,6 +908,7 @@ export const makeWakuSourceProvider = (
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       const queueConsumers = yield* ctx.worker.queueConsumers;
+      const effect = resolveEffectEntry(ctx);
       const framework = wakuFrameworkLayer({
         root: rootDir,
         waku: wakuConfig,
@@ -822,10 +918,15 @@ export const makeWakuSourceProvider = (
           // Dev serves the wrapped user entry too, so DO classes exported
           // from it exist in dev.
           ...(options.main !== undefined ? { main: options.main } : undefined),
+          // Effectful delivery: dev runs the SAME generated wrapper entry
+          // inside workerd — DO/Workflow classes and queue dispatch exist
+          // in dev exactly as deployed.
+          ...(effect !== undefined ? { effect } : undefined),
           worker: {
-            name: ctx.worker.name,
+            name: ctx.worker.name ?? ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
+            workflows: [...(ctx.worker.workflows ?? [])],
             hyperdrives: ctx.worker.hyperdrives,
             queueConsumers,
             assets: ctx.worker.assets,

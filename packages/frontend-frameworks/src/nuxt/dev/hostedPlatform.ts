@@ -58,7 +58,7 @@ export const buildHostedPlatformModules = async (
     ...(wfClasses.length > 0 ? ["WorkflowEntrypoint"] : []),
   ];
   const entrySource = [
-    `import { makeWebsiteEntryExports${doClasses.length > 0 ? ", DurableObjectBridge" : ""}${wfClasses.length > 0 ? ", WorkflowBridge" : ""} } from "alchemy/Serve/Worker";`,
+    `import { makeWebsiteEntryExports${doClasses.length > 0 ? ", DurableObjectBridge" : ""}${wfClasses.length > 0 ? ", WorkflowBridge" : ""} } from "alchemy/Cloudflare/Serve";`,
     ...(cfImports.length > 0
       ? [`import { ${cfImports.join(", ")} } from "cloudflare:workers";`]
       : []),

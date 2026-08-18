@@ -251,11 +251,16 @@ const wrapper = async (handler, converter) => {
 ```
 
 Sibling-lambda non-fetch delivery is RETIRED for the converted frameworks
-(Vite SSR/TanStack, SvelteKit, Next, Astro — `FrameworkSiteConfig
-.singleHandler`): the impl threads directly into the collect-only server
-Lambda, so event-source mappings and their IAM target the server function
-itself and ONE Lambda serves HTTP + SQS + schedules. Unconverted
-frameworks (Nuxt, Waku, Octane) keep the sibling until their phase-6
+(Vite SSR/TanStack, SvelteKit, Next, Astro, Nuxt, Waku —
+`FrameworkSiteConfig.singleHandler`; Nuxt's generated entry delegates
+nitro's aws-lambda streaming runtime as a pre-streamified `streamHandler`,
+riding the user-entry carriage `nitro.options.entry`; Waku's mount is the
+framework hook — a `src/middleware/*.ts` module — and its generated entry
+wraps the built server chunk's `INTERNAL_runFetch`, rolldown-finished
+into `dist/lambda`): the impl threads directly into the collect-only
+server Lambda, so event-source mappings and their IAM target the server
+function itself and ONE Lambda serves HTTP + SQS + schedules. The one
+unconverted framework (Octane) keeps the sibling until its phase-6
 conversion.
 
 Degenerate cases: no registrations ⇒ the wrapper is just the grafted
@@ -375,8 +380,8 @@ legs** with the shared MaxSite:
    does NOT); destroy and verify gone.
 
 Matrix: TanStack + Vite + React Router (tier A) and SvelteKit + Next +
-Nuxt + Astro (tier B) on Cloudflare; TanStack + Next + SvelteKit on AWS
-(single-lambda: HTTP and SQS on one function, streaming intact).
+Nuxt + Astro (tier B) on Cloudflare; TanStack + Next + SvelteKit + Nuxt
+on AWS (single-lambda: HTTP and SQS on one function, streaming intact).
 `monorepo-frontends` is the aggregate: three MaxSites, mixed tiers and
 clouds, both legs.
 
@@ -400,10 +405,17 @@ min). AWS enters at phase 4, after the mechanics are settled.
    examples (aws-vite, aws-tanstack, aws-website-sveltekit,
    aws-website-nextjs — minus DO/WF, which AWS has no analogue for),
    both legs.
-5. **The purge**: markers, scan, adapters, `EffectDispatch`,
-   `server.routes`, dead subpaths — deleted only when every example is
-   green on the new path (no commit has both mechanisms load-bearing).
-6. Remaining frameworks + docs/tutorial rewrite.
+5. **The purge** (DONE): markers, scan, adapters, `EffectDispatch`,
+   dead subpaths — deleted only when every example was green on the new
+   path (no commit had both mechanisms load-bearing).
+6. **Remaining frameworks + docs** (DONE): nuxt-AWS single-handler
+   (`alchemy/Nitro` deleted), Waku both clouds, `server.routes` +
+   `takeover` props deleted (the deploy side compiles only the default
+   `/api/*` edge claim; custom claims via `assets.runWorkerFirst`),
+   `alchemy/Serve/Worker` renamed to `alchemy/Cloudflare/Serve`, the
+   implicit no-entry wrapper arm now fails loudly (SPA/assets-only sites
+   keep the auto entry — the program IS the server there),
+   effectful-websites docs rewritten around mounts.
 
 ## Open questions
 

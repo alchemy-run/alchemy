@@ -12,6 +12,11 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
+import {
+  narrowNextjsSiteImports,
+  stubCloudflareRuntimeForNextBundling,
+  writeNextjsMount,
+} from "./NextjsMount.ts";
 import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
 import {
   expectWorkerExists,
@@ -327,18 +332,23 @@ describe.concurrent("Nextjs", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful Website (artifact takeover, Amendment §2.1.1): one Worker
-  // serves the OpenNext app AND the Effect program — fetch routes, a
-  // Durable Object export, and a cron `scheduled` handler (non-fetch
-  // surface only the takeover wrapper can deliver).
+  // Effectful Website (Serve/DESIGN.md, OpenNext artifact takeover): one
+  // Worker serves the OpenNext app AND the Effect program. HTTP
+  // composition is the user's mount — an optional catch-all route file
+  // (written into the clone below) calling `mount(Site, { routes })`,
+  // compiled by Next like any route handler. The takeover wrapper is
+  // additive-only: it delivers what a route file cannot — the DO class
+  // export and the cron `scheduled` handler.
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
-    "Nextjs effectful: artifact takeover deploys effect routes, DO export, and cron scheduled handler",
+    "Nextjs effectful: user route-file mount serves effect routes; takeover wrapper adds DO export and cron",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const client = yield* HttpClient.HttpClient;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
 
         yield* stack.destroy();
 
@@ -359,6 +369,17 @@ describe.concurrent("Nextjs", () => {
           ],
         });
         yield* linkJsApiTypeScript(rootDir);
+
+        // The mount — HTTP composition is user code: an optional catch-all
+        // route file claiming `/api/*` minus the `!/api/hello` exclusion,
+        // which stays Next's own route handler (Next also prefers the
+        // more-specific route file). Written into the clone so THIS test's
+        // site module is the one mounted; the site module's deep-import
+        // line is narrowed so Next's bundler never parses the provider
+        // barrel.
+        yield* writeNextjsMount(fs, path, rootDir, "site.ts");
+        yield* narrowNextjsSiteImports(fs, path, rootDir);
+        yield* stubCloudflareRuntimeForNextBundling(fs, path, rootDir);
 
         // Import the site module from the CLONE: its `main` anchor and
         // rootDir must point into the cloned project so the OpenNext build
@@ -384,8 +405,7 @@ describe.concurrent("Nextjs", () => {
         expect(deployed.users.namespaceId).not.toMatch(/^dev:/);
         yield* expectWorkerExists(site.workerName, accountId);
 
-        // Effect fetch inside `server.routes` (default /api/*), through the
-        // real edge.
+        // Effect fetch inside the mount's claim, through the real edge.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${site.url!}/api/effect/ping`,
         );
@@ -418,9 +438,9 @@ describe.concurrent("Nextjs", () => {
         );
         expect(count2.count).toBeGreaterThan(count1.count);
 
-        // Exclusion glob routes to the framework: `!/api/hello` carves the
-        // path out of the effect claim, so Next's route handler (and
-        // middleware) serve it — the effect fetch never runs for it.
+        // Exclusion glob routes to the framework: the mount's `!/api/hello`
+        // carves the path out of the effect claim, so Next's route handler
+        // (and middleware) serve it — the effect fetch never runs for it.
         const hello = yield* client
           .get(`${site.url!}/api/hello`)
           .pipe(
@@ -437,7 +457,7 @@ describe.concurrent("Nextjs", () => {
         expect(missing.status).toBe(404);
         expect(yield* missing.text).not.toContain("<html");
 
-        // Framework surface outside server.routes.
+        // Framework surface outside the mount's claim.
         yield* expectUrlContains(`${site.url!}/`, "NEXTJS_SSR_MARKER", {
           timeout: "120 seconds",
           label: "nextjs effectful SSR home page",

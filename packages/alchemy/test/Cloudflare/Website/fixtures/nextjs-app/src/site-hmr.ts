@@ -18,11 +18,12 @@ import * as NodePath from "node:path";
 export const HmrUsers = KV.Namespace("NextjsEffectHmrUsers");
 
 /**
- * The hmr-mode (`next dev` in Node) zero-setup site: fetch served by the
- * dev server's effect front dispatch, which checks `server.routes` ahead
- * of Next's handler — the same strict-ownership gate as the deployed
- * takeover, with no route mount anywhere in the app tree (the artifact
- * takeover itself only exists in `preview` dev and deploys).
+ * The hmr-mode (`next dev` in Node) site (Serve/DESIGN.md): the mount is
+ * app code — a catch-all route file the test writes into its clone next
+ * to this module — compiled natively by `next dev`, so effect routes ride
+ * Next's own dispatch with full HMR (nothing is injected or front-
+ * dispatched; the artifact takeover only exists in `preview` dev and
+ * deploys).
  *
  * Kept free of DO/cron surface: hmr delivery is fetch-only by design.
  */

@@ -479,7 +479,7 @@ export const LocalWorkerProvider = () =>
           viteRootDir: props.vite?.rootDir,
           /**
            * Effectful Website wrapper delivery (plain data, part of the
-           * hashed restart surface — editing `server.routes` or the impl
+           * hashed restart surface — editing `server.entry` or the impl
            * anchor restarts the vite child).
            */
           // Self-gating (undefined unless wrapper delivery + main): applies
@@ -503,7 +503,7 @@ export const LocalWorkerProvider = () =>
                   ? {
                       kind: "effect" as const,
                       exports: props.exports ?? {},
-                      routes: props.server?.routes ?? DEFAULT_SERVER_ROUTES,
+                      routes: DEFAULT_SERVER_ROUTES,
                       mainPath: props.main,
                     }
                   : {

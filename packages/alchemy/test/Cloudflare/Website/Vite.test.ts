@@ -1006,16 +1006,20 @@ if (el) {
     { timeout: 360_000 },
   );
 
-  // The flagship wrapper-delivery path (DESIGN §6.2a): one Worker serves the
-  // SPA assets AND the Effect program's `/api/*` routes through the generated
-  // `virtual:alchemy:website-entry` wrapper — KV capability binding collected
-  // at plan, the `!/api/excluded` exclusion glob carving that path back out
-  // to the SPA asset layer (strict route ownership). The fixture
-  // is cloned and its `site.ts` dynamically imported so the class's
-  // `import.meta.url` / `import.meta.dirname` anchors point at the clone
-  // (keeping the repo fixture pristine and isolated from the dev-mode test).
+  // The flagship tier-A path (Serve/DESIGN.md): one Worker serves the SPA
+  // assets AND the Effect program's `/api/*` routes. HTTP composition is
+  // the user's mount — the fixture's `server.ts` (named by
+  // `server: { entry }`) calls `mount(Site, { routes })` and falls
+  // through to the asset layer; the generated
+  // `virtual:alchemy:website-entry` wrapper grafts that entry's fetch
+  // verbatim. KV capability binding collected at plan, the mount's
+  // `!/api/excluded` exclusion glob carving that path back out to the SPA
+  // asset layer (strict route ownership). The fixture is cloned and its
+  // `site.ts` dynamically imported so the class's `import.meta.url` /
+  // `import.meta.dirname` anchors point at the clone (keeping the repo
+  // fixture pristine and isolated from the dev-mode test).
   test.provider(
-    "Vite: effectful website deploys one worker serving assets + effect API",
+    "Vite: effectful website deploys one worker serving assets + effect API through the server.ts mount",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1028,6 +1032,7 @@ if (el) {
           entries: [
             "index.html",
             "package.json",
+            "server.ts",
             "site.ts",
             "src",
             "vite.config.ts",
@@ -1055,13 +1060,14 @@ if (el) {
         yield* expectWorkerExists(deployed.site.workerName, accountId);
         const base = deployed.site.url!;
 
-        // Outside `server.routes`: the SPA shell serves from the asset layer.
+        // Outside the mount's claim: the SPA shell serves from the asset
+        // layer.
         yield* expectUrlContains(`${base}/`, "Effectful Vite fixture", {
           timeout: "120 seconds",
           label: "effectful vite shell",
         });
 
-        // Inside `server.routes`: the effect fetch answers.
+        // Inside the mount's claim: the effect fetch answers.
         const marker = yield* fetchJsonReady<{ marker: string; path: string }>(
           `${base}/api/anything`,
         );
@@ -1080,9 +1086,10 @@ if (el) {
         );
         expect(got.value).toBe("hello-from-live");
 
-        // Exclusion glob routes to the framework: `!/api/excluded` carves
-        // the path out of the claim (compiled out of `runWorkerFirst`), so
-        // the asset layer's SPA fallback serves the shell.
+        // Exclusion glob routes to the framework: the mount's
+        // `!/api/excluded` carves the path out of the claim, so the entry
+        // falls through to `env.ASSETS.fetch` and the asset layer's SPA
+        // fallback serves the shell.
         yield* expectUrlContains(
           `${base}/api/excluded`,
           "Effectful Vite fixture",

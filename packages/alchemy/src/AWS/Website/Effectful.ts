@@ -36,7 +36,7 @@ export { lambdaServeBridge } from "../Lambda/ServeBridge.ts";
  * `RouteNotFound` in the error channel, which types `HttpRouter` misses.
  * There is no passthrough protocol — a `RouteNotFound` failure renders as
  * the fetch's own 404 response through the standard request pipeline;
- * delegation to the framework is purely a `server.routes` decision made
+ * delegation to the framework is purely the mount's routing decision made
  * BEFORE the fetch is invoked. On the effectful `StaticSite`, where the
  * Effect program IS the whole server, the same rendering applies (the
  * Lambda HTTP bridge answers the failure as the fetch's own 404).
@@ -63,8 +63,8 @@ type WebsiteMain<InitServices = never> = void | {
 
 /**
  * The shape an effectful AWS Website's Effect program may return: an
- * optional `fetch` handler (the `server.routes`-scoped API surface,
- * authoritative within its routes — see {@link WebsiteHttpEffect}) plus
+ * optional `fetch` handler (the mount-claimed API surface, authoritative
+ * within its claim — see {@link WebsiteHttpEffect}) plus
  * any RPC methods, exactly like an effect-native `AWS.Lambda.Function`.
  * Every member is already optional, so a program may also return nothing
  * at all.
@@ -78,33 +78,20 @@ export type WebsiteShape<Req = never> = WebsiteMain<FunctionServices | Req> &
  */
 export interface WebsiteServerOptions {
   /**
-   * Path globs the Effect `fetch` handler owns, in the
-   * `assets.runWorkerFirst` glob dialect: `*` matches any run of
-   * characters (including `/`), and a leading `!` marks an exclusion
-   * (exclusions take precedence). Compiled into the generated
-   * viewer-request CloudFront Function's `serverRoutes` check, which
-   * routes matching paths to the server origin BEFORE the static-asset
-   * manifest lookup — a static file can never shadow an API path, even
-   * under `spa: true`.
-   * @default ["/api/*"]
-   */
-  routes?: string[];
-  /**
-   * Skip the wiring-handshake sentinel scan on explicit-tier framework
-   * deliveries (exotic setups). Not consulted by the effectful
-   * `StaticSite`, whose Effect program IS the server.
+   * Skip the wiring-handshake sentinel scan on framework deliveries
+   * (exotic setups). Not consulted by the effectful `StaticSite`, whose
+   * Effect program IS the server.
    */
   verify?: boolean;
-  /**
-   * Opt out of entry takeover on frameworks that support it. Not
-   * consulted by the effectful `StaticSite`.
-   */
-  takeover?: boolean;
 }
 
 /**
- * The default URL space an effectful Website's `fetch` handler owns when
- * `server.routes` is not configured.
+ * The default URL space an effectful Website's `fetch` handler owns —
+ * compiled into the generated viewer-request CloudFront Function's
+ * `serverRoutes` check, which routes matching paths to the server origin
+ * BEFORE the static-asset manifest lookup, so a static file can never
+ * shadow an API path (even under `spa: true`). The mount's own claim
+ * lives in user code; this is only the edge-ordering default.
  */
 export const DEFAULT_SERVER_ROUTES = ["/api/*"];
 
@@ -158,7 +145,7 @@ export const validateImplAnchor = (
         );
 
 /**
- * A `server.routes` glob was invalid for the CloudFront edge compilation.
+ * An effect-claim glob was invalid for the CloudFront edge compilation.
  * Raised as a defect at plan time.
  */
 export class WebsiteServerRoutingError extends Data.TaggedError(
@@ -169,7 +156,7 @@ export class WebsiteServerRoutingError extends Data.TaggedError(
 }> {}
 
 /**
- * The compiled form of `server.routes` stored in the site's CloudFront KV
+ * The compiled form of the effect claim stored in the site's CloudFront KV
  * `:metadata` entry: anchored regex sources (the CloudFront Function
  * evaluates them with `new RegExp(...)` at the edge). Split into
  * inclusions and exclusions — a path is server-owned when it matches at
@@ -188,7 +175,7 @@ const globToRegExpSource = (glob: string): string =>
   `^${glob.split("*").map(escapeRegExp).join(".*")}$`;
 
 /**
- * Compile `server.routes` globs into the {@link CompiledServerRoutes}
+ * Compile effect-claim globs into the {@link CompiledServerRoutes}
  * shape the generated viewer-request CloudFront Function matches against
  * (see `matchesServerRoute` in `cfcode.ts`). Dies with
  * {@link WebsiteServerRoutingError} when a glob is not path-shaped
@@ -205,7 +192,7 @@ export const compileServerRoutes = (
       return yield* Effect.die(
         new WebsiteServerRoutingError({
           message:
-            `AWS.Website("${id}"): server.routes is empty — an effectful ` +
+            `AWS.Website("${id}"): the effect claim is empty — an effectful ` +
             `Website's fetch handler needs at least one route glob ` +
             `(default ["/api/*"]).`,
           websiteId: id,
@@ -219,7 +206,7 @@ export const compileServerRoutes = (
         return yield* Effect.die(
           new WebsiteServerRoutingError({
             message:
-              `AWS.Website("${id}"): invalid server.routes glob ` +
+              `AWS.Website("${id}"): invalid effect-claim glob ` +
               `${JSON.stringify(route)} — route globs must start with "/" ` +
               `(or "!/" for exclusions), e.g. "/api/*".`,
             websiteId: id,

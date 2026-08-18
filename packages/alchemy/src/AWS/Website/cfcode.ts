@@ -87,7 +87,7 @@ async function routeSite(kvNamespace, metadata) {
     ? event.request.uri.replace(metadata.base, "")
     : event.request.uri;
 
-  // server.routes — the URL space an effectful Website's fetch handler
+  // the effect claim — the URL space an effectful Website's fetch handler
   // owns. Checked BEFORE the static-asset manifest lookup so a static
   // file can never shadow an API path (the AWS analogue of Cloudflare's
   // runWorkerFirst), and so /api/* reaches the server even under spa mode.

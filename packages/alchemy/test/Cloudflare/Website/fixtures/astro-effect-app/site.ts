@@ -42,26 +42,27 @@ export const Users = Namespace("AstroEffectUsers");
 export const Jobs = Queue("AstroEffectJobs");
 
 /**
- * The Astro fetchable-wrapper delivery shape (DESIGN §6.2c): one Worker
- * serves the Astro frontend AND the Effect program's API. The integration
- * pre-resolves `virtual:astro:fetchable` to a generated wrapper importing
- * this module by absolute path — the effect fetch is authoritative inside
- * `server.routes`, Astro's own pipeline serves everything outside them.
+ * The effectful Astro Website (Serve/DESIGN.md): one Worker serves the
+ * Astro frontend AND the Effect program's API. HTTP composition is the
+ * user's mount — the fixture's `src/fetch.ts` (Astro 7's native fetch
+ * entrypoint) calls `mount(Site, { routes: ["/api/*", "!/api/astro-echo"] })`
+ * and composes `site.fetch(...) ?? astro(new FetchState(request))`.
  * Exercises:
  *
  * - the KV capability binding collected at plan and served at runtime;
  * - strict route ownership (`/api/astro-echo` is a real Astro endpoint
- *   carved out of the claim by the `!/api/astro-echo` exclusion glob —
- *   Astro serves it; unknown in-claim paths get the effect's OWN 404);
- * - SSR pages and static assets outside `server.routes`;
+ *   carved out of the claim by the mount's `!/api/astro-echo` exclusion
+ *   glob — Astro serves it; unknown in-claim paths get the effect's OWN
+ *   404);
+ * - SSR pages and static assets outside the mount's claim;
  * - the prerender guard (`about.astro` prerenders in the workerd prerender
- *   worker, which never loads the effect wrapper).
+ *   worker, whose fetchable is replaced with a passthrough so the mount's
+ *   effect graph never evaluates there).
  *
  * `main: import.meta.url` anchors this module: the engine imports it for
- * plan-time binding collection and the generated fetchable wrapper
- * re-imports it inside the Astro `ssr` graph. Tests clone the fixture and
- * dynamically import the clone's copy, so concurrent suites never share
- * a build directory.
+ * plan-time binding collection and the mount re-imports it inside the
+ * Astro `ssr` graph. Tests clone the fixture and dynamically import the
+ * clone's copy, so concurrent suites never share a build directory.
  */
 export default class AstroEffectSite extends Astro<AstroEffectSite>()(
   "AstroEffectSite",
@@ -70,10 +71,8 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
     rootDir: import.meta.dirname,
     workersDev: { enabled: true, previewsEnabled: true },
     compatibility: { date: "2026-03-10" },
-    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
-    // `/api/astro-echo`, which the exclusion glob routes to Astro's own
-    // endpoint.
-    server: { routes: ["/api/*", "!/api/astro-echo"] },
+    // The route claim lives in the mount (src/fetch.ts): the effect fetch
+    // owns `/api/*` EXCEPT `/api/astro-echo`, which stays Astro's.
     dev: { port: 0 },
     memo: {
       include: [

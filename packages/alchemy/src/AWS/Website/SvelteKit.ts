@@ -52,7 +52,7 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * Server delivery + Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: EffectFrameworkServerProps;
@@ -137,14 +137,13 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  *   "Site",
  *   {
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/pages"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * The effect `fetch` owns the mount's claim (default `["/api/*"]`): inside
  * them its responses — 404s included — are final; outside them kit
  * serves. Exclusion globs (`"!/api/pages"`) hand a path back to kit. The
  * same routing runs in front of kit's Vite dev server during
@@ -164,7 +163,7 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * Non-`fetch` methods are RPC methods for trusted server code — dispatch
  * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
  * backend through `fetch` — mount a schema-validated surface (effect
- * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ * `HttpApi` / `@effect/rpc`) under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue

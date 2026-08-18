@@ -391,11 +391,15 @@ describe.concurrent("Nuxt", () => {
   // ─────────────────────────────────────────────────────────────────────
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effect entry takeover (DESIGN Amendment §2.1.2): an effectful
+  // Effectful Nuxt live (Serve/DESIGN.md): an effectful
   // `Cloudflare.Website.Nuxt` — the impl passed as the third argument —
-  // deploys ONE Worker serving Nuxt SSR + assets AND the Effect program,
-  // through the alchemy-generated nitro entry wrapper (`makeWebsiteExports`
-  // over nitro's cloudflare-module runtime). Verifies the full surface:
+  // deploys ONE Worker serving Nuxt SSR + assets AND the Effect program.
+  // HTTP composition is the user's mount: a nitro `server/middleware`
+  // module (written into the clone below) calling
+  // `mount(Site, { routes })` — nitro compiles it into the server bundle
+  // like any app middleware. The alchemy-generated nitro entry wrapper is
+  // additive-only (nitro's fetch, mount inside, serves ALL HTTP verbatim)
+  // and contributes only the non-fetch surface. Verifies:
   //
   // - `/api/effect/kv` — effect fetch with the plan-collected KV binding
   //   (out-of-band read through the cloud KV API proves the real
@@ -405,15 +409,17 @@ describe.concurrent("Nuxt", () => {
   //   worker);
   // - the cron trigger collected from the impl is present in the uploaded
   //   worker metadata (schedules API);
-  // - `/api/hello` (carved out of the effect claim by the `!/api/hello`
-  //   exclusion glob) and the SSR page + static assets keep working
-  //   through the framework side of the routes split.
+  // - `/api/hello` (carved out of the effect claim by the mount's
+  //   `!/api/hello` exclusion glob) and the SSR page + static assets keep
+  //   working through the framework side of the mount's fallthrough.
   // ─────────────────────────────────────────────────────────────────────
   test.provider(
-    "Nuxt: effect entry takeover deploys one worker with effect routes, DO export, and cron",
+    "Nuxt: effectful live deploy — user middleware mount serves effect routes; wrapper adds DO export and cron",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
 
         yield* stack.destroy();
 
@@ -422,6 +428,28 @@ describe.concurrent("Nuxt", () => {
           tempRoot,
           entries: [...fixtureEntries, "site-live.ts"],
         });
+
+        // The mount — HTTP composition is user code (a nitro server
+        // middleware in the built tree), claiming `/api/*` minus the
+        // `!/api/hello` exclusion, which stays nitro's.
+        const middlewareDir = path.join(rootDir, "server", "middleware");
+        yield* fs.makeDirectory(middlewareDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(middlewareDir, "alchemy-mount.ts"),
+          [
+            `import { mount } from "alchemy/Serve";`,
+            `import { defineEventHandler, toWebRequest } from "h3";`,
+            `import Site from "../../site-live.ts";`,
+            ``,
+            `const site = mount(Site, { routes: ["/api/*", "!/api/hello"] });`,
+            ``,
+            `export default defineEventHandler((event) => {`,
+            `  const cloudflare = event.context.cloudflare;`,
+            `  return site.fetch(toWebRequest(event), cloudflare?.env, cloudflare?.context);`,
+            `});`,
+            ``,
+          ].join("\n"),
+        );
 
         // The site module is imported from the CLONE (its
         // `main: import.meta.url` anchor must point at the tree nitro

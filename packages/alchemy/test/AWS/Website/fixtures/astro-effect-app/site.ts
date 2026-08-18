@@ -64,7 +64,6 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
     // glob carves Astro's own endpoint out of the claim (strict route
     // ownership: exclusions are the only way the framework serves a path
     // inside the claimed space).
-    server: { routes: ["/api/*", "!/api/astro-echo"] },
     dev: { port: 0 },
     forceDestroy: true,
     invalidation: { paths: "all", wait: true },

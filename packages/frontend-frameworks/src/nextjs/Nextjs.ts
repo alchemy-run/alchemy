@@ -560,7 +560,7 @@ export const make = (
           const context = yield* resolveRuntimeContext();
           // Zero-setup effect routes under the real `next dev`: with a
           // wrapper-delivery effect entry (and the host-resolved serve
-          // module), the dev server dispatches `server.routes` to the
+          // module), the route-file mount serves the effect claim in the
           // Effect program before Next's handler — the explicit
           // `toHandler` mount is no longer required.
           // An external-entry Worker (explicit tier / `takeover: false`)

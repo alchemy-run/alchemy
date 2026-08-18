@@ -1,4 +1,19 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+// Narrow package-subpath imports, deliberately NOT the `alchemy/Cloudflare`
+// barrel: the mount route file (`app/api/[[...slug]]/route.ts`, written
+// into each test's clone) imports this module, so Next's bundler compiles
+// the whole graph — and the provider barrel drags the IaC engine
+// (bundlers, vite/esbuild, local workerd host) into it, which Turbopack
+// cannot parse (native binaries) and workerd must never evaluate. The
+// service-level subpaths keep the graph to the construct + capability
+// slice.
+import * as KV from "alchemy/Cloudflare/KV";
+import { DurableObject } from "alchemy/Cloudflare/DurableObject";
+import * as Website from "alchemy/Cloudflare/Website";
+// DEEP-IMPORT LINE (rewritten per-clone by `narrowNextjsSiteImports` in
+// NextjsMount.ts): these three have no narrow package subpath, and the
+// barrel is off-limits to Next's bundler — the tests rewrite this one
+// line to deep relative imports into `packages/alchemy/src`.
+import { cron, CronEventSourceLive, DurableObjectState } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -9,17 +24,17 @@ import * as NodePath from "node:path";
  * KV namespace bound by the effectful Website's program. Registered on the
  * stack when the site's init Effect runs at plan time.
  */
-export const EffectUsers = Cloudflare.KV.Namespace("NextjsEffectUsers");
+export const EffectUsers = KV.Namespace("NextjsEffectUsers");
 
 /**
  * Durable Object exported by the effect program — proves the artifact
  * takeover delivers non-fetch entry exports (the generated wrapper emits a
  * `DurableObjectBridge` class next to the OpenNext worker's own classes).
  */
-export class EffectCounter extends Cloudflare.DurableObject<EffectCounter>()(
+export class EffectCounter extends DurableObject<EffectCounter>()(
   "EffectCounter",
   Effect.gen(function* () {
-    const state = yield* Cloudflare.DurableObjectState;
+    const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       return {
         increment: Effect.fn(function* () {
@@ -36,17 +51,20 @@ export class EffectCounter extends Cloudflare.DurableObject<EffectCounter>()(
 ) {}
 
 /**
- * The effectful Next.js Website (artifact takeover, DESIGN §2.1.1): ONE
- * Worker serves the OpenNext app and the Effect program. The program owns
- * `/api/*` MINUS the `!/api/hello` exclusion glob (strict route
- * ownership): inside the claim it answers `/api/effect/*` and renders its
- * OWN 404 for anything else; `/api/hello` stays a Next route handler
- * because the exclusion routes it to the framework.
+ * The effectful Next.js Website (Serve/DESIGN.md, OpenNext artifact
+ * takeover): ONE Worker serves the OpenNext app and the Effect program.
+ * HTTP composition is the USER'S mount — an optional catch-all route file
+ * (`app/api/[[...slug]]/route.ts`, written into each test's clone) calling
+ * `mount(Site, { routes: ["/api/*", "!/api/hello"] })` — compiled by Next
+ * like any route handler: inside the claim the program answers
+ * `/api/effect/*` and renders its OWN 404 for anything else; `/api/hello`
+ * stays a Next route handler because the mount's exclusion glob routes it
+ * to the framework (Next also prefers the more-specific route file).
  *
  * Non-fetch surface: a Durable Object export ({@link EffectCounter}) and a
  * cron `scheduled` handler that stamps a KV key each fire — both delivered
- * by the generated `alchemy-worker.js` wrapper, impossible on a fetch-level
- * seam.
+ * by the generated `alchemy-worker.js` wrapper (additive-only: it never
+ * touches HTTP), impossible on a route-file seam.
  *
  * `main: import.meta.url` anchors this module: the engine imports it for
  * plan-time binding collection and the takeover prebundle re-imports it by
@@ -54,7 +72,7 @@ export class EffectCounter extends Cloudflare.DurableObject<EffectCounter>()(
  * bundled module re-evaluates inside workerd — every path-derived prop
  * guards on it (they are plan-only inputs).
  */
-export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEffectSite>()(
+export default class NextjsEffectSite extends Website.Nextjs<NextjsEffectSite>()(
   "NextjsEffectSite",
   {
     main: import.meta.url,
@@ -65,10 +83,9 @@ export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEf
       ? NodePath.dirname(import.meta.dirname)
       : undefined,
     workersDev: true,
-    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
-    // `/api/hello`, which the exclusion glob routes to the OpenNext
-    // handler (Next route handler + middleware).
-    server: { routes: ["/api/*", "!/api/hello"] },
+    // The route claim lives in the mount (the test-injected catch-all
+    // route file): the effect fetch owns `/api/*` EXCEPT `/api/hello`,
+    // which stays the OpenNext handler's (route handler + middleware).
     dev: { port: 0 },
     memo: {
       include: [
@@ -86,7 +103,7 @@ export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEf
   },
   Effect.gen(function* () {
     const namespace = yield* EffectUsers;
-    const users = yield* Cloudflare.KV.ReadWriteNamespace(namespace);
+    const users = yield* KV.ReadWriteNamespace(namespace);
     const counters = yield* EffectCounter;
 
     // Non-fetch handler: each cron fire increments a dedicated DO counter
@@ -94,9 +111,7 @@ export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEf
     // (strongly consistent) rather than KV (eventually consistent, reads
     // may lag up to a minute across isolates) — same pattern as the
     // CronEventSource fixture.
-    yield* Cloudflare.Workers.cron("* * * * *", () =>
-      counters.getByName("cron").increment(),
-    );
+    yield* cron("* * * * *", () => counters.getByName("cron").increment());
 
     return {
       fetch: Effect.gen(function* () {
@@ -131,7 +146,7 @@ export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEf
       }),
     };
   }).pipe(
-    Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding),
-    Effect.provide(Cloudflare.Workers.CronEventSourceLive),
+    Effect.provide(KV.ReadWriteNamespaceBinding),
+    Effect.provide(CronEventSourceLive),
   ),
 ) {}

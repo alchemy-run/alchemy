@@ -320,14 +320,15 @@ describe.concurrent("Astro dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful Website (DESIGN §6.2c): the Astro construct's third argument
-  // is an Effect program whose `fetch` owns `server.routes` — delivered in
-  // dev through the generated fetchable wrapper running in the ssr
-  // environment inside workerd. The KV capability binding collected at
-  // plan resolves to the LOCAL simulator (`dev:` id — proof no cloud call
-  // ran); the `!/api/astro-echo` exclusion glob routes that path to
-  // Astro's own endpoint, and unknown in-claim paths are the effect's OWN
-  // 404. The queue leg pins ENTRY-LEVEL non-fetch delivery: the impl's
+  // Effectful Website (Serve/DESIGN.md): the Astro construct's third
+  // argument is an Effect program, and HTTP composition is the user's
+  // mount — the fixture's `src/fetch.ts` (Astro 7's native fetch
+  // entrypoint) running in the ssr environment inside workerd in dev.
+  // The KV capability binding collected at plan resolves to the LOCAL
+  // simulator (`dev:` id — proof no cloud call ran); the mount's
+  // `!/api/astro-echo` exclusion glob routes that path to Astro's own
+  // endpoint, and unknown in-claim paths are the effect's OWN 404. The
+  // queue leg pins ENTRY-LEVEL non-fetch delivery: the impl's
   // `consumeQueueMessages` listener is dispatched by the entry-takeover
   // wrapper, and the local queue broker delivers produced messages to the
   // astro dev child (same restart machinery as Website.Vite — the sibling
@@ -342,7 +343,7 @@ describe.concurrent("Astro dev", () => {
 
         // Private clone; the clone's own `site.ts` is the program module
         // (`main: import.meta.url` anchors the cloned path, so the
-        // generated fetchable wrapper imports the clone, not the source
+        // clone's `src/fetch.ts` mount imports the clone, not the source
         // fixture).
         const rootDir = yield* cloneFixture(effectFixtureDir, {
           prefix: "alchemy-astro-effect-dev-",
@@ -375,7 +376,8 @@ describe.concurrent("Astro dev", () => {
         expect(isLocalId(users.namespaceId)).toBe(true);
         expect(jobs.queueId).toMatch(/^dev:/);
 
-        // SSR page outside `server.routes` renders through Astro as usual.
+        // SSR page outside the mount's claim renders through Astro as
+        // usual.
         yield* expectUrlContains(`${site.url!}/`, "astro-effect-home", {
           timeout: "120 seconds",
           label: "astro dev effect SSR home",
@@ -443,9 +445,9 @@ describe.concurrent("Astro dev", () => {
         expect(processed.count).toBeGreaterThanOrEqual(1);
         expect(processed.last).toBe(queueMarker);
 
-        // Exclusion glob routes to the framework: `!/api/astro-echo`
-        // carves the path out of the effect claim, so the wrapper never
-        // dispatches the effect fetch and Astro's own endpoint answers.
+        // Exclusion glob routes to the framework: the mount's
+        // `!/api/astro-echo` carves the path out of the effect claim, so
+        // `site.fetch` declines it and Astro's own endpoint answers.
         yield* expectStatusBody(
           `${site.url!}/api/astro-echo`,
           200,

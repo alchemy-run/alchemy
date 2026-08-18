@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import Site from "./src/backend.ts";
 
 export default Alchemy.Stack(
   "CloudflareWebsiteWakuExample",
@@ -9,18 +10,14 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Waku("WakuSite", {
-      // Waku's server runtime needs AsyncLocalStorage.
-      compatibility: {
-        flags: ["nodejs_als"],
-      },
-      env: {
-        GREETING: "Hello from alchemy",
-      },
-    });
+    // The Website class (and its Effect API, DO, Workflow, queue, and KV
+    // binding) is defined in ./src/backend.ts — yielding it deploys the
+    // whole thing: one Worker serving the Waku frontend and the
+    // Effect-native /api/*.
+    const site = yield* Site;
 
     return {
-      url: site.url,
+      url: site.url.as<string>(),
     };
   }),
 );

@@ -36,11 +36,14 @@ export class EffectCounter extends Cloudflare.DurableObject<EffectCounter>()(
 ) {}
 
 /**
- * The Nuxt effect entry takeover shape (DESIGN Amendment §2.1.2), live
- * flavor: one deployed Worker serving Nuxt SSR + assets AND the effect
- * program, through the alchemy-generated nitro entry wrapper
- * (`makeWebsiteExports` over nitro's `cloudflare-module` runtime). On top
- * of the dev shape this adds the full non-fetch surface:
+ * The effectful Nuxt Website (Serve/DESIGN.md), live flavor: one deployed
+ * Worker serving Nuxt SSR + assets AND the effect program. HTTP
+ * composition is the USER'S mount — a `server/middleware/*.ts` nitro
+ * middleware (written into the test's clone) calling
+ * `mount(Site, { routes: ["/api/*", "!/api/hello"] })`, compiled by nitro
+ * into the server bundle. The alchemy-generated nitro entry wrapper is
+ * additive-only: nitro's fetch (mount inside) serves ALL HTTP verbatim,
+ * and the wrapper contributes the non-fetch surface:
  *
  * - a Durable Object export (`EffectCounter`) — the wrapper emits the
  *   bridge class next to the default handler;
@@ -53,9 +56,6 @@ export default class NuxtEffectLiveSite extends Cloudflare.Website.Nuxt<NuxtEffe
   {
     main: import.meta.url,
     rootDir: import.meta.dirname,
-    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
-    // `/api/hello`, which the exclusion glob routes to nitro's own route.
-    server: { routes: ["/api/*", "!/api/hello"] },
     workersDev: { enabled: true, previewsEnabled: true },
     memo: {
       include: [

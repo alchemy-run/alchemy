@@ -49,7 +49,7 @@ export interface EffectNuxtProps extends NuxtProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * Server delivery + Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: EffectFrameworkServerProps;
@@ -123,28 +123,48 @@ export interface EffectNuxtProps extends NuxtProps {
  * Pass an Effect program as the third argument — it runs inside the
  * server Lambda, and its bindings collect env vars and IAM at deploy
  * time. `main: import.meta.url` anchors the module so the server bundle
- * can re-import it; no route file or config edit is needed. Use narrow
- * subpath imports (`alchemy/AWS/S3`) — never the `alchemy/AWS` barrel —
- * from a site module.
+ * can re-import it. Use narrow subpath imports (`alchemy/AWS/S3`) — never
+ * the `alchemy/AWS` barrel — from a site module.
+ *
+ * @section The Mount
+ * @example server/middleware/alchemy.ts
+ * ```typescript
+ * import { mount } from "alchemy/Serve";
+ * import { defineEventHandler, toWebRequest } from "h3";
+ * import Site from "../backend.ts";
+ *
+ * const site = mount(Site, { routes: ["/api/*", "!/api/pages"] });
+ *
+ * export default defineEventHandler((event) => site.fetch(toWebRequest(event)));
+ * ```
+ * HTTP composition is yours (Serve/DESIGN.md): the mount is an ordinary
+ * nitro server middleware — dispatch order, gates, and effect routing
+ * live there as plain code, in `nuxt dev` and the deployed Lambda alike.
+ * `site.fetch(request)` resolves `undefined` outside the mount's `routes`
+ * claim (exclusion globs like `"!/api/pages"` hand a path back to nitro),
+ * so nitro continues to its own routes and pages; inside the claim the
+ * effect fetch is authoritative — its responses, 404s included, are
+ * final. On AWS there is no env/ctx to pass: env resolves from
+ * `process.env` and the request scope settles inline before the response
+ * (Lambda semantics).
  *
  * @section Server Routes
- * @example Claim paths for the effect fetch
+ * @example Keep API paths off the static tier
  * ```typescript
  * export default class Site extends Nuxt<Site>()(
  *   "Site",
  *   {
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/pages"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
- * them its responses — 404s included — are final; outside them nitro's
- * own handlers serve. Exclusion globs (`"!/api/pages"`) hand a path back
- * to nitro. The same routing applies in `nuxt dev`.
+ * The effect claim (`["/api/*"]`) compiles into the CloudFront
+ * edge router so an API path always reaches the server Lambda and can
+ * never be shadowed by a static file. Runtime route OWNERSHIP is the
+ * mount's `routes` claim — code in your middleware, not config here.
  *
  * @section Calling RPC Methods
  * @example From a server route
@@ -159,7 +179,7 @@ export interface EffectNuxtProps extends NuxtProps {
  * Non-`fetch` methods are RPC methods for trusted server code — dispatch
  * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
  * backend through `fetch` — mount a schema-validated surface (effect
- * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ * `HttpApi` / `@effect/rpc`) under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue
@@ -171,21 +191,10 @@ export interface EffectNuxtProps extends NuxtProps {
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
  * );
  * ```
- * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
- * from the same module. Delivery engages on deploy — `alchemy dev` does
- * not dispatch queue events locally.
- *
- * @section Mounting The Program Yourself
- * @example Server middleware mount
- * ```typescript
- * // server/middleware/alchemy.ts
- * import { toHandler } from "alchemy/Nitro";
- * import Site from "../../src/backend.ts";
- *
- * export default toHandler(Site);
- * ```
- * An explicit mount in the `server/` tree (or
- * `server: { takeover: false }`) stands the automatic delivery down.
+ * Event handlers dispatch on the site's OWN server Lambda (the
+ * single-handler entry, Serve/DESIGN.md): the event-source mapping and
+ * its IAM target the server function itself — no sibling deploys. Under
+ * `alchemy dev` the queue and consumer run in the local Lambda emulator.
  */
 export const Nuxt: {
   <Self>(): {
@@ -249,8 +258,8 @@ export const Nuxt: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        // The class carries the AWS serve shell so `Serve.toHandler(Site)` (and
-        // the `toHandler` nitro mount built on it) dispatches through
+        // The class carries the AWS serve shell so the user's
+        // `mount(Site)` (in a nitro server middleware) dispatches through
         // the Lambda/Node layer recipe instead of the Cloudflare bridge.
         lambdaServeBridge.attach(effectClass(makeNuxt(id, props, impl)))
     : makeNuxt(id, props, impl)) as any;
@@ -260,16 +269,17 @@ const nuxtConfig = (id: string, props: NuxtProps): FrameworkSiteConfig => ({
   framework: NUXT_FRAMEWORK_SPECIFIER,
   target: NUXT_AWS_TARGET_SPECIFIER,
   options: props.nuxt ? { nuxt: props.nuxt } : undefined,
-  // Auto-inject (wrapper) tier: the framework integration writes the
-  // generated effect middleware under `<root>/.alchemy/nuxt/<id>/` and
-  // injects it through `nitro.handlers` — nitro compiles config-injected
-  // handlers into the aws-lambda prod bundle AND the dev SSR worker
-  // through the same virtual module, so ONE mechanism delivers deploy and
-  // dev dispatch. Only consulted on the impl arms; plain sites are
-  // untouched.
-  effectOptions: ({ mainPath, routes }) => ({
-    effect: { id, main: mainPath, routes: [...routes] },
+  // Single-handler (mount) delivery: the AWS deploy target's build child
+  // generates the composite Lambda entry —
+  // `makeFrameworkFunctionHandler({ site, streamHandler })` delegating
+  // nitro's aws-lambda streaming handler (with the user's
+  // `server/middleware` mount inside it) verbatim, while the program's
+  // queue/schedule listeners dispatch on the SAME function. Only
+  // consulted on the impl arms; plain sites are untouched.
+  effectOptions: ({ mainPath }) => ({
+    effect: { id, main: mainPath },
   }),
+  singleHandler: true,
 });
 
 const makeNuxt = (

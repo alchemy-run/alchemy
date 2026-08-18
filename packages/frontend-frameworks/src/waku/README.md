@@ -239,10 +239,34 @@ modules + the client assets directory). Consequences:
 This matches what upstream's `@cloudflare/vite-plugin` provides via its own
 `configurePreviewServer` (miniflare over the built output).
 
+## Effectful delivery (Serve/DESIGN.md)
+
+An effectful `Cloudflare.Website.Waku` (an Effect program as the third
+argument) threads a plain-data `effect` descriptor
+(`src/waku/effect-entry.ts` — impl anchor + registered DO/Workflow class
+names) through the source provider into the cloudflare target:
+
+- the vite plugin's `main` becomes the generated
+  `virtual:alchemy:website-entry` wrapper — waku's fetch grafted VERBATIM
+  (`makeWebsiteEntryExports`), plus the program's non-fetch dispatch and
+  the DO/Workflow class exports, printed from plan-time registration;
+- the user's mount is waku's **framework hook**: a `src/middleware/*.ts`
+  module composing `site.fetch(request) ?? next()` — it runs natively in
+  dev and prod, on every platform;
+- dev serves the SAME wrapper inside workerd, so DOs, Workflows, and queue
+  delivery exist in dev exactly as deployed.
+
+The AWS target's effect arm (`config.effect`) instead generates a
+single-handler `makeFrameworkFunctionHandler` Lambda entry and re-bundles
+it with the server graph and the site module into a self-contained
+`dist/lambda` (one alchemy copy, no sibling function).
+
 ## Limitations
 
-- **Durable Objects cannot be defined in a waku app** (upstream
-  limitation) — use service bindings to a separate worker.
+- **Hand-written Durable Objects cannot be defined in a plain waku app**
+  (upstream limitation — waku owns the worker entry). The effectful arm
+  lifts this: DOs/Workflows registered by the Effect program are exported
+  from the generated wrapper entry.
 - **Waku assumes `process.cwd()` is the project root** in places (html-shell
   input, relative rolldown inputs). The alchemy source provider compensates
   by running build/dev under a cwd lock; the e2e harness runs from the

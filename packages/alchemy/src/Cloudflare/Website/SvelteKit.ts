@@ -178,14 +178,16 @@ export interface SvelteKitProps<
  * Pass an Effect program as the third argument and ONE Worker serves the
  * SvelteKit app **and** your effect-native handlers. The program's
  * capability bindings (KV, R2, D1, ...) are collected at plan time
- * exactly like an effect Worker's; the generated Worker entry routes by
- * `server.routes` (default `["/api/*"]`): inside the routes the effect
- * fetch is authoritative — an `HttpRouter` miss renders as its own 404,
- * never delegation — and kit's own `respond` serves everything outside
- * them without invoking the effect. Keep a kit `+server` endpoint
- * working with an exclusion glob (`routes: ["/api/*", "!/api/foo"]` —
- * exclusions win). Under `alchemy dev`, the same dispatch mounts as a
- * middleware in front of kit's Vite dev server. An explicit
+ * exactly like an effect Worker's. HTTP delivery is your mount — kit's
+ * `handle` hook (`src/hooks.server.ts`) calls `mount(Site)` from
+ * `alchemy/Serve` and composes `site.fetch(...) ?? resolve(event)`:
+ * inside the mount's claim (default `["/api/*"]`; exclusion globs keep
+ * kit `+server` endpoints working — exclusions win) the effect fetch is
+ * authoritative — an `HttpRouter` miss renders as its own 404, never
+ * delegation. The generated Worker entry is additive-only: it grafts
+ * kit's handler (your hook inside) verbatim and delivers the platform
+ * surface next to it. Under `alchemy dev` the same hook runs natively
+ * inside kit's Vite dev server. An explicit
  * `alchemy/SvelteKit` mount in `hooks.server.ts` remains available
  * as an escape hatch.
  *
@@ -410,9 +412,7 @@ export const SvelteKit: {
                   ? {
                       effect: {
                         main: anchor,
-                        routes: props?.server?.routes ?? [
-                          ...DEFAULT_SERVER_ROUTES,
-                        ],
+                        routes: [...DEFAULT_SERVER_ROUTES],
                       },
                     }
                   : undefined),

@@ -474,7 +474,6 @@ const effectEntryOf = (ctx: SourceContext): ViteEffectEntry | undefined =>
   ctx.entry.kind === "effect" && ctx.entry.mainPath !== undefined
     ? makeViteEffectEntry({
         main: ctx.entry.mainPath,
-        server: { routes: ctx.entry.routes },
         exports: ctx.entry.exports,
         runtimeDelivery: "wrapper",
       })

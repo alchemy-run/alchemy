@@ -227,7 +227,7 @@ export interface SvelteKitSourceOptions {
   /**
    * Effectful (wrapper) delivery descriptor, set by the construct when an
    * Effect program is attached: the impl anchor (`main`, a path or
-   * `file://` URL) and the `server.routes` globs. Carried on the
+   * `file://` URL) and the effect-claim globs. Carried on the
    * descriptor because `dev()` runs in a child process whose `DevContext`
    * does not thread the wrapper entry (the build path reads the richer
    * `ctx.entry`, which additionally carries DO/Workflow exports).

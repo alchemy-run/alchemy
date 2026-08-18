@@ -96,7 +96,7 @@ export interface EffectAstroProps extends AstroProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * Server delivery + Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: EffectFrameworkServerProps;
@@ -200,14 +200,13 @@ export interface EffectAstroProps extends AstroProps {
  *   "Site",
  *   {
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/pages"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * The effect `fetch` owns the mount's claim (default `["/api/*"]`): inside
  * them its responses — 404s included — are final; outside them Astro
  * serves. Exclusion globs (`"!/api/pages"`) hand a path back to Astro.
  * The same routing applies in `astro dev`.
@@ -227,7 +226,7 @@ export interface EffectAstroProps extends AstroProps {
  * frontmatter of non-prerendered pages) — dispatch is in-process, no HTTP
  * hop. Browser code is untrusted: it reaches the backend through `fetch` —
  * mount a schema-validated surface (effect `HttpApi` / `@effect/rpc`)
- * under `server.routes`.
+ * under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue

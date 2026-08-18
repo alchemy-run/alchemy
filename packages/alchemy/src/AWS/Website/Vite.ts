@@ -70,7 +70,7 @@ export interface EffectViteProps extends ViteProps {
    */
   main: string;
   /**
-   * Server routing + Lambda tuning (`server.routes` defaults to
+   * Server Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: EffectStaticSiteServerOptions;
@@ -120,7 +120,7 @@ export interface EffectViteSsrProps extends ViteSsrProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * Server delivery + Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: EffectFrameworkServerProps;
@@ -263,14 +263,13 @@ export const viteDefaults = (props: ViteProps | EffectViteProps) => {
  *   "Site",
  *   {
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/pages"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): the
+ * The effect `fetch` owns the mount's claim (default `["/api/*"]`): the
  * edge router consults it before the static-asset manifest, so a static
  * file can never shadow an API path — even under SPA fallback. Exclusion
  * globs (`"!/api/pages"`) hand a path back to the framework. The same
@@ -289,7 +288,7 @@ export const viteDefaults = (props: ViteProps | EffectViteProps) => {
  * Non-`fetch` methods are RPC methods for trusted server code — dispatch
  * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
  * backend through `fetch` — mount a schema-validated surface (effect
- * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ * `HttpApi` / `@effect/rpc`) under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue

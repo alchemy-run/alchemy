@@ -142,8 +142,7 @@ export interface FrameworkSiteProps {
 /**
  * Server options for an *effectful* framework composite (an Effect program
  * as the third argument): the Lambda tuning the plain composites already
- * accept plus the effectful routing/delivery knobs (`routes`, `verify`,
- * `takeover`).
+ * accept plus the wiring-handshake knob (`verify`).
  */
 export interface EffectFrameworkServerProps
   extends FrameworkServerProps, WebsiteServerOptions {}
@@ -161,7 +160,7 @@ export interface EffectFrameworkSiteProps extends FrameworkSiteProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning. `server.routes` (default
+   * Server delivery + Lambda tuning. The edge claim (default
    * `["/api/*"]`) is the URL space the effect `fetch` owns — compiled into
    * the viewer-request CloudFront Function so matching requests reach the
    * server Lambda before the asset manifest.
@@ -257,8 +256,8 @@ export interface FrameworkSiteConfig {
    * Wrapper-entry code generator for the auto-inject tier: produce the
    * source of the generated server entry that mounts the effect program in
    * front of the framework handler (composed at the fetch layer, BEFORE
-   * the single `awslambda.streamifyResponse` wrap). When present (and the
-   * user did not opt out via `server: { takeover: false }`), the entry is
+   * the single `awslambda.streamifyResponse` wrap). When present, the
+   * entry is
    * written to `<root>/.alchemy/generated/<id>/entry.mjs` before the
    * framework build child runs, its path rides the deploy target's
    * `config.main` seam (`options.main`), and the effect module's content
@@ -275,8 +274,7 @@ export interface FrameworkSiteConfig {
    * generator composes the effect fetch ahead of the framework handler,
    * inside the one `streamifyResponse` wrap) and the dev server (the
    * framework mounts the effect dev middleware in front of its own dev
-   * server). Flips `runtimeDelivery` to `"wrapper"` unless the user opts
-   * out via `server: { takeover: false }`. Mutually exclusive with
+   * server). Flips `runtimeDelivery` to `"wrapper"`. Mutually exclusive with
    * {@link wrapperEntry} ({@link wrapperEntry} wins when both are set).
    */
   effectOptions?: (ctx: ServerWrapperEntryContext) => Record<string, unknown>;
@@ -526,7 +524,7 @@ export const effectServerFunctionProps = (props: EffectFrameworkSiteProps) => ({
  *   framework-built artifact ships byte-for-byte, and the resolved props
  *   are stamped with `runtimeDelivery` (the deploy-time sentinel scan
  *   enforces the `alchemy/Serve` mount on the explicit tier).
- *   `server.routes` compiles into the site's CloudFront `serverRoutes`
+ *   the default effect claim compiles into the site's CloudFront `serverRoutes`
  *   check so a static file can never shadow an API path.
  * - **dev** — the framework's own dev server runs in the sidecar with the
  *   collected env map lowered into its process environment (plus the
@@ -558,9 +556,7 @@ export const makeEffectFrameworkSite = (
     }
     const props = yield* asEffect(propsEff);
     yield* validateImplAnchor(id, config.name, props.main);
-    const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
-    // Validate the route globs eagerly — a plan-time defect even in dev,
-    // where the edge compile never runs.
+    const routes = DEFAULT_SERVER_ROUTES;
     yield* compileServerRoutes(id, routes);
     // Impl-declared resources register at the CALLER's namespace —
     // CF-Worker / effectful-StaticSite parity (the migration contract:
@@ -595,13 +591,11 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
   // Framework-integrated wrapper delivery (config.effectOptions): the
   // framework's own deploy target generates the mounting entry from these
   // build options — in dev they additionally mount the framework's effect
-  // dev middleware. `takeover: false` forces the explicit tier.
-  // `wrapperEntry` (the standalone generated-entry seam) wins when both
-  // are configured.
+  // dev middleware. `wrapperEntry` (the standalone generated-entry seam)
+  // wins when both are configured.
   const effectExtra =
     config.effectOptions !== undefined &&
-    config.wrapperEntry === undefined &&
-    props.server?.takeover !== false
+    config.wrapperEntry === undefined
       ? yield* prepareEffectBuildOptions({
           main: props.main,
           routes,
@@ -657,7 +651,7 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
       } as any,
       // Framework-integrated wrapper options ride into the dev build too:
       // the framework's `make()` mounts its effect dev middleware from
-      // them, so `server.routes` dispatches to the effect fetch in front
+      // them, so the edge claim dispatches to the effect fetch in front
       // of the framework's own dev server.
       options:
         effectExtra !== undefined
@@ -681,10 +675,10 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
     };
   }
 
-  // Auto-inject tier: generate the wrapper entry BEFORE the build child
-  // runs (unless the user forced the explicit tier via takeover: false).
+  // Single-handler delivery: generate the wrapper entry BEFORE the build
+  // child runs.
   const wrapper =
-    config.wrapperEntry !== undefined && props.server?.takeover !== false
+    config.wrapperEntry !== undefined
       ? yield* prepareServerWrapperEntry({
           id,
           rootDir: props.rootDir,
@@ -775,9 +769,7 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
       // as-is.
       bundle: false,
       server: {
-        routes: [...routes],
         verify: props.server?.verify,
-        takeover: props.server?.takeover,
       },
       runtimeDelivery,
       runtime: props.server?.runtime ?? "nodejs24.x",

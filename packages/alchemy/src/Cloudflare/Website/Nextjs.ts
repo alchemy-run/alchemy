@@ -276,16 +276,16 @@ export interface NextjsProps<
  * @section Effectful Website
  * Pass an Effect program as the third argument and ONE Worker serves the
  * Next.js app **and** your effect-native handlers. The program's capability
- * bindings are collected at plan time exactly like an effect Worker's; at
- * build time alchemy performs an OpenNext artifact takeover — the site
- * module is prebundled next to `.open-next/worker.js` and a generated
- * wrapper entry routes by `server.routes` (default `/api/*`): inside the
- * routes the effect fetch is authoritative — an `HttpRouter` miss renders
- * as its own 404, never delegation — and the OpenNext handler serves
- * everything outside them without invoking the effect. Hand a path back
- * to Next with an exclusion glob (`routes: ["/api/*", "!/api/foo"]` —
- * exclusions win). Durable Object exports and queue/scheduled/cron
- * handlers ride the same wrapper (non-fetch surface).
+ * bindings are collected at plan time exactly like an effect Worker's. HTTP
+ * delivery is an explicit mount (Serve/DESIGN.md): a route file you own
+ * calls `mount(Site)` from `alchemy/Serve` and composes `site.fetch(req)`
+ * with Next's own routing — inside the mount's claim the effect fetch is
+ * authoritative (an `HttpRouter` miss renders as its own 404, never
+ * delegation), and everything else stays Next's. The generated wrapper
+ * entry is ADDITIVE only: it grafts the OpenNext handler verbatim and
+ * delivers the non-fetch surface next to it — Durable Object / Workflow
+ * class exports and queue/scheduled/cron handlers, derived from the
+ * program's `yield*` registrations.
  *
  * The impl's non-`fetch` methods are **RPC methods** — a typed API
  * surface for TRUSTED callers only: server components dispatch them
@@ -297,15 +297,10 @@ export interface NextjsProps<
  * serves any hand-rolled routes.
  *
  * The program must live in a dedicated module whose default export is the
- * class, anchored by `main: import.meta.url`. Local dev: `preview` mode
- * serves the takeover artifact with full parity; `hmr` mode (the real
- * `next dev`) serves effect routes through the dev server's front
- * dispatch — the same strict-ownership gate as the deployed wrapper,
- * zero user files (fetch only: DO/queue surfaces and site-module edits
- * still need `preview`, which rebuilds the artifact).
- * `server: { takeover: false }` forces the explicit
- * `toHandler` tier everywhere (mounting it explicitly also makes the
- * takeover stand down on deploy).
+ * class, anchored by `main: import.meta.url`. Local dev: `hmr` mode (the
+ * real `next dev`) runs the same route-file mount natively inside Next's
+ * dev server; `preview` mode serves the built artifact with full deploy
+ * parity (DO/queue surfaces and site-module edits rebuild the artifact).
  *
  * @example Effectful Next.js site (src/backend.ts)
  * ```typescript
@@ -457,10 +452,9 @@ export const Nextjs: {
           const props: any =
             (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           // With an impl, `main` anchors the Effect program's module
-          // (`main: import.meta.url`) and the OpenNext artifact-takeover
-          // wrapper delivers the runtime half — auto-inject tier
-          // (`server: { takeover: false }` forces the explicit route-handler
-          // mount instead).
+          // (`main: import.meta.url`); the generated wrapper (additive —
+          // OpenNext's handler, with the user's route-file mount inside,
+          // serves ALL HTTP verbatim) delivers the platform surface.
           const anchor =
             impl === undefined
               ? undefined

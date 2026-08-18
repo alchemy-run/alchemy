@@ -213,10 +213,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * Pass an Effect program as the third argument and the compiled program
  * IS the Worker in front of the assets: capability bindings (KV, R2, D1,
  * ...) are collected at plan time exactly like an effect Worker's, the
- * effect fetch owns `server.routes` (default `["/api/*"]`), and every
- * other request is served by the asset layer. The routes are
- * auto-compiled into `assets.runWorkerFirst`, so the API stays reachable
- * even under `single-page-application` not-found handling. Durable
+ * effect fetch owns the default `/api/*` claim, and every other request
+ * is served by the asset layer. The claim is auto-compiled into
+ * `assets.runWorkerFirst`, so the API stays reachable even under
+ * `single-page-application` not-found handling (claim more with
+ * `assets: { runWorkerFirst: [...] }`). Durable
  * Object classes and queue/scheduled/cron handlers declared by the
  * program deploy on the same Worker. Inside the routes the effect fetch
  * is authoritative — an `HttpRouter` miss renders as its own 404, never
@@ -489,10 +490,9 @@ const makeStaticSite = <
           id,
           {
             ...workerProps,
-            // The effect worker fronts the assets — force the
-            // `server.routes` → `runWorkerFirst` compilation (default
-            // `["/api/*"]`) so the handlers are reachable even under
-            // SPA fallback.
+            // The effect worker fronts the assets — force the default
+            // effect-claim → `runWorkerFirst` compilation (`["/api/*"]`)
+            // so the handlers are reachable even under SPA fallback.
             server: (props as any).server ?? {},
           },
           impl,

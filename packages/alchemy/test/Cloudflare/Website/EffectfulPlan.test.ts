@@ -81,33 +81,7 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
   );
 
   test.provider(
-    "exclusion globs stay OUT of runWorkerFirst (assets-first-then-worker)",
-    (stack) =>
-      Effect.gen(function* () {
-        const plan = yield* stack.plan(
-          Effect.gen(function* () {
-            yield* Cloudflare.Website.Vite(
-              "ExclusionRoutes",
-              {
-                main: import.meta.url,
-                server: { routes: ["/api/*", "!/api/excluded"] },
-              },
-              Effect.succeed(okFetch),
-            );
-          }),
-        );
-        // A `!`-excluded path must not become a negative run_worker_first
-        // rule — Cloudflare's router sends those straight to the asset
-        // worker with no user-worker fallback, so a framework SSR route
-        // carved out by the exclusion could never be served. Only the
-        // inclusions compile; the wrapper's route gate keeps the exclusion.
-        const site = nodeOf(plan, "ExclusionRoutes");
-        expect(site.props.assets.runWorkerFirst).toEqual(["/api/*"]);
-      }),
-  );
-
-  test.provider(
-    "plain form: user routes and rules merge into runWorkerFirst",
+    "plain form: the default claim merges with user runWorkerFirst rules",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -116,7 +90,6 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
               "MergedRoutes",
               {
                 main: import.meta.url,
-                server: { routes: ["/rpc/*"] },
                 assets: { runWorkerFirst: ["/admin/*"] },
               },
               Effect.succeed(okFetch),
@@ -127,7 +100,7 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
         expect(site.props.runtimeDelivery).toBe("wrapper");
         expect(site.props.assets.runWorkerFirst).toEqual([
           "/admin/*",
-          "/rpc/*",
+          "/api/*",
         ]);
       }),
   );
@@ -220,47 +193,6 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
         expect(defect?._tag).toBe("WorkerServerRoutingError");
         expect(String(defect?.message)).toContain("unreachable");
       }),
-  );
-
-  test.provider("server.takeover: false stamps external delivery", (stack) =>
-    Effect.gen(function* () {
-      const plan = yield* stack.plan(
-        Effect.gen(function* () {
-          yield* Cloudflare.Website.Vite(
-            "ExplicitTier",
-            {
-              main: import.meta.url,
-              server: { takeover: false },
-            },
-            Effect.succeed(okFetch),
-          );
-        }),
-      );
-      const site = nodeOf(plan, "ExplicitTier");
-      expect(site.props.runtimeDelivery).toBe("external");
-      // Routes still compile — the explicit mount owns the same scope.
-      expect(site.props.assets.runWorkerFirst).toEqual(["/api/*"]);
-    }),
-  );
-
-  test.provider("invalid server.routes fail fast at plan", (stack) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        stack.plan(
-          Effect.gen(function* () {
-            yield* Cloudflare.Website.Vite(
-              "BadRoutes",
-              {
-                main: import.meta.url,
-                server: { routes: ["api/*"] },
-              },
-              Effect.succeed(okFetch),
-            );
-          }),
-        ),
-      );
-      expect(defectOf(exit)?._tag).toBe("WorkerServerRoutingError");
-    }),
   );
 
   test.provider("impl without a main anchor fails fast at plan", (stack) =>
@@ -514,12 +446,11 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
         const exit = yield* Effect.exit(
           stack.plan(
             Effect.gen(function* () {
-              yield* Cloudflare.Website.Vite(
+              // Octane is the one CF arm still stamping "external"
+              // (byte-for-byte framework bundle, no entry seam).
+              yield* Cloudflare.Website.Octane(
                 "ExportsRejected",
-                {
-                  main: import.meta.url,
-                  server: { takeover: false },
-                },
+                { main: import.meta.url },
                 Effect.gen(function* () {
                   yield* PlanCounter;
                   return okFetch;

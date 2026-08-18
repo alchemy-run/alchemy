@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  makeEffectEntrySource,
-  renderEffectHandler,
-  renderWorkerEntry,
-} from "../effect.ts";
+  NITRO_AWS_STREAMING_HANDLER_SPECIFIER,
+  renderAwsLambdaEntry,
+} from "../aws.ts";
+import { makeEffectEntrySource, renderWorkerEntry } from "../effect.ts";
 
 describe("makeEffectEntrySource (additive wrapper)", () => {
   const source = makeEffectEntrySource({
@@ -14,7 +14,7 @@ describe("makeEffectEntrySource (additive wrapper)", () => {
 
   it("grafts the framework's fetch verbatim via makeWebsiteEntryExports", () => {
     expect(source).toContain(
-      'import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";',
+      'import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Cloudflare/Serve";',
     );
     expect(source).toContain('import Site from "/abs/project/src/site.ts";');
     expect(source).toContain("makeWebsiteEntryExports(WorkerEntrypoint, {");
@@ -100,34 +100,35 @@ describe("renderWorkerEntry", () => {
   });
 });
 
-describe("renderEffectHandler (AWS delivery path)", () => {
-  const source = renderEffectHandler({
-    sitePath: "/abs/project/src/site.ts",
-    routes: ["/backend/*", "!/backend/health"],
+describe("renderAwsLambdaEntry (AWS single-handler delivery)", () => {
+  const source = renderAwsLambdaEntry({
+    sitePath: "/abs/project/server/backend.ts",
   });
 
-  it("imports only the serve mount and the site module", () => {
-    expect(source).toContain('from "alchemy/Nitro"');
-    expect(source).toContain('"/abs/project/src/site.ts"');
-    // No other imports: the matcher is inlined.
-    expect(
-      source.split("\n").filter((line) => line.startsWith("import ")),
-    ).toHaveLength(2);
+  it("grafts nitro's streaming handler verbatim as a pre-streamified delegate", () => {
+    expect(source).toContain(
+      `import { handler as nitroHandler } from ${JSON.stringify(
+        NITRO_AWS_STREAMING_HANDLER_SPECIFIER,
+      )};`,
+    );
+    expect(source).toContain("streamHandler: nitroHandler");
   });
 
-  it("carries the routes claim (exclusions included) into the handler", () => {
-    expect(source).toContain('"/backend/*"');
-    expect(source).toContain('"!/backend/health"');
-    expect(source).toContain("toHandler(Site, { routes })");
+  it("builds the composite handler from alchemy/AWS/Serve over the site module", () => {
+    expect(source).toContain(
+      'import { makeFrameworkFunctionHandler } from "alchemy/AWS/Serve";',
+    );
+    expect(source).toContain(
+      'import Site from "/abs/project/server/backend.ts";',
+    );
+    expect(source).toContain(
+      "export const handler = await makeFrameworkFunctionHandler({",
+    );
+    expect(source).toContain("site: Site,");
   });
 
-  it("pre-gates on the routes claim alone (no reserved rpc path)", () => {
-    expect(source).toContain("if (!matches(pathname))");
-    expect(source).not.toContain("__rpc");
-  });
-
-  it("is an h3 v1 handler (no defineEventHandler dependency)", () => {
-    expect(source).toContain("middleware.__is_handler__ = true;");
-    expect(source).toContain("export default middleware;");
+  it("is ADDITIVE-ONLY: no routes baked in, no route gating, no middleware", () => {
+    expect(source).not.toContain("routes");
+    expect(source).not.toContain("__is_handler__");
   });
 });

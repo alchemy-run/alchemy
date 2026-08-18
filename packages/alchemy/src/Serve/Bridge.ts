@@ -22,7 +22,7 @@
  *     prerender worlds without touching I/O, and within its routes the
  *     effect fetch is AUTHORITATIVE — every outcome, including a
  *     `RouteNotFound` failure rendered as the effect's own 404, is final;
- *     delegation to the framework is purely a `server.routes` decision
+ *     delegation to the framework is purely the mount's routing decision
  *     made by the caller BEFORE the effect fetch is invoked
  *
  * What varies per cloud is a {@link BridgeRecipe}: the service layers

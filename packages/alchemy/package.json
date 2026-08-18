@@ -186,6 +186,12 @@
       "worker": "./src/Cloudflare/Workflows/Workflow.ts",
       "import": "./lib/Cloudflare/Workflows/Workflow.js"
     },
+    "./Cloudflare/Serve": {
+      "types": "./lib/Cloudflare/Workers/ServeWorkerEntry.d.ts",
+      "bun": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
+      "worker": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
+      "import": "./lib/Cloudflare/Workers/ServeWorkerEntry.js"
+    },
     "./Cloudflare/*": {
       "types": "./lib/Cloudflare/*/index.d.ts",
       "bun": "./src/Cloudflare/*/index.ts",
@@ -332,18 +338,6 @@
       "worker": "./src/Client/index.ts",
       "browser": "./lib/Client/browser.js",
       "import": "./lib/Client/index.js"
-    },
-    "./Serve/Worker": {
-      "types": "./lib/Cloudflare/Workers/ServeWorkerEntry.d.ts",
-      "bun": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
-      "worker": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
-      "import": "./lib/Cloudflare/Workers/ServeWorkerEntry.js"
-    },
-    "./Nitro": {
-      "types": "./lib/Serve/Nitro.d.ts",
-      "bun": "./src/Serve/Nitro.ts",
-      "worker": "./src/Serve/Nitro.ts",
-      "import": "./lib/Serve/Nitro.js"
     },
     "./Stack": {
       "types": "./lib/Stack.d.ts",

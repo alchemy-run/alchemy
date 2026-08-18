@@ -54,7 +54,7 @@ export interface WorkerBundleOptions {
         exports: Record<string, DurableObjectExport | WorkflowExport>;
         /**
          * Collect-only wrapper delivery (see `SourceContext.entry` in
-         * `../Source.ts`): the `server.routes` globs and the impl anchor
+         * `../Source.ts`): the effect claim and the impl anchor
          * (`props.main`). Ignored by the rolldown effect entry — carried so
          * framework source providers receive them in dev via
          * `bundleOptions.entry`.

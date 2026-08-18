@@ -160,7 +160,7 @@ describe.concurrent("effectful Function plan (collect-only)", () => {
   );
 
   test.provider(
-    "composite tier default (wrapper) rides through; takeover:false forces external",
+    "composite tier default (wrapper) rides through",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -172,19 +172,8 @@ describe.concurrent("effectful Function plan (collect-only)", () => {
                 handler: "handler",
                 bundle: false,
                 // Internal prop a Website composite stamps for its
-                // auto-inject tier (generated wrapper entry).
+                // wrapper (generated single-handler entry) delivery.
                 runtimeDelivery: "wrapper",
-              },
-              Effect.succeed(okFetch),
-            );
-            yield* AWS.Lambda.Function(
-              "ExplicitTier",
-              {
-                main: mountedMain,
-                handler: "handler",
-                bundle: false,
-                runtimeDelivery: "wrapper",
-                server: { takeover: false },
               },
               Effect.succeed(okFetch),
             );
@@ -193,32 +182,7 @@ describe.concurrent("effectful Function plan (collect-only)", () => {
         expect(nodeOf(plan, "WrapperTier").props.runtimeDelivery).toBe(
           "wrapper",
         );
-        expect(nodeOf(plan, "ExplicitTier").props.runtimeDelivery).toBe(
-          "external",
-        );
       }),
-  );
-
-  test.provider("invalid server.routes fail fast at plan", (stack) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        stack.plan(
-          Effect.gen(function* () {
-            yield* AWS.Lambda.Function(
-              "BadRoutes",
-              {
-                main: mountedMain,
-                handler: "handler",
-                bundle: false,
-                server: { routes: ["api/*"] },
-              },
-              Effect.succeed(okFetch),
-            );
-          }),
-        ),
-      );
-      expect(defectOf(exit)?._tag).toBe("FunctionServerRoutingError");
-    }),
   );
 
   test.provider(

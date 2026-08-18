@@ -16,6 +16,11 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
+import {
+  narrowNextjsSiteImports,
+  stubCloudflareRuntimeForNextBundling,
+  writeNextjsMount,
+} from "./NextjsMount.ts";
 import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
@@ -43,14 +48,14 @@ const fixtureEntries = [
 const effectFixtureEntries = [...fixtureEntries, "src", "stubs"];
 
 /**
- * The hmr-mode zero-setup site module the test writes over the clone's
+ * The hmr-mode site module the test writes over the clone's
  * `src/site-hmr.ts` (clone sits at `packages/alchemy/.tmp/<dir>/`, so
  * `../../../src` is `packages/alchemy/src`). Written as a string with
- * RELATIVE alchemy imports — the effect front dispatch imports this
- * module under plain node in the vite dev child, where the bare
- * `alchemy/*` specifiers would resolve through the `import` condition to
- * the possibly-stale `lib/` in this workspace (and split module identity
- * with the child's own `src/`-resolved serve bridge).
+ * RELATIVE alchemy imports — the engine imports this module under plain
+ * bun at plan time AND Turbopack compiles it into the mount route file's
+ * graph, where the bare `alchemy/*` specifiers would resolve through the
+ * `import` condition to the possibly-stale `lib/` in this workspace (and
+ * split module identity with the mount's `src/`-resolved serve bridge).
  */
 const hmrSiteSource = `
 import * as Effect from "effect/Effect";
@@ -65,9 +70,9 @@ import * as Website from "../../../src/Cloudflare/Website/index.ts";
 export const HmrUsers = KV.Namespace("NextjsEffectHmrUsers");
 
 /**
- * The hmr-mode (\`next dev\` in Node) zero-setup site: the dev server's
- * effect front dispatch serves \`server.routes\` ahead of Next's handler —
- * no route mount exists anywhere in the app tree.
+ * The hmr-mode (\`next dev\` in Node) site: the mount is a catch-all route
+ * file the test writes next to this module — \`next dev\` compiles both
+ * natively and effect routes ride Next's own dispatch.
  */
 export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrSite>()(
   "NextjsEffectHmrSite",
@@ -327,15 +332,19 @@ describe.concurrent("Nextjs dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful Website, preview mode: the artifact takeover ships in the
-  // built worker module set, so effect routes (and the effect program's
-  // DO export) work in dev with production parity.
+  // Effectful Website, preview mode (Serve/DESIGN.md): the user's
+  // route-file mount is compiled into the OpenNext build and the artifact
+  // takeover ships in the built worker module set, so effect routes (and
+  // the effect program's DO export) work in dev with production parity.
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
-    "Nextjs dev (preview): artifact takeover serves effect routes, DO export, and framework fallback",
+    "Nextjs dev (preview): route-file mount serves effect routes; takeover wrapper adds the DO export",
     (stack) =>
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
         yield* stack.destroy();
 
         const rootDir = yield* cloneFixture(fixtureDir, {
@@ -344,6 +353,15 @@ describe.concurrent("Nextjs dev", () => {
           entries: effectFixtureEntries,
         });
         yield* linkJsApiTypeScript(rootDir);
+
+        // The mount — an optional catch-all route file claiming `/api/*`
+        // minus `!/api/hello` (which stays Next's). Written into the clone
+        // so THIS test's site module is the one mounted; the site module's
+        // deep-import line is narrowed so Next's bundler never parses the
+        // provider barrel.
+        yield* writeNextjsMount(fs, path, rootDir, "site.ts");
+        yield* narrowNextjsSiteImports(fs, path, rootDir);
+        yield* stubCloudflareRuntimeForNextBundling(fs, path, rootDir);
 
         // Import the site module from the CLONE: its `main: import.meta.url`
         // anchor (and rootDir) must point into the cloned project so the
@@ -369,7 +387,7 @@ describe.concurrent("Nextjs dev", () => {
         expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
         expect(isLocalId(deployed.users.namespaceId)).toBe(true);
 
-        // Effect fetch inside `server.routes` (default /api/*).
+        // Effect fetch inside the mount's claim.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${site.url!}/api/effect/ping`,
         );
@@ -401,9 +419,10 @@ describe.concurrent("Nextjs dev", () => {
         );
         expect(count2.count).toBe(2);
 
-        // Exclusion glob routes to the framework: `!/api/hello` carves the
-        // path out of the effect claim, so the OpenNext handler (middleware
-        // included) serves it — the effect fetch never runs for it.
+        // Exclusion glob routes to the framework: the mount's `!/api/hello`
+        // carves the path out of the effect claim, so the OpenNext handler
+        // (middleware included) serves it — the effect fetch never runs
+        // for it.
         const client = yield* HttpClient.HttpClient;
         const hello = yield* client
           .get(`${site.url!}/api/hello`)
@@ -421,7 +440,8 @@ describe.concurrent("Nextjs dev", () => {
         expect(missing.status).toBe(404);
         expect(yield* missing.text).not.toContain("<html");
 
-        // Framework surface outside server.routes: SSR page + static asset.
+        // Framework surface outside the mount's claim: SSR page + static
+        // asset.
         yield* expectUrlContains(`${site.url!}/`, "NEXTJS_SSR_MARKER", {
           timeout: "120 seconds",
           label: "nextjs effect dev SSR home page",
@@ -438,14 +458,14 @@ describe.concurrent("Nextjs dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful Website, hmr mode (zero-setup): the real `next dev` runs
-  // behind the dev server's effect front dispatch — `server.routes` are
-  // answered by the Effect program BEFORE Next's handler, so NO route
-  // mount exists anywhere in the app tree.
+  // Effectful Website, hmr mode (Serve/DESIGN.md): the real `next dev`
+  // runs HTTP and the mount is app code — the catch-all route file is
+  // compiled natively by Turbopack, so effect routes ride Next's own
+  // dispatch (nothing is injected or front-dispatched).
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
-    "Nextjs dev (hmr): front dispatch serves effect routes under next dev, no mount file",
+    "Nextjs dev (hmr): route-file mount serves effect routes under next dev",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -460,14 +480,21 @@ describe.concurrent("Nextjs dev", () => {
         });
         yield* linkJsApiTypeScript(rootDir);
 
-        // ZERO-SETUP: only the site module exists — no catch-all route
-        // handler is written. (The clone's copy is replaced with the
-        // relative-import variant the plain-node dispatch can load; see
-        // `hmrSiteSource`.)
+        // The clone's site module is replaced with the relative-import
+        // variant (see `hmrSiteSource`), and the mount route file imports
+        // `alchemy/Serve` through the same relative path into
+        // `packages/alchemy/src` so the mount and the site module share
+        // ONE module graph under Turbopack (a bare `alchemy/Serve` would
+        // resolve through the `import` condition to `lib/` and split the
+        // serve-bridge module identity).
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site-hmr.ts"),
           hmrSiteSource,
         );
+        yield* writeNextjsMount(fs, path, rootDir, "site-hmr.ts", {
+          routes: ["/api/*"],
+          serveSpecifier: "../../../../../src/Serve/index.ts",
+        });
 
         const mod = (yield* Effect.promise(
           () => import(pathe.join(rootDir, "src/site-hmr.ts")),
@@ -494,8 +521,7 @@ describe.concurrent("Nextjs dev", () => {
           label: "nextjs effect hmr SSR home page",
         });
 
-        // Effect route through the front dispatch — no mount compiled by
-        // Next anywhere.
+        // Effect route through the mount route file compiled by next dev.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${site.url!}/api/effect/ping`,
         );

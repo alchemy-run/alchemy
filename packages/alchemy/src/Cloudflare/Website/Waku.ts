@@ -127,10 +127,6 @@ export interface WakuProps<
  * served at their extensionless URLs (`/about`) via the default
  * `drop-trailing-slash` asset handling.
  *
- * Note: full support for the effectful Website arm (an Effect program as
- * the third argument — see `Cloudflare.Website.Vite` for the pattern)
- * lands for Waku in a later release.
- *
  * @resource
  * @product Website
  * @category Workers & Compute
@@ -218,6 +214,54 @@ export interface WakuProps<
  * class Site extends Cloudflare.Website.Waku<Site>()("Site") {}
  *
  * const site = yield* Site;
+ * ```
+ *
+ * @section Effectful Site
+ * Pass an Effect program as the third argument (with
+ * `main: import.meta.url` anchoring the module that default-exports the
+ * class) and ONE Worker serves the Waku app AND a typed Effect backend.
+ * Everything platform-shaped — Durable Object and Workflow class exports,
+ * queue consumers, bindings — derives from the program's `yield*`
+ * registrations and is delivered through a generated worker entry that
+ * grafts Waku's fetch verbatim.
+ *
+ * HTTP composition is YOURS, in Waku's own idiom: a waku middleware
+ * (`src/middleware/*.ts`) mounts the program via `alchemy/Serve` and runs
+ * identically under `waku dev`, `alchemy dev`, and in production.
+ *
+ * @example Effectful backend + middleware mount
+ * ```typescript
+ * // src/backend.ts — narrow subpath imports, never the provider barrel
+ * import * as KV from "alchemy/Cloudflare/KV";
+ * import * as Website from "alchemy/Cloudflare/Website";
+ * import * as Effect from "effect/Effect";
+ *
+ * export const Visits = KV.Namespace("Visits");
+ *
+ * export default class Site extends Website.Waku<Site>()(
+ *   "Site",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const kv = yield* KV.ReadWriteNamespace(yield* Visits);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         return yield* HttpServerResponse.json({ ok: true });
+ *       }),
+ *       visits: Effect.fn(function* () {
+ *         return Number((yield* kv.get("count")) ?? "0");
+ *       }, Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ *
+ * // src/middleware/mount.ts — the mount file (waku's framework hook)
+ * // import { mount } from "alchemy/Serve";
+ * // import Site from "../backend.ts";
+ * // const site = mount(Site);
+ * // export default () => async (c, next) => {
+ * //   if (new URL(c.req.raw.url).pathname === "/healthz") return new Response("ok");
+ * //   return (await site.fetch(c.req.raw)) ?? (await next(), undefined);
+ * // };
  * ```
  */
 export const Waku: {

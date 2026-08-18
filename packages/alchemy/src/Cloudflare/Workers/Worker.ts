@@ -476,29 +476,12 @@ export interface WorkerServerOptions {
    */
   entry?: string;
   /**
-   * Path globs the Effect program's `fetch` handler owns. Compiled into
-   * `assets.runWorkerFirst` rules (merged with any user rules) so matching
-   * requests route through the Worker ahead of the static-asset layer.
-   * `["/*"]` is middleware mode — the Effect fetch sees every request.
-   * Ignored when {@link entry} is set — the entry's own mount decides.
-   * @default ["/api/*"]
-   */
-  routes?: string[];
-  /**
    * Verify at deploy time that the framework server bundle actually mounts
    * the `alchemy/Serve` bridge (the wiring handshake — a sentinel scan over
    * the built bundle). Set `false` to skip the scan for exotic setups.
    * @default true
    */
   verify?: boolean;
-  /**
-   * Whether alchemy may take over the framework's server entry to deliver
-   * the runtime half automatically (the auto-inject tier). Set `false` to
-   * force the explicit tier: the framework bundle deploys byte-for-byte
-   * and you mount the program yourself via `alchemy/Serve`.
-   * @default the framework integration's tier (auto where supported)
-   */
-  takeover?: boolean;
 }
 
 export interface WorkerProps<
@@ -1316,11 +1299,9 @@ export const isSelf = (value: unknown): value is Self =>
 export const DEFAULT_SERVER_ROUTES = ["/api/*"];
 
 /**
- * A `server.routes` configuration that can never work: invalid route
- * globs, or a routing setup that makes the impl's fetch handler
- * unreachable (SPA fallback answering every miss with `index.html` while
- * worker-first routing is explicitly disabled). Raised as a defect at
- * plan time.
+ * A routing setup that makes the impl's fetch handler unreachable (SPA
+ * fallback answering every miss with `index.html` while worker-first
+ * routing is explicitly disabled). Raised as a defect at plan time.
  */
 export class WorkerServerRoutingError extends Data.TaggedError(
   "WorkerServerRoutingError",
@@ -1372,12 +1353,11 @@ const isEntryExport = (value: unknown): boolean =>
  * inside deployed bundles). For collect-only Workers (impl + framework
  * source) it:
  *
- * 1. stamps `runtimeDelivery` — `server.takeover: false` forces the
- *    explicit tier (`"external"`); otherwise the Website construct's tier
- *    default (carried on `props.runtimeDelivery`) wins, falling back to
+ * 1. stamps `runtimeDelivery` — the Website construct's tier default
+ *    (carried on `props.runtimeDelivery`) wins, falling back to
  *    `"wrapper"` for the alchemy-owned vite pipeline and `"external"`
  *    for everything else;
- * 2. compiles `server.routes` (default `["/api/*"]`) into
+ * 2. compiles the default effect claim (`["/api/*"]`) into
  *    `assets.runWorkerFirst` rules when the impl serves a `fetch`
  *    handler — merged with user rules; an explicit `runWorkerFirst`
  *    boolean is honored, except that SPA fallback + explicit
@@ -1407,9 +1387,7 @@ const finalizeWorkerProps = (
     }
     const runtimeDelivery: "external" | "wrapper" | undefined = !collectOnly
       ? undefined
-      : props.server?.takeover === false
-        ? "external"
-        : (props.runtimeDelivery ?? (props.vite ? "wrapper" : "external"));
+      : (props.runtimeDelivery ?? (props.vite ? "wrapper" : "external"));
 
     const entryExports = Object.entries(props.exports ?? {})
       .filter(([, value]) => isEntryExport(value))
@@ -1421,9 +1399,8 @@ const finalizeWorkerProps = (
             `Worker "${id}" exports entry-level classes (${entryExports.join(", ")}) ` +
             `but its runtime delivery is "external" — the framework-built bundle ` +
             `deploys byte-for-byte, so there is no entry seam to emit the exports ` +
-            `through. Remove \`server: { takeover: false }\` to let the framework ` +
-            `integration generate the entry wrapper, or move the Durable Object / ` +
-            `Workflow classes to a dedicated Effect Worker.`,
+            `through. Use a framework integration with wrapper delivery, or move ` +
+            `the Durable Object / Workflow classes to a dedicated Effect Worker.`,
           workerId: id,
           exports: entryExports,
         }),
@@ -1438,31 +1415,13 @@ const finalizeWorkerProps = (
     {
       const workerFirstRoutes: string[] = [];
       if (hasFetch) {
-        const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
-        const invalid = routes.filter(
-          (route) => !(route.startsWith("/") || route.startsWith("!/")),
-        );
-        if (invalid.length > 0) {
-          return Effect.die(
-            new WorkerServerRoutingError({
-              message:
-                `Worker "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
-                `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
-              workerId: id,
-            }),
-          );
-        }
-        // Only the INCLUSION globs compile into `runWorkerFirst`. A
-        // `!`-excluded path must NOT become a negative run_worker_first
-        // rule: Cloudflare's router sends negative-rule matches directly to
-        // the asset worker with no user-worker fallback, so a framework SSR
-        // route carved out by an exclusion glob could never be served. Left
-        // uncompiled, the excluded path takes the default
-        // assets-first-then-worker flow — the wrapper's route gate (which
-        // keeps the exclusion) declines it and the framework side serves.
-        workerFirstRoutes.push(
-          ...routes.filter((route) => !route.startsWith("!")),
-        );
+        // The default effect claim (`/api/*`) compiles into
+        // `runWorkerFirst` so a static file (or the SPA index.html
+        // fallback) can never shadow an API path. The mount's own claim
+        // lives in user code and is invisible at deploy time — a mount
+        // claiming paths beyond `/api/*` mirrors them in
+        // `assets.runWorkerFirst`.
+        workerFirstRoutes.push(...DEFAULT_SERVER_ROUTES);
       }
       // A framework source's `assets` may be config-only (no `directory` —
       // the build supplies it), so the merged shape is cast back onto the
@@ -1497,7 +1456,7 @@ const finalizeWorkerProps = (
                 `\`notFoundHandling: "single-page-application"\` and an explicit ` +
                 `\`runWorkerFirst: false\` — the asset layer answers every miss ` +
                 `with index.html, so the handlers are unreachable. Remove ` +
-                `\`runWorkerFirst: false\` (server.routes are compiled into ` +
+                `\`runWorkerFirst: false\` (the /api/* claim is compiled into ` +
                 `worker-first rules automatically) or route the API paths ` +
                 `worker-first yourself.`,
               workerId: id,

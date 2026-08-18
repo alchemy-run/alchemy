@@ -49,7 +49,7 @@ export interface EffectWakuProps extends WakuProps {
    */
   main: string;
   /**
-   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * Server delivery + Lambda tuning (the edge routes `/api/*` to
    * `["/api/*"]`).
    */
   server?: EffectFrameworkServerProps;
@@ -123,8 +123,20 @@ export interface EffectWakuProps extends WakuProps {
  * Pass an Effect program as the third argument — it runs inside the
  * server Lambda, and its bindings collect env vars and IAM at deploy
  * time. `main: import.meta.url` anchors the module so the server bundle
- * can re-import it; mount the program in Waku's server entry via
- * `alchemy/Serve`. Use narrow subpath imports (`alchemy/AWS/S3`) — never
+ * can re-import it; mount the program in a waku middleware
+ * (`src/middleware/*.ts`) via `alchemy/Serve` — it runs identically under
+ * `waku dev`, `alchemy dev`, and in production:
+ *
+ * ```typescript
+ * // src/middleware/mount.ts
+ * import { mount } from "alchemy/Serve";
+ * import Site from "../backend.ts";
+ * const site = mount(Site);
+ * export default () => async (c, next) =>
+ *   (await site.fetch(c.req.raw)) ?? (await next(), undefined);
+ * ```
+ *
+ * Use narrow subpath imports (`alchemy/AWS/S3`) — never
  * the `alchemy/AWS` barrel — from a site module.
  *
  * @section Server Routes
@@ -134,14 +146,13 @@ export interface EffectWakuProps extends WakuProps {
  *   "Site",
  *   {
  *     main: import.meta.url,
- *     server: { routes: ["/api/*", "!/api/pages"] },
  *   },
  *   Effect.gen(function* () {
  *     return { fetch: HttpServerResponse.text("hello") };
  *   }),
  * ) {}
  * ```
- * The effect `fetch` owns `server.routes` (default `["/api/*"]`): inside
+ * The effect `fetch` owns the mount's claim (default `["/api/*"]`): inside
  * them its responses — 404s included — are final; outside them Waku
  * serves. Exclusion globs (`"!/api/pages"`) hand a path back to Waku.
  *
@@ -158,7 +169,7 @@ export interface EffectWakuProps extends WakuProps {
  * Non-`fetch` methods are RPC methods for trusted server code — dispatch
  * is in-process, no HTTP hop. Browser code is untrusted: it reaches the
  * backend through `fetch` — mount a schema-validated surface (effect
- * `HttpApi` / `@effect/rpc`) under `server.routes`.
+ * `HttpApi` / `@effect/rpc`) under the mount's claim.
  *
  * @section Event Sources
  * @example Consume an SQS queue
@@ -170,9 +181,10 @@ export interface EffectWakuProps extends WakuProps {
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
  * );
  * ```
- * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
- * from the same module. Delivery engages on deploy — `alchemy dev` does
- * not dispatch queue events locally.
+ * Event handlers dispatch on the site's OWN server Lambda (single-handler
+ * delivery): the event-source mapping and its IAM target the server
+ * function, whose generated entry routes SQS batches and schedules
+ * through the program's registered listeners.
  */
 export const Waku: {
   <Self>(): {
@@ -244,6 +256,16 @@ const wakuConfig = (props: WakuProps): FrameworkSiteConfig => ({
   framework: WAKU_FRAMEWORK_SPECIFIER,
   target: WAKU_AWS_TARGET_SPECIFIER,
   options: props.waku ? { waku: props.waku } : undefined,
+  // Single-handler (mount) delivery, Serve/DESIGN.md AWS phase 4: the AWS
+  // deploy target's generated Lambda entry is
+  // `makeFrameworkFunctionHandler({ site, fetch })` — waku's fetch (with
+  // the user's mount middleware inside it) serves ALL HTTP verbatim, and
+  // the program's queue/schedule listeners dispatch on the SAME function.
+  // Only consulted on the impl arms; plain sites are untouched.
+  effectOptions: ({ mainPath }) => ({
+    effect: { main: mainPath },
+  }),
+  singleHandler: true,
 });
 
 const makeWaku = (

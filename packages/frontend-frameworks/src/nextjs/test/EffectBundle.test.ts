@@ -36,7 +36,7 @@ describe("EffectBundle", () => {
     );
     expect(source).toContain(`import Site from "/app/src/site.ts";`);
     expect(source).toContain(
-      `import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
+      `import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Cloudflare/Serve";`,
     );
     expect(source).toContain("makeWebsiteEntryExports(WorkerEntrypoint, {");
     // The framework handler — with the user's route-file mount compiled
@@ -62,7 +62,7 @@ describe("EffectBundle", () => {
       "/app/src/site.ts",
     );
     expect(source).toContain(
-      `import { makeWebsiteEntryExports, WorkflowBridge } from "alchemy/Serve/Worker";`,
+      `import { makeWebsiteEntryExports, WorkflowBridge } from "alchemy/Cloudflare/Serve";`,
     );
     expect(source).toContain(
       "const __AlchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });",

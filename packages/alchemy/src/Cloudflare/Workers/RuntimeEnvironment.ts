@@ -7,8 +7,8 @@
  *
  * Extracted from `Worker.ts` (which re-exports everything here, so the
  * public surface is unchanged) so that foreign bundlers compiling a serve
- * mount (`alchemy/Next` inside a Next.js app, `alchemy/Nitro`
- * inside nitro, …) never traverse `Worker.ts`'s provider import graph —
+ * mount (`mount(Site)` from `alchemy/Serve` inside a Next.js route file,
+ * a Nitro middleware, …) never traverse `Worker.ts`'s provider import graph —
  * that graph reaches the local-runtime chain
  * (`WorkerAsyncBindings` → `KV/Namespace` → `LocalRuntime` →
  * `@alchemy.run/cloudflare-runtime` → the workerd native binary), which

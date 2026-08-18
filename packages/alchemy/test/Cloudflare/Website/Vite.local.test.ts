@@ -190,16 +190,17 @@ const getTextReady = (url: string) =>
   }).pipe(Effect.orDie);
 
 /**
- * The flagship wrapper-delivery roundtrip (DESIGN §6.2a) under `alchemy
- * dev`: the effectful Website's generated `virtual:alchemy:website-entry`
- * wrapper is served through the vite module runner inside workerd, the KV
- * capability binding resolves to the local simulator (a `dev:` id — proof
- * no cloud call ran), and `server.routes` decides ownership statically:
- * the `!/api/excluded` exclusion glob routes that path to the SPA asset
+ * The flagship tier-A roundtrip (Serve/DESIGN.md) under `alchemy dev`:
+ * the fixture's `server.ts` mount (named by `server: { entry }`) owns
+ * HTTP composition inside the generated `virtual:alchemy:website-entry`
+ * wrapper, served through the vite module runner inside workerd. The KV
+ * capability binding resolves to the local simulator (a `dev:` id —
+ * proof no cloud call ran), and the mount's claim decides ownership: the
+ * `!/api/excluded` exclusion glob routes that path to the SPA asset
  * layer, while an unknown in-claim path is the effect's OWN 404.
  */
 test.provider(
-  "Vite dev: effectful website serves effect routes and KV; exclusion glob routes to the assets",
+  "Vite dev: effectful website serves effect routes and KV through the server.ts mount; exclusion glob routes to the assets",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -218,11 +219,12 @@ test.provider(
       expect(deployed.site.url).toMatch(/^http:\/\/localhost:\d+/);
       const base = deployed.site.url!;
 
-      // Outside `server.routes`: the SPA shell serves from the asset layer.
+      // Outside the mount's claim: the SPA shell serves from the asset
+      // layer.
       const shell = yield* getTextReady(`${base}/`);
       expect(shell).toContain("Effectful Vite fixture");
 
-      // Inside `server.routes`: the effect fetch answers.
+      // Inside the mount's claim: the effect fetch answers.
       const marker = (yield* getJsonReady(`${base}/api/anything`)) as {
         marker: string;
         path: string;
@@ -242,9 +244,10 @@ test.provider(
       };
       expect(got.value).toBe("hello-from-dev");
 
-      // Exclusion glob routes to the framework: `!/api/excluded` carves
-      // the path out of the claim, so the asset layer's SPA fallback
-      // serves the shell — the effect fetch never runs for it.
+      // Exclusion glob routes to the framework: the mount's
+      // `!/api/excluded` carves the path out of the claim, so the entry
+      // falls through to `env.ASSETS.fetch` and the SPA fallback serves
+      // the shell — the effect fetch never runs for it.
       const excluded = yield* getTextReady(`${base}/api/excluded`);
       expect(excluded).toContain("Effectful Vite fixture");
 

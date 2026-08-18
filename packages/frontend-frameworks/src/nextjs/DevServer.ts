@@ -85,7 +85,7 @@ export interface DevServerOptions {
     | {
         /** The user's site module (`props.main` — path or `file://` URL). */
         readonly mainPath: string;
-        /** Path globs the effect fetch owns (`server.routes`). */
+        /** Path globs the effect fetch owns (the engine default claim). */
         readonly routes?: ReadonlyArray<string> | undefined;
         /** Engine-resolved path of the `alchemy/Serve` surface module. */
         readonly serveModule: string;

@@ -46,7 +46,7 @@ export interface ViteEffectEntry {
    * and `routes` is not applied (the entry's mount decides routing).
    */
   readonly entryPath?: string | undefined;
-  /** Path globs the Effect fetch owns (`server.routes`, default `/api/*`). */
+  /** The effect claim compiled into edge ordering (always `/api/*`). */
   readonly routes: string[];
   /**
    * DO/Workflow class exports (`props.exports`), reduced to plain names —
@@ -98,7 +98,7 @@ export const makeViteEffectEntry = (
   return {
     mainPath,
     entryPath,
-    routes: props.server?.routes ?? [...DEFAULT_SERVER_ROUTES],
+    routes: [...DEFAULT_SERVER_ROUTES],
     exports: Object.entries(props.exports ?? {}).flatMap(
       ([name, entry]): ViteEffectEntry["exports"] =>
         isDurableObjectExport(entry)

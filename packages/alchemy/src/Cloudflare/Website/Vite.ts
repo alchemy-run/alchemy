@@ -223,13 +223,14 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * Pass an Effect program as the third argument and ONE Worker serves the
  * Vite app **and** your effect-native handlers. The program's capability
  * bindings (KV, R2, D1, ...) are collected at plan time exactly like an
- * effect Worker's; at build time alchemy generates a wrapper entry that
- * routes by `server.routes` (default `["/api/*"]`): inside the routes
- * the effect fetch is authoritative — an `HttpRouter` miss renders as
- * its own 404, never delegation — and outside them the asset layer /
- * framework handler serves without ever invoking the effect. Hand a
- * path back to the framework with an exclusion glob
- * (`routes: ["/api/*", "!/api/foo"]` — exclusions win). Durable
+ * effect Worker's. With a framework server entry, HTTP delivery is your
+ * mount — a `server: { entry }` module that calls `mount(Site)` from
+ * `alchemy/Serve` and composes `site.fetch(...) ?? framework.fetch(...)`
+ * (inside the mount's claim, default `["/api/*"]`, the effect fetch is
+ * authoritative — an `HttpRouter` miss renders as its own 404, never
+ * delegation). A pure SPA needs no mount: the program IS the server for
+ * the default `/api/*` claim, and the asset layer serves everything
+ * else. Durable
  * Object classes and queue/scheduled/cron handlers declared by the
  * program ride the same wrapper. With SPA not-found handling, the routes
  * are auto-compiled into `assets.runWorkerFirst` so a static shell can

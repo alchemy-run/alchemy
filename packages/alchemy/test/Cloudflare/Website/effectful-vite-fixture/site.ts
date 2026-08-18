@@ -18,20 +18,22 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const Users = KV.Namespace("EffectfulViteUsers");
 
 /**
- * The flagship wrapper-delivery shape (DESIGN §6.2a): a Vite SPA whose
- * Effect program owns `/api/*` through the generated
- * `virtual:alchemy:website-entry` worker. Exercises, over real HTTP:
+ * The effectful Vite SPA (Serve/DESIGN.md tier A): the user's mount
+ * (`server: { entry: "./server.ts" }`) owns HTTP composition inside the
+ * generated `virtual:alchemy:website-entry` worker — the entry's fetch is
+ * grafted verbatim, and the wrapper adds only the platform surface.
+ * Exercises, over real HTTP:
  *
  * - the KV capability binding collected at plan and served at runtime;
- * - strict route ownership: the `!/api/excluded` exclusion glob carves
- *   that path back out to the static asset layer (SPA shell), while
- *   `/api/missing` fails `RouteNotFound` — rendered as the effect's OWN
- *   empty 404, never delegation;
- * - the SPA shell and client assets outside `server.routes`.
+ * - strict route ownership: the mount's `!/api/excluded` exclusion glob
+ *   carves that path back out to the static asset layer (SPA shell),
+ *   while `/api/missing` fails `RouteNotFound` — rendered as the effect's
+ *   OWN empty 404, never delegation;
+ * - the SPA shell and client assets outside the mount's claim.
  *
  * `main: import.meta.url` anchors this module: the engine imports it for
- * plan-time binding collection and the generated wrapper re-imports it by
- * absolute path inside workerd.
+ * plan-time binding collection and the mount re-imports it by absolute
+ * path inside workerd.
  */
 export default class EffectfulViteSite extends Website.Vite<EffectfulViteSite>()(
   "EffectfulViteSite",
@@ -39,15 +41,16 @@ export default class EffectfulViteSite extends Website.Vite<EffectfulViteSite>()
     main: import.meta.url,
     rootDir: import.meta.dirname,
     workersDev: true,
-    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
-    // `/api/excluded`, which the exclusion glob routes to the framework
-    // (here: the SPA asset layer).
-    server: { routes: ["/api/*", "!/api/excluded"] },
+    // The mount — HTTP composition is user code. Its claim gives the
+    // effect fetch `/api/*` EXCEPT `/api/excluded`, which falls through
+    // to the framework (here: the SPA asset layer).
+    server: { entry: "./server.ts" },
     assets: { notFoundHandling: "single-page-application" },
     memo: {
       include: [
         "index.html",
         "package.json",
+        "server.ts",
         "site.ts",
         "src/**",
         "vite.config.ts",

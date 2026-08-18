@@ -25,18 +25,20 @@ const rootDir = (() => {
 })();
 
 /**
- * The effectful SvelteKit Website (DESIGN §6.2b): ONE worker serving the
- * kit app AND an Effect-native API. The Effect fetch owns `/api/*` MINUS
- * the `!/api/ping` exclusion glob (strict route ownership — delegation is
- * purely a `server.routes` decision):
+ * The effectful SvelteKit Website (Serve/DESIGN.md): ONE worker serving
+ * the kit app AND an Effect-native API. HTTP composition is the user's
+ * mount — the fixture's `src/hooks.server.ts` calls
+ * `mount(Site, { routes: ["/api/*", "!/api/ping"] })` and composes
+ * `site.fetch(...) ?? resolve(event)`:
  *
  * - `/api/effect/kv?key=k` — GET/PUT round-trip through the KV capability
  *   binding collected at plan time.
- * - `/api/effect/uuid` — a *cacheable* response that must NEVER be served
- *   from the shim's pragma cache (effect dispatch happens before the
- *   cache lookup), pinned by asserting two requests differ.
- * - `/api/ping` — carved back out to kit by the exclusion glob; the
- *   fixture's +server endpoint serves it.
+ * - `/api/effect/uuid` — a fresh id per request (no cache-control: the
+ *   mount runs inside kit's handler, so a `public` response would ride
+ *   kit's pragma cache like any kit response — the user's composition
+ *   owns caching now), pinned by asserting two requests differ.
+ * - `/api/ping` — carved back out to kit by the mount's exclusion glob;
+ *   the fixture's +server endpoint serves it.
  * - any other path inside the claim fails `RouteNotFound` — rendered as
  *   the effect's OWN empty 404, never delegation to kit.
  *
@@ -49,9 +51,8 @@ export default class SvelteKitEffectSite extends Cloudflare.Website.SvelteKit<Sv
     main: import.meta.url,
     rootDir,
     workersDev: { enabled: true, previewsEnabled: true },
-    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
-    // `/api/ping`, which the exclusion glob routes to kit's own handler.
-    server: { routes: ["/api/*", "!/api/ping"] },
+    // The route claim lives in the mount (src/hooks.server.ts): the effect
+    // fetch owns `/api/*` EXCEPT `/api/ping`, which stays kit's.
     dev: { port: 0 },
     memo: { include: ["src/**", "package.json"] },
     env: {
@@ -78,11 +79,12 @@ export default class SvelteKitEffectSite extends Cloudflare.Website.SvelteKit<Sv
           return yield* HttpServerResponse.json({ key, value });
         }
         if (url.pathname === "/api/effect/uuid") {
+          // No cache-control: the mount runs INSIDE kit's handler (the
+          // user's hooks.server.ts owns composition), so a `public`
+          // response would be saved to kit's pragma cache like any other
+          // kit response. Uncached, two GETs must differ.
           const id = yield* Effect.sync(() => crypto.randomUUID());
-          return yield* HttpServerResponse.json(
-            { id },
-            { headers: { "cache-control": "public, max-age=60" } },
-          );
+          return yield* HttpServerResponse.json({ id });
         }
         // The HttpRouter-miss shape: renders as the effect's OWN empty
         // 404 — inside the claim the effect fetch is authoritative.

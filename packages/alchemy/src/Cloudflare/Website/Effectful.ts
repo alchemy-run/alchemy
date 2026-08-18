@@ -17,7 +17,7 @@ import type { WorkerServices } from "../Workers/Worker.ts";
  * `RouteNotFound` in the error channel, which types `HttpRouter` misses.
  * There is no passthrough protocol — a `RouteNotFound` failure renders as
  * the fetch's own 404 response through the standard request pipeline;
- * delegation to the framework is purely a `server.routes` decision made
+ * delegation to the framework is purely the mount's routing decision made
  * BEFORE the fetch is invoked. Plain Workers have no router-miss rendering
  * concern to widen for, so `WorkerShape` deliberately does not admit it.
  */
@@ -43,7 +43,7 @@ type WebsiteMain<InitServices = never> = void | {
 
 /**
  * The shape an effectful Website's Effect program may return: an optional
- * `fetch` handler (the `server.routes`-scoped API surface, authoritative
+ * `fetch` handler (the mount-claimed API surface, authoritative
  * within its routes — see {@link WebsiteHttpEffect}) plus any RPC methods,
  * exactly like a Worker. Every member is already optional — the `fetch`
  * arm is all-optional and RPC methods are an index signature — so a

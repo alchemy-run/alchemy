@@ -129,7 +129,7 @@ export interface ServeHandle {
  * Websites). The isolate-scope layer build is lazy — nothing happens
  * until the first matched request — and memoized per class per process.
  *
- * `server.routes` decides who serves each path: requests outside
+ * The mount's `routes` claim decides who serves each path: requests outside
  * `options.routes` (default `["/api/*"]`; exclusion globs like
  * `"!/api/auth/*"` carve paths back out) resolve `undefined` without
  * invoking the effect fetch, and inside the routes the effect fetch is

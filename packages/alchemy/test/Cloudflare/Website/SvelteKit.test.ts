@@ -501,10 +501,14 @@ describe.concurrent("SvelteKit", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful SvelteKit (DESIGN §6.2b): the site class carries an Effect
-  // program whose fetch owns `/api/*` — delivered by the generated worker
-  // shim's effect arm (wrapper tier), with the KV capability binding
-  // collected at plan time. One worker serves kit SSR + the effect API.
+  // Effectful SvelteKit (Serve/DESIGN.md): the site class carries an
+  // Effect program, and HTTP composition is the user's mount — the
+  // fixture's `src/hooks.server.ts` calls `mount(Site, { routes })` and
+  // composes `site.fetch(...) ?? resolve(event)` inside kit's handle
+  // hook. The worker shim grafts kit's handler (mount inside) verbatim;
+  // the wrapper is additive-only (non-fetch surface + class exports). The
+  // KV capability binding is collected at plan time. One worker serves
+  // kit SSR + the effect API.
   // ─────────────────────────────────────────────────────────────────────
 
   const effectFixtureDir = pathe.resolve(
@@ -514,7 +518,7 @@ describe.concurrent("SvelteKit", () => {
   );
 
   test.provider(
-    "SvelteKit effectful: one worker serves the Effect fetch (KV binding, no shim edge-cache) and kit SSR/exclusion-glob routes over HTTPS",
+    "SvelteKit effectful: one worker serves the Effect fetch through the hooks.server.ts mount and kit SSR/exclusion-glob routes over HTTPS",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -550,8 +554,9 @@ describe.concurrent("SvelteKit", () => {
         expect(users.namespaceId).not.toMatch(/^dev:/);
         yield* expectWorkerExists(site.workerName, accountId);
 
-        // ── Effect surface over HTTPS: /api/effect/kv round-trips the KV
-        // capability binding collected at plan time ──────────────────────
+        // ── Effect surface over HTTPS (through the user's hooks.server.ts
+        // mount): /api/effect/kv round-trips the KV capability binding
+        // collected at plan time ─────────────────────────────────────────
         const kvKey = "greeting";
         // Random payload — a stale value from an earlier run can never
         // satisfy the read.
@@ -594,10 +599,11 @@ describe.concurrent("SvelteKit", () => {
           );
         expect(cloudValue).toBe(kvValue);
 
-        // ── Open question §11.4 pinned: effect responses dispatch BEFORE
-        // the shim's pragma cache, so even a `cache-control: public`
-        // effect response is never served from (or saved to) the edge
-        // cache — two plain GETs must produce different bodies ───────────
+        // ── Effect routes are dynamic per request: the mount runs INSIDE
+        // kit's handler (the user owns composition, so a `public` response
+        // would ride kit's pragma cache like any kit response); the
+        // fixture's uuid route sets no cache-control, so two plain GETs
+        // must produce different bodies ──────────────────────────────────
         const uuid1 = yield* fetchJsonReady<{ id: string }>(
           `${site.url!}/api/effect/uuid`,
         );
@@ -608,9 +614,9 @@ describe.concurrent("SvelteKit", () => {
         expect(uuid2.id).toMatch(/^[0-9a-f-]{36}$/);
         expect(uuid2.id).not.toBe(uuid1.id);
 
-        // ── Exclusion glob routes to the framework: `!/api/ping` carves
-        // the kit endpoint out of the effect claim, so the shim never
-        // dispatches the effect fetch for it and kit's handler serves it ─
+        // ── Exclusion glob routes to the framework: the mount's
+        // `!/api/ping` carves the kit endpoint out of the effect claim, so
+        // `site.fetch` declines it and kit's own +server endpoint serves ─
         const ping = yield* fetchJsonReady<{
           via: string;
           binding: string | null;

@@ -183,15 +183,6 @@ export interface FunctionUrlConfig {
  */
 export interface FunctionServerOptions {
   /**
-   * Path globs the Effect program's `fetch` handler owns. On AWS these are
-   * consumed by the Website composites (compiled into the CloudFront
-   * viewer-request router's `serverRoutes` check) and by the runtime
-   * bridge's route dispatch. `["/*"]` is middleware mode — the Effect
-   * fetch sees every request.
-   * @default ["/api/*"]
-   */
-  routes?: string[];
-  /**
    * Verify at deploy time that the framework server bundle actually mounts
    * the `alchemy/Serve` bridge (the wiring handshake — a sentinel scan over
    * the shipped `bundle: false` directory). Set `false` to skip the scan
@@ -199,26 +190,7 @@ export interface FunctionServerOptions {
    * @default true
    */
   verify?: boolean;
-  /**
-   * Whether alchemy may take over the framework's server entry to deliver
-   * the runtime half automatically (the auto-inject tier). Set `false` to
-   * force the explicit tier: the framework artifact deploys byte-for-byte
-   * and you mount the program yourself via `alchemy/Serve`.
-   * @default the framework integration's tier (auto where supported)
-   */
-  takeover?: boolean;
 }
-
-/**
- * An effectful collect-only Function combined server routing rules with an
- * invalid glob. Raised as a defect at plan time.
- */
-export class FunctionServerRoutingError extends Data.TaggedError(
-  "FunctionServerRoutingError",
-)<{
-  message: string;
-  functionId: string;
-}> {}
 
 /**
  * A collect-only Function's impl registered non-fetch listeners (event
@@ -552,12 +524,10 @@ export interface FunctionRuntimeContext extends Serverless.FunctionContext {
  * Functions (impl + `bundle: false` — the effectful Website server Lambda)
  * it:
  *
- * 1. stamps `runtimeDelivery` — `server.takeover: false` forces the
- *    explicit tier (`"external"`); otherwise the Website composite's tier
- *    default (carried on `props.runtimeDelivery`) wins, falling back to
+ * 1. stamps `runtimeDelivery` — the Website composite's tier default
+ *    (carried on `props.runtimeDelivery`) wins, falling back to
  *    `"external"`;
- * 2. validates `server.routes` globs (they must start with `/` or `!/`);
- * 3. rejects non-fetch listeners (event sources) when the resolved
+ * 2. rejects non-fetch listeners (event sources) when the resolved
  *    delivery is `"external"` — a byte-for-byte framework artifact has no
  *    entry seam to dispatch their events through; non-fetch handlers on
  *    AWS ride a sibling effect Lambda instead (DESIGN §2.1.3).
@@ -579,28 +549,9 @@ const finalizeFunctionProps = (
       return Effect.succeed(props);
     }
 
-    const routes = props.server?.routes;
-    if (routes !== undefined) {
-      const invalid = routes.filter(
-        (route) => !(route.startsWith("/") || route.startsWith("!/")),
-      );
-      if (invalid.length > 0) {
-        return Effect.die(
-          new FunctionServerRoutingError({
-            message:
-              `Function "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
-              `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
-            functionId: id,
-          }),
-        );
-      }
-    }
-
     const runtimeDelivery: "external" | "wrapper" | undefined = !collectOnly
       ? undefined
-      : props.server?.takeover === false
-        ? "external"
-        : (props.runtimeDelivery ?? "external");
+      : (props.runtimeDelivery ?? "external");
 
     if (runtimeDelivery === "external") {
       // The served fetch/RPC surface registers exactly one listener (via
@@ -616,10 +567,9 @@ const finalizeFunctionProps = (
               `listener(s) (event sources) but its runtime delivery is ` +
               `"external" — the framework-built artifact deploys ` +
               `byte-for-byte, so their events would invoke the framework's ` +
-              `handler. Let the framework integration generate the ` +
-              `single-handler entry (remove \`server: { takeover: false }\` ` +
-              `where the integration supports it), or move the event-source ` +
-              `subscriptions to a dedicated Effect Function.`,
+              `handler. Use a framework integration with single-handler ` +
+              `delivery, or move the event-source subscriptions to a ` +
+              `dedicated Effect Function.`,
             functionId: id,
             listeners: nonFetchListeners,
           }),
@@ -752,7 +702,6 @@ const finalizeFunctionProps = (
  *   {
  *     main: ".output/server/index.mjs", // framework-built, ships as-is
  *     bundle: false,
- *     server: { routes: ["/api/*"] },
  *   },
  *   impl,
  * );

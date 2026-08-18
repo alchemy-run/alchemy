@@ -224,17 +224,22 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/nuxt/")) {
     return (
       `// server/middleware/alchemy.ts\n` +
-      `import { toHandler } from "alchemy/Nitro";\n` +
+      `import { defineEventHandler, toWebRequest } from "h3";\n` +
+      `import { mount } from "alchemy/Serve";\n` +
       `import Site from "../../site.ts";\n` +
-      `export default toHandler(Site);`
+      `const site = mount(Site);\n` +
+      `export default defineEventHandler((event) => site.fetch(toWebRequest(event)));`
     );
   }
   if (provider.includes("/nextjs/")) {
     return (
       `// app/api/[[...slug]]/route.ts\n` +
-      `import { toHandler } from "alchemy/Next";\n` +
+      `import { mount } from "alchemy/Serve";\n` +
       `import Site from "@/site";\n` +
-      `const handler = toHandler(Site);\n` +
+      `const site = mount(Site);\n` +
+      `export const dynamic = "force-dynamic";\n` +
+      `const handler = async (req) =>\n` +
+      `  (await site.fetch(req)) ?? new Response("Not Found", { status: 404 });\n` +
       `export { handler as GET, handler as POST, handler as PUT, handler as PATCH,\n` +
       `         handler as DELETE, handler as HEAD, handler as OPTIONS };`
     );
@@ -242,26 +247,35 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/sveltekit/")) {
     return (
       `// src/hooks.server.ts\n` +
-      `import { toHandler } from "alchemy/SvelteKit";\n` +
+      `import { mount } from "alchemy/Serve";\n` +
       `import Site from "./site.ts";\n` +
-      `export const handle = toHandler(Site);`
+      `const site = mount(Site);\n` +
+      `export const handle = async ({ event, resolve }) =>\n` +
+      `  (await site.fetch(event.request, event.platform?.env, event.platform?.ctx)) ??\n` +
+      `  resolve(event);`
     );
   }
   if (provider.includes("/astro/")) {
     return (
       `// src/fetch.ts\n` +
-      `import { toHandler } from "alchemy/Astro";\n` +
+      `import { FetchState, astro } from "astro/fetch";\n` +
+      `import { mount } from "alchemy/Serve";\n` +
       `import Site from "./site.ts";\n` +
-      `export default toHandler(Site);`
+      `const site = mount(Site);\n` +
+      `export default {\n` +
+      `  fetch: async (request, env, ctx) =>\n` +
+      `    (await site.fetch(request, env, ctx)) ?? astro(new FetchState(request)),\n` +
+      `};`
     );
   }
   return (
     `// your framework's server entry (the module the deployed bundle is built from)\n` +
-    `import { Serve } from "alchemy/Serve";\n` +
+    `import { mount } from "alchemy/Serve";\n` +
     `import Site from "./site.ts";\n` +
-    `const site = Serve.toHandler(Site);\n` +
+    `const site = mount(Site);\n` +
     `export default {\n` +
-    `  fetch: async (request) => (await site.match(request)) ?? frameworkHandler.fetch(request),\n` +
+    `  fetch: async (request, env, ctx) =>\n` +
+    `    (await site.fetch(request, env, ctx)) ?? frameworkHandler.fetch(request, env, ctx),\n` +
     `};`
   );
 };

@@ -865,19 +865,21 @@ describe.concurrent("Astro", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful Website (DESIGN §6.2c): one Worker serves Astro SSR,
+  // Effectful Website (Serve/DESIGN.md): one Worker serves Astro SSR,
   // prerendered/static assets, AND the Effect program's `/api/*` fetch —
-  // delivered by the generated fetchable wrapper the integration
-  // pre-resolves `virtual:astro:fetchable` to. The KV capability binding
-  // is collected at plan and served from the runtime env; the
-  // `!/api/astro-echo` exclusion glob routes that path to Astro's own
-  // endpoint (strict route ownership); `about.astro` prerendering inside
-  // the workerd prerender worker (which keeps astro's default fetchable)
-  // is the build-time guard case.
+  // HTTP composition is the user's mount, the fixture's `src/fetch.ts`
+  // (Astro 7's native fetch entrypoint) composing
+  // `site.fetch(...) ?? astro(new FetchState(request))`. The KV
+  // capability binding is collected at plan and served from the runtime
+  // env; the mount's `!/api/astro-echo` exclusion glob routes that path
+  // to Astro's own endpoint (strict route ownership); `about.astro`
+  // prerendering inside the workerd prerender worker (whose fetchable is
+  // a passthrough that never loads the mount's effect graph) is the
+  // build-time guard case.
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
-    "Astro: effectful Website — one Worker serves the Effect API, SSR, and prerendered assets",
+    "Astro: effectful Website — one Worker serves the Effect API through the src/fetch.ts mount, SSR, and prerendered assets",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -921,16 +923,17 @@ describe.concurrent("Astro", () => {
         expect(site.hash?.bundle).toBeDefined();
         yield* expectWorkerExists(site.workerName, accountId);
 
-        // SSR page outside `server.routes` — Astro serves it as usual.
+        // SSR page outside the mount's claim — Astro serves it as usual.
         yield* expectUrlContains(`${site.url!}/`, "astro-effect-home", {
           timeout: "120 seconds",
           label: "effect site SSR home",
         });
 
         // Prerendered page served from static assets — built inside the
-        // workerd prerender worker, which never loads the effect wrapper
-        // (the guard case: the build completing and this page serving
-        // proves prerendering stayed a no-op for the effect tier).
+        // workerd prerender worker, whose fetchable is a passthrough that
+        // never loads the mount's effect graph (the guard case: the build
+        // completing and this page serving proves prerendering stayed a
+        // no-op for the effect tier).
         yield* expectUrlContains(
           `${site.url!}/about/`,
           "astro-effect-prerendered",
@@ -950,9 +953,9 @@ describe.concurrent("Astro", () => {
           },
         );
 
-        // The effect fetch owns `/api/*`: a plain effect-served route
-        // (also proves `server.routes` compiled into `runWorkerFirst` —
-        // without worker-first routing the asset layer would answer).
+        // The effect fetch owns `/api/*` through the mount: a plain
+        // effect-served route (no asset exists at the path, so the worker
+        // — and inside it the mount — answers).
         yield* expectUrlContains(
           `${site.url!}/api/marker`,
           "astro-effect-fetch",
@@ -990,9 +993,9 @@ describe.concurrent("Astro", () => {
           );
         expect(observed).toBe(marker);
 
-        // Exclusion glob routes to the framework: `!/api/astro-echo`
-        // carves the path out of the effect claim, so the wrapper never
-        // dispatches the effect fetch and Astro's own endpoint answers.
+        // Exclusion glob routes to the framework: the mount's
+        // `!/api/astro-echo` carves the path out of the effect claim, so
+        // `site.fetch` declines it and Astro's own endpoint answers.
         yield* expectUrlContains(
           `${site.url!}/api/astro-echo`,
           "astro-endpoint-echo",

@@ -1,11 +1,11 @@
 /**
- * `alchemy/Serve/Worker` — the workerd shell the construct-generated
+ * `alchemy/Cloudflare/Serve` — the workerd shell the construct-generated
  * wrappers call (DESIGN §6.2a). A generated `virtual:alchemy:website-entry`
  * (or hand-written custom entry) looks like:
  *
  * ```ts
  * import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
- * import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Serve/Worker";
+ * import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Cloudflare/Serve";
  * import Site from "/abs/path/to/src/backend.ts";
  * export default makeWebsiteExports(WorkerEntrypoint, {
  *   site: Site,
@@ -68,7 +68,7 @@ export interface WebsiteExportsOptions {
   /** The user's Website class (the default export of `src/backend.ts`). */
   site: AnyWebsiteClass;
   /**
-   * Path globs the effect fetch owns (the construct's `server.routes`).
+   * Path globs the effect fetch owns (the default effect claim).
    * Requests outside the claim go straight to the framework; inside it
    * the effect fetch is authoritative (its 404s are real 404s).
    * @default DEFAULT_SERVER_ROUTES (["/api/*"])

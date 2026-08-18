@@ -115,7 +115,7 @@ describe("Website prop surfaces", () => {
         "V",
         {
           main: "src/site.ts",
-          server: { routes: ["/api/*"], verify: false, takeover: true },
+          server: { entry: "./server.ts", verify: false },
         },
         okImpl,
       ),
@@ -124,7 +124,7 @@ describe("Website prop surfaces", () => {
     () =>
       Cloudflare.Website.Astro(
         "A",
-        { main: "src/site.ts", server: { routes: ["/rpc/*"] } },
+        { main: "src/site.ts", server: { verify: false } },
         okImpl,
       ),
     () => Cloudflare.Website.SvelteKit("S", { main: "src/site.ts" }, okImpl),
@@ -136,7 +136,7 @@ describe("Website prop surfaces", () => {
     () => {
       class Site extends Cloudflare.Website.Vite<Site>()(
         "Site",
-        { main: "src/site.ts", server: { routes: ["/api/*"] } },
+        { main: "src/site.ts", server: { verify: true } },
         okImpl,
       ) {}
       return Site;
@@ -161,7 +161,7 @@ describe("Website prop surfaces", () => {
       Cloudflare.Website.Vite(
         "V",
         // @ts-expect-error `main` is required with an Effect program
-        { server: { routes: ["/api/*"] } },
+        { server: { verify: true } },
         okImpl,
       ),
     // source-dispatch props stay rejected on the impl arm too

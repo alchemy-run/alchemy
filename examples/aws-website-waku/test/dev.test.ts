@@ -161,6 +161,53 @@ test(
     const hello = await (await fetchOk(new URL("/hello.txt", url))).text();
     expect(hello).toContain("hello from public/");
 
+    // ── The mount (src/middleware/mount.ts) runs natively inside waku's
+    // dev server: mount-answered route, admin gate, and the effect API
+    // through `site.fetch` (env from the lowered process.env). ──
+    const healthz = await fetchOk(new URL("/healthz", url));
+    expect(await healthz.text()).toBe("ok");
+
+    const denied = await fetch(new URL("/api/admin/secret", url));
+    expect(denied.status).toBe(403);
+    const allowed = await fetch(new URL("/api/admin/secret", url), {
+      headers: { "x-admin-key": "letmein" },
+    });
+    expect(allowed.status).toBe(200);
+    expect(await allowed.json()).toEqual({ admin: true });
+
+    // The SSR seam (the RSC page → value-form client) renders the counter
+    // against the REAL DynamoDB table (remote()).
+    expect(home).toContain("Server-rendered visits:");
+
+    // The effect fetch against the REAL DynamoDB table (remote()): the
+    // finalizer route writes the marker inline, /api/kv reads it back.
+    const marker = `dev-fin-${crypto.randomUUID().slice(0, 8)}`;
+    const registered = await fetchOk(
+      new URL(`/api/finalizer?v=${marker}`, url),
+    );
+    expect(
+      ((await registered.json()) as { registered: string }).registered,
+    ).toBe(marker);
+    const readBack = await pollUntil(
+      "finalizer marker in DynamoDB",
+      async () => {
+        const res = await fetch(new URL("/api/kv?key=finalizer-last", url));
+        if (!res.ok) return undefined;
+        const { value } = (await res.json()) as { value: string | null };
+        return value === marker ? value : undefined;
+      },
+    );
+    expect(readBack).toBe(marker);
+
+    // The streaming route through the mount in dev.
+    const streamed = await fetchOk(new URL("/api/stream?n=3", url));
+    expect(await streamed.text()).toBe("0\n1\n2\n");
+
+    // (The queue produce→consume leg is live-only — same as aws-tanstack:
+    // the dev-server process's SQS client targets the real regional
+    // endpoint, so it cannot produce to the floci-local queue. The
+    // consumer itself still deploys into the local Lambda emulator.)
+
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──
     fs.writeFileSync(pagePath, pageSource.replace(MARKER, MARKER_V2));

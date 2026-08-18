@@ -1,28 +1,34 @@
 # Cloudflare Website: Waku
 
-Deploys a [Waku](https://waku.gg) app to Cloudflare Workers with `Cloudflare.Website.Waku` — no `waku.config.ts`, no Wrangler.
+Deploys an **effectful** [Waku](https://waku.gg) app to Cloudflare Workers with `Cloudflare.Website.Waku` — no `waku.config.ts` adapter, no Wrangler: ONE Worker serves the Waku frontend AND a typed Effect backend (the MaxSite shape from `Serve/DESIGN.md`).
 
-The resource builds the app with waku's own Vite pipeline and a wrangler-free in-memory Cloudflare adapter: the RSC server bundle deploys as the Worker script, and the client output (including SSG-prerendered pages and the RSC payloads) deploys as Worker static assets. Values passed via `env` are readable in server components through waku's `getEnv`.
+The resource builds the app with waku's own Vite pipeline and a wrangler-free in-memory Cloudflare adapter. With an Effect program as the third argument, the deployed worker entry is a generated wrapper that grafts waku's fetch verbatim and adds everything the program registered: Durable Object and Workflow class exports, the queue consumer, and the bindings — all derived from `yield*` registrations in `src/backend.ts`, never configured elsewhere.
+
+HTTP composition is YOURS, in waku's own idiom: `src/middleware/mount.ts` (waku's framework hook) mounts the program via `alchemy/Serve` —
 
 ```ts
-const site = yield* Cloudflare.Website.Waku("WakuSite", {
-  compatibility: {
-    flags: ["nodejs_als"], // waku's server runtime needs AsyncLocalStorage
-  },
-  env: {
-    GREETING: "Hello from alchemy",
-  },
-});
+const site = mount(Site);
+export default () => async (c, next) => {
+  if (new URL(c.req.raw.url).pathname === "/healthz") return new Response("ok");
+  return (await site.fetch(c.req.raw)) ?? (await next(), undefined);
+};
 ```
+
+— and runs identically under `waku dev`, `alchemy dev`, and in production.
 
 ## The app
 
-A minimal Waku site — a framework showcase, not a backend demo (no bindings beyond `env`):
+The shared MaxSite fixture program:
 
-- `src/pages/index.tsx` — dynamic RSC page, rendered by the Worker on every request; reads `GREETING` via `getEnv`
+- `src/backend.ts` — the Website class: an Effect `fetch` API under `/api/*` (DO round-trip, DO streaming RPC, workflow start/status, queue producer, request-scope finalizer, KV observability), plus RPC methods for the value-form `createClient`
+- `src/middleware/mount.ts` — the mount file: `/healthz` short-circuit, an `x-admin-key` gate, then `site.fetch ?? next()`
+- `src/counter.ts` — a Durable Object with typed RPC (monotonic counter + a stream-returning method)
+- `src/report-workflow.ts` — a durable Workflow (retries + sleep + KV marker)
+- `src/resources.ts` — the shared KV namespace and queue
+- `src/lib/backend.ts` — the module-scope value-form `createClient`, used by the RSC page during SSR
+- `src/pages/index.tsx` — dynamic RSC page: renders the backend's counters through the value-form client
 - `src/pages/about.tsx` — static page, prerendered at build time and served from assets
 - `src/components/Counter.tsx` — a `"use client"` island hydrated into the server-rendered page
-- `src/components/ui/` — hand-copied shadcn-style components (`button.tsx`, `card.tsx` + the `cn` util) styled with Tailwind CSS v4
 
 ## Commands
 

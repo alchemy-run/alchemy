@@ -325,8 +325,8 @@ export const Platform = <
      * collected `exports` — and its return value becomes the resource's
      * final `Props`. This is where a platform stamps derived props that
      * depend on the impl's presence or shape (e.g. the Worker's
-     * collect-only `runtimeDelivery` stamp and `server.routes` routing
-     * compilation). The `runtimeContext` argument is the same instance
+     * collect-only `runtimeDelivery` stamp and the default effect-claim
+     * routing compilation). The `runtimeContext` argument is the same instance
      * `createRuntimeContext` produced, so the hook can observe what init
      * registered (served shape, listeners). Like `transformProps`, the
      * impl path is re-evaluated inside deployed bundles — implementations

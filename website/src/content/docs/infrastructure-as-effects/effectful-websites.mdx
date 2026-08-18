@@ -12,7 +12,7 @@ from a single origin:
 ```typescript
 export default class Site extends Website.Vite<Site>()(
   "Site",
-  { main: import.meta.url, server: { routes: ["/api/*"] } },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const users = yield* KV.ReadWriteNamespace(yield* Users); // binding
     return {
@@ -28,9 +28,12 @@ The program works exactly like a Worker's or Lambda's: the init Effect
 runs at plan time to collect [Bindings](/infrastructure-as-effects/binding)
 (env vars and native bindings on Cloudflare, env vars and IAM on AWS)
 onto the site's server, and runs again inside the deployed
-runtime to serve requests. The framework's own build ships unchanged.
+runtime to serve requests. The framework's own build ships unchanged —
+alchemy never rewrites or scans it. HTTP delivery is **your mount**: one
+framework-native file that calls `mount(Site)` from `alchemy/Serve` and
+composes `site.fetch` with the framework's own handler.
 
-## The two-file DX
+## The two files: backend and mount
 
 The program must live in a **dedicated module whose default export is
 the class**, anchored by `main: import.meta.url` — identical to
@@ -52,7 +55,7 @@ export default class Site extends Website.Vite<Site>()(
   {
     main: import.meta.url,
     assets: { notFoundHandling: "single-page-application" },
-    server: { routes: ["/api/*"] },
+    server: { entry: "./server.ts" },
   },
   Effect.gen(function* () {
     const users = yield* KV.ReadWriteNamespace(yield* Users);
@@ -74,6 +77,31 @@ export default class Site extends Website.Vite<Site>()(
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
 ) {}
 ```
+
+The second file is **the mount** — your server entry (or the
+framework's hook), where HTTP composition is ordinary code you own:
+
+```typescript
+// src/server.ts — the mount (Vite / TanStack Start server entry)
+import framework from "@tanstack/react-start/server-entry";
+import { mount } from "alchemy/Serve";
+import Site from "./backend.ts";
+
+const site = mount(Site);
+
+export default {
+  fetch: async (request: Request, env: unknown, ctx: ExecutionContext) =>
+    (await site.fetch(request, env, ctx)) ?? framework.fetch(request, env, ctx),
+};
+```
+
+`site.fetch` resolves the `Response` for paths the mount claims and
+`undefined` for everything else — decline, not error — so `??` composes
+the framework as the fallback. Gates, custom routes, and dispatch order
+are plain statements around it. `env` and `ctx` are whatever your host
+provides: pass them through on Cloudflare (finalizers ride
+`ctx.waitUntil`); omit them on AWS and in dev servers (env resolves from
+`process.env`, and the request scope settles inline).
 
 ```typescript
 // alchemy.run.ts — deploy it like any resource
@@ -104,40 +132,41 @@ bloats the server bundle and at worst runs workerd out of memory in dev.
 
 ## Routing semantics
 
-**You declare what routes to you.** `server.routes` decides who serves
-each path — statically, before a single request is dispatched. One
-mental model, both clouds:
+**Routing is the mount's code.** The mount's claim decides who serves
+each path — in your entry, where you can read it:
 
 ```
-request
-  ├─ path inside server.routes? ─ yes ─► Effect fetch (authoritative — even its 404s)
-  └─ no ─► platform asset layer ─► framework fetch (SSR / framework API routes)
+request → your mount code (gates, custom routes — plain statements)
+  ├─ path inside the mount's routes? ─ yes ─► Effect fetch (authoritative — even its 404s)
+  └─ no ─► site.fetch resolves undefined ─► framework fetch (SSR / framework routes)
 ```
 
-`server.routes` (default `["/api/*"]`) is the URL space the Effect
-`fetch` owns. Globs use the `runWorkerFirst` dialect: `*` matches any
-run of characters including `/`, and a leading `!` marks an exclusion —
-**exclusions win**. On Cloudflare the routes are compiled into
-`assets.runWorkerFirst`; on AWS into the generated CloudFront
-viewer-request router, checked **before** the static-asset manifest — so
-a static file can never shadow an API path, even under SPA fallback.
-
-Inside the routes the Effect fetch is **authoritative**: whatever it
-returns is the response. An `HttpRouter` miss (a `RouteNotFound`
-failure) renders as the effect's *own* 404 — it is never delegation, and
-there is no response sniffing. Outside the routes the framework serves
-and the Effect fetch is never invoked.
+`mount(Site, { routes })` (default `["/api/*"]`) declares the URL space
+the Effect `fetch` owns. Globs: `*` matches any run of characters
+including `/`, and a leading `!` marks an exclusion — **exclusions
+win**. Inside the claim the Effect fetch is **authoritative**: whatever
+it returns is the response, and an `HttpRouter` miss (a `RouteNotFound`
+failure) renders as the effect's *own* 404 — never delegation, no
+response sniffing. Outside the claim `site.fetch` resolves `undefined`
+without invoking the effect, and your `??` fallback serves.
 
 To hand a path inside the claim back to the framework, carve it out with
 an exclusion glob:
 
 ```typescript
 // the effect owns /api/*, except /api/auth/* stays the framework's
-server: { routes: ["/api/*", "!/api/auth/*"] }
+const site = mount(Site, { routes: ["/api/*", "!/api/auth/*"] });
 ```
 
-`server.routes: ["/*"]` routes every request to the Effect fetch — the
+`routes: ["/*"]` claims every request for the Effect fetch — the
 framework then serves only the paths you exclude.
+
+One deploy-time note: the platform's asset layer runs **in front of**
+the server, so alchemy compiles the default `/api/*` claim into the
+platform's edge ordering (Cloudflare `assets.runWorkerFirst`; the
+CloudFront router on AWS) — a static file can never shadow an API path,
+even under SPA fallback. If your mount claims paths beyond `/api/*`,
+mirror them in `assets: { runWorkerFirst: [...] }` on Cloudflare.
 
 ## Calling the backend
 
@@ -159,8 +188,8 @@ Effect.gen(function* () {
 
 Methods return `Effect` (or a plain value/Promise); arguments and
 results cross the wire as plain JSON. The `/api/__rpc` path is
-**reserved** — user routes must not claim it, and it needs no
-`server.routes` claim of its own. A backend of methods alone needs no
+**reserved** — user routes must not claim it, and the default `/api/*`
+mount claim already covers it. A backend of methods alone needs no
 `fetch` handler at all.
 
 ### In the browser: the type-only form
@@ -285,79 +314,85 @@ dispatching. Keep prerendered/static pages backend-free — make the page
 dynamic, or move the call into client code, where it becomes a wire
 call against the deployed site.
 
-## Per-framework support
+## Per-framework mounts
 
-How the program's `fetch` reaches the deployed server differs per
-framework. *Automatic* means alchemy delivers it for you (a generated
-entry wrapper, entry takeover, or the framework's fetchable seam);
-*one-file mount* means you add one framework-native file that mounts the
-program via `alchemy/Serve`.
+The mount is the same `mount(Site)` everywhere — what differs per
+framework is **which file you own** to compose it in. Same file, both
+clouds:
 
-| Framework | Cloudflare | AWS |
-| --- | --- | --- |
-| StaticSite | automatic — the program **is** the Worker in front of the assets | automatic — the program **is** the server Lambda |
-| Vite (TanStack Start, …) | automatic | — |
-| Astro | automatic | automatic |
-| SvelteKit | automatic | automatic |
-| Nuxt | automatic | one-file mount — `server/middleware/alchemy.ts` with [`toHandler`](/providers/serve/toeventhandler) |
-| Next.js | automatic (`next dev` HMR uses the explicit mount) | one-file mount — `app/api/[[...slug]]/route.ts` with [`toHandler`](/providers/serve/toroutehandler) |
-| Waku | later release | one-file mount — `Serve.toHandler` in the server entry |
-| Octane | later release | one-file mount — `Serve.toHandler` in the server entry |
-
-The explicit mounts are always available as an escape hatch, even where
-delivery is automatic — mounting one makes the generated arm stand down,
-and `server: { takeover: false }` forces the explicit tier outright:
+| Framework | Your mount file |
+| --- | --- |
+| StaticSite | none — the program **is** the server (the Worker in front of the assets on Cloudflare; the server Lambda on AWS) |
+| Vite SPA | none — no framework server exists; the program serves `/api/*` directly |
+| Vite / TanStack Start | `src/server.ts` (the server entry — `server: { entry }` on plain Vite; Start's own convention) |
+| SvelteKit | `src/hooks.server.ts` (the `handle` hook) |
+| Next.js | `app/api/[[...slug]]/route.ts` (an optional catch-all route file) |
+| Nuxt | `server/middleware/alchemy.ts` (a Nitro middleware) |
+| Astro | `src/fetch.ts` (Astro 7's native fetch entrypoint) |
+| Waku | `src/middleware/mount.ts` (a Waku middleware — compose `site.fetch(request) ?? next()`) |
 
 ```typescript
 // Next.js — app/api/[[...slug]]/route.ts (both clouds)
-import { toHandler } from "alchemy/Next";
+import { mount } from "alchemy/Serve";
 import Site from "../../../src/backend.ts";
 
-const handler = toHandler(Site);
+const site = mount(Site);
+export const dynamic = "force-dynamic";
+
+const handler = async (req: Request): Promise<Response> =>
+  (await site.fetch(req)) ?? new Response("Not Found", { status: 404 });
 export { handler as GET, handler as POST, handler as PUT,
          handler as PATCH, handler as DELETE, handler as HEAD,
          handler as OPTIONS };
 ```
 
 ```typescript
-// Nuxt — server/middleware/alchemy.ts (both clouds)
-import { toHandler } from "alchemy/Nitro";
-import Site from "../../src/backend.ts";
+// SvelteKit — src/hooks.server.ts (both clouds)
+import { mount } from "alchemy/Serve";
+import Site from "./backend.ts";
 
-export default toHandler(Site);
+const site = mount(Site);
+
+export const handle = async ({ event, resolve }) =>
+  (await site.fetch(event.request, event.platform?.env, event.platform?.ctx)) ??
+  resolve(event);
 ```
 
-For any other fetch-shaped server entry, compose
-[`Serve.toHandler`](/providers/serve/make) yourself:
+For any other fetch-shaped server entry, the composition is the same
+two lines:
 
 ```typescript
 // src/server.ts (TanStack Start shown)
-import handler from "@tanstack/react-start/server-entry";
-import * as Serve from "alchemy/Serve";
-import Site from "./src/backend.ts";
+import framework from "@tanstack/react-start/server-entry";
+import { mount } from "alchemy/Serve";
+import Site from "./backend.ts";
 
-const site = Serve.toHandler(Site);
+const site = mount(Site);
 export default {
-  fetch: async (req: Request) => (await site.match(req)) ?? handler.fetch(req),
+  fetch: async (req: Request, env: unknown, ctx: ExecutionContext) =>
+    (await site.fetch(req, env, ctx)) ?? framework.fetch(req, env, ctx),
 };
 ```
 
 ## Beyond fetch
 
-On Cloudflare, the program's non-fetch surface — Durable Object classes,
-queue consumers, cron `scheduled` handlers — deploys on the same Worker:
-every automatic tier ships it in production, through the generated entry
-(Vite, StaticSite, SvelteKit, Nuxt) or the entry takeover (Astro,
-Next.js).
+The mount delivers HTTP; everything else the program registers —
+Durable Object and Workflow classes, queue consumers, cron `scheduled`
+handlers — is the **platform surface**, and alchemy delivers it through
+a generated entry that wraps the framework bundle *additively*: the
+framework handler (with your mount inside) serves all HTTP verbatim,
+and the wrapper adds the class exports and listener dispatch next to
+it. Everything the wrapper emits derives from the program's `yield*`
+registrations at plan time — nothing is scanned out of build output,
+and you never hand-write a DO or Workflow export.
 
-On AWS there is no entry seam in a pre-streamified framework bundle, so
-the non-fetch half of the program rides a **sibling effect Lambda**
-(`<SiteId>-Handlers`), deployed automatically from the same impl: event
-sources register their mappings and IAM against the sibling, and a
-fetch-only program deploys no extra Lambda at all. The exception is the
-effectful `AWS.Website.StaticSite`, whose program **is** the server
-Lambda — event sources attach to it directly, no sibling. Either way you
-still write one program.
+On Cloudflare that generated entry is the deployed Worker's entry. On
+AWS it is the single Lambda's handler: HTTP-shaped events route to the
+framework handler and SQS batches / schedule events dispatch through
+the program's registered listeners — **one Lambda**, no sibling
+functions. The effectful `StaticSite` (and the Vite SPA) are the
+degenerate case where there is no framework server at all: the program
+*is* the entry.
 
 ## Async work
 
@@ -426,10 +461,11 @@ return {
 };
 ```
 
-On AWS the consumer rides the sibling effect Lambda (or, for
-`StaticSite`, the site's own Lambda) — shared capabilities collect their
-env and IAM onto **both** functions, so `recordProcessed` above can
-write to the same DynamoDB table the fetch side reads.
+On AWS the consumer rides the site's own Lambda — the generated
+single-handler entry dispatches SQS batches through the registered
+consumer, and the event-source mapping and its IAM target that same
+function, so `recordProcessed` above writes to the same DynamoDB table
+the fetch side reads.
 
 Because the consumer runs asynchronously, the frontend observes the
 catch-up by polling a read method — a `processed()` RPC method that
@@ -443,40 +479,23 @@ await backend.enqueue("hello queue");
 const { count, last } = await backend.processed();
 ```
 
-### Queue delivery in dev
-
-`alchemy dev` delivers queue events locally only where the site worker's
-non-fetch surface actually runs under the local runtime:
-
-| Tier | Queue delivery under `alchemy dev` |
-| --- | --- |
-| Cloudflare Vite, StaticSite, Astro | **yes** — the local queue broker delivers batches to the consumer on the local site worker |
-| Cloudflare Next.js | `preview` mode **yes** (full takeover artifact); `hmr` mode no (fetch-only) |
-| Cloudflare SvelteKit, Nuxt | no — the dev servers mount the effect fetch only; queue batches are not dispatched locally |
-| AWS (all tiers) | no — event-source mappings are cloud wiring that cannot target a locally emulated Lambda; deploy to exercise the consumer |
-
-Where delivery is unavailable in dev, `enqueue` and the rest of the
-program still work — the async leg simply engages on `alchemy deploy`.
-
 ## Dev mode
 
-`alchemy dev` runs each framework's own dev server (full HMR) with the
-effect routes mounted in front of it — the same routing semantics as
-production:
+`alchemy dev` runs each framework's own dev server (full HMR) with your
+mount running natively inside it — the same file, the same routing
+semantics as production:
 
-- **Cloudflare** — bindings resolve against the local simulators
-  (workerd, Miniflare-style KV/R2/D1). The site module's identity stays
+- **Cloudflare** — bindings resolve against the local simulators. The
+  program's platform surface runs locally too: Durable Objects,
+  Workflows, and queue consumers are hosted in a local platform worker
+  (workerd) next to the dev server, so DO round-trips, workflow runs,
+  and queue produce→consume all work offline. The site's identity stays
   `dev:`-prefixed; nothing touches the real cloud unless a resource is
-  piped through `Alchemy.remote()`. Next.js dev has two modes: `preview`
-  serves the takeover artifact with full parity (non-fetch included),
-  `hmr` runs `next dev` with the explicit mount (fetch-only).
-- **AWS** — capability bindings hit the real cloud with your ambient
-  credentials (capability resources are typically piped through
-  `Alchemy.remote()` under dev); the effectful StaticSite's Lambda runs
-  in the local emulator.
-
-Queue-consumer support under dev differs per tier — see the
-[dev delivery matrix](#queue-delivery-in-dev) above.
+  piped through `Alchemy.remote()`.
+- **AWS** — the program runs in the local Lambda emulator; a local
+  queue (not piped through `Alchemy.remote()`) delivers batches to the
+  emulated consumer. Capability resources piped through
+  `Alchemy.remote()` hit the real cloud with your ambient credentials.
 
 ## Migrating from two workers
 
@@ -500,7 +519,7 @@ and delete the separate Worker:
 -  { main: import.meta.url },
 +export default class Site extends Website.Vite<Site>()(
 +  "Site",
-+  { main: import.meta.url, server: { routes: ["/api/*"] } },
++  { main: import.meta.url, server: { entry: "./server.ts" } },
    Effect.gen(function* () {
      const users = yield* KV.ReadWriteNamespace(yield* Users);
      return { fetch: /* unchanged */ };
@@ -523,7 +542,7 @@ unchanged.
   collect env/IAM at plan time
 - [`createClient`](/providers/client/createclient) — the typed
   frontend→backend bridge
-- [`Serve.toHandler`](/providers/serve/make) — the runtime bridge
+- [`mount`](/providers/serve/serve) — the runtime bridge
 - Construct reference:
   [Cloudflare Vite](/providers/cloudflare/website/vite),
   [Cloudflare StaticSite](/providers/cloudflare/website/staticsite),

@@ -5,6 +5,7 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
@@ -188,7 +189,7 @@ test(
 );
 
 test(
-  "queue round-trip: enqueue via the nitro route, the sibling consumer catches up",
+  "queue round-trip: enqueue via the nitro route, the same-Lambda consumer catches up",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
@@ -203,7 +204,7 @@ test(
     const before = yield* readProcessed;
 
     // `POST /api/jobs` sends to SQS and returns immediately; the CONSUMER
-    // runs out of band on the sibling effect Lambda (`<site>-Handlers`),
+    // runs out of band on the SAME server Lambda (single-handler entry),
     // whose event-source mapping was registered by the same backend
     // module.
     const res = yield* postJsonWhenReady(`${url}/api/jobs`, {
@@ -211,7 +212,7 @@ test(
     });
     expect(res.status).toBe(200);
 
-    // Bounded poll until the sibling's write lands in DynamoDB.
+    // Bounded poll until the consumer's write lands in DynamoDB.
     const processed = yield* readProcessed.pipe(
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),
@@ -231,6 +232,113 @@ test(
     const url = yield* base;
     const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
     expect(body).toContain("User-agent: *");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "the mount's own route answers without nitro (healthz)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/healthz`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("ok");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "the mount's admin gate runs ahead of both worlds",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // Warm first so the cold-start window can't read as the gate.
+    yield* getWhenReady(`${url}/healthz`);
+    const client = yield* HttpClient.HttpClient;
+    const denied = yield* client.get(`${url}/api/admin/secret`);
+    expect(denied.status).toBe(403);
+    const allowed = yield* executeWhenReady(
+      HttpClientRequest.get(`${url}/api/admin/secret`).pipe(
+        HttpClientRequest.setHeader("x-admin-key", "letmein"),
+      ),
+    );
+    expect(allowed.status).toBe(200);
+    expect((yield* allowed.json) as object).toEqual({ admin: true });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "effect queue leg over HTTP: /api/enqueue → same-Lambda consumer → /api/kv",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `http-queue-${crypto.randomUUID()}`;
+
+    const readKv = (key: string) =>
+      Effect.gen(function* () {
+        const res = yield* getWhenReady(`${url}/api/kv?key=${key}`);
+        expect(res.status).toBe(200);
+        return ((yield* res.json) as { value: string | null }).value;
+      });
+
+    const before = Number((yield* readKv("processed-count")) ?? "0");
+    const sent = yield* getWhenReady(`${url}/api/enqueue?m=${marker}`);
+    expect(sent.status).toBe(200);
+
+    yield* readKv("processed-count").pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (count) => Number(count ?? "0") > before,
+        times: 45,
+      }),
+    );
+    expect(yield* readKv("processed-last")).toBe(marker);
+  }),
+  { timeout: 240_000 },
+);
+
+test(
+  "streaming route serves the full body through the streamified entry",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/api/stream?n=5`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n4\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer settles inline (Lambda semantics)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `finalizer-${crypto.randomUUID()}`;
+    const registered = yield* getWhenReady(`${url}/api/finalizer?v=${marker}`);
+    expect(registered.status).toBe(200);
+    const value = yield* Effect.gen(function* () {
+      const res = yield* getWhenReady(`${url}/api/kv?key=finalizer-last`);
+      return ((yield* res.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "nitro's own /api routes stay nitro's (the mount's exclusion globs)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // /api/jobs and /api/visits are carved OUT of the mount's claim —
+    // nitro's own scanned routes (value-form client inside) answer them.
+    const res = yield* getWhenReady(`${url}/api/jobs`);
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { count: number };
+    expect(typeof body.count).toBe("number");
   }),
   { timeout: 180_000 },
 );

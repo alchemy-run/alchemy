@@ -14,7 +14,7 @@
  *
  * ```js
  * import { WorkerEntrypoint, DurableObject } from "cloudflare:workers";
- * import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Serve/Worker";
+ * import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Cloudflare/Serve";
  * import __astroEntry from "/abs/path/to/vendored/server.js";
  * import Site from "/abs/path/to/site.ts";
  * export default makeWebsiteEntryExports(WorkerEntrypoint, {
@@ -28,7 +28,7 @@
  * - **fetch stays exactly as delivered today**: the wrapper's fetch
  *   delegates verbatim to the vendored astro entry, whose `App.render`
  *   runs through the pre-resolved fetchable (effect-first over
- *   `server.routes`, env-marker guard). No double
+ *   route claim, env-marker guard). No double
  *   bridging, no route logic at the entry.
  * - **Non-fetch handlers** (queue/scheduled/email/tail) and workerd JS-RPC
  *   dispatch come from the Worker bridge inside
@@ -119,7 +119,7 @@ export const makeEntryWrapperSource = (options: {
     `// non-fetch handlers + DO/Workflow classes come from the Worker bridge.`,
     `globalThis.__ALCHEMY_RUNTIME__ = true;`,
     `import { ${cfImports.join(", ")} } from "cloudflare:workers";`,
-    `import { ${serveImports.join(", ")} } from "alchemy/Serve/Worker";`,
+    `import { ${serveImports.join(", ")} } from "alchemy/Cloudflare/Serve";`,
     `import __astroEntry from ${JSON.stringify(options.entryId)};`,
     `import Site from ${JSON.stringify(options.mainPath)};`,
     `export default makeWebsiteEntryExports(WorkerEntrypoint, {`,

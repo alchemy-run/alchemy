@@ -293,11 +293,12 @@ describe.concurrent("SvelteKit dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful SvelteKit (DESIGN §6.2b) under `alchemy dev`: the site's
-  // Effect program owns `/api/*` through the effect dev middleware
-  // mounted in front of kit's Vite dev server, with binding clients
-  // resolving against the same platform proxy that serves kit's
-  // `platform.env` — backed by the LOCAL simulators (`dev:` ids).
+  // Effectful SvelteKit (Serve/DESIGN.md) under `alchemy dev`: the mount
+  // is app code — the fixture's `src/hooks.server.ts` runs natively in
+  // kit's Vite dev server (nothing is injected), composing
+  // `site.fetch(...) ?? resolve(event)` with binding clients resolving
+  // against the same platform proxy that serves kit's `platform.env` —
+  // backed by the LOCAL simulators (`dev:` ids).
   // ─────────────────────────────────────────────────────────────────────
 
   const effectFixtureDir = pathe.resolve(
@@ -307,7 +308,7 @@ describe.concurrent("SvelteKit dev", () => {
   );
 
   test.provider(
-    "SvelteKit dev: effectful site serves /api/* through the Effect fetch with local KV; exclusion glob routes to kit",
+    "SvelteKit dev: effectful site serves /api/* through the user's hooks.server.ts mount with local KV; exclusion glob routes to kit",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -344,7 +345,7 @@ describe.concurrent("SvelteKit dev", () => {
         expect(users.namespaceId).toMatch(/^dev:/);
 
         // ── Effect surface: /api/effect/kv round-trips the KV capability
-        // binding through the dev middleware + platform proxy. Random
+        // binding through the hooks mount + platform proxy. Random
         // payload so a stale value persisted by an earlier run's local
         // simulator can never satisfy the read ───────────────────────────
         const kvValue = `sveltekit-dev-effect-${crypto.randomUUID()}`;
@@ -354,9 +355,9 @@ describe.concurrent("SvelteKit dev", () => {
         );
         expect(kvRead.value).toBe(kvValue);
 
-        // ── Exclusion glob routes to the framework: `!/api/ping` carves
-        // the kit endpoint out of the effect claim, so the dev middleware
-        // never dispatches the effect fetch for it and kit serves it ─────
+        // ── Exclusion glob routes to the framework: the mount's
+        // `!/api/ping` carves the kit endpoint out of the effect claim, so
+        // `site.fetch` declines it and kit's own +server endpoint serves ─
         const ping = yield* fetchJsonReady<{
           via: string;
           binding: string | null;

@@ -60,7 +60,6 @@ export default class SvelteKitEffectSite extends Website.SvelteKit<SvelteKitEffe
     rootDir,
     // Strict route ownership with an exclusion glob: the effect fetch owns
     // /api/* EXCEPT /api/hello, which kit's own +server endpoint serves.
-    server: { routes: ["/api/*", "!/api/hello"] },
     forceDestroy: true,
     invalidation: { paths: "all", wait: true },
     memo: { include: ["src/**", "package.json"] },

@@ -217,6 +217,21 @@ export interface WakuFrameworkOptions {
    * target and must not be set here or in the config file.
    */
   readonly waku?: WakuConfig | undefined;
+  /**
+   * Effectful (mount-design) delivery descriptor, folded into the deploy
+   * target's config (Serve/DESIGN.md): the target's entry generator builds
+   * the wrapper that grafts waku's fetch — with the user's mount
+   * middleware inside it — and adds the program's non-fetch dispatch.
+   * Plain JSON data assembled by alchemy's Website composites.
+   */
+  readonly effect?:
+    | {
+        /** Absolute path (or `file://` URL) of the user's site module. */
+        readonly main: string;
+        readonly durableObjects?: ReadonlyArray<string> | undefined;
+        readonly workflows?: ReadonlyArray<string> | undefined;
+      }
+    | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
   /**
@@ -313,12 +328,26 @@ export const selectWakuTargetInput = (
   options?: WakuFrameworkOptions,
 ): WakuTargetInputSelection => {
   const raw = options?.target;
-  if (raw !== undefined && isDeployTargetInput(raw)) {
-    return { input: raw, config: options?.vite };
-  }
+  const base =
+    raw !== undefined && isDeployTargetInput(raw)
+      ? options?.vite
+      : (raw?.cloudflare?.worker ?? options?.vite);
+  // The effectful delivery descriptor rides the target config: a target
+  // factory/specifier receives it as `config.effect` (the AWS composite's
+  // options channel; targets passed as VALUES already carry it).
+  const config =
+    options?.effect !== undefined
+      ? {
+          ...(typeof base === "object" && base !== null ? base : undefined),
+          effect: options.effect,
+        }
+      : base;
   return {
-    input: DEFAULT_TARGET_SPECIFIER,
-    config: raw?.cloudflare?.worker ?? options?.vite,
+    input:
+      raw !== undefined && isDeployTargetInput(raw)
+        ? raw
+        : DEFAULT_TARGET_SPECIFIER,
+    config,
   };
 };
 
@@ -780,17 +809,25 @@ export const make = (
         // carries a user worker entry, the chunk built from it must become
         // `serverModules[0]` — waku's own `server/index.js` remains an
         // ordinary chunk the user entry imports (via
-        // `virtual:waku/server-entry`). Without one, waku's own `index`
-        // entry chunk is pinned by name as before.
+        // `virtual:waku/server-entry`). A VIRTUAL entry (the effectful
+        // wrapper, `virtual:alchemy:website-entry`) never resolves to a
+        // filesystem path — its built chunk's facade is the bundler-wrapped
+        // virtual id, matched by inclusion instead. Without either, waku's
+        // own `index` entry chunk is pinned by name as before.
+        const rawEntry = target.entry?.main;
         const userEntry = FrameworkCore.resolveDeployTargetEntry(target, {
           root,
         });
         const collector = yield* FrameworkCore.makeBuildOutputCollector({
           entryEnvironment: "rsc",
           selectEntry:
-            userEntry !== undefined
-              ? FrameworkCore.selectEntryByFacade(userEntry)
-              : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
+            rawEntry !== undefined && rawEntry.startsWith("virtual:")
+              ? (chunk) =>
+                  chunk.facadeModuleId !== null &&
+                  chunk.facadeModuleId.includes(rawEntry)
+              : userEntry !== undefined
+                ? FrameworkCore.selectEntryByFacade(userEntry)
+                : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
         }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
         // The whole build runs under the project root cwd: waku's
         // html-shell plugin declares a cwd-relative `index.html` client

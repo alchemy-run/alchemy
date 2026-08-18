@@ -58,7 +58,11 @@ The home page renders "Server-rendered visits: N" during SSR and a "Bump visits"
 
 ### The async leg
 
-The same class also owns an SQS-backed async flow: `enqueue(message)` sends to the `Jobs` queue, and a `consumeQueueMessages` listener **on the same class** consumes it — each message bumps a `processed-count` item and records `processed-last` in the same DynamoDB table, which the `processed()` method reads back. Because the nitro-built Lambda entry only serves HTTP, the consumer deploys automatically as a **sibling effect Lambda** (`NuxtSite-Handlers`) from the same `server/backend.ts` module: the event-source mapping and its `sqs:ReceiveMessage` IAM target the sibling, while the site Lambda stays HTTP-only. In the UI, "Send to queue" posts to `/api/jobs` and then polls `GET /api/jobs` until the count moves — making the queue → consumer → state catch-up visible.
+The same class also owns an SQS-backed async flow: `enqueue(message)` sends to the `Jobs` queue, and a `consumeQueueMessages` listener **on the same class** consumes it — each message bumps a `processed-count` item and records `processed-last` in the same DynamoDB table, which the `processed()` method reads back. The consumer dispatches on the site's **own server Lambda** (single-handler delivery): the generated Lambda entry serves nitro's HTTP verbatim and routes SQS batches through the program's registered listener, so the event-source mapping and its `sqs:ReceiveMessage` IAM target the server function itself — no sibling function deploys. In the UI, "Send to queue" posts to `/api/jobs` and then polls `GET /api/jobs` until the count moves — making the queue → consumer → state catch-up visible.
+
+### The mount
+
+HTTP composition is user code: `server/middleware/alchemy.ts` mounts the effect program (`const site = mount(Site, { routes })` from `alchemy/Serve`) and calls `site.fetch(toWebRequest(event))` — `undefined` means "not mine" and nitro continues to its own routes and pages. The middleware also answers `/healthz` itself and gates `/api/admin/*`, showing that dispatch order and gates are ordinary middleware code. The same file runs unchanged in `nuxt dev`.
 
 ## Commands
 
@@ -75,4 +79,4 @@ bun alchemy destroy  # tear down
 - In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the DynamoDB table bound by the effect program is pinned `remote()` in `server/backend.ts`, so the nitro routes dispatching the backend hit the real table with your ambient credentials.
 - The async leg runs in the local Lambda emulator in dev: the `Jobs` queue, its event-source mapping, and the consumer all deploy there together (a real queue cannot feed an emulated consumer, so the queue is deliberately not `remote()`). The dev server's `enqueue` produce path is not wired to the emulator yet — deploy to exercise the full async leg end-to-end.
 - `/about` is prerendered at build time — prerendered pages must not call the backend server-side (nitro's `isr` route rule is Vercel/Netlify-only and ignored on AWS Lambda; use `prerender` or `cache` route rules instead).
-- `test/integ.test.ts` deploys the stack and asserts SSR (including the backend-rendered counter), the nitro API routes, the queue round-trip, the prerendered page, and static assets over HTTP.
+- `test/integ.test.ts` deploys the stack and asserts SSR (including the backend-rendered counter), the nitro API routes, the queue round-trip (nitro route AND effect-fetch produce paths), the mount's own routes (healthz, admin gate), the streaming and finalizer routes, the prerendered page, and static assets over HTTP.

@@ -264,17 +264,16 @@ describe.concurrent("Nuxt dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effect entry takeover (DESIGN Amendment §2.1.2), dev half: the impl's
-  // fetch is auto-mounted as an alchemy-generated nitro middleware
-  // (routes-scoped `alchemy/Nitro` toHandler) inside nitro's
-  // dev SSR worker thread — zero framework-file edits. The KV capability
+  // The mount design (Serve/DESIGN.md), dev half: the user's own
+  // `server/middleware` mount is ordinary app code nitro compiles into
+  // its dev SSR worker thread — nothing is injected. The KV capability
   // collected at plan resolves through the platform proxy to the LOCAL
   // simulator (`dev:` namespace id — proof no cloud call ran). Non-fetch
-  // handlers (queue/scheduled/DO classes) are production-only on Nuxt:
-  // dev runs nitro's dev preset entry, not the generated deploy entry.
+  // handlers (queue/scheduled/DO classes) are hosted in the dev platform
+  // proxy's workerd, not the dev SSR worker.
   // ─────────────────────────────────────────────────────────────────────
   test.provider(
-    "Nuxt dev: effectful site serves /api/* through the injected effect middleware",
+    "Nuxt dev: effectful site serves /api/* through the user's middleware mount",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -284,6 +283,31 @@ describe.concurrent("Nuxt dev", () => {
           tempRoot,
           entries: effectFixtureEntries,
         });
+
+        // The mount — HTTP composition is user code (a nitro server
+        // middleware in the served tree), claiming the same routes the
+        // fixture's old `server.routes` did: `/api/*` minus the
+        // `!/api/hello` exclusion, which stays nitro's.
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const middlewareDir = path.join(rootDir, "server", "middleware");
+        yield* fs.makeDirectory(middlewareDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(middlewareDir, "alchemy-mount.ts"),
+          [
+            `import { mount } from "alchemy/Serve";`,
+            `import { defineEventHandler, toWebRequest } from "h3";`,
+            `import Site from "../../site.ts";`,
+            ``,
+            `const site = mount(Site, { routes: ["/api/*", "!/api/hello"] });`,
+            ``,
+            `export default defineEventHandler((event) => {`,
+            `  const cloudflare = event.context.cloudflare;`,
+            `  return site.fetch(toWebRequest(event), cloudflare?.env, cloudflare?.context);`,
+            `});`,
+            ``,
+          ].join("\n"),
+        );
 
         // The site module is imported from the CLONE (its `main:
         // import.meta.url` anchor must point at the tree nitro serves),
@@ -305,7 +329,7 @@ describe.concurrent("Nuxt dev", () => {
 
         const base = deployed.attrs.url!;
 
-        // Effect fetch through the injected middleware.
+        // Effect fetch through the user's mount.
         const marker = yield* fetchJsonReady<{ marker: string }>(
           `${base}/api/effect/marker`,
         );
@@ -322,7 +346,7 @@ describe.concurrent("Nuxt dev", () => {
         expect(got.value).toBe("dev-value");
 
         // Exclusion glob routes to the framework: `!/api/hello` carves the
-        // path out of the effect claim, so nitro's own scanned route
+        // path out of the mount's claim, so nitro's own scanned route
         // answers — the effect fetch never runs for it.
         yield* expectUrlContains(`${base}/api/hello`, "api-route-ok", {
           timeout: "60 seconds",
@@ -340,7 +364,7 @@ describe.concurrent("Nuxt dev", () => {
         // Nuxt SSR outside the effect routes is untouched.
         yield* expectUrlContains(`${base}/`, "NUXT_PAGE_MARKER", {
           timeout: "60 seconds",
-          label: "nuxt dev SSR page alongside the effect middleware",
+          label: "nuxt dev SSR page alongside the mount",
         });
 
         yield* stack.destroy();
@@ -349,79 +373,18 @@ describe.concurrent("Nuxt dev", () => {
   );
 
   test.provider(
-    "Nuxt dev: an explicit alchemy/Nitro mount stands the injected middleware down",
+    "Nuxt dev: without a mount, nothing serves the effect fetch (no injection)",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
         const rootDir = yield* cloneFixture(fixtureDir, {
-          prefix: "alchemy-nuxt-mount-dev-",
+          prefix: "alchemy-nuxt-nomount-dev-",
           tempRoot,
           entries: effectFixtureEntries,
         });
 
-        // A hand-written explicit mount claiming a NARROWER slice than the
-        // construct's `server.routes` (`/api/*`): with the stand-down, the
-        // mount alone dispatches — `/api/nope` (inside the construct claim,
-        // outside the mount claim) must fall back to nitro's 404 instead
-        // of the injected middleware's authoritative empty 404.
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const middlewareDir = path.join(rootDir, "server", "middleware");
-        yield* fs.makeDirectory(middlewareDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(middlewareDir, "alchemy-mount.ts"),
-          [
-            `import { toHandler } from "alchemy/Nitro";`,
-            `import Site from "../../site.ts";`,
-            ``,
-            `export default toHandler(Site, { routes: ["/api/effect/*"] });`,
-            ``,
-          ].join("\n"),
-        );
-
         const site = yield* importEffectSite(rootDir, "site.ts");
-        const deployed = yield* stack.deploy(
-          Effect.gen(function* () {
-            const attrs = yield* site.default;
-            return { attrs };
-          }),
-        );
-        const base = deployed.attrs.url!;
-
-        // The explicit mount serves its claim.
-        const marker = yield* fetchJsonReady<{ marker: string }>(
-          `${base}/api/effect/marker`,
-        );
-        expect(marker.marker).toBe("nuxt-effect-dev");
-
-        // Stand-down proof: inside the CONSTRUCT claim but outside the
-        // MOUNT claim, nitro answers with its own 404 payload — the
-        // injected middleware (which renders an authoritative EMPTY 404
-        // there) was never mounted.
-        const client = yield* HttpClient.HttpClient;
-        const missing = yield* client.get(`${base}/api/nope`);
-        expect(missing.status).toBe(404);
-        expect(yield* missing.text).toContain("404");
-
-        yield* stack.destroy();
-      }).pipe(logLevel),
-    { timeout: 300_000 },
-  );
-
-  test.provider(
-    "Nuxt dev: server.takeover false suppresses the injected middleware entirely",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
-
-        const rootDir = yield* cloneFixture(fixtureDir, {
-          prefix: "alchemy-nuxt-takeover-dev-",
-          tempRoot,
-          entries: [...fixtureEntries, "site-takeover.ts"],
-        });
-
-        const site = yield* importEffectSite(rootDir, "site-takeover.ts");
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const attrs = yield* site.default;
@@ -433,15 +396,17 @@ describe.concurrent("Nuxt dev", () => {
         // The app itself is up (nitro's own scanned route answers).
         yield* expectUrlContains(`${base}/api/hello`, "api-route-ok", {
           timeout: "60 seconds",
-          label: "nitro route with takeover: false",
+          label: "nitro route without a mount",
         });
 
-        // No injection: the claimed routes fall to nitro — the effect
-        // fetch's marker never serves.
+        // The purge regression pin (Serve/DESIGN.md): with no
+        // `server/middleware` mount in the served tree, the effect fetch
+        // has NO HTTP surface — nothing is injected, scanned, or stood
+        // down; the paths a mount would claim fall to nitro's own 404.
         const client = yield* HttpClient.HttpClient;
         const claimed = yield* client.get(`${base}/api/effect/marker`);
         expect(claimed.status).toBe(404);
-        expect(yield* claimed.text).not.toContain("must-not-serve");
+        expect(yield* claimed.text).not.toContain("nuxt-effect-dev");
 
         yield* stack.destroy();
       }).pipe(logLevel),
