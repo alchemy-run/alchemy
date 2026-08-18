@@ -5,8 +5,8 @@
  * `Website.Server` provider — no Lambda, no CloudFront, no S3; the only
  * cloud touch is the state store.
  *
- * Coverage, for each of the four nested packages
- * (packages/nextjs|nuxt|astro|sveltekit):
+ * Coverage, for each of the six nested packages
+ * (packages/nextjs|nuxt|astro|sveltekit|tanstack|vite):
  *   - stack output   → `<framework>Url` is a local dev-server address
  *                      (port is whatever the framework bound)
  *   - effect fetch   → `/api/marker` serves the package's effect program
@@ -39,7 +39,18 @@ const FRAMEWORKS = [
   { output: "nuxtUrl", marker: "monorepo-nuxt-effect", page: "monorepo-nuxt-page" },
   { output: "astroUrl", marker: "monorepo-astro-effect", page: "monorepo-astro-page" },
   { output: "sveltekitUrl", marker: "monorepo-sveltekit-effect", page: "monorepo-sveltekit-page" },
+  { output: "tanstackUrl", marker: "monorepo-tanstack-effect", page: "monorepo-tanstack-page" },
 ] as const;
+
+// The Vite SPA splits in dev: the Vite dev server serves the page at
+// `viteUrl` while the effect program serves /api/* from the local Lambda
+// emulator at `viteServerUrl` (no edge to unify them locally).
+const VITE = {
+  pageOutput: "viteUrl",
+  apiOutput: "viteServerUrl",
+  marker: "monorepo-vite-effect",
+  page: "monorepo-vite-page",
+} as const;
 
 let proc: ReturnType<typeof spawn> | undefined;
 let output = "";
@@ -133,7 +144,7 @@ test(
     pump(proc.stdout!);
     pump(proc.stderr!);
 
-    // All four dev servers boot concurrently on the first dev run
+    // All the dev servers boot concurrently on the first dev run
     // (framework installs are already in place; the slowest is Next's
     // first compile) — wait for every output before asserting.
     const urls: Record<string, string> = {};
@@ -141,6 +152,13 @@ test(
       urls[framework.output] = await pollUntil(
         `${framework.output} in stack outputs`,
         () => outputUrl(framework.output),
+        { tries: 300, delayMs: 1000 },
+      );
+    }
+    for (const key of [VITE.pageOutput, VITE.apiOutput]) {
+      urls[key] = await pollUntil(
+        `${key} in stack outputs`,
+        () => outputUrl(key),
         { tries: 300, delayMs: 1000 },
       );
     }
@@ -164,6 +182,17 @@ test(
       const home = await (await fetchOk(url)).text();
       expect(home).toContain(framework.page);
     }
+
+    // The Vite SPA's split dev topology: static page from the Vite dev
+    // server, effect /api/* from the emulated Lambda.
+    expect(new URL(urls[VITE.pageOutput]!).hostname).toBe("localhost");
+    expect(urls[VITE.apiOutput]!).toContain("localhost");
+    const viteMarker = (await (
+      await fetchOk(new URL("/api/marker", urls[VITE.apiOutput]!))
+    ).json()) as { marker: string };
+    expect(viteMarker).toEqual({ marker: VITE.marker });
+    const viteHome = await (await fetchOk(urls[VITE.pageOutput]!)).text();
+    expect(viteHome).toContain(VITE.page);
   },
   { timeout: 600_000 },
 );

@@ -5,6 +5,7 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
@@ -217,6 +218,113 @@ test(
     const url = yield* base;
     const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
     expect(body).toContain("User-agent: *");
+  }),
+  { timeout: 180_000 },
+);
+
+// ── The src/fetch.ts mount: effect HTTP API riding Astro's fetch entry ──
+
+test(
+  "the mount's own route answers without Astro (healthz)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/healthz`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("ok");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "the mount's admin gate runs ahead of both worlds",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // Warm first so the cold-start window can't read as the gate.
+    yield* getWhenReady(`${url}/healthz`);
+    const client = yield* HttpClient.HttpClient;
+    const denied = yield* client.get(`${url}/api/admin/secret`);
+    expect(denied.status).toBe(403);
+    const allowed = yield* executeWhenReady(
+      HttpClientRequest.get(`${url}/api/admin/secret`).pipe(
+        HttpClientRequest.setHeader("x-admin-key", "letmein"),
+      ),
+    );
+    expect(allowed.status).toBe(200);
+    expect((yield* allowed.json) as object).toEqual({ admin: true });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "streaming route serves the full body through the streamified entry",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/api/stream?n=5`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n4\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer settles inline (Lambda semantics)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `finalizer-${crypto.randomUUID()}`;
+    const registered = yield* getWhenReady(`${url}/api/finalizer?v=${marker}`);
+    expect(registered.status).toBe(200);
+    const value = yield* Effect.gen(function* () {
+      const res = yield* getWhenReady(`${url}/api/kv?key=finalizer-last`);
+      return ((yield* res.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "effect queue leg over HTTP: /api/enqueue → same-Lambda consumer → /api/kv",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `http-queue-${crypto.randomUUID()}`;
+
+    const readKv = (key: string) =>
+      Effect.gen(function* () {
+        const res = yield* getWhenReady(`${url}/api/kv?key=${key}`);
+        expect(res.status).toBe(200);
+        return ((yield* res.json) as { value: string | null }).value;
+      });
+
+    const before = Number((yield* readKv("processed-count")) ?? "0");
+    const sent = yield* getWhenReady(`${url}/api/enqueue?m=${marker}`);
+    expect(sent.status).toBe(200);
+
+    yield* readKv("processed-count").pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (count) => Number(count ?? "0") > before,
+        times: 45,
+      }),
+    );
+    expect(yield* readKv("processed-last")).toBe(marker);
+  }),
+  { timeout: 240_000 },
+);
+
+test(
+  "Astro Actions stay Astro's through the mount's fall-through",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // /_actions/* is outside the mount's claim — Astro's own pipeline
+    // (running through the same fetch entry's fall-through) serves it.
+    const res = yield* action(url, "processed");
+    expect(res.status).toBe(200);
   }),
   { timeout: 180_000 },
 );

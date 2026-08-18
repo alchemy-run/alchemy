@@ -9,6 +9,8 @@ import AstroSite from "./packages/astro/src/backend.ts";
 import NextjsSite from "./packages/nextjs/src/backend.ts";
 import NuxtSite from "./packages/nuxt/src/backend.ts";
 import SvelteKitSite from "./packages/sveltekit/src/backend.ts";
+import TanStackSite from "./packages/tanstack/src/backend.ts";
+import ViteSite from "./packages/vite/src/backend.ts";
 
 export default Alchemy.Stack(
   "MonorepoFrontendsExample",
@@ -24,12 +26,19 @@ export default Alchemy.Stack(
     const nuxt = yield* NuxtSite;
     const astro = yield* AstroSite;
     const sveltekit = yield* SvelteKitSite;
+    const tanstack = yield* TanStackSite;
+    const vite = yield* ViteSite;
 
     return {
       nextjsUrl: nextjs.url,
       nuxtUrl: nuxt.url,
       astroUrl: astro.url,
       sveltekitUrl: sveltekit.url,
+      tanstackUrl: tanstack.url,
+      viteUrl: vite.url,
+      // The SPA's backend Lambda — in dev, the local emulator address
+      // serving /api/* (the Vite dev server only serves the static SPA).
+      viteServerUrl: vite.serverUrl,
     };
   }),
 );

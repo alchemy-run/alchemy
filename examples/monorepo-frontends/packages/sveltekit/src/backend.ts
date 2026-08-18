@@ -19,9 +19,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const MARKER = "monorepo-sveltekit-effect";
 
 /**
- * One Lambda serves the SvelteKit app AND the Effect program. The effect
- * fetch owns `server.routes` (default `["/api/*"]`), so `/api/marker`
- * below is served by the Effect program in front of kit's own routing.
+ * One Lambda serves the SvelteKit app AND the Effect program. `/api/marker`
+ * below is served by the Effect program — the src/hooks.server.ts mount routes `/api/*` here ahead of kit's own routing.
  */
 export default class Site extends SvelteKit<Site>()(
   "SvelteKit",

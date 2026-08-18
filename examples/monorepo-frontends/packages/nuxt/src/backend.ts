@@ -19,9 +19,9 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const MARKER = "monorepo-nuxt-effect";
 
 /**
- * One Lambda serves the Nuxt app AND the Effect program. The effect fetch
- * owns `server.routes` (default `["/api/*"]`), so `/api/marker` below is
- * served by the Effect program in front of nitro's own routing.
+ * One Lambda serves the Nuxt app AND the Effect program. `/api/marker`
+ * below is served by the Effect program — the server/middleware/alchemy.ts
+ * mount routes `/api/*` here ahead of nitro's own routing.
  */
 export default class Site extends Nuxt<Site>()(
   "Nuxt",

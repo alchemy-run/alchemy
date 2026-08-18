@@ -1,5 +1,5 @@
 /**
- * Live deploy of the whole monorepo stack: four effectful AWS Websites,
+ * Live deploy of the whole monorepo stack: six effectful AWS Websites,
  * each built from a NESTED workspace package (`rootDir:
  * "packages/<framework>"`) out of the single root alchemy.run.ts. For
  * each framework the test drives `/api/marker` (the effect fetch riding
@@ -17,6 +17,8 @@ import { MARKER as ASTRO_MARKER } from "../packages/astro/src/backend.ts";
 import { MARKER as NEXTJS_MARKER } from "../packages/nextjs/src/backend.ts";
 import { MARKER as NUXT_MARKER } from "../packages/nuxt/src/backend.ts";
 import { MARKER as SVELTEKIT_MARKER } from "../packages/sveltekit/src/backend.ts";
+import { MARKER as TANSTACK_MARKER } from "../packages/tanstack/src/backend.ts";
+import { MARKER as VITE_MARKER } from "../packages/vite/src/backend.ts";
 
 // A fresh CloudFront distribution (and the Lambda behind it) can serve
 // transient 404/5xx responses while it propagates. `Test.getWhenReady`
@@ -58,8 +60,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   stage: "test",
 });
 
-// The first deploy runs four framework builds (Next/OpenNext is the
-// slowest) AND creates four CloudFront distributions concurrently
+// The first deploy runs six framework builds (Next/OpenNext is the
+// slowest) AND creates six CloudFront distributions concurrently
 // (~5-10 minutes each, deployed in parallel), so give the hook far more
 // headroom than the default 120s.
 const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
@@ -75,6 +77,9 @@ type Outputs = {
   nuxtUrl: string;
   astroUrl: string;
   sveltekitUrl: string;
+  tanstackUrl: string;
+  viteUrl: string;
+  viteServerUrl: string;
 };
 
 const base = (key: keyof Outputs) =>
@@ -92,6 +97,8 @@ test(
     expect(outputs.nuxtUrl).toBeString();
     expect(outputs.astroUrl).toBeString();
     expect(outputs.sveltekitUrl).toBeString();
+    expect(outputs.tanstackUrl).toBeString();
+    expect(outputs.viteUrl).toBeString();
   }),
   { timeout: 180_000 },
 );
@@ -137,6 +144,18 @@ test(
   { timeout: 180_000 },
 );
 
+test(
+  "tanstack: effect fetch serves /api/marker",
+  assertMarker("tanstackUrl", TANSTACK_MARKER),
+  { timeout: 180_000 },
+);
+
+test(
+  "vite: effect fetch serves /api/marker behind the SPA's edge",
+  assertMarker("viteUrl", VITE_MARKER),
+  { timeout: 180_000 },
+);
+
 /** Assert the SSR page renders through the server Lambda. */
 const assertPage = (key: keyof Outputs, pageMarker: string) =>
   Effect.gen(function* () {
@@ -169,6 +188,19 @@ test(
   { timeout: 180_000 },
 );
 
+test(
+  "tanstack: serves the server-rendered home page",
+  assertPage("tanstackUrl", "monorepo-tanstack-page"),
+  { timeout: 180_000 },
+);
+
+test(
+  // The SPA's home is a static index.html — served from S3, not a Lambda.
+  "vite: serves the SPA shell",
+  assertPage("viteUrl", "monorepo-vite-page"),
+  { timeout: 180_000 },
+);
+
 /** Assert a static asset uploaded from the nested package serves. */
 const assertRobots = (key: keyof Outputs) =>
   Effect.gen(function* () {
@@ -194,3 +226,11 @@ test(
   assertRobots("sveltekitUrl"),
   { timeout: 180_000 },
 );
+
+test("tanstack: serves a static asset from public/", assertRobots("tanstackUrl"), {
+  timeout: 180_000,
+});
+
+test("vite: serves a static asset from public/", assertRobots("viteUrl"), {
+  timeout: 180_000,
+});

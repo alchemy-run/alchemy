@@ -19,9 +19,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const MARKER = "monorepo-nextjs-effect";
 
 /**
- * One Lambda serves the Next.js app AND the Effect program. The effect
- * fetch owns `server.routes` (default `["/api/*"]`), so `/api/marker`
- * below is served by the Effect program in front of Next's own routing.
+ * One Lambda serves the Next.js app AND the Effect program. `/api/marker`
+ * below is served by the Effect program — the app/api/[[...slug]]/route.ts mount claims `/api/*` inside Next's own routing.
  */
 export default class Site extends Nextjs<Site>()(
   "Nextjs",

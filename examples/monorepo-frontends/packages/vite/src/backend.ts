@@ -1,32 +1,34 @@
 // The effectful site module: default-exports the Website class, anchored
-// by `main: import.meta.url`. The engine imports it at plan time and the
-// Astro server bundle re-imports it to serve the effect-owned routes.
+// by `main: import.meta.url`. The SPA has no framework server — the
+// Effect program IS the server Lambda, and the edge routes `/api/*` to it
+// ahead of the static assets (so there is no mount file in this package;
+// the plain effect entry dispatches the fetch handler directly).
 //
 // `rootDir` is relative to the directory `alchemy` runs from (the
 // monorepo root, where alchemy.run.ts lives) — the nested-package shape
 // this example exists to pin.
 //
 // Narrow subpath imports only (`alchemy/AWS/Website`, not `alchemy/AWS`):
-// this module is compiled into the framework server bundle — the provider
-// barrel would drag the whole IaC engine along with it.
-import { Astro } from "alchemy/AWS/Website";
+// this module is compiled into the Lambda — the provider barrel would
+// drag the whole IaC engine along with it.
+import { Vite } from "alchemy/AWS/Website";
 import * as Effect from "effect/Effect";
 import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /** Marker served by the effect fetch — asserted by dev and integ tests. */
-export const MARKER = "monorepo-astro-effect";
+export const MARKER = "monorepo-vite-effect";
 
 /**
- * One Lambda serves the Astro frontend AND the Effect program. `/api/marker`
- * below is served by the Effect program — the src/fetch.ts mount routes `/api/*` here ahead of Astro's pipeline.
+ * A Vite SPA fronted by CloudFront with the Effect program deployed as
+ * the `/api/*` Lambda behind the same distribution.
  */
-export default class Site extends Astro<Site>()(
-  "Astro",
+export default class Site extends Vite<Site>()(
+  "Vite",
   {
     main: import.meta.url,
-    rootDir: "packages/astro",
+    rootDir: "packages/vite",
     forceDestroy: true,
   },
   Effect.gen(function* () {

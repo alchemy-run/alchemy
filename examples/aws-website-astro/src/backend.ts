@@ -16,6 +16,8 @@ import { remote } from "alchemy/ProviderMode";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * DynamoDB table bound by the site's program. `remote()` keeps the table
@@ -86,6 +88,13 @@ export default class Site extends Astro<Site>()(
       return item && "N" in item ? item.N : item?.S;
     });
 
+    /** Write one string attribute to a keyed item. */
+    const writeValue = Effect.fn(function* (pk: string, value: string) {
+      yield* putItem({
+        Item: { pk: { S: pk }, value: { S: value } },
+      }).pipe(Effect.orDie);
+    });
+
     // The async leg's CONSUMER — a queue listener on the SAME class. At
     // plan time the event-source mapping (and its consume IAM) registers
     // against the site's own server Lambda; at runtime the generated
@@ -114,6 +123,59 @@ export default class Site extends Astro<Site>()(
     );
 
     return {
+      // ── Effect HTTP API (paths the src/fetch.ts mount routes here) ──
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://site");
+
+        // Streaming route: the response body streams through the single
+        // `streamifyResponse` wrap (the request scope ejects to the
+        // stream's lifetime).
+        if (url.pathname === "/api/stream") {
+          const n = Number(url.searchParams.get("n") ?? "3");
+          const stream = Stream.range(0, n - 1).pipe(
+            Stream.map((i) => `${i}\n`),
+            Stream.encodeText,
+          );
+          return HttpServerResponse.stream(stream, {
+            headers: { "content-type": "text/plain" },
+          });
+        }
+
+        // Request-scope finalizer: settles INLINE before the response on
+        // AWS (Lambda semantics); observed via /api/kv?key=finalizer-last.
+        if (url.pathname === "/api/finalizer") {
+          const value = url.searchParams.get("v") ?? "ran";
+          yield* Effect.addFinalizer(() =>
+            writeValue("finalizer-last", value).pipe(Effect.ignore),
+          );
+          return yield* HttpServerResponse.json({ registered: value });
+        }
+
+        // Queue producer over HTTP (the form action stays covered through
+        // the value-form `enqueue` method).
+        if (url.pathname === "/api/enqueue") {
+          const message = url.searchParams.get("m") ?? "job";
+          yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ sent: message });
+        }
+
+        // Observability for the async legs (consumer, finalizer).
+        if (url.pathname === "/api/kv") {
+          const key = url.searchParams.get("key") ?? "";
+          const value =
+            (yield* readItem(key, "count")) ?? (yield* readItem(key, "value"));
+          return yield* HttpServerResponse.json({ value: value ?? null });
+        }
+
+        // Reached only through the mount's admin gate (src/fetch.ts).
+        if (url.pathname === "/api/admin/secret") {
+          return yield* HttpServerResponse.json({ admin: true });
+        }
+
+        return HttpServerResponse.empty({ status: 404 });
+      }),
+
       /** Read the visit counter (0 when unset). */
       visits: Effect.fn(function* () {
         const current = yield* getItem({
