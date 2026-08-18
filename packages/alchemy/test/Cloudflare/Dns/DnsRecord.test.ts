@@ -34,7 +34,21 @@ const NAME_ADOPT_RELATIVE_FQDN = `${NAME_ADOPT_RELATIVE}.${zoneName}`;
 const NAME_LIST = `alchemy-dnsrecord-list.${zoneName}`;
 const NAME_MX = `alchemy-dnsrecord-mx.${zoneName}`;
 const NAME_MX_AMBIG = `alchemy-dnsrecord-mx-ambig.${zoneName}`;
+const NAME_SVCB = `_alchemy-dnsrecord._tcp.${zoneName}`;
+const NAME_SVCB_ADOPT = `_alchemy-dnsrecord-adopt._tcp.${zoneName}`;
+const NAME_HTTPS = `alchemy-dnsrecord-https.${zoneName}`;
 
+const SVCB_DATA_V1 = {
+  priority: 1,
+  target: `svc.${zoneName}.`,
+  value: 'alpn="h2" port="443"',
+} satisfies Cloudflare.DNS.RecordData;
+
+const SVCB_DATA_V2 = {
+  priority: 1,
+  target: `svc.${zoneName}.`,
+  value: 'mandatory=alpn,port alpn="h2,h3" port="8443"',
+} satisfies Cloudflare.DNS.RecordData;
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
@@ -135,6 +149,118 @@ test.provider("create and delete an A record with default props", (stack) =>
     const gone = yield* findRecord(zoneId, NAME_DEFAULT, "A");
     expect(gone).toBeUndefined();
   }).pipe(logLevel),
+);
+
+test.provider(
+  "creates, lists, and updates an SVCB record from structured data",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_SVCB, "SVCB");
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("StructuredSvcb", {
+            zoneId,
+            name: NAME_SVCB,
+            type: "SVCB",
+            data: SVCB_DATA_V1,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      expect(initial.type).toEqual("SVCB");
+      expect(initial.content).toBeUndefined();
+      expect(initial.data).toEqual(SVCB_DATA_V1);
+
+      const created = yield* getRecord(zoneId, initial.recordId);
+      expect(created.type).toEqual("SVCB");
+      expect("data" in created ? created.data : undefined).toEqual(
+        SVCB_DATA_V1,
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.Record);
+      const listed = (yield* provider.list()).find(
+        (record) => record.recordId === initial.recordId,
+      );
+      expect(listed?.data).toEqual(SVCB_DATA_V1);
+
+      // Introduce drift out of band, then change the desired data. Reconcile
+      // must compare against the observed components and patch in place.
+      yield* dns.updateRecord({
+        zoneId,
+        dnsRecordId: initial.recordId,
+        name: NAME_SVCB,
+        type: "SVCB",
+        ttl: 1,
+        data: { ...SVCB_DATA_V1, value: 'alpn="h3" port="9443"' },
+      });
+
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("StructuredSvcb", {
+            zoneId,
+            name: NAME_SVCB,
+            type: "SVCB",
+            data: SVCB_DATA_V2,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      expect(updated.recordId).toEqual(initial.recordId);
+      expect(updated.data).toEqual(SVCB_DATA_V2);
+
+      const live = yield* getRecord(zoneId, updated.recordId);
+      expect("data" in live ? live.data : undefined).toEqual(SVCB_DATA_V2);
+
+      yield* stack.destroy();
+
+      const gone = yield* findRecord(zoneId, NAME_SVCB, "SVCB");
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "creates and deletes an HTTPS record from structured data",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      const data = {
+        priority: 1,
+        target: ".",
+        value: 'alpn="h2,h3"',
+      } satisfies Cloudflare.DNS.RecordData;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_HTTPS, "HTTPS");
+
+      const record = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("StructuredHttps", {
+            zoneId,
+            name: NAME_HTTPS,
+            type: "HTTPS",
+            data,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      expect(record.type).toEqual("HTTPS");
+      expect(record.data).toEqual(data);
+
+      const live = yield* getRecord(zoneId, record.recordId);
+      expect(live.type).toEqual("HTTPS");
+      expect("data" in live ? live.data : undefined).toEqual(data);
+
+      yield* stack.destroy();
+
+      const gone = yield* findRecord(zoneId, NAME_HTTPS, "HTTPS");
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider("updating mutable fields patches in place", (stack) =>
@@ -306,6 +432,65 @@ test.provider(
       const gone = yield* findRecord(zoneId, NAME_ADOPT, "A");
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
+);
+
+test.provider(
+  "adoption converges an existing structured SVCB record",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_SVCB_ADOPT, "SVCB");
+
+      const pre = yield* dns.createRecord({
+        zoneId,
+        name: NAME_SVCB_ADOPT,
+        type: "SVCB",
+        ttl: 1,
+        data: SVCB_DATA_V1,
+      });
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.DNS.Record("AdoptedStructuredSvcb", {
+              zoneId,
+              name: NAME_SVCB_ADOPT,
+              type: "SVCB",
+              data: SVCB_DATA_V2,
+            });
+          }),
+        )
+        .pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+        );
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("AdoptedStructuredSvcb", {
+            zoneId,
+            name: NAME_SVCB_ADOPT,
+            type: "SVCB",
+            data: SVCB_DATA_V2,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      expect(adopted.recordId).toEqual(pre.id);
+      expect(adopted.data).toEqual(SVCB_DATA_V2);
+
+      const live = yield* getRecord(zoneId, adopted.recordId);
+      expect("data" in live ? live.data : undefined).toEqual(SVCB_DATA_V2);
+
+      yield* stack.destroy();
+
+      const gone = yield* findRecord(zoneId, NAME_SVCB_ADOPT, "SVCB");
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider(

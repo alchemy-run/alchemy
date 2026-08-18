@@ -41,7 +41,15 @@ export type RecordType =
   | "URI"
   | (string & {});
 
-export interface RecordProps {
+/**
+ * Structured DNS record components accepted by Cloudflare.
+ *
+ * The applicable fields depend on the record {@link RecordType}. For example,
+ * `SVCB` and `HTTPS` records use `priority`, `target`, and `value`.
+ */
+export type RecordData = NonNullable<dns.CreateRecordRequest["data"]>;
+
+export interface RecordCommonProps {
   /**
    * Zone the record lives in. Stable — changing the zone triggers
    * replacement.
@@ -64,13 +72,6 @@ export interface RecordProps {
    * `diff` can compare without resolving an `Input`.
    */
   type: RecordType;
-  /**
-   * Record value. Interpretation depends on `type` — an A record's
-   * content is an IPv4, a CNAME's is a target hostname, etc.
-   *
-   * Mutable — patched in place.
-   */
-  content: string;
   /**
    * TTL in seconds (`60`–`86400`), or `"1"` for Cloudflare's "automatic"
    * setting. Must be `"1"` when `proxied` is `true`.
@@ -95,10 +96,41 @@ export interface RecordProps {
    */
   tags?: ReadonlyArray<string>;
   /**
-   * Priority — required for `MX` and `URI` records, ignored for others.
+   * Priority — required for `MX` and `URI` records. For structured record
+   * types such as `SVCB` and `HTTPS`, set `priority` inside {@link RecordData}.
    */
   priority?: number;
 }
+
+/**
+ * Input properties for a Cloudflare DNS record.
+ *
+ * Supply either a formatted `content` string or Cloudflare's structured
+ * `data` components. The two representations are mutually exclusive.
+ */
+export type RecordProps = RecordCommonProps &
+  (
+    | {
+        /**
+         * Formatted record value. Interpretation depends on `type` — an A
+         * record's content is an IPv4, a CNAME's is a target hostname, etc.
+         *
+         * Mutable — patched in place.
+         */
+        content: string;
+        data?: never;
+      }
+    | {
+        content?: never;
+        /**
+         * Structured record components. Required for record types such as
+         * `SVCB` and `HTTPS`, whose fields Cloudflare validates individually.
+         *
+         * Mutable — patched in place.
+         */
+        data: RecordData;
+      }
+  );
 
 export interface RecordAttributes {
   /** Cloudflare-assigned DNS record UUID. */
@@ -109,8 +141,10 @@ export interface RecordAttributes {
   name: string;
   /** Record type. */
   type: RecordType;
-  /** Resolved record value. */
-  content: string;
+  /** Formatted record value, when Cloudflare returns one. */
+  content: string | undefined;
+  /** Structured record components, when Cloudflare returns them. */
+  data: RecordData | undefined;
   /** Resolved TTL (Cloudflare echoes `1` for "automatic"). */
   ttl: number;
   /** Whether the record is proxied. */
@@ -173,6 +207,35 @@ export type Record = Resource<
  *   type: "A",
  *   content: "203.0.113.42",
  *   ttl: 300,
+ * });
+ * ```
+ *
+ * @section Structured service binding records
+ * @example SVCB record
+ * ```typescript
+ * yield* Cloudflare.DNS.Record("McpSvcb", {
+ *   zoneId: zone.zoneId,
+ *   name: "_mcp._agents.example.com",
+ *   type: "SVCB",
+ *   data: {
+ *     priority: 1,
+ *     target: "mcp.example.com.",
+ *     value: 'mandatory=alpn,port alpn="h2,h3" port="443"',
+ *   },
+ * });
+ * ```
+ *
+ * @example HTTPS record
+ * ```typescript
+ * yield* Cloudflare.DNS.Record("WebsiteHttps", {
+ *   zoneId: zone.zoneId,
+ *   name: "example.com",
+ *   type: "HTTPS",
+ *   data: {
+ *     priority: 1,
+ *     target: ".",
+ *     value: 'alpn="h2,h3"',
+ *   },
  * });
  * ```
  */
@@ -241,8 +304,7 @@ export const RecordProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const content = news.content as string;
-      const body = buildMutableBody(news, content);
+      const body = buildMutableBody(news);
 
       // 1. Observe by cached id first.
       let observed: ObservedRecord | undefined;
@@ -274,6 +336,7 @@ export const RecordProvider = () =>
             name: body.name,
             type: body.type,
             content: body.content,
+            data: body.data,
             ttl: body.ttl,
             proxied: body.proxied,
             comment: body.comment,
@@ -340,6 +403,7 @@ export const RecordProvider = () =>
             name: body.name,
             type: body.type,
             content: body.content,
+            data: body.data,
             ttl: body.ttl,
             proxied: body.proxied,
             comment: body.comment,
@@ -356,12 +420,12 @@ export const RecordProvider = () =>
       if (
         !observed.id ||
         !observed.type ||
-        observed.content === undefined ||
+        (observed.content === undefined && observed.data === undefined) ||
         observed.ttl === undefined
       ) {
         return yield* Effect.fail(
           new Error(
-            "Cloudflare returned a DNS record without id/type/content/ttl",
+            "Cloudflare returned a DNS record without id/type/value/ttl",
           ),
         );
       }
@@ -371,6 +435,7 @@ export const RecordProvider = () =>
         name: observed.name ?? body.name,
         type: observed.type,
         content: observed.content,
+        data: observed.data,
         ttl: observed.ttl,
         proxied: observed.proxied ?? false,
         createdOn: observed.createdOn,
@@ -560,6 +625,7 @@ interface ObservedRecord {
   readonly comment?: string;
   readonly tags?: ReadonlyArray<string>;
   readonly priority?: number;
+  readonly data?: RecordData;
   readonly createdOn?: string;
   readonly modifiedOn?: string;
 }
@@ -577,6 +643,7 @@ const narrowRecord = (raw: {
   comment?: string | null;
   tags?: ReadonlyArray<string> | null;
   priority?: number | null;
+  data?: Readonly<{ [key: string]: unknown }> | null;
   createdOn?: string | null;
   modifiedOn?: string | null;
 }): ObservedRecord => ({
@@ -589,6 +656,7 @@ const narrowRecord = (raw: {
   comment: undef(raw.comment),
   tags: raw.tags == null ? undefined : (raw.tags as ReadonlyArray<string>),
   priority: undef(raw.priority),
+  data: normalizeRecordData(raw.data),
   createdOn: undef(raw.createdOn),
   modifiedOn: undef(raw.modifiedOn),
 });
@@ -601,7 +669,7 @@ const toAttributes = (
     !observed?.id ||
     !observed.name ||
     !observed.type ||
-    observed.content === undefined ||
+    (observed.content === undefined && observed.data === undefined) ||
     observed.ttl === undefined
   ) {
     return undefined;
@@ -612,6 +680,7 @@ const toAttributes = (
     name: observed.name,
     type: observed.type,
     content: observed.content,
+    data: observed.data,
     ttl: observed.ttl,
     proxied: observed.proxied ?? false,
     createdOn: observed.createdOn,
@@ -623,10 +692,9 @@ const toAttributes = (
 // Body construction
 // ---------------------------------------------------------------------------
 
-interface RecordMutableBody {
+interface RecordMutableBodyCommon {
   name: string;
   type: RecordType;
-  content: string;
   ttl: number;
   proxied?: boolean;
   comment?: string;
@@ -634,26 +702,30 @@ interface RecordMutableBody {
   priority?: number;
 }
 
-const buildMutableBody = (
-  news: RecordProps,
-  resolvedContent: string,
-): RecordMutableBody => ({
-  name: news.name,
-  type: news.type,
-  content: resolvedContent,
-  // Cloudflare rejects the string `"1"` even though distilled types
-  // it as `number | "1"`; the API wants numeric 1 for "automatic".
-  ttl:
-    news.ttl === undefined
-      ? 1
-      : news.ttl === ("1" as unknown)
+type RecordMutableBody = RecordMutableBodyCommon &
+  ({ content: string; data?: never } | { content?: never; data: RecordData });
+
+const buildMutableBody = (news: RecordProps): RecordMutableBody => {
+  const common: RecordMutableBodyCommon = {
+    name: news.name,
+    type: news.type,
+    // Cloudflare rejects the string `"1"` even though distilled types
+    // it as `number | "1"`; the API wants numeric 1 for "automatic".
+    ttl:
+      news.ttl === undefined
         ? 1
-        : (news.ttl as number),
-  proxied: news.proxied,
-  comment: news.comment,
-  tags: news.tags,
-  priority: news.priority,
-});
+        : news.ttl === ("1" as unknown)
+          ? 1
+          : (news.ttl as number),
+    proxied: news.proxied,
+    comment: news.comment,
+    tags: news.tags,
+    priority: news.priority,
+  };
+  return news.data === undefined
+    ? { ...common, content: news.content }
+    : { ...common, data: news.data };
+};
 
 // ---------------------------------------------------------------------------
 // Drift detection
@@ -663,7 +735,15 @@ const bodyEqualsObserved = (
   desired: RecordMutableBody,
   observed: ObservedRecord,
 ): boolean => {
-  if (desired.content !== observed.content) return false;
+  if (desired.content !== undefined && desired.content !== observed.content) {
+    return false;
+  }
+  if (
+    desired.data !== undefined &&
+    !recordDataEquals(desired.data, observed.data)
+  ) {
+    return false;
+  }
   // CF echoes ttl=1 for "automatic".
   if (desired.ttl !== observed.ttl) return false;
   if (
@@ -691,4 +771,35 @@ const bodyEqualsObserved = (
     return false;
   }
   return true;
+};
+
+const normalizeRecordData = (
+  data: Readonly<{ [key: string]: unknown }> | null | undefined,
+): RecordData | undefined => {
+  if (data == null) return undefined;
+  return Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value != null),
+  ) as RecordData;
+};
+
+const recordDataEquals = (
+  desired: RecordData,
+  observed: RecordData | undefined,
+): boolean => {
+  if (observed === undefined) return false;
+  const desiredEntries = Object.entries(desired).filter(
+    ([, value]) => value != null,
+  );
+  const observedEntries = Object.entries(observed).filter(
+    ([, value]) => value != null,
+  );
+  return (
+    desiredEntries.length === observedEntries.length &&
+    desiredEntries.every(([key, value]) =>
+      observedEntries.some(
+        ([observedKey, observedValue]) =>
+          observedKey === key && observedValue === value,
+      ),
+    )
+  );
 };
