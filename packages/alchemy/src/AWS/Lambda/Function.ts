@@ -2109,6 +2109,14 @@ export const FunctionProvider = () =>
             }),
           );
 
+          // CloudWatch Logs is not implemented by the floci emulator. The
+          // live reap below (flush watch + observe→delete) would sit on
+          // describe/delete timeouts for minutes; emulator log groups die
+          // with the container anyway.
+          if (yield* AWSEnvironment.isLocalEmulator) {
+            return null as any;
+          }
+
           // Lambda auto-creates /aws/lambda/{name} on the first invoke and
           // deleteFunction does NOT remove it — without this every deleted
           // function leaks an orphaned log group. Worse, the Lambda service

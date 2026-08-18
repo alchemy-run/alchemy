@@ -44,7 +44,11 @@ export const DEFAULT_FLOCI_PORT = 4566;
  * container (see floci's ports doc) — its `*.elb.localhost.floci.io` DNS
  * resolves to 127.0.0.1, so the port must be published for the emulated
  * load balancer to be reachable from the host. Ports already taken on the
- * host are skipped with a warning (the gateway still works without them).
+ * host are skipped (the gateway still works without them). A warning is
+ * emitted only when the caller asked for those ports via
+ * {@link FlociConfig.elbListenerPorts} — the default 80/443 publish is
+ * opportunistic and a taken privileged port is the common case on a
+ * developer machine, not a problem.
  */
 export const DEFAULT_ELB_LISTENER_PORTS = [80, 443];
 
@@ -94,7 +98,8 @@ export interface FlociConfig {
   /**
    * ELB listener ports to publish on the managed container (floci's ALB
    * data plane serves each listener on the listener's own port). Ports
-   * already taken on the host are skipped with a warning.
+   * already taken on the host are skipped (with a warning only when this
+   * field is set — the default 80/443 publish is opportunistic).
    * @default [80, 443]
    */
   readonly elbListenerPorts?: readonly number[] | undefined;
@@ -258,11 +263,16 @@ const resolveElbListenerPorts = Effect.fn(function* (
   for (const port of requested) {
     if (published.has(port) || (yield* isHostPortFree(port))) {
       desired.push(port);
-    } else {
+    } else if (config?.elbListenerPorts !== undefined) {
+      // Caller asked for these ports explicitly — warn so they know why
+      // the emulated load balancer is unreachable.
       yield* Effect.logWarning(
         `floci: host port ${port} is taken — emulated load balancer listeners on ${port} will not be reachable from the host`,
       );
     }
+    // Default 80/443 are opportunistic (most stacks have no ELB). A taken
+    // privileged port is the common case on a developer machine, not a
+    // problem — skip silently.
   }
   return desired;
 });

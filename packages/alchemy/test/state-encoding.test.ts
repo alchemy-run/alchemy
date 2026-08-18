@@ -1,17 +1,52 @@
 import { deepEqual } from "@/Diff";
 import {
   DATE_MARKER,
+  decodeDuration,
+  DURATION_MARKER,
   encodeState,
   reviveState,
   reviveStateRecursive,
 } from "@/State/StateEncoding";
 import { describe, expect, test } from "alchemy-test";
+import * as Duration from "effect/Duration";
 
 // Dates in persisted props must ROUND-TRIP: a provider's `diff`/`delete`/
 // `read` receive `olds` from the state store on a later run, and a
 // Date-typed prop must come back as a real Date — not `{}` (the old
 // structural-walk bug, which churned a phantom update on every plan) and
 // not a bare ISO string (which lies about the declared prop type).
+describe("StateEncoding Duration round-trip", () => {
+  const roundTrip = (value: Duration.Duration) =>
+    JSON.parse(JSON.stringify(encodeState(value)), reviveState) as unknown;
+
+  test("finite, infinity, and negative infinity survive encode → JSON → revive", () => {
+    expect(
+      Duration.equals(roundTrip(Duration.seconds(15)), Duration.seconds(15)),
+    ).toBe(true);
+    expect(
+      Duration.equals(roundTrip(Duration.infinity), Duration.infinity),
+    ).toBe(true);
+    expect(
+      Duration.equals(
+        roundTrip(Duration.negativeInfinity),
+        Duration.negativeInfinity,
+      ),
+    ).toBe(true);
+  });
+
+  test("decodeDuration rebuilds Duration.toJSON without clamping negatives", () => {
+    expect(
+      Duration.equals(
+        decodeDuration(Duration.negativeInfinity.toJSON())!,
+        Duration.negativeInfinity,
+      ),
+    ).toBe(true);
+    expect(encodeState(Duration.millis(15000))).toEqual({
+      [DURATION_MARKER]: Duration.millis(15000).toJSON(),
+    });
+  });
+});
+
 describe("StateEncoding Date round-trip", () => {
   const value = {
     expires: new Date("2027-01-01T00:00:00.000Z"),

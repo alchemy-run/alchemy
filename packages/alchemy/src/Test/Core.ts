@@ -1,5 +1,6 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
+import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,7 +9,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
+import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
+import { flociServices } from "../AWS/Local/FlociServices.ts";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
@@ -33,6 +38,7 @@ import {
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
+import { ALCHEMY_DEV } from "../Phase.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
@@ -59,6 +65,10 @@ export interface MakeOptions<ROut = any> {
    * When `true`, resources like Cloudflare Workers run locally via workerd
    * instead of being deployed to the cloud. When omitted, falls back to the
    * `ALCHEMY_DEV` environment variable (`"1"` / `"true"` enable it).
+   *
+   * {@link ALCHEMY_TEST_DEV} (`ALCHEMY_TEST_DEV=1`) overrides this — use it
+   * to force an entire existing live suite through local providers without
+   * editing each `Test.make({ dev: true })`.
    */
   dev?: boolean;
   /**
@@ -108,11 +118,26 @@ export const sidecarProxy = (options: { profile?: string }) =>
     ),
   );
 
-/** Resolve the effective `dev` flag from explicit options or `ALCHEMY_DEV`. */
+/**
+ * Force every `Test.make` into (or out of) local-dev mode, regardless of
+ * the file's `dev` option. Unset leaves the option / `ALCHEMY_DEV` fallback
+ * in place. Accepts the usual truthy/falsey strings (`true`/`1`/`yes`/`on`,
+ * `false`/`0`/`no`/`off`).
+ */
+export const ALCHEMY_TEST_DEV = Config.boolean("ALCHEMY_TEST_DEV").pipe(
+  Config.option,
+);
+
+/** The `ALCHEMY_TEST_DEV` override, if the env var is set. */
+export const alchemyTestDevOverride = (): Option.Option<boolean> =>
+  Effect.runSync(ALCHEMY_TEST_DEV);
+
+/** Resolve the effective `dev` flag: `ALCHEMY_TEST_DEV`, then options, then `ALCHEMY_DEV`. */
 export const resolveDev = (options: { dev?: boolean }): boolean => {
+  const override = alchemyTestDevOverride();
+  if (Option.isSome(override)) return override.value;
   if (options.dev !== undefined) return options.dev;
-  const env = process.env.ALCHEMY_DEV;
-  return env === "1" || env?.toLowerCase() === "true";
+  return Effect.runSync(ALCHEMY_DEV);
 };
 
 /** Resolve the effective `sidecar` flag: defaults to the resolved `dev` flag. */
@@ -189,12 +214,51 @@ const overrideAlchemyContext = (overrides: { dev: boolean }) =>
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
-const platformLayer = Layer.mergeAll(
-  PlatformServices,
-  FetchHttpClient.layer,
-  Layer.provide(ProfileLive, PlatformServices),
-  Layer.provide(CredentialsStoreLive, PlatformServices),
-);
+/**
+ * Floci serves website buckets on the gateway when the Host header is
+ * `{bucket}.s3-website-{region}.amazonaws.com`. Live tests GET that
+ * hostname on port 80; under {@link ALCHEMY_TEST_DEV} rewrite the URL to
+ * the emulator and keep the Host so the virtual-host filter still fires.
+ */
+const rewriteS3WebsiteToFloci = (
+  request: HttpClientRequest.HttpClientRequest,
+): HttpClientRequest.HttpClientRequest => {
+  let url: URL;
+  try {
+    url = new URL(request.url);
+  } catch {
+    return request;
+  }
+  if (!/\.s3-website-[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname)) {
+    return request;
+  }
+  const rewritten = new URL(url.href);
+  const endpoint = new URL(DEFAULT_LOCAL_ENDPOINT);
+  rewritten.protocol = endpoint.protocol;
+  rewritten.hostname = endpoint.hostname;
+  rewritten.port = endpoint.port;
+  return request.pipe(
+    HttpClientRequest.setUrl(rewritten.toString()),
+    HttpClientRequest.setHeader("host", url.hostname),
+  );
+};
+
+const flociWebsiteHttp = Layer.effect(
+  HttpClient.HttpClient,
+  Effect.map(HttpClient.HttpClient, (client) =>
+    HttpClient.mapRequest(client, rewriteS3WebsiteToFloci),
+  ),
+).pipe(Layer.provide(FetchHttpClient.layer));
+
+const platformLayer = () =>
+  Layer.mergeAll(
+    PlatformServices,
+    Option.getOrElse(alchemyTestDevOverride(), () => false)
+      ? flociWebsiteHttp
+      : FetchHttpClient.layer,
+    Layer.provide(ProfileLive, PlatformServices),
+    Layer.provide(CredentialsStoreLive, PlatformServices),
+  );
 
 const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
 
@@ -223,7 +287,18 @@ export const toEffect = <A>(
   const base = Effect.gen(function* () {
     const cfg = yield* loadConfigProvider(Option.none());
     const configProvider = withProfileOverride(cfg, options.profile);
-    return yield* (sidecar ? sidecar.provide(effect) : effect).pipe(
+    // `ALCHEMY_TEST_DEV=1` forces local providers AND points the test
+    // process's distilled AWS clients at the emulator. Otherwise
+    // out-of-band `describeTable` / `getFunction` calls still hit the
+    // live account and fail with ResourceNotFound. Existing
+    // `Test.make({ dev: true })` files are unchanged (mixed
+    // `Alchemy.remote()` suites keep their live SDK).
+    const body = sidecar ? sidecar.provide(effect) : effect;
+    const locally =
+      Option.getOrElse(alchemyTestDevOverride(), () => false) === true
+        ? Effect.provide(body, flociServices())
+        : body;
+    return yield* locally.pipe(
       provideFreshArtifactStore,
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
@@ -236,7 +311,7 @@ export const toEffect = <A>(
     // satisfied — which surfaces as `Service not found: AuthProviders`.
     Effect.provide(options.state ?? State.localState()),
     Effect.provideService(AuthProviders, {}),
-    Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer)),
+    Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );
 
   return (
@@ -261,8 +336,15 @@ export const withProviders = <A, E, R, ROut>(
   effect: Effect.Effect<A, E, R>,
   options: MakeOptions<ROut>,
   stackName: string,
-): Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>> =>
-  effect.pipe(
+): Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>> => {
+  // Closest wins: when `ALCHEMY_TEST_DEV=1`, pin the test body's
+  // distilled AWS clients to the emulator BEFORE `options.providers`
+  // (which still carries the live `AWSEnvironment`).
+  const body =
+    Option.getOrElse(alchemyTestDevOverride(), () => false) === true
+      ? Effect.provide(effect, flociServices())
+      : effect;
+  return body.pipe(
     Effect.provide(
       (options.providers as Layer.Layer<any, never, any>).pipe(
         Layer.provideMerge(
@@ -278,6 +360,7 @@ export const withProviders = <A, E, R, ROut>(
     ),
     Effect.provide(Layer.succeed(Stage, options.stage ?? "test")),
   ) as Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>>;
+};
 
 /**
  * Curried `deploy` for the test factory: bakes in the configured stage and
