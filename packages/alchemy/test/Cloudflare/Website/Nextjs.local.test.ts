@@ -17,7 +17,6 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
-  stubCloudflareRuntimeForNextBundling,
   writeNextjsMount,
 } from "./NextjsMount.ts";
 import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
@@ -44,7 +43,7 @@ const fixtureEntries = [
 ];
 
 /** The effectful fixtures additionally need the site modules (`src/`). */
-const effectFixtureEntries = [...fixtureEntries, "src", "stubs"];
+const effectFixtureEntries = [...fixtureEntries, "src"];
 
 /**
  * The hmr-mode site module the test writes over the clone's
@@ -359,7 +358,6 @@ describe.concurrent("Nextjs dev", () => {
         // deep-import line is narrowed so Next's bundler never parses the
         // provider barrel.
         yield* writeNextjsMount(fs, path, rootDir, "site.ts");
-        yield* stubCloudflareRuntimeForNextBundling(fs, path, rootDir);
 
         // Import the site module from the CLONE: its `main: import.meta.url`
         // anchor (and rootDir) must point into the cloned project so the

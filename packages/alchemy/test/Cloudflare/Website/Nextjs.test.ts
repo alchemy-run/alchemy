@@ -13,7 +13,6 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
-  stubCloudflareRuntimeForNextBundling,
   writeNextjsMount,
 } from "./NextjsMount.ts";
 import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
@@ -364,7 +363,6 @@ describe.concurrent("Nextjs", () => {
             "pages",
             "public",
             "src",
-            "stubs",
           ],
         });
         yield* linkJsApiTypeScript(rootDir);
@@ -377,7 +375,6 @@ describe.concurrent("Nextjs", () => {
         // line is narrowed so Next's bundler never parses the provider
         // barrel.
         yield* writeNextjsMount(fs, path, rootDir, "site.ts");
-        yield* stubCloudflareRuntimeForNextBundling(fs, path, rootDir);
 
         // Import the site module from the CLONE: its `main` anchor and
         // rootDir must point into the cloned project so the OpenNext build

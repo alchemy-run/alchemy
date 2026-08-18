@@ -1,17 +1,15 @@
-// Narrow package-subpath imports, deliberately NOT the `alchemy/Cloudflare`
-// barrel: the mount route file (`app/api/[[...slug]]/route.ts`, written
-// into each test's clone) imports this module, so Next's bundler compiles
-// the whole graph — and the provider barrel drags the IaC engine
-// (bundlers, vite/esbuild, local workerd host) into it, which Turbopack
-// cannot parse (native binaries) and workerd must never evaluate. The
-// service-level subpaths keep the graph to the construct + capability
-// slice.
+// The mount route file (`app/api/[[...slug]]/route.ts`, written into each
+// test's clone) imports this module, so Next's bundler compiles the whole
+// graph — including the provider barrel below (see that import's note).
 import * as KV from "alchemy/Cloudflare/KV";
-import { cron, CronEventSourceLive } from "alchemy/Cloudflare/Cron";
-import {
-  DurableObject,
-  DurableObjectState,
-} from "alchemy/Cloudflare/DurableObject";
+// Deliberately the PROVIDER BARREL: this fixture is the live proof that
+// user code may import `alchemy/Cloudflare` from a module compiled by
+// Next's bundlers (Turbopack dev/build + OpenNext's esbuild). Graph
+// hygiene (test/GraphHygiene.test.ts) keeps the barrel free of static
+// edges to host-only native modules; narrow subpaths remain a
+// bundle-size optimization, not a correctness requirement.
+import { cron, CronEventSourceLive, DurableObjectState } from "alchemy/Cloudflare";
+import { DurableObject } from "alchemy/Cloudflare/DurableObject";
 import * as Website from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
 import { RouteNotFound } from "effect/unstable/http/HttpServerError";

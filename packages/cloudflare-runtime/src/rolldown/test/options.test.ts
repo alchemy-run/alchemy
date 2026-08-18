@@ -71,6 +71,7 @@ describe("options plugin", () => {
 
     expect(output.platform).toBe("neutral");
     expect(output.resolve?.conditionNames).toEqual([
+      "distilled-src",
       "workerd",
       "worker",
       "module",

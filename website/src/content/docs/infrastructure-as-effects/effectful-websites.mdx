@@ -110,24 +110,22 @@ import Site from "./src/backend.ts";
 const site = yield* Site;
 ```
 
-:::caution[Use narrow subpath imports in site modules]
-A `src/backend.ts` module is re-imported inside the framework's server graph —
-and, in dev, evaluated module-by-module by the Vite module runner inside
-workerd. Import the **service-level subpaths** it actually needs:
+:::tip[Prefer narrow subpath imports in site modules]
+A `src/backend.ts` module is re-imported inside the framework's server
+graph. The provider barrels (`alchemy/Cloudflare`, `alchemy/AWS`) are
+fully supported there — the host-only engine machinery is invisible to
+bundlers by construction — but the **service-level subpaths** keep the
+compiled graph to the slice you actually use, which means smaller server
+bundles and faster dev compiles:
 
 ```typescript
-import * as KV from "alchemy/Cloudflare/KV"; // ✅
+import * as KV from "alchemy/Cloudflare/KV"; // ✅ leanest
 import * as Website from "alchemy/Cloudflare/Website"; // ✅
 import { Bucket, GetObject } from "alchemy/AWS/S3"; // ✅
-import { make } from "alchemy/Serve"; // ✅
+import { mount } from "alchemy/Serve"; // ✅
 
-import * as Cloudflare from "alchemy/Cloudflare"; // ❌ never
-import * as AWS from "alchemy/AWS"; // ❌ never
+import * as Cloudflare from "alchemy/Cloudflare"; // ✅ works — just heavier
 ```
-
-The provider barrels drag the entire IaC engine — bundlers, local
-runtimes, credential chains — into the framework graph, which at best
-bloats the server bundle and at worst runs workerd out of memory in dev.
 :::
 
 ## Routing semantics

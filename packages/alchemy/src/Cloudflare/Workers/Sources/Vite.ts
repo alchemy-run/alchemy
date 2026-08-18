@@ -1,6 +1,4 @@
-import cloudflare, {
-  type CloudflareVitePluginOptions,
-} from "@alchemy.run/cloudflare-runtime/vite";
+import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
@@ -13,7 +11,7 @@ import {
   viteBuildOutputPlugin,
   type ViteBuildOutput,
 } from "../../../Bundle/Vite.ts";
-import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
+import { hostImport } from "../../../Util/hostImport.ts";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
@@ -33,12 +31,12 @@ import { isWorkerLoader } from "../WorkerLoader.ts";
 import { WEBSITE_ENTRY_ID, websiteEntryPlugin } from "./ViteWebsiteEntry.ts";
 
 /**
- * This module statically imports `@alchemy.run/cloudflare-runtime/vite`
- * (~0.5s to load), which is only needed for vite-based workers. Importers
- * MUST load it lazily (`Effect.promise(() => import("./Sources/Vite.ts"))`
- * from the dispatch in `Source.ts`, or the legacy vite arms in the
- * Worker providers) so the module cost is only paid when a vite worker
- * is actually built, hashed, or served.
+ * Every heavyweight this module needs — the Cloudflare vite plugin, vite
+ * itself, the Port util — loads through the host-only `hostImport` seam,
+ * so importing THIS module creates no static edge to vite or workerd:
+ * foreign bundlers that reach it through the provider graph parse it and
+ * stop. The module cost is only paid when a vite worker is actually
+ * built, hashed, or served.
  */
 
 /**
@@ -117,7 +115,19 @@ const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
  * lost) and the wrapper flows through the standard
  * `\0distilled:worker-entry:` wrapping (unenv + HMR handshake).
  */
+/**
+ * The Cloudflare vite plugin package, loaded through the host-only
+ * `hostImport` seam: its graph reaches vite's node build and workerd,
+ * which a foreign bundler compiling this module must never statically see.
+ */
+const loadCloudflarePlugin = Effect.promise(() =>
+  hostImport<typeof import("@alchemy.run/cloudflare-runtime/vite")>(
+    "@alchemy.run/cloudflare-runtime/vite",
+  ).then((mod) => mod.default),
+);
+
 const composePlugins = (
+  cloudflare: (typeof import("@alchemy.run/cloudflare-runtime/vite"))["default"],
   pluginOptions: CloudflareVitePluginOptions,
   effectEntry: ViteEffectEntry | undefined,
 ): {
@@ -192,6 +202,11 @@ export const viteDev = (
     // IPv6-shadowing) user-facing dev ports. Substitute a probed
     // ephemeral port there; `strictPort: false` handles the small
     // probe→bind race by moving to the next ephemeral port.
+    const { viteSupportsPortZero } = yield* Effect.promise(() =>
+      hostImport<
+        typeof import("@alchemy.run/cloudflare-runtime/core/internal/Port")
+      >("@alchemy.run/cloudflare-runtime/core/internal/Port"),
+    );
     const server =
       serverOptions.port === 0 && !viteSupportsPortZero(vite.version)
         ? {
@@ -204,6 +219,7 @@ export const viteDev = (
           }
         : serverOptions;
     const composed = composePlugins(
+      yield* loadCloudflarePlugin,
       {
         ...pluginOptions,
         worker: pluginOptions.worker
@@ -297,7 +313,11 @@ export const viteBuildInProcess = (
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
     const console = yield* ConsoleService.Console;
-    const composed = composePlugins(pluginOptions, effectEntry);
+    const composed = composePlugins(
+      yield* loadCloudflarePlugin,
+      pluginOptions,
+      effectEntry,
+    );
     yield* Effect.promise(async () => {
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
@@ -353,9 +373,11 @@ async function loadVite(projectRoot: string = initialCwd): Promise<ViteModule> {
     const viteUrl = pathToFileURL(vitePath);
     return await import(/* @vite-ignore */ viteUrl.href);
   } catch {
-    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
-    // The fallback is a bare specifier and works as-is.
-    return await import("vite");
+    // Fallback: import vite from alchemy's own dependency tree (works for
+    // non-linked installs). Through the host-only seam — a literal
+    // `import("vite")` would hand foreign bundlers a static edge into
+    // vite's node build.
+    return await hostImport<ViteModule>("vite");
   }
 }
 

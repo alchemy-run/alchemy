@@ -7,6 +7,12 @@ import { hasNodejsCompat } from "../utils.ts";
 import { workerEntryId } from "./virtual-modules.ts";
 
 const DEFAULT_RESOLVE_CONDITION_NAMES = [
+  // Serve distilled (and any package that opts in) from workspace SOURCE:
+  // worker bundles built here must pick up a regenerated service without
+  // a lib rebuild (the factory's no-rebuild property). Foreign bundlers
+  // (OpenNext's workerd-conditioned esbuild, Turbopack) never request this
+  // condition and resolve the compiled lib instead.
+  "distilled-src",
   "workerd",
   "worker",
   "module",

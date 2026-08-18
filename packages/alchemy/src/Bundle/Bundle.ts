@@ -6,20 +6,21 @@ import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import {
-  bundleAnalyzerPlugin,
-  type BundleAnalyzerPluginOptions,
-} from "./BundleAnalyzerPlugin.ts";
-import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
+import type { BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
+import type { PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
+import { hostImport } from "../Util/hostImport.ts";
 
 /**
- * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
- * merely importing alchemy — the CLI command tree, the Cloudflare provider
- * barrel — never loads `@rolldown/binding-*`. A stack that bundles
- * nothing must not require the native bundler to be loadable (#562).
+ * Rolldown (and the plugin modules that statically import it) load through
+ * the host-only `hostImport` seam on first {@link build}/{@link watch}:
+ * merely importing alchemy — the CLI command tree, the provider barrels,
+ * a site module compiled by a FOREIGN bundler (Turbopack, OpenNext
+ * esbuild) — must create no static edge to `@rolldown/binding-*` (#562).
+ * A literal `import("rolldown")` is still such an edge; `hostImport` is
+ * not.
  */
-const loadRolldown = () => import("rolldown");
+const loadRolldown = () => hostImport<typeof import("rolldown")>("rolldown");
 
 /**
  * Extra options accepted by {@link build} / {@link watch} on top of the
@@ -412,13 +413,24 @@ export function bundleOutputFromRolldownOutputBundle(
 async function builtInPlugins(
   extra?: BundleExtraOptions,
 ): Promise<rolldown.RolldownPluginOption> {
+  const analyzer = extra?.bundleAnalyzer;
   return [
-    extra?.bundleAnalyzer
-      ? await bundleAnalyzerPlugin(
-          extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
+    analyzer
+      ? await hostImport<typeof import("./BundleAnalyzerPlugin.ts")>(
+          "./BundleAnalyzerPlugin.ts",
+          import.meta.url,
+        ).then((mod) =>
+          mod.bundleAnalyzerPlugin(analyzer === true ? {} : analyzer),
         )
       : undefined,
-    extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
+    extra?.pure !== false
+      ? (
+          await hostImport<typeof import("./PurePlugin.ts")>(
+            "./PurePlugin.ts",
+            import.meta.url,
+          )
+        ).purePlugin(extra?.pure ?? {})
+      : undefined,
     rawPlugin(),
   ];
 }

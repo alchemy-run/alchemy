@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream";
 import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
+import { hostImport } from "../../../Util/hostImport.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import {
@@ -113,8 +114,10 @@ export const WorkerBundle = Effect.gen(function* () {
     const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] =
       yield* Effect.promise(() =>
         Promise.all([
-          import("@alchemy.run/cloudflare-runtime/rolldown"),
-          import("rolldown/plugins"),
+          hostImport<typeof import("@alchemy.run/cloudflare-runtime/rolldown")>(
+            "@alchemy.run/cloudflare-runtime/rolldown",
+          ),
+          hostImport<typeof import("rolldown/plugins")>("rolldown/plugins"),
         ]),
       );
     const realMain = yield* sanitizeMain(options.main);

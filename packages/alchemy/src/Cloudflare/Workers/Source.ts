@@ -24,7 +24,7 @@ import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
-import { makeRolldownSource } from "./Sources/Rolldown.ts";
+import { hostImport } from "../../Util/hostImport.ts";
 import {
   DEFAULT_SERVER_ROUTES,
   type WorkerAssetsConfig,
@@ -387,13 +387,18 @@ export const resolveSource = (
     return Effect.succeed(makeInlineScriptSource(props.script));
   }
   if (props.vite) {
-    // Loaded lazily: `./Sources/Vite.ts` pulls in
-    // `@alchemy.run/cloudflare-runtime/vite` (~0.5s), which is only
-    // needed for vite-based workers — not for every Worker resolution.
+    // Loaded through the host-only seam: `./Sources/Vite.ts` pulls in the
+    // Cloudflare vite plugin → vite → workerd — host machinery a foreign
+    // bundler compiling this module (Turbopack, OpenNext esbuild) must
+    // never statically reach. A literal `import("./Sources/Vite.ts")` is
+    // still a static edge; `hostImport` is not.
     const vite = props.vite;
-    return Effect.promise(() => import("./Sources/Vite.ts")).pipe(
-      Effect.map((Vite) => Vite.makeViteSource(vite)),
-    );
+    return Effect.promise(() =>
+      hostImport<typeof import("./Sources/Vite.ts")>(
+        "./Sources/Vite.ts",
+        import.meta.url,
+      ),
+    ).pipe(Effect.map((Vite) => Vite.makeViteSource(vite)));
   }
   if (isPythonMain(props.main)) {
     return Effect.succeed(makePythonSource(props.main));
@@ -420,7 +425,16 @@ export const resolveSource = (
       }),
     );
   }
-  return Effect.succeed(makeRolldownSource({ main: props.main! }));
+  // Same host-only seam: the rolldown effect-entry bundler drags rolldown's
+  // native binding — never statically reachable from user-compiled code.
+  return Effect.promise(() =>
+    hostImport<typeof import("./Sources/Rolldown.ts")>(
+      "./Sources/Rolldown.ts",
+      import.meta.url,
+    ),
+  ).pipe(
+    Effect.map((Rolldown) => Rolldown.makeRolldownSource({ main: props.main! })),
+  );
 };
 
 /**
