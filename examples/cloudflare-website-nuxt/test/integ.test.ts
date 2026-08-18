@@ -5,6 +5,7 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
@@ -240,4 +241,153 @@ test(
     expect(body).toContain("User-agent: *");
   }),
   { timeout: 180_000 },
+);
+
+// ── MaxSite: the mount (server/middleware/alchemy.ts) + platform legs ──
+
+test(
+  "mount: /healthz answered in the middleware, ahead of both worlds",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/healthz`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("ok");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "mount: the admin gate runs ahead of the effect fetch",
+  Effect.gen(function* () {
+    const url = yield* base;
+    yield* getWhenReady(`${url}/healthz`);
+
+    const client = yield* HttpClient.HttpClient;
+    // A redeploy serves the previous version for a short window on
+    // workers.dev — poll (bounded) until the NEW dispatch order answers.
+    const observed = yield* Effect.gen(function* () {
+      const denied = yield* client.get(`${url}/api/admin/anything`);
+      const passed = yield* client.execute(
+        HttpClientRequest.get(`${url}/api/admin/anything`).pipe(
+          HttpClientRequest.setHeader("x-admin-key", "letmein"),
+        ),
+      );
+      return {
+        denied: denied.status,
+        passed: passed.status,
+        passedBody: yield* passed.text,
+      };
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (o) => o.denied === 403 && o.passed === 404,
+        times: 30,
+      }),
+    );
+    expect(observed.denied).toBe(403);
+    // Gate passed -> the effect fetch is authoritative for /api/* — its
+    // own 404 (empty body), never nitro's error page.
+    expect(observed.passed).toBe(404);
+    expect(observed.passedBody).not.toContain("<html");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "mount: the exclusion glob carves nitro's own /api/jobs back out",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // Served by nitro's server/api/jobs.get.ts (through createClient), NOT
+    // the effect fetch — proof the mount's routes claim is the user's
+    // decision.
+    const res = yield* getWhenReady(`${url}/api/jobs`);
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { count: number };
+    expect(body.count).toBeGreaterThanOrEqual(0);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "durable object: same name routes to the same instance (monotonic)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const name = `it-${crypto.randomUUID().slice(0, 8)}`;
+
+    const first = yield* getWhenReady(`${url}/api/do/increment?name=${name}`);
+    expect(first.status).toBe(200);
+    const a = ((yield* first.json) as { next: number }).next;
+    const second = yield* getWhenReady(`${url}/api/do/increment?name=${name}`);
+    const b = ((yield* second.json) as { next: number }).next;
+    expect(b).toBe(a + 1);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "durable object: streaming RPC forwarded onto a streaming response",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/api/do/ticks?n=4`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer runs after the response (waitUntil settle)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `fin-${crypto.randomUUID().slice(0, 8)}`;
+
+    const res = yield* getWhenReady(`${url}/api/finalizer?v=${marker}`);
+    expect(res.status).toBe(200);
+
+    const client = yield* HttpClient.HttpClient;
+    const value = yield* Effect.gen(function* () {
+      const kv = yield* client.get(`${url}/api/kv?key=finalizer-last`);
+      return ((yield* kv.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "workflow: durable steps run to completion and land the KV marker",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `wf-${crypto.randomUUID().slice(0, 8)}`;
+
+    const started = yield* getWhenReady(
+      `${url}/api/workflow/start?marker=${marker}`,
+    );
+    expect(started.status).toBe(200);
+    const { id } = (yield* started.json) as { id: string };
+
+    const client = yield* HttpClient.HttpClient;
+    const status = yield* Effect.gen(function* () {
+      const res = yield* client.get(`${url}/api/workflow/status?id=${id}`);
+      return (yield* res.json) as { status: string } | null;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s?.status === "complete" || s?.status === "errored",
+        times: 45,
+      }),
+    );
+    expect(status?.status).toBe("complete");
+
+    const kv = yield* client.get(`${url}/api/kv?key=workflow-last`);
+    const { value } = (yield* kv.json) as { value: string | null };
+    expect(value).toBe(`report:${marker}`);
+  }),
+  { timeout: 240_000 },
 );

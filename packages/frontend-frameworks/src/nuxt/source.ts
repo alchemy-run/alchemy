@@ -44,14 +44,11 @@ import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import {
   bundleNuxtEffectModule,
-  DEFAULT_EFFECT_ROUTES,
   EFFECT_MODULE_DIR,
   EFFECT_MODULE_NAME,
   effectGeneratedDir,
   effectMainToPath,
-  renderEffectHandler,
   renderWorkerEntry,
-  scanForExplicitServeMount,
   writeGeneratedModule,
   type NuxtEffectOptions,
 } from "./effect.ts";
@@ -117,10 +114,11 @@ export interface SourceContext {
   /**
    * Mirror of alchemy's `SourceContext.entry`. For collect-only wrapper
    * delivery (`runtimeDelivery: "wrapper"`) the effect variant carries the
-   * routes the effect fetch owns, the site module the generated wrapper
-   * re-imports (`props.main`, path or `file://` URL), and the impl's
-   * Durable Object / Workflow exports (only their names and `kind`
-   * discriminators are read here).
+   * site module the generated wrapper re-imports (`props.main`, path or
+   * `file://` URL) and the impl's Durable Object / Workflow exports (only
+   * their names and `kind` discriminators are read here). `routes` is a
+   * legacy field of the retired routes-scoped design — ignored: routing
+   * lives in the user's `server/middleware` mount.
    */
   readonly entry?:
     | { readonly kind: "external" }
@@ -148,6 +146,17 @@ export interface SourceDevContext extends SourceContext {
   readonly worker: {
     readonly name: string;
     readonly bindings: ReadonlyArray<unknown>;
+    /** DO namespace configs (className/sql) for the hosted platform. */
+    readonly durableObjectNamespaces?: ReadonlyArray<unknown> | undefined;
+    /** Workflows hosted by this worker (PHYSICAL workflowName + className). */
+    readonly workflows?:
+      | ReadonlyArray<{
+          readonly workflowName: string;
+          readonly className: string;
+        }>
+      | undefined;
+    /** Queue consumers (opaque; possibly an Effect in the host's dialect). */
+    readonly queueConsumers?: unknown;
   };
   /**
    * The host's pre-built `Context<RuntimeServices>` (opaque here). Handed
@@ -236,9 +245,10 @@ export interface NuxtSourceOptions {
    */
   readonly main?: string | undefined;
   /**
-   * Effect entry takeover (set by `Cloudflare.Website.Nuxt` when an impl is
-   * present): the site-module anchor and the routes the effect fetch owns.
-   * Mutually exclusive with `main` — the generated wrapper IS the entry.
+   * Effect entry delivery (set by `Cloudflare.Website.Nuxt` when an impl
+   * is present): the site-module anchor the generated additive wrapper
+   * re-imports. Mutually exclusive with `main` — the generated wrapper IS
+   * the entry.
    */
   readonly effect?: NuxtEffectOptions | undefined;
 }
@@ -449,15 +459,14 @@ const hashNuxtInput = Effect.fnUntraced(function* (
       main: options.main,
     },
     // The effect entry's generated-wrapper inputs (site module relative to
-    // the root — its CONTENT is covered by the tree hash — plus routes and
-    // export class names): a change to any regenerates a different wrapper,
+    // the root — its CONTENT is covered by the tree hash — plus export
+    // class names): a change to any regenerates a different wrapper,
     // so it must bust the memo. Machine-independent by construction.
     effect:
       effect === undefined
         ? undefined
         : {
             main: NodePath.relative(rootDir, effect.mainPath),
-            routes: effect.routes,
             durableObjects: effect.durableObjects,
             workflows: effect.workflows,
           },
@@ -654,7 +663,6 @@ export const buildInChild = (config: NuxtBuildChildConfig) =>
 interface ResolvedEffectEntry {
   /** Absolute path of the user's site module. */
   readonly mainPath: string;
-  readonly routes: Array<string>;
   readonly durableObjects: Array<string>;
   readonly workflows: Array<string>;
 }
@@ -685,9 +693,6 @@ const resolveEffectEntry = (
   }
   return {
     mainPath: effectMainToPath(fromCtx?.mainPath ?? fromOptions!.main),
-    routes: [
-      ...(fromCtx?.routes ?? fromOptions?.routes ?? DEFAULT_EFFECT_ROUTES),
-    ],
     durableObjects: durableObjects.sort(),
     workflows: workflows.sort(),
   };
@@ -798,22 +803,10 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   return {
     ownsAssets: true,
     build: Effect.fnUntraced(function* (ctx) {
-      // Effect entry takeover: generate the nitro entry wrapper before the
-      // build child runs and hand it through the existing user-entry
-      // carriage (`main` → `nitro.options.entry`). Workflow class exports
-      // are not deliverable through this wrapper yet.
+      // Effect entry delivery (additive wrapper): generate the nitro entry
+      // wrapper before the build child runs and hand it through the
+      // existing user-entry carriage (`main` → `nitro.options.entry`).
       const effect = resolveEffectEntry(ctx, options);
-      if (effect !== undefined && effect.workflows.length > 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message:
-              `Workflow exports (${effect.workflows.join(", ")}) are not supported on ` +
-              "Cloudflare.Website.Nuxt entry takeover yet — host the Workflow on a " +
-              "separate effect Worker, or use a hand-written nitro entry.",
-          }),
-        );
-      }
       let wrapperPath: string | undefined;
       if (effect !== undefined) {
         // 1. Rolldown-prebundle the site module (workerd conditions, unenv,
@@ -824,8 +817,8 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
           generatedDir,
           rootDir,
           sitePath: effect.mainPath,
-          routes: effect.routes,
           durableObjects: effect.durableObjects,
+          workflows: effect.workflows,
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
         }).pipe(
@@ -841,7 +834,10 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
         // 2. Generate the nitro entry wrapper importing the prebundle.
         wrapperPath = yield* writeGeneratedModule(
           NodePath.join(generatedDir, "worker-entry.mjs"),
-          renderWorkerEntry({ durableObjects: effect.durableObjects }),
+          renderWorkerEntry({
+            durableObjects: effect.durableObjects,
+            workflows: effect.workflows,
+          }),
         );
       }
       const output = yield* runBuildChild({
@@ -928,50 +924,48 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
       return { input: hash, additionalWorkspaces: workspaces };
     }),
     dev: Effect.fnUntraced(function* (ctx: SourceDevContext) {
-      // Effect dev delivery (fetch only): a generated nitro middleware
-      // module scoped to the effect routes, injected through the dev
-      // overrides layer (`nitro.handlers`). It runs inside nitro's dev SSR
-      // worker thread, where `event.context.cloudflare.env` — served by
-      // the platform proxy — carries the alchemy stack markers and the
-      // plan-collected bindings, so `alchemy/Nitro` resolves the
-      // same capabilities against the local simulators. Non-fetch
-      // handlers (queue/scheduled/DO classes) are production-only: the
-      // dev server runs nitro's dev preset entry, not the deploy entry.
+      // The user's `server/middleware` mount serves effect routes natively
+      // in nitro's dev server (the mount is ordinary app code, compiled
+      // into the dev SSR worker like any scanned middleware) — nothing is
+      // injected. Its four-worlds guard needs the stack markers `putWorker`
+      // appends in prod, so they ride the dev platform env alongside the
+      // plan-collected bindings served by the platform proxy. The site's
+      // platform half (DO/Workflow classes, queue consumers) is hosted in
+      // the dev platform proxy's workerd (Serve/DESIGN.md tier B dev).
       const effect = resolveEffectEntry(ctx, options);
-      // Stand-down (DESIGN §6.3), mirroring the framework-core makeNuxt
-      // path AWS rides: the explicit tier always wins — never two bridges
-      // in one nitro app. A hand-mounted `alchemy/Nitro` handler under
-      // `server/` or `server: { takeover: false }` suppresses the
-      // injected dev middleware.
-      const inject =
-        effect !== undefined &&
-        options.effect?.takeover !== false &&
-        !(yield* scanForExplicitServeMount(NodePath.join(rootDir, "server")));
-      const devHandlerPath = !inject
-        ? undefined
-        : yield* writeGeneratedModule(
-            NodePath.join(
-              effectGeneratedDir(rootDir, ctx.id),
-              "dev-handler.mjs",
-            ),
-            renderEffectHandler({
-              sitePath: effect!.mainPath,
-              routes: effect!.routes,
-            }),
-          );
+      const queueConsumers = Effect.isEffect(ctx.worker.queueConsumers)
+        ? yield* ctx.worker.queueConsumers as Effect.Effect<
+            ReadonlyArray<unknown>
+          >
+        : (ctx.worker.queueConsumers as ReadonlyArray<unknown> | undefined);
       const framework = yield* makeNuxt(
         frameworkOptions(ctx, {
-          env: resolveDevEnvOverrides(ctx.env),
+          env: {
+            ...resolveDevEnvOverrides(ctx.env),
+            ALCHEMY_PHASE: "runtime",
+            ALCHEMY_STACK_NAME: ctx.stack.name,
+            ALCHEMY_STAGE: ctx.stack.stage,
+          },
           bindings: ctx.worker.bindings,
           // The host's runtime stack (includes remote-bindings support) —
           // the dev platform proxy is hosted in it instead of the
           // credential-free internal layer, so `Alchemy.remote()` bindings
           // resolve in dev.
           services: ctx.runtimeContext,
-          serverHandlers:
-            devHandlerPath === undefined
-              ? undefined
-              : [{ middleware: true, handler: devHandlerPath }],
+          ...(effect !== undefined
+            ? {
+                hostedPlatform: {
+                  main: effect.mainPath,
+                  durableObjects: effect.durableObjects,
+                  workflows: effect.workflows,
+                  durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
+                  // PHYSICAL workflow names — the binding hook subscribes
+                  // by the deployed name, not the class name.
+                  workflowConfigs: ctx.worker.workflows ?? [],
+                  queueConsumers,
+                },
+              }
+            : undefined),
         }),
       );
       const server = yield* framework

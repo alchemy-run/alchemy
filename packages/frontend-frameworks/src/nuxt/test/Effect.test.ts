@@ -1,26 +1,106 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as NodeFs from "node:fs";
-import * as NodeOs from "node:os";
-import * as NodePath from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
-import { renderEffectHandler, scanForExplicitServeMount } from "../effect.ts";
+import { describe, expect, it } from "vitest";
+import {
+  makeEffectEntrySource,
+  renderEffectHandler,
+  renderWorkerEntry,
+} from "../effect.ts";
 
-const tempDirs: Array<string> = [];
-const makeTempDir = (): string => {
-  const dir = NodeFs.mkdtempSync(
-    NodePath.join(NodeOs.tmpdir(), "alchemy-nuxt-effect-test-"),
-  );
-  tempDirs.push(dir);
-  return dir;
-};
-afterAll(() => {
-  for (const dir of tempDirs) {
-    NodeFs.rmSync(dir, { recursive: true, force: true });
-  }
+describe("makeEffectEntrySource (additive wrapper)", () => {
+  const source = makeEffectEntrySource({
+    sitePath: "/abs/project/src/site.ts",
+    durableObjects: ["Counter", "Registry"],
+    workflows: ["ReportWorkflow"],
+  });
+
+  it("grafts the framework's fetch verbatim via makeWebsiteEntryExports", () => {
+    expect(source).toContain(
+      'import { makeWebsiteEntryExports, DurableObjectBridge, WorkflowBridge } from "alchemy/Serve/Worker";',
+    );
+    expect(source).toContain('import Site from "/abs/project/src/site.ts";');
+    expect(source).toContain("makeWebsiteEntryExports(WorkerEntrypoint, {");
+    // ADDITIVE-ONLY: no routes baked in, no route gating — the user's
+    // server middleware mount owns HTTP.
+    expect(source).not.toContain("routes");
+    expect(source).not.toContain("makeWebsiteExports(");
+  });
+
+  it("resolves the lazy framework loader (default/fetch/callable)", () => {
+    expect(source).toContain("framework?.() ?? Promise.resolve(undefined)");
+    expect(source).toContain("mod?.default ?? mod");
+    expect(source).toContain("target.fetch.bind(target)");
+  });
+
+  it("exports Durable Object bridge classes", () => {
+    expect(source).toContain(
+      "const __AlchemyDurableObjectBridge = DurableObjectBridge(DurableObject, { site: Site });",
+    );
+    expect(source).toContain(
+      'export class Counter extends __AlchemyDurableObjectBridge("Counter") {}',
+    );
+    expect(source).toContain(
+      'export class Registry extends __AlchemyDurableObjectBridge("Registry") {}',
+    );
+  });
+
+  it("exports Workflow bridge classes (lazy stack identity)", () => {
+    expect(source).toContain(
+      "const __AlchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });",
+    );
+    expect(source).toContain(
+      'export class ReportWorkflow extends __AlchemyWorkflowBridge("ReportWorkflow") {}',
+    );
+    expect(source).toContain(
+      'import { DurableObject, WorkerEntrypoint, WorkflowEntrypoint } from "cloudflare:workers";',
+    );
+  });
+
+  it("omits DO/Workflow scaffolding when the site exports none", () => {
+    const bare = makeEffectEntrySource({
+      sitePath: "/abs/src/site.ts",
+      durableObjects: [],
+      workflows: [],
+    });
+    expect(bare).toContain("makeWebsiteEntryExports(WorkerEntrypoint");
+    expect(bare).not.toContain("DurableObjectBridge");
+    expect(bare).not.toContain("WorkflowBridge");
+    expect(bare).toContain(
+      'import { WorkerEntrypoint } from "cloudflare:workers";',
+    );
+  });
+
+  it("rejects class names that are not identifiers", () => {
+    expect(() =>
+      makeEffectEntrySource({
+        sitePath: "/abs/src/site.ts",
+        durableObjects: ["not-an-identifier"],
+        workflows: [],
+      }),
+    ).toThrow(/not a valid JavaScript identifier/);
+  });
 });
 
-describe("renderEffectHandler", () => {
+describe("renderWorkerEntry", () => {
+  it("re-exports DO and Workflow classes from the prebundle", () => {
+    const entry = renderWorkerEntry({
+      durableObjects: ["Counter"],
+      workflows: ["ReportWorkflow"],
+    });
+    expect(entry).toContain(
+      'export { Counter, ReportWorkflow } from "alchemy:nuxt-effect";',
+    );
+    expect(entry).toContain(
+      "export default makeAlchemyWorker(() => Promise.resolve({ default: nitroHandler }));",
+    );
+  });
+
+  it("degenerates to the plain wrapper without classes", () => {
+    const entry = renderWorkerEntry({ durableObjects: [], workflows: [] });
+    expect(entry).not.toContain("export {");
+    expect(entry).toContain("makeAlchemyWorker(");
+  });
+});
+
+describe("renderEffectHandler (AWS delivery path)", () => {
   const source = renderEffectHandler({
     sitePath: "/abs/project/src/site.ts",
     routes: ["/backend/*", "!/backend/health"],
@@ -49,46 +129,5 @@ describe("renderEffectHandler", () => {
   it("is an h3 v1 handler (no defineEventHandler dependency)", () => {
     expect(source).toContain("middleware.__is_handler__ = true;");
     expect(source).toContain("export default middleware;");
-  });
-});
-
-describe("scanForExplicitServeMount", () => {
-  const scan = (serverDir: string) =>
-    Effect.runPromise(
-      scanForExplicitServeMount(serverDir).pipe(
-        Effect.provide(NodeServices.layer),
-      ),
-    );
-
-  it("detects an alchemy/Nitro import in server/middleware", async () => {
-    const root = makeTempDir();
-    const middlewareDir = NodePath.join(root, "server", "middleware");
-    NodeFs.mkdirSync(middlewareDir, { recursive: true });
-    NodeFs.writeFileSync(
-      NodePath.join(middlewareDir, "alchemy.ts"),
-      'import { toHandler } from "alchemy/Nitro";\n' +
-        'import Site from "../../src/site.ts";\n' +
-        "export default toHandler(Site);\n",
-    );
-    await expect(scan(NodePath.join(root, "server"))).resolves.toBe(true);
-  });
-
-  it("ignores server files that do not mount alchemy/Serve", async () => {
-    const root = makeTempDir();
-    const apiDir = NodePath.join(root, "server", "api");
-    NodeFs.mkdirSync(apiDir, { recursive: true });
-    NodeFs.writeFileSync(
-      NodePath.join(apiDir, "hello.ts"),
-      // The value-form createClient graph (alchemy/Client) must NOT
-      // false-positive the stand-down.
-      'import { createClient } from "alchemy/Client";\n' +
-        "export default () => createClient;\n",
-    );
-    await expect(scan(NodePath.join(root, "server"))).resolves.toBe(false);
-  });
-
-  it("is false for a missing server directory", async () => {
-    const root = makeTempDir();
-    await expect(scan(NodePath.join(root, "server"))).resolves.toBe(false);
   });
 });

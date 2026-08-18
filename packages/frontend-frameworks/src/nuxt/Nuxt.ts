@@ -18,7 +18,6 @@ import {
   effectGeneratedDir,
   effectMainToPath,
   renderEffectHandler,
-  scanForExplicitServeMount,
   writeGeneratedModule,
 } from "./effect.ts";
 import {
@@ -128,6 +127,34 @@ const EFFECT_ENTRY_EXTERNALS = [
   EFFECT_VIRTUAL_SPECIFIER,
 ];
 
+/**
+ * Specifier FAMILIES (the package itself or any subpath) of plan/dev-time
+ * tooling the alchemy module graph reaches. With the mount design the
+ * user's `server/middleware` mount imports the site module into nitro's
+ * own server graph, and rollup loads (parses) every statically-resolvable
+ * module — including lazy `import("vite")` / `import("rolldown")` reaches
+ * inside plan-only code — BEFORE treeshaking prunes them. vite's node
+ * dist even fails to parse under nitro's replace pass. These families are
+ * never evaluated inside the deployed worker (the plan half is dead code
+ * under `__ALCHEMY_RUNTIME__ = true` and tree-shakes at generate), so
+ * they stay external: dynamic imports stay lazy and unexecuted; a static
+ * import that SURVIVES treeshaking would fail the deploy loudly rather
+ * than silently shipping dev tooling.
+ */
+const EFFECT_ENTRY_EXTERNAL_FAMILIES = [
+  "vite",
+  "rolldown",
+  "@rolldown",
+  "workerd",
+  "@alchemy.run/cloudflare-runtime",
+];
+
+const isEffectEntryExternal = (id: string): boolean =>
+  EFFECT_ENTRY_EXTERNALS.includes(id) ||
+  EFFECT_ENTRY_EXTERNAL_FAMILIES.some(
+    (family) => id === family || id.startsWith(`${family}/`),
+  );
+
 /** Fold an existing rollup/rolldown `external` option into a predicate. */
 const matchesExternal = (
   previous: unknown,
@@ -152,7 +179,7 @@ const wrapRollupExternal = (rollupConfig: RollupConfigSlice): void => {
     importer: string | undefined,
     isResolved: boolean,
   ): boolean =>
-    EFFECT_ENTRY_EXTERNALS.includes(id) ||
+    isEffectEntryExternal(id) ||
     matchesExternal(previous, id, importer, isResolved);
 };
 
@@ -197,7 +224,7 @@ const wrapViteServerExternal = (viteConfig: ViteConfigSlice): void => {
       isResolved: boolean,
     ): boolean =>
       id.startsWith("cloudflare:") ||
-      EFFECT_ENTRY_EXTERNALS.includes(id) ||
+      isEffectEntryExternal(id) ||
       matchesExternal(previous, id, importer, isResolved);
   }
 };
@@ -305,6 +332,12 @@ export interface NuxtDevPlatformContext {
    * to the framework half — see `NuxtOptions.dev.services`).
    */
   readonly services?: unknown;
+  /**
+   * The site's platform half, hosted inside the dev platform proxy
+   * (opaque to the framework half — the Cloudflare target takes its
+   * `DevHostedPlatformOptions`; see `NuxtOptions.dev.hostedPlatform`).
+   */
+  readonly hostedPlatform?: unknown;
 }
 
 /**
@@ -412,8 +445,9 @@ export interface NuxtOptions {
   /**
    * Effectful-Website middleware delivery ({@link NuxtEffectMiddleware}):
    * write the generated effect middleware and inject it through
-   * `nitro.handlers` in BOTH `build` and `dev`. Stands down when the
-   * user's `server/` tree already mounts `alchemy/Serve` explicitly.
+   * `nitro.handlers` in BOTH `build` and `dev`. AWS delivery path only —
+   * the Cloudflare pipeline uses the additive entry wrapper plus the
+   * user's own `server/middleware` mount.
    */
   readonly effect?: NuxtEffectMiddleware | undefined;
   readonly dev?:
@@ -449,10 +483,18 @@ export interface NuxtOptions {
          * layer (`nitro.handlers` — Nuxt portals it to `serverHandlers`).
          * Handler modules are bundled into nitro's dev SSR worker thread,
          * so they run with the dev platform's `event.context.cloudflare`
-         * contract. Used by the effect entry takeover to mount the
-         * routes-scoped effect middleware in dev.
+         * contract.
          */
         readonly serverHandlers?: ReadonlyArray<NuxtServerHandler> | undefined;
+        /**
+         * The effectful site's platform half, hosted INSIDE the dev
+         * platform proxy's workerd (Serve/DESIGN.md tier B dev): a
+         * bundled module exporting the DO/Workflow bridge classes and
+         * delegating queue batches into the program. Opaque to the
+         * framework half; the Cloudflare target accepts its
+         * `DevHostedPlatformOptions` shape.
+         */
+        readonly hostedPlatform?: unknown;
       }
     | undefined;
 }
@@ -535,10 +577,14 @@ export const make: (
    * and return the `nitro.handlers` entry injecting it. The handler's env
    * conditions admit dev AND the target's own build while excluding the
    * prerenderer's `nitro-prerender` clone — the alchemy graph never
-   * compiles into (or runs during) prerender. Stands down (returns
-   * `undefined`) when the user's `server/` tree already mounts
-   * `alchemy/Serve` explicitly: the explicit tier always wins — never two
-   * bridges in one nitro app.
+   * compiles into (or runs during) prerender.
+   *
+   * This is the AWS delivery path (`NuxtOptions.effect` is only set by
+   * the AWS Nuxt composite; the Cloudflare source rides `main` +
+   * `effectEntry` and the user's own `server/middleware` mount instead).
+   * The former stand-down scan is gone — the stand-down concept died with
+   * the mount design (Serve/DESIGN.md); phase 4 replaces this injection
+   * with the AWS mount story.
    */
   const prepareEffectMiddleware = Effect.fnUntraced(function* (
     root: string,
@@ -546,13 +592,6 @@ export const make: (
   ) {
     const effect = options?.effect;
     if (effect === undefined) {
-      return undefined;
-    }
-    if (yield* scanForExplicitServeMount(NodePath.join(root, "server"))) {
-      yield* Effect.logInfo(
-        "alchemy: explicit alchemy/Serve mount detected in server/ — the " +
-          "injected effect middleware stands down",
-      );
       return undefined;
     }
     const handlerPath = yield* writeGeneratedModule(
@@ -780,6 +819,7 @@ export const make: (
               env: options?.dev?.env,
               bindings: options?.dev?.bindings,
               services: options?.dev?.services,
+              hostedPlatform: options?.dev?.hostedPlatform,
             })
             .pipe(Effect.mapError((error) => fail(error.message, error.cause)))
         : undefined;

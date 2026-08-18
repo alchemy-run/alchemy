@@ -117,6 +117,16 @@ export default defineNitroPlugin((nitroApp) => {
       for (const [name, value] of Object.entries(info.env ?? {})) {
         env[name] = value;
       }
+      // The value-form `createClient` path (nitro routes value-importing
+      // the backend) resolves env through alchemy/Serve's ladder, not the
+      // h3 event — publish the platform on the `getCloudflareContext()`-
+      // shaped global rung so that world builds against the proxied
+      // bindings instead of falling through to `process.env` (whose stack
+      // markers would select a runtime world with no bindings; the
+      // per-class runtime build is memoized, so the first builder wins).
+      (globalThis as Record<PropertyKey, unknown>)[
+        Symbol.for("__cloudflare-context__")
+      ] = { env, cf: platform.cf };
       return { module, env, cf: platform.cf };
     })().catch((error: unknown) => {
       // Reset so the next request retries (host proxy restarts, races).

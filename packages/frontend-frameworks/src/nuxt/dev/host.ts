@@ -17,6 +17,11 @@ import type * as Scope from "effect/Scope";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NuxtDevPlatform, NuxtDevPlatformContext } from "../Nuxt.ts";
+import {
+  buildHostedPlatformModules,
+  hasHostedSurface,
+  type DevHostedPlatformOptions,
+} from "./hostedPlatform.ts";
 import { RUNTIME_CONFIG_KEY, type DevConnectInfo } from "./shared.ts";
 
 /**
@@ -69,6 +74,14 @@ export interface OpenDevProxyOptions {
    * the proxy's internal local-only layer cannot serve.
    */
   readonly services?: unknown;
+  /** Hosted platform modules (first module exports the DO/WF classes). */
+  readonly modules?: ReadonlyArray<unknown> | undefined;
+  /** DO namespace configs implemented by `modules`. */
+  readonly durableObjectNamespaces?: ReadonlyArray<unknown> | undefined;
+  /** Workflow configs (workflowName/className) for the local engine. */
+  readonly workflows?: ReadonlyArray<unknown> | undefined;
+  /** Queues the hosted module consumes (local broker delivery). */
+  readonly queueConsumers?: ReadonlyArray<unknown> | undefined;
 }
 
 /** How the platform proxy is opened. A test seam; the default is {@link openPlatformProxy}. */
@@ -101,6 +114,18 @@ export const openPlatformProxy: OpenDevProxy = async (options) => {
             typeof getPlatformProxy
           >[0]["services"],
         }
+      : undefined),
+    ...(options.modules !== undefined
+      ? { modules: options.modules as never }
+      : undefined),
+    ...(options.durableObjectNamespaces !== undefined
+      ? { durableObjectNamespaces: options.durableObjectNamespaces as never }
+      : undefined),
+    ...(options.workflows !== undefined
+      ? { workflows: options.workflows as never }
+      : undefined),
+    ...(options.queueConsumers !== undefined
+      ? { queueConsumers: options.queueConsumers as never }
       : undefined),
   });
   return {
@@ -149,6 +174,29 @@ export const makeCloudflareDevPlatform =
   ): Effect.Effect<NuxtDevPlatform, DeployTargetError, Scope.Scope> =>
     Effect.gen(function* () {
       const open = options.openProxy ?? openPlatformProxy;
+      // The site's platform half (Serve/DESIGN.md tier B dev): DO/Workflow
+      // bridge classes + queue/scheduled delegation, bundled for workerd
+      // and hosted INSIDE the proxy so DO namespace bindings, workflow
+      // bindings, and local queue delivery resolve during dev.
+      const hosted = context.hostedPlatform as
+        | DevHostedPlatformOptions
+        | undefined;
+      const platformModules =
+        hosted !== undefined && hasHostedSurface(hosted)
+          ? yield* Effect.tryPromise({
+              try: () =>
+                buildHostedPlatformModules(hosted, {
+                  compatibilityDate: options.compatibilityDate,
+                  compatibilityFlags: options.compatibilityFlags,
+                }),
+              catch: (cause) =>
+                new DeployTargetError({
+                  platform: "cloudflare",
+                  message: "Failed to bundle the dev platform worker",
+                  cause,
+                }),
+            })
+          : undefined;
       const proxy = yield* Effect.acquireRelease(
         Effect.tryPromise({
           try: () =>
@@ -158,6 +206,24 @@ export const makeCloudflareDevPlatform =
               compatibilityFlags: options.compatibilityFlags,
               bindings: context.bindings ?? [],
               services: context.services,
+              ...(platformModules !== undefined && hosted !== undefined
+                ? {
+                    modules: platformModules,
+                    durableObjectNamespaces: hosted.durableObjectNamespaces,
+                    workflows: hosted.workflowConfigs,
+                    queueConsumers: hosted.queueConsumers,
+                  }
+                : undefined),
+            }).catch((error) => {
+              // A proxy boot failure otherwise surfaces as an opaque 500
+              // on every request — put the runtime's own stderr on the
+              // console.
+              console.error(
+                "[alchemy] dev platform proxy failed to start:",
+                error,
+                (error as { detail?: unknown })?.detail,
+              );
+              throw error;
             }),
           catch: (cause) =>
             new DeployTargetError({

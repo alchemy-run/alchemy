@@ -1,35 +1,35 @@
 /**
- * Effect entry takeover for `Cloudflare.Website.Nuxt` (alchemy DESIGN
- * §2.1.2): generators for the two alchemy-authored modules that deliver an
- * effectful Website program into a Nuxt project without any user
- * `nuxt.config.ts` (or framework-file) edits.
+ * Effect entry delivery for `Cloudflare.Website.Nuxt` (Serve/DESIGN.md,
+ * tier B): generators for the alchemy-authored modules that deliver an
+ * effectful Website program's PLATFORM surface into a Nuxt project. The
+ * wrapper is ADDITIVE-ONLY — nitro's handler (with the user's
+ * `server/middleware` mount inside it) serves ALL HTTP verbatim; alchemy
+ * contributes only what a middleware cannot: queue/scheduled/RPC dispatch
+ * and the Durable Object / Workflow class exports derived from the
+ * program's plan-time registrations. HTTP dispatch order, gates, and
+ * effect routing are the user's mount code, never generated.
  *
  * - **Production** ({@link renderWorkerEntry}): a nitro entry wrapper,
  *   written under `<root>/.alchemy/nuxt/<id>/` and mapped onto
  *   `nitro.options.entry` through the existing user-entry carriage
  *   (`NuxtTargetConfig.main`). Nitro's rollup bundles it as THE worker
  *   entry, so its exports are the deployed Worker's exports: the default
- *   export is `makeWebsiteExports(...)` from `alchemy/Serve/Worker` —
- *   routes-scoped effect fetch first, nitro's `cloudflare-module` preset
- *   runtime as the framework fallback, and the full non-fetch dispatch
- *   (queue/scheduled/email + RPC) from the underlying Worker bridge — plus
- *   one `DurableObjectBridge` class per Durable Object export collected
- *   from the impl at plan time.
+ *   export is `makeWebsiteEntryExports(...)` from `alchemy/Serve/Worker`
+ *   — nitro's `cloudflare-module` preset runtime grafted verbatim as the
+ *   one fetch handler, plus the full non-fetch dispatch
+ *   (queue/scheduled/email + RPC) from the underlying Worker bridge —
+ *   plus one `DurableObjectBridge` / `WorkflowBridge` class per export
+ *   collected from the impl at plan time.
  *
- * - **Dev** ({@link renderEffectHandler}): a nitro middleware handler (h3
- *   v1 `__is_handler__` marker, injected through `nitro.handlers` on the
- *   dev overrides layer) that scopes itself to the effect routes and
- *   delegates to `alchemy/Nitro`'s `toHandler`. It runs inside nitro's dev SSR worker thread, where
- *   `event.context.cloudflare.env` is served by the platform proxy — so
- *   the same bindings resolve in dev, against the local simulators.
- *   Non-fetch handlers (queue/scheduled/DO classes) are production-only on
- *   Nuxt for now: the dev server runs nitro's dev preset entry, not the
- *   deploy entry.
- *
- *   The SAME renderer is the AWS Nuxt delivery module for BOTH modes
- *   (`Nuxt.ts`'s `NuxtOptions.effect`): it is cloud-neutral — nitro
- *   compiles config-injected handlers through the same virtual module into
- *   the aws-lambda prod bundle and the dev SSR worker alike.
+ * - **AWS delivery** ({@link renderEffectHandler}): a nitro middleware
+ *   handler (h3 v1 `__is_handler__` marker, injected through
+ *   `nitro.handlers`) that scopes itself to the effect routes and
+ *   delegates to `alchemy/Nitro`'s `toHandler`. This is the AWS Nuxt
+ *   delivery module (`Nuxt.ts`'s `NuxtOptions.effect`) — cloud-neutral,
+ *   compiled by nitro into the aws-lambda prod bundle and the AWS dev SSR
+ *   worker alike. It is NOT used on the Cloudflare path anymore: there
+ *   the user's own `server/middleware` mount owns HTTP in dev and prod
+ *   (phase 4 retires this renderer when AWS moves to the mount design).
  *
  * Both generated modules import the user's site module by absolute path
  * (the `main: import.meta.url` anchor) — the module is re-imported inside
@@ -64,16 +64,19 @@ export class NuxtEffectBundleError extends Data.TaggedError<"NuxtEffectBundleErr
 }> {}
 
 /**
- * Default URL space the effect fetch owns when the construct passes no
- * `server.routes`. Mirrors alchemy's `DEFAULT_SERVER_ROUTES` (kept as a
- * literal here — this package must not import alchemy).
+ * Default URL space the AWS-path effect middleware owns when the construct
+ * passes no `server.routes`. Mirrors alchemy's `DEFAULT_SERVER_ROUTES`
+ * (kept as a literal here — this package must not import alchemy). The
+ * Cloudflare mount design has no routes concept: routing lives in the
+ * user's `server/middleware` mount.
  */
 export const DEFAULT_EFFECT_ROUTES: ReadonlyArray<string> = ["/api/*"];
 
 /**
  * The effect-entry descriptor carried on the Nuxt source options
  * (JSON-serializable; set by `Cloudflare.Website.Nuxt` when an impl is
- * present).
+ * present). Older descriptors may carry extra fields (`routes`,
+ * `takeover`) from the retired routes-scoped design — they are ignored.
  */
 export interface NuxtEffectOptions {
   /**
@@ -81,14 +84,6 @@ export interface NuxtEffectOptions {
    * default export is the Website class). A path or `file://` URL.
    */
   readonly main: string;
-  /** Path globs the effect fetch owns. @default ["/api/*"] */
-  readonly routes?: ReadonlyArray<string> | undefined;
-  /**
-   * `server.takeover` from the construct: `false` opts out of automatic
-   * delivery — the dev half then never injects the effect middleware
-   * (the explicit `alchemy/Nitro` mount tier owns the dispatch).
-   */
-  readonly takeover?: boolean | undefined;
 }
 
 /** Normalize a `main` anchor (path or `file://` URL) to an absolute path. */
@@ -130,29 +125,63 @@ const EFFECT_ENTRY_SOURCE_NAME = "alchemy-effect-entry.mjs";
 /**
  * The rolldown prebundle input: imports the user's site module by absolute
  * path, exports a factory the generated nitro entry calls with the lazy
- * framework loader (routes baked in), and the effect program's DO bridge
- * classes. `cloudflare:workers` stays external through the prebundle AND
- * nitro's rollup (both treat `cloudflare:*` as external).
+ * framework loader, and the effect program's DO / Workflow bridge classes.
+ * ADDITIVE-ONLY (Serve/DESIGN.md): the factory grafts the framework's
+ * fetch verbatim via `makeWebsiteEntryExports` — no routes baked in, no
+ * route gating; the user's `server/middleware` mount owns HTTP — and the
+ * wrapper contributes only the non-fetch dispatch (queue/scheduled/RPC)
+ * plus the class exports. `cloudflare:workers` stays external through the
+ * prebundle AND nitro's rollup (both treat `cloudflare:*` as external).
  */
 export const makeEffectEntrySource = (options: {
   readonly sitePath: string;
-  readonly routes: ReadonlyArray<string>;
   readonly durableObjects: ReadonlyArray<string>;
+  readonly workflows: ReadonlyArray<string>;
 }): string => {
   const hasDos = options.durableObjects.length > 0;
+  const hasWfs = options.workflows.length > 0;
+  const cfImports = [
+    ...(hasDos ? ["DurableObject"] : []),
+    "WorkerEntrypoint",
+    ...(hasWfs ? ["WorkflowEntrypoint"] : []),
+  ];
+  const serveImports = [
+    "makeWebsiteEntryExports",
+    ...(hasDos ? ["DurableObjectBridge"] : []),
+    ...(hasWfs ? ["WorkflowBridge"] : []),
+  ];
   return [
     "// Generated by alchemy — do not edit. Rolldown input for the effect",
-    "// half of the Nuxt entry takeover.",
-    `import { ${hasDos ? "DurableObject, " : ""}WorkerEntrypoint } from "cloudflare:workers";`,
-    `import { makeWebsiteExports${hasDos ? ", DurableObjectBridge" : ""} } from "alchemy/Serve/Worker";`,
+    "// half of the Nuxt entry wrapper (additive): nitro's handler — with",
+    "// the user's server/middleware mount inside — serves ALL HTTP",
+    "// verbatim; the wrapper adds the platform surface (queue/scheduled/",
+    "// RPC dispatch and the class exports below) from the program's",
+    "// registrations.",
+    `import { ${cfImports.join(", ")} } from "cloudflare:workers";`,
+    `import { ${serveImports.join(", ")} } from "alchemy/Serve/Worker";`,
     `import Site from ${JSON.stringify(options.sitePath)};`,
     "",
-    "export const makeAlchemyWorker = (framework) =>",
-    "  makeWebsiteExports(WorkerEntrypoint, {",
+    "export const makeAlchemyWorker = (framework) => {",
+    "  let frameworkModule;",
+    "  return makeWebsiteEntryExports(WorkerEntrypoint, {",
     "    site: Site,",
-    `    routes: ${serializeRoutes(options.routes)},`,
-    "    framework,",
+    "    fetch: async (request, env, ctx) => {",
+    "      const mod = await (frameworkModule ??=",
+    "        framework?.() ?? Promise.resolve(undefined));",
+    "      const target = mod?.default ?? mod;",
+    "      const fetchFn =",
+    '        typeof target?.fetch === "function"',
+    "          ? target.fetch.bind(target)",
+    '          : typeof target === "function"',
+    "            ? target",
+    "            : undefined;",
+    "      if (fetchFn === undefined) {",
+    '        return new Response("Not Found", { status: 404 });',
+    "      }",
+    "      return fetchFn(request, env, ctx);",
+    "    },",
     "  });",
+    "};",
     ...(hasDos
       ? [
           "",
@@ -163,15 +192,26 @@ export const makeEffectEntrySource = (options: {
           ),
         ]
       : []),
+    ...(hasWfs
+      ? [
+          "",
+          "const __AlchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });",
+          ...options.workflows.map(
+            (name) =>
+              `export class ${assertClassName(name)} extends __AlchemyWorkflowBridge(${JSON.stringify(name)}) {}`,
+          ),
+        ]
+      : []),
     "",
   ].join("\n");
 };
 
 /**
  * Render the production nitro entry wrapper: default-exports the wrapper
- * worker class built by the PREBUNDLED effect module's factory, with
- * nitro's `cloudflare-module` runtime as the framework fallback, and
- * re-exports the effect program's Durable Object bridge classes.
+ * worker class built by the PREBUNDLED effect module's factory — nitro's
+ * `cloudflare-module` runtime grafted verbatim as the one fetch handler —
+ * and re-exports the effect program's Durable Object / Workflow bridge
+ * classes.
  *
  * The prebundle is imported by {@link EFFECT_VIRTUAL_SPECIFIER} — external
  * through nitro's rollup, rewritten to the module's in-set relative path
@@ -179,20 +219,23 @@ export const makeEffectEntrySource = (options: {
  */
 export const renderWorkerEntry = (options: {
   readonly durableObjects: ReadonlyArray<string>;
-}): string =>
-  [
+  readonly workflows: ReadonlyArray<string>;
+}): string => {
+  const classes = [...options.durableObjects, ...options.workflows];
+  return [
     "// Generated by alchemy (Cloudflare.Website.Nuxt effect entry) — do not edit.",
     `import { makeAlchemyWorker } from ${JSON.stringify(EFFECT_VIRTUAL_SPECIFIER)};`,
     `import nitroHandler from ${JSON.stringify(NITRO_HANDLER_SPECIFIER)};`,
-    ...(options.durableObjects.length > 0
+    ...(classes.length > 0
       ? [
-          `export { ${options.durableObjects.map(assertClassName).join(", ")} } from ${JSON.stringify(EFFECT_VIRTUAL_SPECIFIER)};`,
+          `export { ${classes.map(assertClassName).join(", ")} } from ${JSON.stringify(EFFECT_VIRTUAL_SPECIFIER)};`,
         ]
       : []),
     "",
     "export default makeAlchemyWorker(() => Promise.resolve({ default: nitroHandler }));",
     "",
   ].join("\n");
+};
 
 /**
  * Rebuild any `builtin:esm-external-require` plugin instance with the
@@ -251,8 +294,8 @@ export interface BundleNuxtEffectModuleOptions {
   readonly rootDir: string;
   /** Absolute path of the user's site module. */
   readonly sitePath: string;
-  readonly routes: ReadonlyArray<string>;
   readonly durableObjects: ReadonlyArray<string>;
+  readonly workflows: ReadonlyArray<string>;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: ReadonlyArray<string>;
 }
@@ -312,8 +355,8 @@ export const bundleNuxtEffectModule = (
         entrySourcePath,
         makeEffectEntrySource({
           sitePath: options.sitePath,
-          routes: options.routes,
           durableObjects: options.durableObjects,
+          workflows: options.workflows,
         }),
       )
       .pipe(Effect.mapError(fail("Failed to write the effect entry source")));
@@ -420,45 +463,6 @@ export const renderEffectHandler = (options: {
     "export default middleware;",
     "",
   ].join("\n");
-
-/**
- * Signals of an explicit `alchemy/Serve` mount in the user's `server/`
- * source tree (a `server/middleware/*` file importing
- * `alchemy/Nitro`'s `toHandler`): the explicit-MOUNT marker
- * byte literal or an import of an `alchemy/Serve` specifier. Kept in sync
- * with `alchemy/src/Serve/constants.ts` — duplicated here because this
- * package deliberately carries no alchemy dependency. (Same pattern as
- * the SvelteKit adapters' stand-down scan.)
- */
-const SERVE_MOUNT_PATTERN =
-  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/(?:Serve(?:\/Worker)?|Next|Nitro|Astro|SvelteKit)["']/;
-
-/**
- * Scan the project's `server/` source tree for an explicit `alchemy/Serve`
- * mount (DESIGN §6.3: the auto-injected middleware stands down when the
- * user mounted the bridge themselves — the explicit tier always wins,
- * never two bridges in one nitro app).
- */
-export const scanForExplicitServeMount = Effect.fnUntraced(function* (
-  serverDir: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const entries = yield* fs
-    .readDirectory(serverDir, { recursive: true })
-    .pipe(Effect.orElseSucceed(() => [] as Array<string>));
-  for (const entry of entries) {
-    if (!/\.(?:m|c)?[tj]s$/.test(entry)) {
-      continue;
-    }
-    const content = yield* fs
-      .readFileString(NodePath.join(serverDir, entry))
-      .pipe(Effect.orElseSucceed(() => ""));
-    if (SERVE_MOUNT_PATTERN.test(content)) {
-      return true;
-    }
-  }
-  return false;
-});
 
 /**
  * Write a generated module, creating the directory as needed. Content is
