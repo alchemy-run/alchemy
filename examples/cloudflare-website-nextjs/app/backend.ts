@@ -7,40 +7,31 @@ import * as KV from "alchemy/Cloudflare/KV";
 import * as Queues from "alchemy/Cloudflare/Queues";
 import { Nextjs } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Counter } from "./counter.ts";
+import ReportWorkflow from "./report-workflow.ts";
+import { Jobs, Visits } from "./resources.ts";
+
+export { Jobs, Visits };
 
 /**
- * KV namespace bound by the site's Effect program. Registered on the stack
- * when the program's init Effect runs at plan time — no separate wiring in
- * alchemy.run.ts needed.
- */
-export const Visits = KV.Namespace("Visits");
-
-/**
- * Queue bound by the site's Effect program — the async leg. The program
- * both produces to it (the `enqueue` RPC method) and CONSUMES it on the
- * SAME class via `consumeQueueMessages`; the entry takeover wraps the
- * OpenNext worker artifact so the queue handler is delivered alongside
- * `fetch`. (Local queue delivery is prod-only for Next — `alchemy dev`
- * serves the frontend, but consumed batches only flow in a real deploy.)
- */
-export const Jobs = Queues.Queue("Jobs");
-
-/**
- * ONE Worker serves the Next.js app AND a typed backend: the third
- * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose RPC METHODS are the API surface for TRUSTED callers only. There
- * is no public wire — `createClient(Backend)` (the value form) dispatches
- * them in-process from server code: async server components and the
- * server actions in app/actions.ts, which are Next's own transport for
- * the browser. The takeover is automatic — alchemy wraps the OpenNext
- * worker artifact with a generated entry that delivers the program's
- * platform handlers (the queue consumer below) alongside `fetch`; every
- * HTTP path (including Next's own /api/hello route handler) stays Next's.
+ * ONE Worker serves the Next.js app AND a typed backend — the maximal
+ * shape (Serve/DESIGN.md "MaxSite"): an Effect `fetch` API (streaming
+ * route, request-scope finalizer route), a Durable Object, a durable
+ * Workflow, a queue produced to AND consumed on the same class, and RPC
+ * METHODS for trusted callers — `createClient(Backend)` (the value form)
+ * dispatches them in-process from server code: async server components and
+ * the server actions in app/actions.ts, which are Next's own transport for
+ * the browser.
  *
- * The KV capability the program uses is collected automatically at plan
- * time — no separate backend worker, service binding, proxy route, or env
- * shim.
+ * HTTP composition lives in app/api/[[...slug]]/route.ts — the mount.
+ * Everything platform-shaped (queue consumer, DO/Workflow class exports,
+ * bindings) derives from the `yield*` registrations below; the generated
+ * wrapper around the OpenNext artifact delivers it alongside Next's own
+ * handler.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated entry re-imports it at
@@ -60,23 +51,22 @@ export default class Site extends Nextjs<Site>()(
         "next.config.mjs",
         "postcss.config.mjs",
         "open-next.config.ts",
-        "app/backend.ts",
         "tsconfig.json",
       ],
     },
   },
   Effect.gen(function* () {
-    // Init: runs at plan time in the engine (collects the KV binding) and
+    // Init: runs at plan time in the engine (collects the bindings) and
     // again inside the Worker on first request (builds the runtime client).
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     const jobsQueue = yield* Jobs;
     const jobs = yield* Queues.WriteQueue(jobsQueue);
+    // Platform registrations — each yield* IS the wiring: binding +
+    // migration/config + class export in the generated worker entry.
+    const counters = yield* Counter;
+    const reports = yield* ReportWorkflow;
 
-    // The async leg's consumer — a queue listener on the SAME class. At
-    // plan time this yields the `Cloudflare.Queues.Consumer` resource; at
-    // runtime queue batches dispatch to it. Each message bumps
-    // `processed-count` and records `processed-last` in KV, where the
-    // `processed` RPC method reads them back.
+    // The async leg's consumer — a queue listener on the SAME class.
     yield* Queues.consumeQueueMessages<string>(
       jobsQueue,
       {
@@ -97,9 +87,72 @@ export default class Site extends Nextjs<Site>()(
     );
 
     return {
-      // RPC methods — the KV-backed visit counter. Invoked directly (no
-      // HTTP) by the value form of `createClient` from trusted server
-      // code: the async server component and the server actions.
+      // ── Effect HTTP API (paths the route-file mount routes here) ──
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://site");
+
+        if (url.pathname === "/api/do/increment") {
+          const name = url.searchParams.get("name") ?? "default";
+          const next = yield* counters
+            .getByName(name)
+            .increment(1)
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ next });
+        }
+
+        if (url.pathname === "/api/do/ticks") {
+          const n = Number(url.searchParams.get("n") ?? "3");
+          const stream = counters
+            .getByName("ticker")
+            .ticks(n)
+            .pipe(
+              Stream.map((i) => `${i}\n`),
+              Stream.encodeText,
+            );
+          return HttpServerResponse.stream(stream, {
+            headers: { "content-type": "text/plain" },
+          });
+        }
+
+        if (url.pathname === "/api/finalizer") {
+          const value = url.searchParams.get("v") ?? "ran";
+          yield* Effect.addFinalizer(() =>
+            visits.put("finalizer-last", value).pipe(Effect.ignore),
+          );
+          return yield* HttpServerResponse.json({ registered: value });
+        }
+
+        if (url.pathname === "/api/workflow/start") {
+          const marker = url.searchParams.get("marker") ?? "default";
+          const instance = yield* reports
+            .create({ params: { marker } })
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ id: instance.id });
+        }
+        if (url.pathname === "/api/workflow/status") {
+          const id = url.searchParams.get("id") ?? "";
+          const instance = yield* reports.get(id).pipe(Effect.orDie);
+          const status = yield* instance.status().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json(status);
+        }
+
+        if (url.pathname === "/api/enqueue") {
+          const message = url.searchParams.get("m") ?? "job";
+          yield* jobs.send(message, { contentType: "text" }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ sent: message });
+        }
+
+        if (url.pathname === "/api/kv") {
+          const key = url.searchParams.get("key") ?? "";
+          const value = yield* visits.get(key).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ value: value ?? null });
+        }
+
+        return HttpServerResponse.empty({ status: 404 });
+      }),
+
+      // ── Value-form methods (createClient from Next server code) ──
       visits: Effect.fn(function* () {
         return Number((yield* visits.get("count")) ?? "0");
       }, Effect.orDie),
@@ -108,14 +161,10 @@ export default class Site extends Nextjs<Site>()(
         yield* visits.put("count", String(count));
         return count;
       }, Effect.orDie),
-      // The async leg's producer (called by the `enqueueJob` server
-      // action) — sends a message to the queue; the consumer above
-      // catches up asynchronously.
       enqueue: (message: string) =>
         jobs
           .send(message, { contentType: "text" })
           .pipe(Effect.asVoid, Effect.orDie),
-      // Read the consumer's async state (the `getProcessed` server action).
       processed: Effect.fn(function* () {
         const count = yield* visits.get("processed-count");
         const last = yield* visits.get("processed-last");
@@ -123,8 +172,12 @@ export default class Site extends Nextjs<Site>()(
       }, Effect.orDie),
     };
   }).pipe(
-    Effect.provide(KV.ReadWriteNamespaceBinding),
-    Effect.provide(Queues.WriteQueueBinding),
-    Effect.provide(Queues.EventSourceLive),
+    Effect.provide(
+      Layer.mergeAll(
+        KV.ReadWriteNamespaceBinding,
+        Queues.WriteQueueBinding,
+        Queues.EventSourceLive,
+      ),
+    ),
   ),
 ) {}

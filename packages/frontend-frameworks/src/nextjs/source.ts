@@ -166,6 +166,8 @@ export interface DevContext extends SourceContext {
     readonly durableObjectNamespaces: NonNullable<
       WorkerWiring["durableObjectNamespaces"]
     >;
+    /** Workflows hosted by this worker (physical workflowName + className). */
+    readonly workflows?: WorkerWiring["workflows"] | undefined;
     readonly hyperdrives: NonNullable<WorkerWiring["hyperdrives"]>;
     readonly queueConsumers: Effect.Effect<
       NonNullable<WorkerWiring["queueConsumers"]>
@@ -799,6 +801,9 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
             name: ctx.worker.name,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
+            ...(ctx.worker.workflows !== undefined
+              ? { workflows: ctx.worker.workflows }
+              : {}),
             hyperdrives: ctx.worker.hyperdrives,
             queueConsumers,
             assets: ctx.worker.assets,

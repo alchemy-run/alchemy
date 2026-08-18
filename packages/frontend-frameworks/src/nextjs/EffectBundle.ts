@@ -1,6 +1,6 @@
 /**
  * OpenNext artifact takeover for effectful `Cloudflare.Website.Nextjs`
- * (alchemy DESIGN Amendment §2.1.1).
+ * (Serve/DESIGN.md, tier B).
  *
  * Next.js has no bundler seam alchemy controls (webpack/turbopack are not
  * hookable), but the OpenNext artifact is post-framework and alchemy owns
@@ -17,20 +17,19 @@
  *    is dead-code-eliminated — into `.open-next/alchemy-effect/`.
  * 2. **Generates** `.open-next/alchemy-worker.js`: probes which conditional
  *    Durable Object classes `.open-next/worker.js` actually exports and
- *    re-exports exactly those, re-exports the effect program's own DO
- *    bridge classes, and default-exports the `makeWebsiteExports` wrapper
- *    class — effect-first fetch over `server.routes` with the OpenNext
- *    handler as the outside-routes fallback, and the full non-fetch handler
- *    surface (queue/scheduled/email/RPC) from the Worker bridge dispatch.
+ *    re-exports exactly those, re-exports the effect program's own DO and
+ *    Workflow bridge classes, and default-exports the
+ *    `makeWebsiteEntryExports` wrapper class — ADDITIVE-ONLY
+ *    (Serve/DESIGN.md): the OpenNext handler (with the user's route-file
+ *    mount compiled inside it) serves ALL HTTP verbatim; the wrapper
+ *    contributes only what a route file cannot — the non-fetch handler
+ *    surface (queue/scheduled/RPC via the Worker bridge dispatch) and the
+ *    class exports. HTTP dispatch order, gates, and effect routing are the
+ *    mount's code, never generated.
  * 3. The final esbuild pass then bundles `alchemy-worker.js` instead of
  *    `worker.js`, with the prebundled effect module kept **external** and
  *    copied verbatim into the module set (workerd accepts multi-module
  *    uploads) so esbuild never re-processes rolldown output.
- *
- * **Stand-down rule**: when the user already mounted the bridge explicitly
- * (`toHandler` in a catch-all route — the `"__ALCHEMY_SERVE_MOUNT_v1__"`
- * mount marker appears in the OpenNext build output), the takeover stands
- * down and the framework-built artifact deploys unchanged.
  */
 
 import * as Data from "effect/Data";
@@ -59,9 +58,10 @@ export interface NextjsEffectEntry {
    */
   readonly mainPath: string;
   /**
-   * Path globs the effect fetch owns (the construct's `server.routes`).
-   * Omitted = middleware mode (every request offered to the effect fetch
-   * first).
+   * Path globs from the construct's `server.routes`. NOT consumed by the
+   * generated wrapper (routing is the user's route-file mount's code —
+   * Serve/DESIGN.md); still carried for the memo hash and the legacy hmr
+   * dev front dispatch until the `server.routes` purge.
    */
   readonly routes?: ReadonlyArray<string> | undefined;
   /** Durable Object class names exported by the effect program. */
@@ -83,19 +83,6 @@ export const EFFECT_MODULE_NAME = "alchemy-effect.mjs";
 const EFFECT_ENTRY_SOURCE_NAME = "alchemy-effect-entry.mjs";
 
 /**
- * The explicit-mount marker embedded by the PUBLIC `alchemy/Serve` surface
- * (structural mirror of `alchemy/src/Serve/constants.ts` — this package
- * deliberately does not import alchemy). Its presence in the OpenNext build
- * output means the user mounted the bridge explicitly (`toHandler` /
- * `Serve.toHandler`) and the takeover must stand down. Deliberately NOT the
- * bridge's `__ALCHEMY_SERVE_v1__` sentinel: the bridge module also rides
- * the value-form `createClient` graph (server components importing the
- * backend), so that literal appears in EVERY effectful site's OpenNext
- * output and would false-positive the stand-down.
- */
-export const SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
-
-/**
  * The Durable Object classes OpenNext's `worker.js` template re-exports
  * conditionally (per the project's `open-next.config.ts` cache/queue
  * choices). The wrapper generator probes the artifact and re-exports
@@ -113,28 +100,37 @@ export const probeOpenNextDoExports = (workerSource: string): Array<string> =>
 
 /**
  * The rolldown input source: imports the user's site module by absolute
- * path, exports a factory the generated wrapper calls with the lazy
- * framework loader, and the effect program's DO bridge classes.
+ * path, exports a factory the generated wrapper calls with the OpenNext
+ * handler, and the effect program's DO / Workflow bridge classes.
+ *
+ * ADDITIVE-ONLY (Serve/DESIGN.md): the OpenNext handler — with the user's
+ * route-file mount (`app/api/[[...slug]]/route.ts`) compiled inside it — is
+ * grafted verbatim as the ONE fetch handler via `makeWebsiteEntryExports`;
+ * the wrapper never route-gates or intercepts. It contributes only what a
+ * route file cannot: the non-fetch handler surface (queue/scheduled/RPC via
+ * the Worker bridge dispatch) plus the class exports below, all derived
+ * from the program's plan-time registrations.
  */
 export const makeEffectEntrySource = (
   entry: NextjsEffectEntry,
   mainPath: string,
 ): string => {
   const needsDo = entry.doClasses.length > 0;
+  const needsWf = entry.wfClasses.length > 0;
   return [
     `// Generated by alchemy — do not edit. Rolldown input for the effect`,
     `// half of the OpenNext artifact takeover.`,
-    `import { ${needsDo ? "DurableObject, " : ""}WorkerEntrypoint } from "cloudflare:workers";`,
-    `import { makeWebsiteExports${needsDo ? ", DurableObjectBridge" : ""} } from "alchemy/Serve/Worker";`,
+    `import { ${needsDo ? "DurableObject, " : ""}WorkerEntrypoint${needsWf ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";`,
+    `import { makeWebsiteEntryExports${needsDo ? ", DurableObjectBridge" : ""}${needsWf ? ", WorkflowBridge" : ""} } from "alchemy/Serve/Worker";`,
     `import Site from ${JSON.stringify(mainPath)};`,
     ``,
+    `// Additive: the OpenNext handler (the user's route-file mount rides`,
+    `// inside it) serves ALL HTTP verbatim; the wrapper adds the platform`,
+    `// surface (queue/scheduled/RPC dispatch and the class exports below).`,
     `export const makeAlchemyWorker = (framework) =>`,
-    `  makeWebsiteExports(WorkerEntrypoint, {`,
+    `  makeWebsiteEntryExports(WorkerEntrypoint, {`,
     `    site: Site,`,
-    ...(entry.routes !== undefined
-      ? [`    routes: ${JSON.stringify(entry.routes)},`]
-      : []),
-    `    framework,`,
+    `    fetch: (request, env, ctx) => framework.fetch(request, env, ctx),`,
     `  });`,
     ...(needsDo
       ? [
@@ -143,6 +139,16 @@ export const makeEffectEntrySource = (
           ...entry.doClasses.map(
             (className) =>
               `export class ${className} extends __AlchemyDurableObjectBridge(${JSON.stringify(className)}) {}`,
+          ),
+        ]
+      : []),
+    ...(needsWf
+      ? [
+          ``,
+          `const __AlchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });`,
+          ...entry.wfClasses.map(
+            (className) =>
+              `export class ${className} extends __AlchemyWorkflowBridge(${JSON.stringify(className)}) {}`,
           ),
         ]
       : []),
@@ -159,23 +165,31 @@ export const makeTakeoverWorkerSource = (options: {
   readonly openNextDoExports: ReadonlyArray<string>;
   /** The effect program's DO classes (re-exported from the prebundle). */
   readonly effectDoClasses: ReadonlyArray<string>;
+  /** The effect program's Workflow classes (re-exported from the prebundle). */
+  readonly effectWfClasses: ReadonlyArray<string>;
 }): string => {
   const effectModule = `./${EFFECT_MODULE_DIR}/${EFFECT_MODULE_NAME}`;
+  const effectClasses = [
+    ...options.effectDoClasses,
+    ...options.effectWfClasses,
+  ];
   return [
-    `// Generated by alchemy — OpenNext artifact takeover: one Worker serves`,
-    `// the Next.js app (fallback) and the effect program's handlers.`,
+    `// Generated by alchemy — OpenNext artifact takeover: the Next.js app`,
+    `// (with the user's route-file mount inside) serves ALL HTTP; the`,
+    `// wrapper adds the effect program's platform surface.`,
+    `import framework from "./${WORKER_ENTRY_NAME}";`,
     `import { makeAlchemyWorker } from ${JSON.stringify(effectModule)};`,
     ...(options.openNextDoExports.length > 0
       ? [
           `export { ${options.openNextDoExports.join(", ")} } from "./${WORKER_ENTRY_NAME}";`,
         ]
       : []),
-    ...(options.effectDoClasses.length > 0
+    ...(effectClasses.length > 0
       ? [
-          `export { ${options.effectDoClasses.join(", ")} } from ${JSON.stringify(effectModule)};`,
+          `export { ${effectClasses.join(", ")} } from ${JSON.stringify(effectModule)};`,
         ]
       : []),
-    `export default makeAlchemyWorker(() => import("./${WORKER_ENTRY_NAME}"));`,
+    `export default makeAlchemyWorker(framework);`,
     ``,
   ].join("\n");
 };
@@ -183,43 +197,6 @@ export const makeTakeoverWorkerSource = (options: {
 /** `file://` URLs (the `main: import.meta.url` anchor) become plain paths. */
 export const effectMainToPath = (mainPath: string): string =>
   mainPath.startsWith("file://") ? fileURLToPath(mainPath) : mainPath;
-
-/**
- * Scan the OpenNext-owned build outputs for the `alchemy/Serve` sentinel —
- * NOT alchemy's own generated files, which always embed it. A hit means the
- * user compiled an explicit bridge mount (e.g. `toHandler` in a
- * catch-all route) into the app.
- */
-export const scanForServeSentinel = Effect.fn(function* (
-  openNextDirectory: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const candidates: Array<string> = [];
-  const workerEntry = NodePath.join(openNextDirectory, WORKER_ENTRY_NAME);
-  if (yield* fs.exists(workerEntry).pipe(Effect.orElseSucceed(() => false))) {
-    candidates.push(workerEntry);
-  }
-  for (const dir of ["middleware", "server-functions"]) {
-    const root = NodePath.join(openNextDirectory, dir);
-    const entries = yield* fs
-      .readDirectory(root, { recursive: true })
-      .pipe(Effect.orElseSucceed(() => [] as Array<string>));
-    for (const entry of entries) {
-      if (/\.(?:m|c)?js$/.test(entry)) {
-        candidates.push(NodePath.join(root, entry));
-      }
-    }
-  }
-  for (const file of candidates) {
-    const content = yield* fs
-      .readFileString(file)
-      .pipe(Effect.orElseSucceed(() => ""));
-    if (content.includes(SERVE_MOUNT_MARKER)) {
-      return true;
-    }
-  }
-  return false;
-});
 
 /**
  * Copy alchemy's pure-annotation transform when it is resolvable (the
@@ -303,18 +280,6 @@ export const bundleEffectModule = (
         }),
       );
     }
-    if (options.entry.wfClasses.length > 0) {
-      return yield* Effect.fail(
-        new EffectBundleError({
-          message:
-            `Workflow classes (${options.entry.wfClasses.join(", ")}) are not ` +
-            `yet supported by the Next.js artifact takeover — only Durable ` +
-            `Object exports are. Deploy Workflows on a dedicated ` +
-            `Cloudflare.Worker for now.`,
-        }),
-      );
-    }
-
     const [
       { default: cloudflareRolldown },
       { esmExternalRequirePlugin },

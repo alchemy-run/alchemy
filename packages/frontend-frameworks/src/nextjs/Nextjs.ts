@@ -100,8 +100,11 @@ export interface NextjsFrameworkOptions {
    * The construct's effect program entry (wrapper delivery): triggers the
    * OpenNext artifact takeover ({@link EffectBundle}) — the site module is
    * rolldown-prebundled and a generated `alchemy-worker.js` wrapping
-   * `worker.js` becomes the final bundle pass's entry. Stands down when
-   * the app already mounts `alchemy/Serve` explicitly (sentinel scan).
+   * `worker.js` becomes the final bundle pass's entry. ADDITIVE-ONLY
+   * (Serve/DESIGN.md): the OpenNext handler (with the user's route-file
+   * mount inside) serves all HTTP; the wrapper contributes only the
+   * platform surface (queue/scheduled/RPC dispatch, DO/Workflow class
+   * exports).
    */
   readonly effectEntry?: EffectBundle.NextjsEffectEntry | undefined;
   /**
@@ -381,14 +384,16 @@ export const make = (
 
         // 1.75. Artifact takeover (effectful Website): prebundle the site
         // module, generate the wrapping entry, and point the final bundle
-        // pass at it. Stands down when the app compiled an explicit
-        // `alchemy/Serve` mount (sentinel in the OpenNext output).
+        // pass at it. ADDITIVE-ONLY (Serve/DESIGN.md): the user's
+        // route-file mount owns HTTP inside the OpenNext handler; the
+        // wrapper only adds the platform surface. Two bridges on one
+        // worker is no longer constructible, so nothing is detected or
+        // stood down.
         let takeover = false;
         if (options?.effectEntry !== undefined) {
           const effectEntry = options.effectEntry;
           // Remove artifacts of a previous takeover build up-front so a
-          // stale wrapper can never leak into this build's output (and the
-          // sentinel scan below only ever sees OpenNext-owned files).
+          // stale wrapper can never leak into this build's output.
           yield* fs
             .remove(
               NodePath.join(
@@ -407,78 +412,44 @@ export const make = (
             )
             .pipe(Effect.ignore);
 
-          const explicitMount = yield* EffectBundle.scanForServeSentinel(
-            p.openNextDirectory,
-          ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-          if (explicitMount) {
-            if (
-              effectEntry.doClasses.length > 0 ||
-              effectEntry.wfClasses.length > 0
-            ) {
-              return yield* Effect.fail(
-                fail(
-                  `The app mounts alchemy/Serve explicitly (the ` +
-                    `"${EffectBundle.SERVE_MOUNT_MARKER}" mount marker is compiled into ` +
-                    `the OpenNext output), so the artifact takeover stands ` +
-                    `down — but the effect program exports Durable ` +
-                    `Object/Workflow classes (${[
-                      ...effectEntry.doClasses,
-                      ...effectEntry.wfClasses,
-                    ].join(
-                      ", ",
-                    )}) that only the takeover can deliver. Remove ` +
-                    `the explicit mount (or the class exports).`,
-                )(undefined),
-              );
-            }
-            yield* Effect.logInfo(
-              "alchemy: explicit alchemy/Serve mount detected in the Next.js " +
-                "build — artifact takeover stands down (the framework-built " +
-                "worker deploys unchanged).",
+          yield* EffectBundle.bundleEffectModule({
+            openNextDirectory: p.openNextDirectory,
+            rootDir: root,
+            entry: effectEntry,
+            compatibilityDate:
+              options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+            compatibilityFlags: [
+              ...new Set([
+                "nodejs_compat",
+                ...(options?.vite?.compatibilityFlags ?? []),
+              ]),
+            ],
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.mapError((error) => fail(error.message)(error.cause)),
+          );
+          const workerSource = yield* fs
+            .readFileString(
+              NodePath.join(p.openNextDirectory, Bundle.WORKER_ENTRY_NAME),
+            )
+            .pipe(
+              Effect.mapError(fail("Failed to read the OpenNext worker entry")),
             );
-          } else {
-            yield* EffectBundle.bundleEffectModule({
-              openNextDirectory: p.openNextDirectory,
-              rootDir: root,
-              entry: effectEntry,
-              compatibilityDate:
-                options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
-              compatibilityFlags: [
-                ...new Set([
-                  "nodejs_compat",
-                  ...(options?.vite?.compatibilityFlags ?? []),
-                ]),
-              ],
-            }).pipe(
-              Effect.provideService(FileSystem.FileSystem, fs),
-              Effect.mapError((error) => fail(error.message)(error.cause)),
-            );
-            const workerSource = yield* fs
-              .readFileString(
-                NodePath.join(p.openNextDirectory, Bundle.WORKER_ENTRY_NAME),
-              )
-              .pipe(
-                Effect.mapError(
-                  fail("Failed to read the OpenNext worker entry"),
-                ),
-              );
-            yield* fs
-              .writeFileString(
-                NodePath.join(
-                  p.openNextDirectory,
-                  EffectBundle.TAKEOVER_ENTRY_NAME,
-                ),
-                EffectBundle.makeTakeoverWorkerSource({
-                  openNextDoExports:
-                    EffectBundle.probeOpenNextDoExports(workerSource),
-                  effectDoClasses: effectEntry.doClasses,
-                }),
-              )
-              .pipe(
-                Effect.mapError(fail("Failed to write the takeover entry")),
-              );
-            takeover = true;
-          }
+          yield* fs
+            .writeFileString(
+              NodePath.join(
+                p.openNextDirectory,
+                EffectBundle.TAKEOVER_ENTRY_NAME,
+              ),
+              EffectBundle.makeTakeoverWorkerSource({
+                openNextDoExports:
+                  EffectBundle.probeOpenNextDoExports(workerSource),
+                effectDoClasses: effectEntry.doClasses,
+                effectWfClasses: effectEntry.wfClasses,
+              }),
+            )
+            .pipe(Effect.mapError(fail("Failed to write the takeover entry")));
+          takeover = true;
         }
 
         // 2. The final bundle pass (what wrangler does implicitly on deploy).
@@ -689,6 +660,12 @@ export const make = (
               : {}),
             ...(worker?.queueConsumers !== undefined
               ? { queueConsumers: worker.queueConsumers }
+              : {}),
+            // Workflows hosted by this worker: the takeover entry exports
+            // the effect program's WorkflowEntrypoint classes, and each
+            // entry here hosts a local engine service for them.
+            ...(worker?.workflows !== undefined
+              ? { workflows: worker.workflows }
               : {}),
             ...(worker?.unsafe !== undefined ? { unsafe: worker.unsafe } : {}),
             logging: options?.nextjs?.debug

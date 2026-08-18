@@ -5,6 +5,7 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
@@ -139,12 +140,14 @@ test(
 );
 
 test(
-  "serves the dynamic API route",
+  "mount: the exclusion carves Next's own /api/jobs route back out",
   Effect.gen(function* () {
     const url = yield* base;
-    // Next's own App Router route handler, calling the effectful backend
-    // through the module-scope value-form client — the backend claims no
-    // HTTP paths, so all of /api/* stays Next's.
+    // Served by Next's own App Router route handler (app/api/jobs/route.ts,
+    // through the value-form client), NOT the effect fetch — proof the
+    // mount's routes claim (`["/api/*", "!/api/jobs"]`) is the user's
+    // decision and Next's more-specific route file wins over the
+    // catch-all mount.
     const res = yield* getWhenReady(`${url}/api/jobs`);
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { count: number };
@@ -266,4 +269,97 @@ test(
     expect(body).toContain("User-agent: *");
   }),
   { timeout: 180_000 },
+);
+
+// ── MaxSite: the effect HTTP API through the route-file mount ──
+// (No /healthz or gate tests here: a Next route-file mount only sees
+// /api/* — cross-cutting gates belong in middleware, out of scope for
+// this example.)
+
+test(
+  "durable object: same name routes to the same instance (monotonic)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const name = `it-${crypto.randomUUID().slice(0, 8)}`;
+
+    const first = yield* getWhenReady(`${url}/api/do/increment?name=${name}`);
+    expect(first.status).toBe(200);
+    const a = ((yield* first.json) as { next: number }).next;
+    const second = yield* getWhenReady(`${url}/api/do/increment?name=${name}`);
+    const b = ((yield* second.json) as { next: number }).next;
+    expect(b).toBe(a + 1);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "durable object: streaming RPC forwarded onto a streaming response",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/api/do/ticks?n=4`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer runs and lands the KV marker (inline settle)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `fin-${crypto.randomUUID().slice(0, 8)}`;
+
+    // The route-file mount calls `site.fetch(req)` without a ctx, so the
+    // request scope settles INLINE before the response resolves (the
+    // correct semantics where no ExecutionContext is in hand) — the
+    // finalizer's KV write is observable right after.
+    const res = yield* getWhenReady(`${url}/api/finalizer?v=${marker}`);
+    expect(res.status).toBe(200);
+
+    const client = yield* HttpClient.HttpClient;
+    const value = yield* Effect.gen(function* () {
+      const kv = yield* client.get(`${url}/api/kv?key=finalizer-last`);
+      return ((yield* kv.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "workflow: durable steps run to completion and land the KV marker",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `wf-${crypto.randomUUID().slice(0, 8)}`;
+
+    const started = yield* getWhenReady(
+      `${url}/api/workflow/start?marker=${marker}`,
+    );
+    expect(started.status).toBe(200);
+    const { id } = (yield* started.json) as { id: string };
+
+    const client = yield* HttpClient.HttpClient;
+    const status = yield* Effect.gen(function* () {
+      const res = yield* client.get(`${url}/api/workflow/status?id=${id}`);
+      return (yield* res.json) as { status: string } | null;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s?.status === "complete" || s?.status === "errored",
+        times: 45,
+      }),
+    );
+    expect(status?.status).toBe("complete");
+
+    const kv = yield* client.get(`${url}/api/kv?key=workflow-last`);
+    const { value } = (yield* kv.json) as { value: string | null };
+    expect(value).toBe(`report:${marker}`);
+  }),
+  { timeout: 240_000 },
 );

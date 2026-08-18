@@ -1,37 +1,13 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as NodeFs from "node:fs";
-import * as NodeOs from "node:os";
-import * as NodePath from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   makeEffectEntrySource,
   makeTakeoverWorkerSource,
   probeOpenNextDoExports,
-  scanForServeSentinel,
-  SERVE_MOUNT_MARKER,
   TAKEOVER_ENTRY_NAME,
 } from "../EffectBundle.ts";
 import { effectEntryOf } from "../source.ts";
 
-const runScan = (dir: string) =>
-  Effect.runPromise(
-    scanForServeSentinel(dir).pipe(Effect.provide(NodeServices.layer)),
-  );
-
 describe("EffectBundle", () => {
-  let root: string;
-
-  beforeAll(() => {
-    root = NodeFs.mkdtempSync(
-      NodePath.join(NodeOs.tmpdir(), "alchemy-nextjs-effect-"),
-    );
-  });
-
-  afterAll(() => {
-    NodeFs.rmSync(root, { recursive: true, force: true });
-  });
-
   it("probes exactly the DO classes the OpenNext worker exports", () => {
     expect(
       probeOpenNextDoExports(
@@ -48,7 +24,7 @@ describe("EffectBundle", () => {
     ).toEqual(["DOQueueHandler", "DOShardedTagCache", "BucketCachePurge"]);
   });
 
-  it("generates the effect entry with routes, site import, and DO bridges", () => {
+  it("grafts the OpenNext handler verbatim via makeWebsiteEntryExports (additive)", () => {
     const source = makeEffectEntrySource(
       {
         mainPath: "/app/src/site.ts",
@@ -59,59 +35,66 @@ describe("EffectBundle", () => {
       "/app/src/site.ts",
     );
     expect(source).toContain(`import Site from "/app/src/site.ts";`);
-    expect(source).toContain(`routes: ["/api/*"],`);
+    expect(source).toContain(
+      `import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
+    );
+    expect(source).toContain("makeWebsiteEntryExports(WorkerEntrypoint, {");
+    // The framework handler — with the user's route-file mount compiled
+    // inside it — IS the one fetch handler; the wrapper never route-gates.
+    expect(source).toContain(
+      "fetch: (request, env, ctx) => framework.fetch(request, env, ctx),",
+    );
+    expect(source).not.toContain("makeWebsiteExports(");
+    expect(source).not.toContain("routes:");
     expect(source).toContain(
       `export class Counter extends __AlchemyDurableObjectBridge("Counter") {}`,
     );
-    expect(source).toContain(`from "alchemy/Serve/Worker"`);
+    expect(source).not.toContain("WorkflowBridge");
   });
 
-  it("generates the takeover wrapper re-exporting probed + effect DO classes", () => {
+  it("re-exports Workflow bridge classes (lazy stack identity)", () => {
+    const source = makeEffectEntrySource(
+      {
+        mainPath: "/app/src/site.ts",
+        doClasses: [],
+        wfClasses: ["ReportWorkflow"],
+      },
+      "/app/src/site.ts",
+    );
+    expect(source).toContain(
+      `import { makeWebsiteEntryExports, WorkflowBridge } from "alchemy/Serve/Worker";`,
+    );
+    expect(source).toContain(
+      "const __AlchemyWorkflowBridge = WorkflowBridge(WorkflowEntrypoint, { site: Site });",
+    );
+    expect(source).toContain(
+      `export class ReportWorkflow extends __AlchemyWorkflowBridge("ReportWorkflow") {}`,
+    );
+    expect(source).not.toContain("DurableObjectBridge");
+  });
+
+  it("generates the takeover wrapper re-exporting probed + effect classes", () => {
     const wrapper = makeTakeoverWorkerSource({
       openNextDoExports: ["DOQueueHandler"],
       effectDoClasses: ["Counter"],
+      effectWfClasses: ["ReportWorkflow"],
     });
+    expect(wrapper).toContain(`import framework from "./worker.js";`);
     expect(wrapper).toContain(`export { DOQueueHandler } from "./worker.js";`);
     expect(wrapper).toContain(
-      `export { Counter } from "./alchemy-effect/alchemy-effect.mjs";`,
+      `export { Counter, ReportWorkflow } from "./alchemy-effect/alchemy-effect.mjs";`,
     );
-    expect(wrapper).toContain(
-      `export default makeAlchemyWorker(() => import("./worker.js"));`,
-    );
+    expect(wrapper).toContain(`export default makeAlchemyWorker(framework);`);
+    // Additive: the OpenNext handler is passed verbatim — never a lazy
+    // route-gated thunk.
+    expect(wrapper).not.toContain("() => import(");
     // No spurious export lists when nothing is probed.
     const bare = makeTakeoverWorkerSource({
       openNextDoExports: [],
       effectDoClasses: [],
+      effectWfClasses: [],
     });
     expect(bare).not.toContain("export {");
-  });
-
-  it("scan finds the sentinel only in OpenNext-owned outputs", async () => {
-    const openNext = NodePath.join(root, ".open-next");
-    NodeFs.mkdirSync(NodePath.join(openNext, "server-functions", "default"), {
-      recursive: true,
-    });
-    NodeFs.mkdirSync(NodePath.join(openNext, "alchemy-effect"), {
-      recursive: true,
-    });
-    NodeFs.writeFileSync(
-      NodePath.join(openNext, "worker.js"),
-      `export default { fetch() {} };`,
-    );
-    // Alchemy's own prebundle always embeds the sentinel — it must never
-    // count as a user mount.
-    NodeFs.writeFileSync(
-      NodePath.join(openNext, "alchemy-effect", "alchemy-effect.mjs"),
-      `globalThis["${SERVE_MOUNT_MARKER}"] = true;`,
-    );
-    expect(await runScan(openNext)).toBe(false);
-
-    // A compiled route handler that mounts alchemy/Serve IS a user mount.
-    NodeFs.writeFileSync(
-      NodePath.join(openNext, "server-functions", "default", "handler.mjs"),
-      `/* compiled */ globalThis["${SERVE_MOUNT_MARKER}"] = true;`,
-    );
-    expect(await runScan(openNext)).toBe(true);
   });
 
   it("effectEntryOf classifies exports and requires a wrapper mainPath", () => {

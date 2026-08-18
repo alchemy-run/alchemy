@@ -29,8 +29,6 @@ export {
   makeEffectEntrySource,
   makeTakeoverWorkerSource,
   probeOpenNextDoExports,
-  scanForServeSentinel,
-  SERVE_MOUNT_MARKER,
   TAKEOVER_ENTRY_NAME,
   type NextjsEffectEntry,
 } from "./EffectBundle.ts";
