@@ -138,6 +138,7 @@ export interface DistilledCloudflareOptions {
         readonly mainPath: string;
         readonly routes: ReadonlyArray<string>;
         readonly doClasses?: ReadonlyArray<string> | undefined;
+        readonly workflowClasses?: ReadonlyArray<string> | undefined;
       }
     | undefined;
   /**
@@ -587,6 +588,7 @@ export function distilledCloudflare(
                     createEffectEntryPlugin({
                       mainPath: options.effect.mainPath,
                       doClasses: options.effect.doClasses,
+                      workflowClasses: options.effect.workflowClasses,
                       serverEntrypoint: SERVER_ENTRYPOINT,
                     }),
                   ]

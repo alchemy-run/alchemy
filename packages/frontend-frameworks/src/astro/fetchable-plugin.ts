@@ -296,6 +296,17 @@ export const createEffectFetchablePlugin = (
       },
       async handler() {
         userFetchId = undefined;
+        if (platform !== "node") {
+          // Cloudflare: EXPLICIT MOUNTS ONLY (Serve/DESIGN.md). The user's
+          // fetch file — when present — IS the fetchable (their mount
+          // composes `site.fetch(request) ?? astro(...)`); without one,
+          // astro's default fetchable serves and the effect program has no
+          // HTTP surface. Nothing is generated, nothing is sniffed — the
+          // entry plugin still delivers the non-fetch platform surface.
+          return null;
+        }
+        // AWS/node arm: unchanged until its own mount story lands
+        // (DESIGN.md phase 4).
         if (!fetchFileDisabled) {
           const resolved = await this.resolve(`${srcDir}${fetchFile}`);
           if (resolved) {

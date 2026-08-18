@@ -636,6 +636,7 @@ const hashAstroInput = (
                 .replaceAll("\\", "/"),
               routes: [...effect.routes],
               doClasses: [...effect.doClasses],
+              workflowClasses: [...(effect.workflowClasses ?? [])],
             }),
           ];
     const salt = `${PROVIDER}@${packageVersion}`;
@@ -859,17 +860,20 @@ interface ResolvedEffectOptions {
   mainPath: string;
   routes: Array<string>;
   doClasses: Array<string>;
+  workflowClasses: Array<string>;
 }
 
 /**
  * Split the impl's entry-level class exports: Durable Objects are
- * delivered by the entry-takeover wrapper (`doClasses` re-exported as
- * bridge classes); Workflows have no delivery path yet and fail fast —
- * from `hash()` too, so the error surfaces at plan time.
+ * delivered by the entry-takeover wrapper (`doClasses` and
+ * `workflowClasses` re-exported as bridge classes).
  */
 const entryClassExports = (
   ctx: SourceContext,
-): Effect.Effect<{ doClasses: Array<string> }, SourceProviderError> => {
+): Effect.Effect<
+  { doClasses: Array<string>; workflowClasses: Array<string> },
+  SourceProviderError
+> => {
   const doClasses: Array<string> = [];
   const wfClasses: Array<string> = [];
   if (ctx.entry?.kind === "effect") {
@@ -882,26 +886,17 @@ const entryClassExports = (
       }
     }
   }
-  if (wfClasses.length > 0) {
-    return Effect.fail(
-      new SourceProviderError({
-        provider: PROVIDER,
-        message:
-          `Website.Astro "${ctx.id}" exports Workflow classes ` +
-          `(${wfClasses.join(", ")}), which the Astro entry-takeover ` +
-          "wrapper does not deliver yet — only Durable Object exports and " +
-          "non-fetch handlers are. Move the Workflow classes to a " +
-          "dedicated Cloudflare.Worker and bind it to the site.",
-      }),
-    );
-  }
-  return Effect.succeed({ doClasses: doClasses.sort() });
+  return Effect.succeed({
+    doClasses: doClasses.sort(),
+    workflowClasses: wfClasses.sort(),
+  });
 };
 
 /** Resolve the effect-wrapper options for the target from the descriptor + ctx. */
 const resolveEffectOptions = (
   effect: AstroSourceOptions["effect"],
   doClasses: Array<string>,
+  workflowClasses: Array<string>,
 ): ResolvedEffectOptions | undefined =>
   effect === undefined
     ? undefined
@@ -909,6 +904,7 @@ const resolveEffectOptions = (
         mainPath: normalizeMainPath(effect.mainPath),
         routes: [...effect.routes],
         doClasses,
+        workflowClasses,
       };
 
 /** Extract the asset-routing config from raw `props.assets` (drop non-config keys). */
@@ -974,6 +970,7 @@ export interface AstroBuildChildConfig {
         readonly mainPath: string;
         readonly routes: Array<string>;
         readonly doClasses: Array<string>;
+        readonly workflowClasses?: Array<string> | undefined;
       }
     | undefined;
 }
@@ -1047,8 +1044,12 @@ const makeAstroSourceProvider = (
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const rootDir = yield* resolveRoot;
-        const { doClasses } = yield* entryClassExports(ctx);
-        const effect = resolveEffectOptions(options.effect, doClasses);
+        const { doClasses, workflowClasses } = yield* entryClassExports(ctx);
+        const effect = resolveEffectOptions(
+          options.effect,
+          doClasses,
+          workflowClasses,
+        );
         const output = yield* runBuildChild({
           module: import.meta.url,
           rootDir,
@@ -1128,12 +1129,12 @@ const makeAstroSourceProvider = (
         // it at plan time, so the error surfaces before any deploy — and
         // fold the deliverable DO classes into the input salt so a
         // DO-class change regenerates the entry wrapper.
-        const { doClasses } = yield* entryClassExports(ctx);
+        const { doClasses, workflowClasses } = yield* entryClassExports(ctx);
         const { hash, workspaces } = yield* hashAstroInput(
           rootDir,
           options.memo,
           Effect.succeed(previous?.additionalWorkspaces ?? []),
-          resolveEffectOptions(options.effect, doClasses),
+          resolveEffectOptions(options.effect, doClasses, workflowClasses),
         );
         return { input: hash, additionalWorkspaces: workspaces };
       }),
@@ -1141,7 +1142,7 @@ const makeAstroSourceProvider = (
     dev: (ctx) =>
       Effect.gen(function* () {
         const rootDir = yield* resolveRoot;
-        const { doClasses } = yield* entryClassExports(ctx);
+        const { doClasses, workflowClasses } = yield* entryClassExports(ctx);
         yield* applyWorkerEnvToProcess(ctx.env);
         const queueConsumers = yield* ctx.worker.queueConsumers;
         const astro = yield* framework(
@@ -1159,7 +1160,7 @@ const makeAstroSourceProvider = (
             },
             context: ctx.runtimeContext,
           },
-          resolveEffectOptions(options.effect, doClasses),
+          resolveEffectOptions(options.effect, doClasses, workflowClasses),
         );
         const server = yield* astro
           .dev({ root: rootDir, port: 0 })

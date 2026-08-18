@@ -79,6 +79,7 @@ export interface AstroCloudflareConfig {
         readonly mainPath: string;
         readonly routes: ReadonlyArray<string>;
         readonly doClasses?: ReadonlyArray<string> | undefined;
+        readonly workflowClasses?: ReadonlyArray<string> | undefined;
       }
     | undefined;
 }

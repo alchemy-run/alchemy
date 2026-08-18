@@ -177,19 +177,36 @@ export const Counter = site.exports.Counter;
 export const ReportWorkflow = site.exports.ReportWorkflow;
 ```
 
-Tier B (glue string, `main_module` of the multi-module upload):
+Tier B (AS IMPLEMENTED — better than the originally-designed glue+manifest
+upload): alchemy's framework targets own their adapters' final bundle (the
+in-memory kit adapter's worker shim, the OpenNext artifact takeover,
+nitro's entry takeover, Astro's vendored-entry takeover), so the wrapper is
+generated INSIDE our own pipeline and bundled in ONE rolldown graph with
+the framework output and the backend — single alchemy copy, no split-brain
+runtime, and the framework's artifact is never inspected to decide
+anything. The wrapper is `makeWebsiteEntryExports`: the framework's fetch
+(with the user's hook mount inside) grafted VERBATIM, plus the bridge's
+non-fetch dispatch and the DO/Workflow class exports:
 
 ```js
-import framework from "./framework/_worker.js";   // adapter artifact, byte-verbatim
-import { site } from "./platform.mjs";            // the ONE thing alchemy bundles
-export default { ...framework.default, ...site.platform };
-export * from "./framework/_worker.js";           // OpenNext only: its internal DOs
-export const Counter = site.exports.Counter;
-export const ReportWorkflow = site.exports.ReportWorkflow;
+// e.g. kit's WorkerShim effect arm (Next/Nuxt/Astro emit the same shape)
+export default makeWebsiteEntryExports(WorkerEntrypoint, {
+  site: Site,
+  fetch: (request, env, ctx) => kit_handler.fetch(request, env, ctx),
+});
+const __do = DurableObjectBridge(DurableObject, { site: Site });
+export class Counter extends __do("Counter") {}
+const __wf = WorkflowBridge(WorkflowEntrypoint, { site: Site });
+export class ReportWorkflow extends __wf("ReportWorkflow") {}
 ```
 
-AWS (zip member; ships unbundled — `node_modules` resolution gives the
-framework handler and this wrapper the same alchemy instance):
+(The glue-string + verbatim multi-module-upload design remains the
+fallback for a future adapter whose pipeline we genuinely cannot own —
+none of the current six needs it.)
+
+AWS (phase 4, planned; zip member shipping unbundled — `node_modules`
+resolution gives the framework handler and this wrapper the same alchemy
+instance):
 
 ```js
 import { handler as framework } from "./framework/index.mjs"; // or entry.default.fetch (owned entry)
@@ -200,36 +217,16 @@ const site = mount(Site);
 export const handler = toLambdaHandler({ fetch: framework, ...site.platform });
 ```
 
-Degenerate cases: no registrations ⇒ tier A entry is a re-export line;
-tier B generates nothing (artifact uploaded directly as main); AWS wrapper
-still owns the streamify wrap.
-
-### Multi-module upload mechanics (tier B)
-
-A Worker deploy is a multipart PUT of named modules. The glue references
-manifest **names**, not paths:
-
-```
-metadata: { main_module: "entry.mjs", bindings: […], migrations: {…} }
-"entry.mjs"             ← generated string
-"platform.mjs"          ← rolldown output (backend + bridge; alchemy's only bundle pass)
-"framework/_worker.js"  ← adapter artifact bytes
-"framework/chunks/*"    ← its chunks under relative names (walk, don't parse)
-```
-
-Relative imports resolve against the importer's module name, so the
-artifact's internal chunk graph (incl. dynamic `import()`, `.wasm` parts)
-works unmodified. The framework's entry stays the root of *its* graph;
-only `main_module` changes hands.
+Degenerate cases: no registrations ⇒ the wrapper carries only the grafted
+fetch; AWS wrapper still owns the streamify wrap.
 
 ### Runtime copies
 
-Tier A: one copy of everything. Tier B: HTTP runs the framework-inlined
-copy (the mount rode the adapter's build); queue/DO/Workflow run
-`platform.mjs`'s copy. **No shared in-memory state across that line** —
-documented semantics; shared state belongs in DO/KV/D1, which both copies
-bind identically. (`createClient` in server components already created
-this situation; it is not new.) AWS: always one copy via `node_modules`.
+One copy of everything, both tiers — tier B's single rolldown graph
+deduplicates the backend's alchemy imports with the wrapper's. (The only
+double-copy that ever existed was inherent to `createClient` inside a
+framework bundle that ALSO shipped a separate alchemy bundle; owning the
+final bundle removed it.) AWS: one copy via `node_modules`.
 
 ## Dev
 
@@ -237,15 +234,20 @@ this situation; it is not new.) AWS: always one copy via `node_modules`.
   plugin — the same virtual entry, same graph, inside local workerd.
   Custom entry logic, DOs, Workflows, queue delivery, HMR: one process,
   dev ≡ prod.
-- **Tier B:** the framework's own dev server (Node) runs HTTP — the mount
-  is app code, so hooks/route files run natively with full HMR;
-  `site.fetch(request)` settles inline. Platform code runs in the existing
-  local workerd **sidecar**: a generated sidecar worker (workerd config is
-  the same named-module manifest concept as the upload) hosts
-  `site.platform` + `site.exports` from the watch-built platform bundle.
-  DO/queue bindings from the dev process reach it over the local-binding
-  RPC (same mechanism as KV/D1 today). Dev mirrors prod's two-copy
-  topology exactly.
+- **Tier B (AS IMPLEMENTED for kit):** the framework's own dev server
+  runs HTTP — the mount is app code, so hooks/route files run natively
+  with full HMR; `site.fetch(request)` settles inline (no ctx in Node).
+  The platform half is HOSTED IN THE DEV PLATFORM PROXY'S workerd
+  (`hostedPlatform`): a rolldown-bundled platform entry (backend +
+  DO/Workflow bridge classes + queue/scheduled delegation) becomes the
+  proxy worker's modules, Workflow classes are re-exported as named
+  entrypoints for the local engine, and Workflow `Instance` values cross
+  the Node boundary as `{$: "workflow-instance", id}` facades whose
+  methods chain through the binding's idempotent `get(id)`. The dev
+  child's `process.env` carries the stack markers (the env ladder's
+  fallback — what the value-form `createClient` resolves). Known
+  limitation (tracked): Stream-returning DO RPC consumed from the Node
+  side arrives empty (no nested-stream transport in the proxy).
 - **AWS:** the framework dev server + the same sidecar model; the bridge
   runs in Node with ambient credentials (`Alchemy.remote()` resources hit
   real cloud, unchanged).
