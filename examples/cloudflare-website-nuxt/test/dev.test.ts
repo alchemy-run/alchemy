@@ -85,14 +85,13 @@ test(
     const b = ((yield* second.json) as { next: number }).next;
     expect(b).toBe(a + 1);
 
-    // KNOWN LIMITATION (tier B dev): a Stream-returning DO RPC consumed
-    // from the framework's Node dev process crosses the platform proxy,
-    // which has no capability transport for nested streams (JSON + chain
-    // calls only). On SvelteKit dev the body arrives empty (status 200);
-    // on Nuxt dev the serialization error escapes nitro's h3 handling and
-    // KILLS the dev SSR worker, so /api/do/ticks is deliberately NOT
-    // exercised here. Deployed (live leg) and tier A dev (all-workerd)
-    // stream correctly; tracked for a proxy stream channel.
+    // Full stream assertion: nested streams cross the platform proxy via
+    // the one-shot retained-stream channel (PATH_STREAM pickup) — this
+    // was previously the crash case (the serialize error escaped h3 and
+    // killed the dev SSR worker).
+    const ticks = yield* getWhenReady(`${base}/api/do/ticks?n=3`);
+    expect(ticks.status).toBe(200);
+    expect(yield* ticks.text).toBe("0\n1\n2\n");
   }),
   { timeout: 120_000 },
 );
