@@ -339,29 +339,11 @@
       "worker": "./src/Cloudflare/Workers/ServeWorkerEntry.ts",
       "import": "./lib/Cloudflare/Workers/ServeWorkerEntry.js"
     },
-    "./SvelteKit": {
-      "types": "./lib/Serve/SvelteKit.d.ts",
-      "bun": "./src/Serve/SvelteKit.ts",
-      "worker": "./src/Serve/SvelteKit.ts",
-      "import": "./lib/Serve/SvelteKit.js"
-    },
-    "./Astro": {
-      "types": "./lib/Serve/Astro.d.ts",
-      "bun": "./src/Serve/Astro.ts",
-      "worker": "./src/Serve/Astro.ts",
-      "import": "./lib/Serve/Astro.js"
-    },
     "./Nitro": {
       "types": "./lib/Serve/Nitro.d.ts",
       "bun": "./src/Serve/Nitro.ts",
       "worker": "./src/Serve/Nitro.ts",
       "import": "./lib/Serve/Nitro.js"
-    },
-    "./Next": {
-      "types": "./lib/Serve/Next.d.ts",
-      "bun": "./src/Serve/Next.ts",
-      "worker": "./src/Serve/Next.ts",
-      "import": "./lib/Serve/Next.js"
     },
     "./Stack": {
       "types": "./lib/Stack.d.ts",

@@ -19,9 +19,9 @@
  */
 
 import {
-  toHandler as makeHandle,
+  mount as makeHandle,
   type AnyWebsiteClass,
-  type MakeOptions,
+  type MountOptions,
 } from "./Serve.ts";
 
 /** Defeats static resolution of the specifier by foreign bundlers. */
@@ -126,7 +126,7 @@ const toWebRequest = async (
  * export default toHandler(Site);
  * ```
  */
-export const toHandler = (site: AnyWebsiteClass, options?: MakeOptions) => {
+export const toHandler = (site: AnyWebsiteClass, options?: MountOptions) => {
   const handle = makeHandle(site, options);
   const handler = async (
     event: NitroEventLike,

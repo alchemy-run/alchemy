@@ -39,10 +39,6 @@ import * as NodeHttp from "node:http";
 import { createRequire } from "node:module";
 import type * as NodeNet from "node:net";
 import type * as NodeVm from "node:vm";
-import {
-  createEffectDispatch,
-  type EffectDispatchHandle,
-} from "./EffectDispatch.ts";
 
 /** The symbol OpenNext uses to store/read the Cloudflare context. Must stay
  * in sync with `@opennextjs/cloudflare`'s `cloudflareContextSymbol`. */
@@ -370,40 +366,13 @@ export const start = Effect.fn("Nextjs.DevServer.start")(function* (
   );
   const nextHandler = app.getRequestHandler();
 
-  // 5. Effectful front dispatch (zero-setup hmr): the Serve bridge answers
-  //    `server.routes` requests; everything else falls
-  //    through to Next. Constructed AFTER the context was planted (the
-  //    bridge's env ladder reads the getCloudflareContext global) and
-  //    without a watcher — this process may be bun-hosted, where the
-  //    cache-busted re-import that powers the AWS child's effect-handler
-  //    hot reload doesn't work (bun ignores import query strings). Site-
-  //    module edits need a dev-server restart in hmr mode; `preview` mode
-  //    rebuilds the artifact and remains the parity mode.
-  if (options.effect !== undefined) {
-    const dispatch: EffectDispatchHandle = yield* Effect.tryPromise({
-      try: () =>
-        createEffectDispatch({
-          main: options.effect!.mainPath,
-          routes: options.effect!.routes,
-          serveModule: options.effect!.serveModule,
-          watch: false,
-        }),
-      catch: fail(
-        "Failed to construct the effect dispatch for next dev (is the site module importable?)",
-      ),
-    });
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => dispatch.close().catch(() => undefined)),
-    );
-    http.setHandler(async (req, res) => {
-      if (await dispatch.dispatch(req, res)) {
-        return;
-      }
-      return nextHandler(req, res);
-    });
-  } else {
-    http.setHandler(nextHandler);
-  }
+  // 5. HTTP dispatch is Next's own handler wholesale: the user's
+  //    route-file mount (app/api/[[...slug]]/route.ts) runs natively
+  //    inside it — the mount design has no front dispatch (the old
+  //    EffectDispatch middleware would have bypassed the mount's gates).
+  //    The getCloudflareContext-shaped global planted above is what the
+  //    mount's env ladder (and the value-form createClient) resolve.
+  http.setHandler(nextHandler);
 
   const urlHost =
     hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname;

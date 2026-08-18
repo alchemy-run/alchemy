@@ -16,24 +16,11 @@
  * ```
  */
 
-import * as Data from "effect/Data";
 import { markRuntime, type ServeOptions, type SiteRuntime } from "./Bridge.ts";
-import { type SERVE_MOUNT_MARKER } from "./constants.ts";
-
-// The explicit-mount marker, written as a literal (type-checked against
-// `constants.ts`) so the exact byte sequence provably survives bundling and
-// minification into any framework server bundle that imports the PUBLIC
-// `alchemy/Serve` surface. Framework integrations' stand-down scans grep
-// built output for it to detect an explicit mount. Deliberately NOT the
-// bridge's `SERVE_SENTINEL`: the bridge also rides the value-form
-// `createClient` graph, so its literal appears in every effectful website's
-// server bundle — this module only rides explicit mounts.
-const MOUNT_MARKER: typeof SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
-(globalThis as Record<string, any>)[MOUNT_MARKER] = true;
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 
 export type { ServeOptions } from "./Bridge.ts";
-export { SERVE_MOUNT_MARKER, SERVE_SENTINEL } from "./constants.ts";
+export { SERVE_SENTINEL } from "./constants.ts";
 export { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 
 import { bridgeOf, type ServeBridge } from "./Bridge.ts";
@@ -98,9 +85,6 @@ export interface MountOptions extends ServeOptions {
    */
   routes?: readonly string[];
 }
-
-/** @deprecated Renamed {@link MountOptions}. */
-export type MakeOptions = MountOptions;
 
 export interface ServeHandle {
   /**
@@ -250,9 +234,6 @@ export const mount = <S extends AnyWebsiteClass>(
   };
 };
 
-/** @deprecated Renamed {@link mount}. */
-export const toHandler = mount;
-
 /**
  * Tear down the runtime built for a Website class by a previous
  * {@link mount} handle: the class's cloud bridge closes its
@@ -268,26 +249,4 @@ export const dispose = async <S extends AnyWebsiteClass>(
 ): Promise<void> => {
   const bridge = bridgeOf(site) ?? (await fallbackBridge());
   return bridge.dispose(site);
-};
-
-export class ServeExportsUnavailableError extends Data.TaggedError(
-  "ServeExportsUnavailableError",
-)<{
-  message: string;
-}> {}
-
-/**
- * Full exports surface (fetch/queue/scheduled + DO bridge classes) for
- * user-authored custom entries. Ships in a later phase — until then the
- * construct-generated wrapper (auto tier) delivers non-fetch handlers, and
- * {@link mount} delivers fetch on explicit mounts.
- */
-export const exports = <S extends AnyWebsiteClass>(_site: S): never => {
-  throw new ServeExportsUnavailableError({
-    message:
-      "Serve.exports is not available yet: the full exports surface for " +
-      "custom entries (queue/scheduled/DO classes) ships in a later phase. " +
-      "Use the construct-generated wrapper (auto tier) for non-fetch " +
-      "handlers, or mount(Site) for fetch-only delivery.",
-  });
 };

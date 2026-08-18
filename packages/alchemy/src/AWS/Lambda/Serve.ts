@@ -48,7 +48,7 @@ import {
 } from "./HttpServer.ts";
 import { lambdaServeBridge } from "./ServeBridge.ts";
 
-export { dispose, mount, toHandler } from "../../Serve/Serve.ts";
+export { dispose, mount } from "../../Serve/Serve.ts";
 export type {
   AnyWebsiteClass,
   MountOptions,

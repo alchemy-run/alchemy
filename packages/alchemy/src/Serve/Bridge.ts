@@ -111,14 +111,10 @@ export interface SiteFetchOptions {
 
 /**
  * A cloud-specific serve bridge a Website class carries under
- * `SERVE_BRIDGE_KEY`: the runtime half `Serve.toHandler` dispatches matched
+ * `SERVE_BRIDGE_KEY`: the runtime half `mount` dispatches matched
  * requests to. Lives HERE (not `Serve.ts`) so graphs that only need
- * dispatch — the value-form `createClient` (`Client/Server.ts`) — never
- * pull in the mount-marker module: the `__ALCHEMY_SERVE_MOUNT_v1__`
- * literal must appear in a server bundle ONLY on an explicit mount, or
- * the framework generators' stand-down scan reads a false mount and
- * skips wrapper injection (deploying a bare framework handler with no
- * queue/scheduled exports).
+ * dispatch — the value-form `createClient` (`Client/Server.ts`) — stay
+ * on the leanest slice of the Serve graph.
  */
 export interface ServeBridge {
   match(

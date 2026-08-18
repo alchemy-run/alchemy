@@ -69,7 +69,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
             },
           },
         };
-        const handle = Serve.toHandler(site as any);
+        const handle = Serve.mount(site as any);
         const response = await handle.match(new Request("http://x/api/a"));
         expect(await response!.text()).toBe("from-shell");
         expect(calls).toHaveLength(1);
@@ -87,7 +87,7 @@ describe.concurrent("AWS serve shell dispatch", () => {
           { main: import.meta.url },
           Effect.succeed(okFetch),
         ) {}
-        const handle = Serve.toHandler(DeclineSite as any, {
+        const handle = Serve.mount(DeclineSite as any, {
           // No ALCHEMY_STACK_NAME: the four-worlds guard must decline
           // without building any layers (a `next build` prerender world).
           env: { SOME_VAR: "1" },
