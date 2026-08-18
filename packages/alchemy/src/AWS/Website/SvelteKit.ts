@@ -176,9 +176,10 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
  * );
  * ```
- * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
- * from the same module. Delivery engages on deploy — `alchemy dev` does
- * not dispatch queue events locally.
+ * Event handlers dispatch on the site's OWN server Lambda (the
+ * single-handler entry, Serve/DESIGN.md): the event-source mapping and
+ * its IAM target the server function itself — no sibling deploys. Under
+ * `alchemy dev` the queue and consumer run in the local Lambda emulator.
  */
 export const SvelteKit: {
   <Self>(): {
@@ -250,14 +251,16 @@ const svelteKitConfig = (props: SvelteKitProps): FrameworkSiteConfig => ({
   framework: SVELTEKIT_FRAMEWORK_SPECIFIER,
   target: SVELTEKIT_AWS_TARGET_SPECIFIER,
   options: props.kit ? { kit: props.kit } : undefined,
-  // Auto-inject (wrapper) tier: the AWS deploy target's generated Lambda
-  // entry composes the effect fetch ahead of kit's `respond` (inside the
-  // one `streamifyResponse` wrap), and kit's dev server mounts the effect
-  // dev middleware — both driven by this `effect` build option. Only
-  // consulted on the impl arms; plain sites are untouched.
-  effectOptions: ({ mainPath, routes }) => ({
-    effect: { main: mainPath, routes: [...routes] },
+  // Single-handler (mount) delivery: the AWS deploy target's generated
+  // Lambda entry is `makeFrameworkFunctionHandler({ site, fetch })` — kit's
+  // `respond` (with the user's `hooks.server.ts` mount inside it) serves
+  // ALL HTTP verbatim, and the program's queue/schedule listeners dispatch
+  // on the SAME function. Only consulted on the impl arms; plain sites are
+  // untouched.
+  effectOptions: ({ mainPath }) => ({
+    effect: { main: mainPath },
   }),
+  singleHandler: true,
 });
 
 const makeSvelteKit = (

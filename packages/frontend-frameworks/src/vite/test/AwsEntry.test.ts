@@ -16,7 +16,7 @@ describe("generateLambdaEntry", () => {
     );
     expect(entry.match(/toLambdaHandler\(/g)).toHaveLength(1);
     // Plain arm carries no alchemy imports.
-    expect(entry).not.toContain("makeWebsiteHandlers");
+    expect(entry).not.toContain("makeFrameworkFunctionHandler");
     expect(entry).not.toContain("alchemy/AWS");
   });
 
@@ -46,42 +46,30 @@ describe("generateLambdaEntry", () => {
     expect(entry).not.toContain("toLambdaHandler(");
   });
 
-  it("composes site.match ?? frameworkFetch inside the ONE streamify wrap", () => {
+  it("effect arm is additive-only: the framework fetch grafts verbatim", () => {
     const entry = generateLambdaEntry({
       serverImport: "./server.js",
       streaming: true,
       effect: {
         main: "/abs/project/src/site.ts",
-        routes: ["/api/*"],
       },
     });
     expect(entry).toContain(
-      `import { lambdaServeBridge } from 'alchemy/AWS/Lambda/ServeBridge';`,
+      `import { makeFrameworkFunctionHandler } from 'alchemy/AWS/Serve';`,
     );
     expect(entry).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,
     );
-    expect(entry).toContain(`routes: ["/api/*"]`);
-    // Exactly ONE streamify wrap, composed at the fetch layer.
-    expect(entry.match(/toLambdaHandler\(/g)).toHaveLength(1);
     expect(entry).toContain(
-      "export const handler = toLambdaHandler(async (request) =>",
+      "export const handler = await makeFrameworkFunctionHandler({",
     );
-    expect(entry).toContain(
-      "(await __alchemy_handlers.match(request)) ?? __alchemy_fetch(request));",
-    );
-  });
-
-  it("effect arm omits routes when unset; buffered wrap composes identically", () => {
-    const entry = generateLambdaEntry({
-      serverImport: "./s.js",
-      streaming: false,
-      effect: { main: "/abs/site.ts" },
-    });
-    expect(entry).not.toContain("routes:");
-    expect(entry).toContain(
-      "export const handler = toBufferedLambdaHandler(async (request) =>",
-    );
+    expect(entry).toContain("fetch: __alchemy_fetch,");
+    // No routes gate, no match/fallthrough composition, no second wrap —
+    // the wrapper owns the one streamifyResponse internally.
+    expect(entry).not.toContain("routes");
+    expect(entry).not.toContain("match(");
+    expect(entry).not.toContain("toLambdaHandler(");
+    expect(entry).not.toContain("lambdaServeBridge");
   });
 
   it("honors the adapterModule test seam", () => {

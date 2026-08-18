@@ -36,7 +36,7 @@ export const Visits = DynamoDB.Table("AstroEffectVisits", {
  * API. The AWS deploy target pre-resolves `virtual:astro:fetchable` to a
  * generated wrapper importing this module by absolute path — the effect
  * fetch owns `server.routes` (via the AWS serve shell,
- * `makeWebsiteHandlers`); Astro's own pipeline serves every path outside
+ * the mount); Astro's own pipeline serves every path outside
  * them. Exercises:
  *
  * - the DynamoDB capability bindings collected at plan (table-name env

@@ -34,11 +34,7 @@ import * as NodePath from "node:path";
 import * as Path from "effect/Path";
 import { rolldown } from "rolldown";
 import { runBuildChild } from "../core/BuildChild.ts";
-import {
-  effectMainPath,
-  scanForExplicitServeMount,
-  type ViteEffectOptions,
-} from "./effect.ts";
+import { effectMainPath } from "./effect.ts";
 import { make, type ViteTarget, type ViteTargetConfig } from "./Vite.ts";
 
 const fail = (message: string, cause?: unknown) =>
@@ -73,16 +69,14 @@ export interface ViteAwsTargetConfig extends ViteTargetConfig {
 export const SERVER_ENTRY_NAME = "lambda/index.mjs";
 
 /**
- * The effect arm of the generated Lambda entry — collect-only *wrapper*
- * delivery for an effectful `AWS.Website.Vite` (SSR arm). Plain data
- * threaded from alchemy's composite through the build options
- * (`options.effect`).
+ * The effect arm of the generated Lambda entry — single-handler (mount)
+ * delivery for an effectful `AWS.Website.Vite` (SSR arm), Serve/DESIGN.md
+ * AWS phase 4. Plain data threaded from alchemy's composite through the
+ * build options (`options.effect`).
  */
 export interface LambdaEntryEffectOptions {
   /** Absolute filesystem path of the user's site module (the impl anchor). */
   readonly main: string;
-  /** Path globs the Effect fetch owns. @default ["/api/*"] */
-  readonly routes?: ReadonlyArray<string> | undefined;
 }
 
 /**
@@ -97,17 +91,15 @@ export interface LambdaEntryEffectOptions {
  * Start's `createServerEntry`), a bare handler function, or a named
  * `fetch` export.
  *
- * With `effect` set, the ONE `toLambdaHandler` wrap composes
- * `site.match(request) ?? frameworkFetch(request)` — effect dispatch
- * happens at the fetch layer BEFORE the single `awslambda.streamifyResponse`
- * wrap, so streamed effect bodies ride the exact same streaming pipe as
- * the framework's own responses. `lambdaServeBridge.handlers` (alchemy's AWS
- * serve shell) owns the routes gate (strict route ownership: inside the
- * routes the effect fetch's answer — 404s included — is final; `match`
- * resolves `undefined` only for paths outside the routes), the
- * four-worlds env guard, and the instance-lifetime layer build; it also
- * embeds the serve sentinel, so the wiring handshake holds for any bundle
- * produced from this entry.
+ * With `effect` set (an effectful `AWS.Website.Vite`), the entry is
+ * ADDITIVE-ONLY (Serve/DESIGN.md): the framework's fetch — with the user's
+ * `mount(Site)` inside it (TanStack's `src/server.ts` server entry) —
+ * serves ALL HTTP verbatim, and `makeFrameworkFunctionHandler` from
+ * `alchemy/AWS/Serve` contributes only what the framework handler cannot:
+ * the program's non-fetch listeners (queue consumers, schedules)
+ * dispatched on the SAME function, inside the one
+ * `awslambda.streamifyResponse` wrap. HTTP dispatch order, gates, and
+ * effect routing are the mount's code, never generated.
  */
 export const generateLambdaEntry = (options: {
   /** Import specifier of the framework's built server entry chunk. */
@@ -123,33 +115,26 @@ export const generateLambdaEntry = (options: {
   const adapterModule =
     options.adapterModule ?? "@alchemy.run/frontend-frameworks/aws-lambda";
   const effect = options.effect;
-  const effectImports =
+  const imports =
     effect !== undefined
-      ? `import { lambdaServeBridge } from 'alchemy/AWS/Lambda/ServeBridge';\n` +
+      ? `import { makeFrameworkFunctionHandler } from 'alchemy/AWS/Serve';\n` +
         `import __alchemy_site from ${JSON.stringify(effect.main)};\n`
-      : "";
+      : `import { ${wrap} } from ${JSON.stringify(adapterModule)};\n`;
   const exports =
     effect !== undefined
-      ? `// Effectful Website wrapper (alchemy auto-inject tier): the Effect
-// fetch owns the routes below and dispatches BEFORE the framework's
-// handler — composed at the fetch layer, ahead of the single ${wrap}
-// wrap, so streamed effect bodies ride the same streaming pipe as the
-// framework's. Only paths outside the routes fall through.
-const __alchemy_handlers = lambdaServeBridge.handlers({
-  site: __alchemy_site,${
-    effect.routes !== undefined
-      ? `\n  routes: ${JSON.stringify(effect.routes)},`
-      : ""
-  }
-});
-
-export const handler = ${wrap}(async (request) =>
-  (await __alchemy_handlers.match(request)) ?? __alchemy_fetch(request));`
+      ? `// Effectful Website (single-handler, additive): the framework's
+// fetch — with the user's mount inside it — serves ALL HTTP verbatim;
+// the wrapper adds the program's non-fetch listener dispatch (queue
+// consumers, schedules) on the same function, inside the one
+// streamifyResponse wrap.
+export const handler = await makeFrameworkFunctionHandler({
+  site: __alchemy_site,
+  fetch: __alchemy_fetch,
+});`
       : `export const handler = ${wrap}(__alchemy_fetch);`;
   return /* js */ `
 import * as __alchemy_server from ${JSON.stringify(options.serverImport)};
-import { ${wrap} } from ${JSON.stringify(adapterModule)};
-${effectImports}
+${imports}
 // Normalize the framework entry's export to a plain fetch handler:
 // a fetch-shaped default export ({ fetch }), a bare handler function,
 // or a named \`fetch\` export.
@@ -214,14 +199,10 @@ const makeAwsFinishTarget = (config: ViteAwsTargetConfig = {}): ViteTarget =>
         }
         const entry = context.entry;
 
-        // Effectful wrapper delivery: stand down when the framework's
-        // built server graph already mounts alchemy/Serve explicitly (the
-        // explicit tier wins — never two bridges on one Lambda).
-        const effect =
-          config.effect !== undefined &&
-          scanForExplicitServeMount(NodePath.dirname(entry))
-            ? undefined
-            : config.effect;
+        // Effectful single-handler delivery (Serve/DESIGN.md): the entry
+        // is additive-only — no stand-down scan, the user's mount rides
+        // the framework's own fetch and the wrapper never gates it.
+        const effect = config.effect;
         const effectActive = effect !== undefined;
 
         // The generated entry lives NEXT to the built server chunk so its
@@ -240,10 +221,7 @@ const makeAwsFinishTarget = (config: ViteAwsTargetConfig = {}): ViteTarget =>
               adapterModule: config.adapterModule,
               effect:
                 effect !== undefined
-                  ? {
-                      main: effectMainPath(effect.main),
-                      routes: effect.routes,
-                    }
+                  ? { main: effectMainPath(effect.main) }
                   : undefined,
             }),
           )

@@ -1,50 +1,27 @@
 /**
- * The effectful-Website delivery seam for Astro (DESIGN §6.2c): an
- * `enforce: "pre"` vite plugin that pre-resolves Astro 7's
- * `virtual:astro:fetchable` (the `fetchFile` advanced-routing seam — astro
- * core delegates every `App.render` through it, prod and dev, on every
- * adapter) to a generated wrapper module (the Cloudflare shape shown; the
- * `"node"`/AWS arm calls `lambdaServeBridge.handlers` from
- * `alchemy/AWS/Lambda/ServeBridge` instead — see `platform` below):
+ * Environment plumbing for effectful Astro sites (Serve/DESIGN.md — the
+ * mount design): EXPLICIT MOUNTS ONLY. The user's fetch file
+ * (`src/fetch.ts` by default) IS the fetchable — their mount composes
+ * `site.fetch(request) ?? astro(new FetchState(request))` and astro's own
+ * fetchable plugin resolves the file directly, prod and dev, on every
+ * adapter. Nothing is generated, nothing is sniffed, and no routes are
+ * baked anywhere.
  *
- * ```js
- * import { FetchState, astro } from "astro/fetch";
- * import { toHandler } from "alchemy/Astro";
- * import Site from "/abs/path/to/site.ts";
- * const site = toHandler(Site, { routes: ["/api/*"] });
- * export default {
- *   async fetch(request) {
- *     return (await site.fetch(request)) ?? astro(new FetchState(request));
- *   },
- * };
- * ```
+ * What remains here supports that mount:
  *
- * Strict route ownership: inside `routes` the Effect fetch is
- * authoritative (a `RouteNotFound` failure renders as the effect's own
- * 404), and Astro's whole pipeline serves everything outside them. When
- * the user authored their own fetch file (`src/fetch.ts` by default):
- *
- * - if it already mounts `alchemy/Serve` (the explicit tier), the plugin
- *   **stands down** — astro's own fetchable plugin resolves the user file
- *   directly and no double bridging occurs;
- * - otherwise the user fetchable is composed as the fallback in place of
- *   `astro(state)` (the user file keeps full control of the astro
- *   pipeline).
- *
- * The plugin applies to the `ssr` (prod + dev-in-workerd) and `astro`
- * (dev) environments only — deliberately NOT to `prerender`: the
- * build-time prerender worker keeps astro's default fetchable, so the
- * effect module graph never loads there and prerendering is a guaranteed
- * no-op for the effect tier (belt and braces on top of the bridge's
- * env-marker guard, which declines requests in any world without
- * `ALCHEMY_STACK_NAME`).
+ * - a config plugin that stamps `globalThis.__ALCHEMY_RUNTIME__` into the
+ *   server environments (folds plan-only `host.bind` guards at build
+ *   time) and excludes the alchemy graph from the dep optimizer (the
+ *   mount's imports are discovered lazily otherwise, and a mid-request
+ *   re-optimize breaks the workerd module runner), plus the workerd node
+ *   stubs on Cloudflare;
+ * - a prerender passthrough that keeps the build-time prerender worker on
+ *   astro's default pipeline, so the mount's alchemy graph never
+ *   evaluates there.
  */
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import type * as vite from "vite";
 
 const FETCHABLE_MODULE_ID = "virtual:astro:fetchable";
-const RESOLVED_WRAPPER_ID = "\0virtual:alchemy:astro-fetchable";
 
 /**
  * An inert stub module: every named export is a callable Proxy that allows
@@ -167,77 +144,25 @@ const OPTIMIZE_EXCLUDES = [
   ...Object.keys(NODE_STUBS),
 ];
 
-/**
- * Marks a user fetch file that already mounts the alchemy runtime bridge
- * (the explicit tier): the serve sentinel literal, an `alchemy/Serve`
- * import specifier, or the AWS serve shell
- * (`alchemy/AWS/Lambda/ServeBridge`). Any one makes the wrapper
- * generator stand down.
- */
-const mountsServe = (source: string): boolean =>
-  source.includes("__ALCHEMY_SERVE_v1__") ||
-  /["']alchemy\/(?:Serve|Astro|AWS\/Lambda\/WebsiteHandlers)/.test(source);
-
 export interface EffectFetchablePluginOptions {
   /**
-   * The user's effect-program module (`props.main`) — an absolute path or
-   * `file://` URL. The generated wrapper re-imports its default export
-   * (the Website class) inside the framework's server graph.
-   */
-  readonly mainPath: string;
-  /** Path globs the effect fetch owns (the construct's `server.routes`). */
-  readonly routes: ReadonlyArray<string>;
-  /** Resolved `config.srcDir` (URL or path). */
-  readonly srcDir: URL | string;
-  /**
-   * Resolved `config.fetchFile` (`"fetch"` default; `null` = the user
-   * disabled the fetch-file seam, so there is never a user fetchable).
-   */
-  readonly fetchFile: string | null | undefined;
-  /**
-   * Where the wrapper runs, which decides how the alchemy env is sourced:
+   * Where the mount runs, which decides the config shape:
    *
-   * - `"cloudflare"` (the CF integration): the `ssr` environment always
-   *   executes in workerd (prod and dev), so the wrapper statically
-   *   imports `env` from `cloudflare:workers` (externalized by the
-   *   adapter) and hands it to the bridge — no reliance on the guarded
-   *   dynamic-import ladder inside the vite module runner. Applies to the
-   *   `ssr` environment only.
-   * - `"node"` (the AWS Lambda / Node target): the wrapper calls
-   *   `lambdaServeBridge.handlers` from `alchemy/AWS/Lambda/ServeBridge` —
-   *   the AWS serve shell (Credentials/Region layer recipe, Lambda
-   *   shutdown extension, sentinel literal) — which resolves the alchemy
-   *   env from `process.env` (the Lambda sandbox env, or the dev-server
-   *   process env `alchemy dev` lowered the packed binding values into).
-   *   Deliberately NOT `alchemy/Astro`: the Cloudflare-flavored
-   *   bridge would drag the whole `@distilled.cloud/cloudflare` graph
-   *   into every AWS server bundle. Applies to the `ssr` and `astro`
-   *   (dev) environments.
+   * - `"cloudflare"`: the server environments execute in workerd — the
+   *   workerd node stubs alias in, and the plugin applies to the `ssr`
+   *   environment only.
+   * - `"node"` (the AWS Lambda / Node target): applies to the `ssr` and
+   *   `astro` (dev) environments.
    *
    * @default "node"
    */
   readonly platform?: "cloudflare" | "node" | undefined;
 }
 
-/** Normalize a path or `file://` URL to a `/`-separated absolute path. */
-const toPath = (value: URL | string): string =>
-  (typeof value === "string"
-    ? value.startsWith("file:")
-      ? fileURLToPath(value)
-      : value
-    : fileURLToPath(value)
-  ).replaceAll("\\", "/");
-
 export const createEffectFetchablePlugin = (
   options: EffectFetchablePluginOptions,
 ): vite.Plugin[] => {
-  const mainPath = toPath(options.mainPath);
-  const srcDir = toPath(options.srcDir).replace(/\/?$/, "/");
-  const fetchFileDisabled = options.fetchFile === null;
-  const fetchFile = options.fetchFile ?? "fetch";
   const platform = options.platform ?? "node";
-  /** The user fetch file composed as the fallback (`undefined` = astro pipeline). */
-  let userFetchId: string | undefined;
   const environments = platform === "cloudflare" ? ["ssr"] : ["ssr", "astro"];
   // Config-time hooks live on their own GLOBAL plugin (no
   // `applyToEnvironment`, no `enforce`): environment instances don't exist
@@ -289,109 +214,6 @@ export const createEffectFetchablePlugin = (
       },
     },
   };
-  const fetchablePlugin: vite.Plugin = {
-    name: "@alchemy.run/frontend-frameworks/astro:effect-fetchable",
-    enforce: "pre",
-    applyToEnvironment(environment) {
-      return environments.includes(environment.name);
-    },
-    resolveId: {
-      filter: {
-        id: new RegExp(`^${FETCHABLE_MODULE_ID}$`),
-      },
-      async handler() {
-        userFetchId = undefined;
-        if (platform !== "node") {
-          // Cloudflare: EXPLICIT MOUNTS ONLY (Serve/DESIGN.md). The user's
-          // fetch file — when present — IS the fetchable (their mount
-          // composes `site.fetch(request) ?? astro(...)`); without one,
-          // astro's default fetchable serves and the effect program has no
-          // HTTP surface. Nothing is generated, nothing is sniffed — the
-          // entry plugin still delivers the non-fetch platform surface.
-          return null;
-        }
-        // AWS/node arm: unchanged until its own mount story lands
-        // (DESIGN.md phase 4).
-        if (!fetchFileDisabled) {
-          const resolved = await this.resolve(`${srcDir}${fetchFile}`);
-          if (resolved) {
-            const source = await readFile(
-              resolved.id.split("?")[0]!,
-              "utf-8",
-            ).catch(() => undefined);
-            if (source !== undefined && mountsServe(source)) {
-              // Explicit mount wins — let astro's own fetchable plugin
-              // resolve the user file directly (no double bridging).
-              return null;
-            }
-            userFetchId = resolved.id;
-          }
-        }
-        return RESOLVED_WRAPPER_ID;
-      },
-    },
-    load: {
-      filter: {
-        id: new RegExp(`^${RESOLVED_WRAPPER_ID.replace("\0", "\\0")}$`),
-      },
-      handler() {
-        const fallback =
-          userFetchId !== undefined
-            ? {
-                imports: `import userFetchable from ${JSON.stringify(userFetchId)};`,
-                call: "userFetchable.fetch(request)",
-              }
-            : {
-                imports: `import { FetchState, astro } from "astro/fetch";`,
-                call: "astro(new FetchState(request))",
-              };
-        if (platform === "node") {
-          // The AWS Lambda / Node arm: `lambdaServeBridge.handlers` is the AWS
-          // serve shell — Credentials.fromChain() / Region.fromEnv() layer
-          // recipe (the chain also resolves the developer's ambient
-          // profile under `alchemy dev`), the Lambda shutdown extension,
-          // and the wiring-handshake sentinel literal (so the deploy-time
-          // sentinel scan over the shipped `dist/server` passes). `match`
-          // resolves `undefined` only on decline (outside `routes`, or
-          // marker-less build worlds) and the wrapper falls through to
-          // Astro; inside the routes the effect's answer is final.
-          return {
-            code: [
-              `globalThis.__ALCHEMY_RUNTIME__ = true;`,
-              `import { lambdaServeBridge } from "alchemy/AWS/Lambda/ServeBridge";`,
-              fallback.imports,
-              `import Site from ${JSON.stringify(mainPath)};`,
-              `const site = lambdaServeBridge.handlers({ site: Site, routes: ${JSON.stringify(options.routes)} });`,
-              `export default {`,
-              `  async fetch(request) {`,
-              `    return (await site.match(request)) ?? (await ${fallback.call});`,
-              `  },`,
-              `};`,
-            ].join("\n"),
-          };
-        }
-        // On Cloudflare the `ssr` environment always executes in workerd
-        // (prod and dev-in-module-runner alike), so the wrapper hands the
-        // importable workerd env to the bridge directly instead of relying
-        // on the guarded dynamic-import ladder.
-        return {
-          code: [
-            `globalThis.__ALCHEMY_RUNTIME__ = true;`,
-            `import { toHandler } from "alchemy/Astro";`,
-            `import { env as __alchemyWorkerEnv } from "cloudflare:workers";`,
-            fallback.imports,
-            `import Site from ${JSON.stringify(mainPath)};`,
-            `const site = toHandler(Site, { routes: ${JSON.stringify(options.routes)}, env: __alchemyWorkerEnv });`,
-            `export default {`,
-            `  async fetch(request) {`,
-            `    return (await site.fetch(request)) ?? (await ${fallback.call});`,
-            `  },`,
-            `};`,
-          ].join("\n"),
-        };
-      },
-    },
-  };
   // PRERENDER exclusion for user mounts: astro core resolves `fetchFile`
   // (the user's src/fetch.ts) in EVERY environment, but the mount's
   // alchemy graph must never evaluate in the build-time prerender worker
@@ -431,5 +253,5 @@ export const createEffectFetchablePlugin = (
       },
     },
   };
-  return [configPlugin, prerenderPlugin, fetchablePlugin];
+  return [configPlugin, prerenderPlugin];
 };

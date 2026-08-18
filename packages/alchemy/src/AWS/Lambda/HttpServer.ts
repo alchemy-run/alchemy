@@ -167,14 +167,26 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   };
 };
 
-const functionUrlEventToWebRequest = (
+/**
+ * Convert a Function URL (payload v2) event into a web `Request` — the ONE
+ * home for this translation, shared by the effect HTTP listener
+ * ({@link makeFunctionHttpHandler}) and the framework-composite wrapper
+ * (`alchemy/AWS/Serve`). The URL host prefers `x-forwarded-host` (set by
+ * the CloudFront edge router) over the Function URL's own domain so
+ * server-side absolute URLs (redirects, canonical links) carry the
+ * viewer-facing host.
+ */
+export const functionUrlEventToWebRequest = (
   event: LambdaFunctionURLEvent,
 ): Request => {
   // `requestContext.http.protocol` is the HTTP version ("HTTP/1.1"), never a
   // URL scheme — without `x-forwarded-proto` (real Function URLs always set
   // it; local emulators may not) fall back to https.
   const protocol = event.headers["x-forwarded-proto"] ?? "https";
-  const host = event.headers.host ?? event.requestContext.domainName;
+  const host =
+    event.headers["x-forwarded-host"] ??
+    event.headers.host ??
+    event.requestContext.domainName;
   const url = `${protocol}://${host}${event.rawPath}${event.rawQueryString ? `?${event.rawQueryString}` : ""}`;
   const method = event.requestContext.http.method;
   const headers = new Headers();

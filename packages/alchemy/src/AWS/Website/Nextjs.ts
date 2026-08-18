@@ -1,7 +1,6 @@
 import type { ConfigError } from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { Input } from "../../Input.ts";
@@ -13,7 +12,6 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { effectClass } from "../../Util/effect.ts";
-import { initialCwd } from "../../Util/Node.ts";
 import type { Distribution } from "../CloudFront/Distribution.ts";
 import type { Invalidation } from "../CloudFront/Invalidation.ts";
 import { Table } from "../DynamoDB/Table.ts";
@@ -35,7 +33,6 @@ import {
   lambdaServeBridge,
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
-  deploySiblingHandlers,
   validateImplAnchor,
   type WebsiteServerOptions,
   type WebsiteShape,
@@ -356,9 +353,10 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
  * );
  * ```
- * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
- * from the same module. Delivery engages on deploy — `alchemy dev` does
- * not dispatch queue events locally.
+ * Event handlers dispatch on the site's OWN server Lambda (the
+ * single-handler entry, Serve/DESIGN.md): the event-source mapping and
+ * its IAM target the server function itself — no sibling deploys. Under
+ * `alchemy dev` the queue and consumer run in the local Lambda emulator.
  *
  * @section Mounting The Program Yourself
  * @example Catch-all route handler
@@ -535,49 +533,15 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
           })
         : props.server?.environment;
 
-    // Zero-setup effect delivery in dev: the framework module's dev child
-    // (the custom-server `next dev`) runs the Serve dispatch ahead of
-    // Next's handler — same strict-ownership gate as the deployed
-    // wrapper, so dev and deploy agree on route precedence.
-    // `serveModule` is THIS engine's own `alchemy/Serve` surface
-    // (`import.meta.resolve`), so the child's bridge and the backend
-    // module's bare `alchemy/*` imports share one module graph. The
-    // effect-module content hash is deliberately NOT part of these
-    // options (the dev restart surface): backend edits hot-reload inside
-    // the child (watch + cache-busted re-import), they don't restart
-    // `next dev`. `takeover: false` forces the explicit tier — the user's
-    // own `toHandler` mount, compiled by Next, serves instead.
-    const devEffect =
-      impl !== undefined &&
-      (props as EffectNextjsProps).server?.takeover !== false
-        ? yield* Effect.gen(function* () {
-            const path = yield* Path.Path;
-            const main = (props as EffectNextjsProps).main;
-            const mainPath = main.startsWith("file:")
-              ? yield* path.fromFileUrl(new URL(main)).pipe(Effect.orDie)
-              : path.resolve(initialCwd, main);
-            return {
-              effect: {
-                id,
-                main: mainPath,
-                routes: [...(routes ?? DEFAULT_SERVER_ROUTES)],
-                serveModule: import.meta.resolve(
-                  import.meta.url.endsWith(".ts")
-                    ? "../../Serve/Serve.ts"
-                    : "../../Serve/Serve.js",
-                  import.meta.url,
-                ),
-              },
-            };
-          })
-        : undefined;
-
+    // Mount-design dev (Serve/DESIGN.md): the user's route-file mount runs
+    // natively inside `next dev` — no front dispatch, no dev effect
+    // options. The stack markers + packed binding env lowered into the dev
+    // child's process env are what the mount's env ladder resolves.
     const build = yield* Server("Build", {
       framework: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       target: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       root: props.rootDir,
       env: devEnv as any,
-      options: devEffect,
       memo: props.memo,
       dev: props.dev,
     });
@@ -603,23 +567,26 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
     };
   }
 
-  // Effectful zero-setup delivery (the OpenNext wrapper override): the
-  // framework module derives an OpenNext config under
-  // `.alchemy/generated/<id>/` whose function-form wrapper composes the
-  // Effect fetch ahead of Next, inside the one streamify wrap. The effect
-  // inputs ride the build options (JSON-serializable; they participate in
-  // the Server memo hash, and `effectHash` folds the effect module's
-  // content in so effect edits rebuild). `takeover: false` forces the
-  // explicit tier; an explicit `alchemy/Serve` mount in the route tree
-  // makes the build-side generator stand down on its own.
+  // Effectful single-handler delivery (the OpenNext wrapper override,
+  // Serve/DESIGN.md): the framework module derives an OpenNext config
+  // under `.alchemy/generated/<id>/` whose function-form wrapper is
+  // ADDITIVE-ONLY — Next's handler (with the user's route-file mount
+  // inside) serves ALL HTTP through the stock streaming pipeline
+  // verbatim, and `makeFrameworkFunctionHandler` adds the program's
+  // non-fetch listener dispatch on the same function. The effect inputs
+  // ride the build options (JSON-serializable; they participate in the
+  // Server memo hash, and `effectHash` folds the effect module's content
+  // in so effect edits rebuild). `takeover: false` forces the explicit
+  // tier (the artifact deploys with Next's own entry — non-fetch
+  // listeners are then a plan-time error).
   const effectExtra =
     impl !== undefined &&
     (props as EffectNextjsProps).server?.takeover !== false
       ? yield* prepareEffectBuildOptions({
           main: (props as EffectNextjsProps).main,
           routes: routes ?? DEFAULT_SERVER_ROUTES,
-          code: ({ mainPath, routes: effectRoutes }) => ({
-            effect: { id, main: mainPath, routes: [...effectRoutes] },
+          code: ({ mainPath }) => ({
+            effect: { id, main: mainPath },
           }),
         })
       : undefined;
@@ -727,25 +694,12 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
     },
   };
 
-  // Sibling-function non-fetch delivery (DESIGN §2.1.3): the OpenNext
-  // entry is pre-streamified, so event-source handlers cannot ride it.
-  // Deploy the same impl as a sibling effect Lambda FIRST (its event
-  // sources register mappings + IAM against the sibling; fetch-only impls
-  // retract it), then thread the redirect-wrapped impl into the site
-  // Lambda.
-  const siteImpl =
-    impl !== undefined
-      ? (yield* deploySiblingHandlers({
-          id,
-          main: (props as EffectNextjsProps).main,
-          impl,
-          runtime: props.server?.runtime,
-          architecture: props.server?.architecture,
-          memorySize: props.server?.memorySize,
-          timeout: props.server?.timeout,
-          env: props.server?.environment,
-        })).siteImpl
-      : undefined;
+  // Single-handler non-fetch delivery (Serve/DESIGN.md, AWS phase 4): the
+  // impl threads DIRECTLY into the server Lambda — the generated OpenNext
+  // wrapper dispatches queue/schedule events on the same function, so
+  // event-source mappings and their IAM target the server function
+  // itself. No sibling `<id>-Handlers` Lambda deploys.
+  const siteImpl = impl;
 
   // With an Effect program, the server Lambda runs in collect-only mode:
   // the impl's init evaluates at plan time (bindings collect env + IAM

@@ -102,6 +102,12 @@
       "worker": "./src/AWS/Lambda/*.ts",
       "import": "./lib/AWS/Lambda/*.js"
     },
+    "./AWS/Serve": {
+      "types": "./lib/AWS/Lambda/Serve.d.ts",
+      "bun": "./src/AWS/Lambda/Serve.ts",
+      "worker": "./src/AWS/Lambda/Serve.ts",
+      "import": "./lib/AWS/Lambda/Serve.js"
+    },
     "./Command": {
       "types": "./lib/Command/index.d.ts",
       "bun": "./src/Command/index.ts",

@@ -116,9 +116,7 @@ const findActionId = async (base: string, name: string) => {
     // annotation; production chunks inline the name as the trailing
     // createServerReference argument. Try both.
     const match =
-      js.match(
-        new RegExp(`"([0-9a-f]{40,})":\\{"name":"${name}"\\}`),
-      ) ??
+      js.match(new RegExp(`"([0-9a-f]{40,})":\\{"name":"${name}"\\}`)) ??
       js.match(
         new RegExp(
           `createServerReference\\)?\\("([0-9a-f]{40,})"[^)]*?"${name}"\\)`,
@@ -196,6 +194,33 @@ test(
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    // ── The mount (app/api/[[...slug]]/route.ts) runs natively inside
+    // `next dev`: the effect API through `site.fetch` (env from the
+    // lowered process.env). ──
+    const marker = `dev-finalizer-${Date.now().toString(36)}`;
+    const registered = await fetchOk(
+      new URL(`/api/finalizer?v=${marker}`, url),
+      // Next compiles the route on first hit; give it headroom.
+      { tries: 60, delayMs: 1000 },
+    );
+    expect(
+      ((await registered.json()) as { registered: string }).registered,
+    ).toBe(marker);
+    const readBack = await pollUntil(
+      "finalizer marker in DynamoDB",
+      async () => {
+        const res = await fetch(new URL("/api/kv?key=finalizer-last", url));
+        if (!res.ok) return undefined;
+        const { value } = (await res.json()) as { value: string | null };
+        return value === marker ? value : undefined;
+      },
+    );
+    expect(readBack).toBe(marker);
+
+    // Streaming route through the dev server.
+    const streamed = await fetchOk(new URL("/api/stream?n=3", url));
+    expect(await streamed.text()).toBe("0\n1\n2\n");
 
     // The server-action transport rides `next dev` too: this is the
     // exact request Next's client runtime sends for `bumpVisits`, which

@@ -239,9 +239,10 @@ export interface EffectAstroProps extends AstroProps {
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
  * );
  * ```
- * Event handlers deploy on a sibling Lambda (`<SiteId>-Handlers`) built
- * from the same module. Delivery engages on deploy — `alchemy dev` does
- * not dispatch queue events locally.
+ * Event handlers dispatch on the site's OWN server Lambda (the
+ * single-handler entry, Serve/DESIGN.md): the event-source mapping and
+ * its IAM target the server function itself — no sibling deploys. Under
+ * `alchemy dev` the queue and consumer run in the local Lambda emulator.
  */
 export const Astro: {
   <Self>(): {
@@ -331,23 +332,23 @@ const makeAstro = (
   if (impl === undefined) {
     return makeFrameworkSite(id, props, config).pipe(Namespace.push(id));
   }
-  // Astro's effectful delivery is the fetchable wrapper (DESIGN §6.2c) —
-  // cloud-agnostic, injected INSIDE the astro build rather than through a
-  // generated Lambda entry: the AWS deploy target's integration
-  // pre-resolves `virtual:astro:fetchable` to a wrapper mounting the AWS
-  // serve shell, in the production `ssr` bundle and Astro's Node dev
-  // server alike. `runtimeDelivery` stays "external" — the framework
-  // artifact ships byte-for-byte and the deploy-time sentinel scan finds
-  // the shell's sentinel bundled into `dist/server` (the wiring
-  // handshake holds even for this auto-injected tier). `takeover: false`
-  // stands the injection down (handled by the shared `effectOptions`
-  // gate): the user mounts the bridge in their own fetch file
-  // (`src/fetch.ts`) instead. The extra option rides the framework
+  // Astro's effectful delivery is the mount design (Serve/DESIGN.md, AWS
+  // phase 4): HTTP is the user's `src/fetch.ts` mount
+  // (`site.fetch(request) ?? astro(new FetchState(request))`), riding
+  // astro's own fetchable seam in prod and dev alike. The AWS deploy
+  // target swaps the server entrypoint for a generated
+  // `makeFrameworkFunctionHandler` wrapper — additive-only: astro's fetch
+  // serves ALL HTTP verbatim, and the program's non-fetch listeners
+  // (queue consumers, schedules) dispatch on the SAME Lambda
+  // (`singleHandler` below — no sibling deploys). `takeover: false`
+  // forces the explicit tier (astro's own entry, non-fetch listeners
+  // rejected at plan time). The extra option rides the framework
   // `make()`'s `targetConfig` channel into the AWS deploy target's
   // config (`AstroAwsConfig.effect`).
-  config.effectOptions = ({ mainPath, routes }) => ({
-    targetConfig: { effect: { main: mainPath, routes: [...routes] } },
+  config.effectOptions = ({ mainPath }) => ({
+    targetConfig: { effect: { main: mainPath } },
   });
+  config.singleHandler = true;
   // A declared-static build deploys assets-only (no server function), so
   // an Effect program's handlers could never run — fail fast at plan.
   if (output === "static" && !globalThis.__ALCHEMY_RUNTIME__) {

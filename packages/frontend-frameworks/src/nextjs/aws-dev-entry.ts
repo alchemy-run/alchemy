@@ -11,14 +11,13 @@
  * upgrade auto-wires through `req.socket.server` on the first
  * Next-handled request; no proxy, no second port.
  *
- * With an `effect` config, the alchemy Serve bridge dispatches
- * `server.routes` requests BEFORE Next's handler
- * (strict route ownership — the deployed wrapper's exact gate) and the
- * backend module hot-reloads via watch + cache-busted re-import (see
- * `EffectDispatch.ts`). Env and credentials are inherited: the sidecar
- * lowered the stack markers + packed binding env into `process.env`, and
- * the bridge's `Credentials.fromChain()` resolves the developer's
- * ambient profile — the tested AWS dev credential model, unchanged.
+ * Effectful sites need no front dispatch here (the mount design,
+ * Serve/DESIGN.md): the user's route-file mount runs natively inside
+ * Next's own pipeline, and Next's compiler hot-reloads the backend module
+ * like any other route dependency. Env and credentials are inherited: the
+ * sidecar lowered the stack markers + packed binding env into
+ * `process.env`, and the mount's `Credentials.fromChain()` resolves the
+ * developer's ambient profile — the tested AWS dev credential model.
  *
  * Deliberately plain node (never bun): Node is the AWS Lambda programming
  * model, node's own type transform loads the user's TypeScript backend,
@@ -34,18 +33,12 @@ import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import {
-  createEffectDispatch,
-  type EffectDispatchConfig,
-  type EffectDispatchHandle,
-} from "./EffectDispatch.ts";
 
 /** The argv[2] payload (plain JSON, written by `nextjs/aws.ts`). */
 export interface NextjsAwsDevEntryConfig {
   readonly root: string;
   readonly port: number;
   readonly hostname?: string | undefined;
-  readonly effect?: Omit<EffectDispatchConfig, "watch"> | undefined;
 }
 
 type RequestHandler = (
@@ -110,14 +103,6 @@ const main = async (): Promise<void> => {
   })();
   const hostname = config.hostname ?? "localhost";
 
-  // The effect dispatch first: a broken backend module is a loud startup
-  // failure (the parent surfaces this process's output), matching the
-  // deploy-time behavior of a broken backend.
-  let dispatch: EffectDispatchHandle | undefined;
-  if (config.effect !== undefined) {
-    dispatch = await createEffectDispatch({ ...config.effect, watch: true });
-  }
-
   // The documented programmatic dev API — the parent resolved the port,
   // so it can seed `next({ port })` (Turbopack derives HMR/asset URLs
   // from it) before anything binds.
@@ -135,9 +120,6 @@ const main = async (): Promise<void> => {
   // answer) then observes a server that really serves.
   const server = NodeHttp.createServer((req, res) => {
     void (async () => {
-      if (dispatch !== undefined && (await dispatch.dispatch(req, res))) {
-        return;
-      }
       // The HMR websocket upgrade auto-wires through `req.socket.server`
       // inside Next's handler on the first request it serves.
       await nextHandler(req, res);

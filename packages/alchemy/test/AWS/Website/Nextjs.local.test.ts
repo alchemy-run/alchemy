@@ -153,19 +153,18 @@ describe("AWS.Website.Nextjs local", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Effectful Next.js (zero-setup, DESIGN §7-AWS): NO user mount file. The
-// dev `Server` runs the alchemy-owned custom-server child (`next dev`
-// through the programmatic API) with the Serve bridge dispatching
-// `server.routes` BEFORE Next's handler — the same strict-ownership
-// gate as the deployed wrapper. Env is
-// lowered by the composite (stack markers + packed binding values +
-// AWS_REGION), credentials resolve from the developer's ambient profile
-// (the AWS dev model: bindings hit real cloud, so the bound bucket is
-// `remote()`), and the effect program also deploys into the floci Lambda
-// emulator as the dev server Lambda. Editing the backend module mid-run
-// hot-swaps the effect handlers in the child (watch + cache-busted
-// re-import). Docker required (floci); live credentials required
-// (--profile testing).
+// Effectful Next.js under `alchemy dev` (the mount design,
+// Serve/DESIGN.md): the user's catch-all route file mounts the site and
+// runs NATIVELY inside `next dev` (the alchemy-owned custom-server child
+// carries no front dispatch). Env is lowered by the composite (stack
+// markers + packed binding values + AWS_REGION), credentials resolve from
+// the developer's ambient profile (the AWS dev model: bindings hit real
+// cloud, so the bound bucket is `remote()`), and the effect program also
+// deploys into the floci Lambda emulator as the dev server Lambda.
+// Editing the backend module mid-run recompiles the route (the site
+// module is an ordinary dependency of the route file) — a fresh class
+// identity, a fresh layer build, the new handlers on the next dispatch.
+// Docker required (floci); live credentials required (--profile testing).
 // ─────────────────────────────────────────────────────────────────────
 
 // Clone INSIDE the workspace (unlike the plain dev test above, which
@@ -181,13 +180,14 @@ const alchemySrcFrom = (relDepth: number) => `${"../".repeat(relDepth)}src`;
  * The effectful site module written into the clone at `src/site.ts`
  * (clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
  * `packages/alchemy/src`). Parameterized by `marker` so the effect-HMR
- * case can rewrite it mid-test and observe the hot-swapped handlers
+ * case can rewrite it mid-test and observe the recompiled handlers
  * through the effect `fetch`.
  *
- * `server.routes` claims only `/api/effect/*` (strict ownership inside
- * the claim), so the fixture's own Next route at `/api/hello` stays
- * outside the claim and behaves identically in dev and deploy — the §5
- * route-precedence parity pin.
+ * `server.routes` claims only `/api/effect/*` (the edge-router claim on
+ * deploy); the MOUNT (the catch-all route file below) claims the same
+ * space, so the fixture's own Next route at `/api/hello` stays outside
+ * and behaves identically in dev and deploy — the §5 route-precedence
+ * parity pin.
  */
 const nextEffectSiteSource = (marker: string) => `
 import * as Effect from "effect/Effect";
@@ -261,6 +261,27 @@ export default class NextEffectSite extends Nextjs<NextEffectSite>()(
 ) {}
 `;
 
+/**
+ * The MOUNT — the user's catch-all route file written into the clone at
+ * `app/api/effect/[[...slug]]/route.ts` (the mount design: the route
+ * file's location IS the routing; it claims /api/effect/* and everything
+ * under it). Compiled by `next dev` like any user route; `site.fetch`
+ * resolves env from the lowered `process.env`.
+ */
+const nextMountRouteSource = `
+import { mount } from "${alchemySrcFrom(6)}/Serve/Serve.ts";
+import Site from "../../../../src/site.ts";
+
+const site = mount(Site, { routes: ["/api/effect/*"] });
+
+export const dynamic = "force-dynamic";
+
+const handler = async (req: Request): Promise<Response> =>
+  (await site.fetch(req)) ?? new Response("Not Found", { status: 404 });
+
+export { handler as GET, handler as POST };
+`;
+
 /** GET `url` until it answers 200 JSON — bounded (first hit compiles the
  * route + the alchemy graph under turbopack, be patient). */
 const fetchJsonReady = <T>(url: string, times = 60) =>
@@ -285,7 +306,7 @@ const fetchJsonReady = <T>(url: string, times = 60) =>
 
 describe("AWS.Website.Nextjs local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful Next.js dev (zero-setup): front dispatch serves /api/effect/* with the real S3 binding, no mount file",
+    "effectful Next.js dev (mount design): the route-file mount serves /api/effect/* with the real S3 binding",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -306,15 +327,27 @@ describe("AWS.Website.Nextjs local (effectful)", () => {
           cwd: rootDir,
         });
 
-        // ZERO-SETUP: only the site module is written — no route mount,
-        // no generated file in the user's `app/` tree. The dev child's
-        // front dispatch delivers the effect routes.
+        // The mount design: the site module AND the user's route-file
+        // mount are both ordinary project files — the mount runs natively
+        // inside `next dev`.
         yield* fs.makeDirectory(path.join(rootDir, "src"), {
           recursive: true,
         });
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site.ts"),
           nextEffectSiteSource("effect-fetch-v1"),
+        );
+        const mountDir = path.join(
+          rootDir,
+          "app",
+          "api",
+          "effect",
+          "[[...slug]]",
+        );
+        yield* fs.makeDirectory(mountDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(mountDir, "route.ts"),
+          nextMountRouteSource,
         );
 
         // Bun resolves the clone's relative imports to the same
@@ -367,15 +400,15 @@ describe("AWS.Website.Nextjs local (effectful)", () => {
           { label: "framework API route untouched" },
         );
 
-        // Effect route through the front dispatch — no mount file exists.
+        // Effect route through the route-file mount, compiled by next dev.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch-v1");
 
-        // Strict ownership inside the claim: an unknown path is the
-        // effect's OWN 404 (the fixture's JSON), never Next's HTML 404 —
-        // the dispatch answered before Next's router ever ran.
+        // Strict ownership inside the mount's claim: an unknown path is
+        // the effect's OWN 404 (the fixture's JSON), never Next's HTML
+        // 404 — the catch-all route file answered it.
         const client = yield* HttpClient.HttpClient;
         const missing = yield* client.get(`${url}/api/effect/nope`);
         expect(missing.status).toBe(404);
@@ -418,9 +451,10 @@ describe("AWS.Website.Nextjs local (effectful)", () => {
         expect(observed).toBe(value);
 
         // ── Effect-handler HMR: rewrite the backend module in place. The
-        // stack is NOT re-applied — the dev child's watcher re-imports the
-        // module (cache-busted → fresh class identity → fresh layer build)
-        // and the next dispatch serves the new marker. Bounded poll ──────
+        // stack is NOT re-applied — next dev recompiles the route (the
+        // site module is an ordinary dependency of the mount's route
+        // file), producing a fresh class identity and a fresh layer
+        // build; the next dispatch serves the new marker. Bounded poll ──
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site.ts"),
           nextEffectSiteSource("effect-fetch-v2"),

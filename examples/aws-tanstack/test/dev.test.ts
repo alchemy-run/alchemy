@@ -93,8 +93,7 @@ const fetchOk = async (
 };
 
 /** Extract the stack-output URL the CLI prints on stdout. */
-const outputUrl = () =>
-  output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
+const outputUrl = () => output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
 
 /**
  * Discover a server function's DEV id: vite serves the client transform
@@ -185,6 +184,44 @@ test(
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    // ── The mount (src/server.ts) runs natively inside Start's dev
+    // server: entry-answered route, admin gate, and the effect API
+    // through `site.fetch` (env from the lowered process.env). ──
+    const healthz = await fetchOk(new URL("/healthz", url));
+    expect(await healthz.text()).toBe("ok");
+
+    const denied = await fetch(new URL("/api/admin/secret", url));
+    expect(denied.status).toBe(403);
+    const allowed = await fetch(new URL("/api/admin/secret", url), {
+      headers: { "x-admin-key": "letmein" },
+    });
+    expect(allowed.status).toBe(200);
+    expect(await allowed.json()).toEqual({ admin: true });
+
+    // The effect fetch against the REAL DynamoDB table (remote()): the
+    // finalizer route writes the marker inline, /api/kv reads it back.
+    const marker = `dev-finalizer-${Date.now().toString(36)}`;
+    const registered = await fetchOk(
+      new URL(`/api/finalizer?v=${marker}`, url),
+    );
+    expect(
+      ((await registered.json()) as { registered: string }).registered,
+    ).toBe(marker);
+    const readBack = await pollUntil(
+      "finalizer marker in DynamoDB",
+      async () => {
+        const res = await fetch(new URL("/api/kv?key=finalizer-last", url));
+        if (!res.ok) return undefined;
+        const { value } = (await res.json()) as { value: string | null };
+        return value === marker ? value : undefined;
+      },
+    );
+    expect(readBack).toBe(marker);
+
+    // Streaming route through the dev server.
+    const streamed = await fetchOk(new URL("/api/stream?n=3", url));
+    expect(await streamed.text()).toBe("0\n1\n2\n");
 
     // The public surface rides the dev server too: POST the `bumpVisits`
     // server function exactly as Start's browser client would (dev fn

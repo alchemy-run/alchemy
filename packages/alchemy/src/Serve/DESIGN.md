@@ -68,17 +68,35 @@ bring-your-own-build users only):
 
 ```ts
 import { mount } from "alchemy/Cloudflare/Serve";   // + .platform, .exports
-import { mount, toLambdaHandler } from "alchemy/AWS/Serve";
+import { mount, makeFrameworkFunctionHandler } from "alchemy/AWS/Serve";
 ```
 
 - `site.platform` — `{ queue?, scheduled? }` handlers in the cloud's native
   shapes, present only when the program registered them.
 - `site.exports` — typed record of DO / Workflow classes (the only module
   surface that imports `cloudflare:workers`, hence a workerd-only leaf).
-- `toLambdaHandler({ fetch, ...platform })` — the Lambda calling-convention
-  adapter: one `streamifyResponse` wrap, event-shape branch (HTTP-shaped →
-  `fetch`; SQS batch → `queue` with partial-batch responses; schedule →
-  `scheduled`).
+- `makeFrameworkFunctionHandler({ site, fetch | streamHandler })` (AS
+  IMPLEMENTED — supersedes the originally-sketched `toLambdaHandler`
+  event-branch adapter): the framework-composite Lambda entry builder. It
+  is the SAME machinery a plain effect Lambda boots — the site's
+  instance-lifetime layer build plus the `Function.ts` listener-dispatch
+  loop (`RuntimeContext.exports.handler` already dispatches HTTP + SQS +
+  schedules on one function; nothing new was invented) — with ONE
+  difference: HTTP-shaped events are answered by the FRAMEWORK's handler
+  (which contains the user's mount), never by the site program's own HTTP
+  listener. It owns the single `awslambda.streamifyResponse` wrap:
+  `fetch` (a fetch-shaped node handler — kit's `respond`, a vite entry's
+  `default.fetch`, astro's `App.render`) is translated from the Function
+  URL event via the shared `HttpServer.ts` translator and written through
+  `HttpResponseStream` unbuffered; `streamHandler` (a pre-streamified
+  handler — OpenNext's `aws-lambda-streaming` wrapper output, nitro's
+  aws-lambda entry) is delegated the raw
+  `(event, responseStream, context)` triple verbatim. Non-HTTP events
+  dispatch through the program's registered listeners; their JSON result
+  is the invocation payload, and a thrown error fails the invocation so
+  event sources retry. The site build is the `alchemy/Serve` bridge's
+  memoized per-class build — the user's mount, the value-form
+  `createClient`, and the wrapper share ONE runtime per sandbox.
 
 `mount` is memoized per site class (WeakMap): the user's mount, the
 generated entry, and the value-form `createClient` share one runtime.
@@ -204,21 +222,48 @@ export class ReportWorkflow extends __wf("ReportWorkflow") {}
 fallback for a future adapter whose pipeline we genuinely cannot own —
 none of the current six needs it.)
 
-AWS (phase 4, planned; zip member shipping unbundled — `node_modules`
-resolution gives the framework handler and this wrapper the same alchemy
-instance):
+AWS (phase 4, AS IMPLEMENTED — no zip-member/glue-manifest step was
+needed: every AWS framework target already owns a finishing bundle, so
+the wrapper is generated inside that pipeline and bundled in ONE graph
+with the framework output and the backend — single alchemy copy, exactly
+like Cloudflare tier B):
 
 ```js
-import { handler as framework } from "./framework/index.mjs"; // or entry.default.fetch (owned entry)
-import Site from "./backend.mjs";                             // transpiled, alchemy external
-import { mount, toLambdaHandler } from "alchemy/AWS/Serve";
+// vite/TanStack + SvelteKit (the target's generated Lambda entry, then
+// rolldown-finished into dist/lambda | dist/server):
+import * as server from "./<framework-entry-chunk>"; // user's mount inside
+import Site from "<abs>/src/backend.ts";
+import { makeFrameworkFunctionHandler } from "alchemy/AWS/Serve";
+export const handler = await makeFrameworkFunctionHandler({
+  site: Site,
+  fetch: server.default.fetch, // kit: `respond`; astro: App.render fetch
+});
 
-const site = mount(Site);
-export const handler = toLambdaHandler({ fetch: framework, ...site.platform });
+// Next via OpenNext (the derived config's function-form wrapper —
+// additive-only; the site module + serve machinery prebundle beside the
+// deployed config as alchemy-effect.mjs):
+const wrapper = async (handler, converter) => {
+  const stock = (await import("@opennextjs/aws/overrides/wrappers/aws-lambda-streaming.js")).default;
+  const streamHandler = await stock.wrapper(handler, converter);
+  const { makeFrameworkFunctionHandler, default: Site } = await import("./alchemy-effect.mjs");
+  return makeFrameworkFunctionHandler({ site: Site, streamHandler });
+};
 ```
 
-Degenerate cases: no registrations ⇒ the wrapper carries only the grafted
-fetch; AWS wrapper still owns the streamify wrap.
+Sibling-lambda non-fetch delivery is RETIRED for the converted frameworks
+(Vite SSR/TanStack, SvelteKit, Next, Astro — `FrameworkSiteConfig
+.singleHandler`): the impl threads directly into the collect-only server
+Lambda, so event-source mappings and their IAM target the server function
+itself and ONE Lambda serves HTTP + SQS + schedules. Unconverted
+frameworks (Nuxt, Waku, Octane) keep the sibling until their phase-6
+conversion.
+
+Degenerate cases: no registrations ⇒ the wrapper is just the grafted
+fetch inside the streamify wrap; the effectful `StaticSite`/Vite SPA arm
+has NO framework server at all — the Effect program IS the Lambda (the
+plain `FunctionBundle` entry, now a real module:
+`alchemy/AWS/Lambda/EntryRuntime`'s `makeFunctionEntrypoint`) and no
+mount file exists.
 
 ### Runtime copies
 
@@ -248,9 +293,15 @@ final bundle removed it.) AWS: one copy via `node_modules`.
   fallback — what the value-form `createClient` resolves). Known
   limitation (tracked): Stream-returning DO RPC consumed from the Node
   side arrives empty (no nested-stream transport in the proxy).
-- **AWS:** the framework dev server + the same sidecar model; the bridge
-  runs in Node with ambient credentials (`Alchemy.remote()` resources hit
-  real cloud, unchanged).
+- **AWS (AS IMPLEMENTED):** the framework's own dev server runs HTTP and
+  the mount is app code — TanStack's `src/server.ts` server entry, kit's
+  `hooks.server.ts`, Next's route file all run natively with full HMR; no
+  front middleware, no generated dev dispatch (the vite/kit AWS dev
+  middlewares and Next's `EffectDispatch` stage are deleted). The bridge
+  resolves `process.env` (the lowered stack markers + packed binding env)
+  and `Credentials.fromChain()` — ambient credentials; `Alchemy.remote()`
+  resources hit real cloud. The effect program also deploys into the
+  local Lambda emulator, which owns queue delivery in dev.
 
 ## Code layout
 
@@ -261,13 +312,16 @@ delicate part, unchanged in spirit), `Serve.ts` (`mount` only), `Env.ts`,
 (how `createClient` finds the bridge); both markers die
 (`SERVE_SENTINEL` pending the deploy-validation decision).
 
-Cloud (`Cloudflare/Workers/ServeBridge.ts` → public `alchemy/Cloudflare/Serve`;
-`AWS/Lambda/ServeBridge.ts` → public `alchemy/AWS/Serve`): recipes +
-`.platform`/`.exports`/`toLambdaHandler`. New in `Cloudflare/Workers/Sources/`:
-the `FrameworkArtifact` source (artifact walk → upload parts, glue
-authoring, `platform.mjs` pass) and the virtual-entry vite plugin.
-`AWS/Website/*`: zip assembly (`handler.mjs`, transpiled `backend.mjs`);
-sibling-lambda event sources retired for the single-handler branch.
+Cloud: `Cloudflare/Workers/ServeBridge.ts` (recipe + class stamp);
+`AWS/Lambda/ServeBridge.ts` (recipe + class stamp — the `handlers()`
+routes-gated shell is deleted) with the public `alchemy/AWS/Serve`
+subpath at `AWS/Lambda/Serve.ts` (`mount` re-export +
+`makeFrameworkFunctionHandler`), and `AWS/Lambda/EntryRuntime.ts` — the
+plain effect-Lambda entry as a REAL module (`makeFunctionEntrypoint`,
+`resolveFunctionHandler`); the `FunctionBundle` virtual entry is now a
+two-line template calling it. `AWS/Website/*`: sibling-lambda event
+sources retired for the single-handler frameworks
+(`FrameworkSiteConfig.singleHandler`).
 
 Framework-specific (`packages/frontend-frameworks/`): shrinks to **data +
 build orchestration** — tier, artifact path, build/dev-server invocation,
@@ -340,8 +394,12 @@ min). AWS enters at phase 4, after the mechanics are settled.
    single bundle, exports, workerd dev. MaxSite example, both legs.
 3. **Tier B end-to-end** (SvelteKit on Cloudflare): glue + multi-module
    upload + sidecar dev. MaxSite example, both legs.
-4. **AWS**: `toLambdaHandler`, retire sibling lambdas, zip assembly.
-   MaxSite examples, both legs.
+4. **AWS** (IMPLEMENTED): `makeFrameworkFunctionHandler` +
+   `EntryRuntime`, sibling lambdas retired for vite/kit/Next/Astro,
+   generated entries additive-only, dev middlewares deleted. MaxSite
+   examples (aws-vite, aws-tanstack, aws-website-sveltekit,
+   aws-website-nextjs — minus DO/WF, which AWS has no analogue for),
+   both legs.
 5. **The purge**: markers, scan, adapters, `EffectDispatch`,
    `server.routes`, dead subpaths — deleted only when every example is
    green on the new path (no commit has both mechanisms load-bearing).

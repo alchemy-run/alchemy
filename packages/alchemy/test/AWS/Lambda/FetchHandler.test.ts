@@ -8,21 +8,26 @@
  *     fetch-layer composition that rides a framework's `toLambdaHandler`
  *     pipe), and the request scope is transferred to the stream (its
  *     finalizers run at stream completion) instead of settling inline;
- *   - `makeWebsiteHandlers` dispatch — strict route ownership: inside
- *     `routes` the effect fetch is authoritative (a `RouteNotFound`
- *     failure renders as the effect's own 404 response), `match` resolves
- *     `undefined` ONLY for paths outside the routes, the four-worlds
- *     guard (no stack markers → decline without building layers), and
- *     `fetch`'s fallback/404 answers.
+ *   - `mount` dispatch over the AWS bridge — the user's mount owns
+ *     routing: inside its `routes` claim the effect fetch is authoritative
+ *     (a `RouteNotFound` failure renders as the effect's own 404
+ *     response), `fetch` resolves `undefined` ONLY for paths outside the
+ *     claim, and the four-worlds guard (no stack markers → decline
+ *     without building layers) holds;
+ *   - `makeFrameworkFunctionHandler` (the single-handler composite entry,
+ *     buffered fallback outside the Lambda sandbox): HTTP-shaped events
+ *     go to the FRAMEWORK's fetch — never the site program's own HTTP
+ *     listener — and non-HTTP events dispatch through the program's
+ *     registered listeners.
  *
- * The `makeWebsiteHandlers` tests stamp `globalThis.__ALCHEMY_RUNTIME__`
- * (as any real bridge construction does) — process-global state — so they
- * take the runner's whole-process write lock via `{ exclusive: true }` and
- * restore the flag in `finally`.
+ * The mount tests stamp `globalThis.__ALCHEMY_RUNTIME__` (as any real
+ * bridge construction does) — process-global state — so they take the
+ * runner's whole-process write lock via `{ exclusive: true }` and restore
+ * the flag in `finally`.
  */
 import * as AWS from "@/AWS";
 import { makeFunctionFetchHandler } from "@/AWS/Lambda/HttpServer.ts";
-import { lambdaServeBridge } from "@/AWS/Lambda/ServeBridge.ts";
+import { makeFrameworkFunctionHandler, mount } from "@/AWS/Lambda/Serve.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -52,8 +57,8 @@ const restoringRuntimeFlag = async (body: () => Promise<void>) => {
 
 /**
  * An effectful site class hosted on the Lambda platform — the value shape a
- * user's `site.ts` default-exports. Constructing the class is lazy; the
- * impl only evaluates when `makeWebsiteHandlers` builds the layer stack.
+ * user's `backend.ts` default-exports. Constructing the class is lazy; the
+ * impl only evaluates when the bridge builds the layer stack.
  */
 class FetchSite extends AWS.Website.StaticSite<FetchSite>()(
   "FetchHandlerSite",
@@ -161,69 +166,44 @@ describe("makeFunctionFetchHandler", () => {
   });
 });
 
-describe("makeWebsiteHandlers", () => {
+describe("mount (AWS bridge)", () => {
   it(
-    "routes decide who serves: effect inside (authoritative), decline outside",
+    "the mount's routes decide who serves: effect inside (authoritative), decline outside",
     () =>
       restoringRuntimeFlag(async () => {
-        const site = lambdaServeBridge.handlers({
-          site: FetchSite,
-          routes: ["/api/*"],
-          env: markers,
-        });
+        const site = mount(FetchSite, { routes: ["/api/*"], env: markers });
 
-        // Outside routes → decline without touching the effect fetch.
+        // Outside the claim → decline without touching the effect fetch.
         expect(
-          await site.match(new Request("http://localhost/assets/app.js")),
+          await site.fetch(new Request("http://localhost/assets/app.js")),
         ).toBeUndefined();
 
-        // Inside routes → effect fetch.
-        const hit = await site.match(new Request("http://localhost/api/hello"));
+        // Inside the claim → effect fetch.
+        const hit = await site.fetch(new Request("http://localhost/api/hello"));
         expect(hit?.status).toBe(200);
         expect(await hit!.text()).toBe("hi from effect");
 
         // An unknown route INSIDE the claim: the HttpRouter miss renders
         // as the effect's OWN 404 response — never undefined/delegation.
-        const miss = await site.match(
+        const miss = await site.fetch(
           new Request("http://localhost/api/unknown"),
         );
         expect(miss).toBeDefined();
         expect(miss!.status).toBe(404);
 
         // A handler that matched and chose 404 keeps its body.
-        const gone = await site.match(new Request("http://localhost/api/gone"));
+        const gone = await site.fetch(new Request("http://localhost/api/gone"));
         expect(gone?.status).toBe(404);
         expect(await gone!.text()).toBe("really gone");
-
-        // fetch answers path-miss declines via the fallback, else 404.
-        const fromFallback = await site.fetch(
-          new Request("http://localhost/assets/app.js"),
-          { fallback: async () => new Response("framework") },
-        );
-        expect(await fromFallback.text()).toBe("framework");
-        const notFound = await site.fetch(
-          new Request("http://localhost/assets/app.js"),
-        );
-        expect(notFound.status).toBe(404);
-
-        // Inside the claim the effect's 404 wins — the fallback is never
-        // consulted for an in-claim router miss.
-        const insideMiss = await site.fetch(
-          new Request("http://localhost/api/unknown"),
-          { fallback: async () => new Response("framework") },
-        );
-        expect(insideMiss.status).toBe(404);
-        expect(await insideMiss.text()).not.toBe("framework");
       }),
     { exclusive: true, timeout: 60_000 },
   );
 
   it(
-    "exclusion glob routes to the framework",
+    "exclusion glob hands a path back to the framework",
     () =>
       restoringRuntimeFlag(async () => {
-        const site = lambdaServeBridge.handlers({
-          site: FetchSite,
+        const site = mount(FetchSite, {
           routes: ["/api/*", "!/api/hello*"],
           env: markers,
         });
@@ -231,12 +211,12 @@ describe("makeWebsiteHandlers", () => {
         // The excluded path declines even though the effect fetch has a
         // handler for it — the framework serves it.
         expect(
-          await site.match(new Request("http://localhost/api/hello")),
+          await site.fetch(new Request("http://localhost/api/hello")),
         ).toBeUndefined();
 
         // The rest of the claim stays the effect's — unknown routes are
         // its own 404.
-        const miss = await site.match(
+        const miss = await site.fetch(
           new Request("http://localhost/api/unknown"),
         );
         expect(miss?.status).toBe(404);
@@ -252,13 +232,12 @@ describe("makeWebsiteHandlers", () => {
         class NeverBuilt {
           static readonly LogicalId = "NeverBuilt";
         }
-        const site = lambdaServeBridge.handlers({
-          site: NeverBuilt as any,
+        const site = mount(NeverBuilt as any, {
           routes: ["/api/*"],
           env: { NOT_ALCHEMY: "1" },
         });
         expect(
-          await site.match(new Request("http://localhost/api/hello")),
+          await site.fetch(new Request("http://localhost/api/hello")),
         ).toBeUndefined();
       }),
     { exclusive: true },
@@ -268,17 +247,91 @@ describe("makeWebsiteHandlers", () => {
     "omitted routes default to DEFAULT_SERVER_ROUTES (/api/*)",
     () =>
       restoringRuntimeFlag(async () => {
-        const site = lambdaServeBridge.handlers({
-          site: FetchSite,
-          env: markers,
-        });
-        const hit = await site.match(new Request("http://localhost/api/hello"));
+        const site = mount(FetchSite, { env: markers });
+        const hit = await site.fetch(new Request("http://localhost/api/hello"));
         expect(await hit!.text()).toBe("hi from effect");
         // Outside the default claim → decline (the framework serves).
         expect(
-          await site.match(new Request("http://localhost/anything")),
+          await site.fetch(new Request("http://localhost/anything")),
         ).toBeUndefined();
       }),
     { exclusive: true, timeout: 60_000 },
   );
+});
+
+describe("makeFrameworkFunctionHandler", () => {
+  /** A minimal Function URL (payload v2) event. */
+  const functionUrlEvent = (path: string) => ({
+    version: "2.0",
+    rawPath: path,
+    rawQueryString: "",
+    headers: {
+      host: "example.lambda-url.us-east-1.on.aws",
+      "x-forwarded-proto": "https",
+    },
+    requestContext: {
+      domainName: "example.lambda-url.us-east-1.on.aws",
+      http: { method: "GET", sourceIp: "127.0.0.1" },
+    },
+  });
+
+  it(
+    "routes HTTP-shaped events to the FRAMEWORK's fetch, never the site's HTTP listener",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const previousEnv = {
+          ALCHEMY_STACK_NAME: process.env.ALCHEMY_STACK_NAME,
+          ALCHEMY_STAGE: process.env.ALCHEMY_STAGE,
+        };
+        process.env.ALCHEMY_STACK_NAME = markers.ALCHEMY_STACK_NAME;
+        process.env.ALCHEMY_STAGE = markers.ALCHEMY_STAGE;
+        try {
+          const seen: Array<string> = [];
+          const handler = (await makeFrameworkFunctionHandler({
+            site: FetchSite,
+            fetch: async (request) => {
+              seen.push(new URL(request.url).pathname);
+              return new Response("from the framework", {
+                status: 200,
+                headers: { "content-type": "text/plain" },
+              });
+            },
+          })) as (event: any, context: any) => Promise<any>;
+
+          // Outside the Lambda sandbox (no `awslambda` global) the wrapper
+          // returns the buffered `(event, context)` form.
+          const result = await handler(functionUrlEvent("/api/hello"), {});
+          // The site's own fetch has a handler for /api/hello — but HTTP
+          // belongs to the framework (whose body carries the user's
+          // mount), so the framework answered.
+          expect(seen).toEqual(["/api/hello"]);
+          expect(result.statusCode).toBe(200);
+          expect(result.body).toBe("from the framework");
+
+          // A non-HTTP event dispatches through the program's listeners —
+          // this fetch-only program has none, which is a loud error (the
+          // plain effect entry's exact behavior).
+          await expect(
+            handler({ Records: [{ eventSource: "aws:nothing" }] }, {}),
+          ).rejects.toThrow("No event handler found");
+        } finally {
+          process.env.ALCHEMY_STACK_NAME = previousEnv.ALCHEMY_STACK_NAME;
+          process.env.ALCHEMY_STAGE = previousEnv.ALCHEMY_STAGE;
+        }
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it("requires exactly one of fetch / streamHandler", async () => {
+    await expect(
+      makeFrameworkFunctionHandler({ site: FetchSite } as any),
+    ).rejects.toThrow("exactly one");
+    await expect(
+      makeFrameworkFunctionHandler({
+        site: FetchSite,
+        fetch: async () => new Response("x"),
+        streamHandler: async () => {},
+      } as any),
+    ).rejects.toThrow("exactly one");
+  });
 });

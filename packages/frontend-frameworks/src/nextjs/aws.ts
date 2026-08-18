@@ -16,23 +16,26 @@
  *   `aws-lambda-streaming` wrapper is generated under `.alchemy/generated/`
  *   so the emitted handler streams on a Lambda Function URL
  *   (`invokeMode: RESPONSE_STREAM`). With `effect` set (the effectful
- *   zero-setup tier), a **derived** config re-points
+ *   single-handler tier, Serve/DESIGN.md), a **derived** config re-points
  *   `default.override.wrapper` at a generated function-form wrapper that
- *   composes the Effect fetch at the `InternalEvent` layer and delegates
- *   the one `awslambda.streamifyResponse` wrap to the stock streaming
- *   wrapper; the site module + serve shell are prebundled beside the
- *   deployed config (`alchemy-effect.mjs`, kept out of the config compile
- *   via `--node-externals`). After the build, the authoritative
+ *   is ADDITIVE-ONLY: the stock streaming wrapper's handler (Next's whole
+ *   pipeline, with the user's route-file mount inside) serves ALL HTTP
+ *   verbatim, and `makeFrameworkFunctionHandler` from `alchemy/AWS/Serve`
+ *   adds the program's non-fetch listener dispatch on the same function;
+ *   the site module + serve machinery are prebundled beside the deployed
+ *   config (`alchemy-effect.mjs`, kept out of the config compile via
+ *   `--node-externals`). After the build, the authoritative
  *   `.open-next/open-next.output.json` manifest is read to verify the
  *   default origin is a streaming function.
  * - **`dev`** runs the real `next dev` through Next's documented custom-server
  *   API (`next({ dev: true })` + `prepare()` + `getRequestHandler()` on an
  *   http server we own, in a spawned `aws-dev-entry.ts` child) — plain Node,
  *   which is already the AWS Lambda programming model. On effectful sites the
- *   Serve bridge dispatches `server.routes` requests before Next's
- *   handler, with watch + cache-busted re-import hot-reloading the
- *   backend module. Scoped: closing the Scope stops the child. `next.config`
- *   edits do not auto-restart the server (documented delta from the CLI).
+ *   user's route-file mount runs natively inside Next's own pipeline (the
+ *   mount design — no front dispatch), and Next's compiler hot-reloads the
+ *   backend module like any other route dependency. Scoped: closing the
+ *   Scope stops the child. `next.config` edits do not auto-restart the
+ *   server (documented delta from the CLI).
  *
  * The OpenNext output topology the alchemy composite (`AWS.Website.Nextjs`)
  * deploys from `.open-next/`:
@@ -66,31 +69,23 @@ const fail = (message: string) => (cause: unknown) =>
   new FrameworkCore.FrameworkError({ framework: "nextjs", message, cause });
 
 /**
- * The effectful zero-setup delivery inputs — plain JSON, threaded from the
- * `AWS.Website.Nextjs` composite through the `Server` resource's build
- * options. When present, the build passes a **derived** OpenNext config
- * (under `.alchemy/generated/<id>/`) through `--config-path` whose
- * `default.override.wrapper` is a function-form custom wrapper composing
- * the Effect fetch at the `InternalEvent` layer before delegating the one
- * `awslambda.streamifyResponse` wrap to the stock `aws-lambda-streaming`
- * wrapper.
+ * The effectful single-handler delivery inputs (Serve/DESIGN.md, AWS
+ * phase 4) — plain JSON, threaded from the `AWS.Website.Nextjs` composite
+ * through the `Server` resource's build options. When present, the build
+ * passes a **derived** OpenNext config (under `.alchemy/generated/<id>/`)
+ * through `--config-path` whose `default.override.wrapper` is a
+ * function-form custom wrapper: ADDITIVE-ONLY — Next's handler (with the
+ * user's route-file mount inside it) serves ALL HTTP through the stock
+ * `aws-lambda-streaming` pipeline verbatim, and
+ * `makeFrameworkFunctionHandler` from `alchemy/AWS/Serve` adds the
+ * program's non-fetch listener dispatch (queue consumers, schedules) on
+ * the SAME function.
  */
 export interface NextjsAwsEffectOptions {
   /** The construct id — names the generated `.alchemy/generated/<id>/` dir. */
   readonly id: string;
   /** Absolute path of the user's site module (the `main` impl anchor). */
   readonly main: string;
-  /** Path globs the Effect fetch owns (`server.routes`). */
-  readonly routes: ReadonlyArray<string>;
-  /**
-   * Dev-only: absolute path (or `file://` URL) of the `alchemy/Serve`
-   * surface module, resolved by the ENGINE from its own alchemy instance
-   * (`import.meta.resolve`) so the dev child's Serve bridge and the
-   * backend module's own bare `alchemy/*` imports share one module graph.
-   * Ignored by the production build (the wrapper resolves its own serve
-   * shell); when absent in dev the effect dispatch is skipped.
-   */
-  readonly serveModule?: string | undefined;
 }
 
 /** Options for the Next.js AWS framework module. */
@@ -192,68 +187,6 @@ export const EFFECT_WRAPPER_NAME = "opennext-wrapper.mjs";
 export const OPENNEXT_TESTED_RANGE = "4.x";
 
 /**
- * Signals of an explicit `alchemy/Serve` mount in the user's Next route
- * trees (`toHandler` in a catch-all route handler): the explicit-mount
- * marker byte literal (embedded by `alchemy/src/Serve/Serve.ts`, the module
- * only explicit mounts import) or an `alchemy/Serve` import specifier.
- * Deliberately NOT the bridge's `__ALCHEMY_SERVE_v1__` sentinel: the bridge
- * also rides the value-form `createClient` graph (server components
- * importing the backend), so that literal appears in every effectful site
- * and would false-positive the stand-down. Kept in sync with
- * `alchemy/src/Serve/constants.ts` — duplicated because this package
- * deliberately carries no alchemy dependency.
- */
-const SERVE_MOUNT_PATTERN =
-  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/(?:Serve(?:\/Worker)?|Next|Nitro|Astro|SvelteKit)["']/;
-
-const SOURCE_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
-
-/** The only places a Next route handler can live (`find-pages-dir`). */
-const ROUTE_TREES = [
-  "app",
-  NodePath.join("src", "app"),
-  "pages",
-  NodePath.join("src", "pages"),
-];
-
-const scanTreeForServeMount = (directory: string): boolean => {
-  let entries: NodeFs.Dirent[];
-  try {
-    entries = NodeFs.readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return false;
-  }
-  for (const entry of entries) {
-    const child = NodePath.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (scanTreeForServeMount(child)) {
-        return true;
-      }
-    } else if (SOURCE_FILE_PATTERN.test(entry.name)) {
-      try {
-        if (SERVE_MOUNT_PATTERN.test(NodeFs.readFileSync(child, "utf8"))) {
-          return true;
-        }
-      } catch {
-        // unreadable file — keep scanning
-      }
-    }
-  }
-  return false;
-};
-
-/**
- * Scan the project's Next route trees (`app`, `src/app`, `pages`,
- * `src/pages`) for an explicit `alchemy/Serve` mount (DESIGN §6.3: the
- * auto-inject tier stands down when the user mounted the bridge
- * themselves — never two bridges on one Lambda). Route handlers cannot
- * live outside these trees, so the scan is exact for the mount that could
- * double-dispatch.
- */
-export const scanForExplicitNextServeMount = (root: string): boolean =>
-  ROUTE_TREES.some((tree) => scanTreeForServeMount(NodePath.join(root, tree)));
-
-/**
  * Version-gate the OpenNext wrapper-override delivery against the
  * *project's* installed `@opennextjs/aws`: the tested major, and the
  * semi-public stock streaming wrapper path the generated wrapper delegates
@@ -310,92 +243,28 @@ export const openNextEffectSupportIssue = (cli: string): string | undefined => {
 
 /**
  * The generated OpenNext wrapper module (`opennext-wrapper.mjs`): a
- * function-form wrapper override composing `makeWebsiteHandlers.match` at
- * the `InternalEvent` (fetch) layer — strict route ownership,
- * four-worlds env guard — then delegating the single
- * `awslambda.streamifyResponse` wrap to the stock `aws-lambda-streaming`
- * wrapper, so effect responses ride the exact compression + Function-URL
- * prelude pipe Next's own responses do.
+ * function-form wrapper override, ADDITIVE-ONLY (Serve/DESIGN.md). The
+ * stock `aws-lambda-streaming` wrapper builds Next's own streaming Lambda
+ * handler — with the user's route-file mount inside Next's pipeline — and
+ * `makeFrameworkFunctionHandler` delegates every HTTP-shaped event to it
+ * verbatim while dispatching non-HTTP events (SQS batches, schedules)
+ * through the site program's registered listeners on the SAME function.
  *
  * The module's TOP LEVEL IS PURE DATA: `open-next build` evaluates it (the
  * `canStream` probe reads `supportStreaming` to stamp
  * `origins.default.streaming` in the output manifest), so every heavy
  * import is dynamic, cold-start only.
  */
-export const generateOpenNextWrapperSource = (options: {
-  readonly routes: ReadonlyArray<string>;
-}): string => /* js */ `// Generated by @alchemy.run/frontend-frameworks/nextjs/aws.
-// The OpenNext wrapper override for the effectful zero-setup tier: the
-// Effect fetch composes at the InternalEvent (fetch) layer, strictly
-// BEFORE the single awslambda.streamifyResponse wrap, which is delegated
-// to the stock aws-lambda-streaming wrapper. TOP LEVEL IS PURE DATA — the
-// build evaluates this module (the canStream probe reads supportStreaming),
-// so every heavy import is dynamic, cold-start only.
-const ROUTES = ${JSON.stringify(options.routes)};
-
-/** InternalEvent -> fetch Request (url is already absolute). */
-const toWebRequest = (internalEvent) => {
-  const method = internalEvent.method ?? "GET";
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(internalEvent.headers ?? {})) {
-    if (value !== undefined) headers.append(key, String(value));
-  }
-  return new Request(internalEvent.url, {
-    method,
-    headers,
-    ...(method !== "GET" && method !== "HEAD" && internalEvent.body !== undefined
-      ? { body: internalEvent.body }
-      : {}),
-  });
-};
-
-/**
- * Write an effect Response through the wrapper's streamCreator — the same
- * prelude + compression pipe Next's own responses ride (OpenNext's own
- * in-contract pattern for middleware-produced responses). set-cookie is
- * lifted into the prelude's cookies array; content-encoding is stripped
- * because the wrapper's Accept-Encoding sniff owns it (writeHeaders
- * force-sets the header and pipes the matching compressor, so effect
- * responses must never pre-compress).
- */
-const emit = async (response, options) => {
-  const headers = {};
-  for (const [key, value] of response.headers.entries()) {
-    const lower = key.toLowerCase();
-    if (lower === "set-cookie" || lower === "content-encoding") continue;
-    headers[lower] = value;
-  }
-  const cookies =
-    typeof response.headers.getSetCookie === "function"
-      ? response.headers.getSetCookie()
-      : [];
-  if (options?.streamCreator === undefined) {
-    // A buffered wrapper (not the pinned topology): hand back an
-    // InternalResult and let the converter path answer.
-    return {
-      type: "core",
-      statusCode: response.status,
-      headers,
-      body:
-        response.body ?? new ReadableStream({ start: (c) => c.close() }),
-      isBase64Encoded: false,
-    };
-  }
-  const stream = options.streamCreator.writeHeaders({
-    statusCode: response.status,
-    headers,
-    cookies,
-  });
-  if (response.body) {
-    for await (const chunk of response.body) {
-      if (!stream.write(chunk)) {
-        await new Promise((resolve) => stream.once("drain", resolve));
-      }
-    }
-  }
-  await new Promise((resolve) => stream.end(resolve));
-};
-
+export const generateOpenNextWrapperSource =
+  (): string => /* js */ `// Generated by @alchemy.run/frontend-frameworks/nextjs/aws.
+// The OpenNext wrapper override for the effectful single-handler tier
+// (additive): Next's handler — with the user's route-file mount inside —
+// serves ALL HTTP through the stock aws-lambda-streaming pipeline
+// verbatim; makeFrameworkFunctionHandler adds the program's non-fetch
+// listener dispatch (queue consumers, schedules) on the same function.
+// TOP LEVEL IS PURE DATA — the build evaluates this module (the canStream
+// probe reads supportStreaming), so every heavy import is dynamic,
+// cold-start only.
 const wrapper = async (handler, converter) => {
   // Cold start only. The stock wrapper is inlined (lazily) into the
   // compiled open-next.config.mjs by the build's config compile, so this
@@ -405,21 +274,11 @@ const wrapper = async (handler, converter) => {
   const stock = (
     await import("@opennextjs/aws/overrides/wrappers/aws-lambda-streaming.js")
   ).default;
-  const { makeWebsiteHandlers, default: Site } = await import(
+  const streamHandler = await stock.wrapper(handler, converter);
+  const { makeFrameworkFunctionHandler, default: Site } = await import(
     "./${EFFECT_MODULE_NAME}"
   );
-  const site = lambdaServeBridge.handlers({ site: Site, routes: ROUTES });
-  const composed = async (internalEvent, options) => {
-    // Strict route ownership + the four-worlds env guard live
-    // inside match; undefined means "the framework serves".
-    const matched = await site.match(toWebRequest(internalEvent));
-    if (matched === undefined) return handler(internalEvent, options);
-    return emit(matched, options);
-  };
-  // The ONE streamifyResponse wrap, applied by the stock wrapper around
-  // the composed fetch. Warmer events short-circuit inside it, before
-  // convertFrom — they never reach the composed handler.
-  return stock.wrapper(composed, converter);
+  return makeFrameworkFunctionHandler({ site: Site, streamHandler });
 };
 
 export default {
@@ -540,9 +399,9 @@ export default {
  */
 export const generateEffectEntrySource = (mainPath: string): string =>
   `// Generated by @alchemy.run/frontend-frameworks/nextjs/aws — the rolldown
-// prebundle entry for the effectful zero-setup tier (one bundle keeps the
-// serve shell and the site module in a single module graph).
-export { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";
+// prebundle entry for the effectful single-handler tier (one bundle keeps
+// the serve machinery and the site module in a single module graph).
+export { makeFrameworkFunctionHandler } from "alchemy/AWS/Serve";
 export { default } from ${JSON.stringify(mainPath)};
 `;
 
@@ -712,18 +571,18 @@ interface NextDevChild {
  * node's type transform loads the TypeScript backend, and node's
  * query-keyed ESM cache powers the effect-handler hot reload.
  *
- * The child embeds Next through the documented custom-server API and — on
- * effectful sites — runs the Serve dispatch in front of Next's handler
- * (see `aws-dev-entry.ts`). One known delta from the retired `next dev`
- * CLI child: `next.config` edits no longer auto-restart the server (the
- * CLI's parent restart loop is not replicated; restart `alchemy dev`).
+ * The child embeds Next through the documented custom-server API; on
+ * effectful sites the user's route-file mount runs natively inside Next's
+ * own pipeline (no front dispatch — the mount design). One known delta
+ * from the retired `next dev` CLI child: `next.config` edits no longer
+ * auto-restart the server (the CLI's parent restart loop is not
+ * replicated; restart `alchemy dev`).
  */
 const spawnNextDev = (options: {
   readonly root: string;
   readonly entry: string;
   readonly port: number;
   readonly host?: string | undefined;
-  readonly effect?: NextjsAwsEffectOptions | undefined;
 }): Effect.Effect<NextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.try({
@@ -731,14 +590,6 @@ const spawnNextDev = (options: {
         const cp = createRequire(import.meta.url)(
           "child_process",
         ) as typeof NodeChildProcessModule;
-        const effect =
-          options.effect?.serveModule !== undefined
-            ? {
-                main: options.effect.main,
-                routes: options.effect.routes,
-                serveModule: options.effect.serveModule,
-              }
-            : undefined;
         const child = cp.spawn(
           "node",
           [
@@ -748,7 +599,6 @@ const spawnNextDev = (options: {
               root: options.root,
               port: options.port,
               hostname: options.host,
-              effect,
             }),
           ],
           {
@@ -890,22 +740,10 @@ export const make: (
 
       const cli = yield* resolveOpenNextCli(root);
 
-      // Effectful zero-setup delivery: stand down when the user's route
-      // tree already mounts alchemy/Serve explicitly (the explicit tier
-      // wins — never two bridges on one Lambda).
-      let effect = options?.effect;
-      if (
-        effect !== undefined &&
-        (yield* Effect.sync(() => scanForExplicitNextServeMount(root)))
-      ) {
-        yield* Effect.sync(() =>
-          process.stderr.write(
-            "alchemy: explicit alchemy/Serve mount detected in the Next " +
-              "route tree - the OpenNext wrapper override stands down\n",
-          ),
-        );
-        effect = undefined;
-      }
+      // Effectful single-handler delivery (Serve/DESIGN.md): additive-only
+      // — the user's route-file mount rides Next's own pipeline, so there
+      // is no stand-down scan and nothing to detect.
+      const effect = options?.effect;
 
       const writeGeneratedConfig = (directory: string, content: string) =>
         fs
@@ -954,7 +792,7 @@ export const make: (
             Effect.andThen(
               fs.writeFileString(
                 path.join(generatedDir, EFFECT_WRAPPER_NAME),
-                generateOpenNextWrapperSource({ routes: effect.routes }),
+                generateOpenNextWrapperSource(),
               ),
             ),
             Effect.mapError(
@@ -1111,13 +949,7 @@ export const make: (
       const port = devOptions?.port ?? (yield* pickEphemeralPort);
       const entry = yield* resolveDevEntry;
       const host = devOptions?.host;
-      const child = yield* spawnNextDev({
-        root,
-        entry,
-        port,
-        host,
-        effect: options?.effect,
-      });
+      const child = yield* spawnNextDev({ root, entry, port, host });
       const url = `http://${host ?? "localhost"}:${port}`;
       yield* awaitNextDevReady({ url, child });
       return { url };

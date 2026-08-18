@@ -35,7 +35,12 @@ setGetEnv((key) => process.env[key]);
 
 const app = createApp();
 
-const fetchHandler: FetchHandler = (request) =>
+/**
+ * The plain fetch-shaped handler over Astro's production `App` — exported
+ * so the effectful single-handler entry (`astro/aws.ts`'s generated
+ * wrapper) can graft it verbatim into `makeFrameworkFunctionHandler`.
+ */
+export const fetchHandler: FetchHandler = (request) =>
   app.render(request, {
     addCookieHeader: true,
     // The Function URL (and CloudFront in front of it) prepend the viewer

@@ -280,6 +280,18 @@ export interface FrameworkSiteConfig {
    * {@link wrapperEntry} ({@link wrapperEntry} wins when both are set).
    */
   effectOptions?: (ctx: ServerWrapperEntryContext) => Record<string, unknown>;
+  /**
+   * Single-handler delivery (Serve/DESIGN.md, AWS phase 4): the framework
+   * integration's generated Lambda entry is built with
+   * `makeFrameworkFunctionHandler` from `alchemy/AWS/Serve` — ONE function
+   * dispatches the framework's HTTP (with the user's mount inside it) AND
+   * the program's non-fetch listeners (queue consumers, schedules). The
+   * impl threads DIRECTLY into the server Lambda, so event-source
+   * mappings and their IAM target the server function itself and no
+   * sibling `<id>-Handlers` Lambda deploys. Frameworks not yet converted
+   * to the mount design leave this unset and keep the sibling delivery.
+   */
+  singleHandler?: boolean;
 }
 
 /** A wrapper entry prepared by {@link prepareServerWrapperEntry}. */
@@ -721,23 +733,31 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
     dev: props.dev,
   });
 
-  // Sibling-function non-fetch delivery (DESIGN §2.1.3): the framework
-  // artifact's entry is pre-streamified, so event-source handlers cannot
-  // ride it. Deploy the same impl as a sibling effect Lambda FIRST (its
-  // event sources register their mappings + IAM against the sibling; a
-  // fetch-only impl retracts the sibling and deploys no extra Lambda),
-  // then thread the redirect-wrapped impl into the site Lambda so its own
-  // evaluation cannot re-target event sources at the framework artifact.
-  const { siteImpl } = yield* deploySiblingHandlers({
-    id,
-    main: props.main,
-    impl,
-    runtime: props.server?.runtime,
-    architecture: props.server?.architecture,
-    memorySize: props.server?.memorySize,
-    timeout: props.server?.timeout,
-    env: props.server?.environment,
-  });
+  // Non-fetch delivery:
+  //  - Single-handler frameworks (the mount design, Serve/DESIGN.md AWS
+  //    phase 4): the impl threads DIRECTLY into the server Lambda — the
+  //    generated `makeFrameworkFunctionHandler` entry dispatches queue/
+  //    schedule events on the same function, so event-source mappings and
+  //    IAM target the server function itself. No sibling deploys.
+  //  - Legacy sibling delivery (frameworks not yet converted): deploy the
+  //    same impl as a sibling effect Lambda FIRST (its event sources
+  //    register their mappings + IAM against the sibling; a fetch-only
+  //    impl retracts the sibling), then thread the redirect-wrapped impl
+  //    into the site Lambda so its own evaluation cannot re-target event
+  //    sources at the framework artifact.
+  const { siteImpl } =
+    config.singleHandler === true
+      ? { siteImpl: impl }
+      : yield* deploySiblingHandlers({
+          id,
+          main: props.main,
+          impl,
+          runtime: props.server?.runtime,
+          architecture: props.server?.architecture,
+          memorySize: props.server?.memorySize,
+          timeout: props.server?.timeout,
+          env: props.server?.environment,
+        });
 
   // The server Lambda in collect-only mode: the impl runs for binding
   // collection (env + IAM + VPC/EFS requests land through the ordinary

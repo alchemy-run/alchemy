@@ -117,12 +117,14 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         // The fetchable-wrapper inputs ride the framework build options
         // (`targetConfig.effect` -> the AWS deploy target's config).
         const buildTargetConfig = build.props.options?.targetConfig as
-          | { effect?: { main?: string; routes?: string[] } }
+          | { effect?: { main?: string } }
           | undefined;
-        expect(buildTargetConfig?.effect?.routes).toEqual(["/api/*"]);
         expect(buildTargetConfig?.effect?.main).toContain(
           "EffectfulPlan.test.ts",
         );
+        // Routing lives in the user's mount — no routes ride the build
+        // options (Serve/DESIGN.md).
+        expect(buildTargetConfig?.effect).not.toHaveProperty("routes");
 
         // The impl's init ran at plan time: the DynamoDB capability
         // collected an IAM policy row through the binding channel.
@@ -251,6 +253,8 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
             effectHash: string;
           };
           expect(options.effect.id).toBe("NuxtSite");
+          // Nuxt keeps the routes-scoped middleware delivery until its
+          // own mount conversion (Serve/DESIGN.md phase 6).
           expect(options.effect.routes).toEqual(["/api/*"]);
           expect(options.effect.main).toContain("EffectfulPlan.test.ts");
           expect(typeof options.effectHash).toBe("string");
@@ -298,11 +302,13 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build).toBeDefined();
         const options = build.props.options as {
-          effect: { main: string; routes: string[] };
+          effect: { main: string };
           effectHash: string;
         };
-        expect(options.effect.routes).toEqual(["/api/*"]);
         expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        // Routing lives in the user's mount — no routes ride the build
+        // options (Serve/DESIGN.md).
+        expect(options.effect).not.toHaveProperty("routes");
         expect(typeof options.effectHash).toBe("string");
       }),
   );
@@ -336,12 +342,14 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build).toBeDefined();
         const options = build.props.options as {
-          effect: { id: string; main: string; routes: string[] };
+          effect: { id: string; main: string };
           effectHash: string;
         };
         expect(options.effect.id).toBe("NextSite");
-        expect(options.effect.routes).toEqual(["/api/*"]);
         expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        // Routing lives in the user's mount — no routes ride the build
+        // options (Serve/DESIGN.md).
+        expect(options.effect).not.toHaveProperty("routes");
         expect(typeof options.effectHash).toBe("string");
         // The OpenNext cache env names survive the impl threading (the
         // collected env merges INTO them, never replaces them).
@@ -503,11 +511,13 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
         // entry composes the effect fetch, driven by the `effect` build
         // options; the effect module's content hash keys rebuilds.
         const options = build.props.options as {
-          effect: { main: string; routes: string[] };
+          effect: { main: string };
           effectHash: string;
         };
-        expect(options.effect.routes).toEqual(["/api/*"]);
         expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        // Routing lives in the user's mount — no routes ride the build
+        // options (Serve/DESIGN.md).
+        expect(options.effect).not.toHaveProperty("routes");
         expect(typeof options.effectHash).toBe("string");
 
         // The composite's server Lambda runs in collect-only mode over the
@@ -796,16 +806,16 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
             );
           }),
         );
-        // The framework's `make()` mounts the effect dev middleware from
-        // these options — the dev analogue of the generated Lambda entry's
-        // effect arm.
+        // The hooks mount owns dev HTTP (Serve/DESIGN.md); the effect
+        // options only carry the anchor (the dev plugin keeps alchemy
+        // external to vite's SSR transform).
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build).toBeDefined();
         const options = build.props.options as {
-          effect: { main: string; routes: string[] };
+          effect: { main: string };
         };
-        expect(options.effect.routes).toEqual(["/api/*"]);
         expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        expect(options.effect).not.toHaveProperty("routes");
       }),
   );
 
@@ -822,19 +832,18 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
             );
           }),
         );
-        // The framework's `make()` mounts the effect dev middleware in
-        // front of vite's own dev server from these options — the dev
-        // analogue of the generated Lambda entry's effect arm.
+        // The user's server-entry mount owns dev HTTP (Serve/DESIGN.md);
+        // the effect options only carry the anchor.
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build).toBeDefined();
         expect(build.props.framework).toBe(
           "@alchemy.run/frontend-frameworks/vite",
         );
         const options = build.props.options as {
-          effect: { main: string; routes: string[] };
+          effect: { main: string };
         };
-        expect(options.effect.routes).toEqual(["/api/*"]);
         expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        expect(options.effect).not.toHaveProperty("routes");
         // The effect program deploys as the local emulator sibling.
         const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
         expect(server).toBeDefined();
@@ -846,7 +855,7 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
   );
 
   dev.test.provider(
-    "dev: Nextjs threads the effect dispatch options into the dev Server (custom-server child)",
+    "dev: Nextjs threads no dispatch options (the route-file mount owns dev HTTP)",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -861,29 +870,13 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
             );
           }),
         );
-        // The framework module's dev child runs the Serve front dispatch
-        // from these options: the impl anchor (absolute path), the routes
-        // claim, and the ENGINE-resolved `alchemy/Serve` module (one
-        // alchemy instance for the child's bridge and the backend's own
-        // imports). The effect-module content hash is deliberately NOT
-        // part of the dev restart surface — backend edits hot-reload
-        // inside the child instead of restarting `next dev`.
+        // Mount design (Serve/DESIGN.md): the user's route-file mount runs
+        // natively inside `next dev` — the dev child gets NO effect
+        // dispatch options; the lowered env (markers + packed bindings) is
+        // what the mount's env ladder resolves.
         const build = nodeOf(plan, "Build", "AWS.Website.Server");
         expect(build).toBeDefined();
-        const options = build.props.options as {
-          effect: {
-            id: string;
-            main: string;
-            routes: string[];
-            serveModule: string;
-          };
-          effectHash?: string;
-        };
-        expect(options.effect.id).toBe("DevNext");
-        expect(options.effect.routes).toEqual(["/api/effect/*"]);
-        expect(options.effect.main).toContain("EffectfulPlan.test.ts");
-        expect(options.effect.serveModule).toContain("Serve");
-        expect(options.effectHash).toBeUndefined();
+        expect(build.props.options).toBeUndefined();
       }),
   );
 

@@ -579,10 +579,6 @@ export function distilledCloudflare(
               ...(options.effect !== undefined
                 ? [
                     createEffectFetchablePlugin({
-                      mainPath: options.effect.mainPath,
-                      routes: options.effect.routes,
-                      srcDir: config.srcDir,
-                      fetchFile: config.fetchFile,
                       platform: "cloudflare",
                     }),
                     createEffectEntryPlugin({

@@ -51,7 +51,7 @@ export interface ViteTargetConfig {
   /** The server-environment split ({@link ViteOptions.viteEnvironments}). */
   readonly viteEnvironments?: ViteEnvironmentsOptions | undefined;
   /**
-   * Effectful (wrapper) delivery for an effectful `Website.Vite`
+   * Effectful (mount-design) delivery for an effectful `Website.Vite`
    * ({@link ViteOptions.effect}): the target's finishing pass generates
    * its Lambda entry's effect arm from it.
    */
@@ -104,11 +104,12 @@ export interface ViteOptions {
    */
   readonly vite?: ViteModule.InlineConfig | undefined;
   /**
-   * Effectful (wrapper) delivery for an effectful `Website.Vite`.
+   * Effectful (mount-design) delivery for an effectful `Website.Vite`.
    * Production builds: forwarded to the target via its config (the AWS
-   * target's finishing pass composes the effect fetch ahead of the
-   * framework handler in the generated Lambda entry). Dev: mounts the
-   * effect middleware in front of vite's dev server (see `effect.ts`).
+   * target's finishing pass generates the additive
+   * `makeFrameworkFunctionHandler` Lambda entry). Dev: the user's mount
+   * runs natively; a config-only plugin keeps alchemy external to vite's
+   * SSR transform (see `effect.ts`).
    */
   readonly effect?: ViteEffectOptions | undefined;
   readonly dev?:
@@ -135,8 +136,8 @@ const fail = (message: string, cause?: unknown) =>
  *   project (no SSR environment) builds assets-only: `serverModules` stays
  *   `undefined` and the finish pass passes the build through.
  * - `dev` runs vite's own dev server (Node SSR, full HMR) over the user
- *   config; an effectful site additionally mounts the effect dispatch as a
- *   front middleware (see `effect.ts`).
+ *   config; an effectful site's mount runs natively inside it (the
+ *   config-only dev plugin in `effect.ts` keeps alchemy external).
  *
  * The `null` second argument to `createBuilder` is load-bearing: it lets
  * vite fall back to the legacy single-environment builder when the config
@@ -251,17 +252,12 @@ export const make: (
     const root = devOptions?.root ?? baseRoot;
     const plugins: Array<ViteModule.Plugin> = [];
     if (options?.effect !== undefined) {
-      // Effectful Website: mount the effect middleware in front of the
-      // framework (the dev analogue of the Lambda entry's effect arm).
-      // The target selects the serve bridge (AWS mounts alchemy's Lambda
-      // serve shell over `process.env`).
-      const target = yield* resolveTarget(root);
-      plugins.push(
-        makeEffectDevPlugin({
-          effect: options.effect,
-          platform: target.platform,
-        }),
-      );
+      // Effectful Website (mount design): the user's server entry — with
+      // `mount(Site)` inside it — runs natively in the framework's dev
+      // server; the plugin only keeps alchemy external to vite's SSR
+      // transform so the mount and the site module share one alchemy
+      // instance.
+      plugins.push(makeEffectDevPlugin({ effect: options.effect }));
     }
     const vite = yield* loadVite(root);
     const config = resolveViteConfig(root, plugins);

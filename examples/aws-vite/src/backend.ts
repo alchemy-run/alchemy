@@ -18,6 +18,8 @@ import * as Stream from "effect/Stream";
 import * as Etag from "effect/unstable/http/Etag";
 import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { Processed, SiteApi, VisitCount } from "./api.ts";
 
@@ -194,12 +196,58 @@ export default class Site extends Vite<Site>()(
         ),
     );
 
+    // The schema-validated router, plus two hand-rolled MaxSite routes the
+    // HttpApi schema doesn't model: a STREAMING response and a
+    // request-scope FINALIZER (settles inline before the response on
+    // Lambda).
+    const apiHandler = HttpApiBuilder.layer(SiteApi).pipe(
+      Layer.provide(siteGroup),
+      Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+      HttpRouter.toHttpEffect,
+    );
+
     return {
-      // The schema-validated HTTP surface the untrusted frontend calls.
-      fetch: HttpApiBuilder.layer(SiteApi).pipe(
-        Layer.provide(siteGroup),
-        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
-        HttpRouter.toHttpEffect,
+      // The HTTP surface the untrusted frontend calls. NOTE (the mount
+      // design, Serve/DESIGN.md): on the SPA arm the Effect program IS
+      // the whole server Lambda — there is no framework server and hence
+      // no mount file; this `fetch` is the server, dispatched by the
+      // plain effect entry for every `server.routes` path the edge
+      // forwards here.
+      fetch: Effect.map(apiHandler, (handler) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const url = new URL(request.url, "http://site");
+
+          // Streaming route: chunks ride the HTTP bridge's response.
+          if (url.pathname === "/api/stream") {
+            const n = Number(url.searchParams.get("n") ?? "3");
+            const stream = Stream.range(0, n - 1).pipe(
+              Stream.map((i) => `${i}\n`),
+              Stream.encodeText,
+            );
+            return HttpServerResponse.stream(stream, {
+              headers: { "content-type": "text/plain" },
+            });
+          }
+
+          // Request-scope finalizer: runs before the response resolves
+          // (inline settle); observed via GET /api/kv?key=finalizer-last.
+          if (url.pathname === "/api/finalizer") {
+            const value = url.searchParams.get("v") ?? "ran";
+            yield* Effect.addFinalizer(() =>
+              writeKey("finalizer-last", value).pipe(Effect.ignore),
+            );
+            return yield* HttpServerResponse.json({ registered: value });
+          }
+          if (url.pathname === "/api/kv") {
+            const key = url.searchParams.get("key") ?? "";
+            return yield* HttpServerResponse.json({
+              value: (yield* readKey(key)) ?? null,
+            });
+          }
+
+          return yield* handler;
+        }),
       ),
       // Trusted-caller RPC methods (in-process value form, invoke bindings).
       visits,

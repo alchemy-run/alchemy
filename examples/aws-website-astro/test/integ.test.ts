@@ -36,7 +36,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the asset manifest and CloudFront edge caches are still
 // propagating, a 200 body can be stale — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -45,17 +46,17 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
     }
     return body;
   },
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+  Effect.retry({
+    while: (error) => error instanceof AssetNotReady,
+    schedule: Schedule.max([
+      Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
       ]),
-    }),
-  );
+      Schedule.recurs(20),
+    ]),
+  }),
+);
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
@@ -168,7 +169,7 @@ test(
 );
 
 test(
-  "queue round-trip: enqueue action, the sibling consumer catches up",
+  "queue round-trip: enqueue action, the same-Lambda consumer catches up",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
@@ -191,7 +192,7 @@ test(
 
     // The enqueue action sends to SQS and returns immediately (a void
     // handler result answers 204); the CONSUMER runs out of band on the
-    // sibling effect Lambda (`<site>-Handlers`), whose event-source
+    // SAME server Lambda (single-handler entry), whose event-source
     // mapping was registered by the same backend module.
     const res = yield* action(url, "enqueue", { message: marker });
     expect(res.status).toBe(204);

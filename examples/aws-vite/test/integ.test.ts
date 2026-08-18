@@ -32,15 +32,16 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the asset manifest and CloudFront edge caches are still
 // propagating, a 200 body can be stale — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
-  const res = yield* getWhenReady(url);
-  expect(res.status).toBe(200);
-  const body = yield* res.text;
-  if (!body.includes(expected)) {
-    return yield* Effect.fail(new AssetNotReady({ body }));
-  }
-  return body;
-},
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const body = yield* res.text;
+    if (!body.includes(expected)) {
+      return yield* Effect.fail(new AssetNotReady({ body }));
+    }
+    return body;
+  },
   Effect.retry({
     while: (error) => error instanceof AssetNotReady,
     schedule: Schedule.max([
@@ -165,6 +166,40 @@ test(
     );
     expect(processed.count).toBeGreaterThan(before.count);
     expect(processed.last).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "streaming route serves the full body through the effect entry",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/api/stream?n=5`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n4\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer settles inline (Lambda semantics)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `finalizer-${crypto.randomUUID()}`;
+    const registered = yield* getWhenReady(`${url}/api/finalizer?v=${marker}`);
+    expect(registered.status).toBe(200);
+    // Inline settle: the S3 write happened BEFORE the response resolved.
+    const value = yield* Effect.gen(function* () {
+      const res = yield* getWhenReady(`${url}/api/kv?key=finalizer-last`);
+      return ((yield* res.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
   }),
   { timeout: 180_000 },
 );

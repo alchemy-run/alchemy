@@ -29,10 +29,11 @@ export const Visits = DynamoDB.Table("Visits", {
 
 /**
  * SQS queue for the async leg: the site's program both produces to it (the
- * `enqueue` RPC method) and CONSUMES it — the consumer deploys as a sibling
- * effect Lambda from this same module, with the event-source mapping and
- * its IAM targeting the sibling (the framework-built site Lambda stays
- * fetch-only). Deliberately NOT `remote()`: under `alchemy dev` the queue,
+ * `enqueue` RPC method) and CONSUMES it — single-handler delivery
+ * (Serve/DESIGN.md, AWS phase 4): the event-source mapping and its IAM
+ * target the site's OWN server Lambda, whose generated entry dispatches
+ * SQS batches through the consumer registered below (no sibling function
+ * deploys). Deliberately NOT `remote()`: under `alchemy dev` the queue,
  * its event-source mapping, and the consumer all run together in the local
  * Lambda emulator (a real queue cannot feed an emulated consumer).
  */
@@ -86,11 +87,11 @@ export default class Site extends Astro<Site>()(
     });
 
     // The async leg's CONSUMER — a queue listener on the SAME class. At
-    // plan time this deploys the sibling effect Lambda (`Astro-Handlers`)
-    // with the event-source mapping targeting it; at runtime the sibling
-    // dispatches each SQS batch here. Each message bumps the
-    // `processed-count` item and records `processed-last` in DynamoDB,
-    // where the `processed` RPC method reads them back.
+    // plan time the event-source mapping (and its consume IAM) registers
+    // against the site's own server Lambda; at runtime the generated
+    // single-handler entry dispatches each SQS batch here. Each message
+    // bumps the `processed-count` item and records `processed-last` in
+    // DynamoDB, where the `processed` RPC method reads them back.
     yield* SQS.consumeQueueMessages(queue, (records) =>
       records.pipe(
         Stream.runForEach(

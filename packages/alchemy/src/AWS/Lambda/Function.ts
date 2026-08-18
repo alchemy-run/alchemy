@@ -616,11 +616,10 @@ const finalizeFunctionProps = (
               `listener(s) (event sources) but its runtime delivery is ` +
               `"external" — the framework-built artifact deploys ` +
               `byte-for-byte, so their events would invoke the framework's ` +
-              `handler. Move the event-source subscriptions to a dedicated ` +
-              `Effect Function (the sibling-function pattern), or let the ` +
-              `framework integration generate the entry wrapper by removing ` +
-              `\`server: { takeover: false }\` where the integration ` +
-              `supports it.`,
+              `handler. Let the framework integration generate the ` +
+              `single-handler entry (remove \`server: { takeover: false }\` ` +
+              `where the integration supports it), or move the event-source ` +
+              `subscriptions to a dedicated Effect Function.`,
             functionId: id,
             listeners: nonFetchListeners,
           }),

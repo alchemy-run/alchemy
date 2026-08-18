@@ -630,19 +630,14 @@ export const make: (
     const vite = yield* loadVite(root);
     let config = yield* resolveViteConfig(root, adapter);
     if (options?.effect !== undefined) {
-      // Effectful Website: mount the effect middleware in front of kit
-      // (the dev analogue of the worker shim's effect arm). The plugin
-      // reads env from the same platform proxy `emulate()` serves kit.
+      // Effectful Website (mount design): the user's hooks.server.ts mount
+      // serves effect dispatch natively inside kit's dev server; the
+      // config-only plugin keeps alchemy external to vite's SSR transform
+      // so the mount and the site module share one alchemy instance.
       config = {
         ...config,
         plugins: [
-          makeEffectDevPlugin({
-            effect: options.effect,
-            emulate: () => adapter.emulate?.(),
-            // Selects the serve bridge: the AWS target mounts alchemy's
-            // Lambda serve shell over `process.env` (no platform proxy).
-            platform: target.platform,
-          }),
+          makeEffectDevPlugin({ effect: options.effect }),
           ...(config.plugins ?? []),
         ],
       };

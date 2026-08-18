@@ -10,7 +10,7 @@
 /**
  * The default URL space an effectful Website's `fetch` handler owns when
  * `server.routes` is not configured. Every routes-carrying serve surface
- * (`Serve.toHandler`, `makeWebsiteExports`, `makeWebsiteHandlers`, the
+ * (`Serve.toHandler`, `makeWebsiteExports`, the
  * framework adapters) falls back to this claim, matching the constructs'
  * own `server.routes` default.
  */

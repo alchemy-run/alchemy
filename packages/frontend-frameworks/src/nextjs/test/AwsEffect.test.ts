@@ -11,7 +11,6 @@ import {
   generateOpenNextWrapperSource,
   OPENNEXT_TESTED_RANGE,
   openNextEffectSupportIssue,
-  scanForExplicitNextServeMount,
 } from "../aws.ts";
 
 const tempDirs: Array<string> = [];
@@ -35,31 +34,26 @@ const importModule = async (dir: string, name: string, source: string) => {
 };
 
 describe("generateOpenNextWrapperSource", () => {
-  const source = generateOpenNextWrapperSource({
-    routes: ["/api/*", "!/api/hello"],
+  const source = generateOpenNextWrapperSource();
+
+  it("is additive-only: no routes, no gating, no InternalEvent composition", () => {
+    expect(source).not.toContain("ROUTES");
+    expect(source).not.toContain("match(");
+    expect(source).not.toContain("lambdaServeBridge");
   });
 
-  it("bakes the routes claim (exclusions included)", () => {
-    expect(source).toContain(
-      `const ROUTES = ${JSON.stringify(["/api/*", "!/api/hello"])};`,
-    );
-  });
-
-  it("delegates the streamify wrap to the stock streaming wrapper", () => {
+  it("grafts the stock streaming handler verbatim into the single-handler wrapper", () => {
     expect(source).toContain(
       '"@opennextjs/aws/overrides/wrappers/aws-lambda-streaming.js"',
     );
-    expect(source).toContain("stock.wrapper(composed, converter)");
+    expect(source).toContain("stock.wrapper(handler, converter)");
+    expect(source).toContain(
+      "makeFrameworkFunctionHandler({ site: Site, streamHandler })",
+    );
   });
 
   it("loads the prebundled effect module beside the deployed config", () => {
     expect(source).toContain(`"./${EFFECT_MODULE_NAME}"`);
-  });
-
-  it("strips content-encoding and lifts set-cookie into the prelude", () => {
-    expect(source).toContain('lower === "set-cookie"');
-    expect(source).toContain('lower === "content-encoding"');
-    expect(source).toContain("getSetCookie");
   });
 
   it("is pure data at the top level: importable with no side effects", async () => {
@@ -79,10 +73,10 @@ describe("generateOpenNextWrapperSource", () => {
 });
 
 describe("generateEffectEntrySource", () => {
-  it("exports the serve shell and the site module from one graph", () => {
+  it("exports the serve machinery and the site module from one graph", () => {
     const source = generateEffectEntrySource("/abs/project/app/backend.ts");
     expect(source).toContain(
-      'export { makeWebsiteHandlers } from "alchemy/AWS/Lambda/ServeBridge";',
+      'export { makeFrameworkFunctionHandler } from "alchemy/AWS/Serve";',
     );
     expect(source).toContain(
       'export { default } from "/abs/project/app/backend.ts";',
@@ -183,58 +177,6 @@ describe("generateDerivedOpenNextConfig", () => {
       `export default { default: {}, middleware: { external: true } };`,
     );
     expect(message).toContain("middleware.external");
-  });
-});
-
-describe("scanForExplicitNextServeMount", () => {
-  it("detects a toHandler mount in app/", () => {
-    const root = makeTempDir();
-    const routeDir = NodePath.join(root, "app", "api", "[[...slug]]");
-    NodeFs.mkdirSync(routeDir, { recursive: true });
-    NodeFs.writeFileSync(
-      NodePath.join(routeDir, "route.ts"),
-      'import { toHandler } from "alchemy/Next";\n' +
-        'import Site from "../../backend.ts";\n' +
-        "const handler = toHandler(Site);\n" +
-        "export { handler as GET, handler as POST };\n",
-    );
-    expect(scanForExplicitNextServeMount(root)).toBe(true);
-  });
-
-  it("detects a mount under src/app/", () => {
-    const root = makeTempDir();
-    const routeDir = NodePath.join(root, "src", "app", "api", "[[...slug]]");
-    NodeFs.mkdirSync(routeDir, { recursive: true });
-    NodeFs.writeFileSync(
-      NodePath.join(routeDir, "route.ts"),
-      'import { toHandler } from "alchemy/Next";\n',
-    );
-    expect(scanForExplicitNextServeMount(root)).toBe(true);
-  });
-
-  it("does not false-positive on the createClient graph", () => {
-    const root = makeTempDir();
-    const appDir = NodePath.join(root, "app");
-    NodeFs.mkdirSync(appDir, { recursive: true });
-    NodeFs.writeFileSync(
-      NodePath.join(appDir, "page.tsx"),
-      // The value-form createClient graph (alchemy/Client) must NOT
-      // false-positive the stand-down.
-      'import { createClient } from "alchemy/Client";\n' +
-        'import Backend from "./backend.ts";\n' +
-        "export default () => createClient(Backend);\n",
-    );
-    // The backend module itself (capability imports) is not a mount either.
-    NodeFs.writeFileSync(
-      NodePath.join(appDir, "backend.ts"),
-      'import { Bucket } from "alchemy/AWS/S3";\n' +
-        'import { Nextjs } from "alchemy/AWS/Website";\n',
-    );
-    expect(scanForExplicitNextServeMount(root)).toBe(false);
-  });
-
-  it("is false for a project with no route trees", () => {
-    expect(scanForExplicitNextServeMount(makeTempDir())).toBe(false);
   });
 });
 

@@ -111,13 +111,13 @@ describe("AWS.Website.SvelteKit local", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Effectful SvelteKit (DESIGN §6.2b / §7-AWS) under `alchemy dev`: the
-// site's Effect program owns `/api/*` through the effect dev middleware
-// mounted in front of kit's Vite dev server, running in the RPC-sidecar
-// process with env lowered by the composite. Bindings hit the REAL cloud
-// with ambient credentials (the AWS dev model — no local S3 emulator),
-// while the effect program also deploys into the floci Lambda emulator as
-// the sibling function (docker required).
+// Effectful SvelteKit under `alchemy dev` (the mount design,
+// Serve/DESIGN.md): the fixture's `src/hooks.server.ts` mount serves the
+// effect API natively inside kit's Vite dev server, running in the
+// RPC-sidecar process with env lowered by the composite. Bindings hit
+// the REAL cloud with ambient credentials (the AWS dev model — no local
+// S3 emulator), while the effect program also deploys into the floci
+// Lambda emulator as the dev server Lambda (docker required).
 // ─────────────────────────────────────────────────────────────────────
 
 const effectFixtureDir = pathe.resolve(
@@ -153,7 +153,7 @@ const fetchJsonReady = <T>(url: string) =>
 
 describe("AWS.Website.SvelteKit local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful SvelteKit dev: /api/* serves through the effect middleware with real S3; the exclusion glob, SSR, and streamed bodies work",
+    "effectful SvelteKit dev: /api/* serves through the hooks mount with real S3; the exclusion glob, SSR, and streamed bodies work",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -199,7 +199,7 @@ describe("AWS.Website.SvelteKit local (effectful)", () => {
         expect(data.bucketArn).not.toContain(":000000000000:");
 
         // ── Effect surface: /api/effect/s3 write+read round-trips the S3
-        // capability bindings through the dev middleware, against the REAL
+        // capability bindings through the hooks mount, against the REAL
         // bucket with ambient credentials. Random payload so a stale
         // object from an earlier run can never satisfy the read ──────────
         const s3Value = `sveltekit-aws-effect-${crypto.randomUUID()}`;
@@ -235,16 +235,16 @@ describe("AWS.Website.SvelteKit local (effectful)", () => {
         );
         expect(cloudBody).toBe(s3Value);
 
-        // ── Streamed effect response through the dev middleware ──────────
+        // ── Streamed effect response through the hooks mount ─────────────
         yield* expectUrlContains(
           `${url}/api/effect/stream`,
           siteModule.STREAM_MARKER,
           { timeout: "60 seconds", label: "streamed effect response (dev)" },
         );
 
-        // ── Exclusion glob: /api/hello is carved OUT of the effect claim
-        // (`!/api/hello` in server.routes), so the middleware declines the
-        // path and kit's own +server endpoint answers ────────────────────
+        // ── Exclusion glob: /api/hello is carved OUT of the mount's claim
+        // (`!/api/hello`), so the mount declines the path and kit's own
+        // +server endpoint answers ───────────────────────────────────────
         const hello = yield* fetchJsonReady<{
           marker: string;
           via: string;

@@ -34,10 +34,6 @@ import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
 
-// Re-exported for callers that historically imported the scan from the
-// adapter module (it moved to the cloud-agnostic `EffectDev.ts` so the AWS
-// target can share it without importing this Cloudflare-specific module).
-export { scanForExplicitServeMount } from "./EffectDev.ts";
 import {
   generateWorkerShim,
   type WorkerShimEffectOptions,

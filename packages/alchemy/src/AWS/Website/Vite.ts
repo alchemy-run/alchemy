@@ -1,5 +1,5 @@
 import type { ConfigError } from "effect/Config";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as NodePath from "node:path";
 import type { Named, Tag } from "../../Named.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -301,10 +301,11 @@ export const viteDefaults = (props: ViteProps | EffectViteProps) => {
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.body))),
  * );
  * ```
- * On the SSR arm event handlers deploy on a sibling Lambda
- * (`<SiteId>-Handlers`) built from the same module; on the SPA arm they
- * attach to the site's own Lambda. Delivery engages on deploy —
- * `alchemy dev` does not dispatch queue events locally.
+ * On both arms the event handlers attach to the site's own Lambda: the
+ * SPA arm's program IS the Lambda, and the SSR arm's generated
+ * single-handler entry (Serve/DESIGN.md) dispatches events on the same
+ * function that serves the framework — no sibling deploys. Under
+ * `alchemy dev` the queue and consumer run in the local Lambda emulator.
  */
 export const Vite: {
   <Self>(): {
@@ -415,14 +416,16 @@ const viteSsrConfig = (props: ViteSsrProps): FrameworkSiteConfig => ({
     props.viteEnvironments !== undefined
       ? { viteEnvironments: props.viteEnvironments }
       : undefined,
-  // Auto-inject (wrapper) tier: the AWS deploy target's generated Lambda
-  // entry composes the effect fetch ahead of the framework's server entry
-  // (inside the one `streamifyResponse` wrap), and vite's dev server
-  // mounts the effect dev middleware — both driven by this `effect` build
-  // option. Only consulted on the impl arms; plain sites are untouched.
-  effectOptions: ({ mainPath, routes }) => ({
-    effect: { main: mainPath, routes: [...routes] },
+  // Single-handler (mount) delivery: the AWS deploy target's generated
+  // Lambda entry is `makeFrameworkFunctionHandler({ site, fetch })` — the
+  // framework's fetch (with the user's mount inside it) serves ALL HTTP
+  // verbatim, and the program's queue/schedule listeners dispatch on the
+  // SAME function. Only consulted on the impl arms; plain sites are
+  // untouched.
+  effectOptions: ({ mainPath }) => ({
+    effect: { main: mainPath },
   }),
+  singleHandler: true,
 });
 
 const makeVite = (
@@ -430,6 +433,15 @@ const makeVite = (
   props: any = {},
   impl?: Effect.Effect<any, any, any>,
 ): Effect.Effect<any, never, any> => {
+  // Effect-valued props (e.g. optional domain config resolved through
+  // effect/Config): resolve them first, then re-dispatch — the arm
+  // selection (`ssr`) and the Vite-convention defaults both need the
+  // resolved object.
+  if (Effect.isEffect(props)) {
+    return Effect.flatMap(props as Effect.Effect<any, any, any>, (resolved) =>
+      makeVite(id, resolved, impl),
+    ) as Effect.Effect<any, never, any>;
+  }
   if (props?.ssr === true) {
     const config = viteSsrConfig(props as ViteSsrProps);
     return impl === undefined

@@ -46,19 +46,6 @@ const runEntry = (config?: NextjsAwsDevEntryConfig) =>
     { encoding: "utf8", timeout: 25_000 },
   );
 
-/** A minimal `alchemy/Serve` stand-in — enough for `createEffectDispatch`. */
-const writeServeFixture = (dir: string): string => {
-  const file = NodePath.join(dir, "serve.mjs");
-  NodeFs.writeFileSync(
-    file,
-    `export const DEFAULT_SERVER_ROUTES = ["/api/*"];
-export const matchRoutes = () => false;
-export const make = () => ({ match: async () => undefined });
-`,
-  );
-  return file;
-};
-
 describe.skipIf(!canRunTsEntry)("aws-dev-entry", () => {
   it("fails loudly when the JSON config argument is missing", () => {
     const result = runEntry();
@@ -67,34 +54,13 @@ describe.skipIf(!canRunTsEntry)("aws-dev-entry", () => {
     expect(result.stderr).toContain("missing the JSON config argument");
   });
 
-  it("fails loudly on a broken effect backend, before Next ever loads", () => {
+  it("resolves the project's next (no effect dispatch — the mount owns dev HTTP)", () => {
     const root = makeTempDir();
-    const main = NodePath.join(root, "backend.mjs");
-    NodeFs.writeFileSync(main, "export const nope = 1;\n");
-    const result = runEntry({
-      root,
-      port: 0,
-      effect: { main, serveModule: writeServeFixture(root) },
-    });
+    const result = runEntry({ root, port: 0 });
+    // The failure is the (absent) `next` resolved from the project root —
+    // the entry carries no effect dispatch stage anymore (Serve/DESIGN.md:
+    // the user's route-file mount runs natively inside next dev).
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("no default export");
-    // Failed at the dispatch stage — the project's `next` was never touched.
-    expect(result.stderr).not.toMatch(/Cannot find (module|package) '?next/);
-  });
-
-  it("constructs the effect dispatch first, then resolves the project's next", () => {
-    const root = makeTempDir();
-    const main = NodePath.join(root, "backend.mjs");
-    NodeFs.writeFileSync(main, "export default { site: true };\n");
-    const result = runEntry({
-      root,
-      port: 0,
-      effect: { main, serveModule: writeServeFixture(root) },
-    });
-    // The backend imported fine; the failure is the (absent) `next`
-    // resolved from the project root — pinning the wiring order.
-    expect(result.status).toBe(1);
-    expect(result.stderr).not.toContain("no default export");
     expect(result.stderr).toMatch(/Cannot find (module|package) '?next/);
   });
 });

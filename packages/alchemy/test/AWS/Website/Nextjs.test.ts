@@ -191,7 +191,7 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
 // Effectful Next.js live (zero-setup wrapper override, DESIGN §7-AWS):
 // no route file, no config edit — alchemy derives an OpenNext config under
 // `.alchemy/generated/<id>/` whose function-form custom wrapper composes
-// `makeWebsiteHandlers.match` at the InternalEvent layer and delegates the
+// `additive single-handler wrapper (`makeFrameworkFunctionHandler`) and delegates the
 // one `streamifyResponse` wrap to the stock aws-lambda-streaming wrapper;
 // the site module + serve shell are prebundled beside the deployed config.
 // The clone's own `open-next.config.ts` (webpack buildCommand) exercises

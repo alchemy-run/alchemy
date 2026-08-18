@@ -165,8 +165,8 @@ describe("AWS.Website.Astro local", () => {
 
 // ─────────────────────────────────────────────────────────────────────
 // Effectful Website (DESIGN §6.2c, §7-AWS): the Astro construct's third
-// argument is an Effect program whose `fetch` owns `server.routes` —
-// delivered in dev through the generated fetchable wrapper running inside
+// argument is an Effect program whose `fetch` the fixture's own
+// `src/fetch.ts` MOUNT serves (the mount design) — running inside
 // Astro's own Node dev server (the sidecar process), which IS the AWS
 // Lambda programming model. The DynamoDB capability bindings collected at
 // plan resolve against the REAL cloud table (the fixture pins it
@@ -177,15 +177,14 @@ describe("AWS.Website.Astro local", () => {
 
 describe("AWS.Website.Astro local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful Astro dev: /api/* serves through the Effect fetch with real AWS bindings",
+    "effectful Astro dev: /api/* serves through the src/fetch.ts mount with real AWS bindings",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
         // Private clone; the clone's own `site.ts` is the program module
-        // (`main: import.meta.url` anchors the cloned path, so the
-        // generated fetchable wrapper imports the clone, not the source
-        // fixture).
+        // (`main: import.meta.url` anchors the cloned path, and the
+        // clone's own `src/fetch.ts` mount imports it by relative path).
         const rootDir = yield* cloneFixture(effectFixtureDir, {
           prefix: "alchemy-astro-effect-aws-dev-",
           tempRoot,

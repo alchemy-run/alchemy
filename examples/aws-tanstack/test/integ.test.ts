@@ -24,7 +24,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the asset manifest and CloudFront edge caches are still
 // propagating, a 200 body can be stale — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
+const getBodyWhenReady = Effect.fn(
+  function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -33,17 +34,17 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
     }
     return body;
   },
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+  Effect.retry({
+    while: (error) => error instanceof AssetNotReady,
+    schedule: Schedule.max([
+      Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
       ]),
-    }),
-  );
+      Schedule.recurs(20),
+    ]),
+  }),
+);
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
@@ -91,10 +92,7 @@ const callServerFn = (base: string, name: string, data?: unknown) =>
     if (data !== undefined) {
       const payload = yield* Effect.promise(() => toJSONAsync({ data }));
       request = request.pipe(
-        HttpClientRequest.bodyText(
-          JSON.stringify(payload),
-          "application/json",
-        ),
+        HttpClientRequest.bodyText(JSON.stringify(payload), "application/json"),
       );
     }
     return yield* executeWhenReady(request);
@@ -196,7 +194,7 @@ test(
 );
 
 test(
-  "queue leg: enqueue → sibling consumer → processed",
+  "queue leg: enqueue → same-Lambda consumer → processed",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
@@ -208,13 +206,12 @@ test(
     const before = yield* readCount(url, "processed-count");
 
     // Produce through the `enqueueJob` server function; the CONSUMER runs
-    // out of band on the sibling effect Lambda (`Website-Handlers`),
-    // whose event-source mapping was registered by the same backend
-    // module.
+    // out of band on the SAME server Lambda (single-handler entry), whose
+    // event-source mapping was registered by the same backend module.
     const sent = yield* callServerFn(url, "enqueueJob", marker);
     expect(sent.status).toBe(200);
 
-    // Poll the server-rendered page until the sibling's DynamoDB writes
+    // Poll the server-rendered page until the consumer's DynamoDB writes
     // are observed by the SSR loader.
     const after = yield* readCount(url, "processed-count").pipe(
       Effect.repeat({
@@ -236,6 +233,103 @@ test(
     const url = yield* base;
     const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
     expect(body).toContain("User-agent: *");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "the mount's own route answers without the framework (healthz)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/healthz`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("ok");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "the mount's admin gate runs ahead of both worlds",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // Warm first so the cold-start window can't read as the gate.
+    yield* getWhenReady(`${url}/healthz`);
+    const client = yield* HttpClient.HttpClient;
+    const denied = yield* client.get(`${url}/api/admin/secret`);
+    expect(denied.status).toBe(403);
+    const allowed = yield* client.execute(
+      HttpClientRequest.get(`${url}/api/admin/secret`).pipe(
+        HttpClientRequest.setHeader("x-admin-key", "letmein"),
+      ),
+    );
+    expect(allowed.status).toBe(200);
+    expect((yield* allowed.json) as object).toEqual({ admin: true });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "effect queue leg over HTTP: /api/enqueue → same-Lambda consumer → /api/kv",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `http-queue-${crypto.randomUUID()}`;
+
+    const readKv = (key: string) =>
+      Effect.gen(function* () {
+        const res = yield* getWhenReady(`${url}/api/kv?key=${key}`);
+        expect(res.status).toBe(200);
+        return ((yield* res.json) as { value: string | null }).value;
+      });
+
+    const before = Number((yield* readKv("processed-count")) ?? "0");
+    const sent = yield* getWhenReady(`${url}/api/enqueue?m=${marker}`);
+    expect(sent.status).toBe(200);
+
+    // The consumer runs on the SAME Lambda (single-handler entry): poll
+    // until its DynamoDB writes land.
+    yield* readKv("processed-count").pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (count) => Number(count ?? "0") > before,
+        times: 45,
+      }),
+    );
+    expect(yield* readKv("processed-last")).toBe(marker);
+  }),
+  { timeout: 240_000 },
+);
+
+test(
+  "streaming route serves the full body through the streamified entry",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(`${url}/api/stream?n=5`);
+    expect(res.status).toBe(200);
+    expect(yield* res.text).toBe("0\n1\n2\n3\n4\n");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "request-scope finalizer settles inline (Lambda semantics)",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const marker = `finalizer-${crypto.randomUUID()}`;
+    const registered = yield* getWhenReady(`${url}/api/finalizer?v=${marker}`);
+    expect(registered.status).toBe(200);
+    // Inline settle: the write happened BEFORE the response resolved —
+    // the next read observes it (small poll for DynamoDB consistency).
+    const value = yield* Effect.gen(function* () {
+      const res = yield* getWhenReady(`${url}/api/kv?key=finalizer-last`);
+      return ((yield* res.json) as { value: string | null }).value;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (value) => value === marker,
+        times: 20,
+      }),
+    );
+    expect(value).toBe(marker);
   }),
   { timeout: 180_000 },
 );

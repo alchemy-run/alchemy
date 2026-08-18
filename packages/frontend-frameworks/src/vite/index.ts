@@ -14,8 +14,6 @@ export {
 export {
   effectMainPath,
   makeEffectDevPlugin,
-  matchServerRoutes,
-  scanForExplicitServeMount,
   type EffectDevPluginArgs,
   type ViteEffectOptions,
 } from "./effect.ts";
