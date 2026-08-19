@@ -501,7 +501,7 @@ test.provider(
           Effect.as(undefined),
           Effect.catchCause((cause) => Effect.succeed(findError(cause))),
         );
-      expect(error).toBeDefined();
+      expect(error).toBeInstanceOf(Cloudflare.DNS.AmbiguousDnsRecordError);
       expect(String(error)).toContain("Multiple DNS records");
 
       yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");

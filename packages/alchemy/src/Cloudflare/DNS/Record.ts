@@ -1,5 +1,6 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
@@ -401,13 +402,13 @@ export const RecordProvider = () =>
       // `(name, type)` (MX fallbacks, multiple TXT/A records) — the
       // declared `content`/`priority` disambiguate which one this
       // resource corresponds to.
-      const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
+      const zoneId = output?.zoneId ?? olds?.zoneId;
       const name = output?.name ?? olds?.name;
       const type = output?.type ?? olds?.type;
       if (zoneId && name && type) {
         const observed = yield* findByNameType(zoneId, name, type, {
-          content: (olds?.content as string | undefined) ?? output?.content,
-          priority: olds?.priority as number | undefined,
+          content: olds?.content ?? output?.content,
+          priority: olds?.priority,
         });
         const attrs = toAttributes(observed, zoneId);
         if (attrs) return Unowned(attrs);
@@ -437,6 +438,25 @@ interface RecordMatch {
   readonly content?: string;
   readonly priority?: number;
 }
+
+/**
+ * Raised when several DNS records share `(name, type)` and the declared
+ * `content`/`priority` do not select exactly one of them — adoption must
+ * never pick a record arbitrarily.
+ */
+export class AmbiguousDnsRecordError extends Data.TaggedError(
+  "AmbiguousDnsRecordError",
+)<{
+  readonly zoneId: string;
+  readonly name: string;
+  readonly type: RecordType;
+  readonly candidates: ReadonlyArray<{
+    readonly id?: string;
+    readonly content?: string;
+    readonly priority?: number;
+  }>;
+  readonly message: string;
+}> {}
 
 // Locate an existing record by `(zoneId, name, type)`. Cloudflare accepts
 // relative names on writes but returns FQDNs on reads, so check the supplied
@@ -469,19 +489,28 @@ const findByNameType = (
         }),
       );
     }),
-    Effect.flatMap((candidates) => {
-      if (candidates.length === 0) return Effect.succeed(undefined);
-      if (candidates.length === 1) return Effect.succeed(candidates[0]);
-      const narrowed = candidates.filter(
-        (r) =>
-          (match.content === undefined || r.content === match.content) &&
-          (match.priority === undefined || r.priority === match.priority),
-      );
-      if (narrowed.length === 1) return Effect.succeed(narrowed[0]);
-      if (narrowed.length === 0) return Effect.succeed(undefined);
-      return Effect.fail(
-        new Error(
-          `Multiple DNS records in zone ${zoneId} match (name=${name}, ` +
+    Effect.flatMap(
+      Effect.fn(function* (candidates) {
+        if (candidates.length === 0) return undefined;
+        if (candidates.length === 1) return candidates[0];
+        const narrowed = candidates.filter(
+          (r) =>
+            (match.content === undefined || r.content === match.content) &&
+            (match.priority === undefined || r.priority === match.priority),
+        );
+        if (narrowed.length === 1) return narrowed[0];
+        if (narrowed.length === 0) return undefined;
+        return yield* new AmbiguousDnsRecordError({
+          zoneId,
+          name,
+          type,
+          candidates: candidates.map((r) => ({
+            id: r.id,
+            content: r.content,
+            priority: r.priority,
+          })),
+          message:
+            `Multiple DNS records in zone ${zoneId} match (name=${name}, ` +
             `type=${type}) and the desired content/priority does not ` +
             `select exactly one. Set \`content\`` +
             (type === "MX" || type === "URI" ? " and `priority`" : "") +
@@ -494,9 +523,9 @@ const findByNameType = (
                   (r.priority === undefined ? "" : ` priority=${r.priority}`),
               )
               .join("\n"),
-        ),
-      );
-    }),
+        });
+      }),
+    ),
   );
 
 const listExactByNameType = (zoneId: string, name: string, type: RecordType) =>
