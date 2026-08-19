@@ -44,7 +44,8 @@ type Operation<Res, Err> = Effect.Effect<
 const WORKER_TYPE_ID = "Cloudflare.Worker";
 type WorkerHost = ResourceLike & {
   bind: (
-    sid: string,
+    template: TemplateStringsArray,
+    ...args: unknown[]
   ) => (binding: Input<{ bindings?: unknown[] }>) => Effect.Effect<void>;
 };
 const isWorkerHost = (host: ResourceLike): host is WorkerHost =>
