@@ -78,15 +78,17 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
           deployed.router.distribution.distributionId,
         );
       }),
-    // Create waits for Status === "Deployed" (~5 min) and destroy is
-    // disable -> wait -> delete (~5-15 min more): 600s was measured too
-    // small — the run died mid-destroy with green assertions.
-    // CloudFront full lifecycle (create + KV-routed assertions + disable +
-    // delete) measures ~6m with bounded polls; generous headroom for
-    // propagation variance. If this ever times out mid-destroy again,
-    // suspect a hung poll first (see the Effect.timeout guards in
-    // Distribution.ts), not CloudFront.
-    { timeout: 1_500_000 },
+    // The budget must fit THREE full CloudFront propagation waits (~5-12 min
+    // each), not two: when a previous run's teardown was abandoned (the
+    // runner gives interrupted finalizers only a 10s grace), the next run's
+    // initial stack.destroy() has to wait out the leftover distribution's
+    // disable before deleting it, then still do its own create-deploy wait
+    // and disable->wait->delete teardown. If this times out with the destroy
+    // apparently stalled between waves, suspect an unbounded retry backoff
+    // first: the 2026-08-13 "hang" was the KvEntries/KvRoutesUpdate etag-race
+    // retry sleeping on an uncapped exponential (see kvsEtagRetrySchedule in
+    // src/AWS/CloudFront/common.ts), not CloudFront.
+    { timeout: 2_400_000 },
   );
 });
 

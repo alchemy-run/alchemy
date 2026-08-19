@@ -42,6 +42,37 @@ export interface NextjsProps {
    */
   rootDir?: string;
   /**
+   * OpenNext configuration, expressed as alchemy props. Deep-merged over
+   * the streaming default (`default.override.wrapper:
+   * "aws-lambda-streaming"`) and written to the synthesized
+   * `open-next.config.ts`. JSON-serializable values only — for
+   * function-valued overrides, author your own `open-next.config.ts` (a
+   * user-authored file takes precedence over this prop).
+   */
+  openNext?: {
+    /** The default server function's configuration. */
+    default?: {
+      /**
+       * Named overrides (wrapper, converter, incrementalCache, queue,
+       * tagCache, ...). Alchemy's default sets
+       * `wrapper: "aws-lambda-streaming"` — required by the streaming
+       * Lambda Function URL this resource deploys.
+       */
+      override?: Record<string, unknown>;
+      minify?: boolean;
+      [key: string]: unknown;
+    };
+    /** Additional (split) server functions. */
+    functions?: Record<string, unknown>;
+    /** Image-optimization function configuration. */
+    imageOptimization?: Record<string, unknown>;
+    /** Middleware configuration. */
+    middleware?: Record<string, unknown>;
+    /** OpenNext escape hatches (e.g. `disableIncrementalCache`). */
+    dangerous?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  /**
    * Controls which files are hashed to decide whether the build re-runs.
    * @default true
    */
@@ -201,6 +232,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       env: props.server?.environment,
       memo: props.memo,
       dev: props.dev,
+      options: props.openNext ? { openNext: props.openNext } : undefined,
     });
 
     if (isLocal) {

@@ -1,6 +1,6 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
+
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -9,6 +9,7 @@ import {
   extractValue,
   getKvsEtag,
   isKvsPreconditionFailed,
+  kvsEtagRetrySchedule,
   retryForKvsReadiness,
   withKvsRegionFn,
 } from "./common.ts";
@@ -127,7 +128,7 @@ export const KvEntriesProvider = () =>
       ) {
         let remainingPuts = puts;
         let remainingDeletes = deletes;
-        let currentEtag = etag ?? (yield* getKvsEtag(store));
+        let currentEtag: string | undefined = etag;
 
         while (remainingPuts.length > 0 || remainingDeletes.length > 0) {
           const batchPuts = remainingPuts.slice(0, BATCH_SIZE);
@@ -136,20 +137,35 @@ export const KvEntriesProvider = () =>
             BATCH_SIZE - batchPuts.length,
           );
 
-          const resp = yield* sendBatch(
-            store,
-            currentEtag,
-            batchPuts,
-            batchDeletes,
-          ).pipe(
+          // A PreconditionFailed means the etag we sent is stale (another
+          // writer — e.g. a sibling resource mutating the same store — got
+          // in between), so each retry attempt MUST re-resolve the etag:
+          // retrying with the same one can never succeed.
+          const resp = yield* Effect.gen(function* () {
+            const attemptEtag = currentEtag ?? (yield* getKvsEtag(store));
+            currentEtag = attemptEtag;
+            return yield* sendBatch(
+              store,
+              attemptEtag,
+              batchPuts,
+              batchDeletes,
+            );
+          }).pipe(
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                if (
+                  error._tag === "ValidationException" &&
+                  isKvsPreconditionFailed(error)
+                ) {
+                  currentEtag = undefined;
+                }
+              }),
+            ),
             Effect.retry({
               while: (error) =>
                 error._tag === "ValidationException" &&
                 isKvsPreconditionFailed(error),
-              schedule: Schedule.max([
-                Schedule.exponential("100 millis"),
-                Schedule.recurs(24),
-              ]),
+              schedule: kvsEtagRetrySchedule,
             }),
           );
 

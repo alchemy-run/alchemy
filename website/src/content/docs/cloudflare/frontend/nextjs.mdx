@@ -63,6 +63,11 @@ export default defineCloudflareConfig({
 For revalidation that actually writes, see
 [Writable ISR](#writable-isr) below.
 
+The Next.js build itself runs programmatically through your
+project's own `next` install (no shell command, no `build` script
+required). A `buildCommand` set in `open-next.config.ts` is still
+honored.
+
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the

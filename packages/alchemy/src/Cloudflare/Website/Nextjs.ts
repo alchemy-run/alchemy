@@ -36,13 +36,6 @@ export interface NextjsBuildOptions {
    */
   configPath?: string;
   /**
-   * The command the OpenNext pipeline runs to build the Next.js app.
-   * A `buildCommand` set in the project's `open-next.config.ts` takes
-   * precedence over this option.
-   * @default "npx next build"
-   */
-  buildCommand?: string;
-  /**
    * Skip the internal `next build` and reuse an existing `.next` directory.
    * @default false
    */
@@ -251,14 +244,15 @@ export interface NextjsProps<
  * ```
  *
  * @section Build Configuration
- * The `nextjs` prop tunes the OpenNext pipeline: a custom build command,
- * minification, or reusing an existing `.next` build.
+ * The `nextjs` prop tunes the OpenNext pipeline: minification, or reusing
+ * an existing `.next` build. The Next.js build itself runs programmatically
+ * through the project's own `next/dist/build` (a `buildCommand` set in the
+ * project's `open-next.config.ts` is still honored).
  *
- * @example Minified build with a custom command
+ * @example Minified build
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   nextjs: {
- *     buildCommand: "npx next build --no-lint",
  *     minify: true,
  *   },
  * });
