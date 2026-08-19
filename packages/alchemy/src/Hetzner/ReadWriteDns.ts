@@ -13,8 +13,6 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * {@link ReadWriteDnsHttp} on the Action / Function Effect.
  *
  * @binding
- * @product DNS
- * @category Domains & DNS
  *
  * @section Managing RRSets at runtime
  * @example Full CRUD from an Action

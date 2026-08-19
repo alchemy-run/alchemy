@@ -18,8 +18,6 @@ import type { Zone } from "./Zone.ts";
  * zone id. Provide {@link ReadDnsHttp} on the Action / Function Effect.
  *
  * @binding
- * @product DNS
- * @category Domains & DNS
  *
  * @section Reading RRSets at runtime
  * @example List and get RRSets from an Action
