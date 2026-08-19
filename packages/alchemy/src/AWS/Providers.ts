@@ -1242,8 +1242,8 @@ export const providers = () =>
             EC2.EgressOnlyInternetGatewayProvider(),
           ),
           flociDual(EC2.EIP, () => EC2.EIPProvider()),
-          EC2.FlowLogProvider(),
-          EC2.InstanceProvider(),
+          flociDual(EC2.FlowLog, () => EC2.FlowLogProvider()),
+          flociDual(EC2.Instance, () => EC2.InstanceProvider()),
           // Dual EC2 networking glue: local (floci) ECS services/tasks run
           // inside an emulated VPC — a live VPC can't host local containers
           // and local target groups can't reference a live vpcId.
@@ -1420,10 +1420,10 @@ export const providers = () =>
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
           Logs.DestinationProvider(),
-          Logs.LogGroupProvider(),
+          flociDual(Logs.LogGroup, () => Logs.LogGroupProvider()),
           Logs.LogStreamProvider(),
           Logs.MetricFilterProvider(),
-          Logs.ResourcePolicyProvider(),
+          flociDual(Logs.ResourcePolicy, () => Logs.ResourcePolicyProvider()),
           Logs.SubscriptionFilterProvider(),
           MediaConnect.FlowProvider(),
           MediaConvert.JobProvider(),

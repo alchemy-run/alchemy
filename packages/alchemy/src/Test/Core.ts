@@ -248,7 +248,8 @@ export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 /**
  * Floci serves virtual-host data planes on the gateway when the Host
  * header is the AWS hostname (`{bucket}.s3-website-{region}.amazonaws.com`,
- * `{apiId}.appsync-api.{region}.amazonaws.com`). Live tests GET those
+ * `{apiId}.appsync-api.{region}.amazonaws.com`,
+ * `{apiId}.execute-api.{region}.amazonaws.com`). Live tests GET those
  * hosts; under {@link ALCHEMY_TEST_DEV} rewrite the URL to the emulator
  * and keep the Host so the virtual-host filter still fires.
  */
@@ -263,7 +264,8 @@ const rewriteAwsVirtualHostToFloci = (
   }
   if (
     !/\.s3-website-[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname)
+    !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
+    !/\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname)
   ) {
     return request;
   }
