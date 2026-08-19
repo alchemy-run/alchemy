@@ -59,12 +59,13 @@ const AuthDatabase = Layer.unwrap(
 
 Better Auth's optional `secondaryStorage` (sessions, rate limiting,
 OAuth state) is modeled as a second service, `BetterAuth.SecondaryStorage`,
-resolved only when a layer provides it. There is deliberately no
-Cloudflare KV implementation: Better Auth's guidance is a Redis-style
-store with strongly consistent reads and precise sub-minute TTLs, and
-KV's eventual consistency (plus its 60-second TTL floor) fights session
-reads and rate-limit counters. A Durable Object-backed layer is the
-right strongly-consistent Cloudflare option when one lands.
+resolved only when a layer provides it. It requires atomic
+`getAndDelete` and `increment` alongside `get`/`set`/`delete`. There is
+deliberately no Cloudflare KV implementation: Better Auth's guidance is a
+Redis-style store with strongly consistent reads and precise sub-minute
+TTLs, and KV's eventual consistency (plus its 60-second TTL floor) fights
+session reads and rate-limit counters. A Durable Object-backed layer is
+the right strongly-consistent Cloudflare option when one lands.
 
 ## Choosing between Postgres options
 

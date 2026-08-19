@@ -28,8 +28,14 @@ The Action's input is a hash of:
 
 Unchanged input ⇒ the Action no-ops without touching the database.
 `--force` re-runs it. Migrations are additive and idempotent
-(`CREATE TABLE` / `ADD COLUMN` on what's missing), so re-running is
-always safe.
+(`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing), so
+re-running a greenfield or already-migrated database is always safe.
+
+Populated databases missing `account.issuer` are upgraded in place from
+provider IDs and stored Microsoft `id_token` claims. Deploy fails when
+`(issuer, accountId)` collides, a Microsoft row has no `oid`, or leftover
+`scimProvider` / `oauthApplication` tables still have rows — those last
+two need the [upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
 
 The host Function/Worker depends on the migration through its
 environment, so first-deploy traffic cannot race the schema.
@@ -58,7 +64,7 @@ const auth = yield* BetterAuth({
 ```
 
 With `migrate: false` you own the schema — generate it with
-`npx @better-auth/cli generate` and apply it through your own migration
+`npx auth@latest generate` and apply it through your own migration
 flow (for Drizzle users that is the default and only mode).
 
 Multiple `BetterAuth` instances in one stack? Give each a distinct

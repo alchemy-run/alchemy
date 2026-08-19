@@ -5,6 +5,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { getSchema } from "better-auth/db";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { prepareSchemaUpgrades } from "./AccountIdentity.ts";
 import type { DatabaseService } from "./Database.ts";
 import { BetterAuthMigrationError } from "./Errors.ts";
 
@@ -31,6 +32,7 @@ interface MigrateInput {
 export interface MigrateOutput {
   tablesCreated: number;
   tablesAltered: number;
+  indexesCreated: number;
 }
 
 export interface RegisterMigrationOptions {
@@ -147,7 +149,8 @@ const runMigrationWith = (
           ),
         );
       }
-      const { getMigrations } = yield* Effect.promise(
+      yield* prepareSchemaUpgrades(options, database);
+      const { getMigrations, UnsafeMigrationError } = yield* Effect.promise(
         () => import("better-auth/db/migration"),
       );
       const migrations = yield* Effect.tryPromise({
@@ -162,7 +165,10 @@ const runMigrationWith = (
           }),
         catch: (cause) =>
           new BetterAuthMigrationError({
-            message: "Failed to compute Better Auth schema migrations",
+            message:
+              cause instanceof UnsafeMigrationError
+                ? cause.message
+                : "Failed to compute Better Auth schema migrations",
             cause,
           }),
       });
@@ -177,42 +183,52 @@ const runMigrationWith = (
       return {
         tablesCreated: migrations.toBeCreated.length,
         tablesAltered: migrations.toBeAdded.length,
+        indexesCreated: migrations.toBeAddedIndexes.length,
       } satisfies MigrateOutput;
     }),
   );
 
 /**
  * Stable fingerprint of the Better Auth schema derived from the user's
- * options (plugins, additionalFields, model renames). Changing the schema
- * changes the fingerprint, which changes the migration Action's input and
- * re-runs it on the next deploy.
+ * options (plugins, additionalFields, model renames, table indexes).
+ * Changing the schema changes the fingerprint, which changes the
+ * migration Action's input and re-runs it on the next deploy.
  */
 export const schemaFingerprint = (
   options: BetterAuthOptions,
 ): Effect.Effect<string> =>
   Effect.suspend(() => {
     const schema = getSchema(options);
-    // Reduce to the migration-relevant field attributes; sha256Object's
-    // stable serialization handles key ordering.
+    // Reduce to the migration-relevant field and index attributes;
+    // sha256Object's stable serialization handles key ordering.
     const reduced = Object.fromEntries(
       Object.entries(schema).map(([table, def]) => [
         table,
-        Object.fromEntries(
-          Object.entries(def.fields).map(([name, field]) => [
-            name,
-            {
-              type: String(field.type),
-              required: field.required ?? false,
-              unique: field.unique ?? false,
-              references: field.references
-                ? {
-                    model: field.references.model,
-                    field: field.references.field,
-                  }
-                : undefined,
-            },
-          ]),
-        ),
+        {
+          fields: Object.fromEntries(
+            Object.entries(def.fields).map(([name, field]) => [
+              name,
+              {
+                type: String(field.type),
+                required: field.required ?? false,
+                unique: field.unique ?? false,
+                index: field.index ?? false,
+                fieldName: field.fieldName,
+                references: field.references
+                  ? {
+                      model: field.references.model,
+                      field: field.references.field,
+                    }
+                  : undefined,
+              },
+            ]),
+          ),
+          indexes: (def.indexes ?? []).map((index) => ({
+            name: index.name,
+            unique: index.unique ?? false,
+            columns: [...index.columns],
+          })),
+        },
       ]),
     );
     return sha256Object(reduced);

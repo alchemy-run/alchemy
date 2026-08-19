@@ -41,10 +41,15 @@ export interface BetterAuthProps extends Omit<
    * Deploy-time automatic schema migration. Runs as an internal alchemy
    * Action during `alchemy deploy` (never at plan, never inside the
    * deployed runtime) and re-runs only when the auth schema (plugins,
-   * additional fields) or the target database changes.
+   * additional fields, indexes) or the target database changes.
    *
    * `false` opts out. `true` on a Database layer without migration support
    * (Memory, Drizzle) fails the deploy with a descriptive error.
+   *
+   * Populated `account` tables missing `issuer` are backfilled from provider
+   * IDs (and stored Microsoft ID tokens). Identity collisions, Microsoft
+   * rows without `oid`, and leftover SCIM / OAuth-application tables fail
+   * the deploy rather than being guessed.
    *
    * @default true when the Database layer supports migration
    */

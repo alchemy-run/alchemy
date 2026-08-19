@@ -229,14 +229,18 @@ Effect.gen(function* () {
 
 ## Drizzle
 
-Bring your own Drizzle database via Better Auth's official `drizzleAdapter` (optional peer `drizzle-orm`). Schema is yours — generate it with `npx @better-auth/cli generate`; there is no automatic migration for this layer.
+Bring your own Drizzle database via Better Auth's Relations v2 `drizzleAdapter` (optional peers `drizzle-orm` and `@better-auth/drizzle-adapter`). Schema is yours — generate it with `npx auth@latest generate`; there is no automatic migration for this layer.
 
 ```typescript
 import { Drizzle } from "@alchemy.run/better-auth/Drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./auth-schema.ts";
+import { relations } from "./app-schema.ts";
 
-const db = drizzle(pool, { schema });
+const db = drizzle({
+  client: pool,
+  relations: { ...relations, ...schema.authRelations },
+});
 
 Effect.gen(function* () {
   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
@@ -265,7 +269,7 @@ const result = yield* auth.api
 Every SQL layer migrates automatically during `alchemy deploy` via an internal alchemy Action:
 
 - runs **only at apply** (never at plan, never inside the deployed runtime — the migration code is dead-code-eliminated from bundles),
-- re-runs only when the auth schema (plugins, additional fields) or the target database changes,
-- is additive and idempotent (`CREATE TABLE` / `ADD COLUMN` on what's missing).
+- re-runs only when the auth schema (plugins, additional fields, indexes) or the target database changes,
+- is additive and idempotent (`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing). Missing `account.issuer` values are backfilled automatically; the deploy fails instead of guessing on identity collisions, Microsoft rows without `oid`, or leftover SCIM / OAuth-application tables.
 
-Opt out with `migrate: false` and manage the schema yourself (`npx @better-auth/cli generate`). Multiple `BetterAuth` instances in one stack: give each a distinct `id` to disambiguate the secret + migration resources.
+Opt out with `migrate: false` and manage the schema yourself (`npx auth@latest generate`). Multiple `BetterAuth` instances in one stack: give each a distinct `id` to disambiguate the secret + migration resources.

@@ -23,7 +23,9 @@ packages:
   - fixtures/*
 catalogs:
   auth:
-    better-auth: ^1.6.2
+    "@better-auth/drizzle-adapter": ^1.7.1
+    "@better-auth/kysely-adapter": ^1.7.1
+    better-auth: ^1.7.1
   aws:
     "@aws/durable-execution-sdk-js": ^2.1.0
     "@aws-crypto/crc32": ^5.2.0
@@ -175,3 +177,11 @@ minimumReleaseAgeExclude:
   - '@foldkit/vite-plugin@0.15.0'
   - effect@4.0.0-rc.110
   - foldkit@0.147.0
+  - '@better-auth/core@1.7.1'
+  - '@better-auth/drizzle-adapter@1.7.1'
+  - '@better-auth/kysely-adapter@1.7.1'
+  - '@better-auth/memory-adapter@1.7.1'
+  - '@better-auth/mongo-adapter@1.7.1'
+  - '@better-auth/prisma-adapter@1.7.1'
+  - '@better-auth/telemetry@1.7.1'
+  - better-auth@1.7.1
