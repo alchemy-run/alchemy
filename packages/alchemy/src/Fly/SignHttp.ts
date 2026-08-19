@@ -10,7 +10,12 @@ import {
 } from "./SecretKeyHttp.ts";
 import { Sign, type SignRequest } from "./Sign.ts";
 
-/** Runtime layer for {@link Sign}. */
+/**
+ * HTTP implementation of {@link Sign}.
+ *
+ * @layer
+ * @provides Fly.Sign
+ */
 export const SignHttp = Layer.effect(
   Sign,
   Effect.suspend(() =>

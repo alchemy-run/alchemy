@@ -103,6 +103,14 @@ export type SecretKey = Resource<
  * const { signature } = yield* sign({ plaintext: bytes });
  * yield* verify({ plaintext: bytes, signature });
  * ```
+ *
+ * @example Encrypt and decrypt
+ * ```typescript
+ * const encrypt = yield* Fly.Encrypt(box);
+ * const decrypt = yield* Fly.Decrypt(box);
+ * const { ciphertext } = yield* encrypt({ plaintext: bytes });
+ * const { plaintext } = yield* decrypt({ ciphertext });
+ * ```
  */
 export const SecretKey = Resource<SecretKey>("Fly.SecretKey");
 

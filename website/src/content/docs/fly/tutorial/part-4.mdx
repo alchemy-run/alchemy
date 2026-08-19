@@ -192,7 +192,8 @@ Over four parts you built a complete Fly deployment:
   multiple Services per App.
 - [Machines](/fly/compute/machines) — raw images without a bundle.
 - [Volumes](/fly/data/volumes) — snapshots, extend, region rules.
-- [Secrets](/fly/data/secrets) — `WriteSecret`, KMS `SecretKey`.
+- [Secrets](/fly/data/secrets) — `ReadSecret` / `WriteSecret`, plus
+  KMS `SecretKey` with `Encrypt` / `Decrypt` / `Sign` / `Verify`.
 - [Testing](/testing) — deploy this stack from an integration test
   and drive it over HTTP.
 - [CI](/environments/ci) — run `alchemy deploy` from GitHub Actions

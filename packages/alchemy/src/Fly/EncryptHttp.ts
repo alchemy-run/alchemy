@@ -10,7 +10,12 @@ import {
   toByteList,
 } from "./SecretKeyHttp.ts";
 
-/** Runtime layer for {@link Encrypt}. */
+/**
+ * HTTP implementation of {@link Encrypt}.
+ *
+ * @layer
+ * @provides Fly.Encrypt
+ */
 export const EncryptHttp = Layer.effect(
   Encrypt,
   Effect.suspend(() =>

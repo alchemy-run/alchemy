@@ -6,7 +6,12 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { makeHttpSecretKeyBinding, toByteList } from "./SecretKeyHttp.ts";
 import { Verify, type VerifyRequest } from "./Verify.ts";
 
-/** Runtime layer for {@link Verify}. */
+/**
+ * HTTP implementation of {@link Verify}.
+ *
+ * @layer
+ * @provides Fly.Verify
+ */
 export const VerifyHttp = Layer.effect(
   Verify,
   Effect.suspend(() =>
