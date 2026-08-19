@@ -55,6 +55,7 @@
     "setup": "effect-tsgo patch && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test": "cd ./packages/alchemy && bun alchemy-test",
+    "test:aws:floci": "bun scripts/test-aws-floci.ts",
     "test:cloudflare-packages": "turbo run test --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frontend-frameworks --filter='./fixtures/*'",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
     "test:examples": "bun scripts/test-examples.ts",
