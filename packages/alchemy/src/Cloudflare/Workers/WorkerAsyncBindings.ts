@@ -635,6 +635,29 @@ export const getCronBindings = (
 ) => Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
 
 /**
+ * Return Workflow classes hosted by this Worker. Cross-script Workflow
+ * bindings belong to their referenced Worker and must not be validated
+ * against this Worker's module exports.
+ */
+export const getOwnedWorkflowClassNames = (
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+  workerName: string,
+): Array<string> =>
+  Array.from(
+    new Set(
+      bindings.flatMap((resourceBinding) =>
+        (resourceBinding.data.bindings ?? []).flatMap((binding) =>
+          binding.type === "workflow" &&
+          (binding.scriptName === undefined ||
+            binding.scriptName === workerName)
+            ? [binding.className]
+            : [],
+        ),
+      ),
+    ),
+  );
+
+/**
  * Merge the Workers Cache settings contributed by `yield* Cloudflare.cache()`
  * bindings. Commutative: the cache is enabled (and cross-version) if any
  * contributor asked for it.
