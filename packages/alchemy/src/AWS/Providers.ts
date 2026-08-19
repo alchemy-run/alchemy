@@ -1173,8 +1173,10 @@ export const providers = () =>
           CodeDeploy.DeploymentGroupProvider(),
           CodePipeline.PipelineProvider(),
           flociDual(Cognito.Group, () => Cognito.GroupProvider()),
-          Cognito.IdentityPoolProvider(),
-          Cognito.IdentityPoolRoleAttachmentProvider(),
+          flociDual(Cognito.IdentityPool, () => Cognito.IdentityPoolProvider()),
+          flociDual(Cognito.IdentityPoolRoleAttachment, () =>
+            Cognito.IdentityPoolRoleAttachmentProvider(),
+          ),
           flociDual(Cognito.IdentityProvider, () =>
             Cognito.IdentityProviderProvider(),
           ),
