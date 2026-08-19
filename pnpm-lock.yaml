@@ -2238,6 +2238,36 @@ importers:
         specifier: 4.0.0-rc.110
         version: 4.0.0-rc.110
 
+  examples/fly-app:
+    dependencies:
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../distilled/packages/fly-io
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.110(effect@4.0.0-rc.110)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.110
+        version: 4.0.0-rc.110
+
+  examples/fly-service:
+    dependencies:
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../distilled/packages/fly-io
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.110(effect@4.0.0-rc.110)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.110
+        version: 4.0.0-rc.110
+
   examples/hetzner-app:
     dependencies:
       '@distilled.cloud/hetzner':
@@ -3166,6 +3196,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../distilled/packages/core
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../distilled/packages/fly-io
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../distilled/packages/hetzner

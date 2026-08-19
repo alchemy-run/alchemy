@@ -26,6 +26,9 @@
     {
       "path": "./distilled/packages/hetzner/tsconfig.json"
     },
+    {
+      "path": "./distilled/packages/fly-io/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
@@ -170,7 +173,13 @@
       "path": "./examples/hetzner-server/tsconfig.json"
     },
     {
+      "path": "./examples/fly-app/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-app/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-service/tsconfig.json"
     },
     {
       "path": "./examples/monorepo-single-stack/tsconfig.json"
