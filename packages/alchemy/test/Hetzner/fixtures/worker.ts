@@ -10,10 +10,10 @@ import { Box, Data, MARKER, MARKER_FILE, VOLUME_PATH } from "./shared.ts";
  */
 export default class Worker extends Hetzner.Service<Worker>()(
   "Worker",
-  Effect.gen(function* () {
-    const server = yield* Box;
-    return { server, main: import.meta.url };
-  }),
+  {
+    server: Box,
+    main: import.meta.url,
+  },
   Effect.gen(function* () {
     const volume = yield* Data;
     const mount = yield* Hetzner.MountVolume(volume, { path: VOLUME_PATH });
@@ -25,7 +25,7 @@ export default class Worker extends Hetzner.Service<Worker>()(
         yield* fs.makeDirectory(mount.path, { recursive: true });
         yield* fs.writeFileString(MARKER_FILE, MARKER);
         return yield* Effect.never;
-      }),
+      }).pipe(Effect.orDie),
     );
   }).pipe(Effect.provide(Hetzner.MountVolumeLive)),
 ) {}

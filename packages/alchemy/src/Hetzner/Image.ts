@@ -50,7 +50,7 @@ export type ImageOsFlavor =
  * A resource-valued prop: the resource itself, or an Effect that produces
  * it (so `yield* Server(...)` and `Server(...)` both type-check).
  */
-export type Ref<T> = T | Effect.Effect<T, never, Providers>;
+type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 /**
  * Server identity an Image is snapshotted from. Accepts a `Hetzner.Server`
@@ -372,8 +372,11 @@ const waitUntilGone = (imageId: number) =>
     }),
   );
 
-const serverIdOf = (server: ImageServer | undefined): number | undefined =>
-  server?.serverId;
+const serverIdOf = (value: unknown): number | undefined => {
+  if (value == null || typeof value !== "object") return undefined;
+  const id = (value as { serverId?: unknown }).serverId;
+  return typeof id === "number" ? id : undefined;
+};
 
 const disableProtection = (id: number) =>
   Services.imageActions

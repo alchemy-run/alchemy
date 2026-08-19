@@ -11,11 +11,11 @@ import { API_PORT, Box, Data, MARKER_FILE, VOLUME_PATH } from "./shared.ts";
  */
 export default class Api extends Hetzner.Service<Api>()(
   "Api",
-  Effect.map(Box, (server) => ({
-    server,
+  {
+    server: Box,
     main: import.meta.url,
     port: API_PORT,
-  })),
+  },
   Effect.gen(function* () {
     const volume = yield* Data;
     const mount = yield* Hetzner.MountVolume(volume, { path: VOLUME_PATH });
@@ -31,7 +31,7 @@ export default class Api extends Hetzner.Service<Api>()(
           });
         }
         const fs = yield* FileSystem.FileSystem;
-        const text = yield* fs.readFileString(MARKER_FILE);
+        const text = yield* fs.readFileString(MARKER_FILE).pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           path: mount.path,
           device: mount.device,

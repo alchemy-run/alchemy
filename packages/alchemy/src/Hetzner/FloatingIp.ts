@@ -1,5 +1,6 @@
 import { Services } from "@distilled.cloud/hetzner";
 import type { GetFloatingIpResponseFloatingIp } from "@distilled.cloud/hetzner/floating_ips";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -273,6 +274,12 @@ const disableProtection = (id: number) =>
     .changeFloatingIpProtection({ id, delete: false })
     .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
 
+export class FloatingIpNotCreated extends Data.TaggedError(
+  "Hetzner.FloatingIpNotCreated",
+)<{
+  name: string;
+}> {}
+
 export const FloatingIpProvider = () =>
   Provider.succeed(FloatingIp, {
     stables: ["id", "ip", "type", "homeLocation", "homeLocationId", "created"],
@@ -321,7 +328,7 @@ export const FloatingIpProvider = () =>
 
       // Observe — cloud state is authoritative. `output.id` is a cache
       // for the stable identifier; if the IP is gone, we recreate.
-      let current = yield* observe({
+      let current: CloudFloatingIp | undefined = yield* observe({
         id,
         name,
         outputId: output?.id,
@@ -348,27 +355,22 @@ export const FloatingIpProvider = () =>
             description: desiredDescription,
             labels: desiredLabels,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              observe({ id, name }).pipe(
-                Effect.flatMap((hit) =>
-                  hit !== undefined && matchesDesired(hit, news.type, location)
-                    ? Effect.succeed({ floating_ip: hit, action: undefined })
-                    : Services.floatingIps.createFloatingIp({
-                        type: news.type,
-                        home_location: location.name,
-                        name,
-                        description: desiredDescription,
-                        labels: desiredLabels,
-                      }),
-                ),
-              ),
-            ),
-          );
-        if (created.action) {
-          yield* waitForAction(created.action);
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          if (created.action) {
+            yield* waitForAction(created.action);
+          }
+          current = created.floating_ip;
+        } else {
+          const hit = yield* observe({ id, name });
+          if (hit !== undefined && matchesDesired(hit, news.type, location)) {
+            current = hit;
+          }
         }
-        current = created.floating_ip;
+      }
+
+      if (current === undefined) {
+        return yield* new FloatingIpNotCreated({ name });
       }
 
       // Sync — name / description / labels via PUT (labels overwrite the

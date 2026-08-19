@@ -21,7 +21,7 @@ export class FloatingIpAssignmentError extends Data.TaggedError(
  * A resource-valued prop: the resource itself, or an Effect that produces
  * it (so `yield* FloatingIp(...)` and `FloatingIp(...)` both type-check).
  */
-export type Ref<T> = T | Effect.Effect<T, never, Providers>;
+type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 /**
  * Floating IP identity this assignment binds. Accepts a

@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
@@ -31,12 +32,20 @@ export interface SshOptions {
   privateKey?: string | Redacted.Redacted<string>;
 }
 
+export type SshServices =
+  | FileSystem.FileSystem
+  | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Scope.Scope;
+
 export interface SshClient {
-  exec: (command: string) => Effect.Effect<SshExecResult, SshError, never>;
+  exec: (
+    command: string,
+  ) => Effect.Effect<SshExecResult, SshError, SshServices>;
   scp: (
     local: string | Uint8Array<ArrayBufferLike>,
     remote: string,
-  ) => Effect.Effect<void, SshError, never>;
+  ) => Effect.Effect<void, SshError, SshServices>;
 }
 
 /**
@@ -60,16 +69,22 @@ export interface SshClient {
 export interface Ssh extends Binding.Service<
   Ssh,
   "Hetzner.Ssh",
-  (server: Server, options?: SshOptions) => Effect.Effect<SshClient, SshError>
+  (
+    server: Server,
+    options?: SshOptions,
+  ) => Effect.Effect<SshClient, SshError, SshServices>
 > {}
 
 export const Ssh = Binding.Service<Ssh>("Hetzner.Ssh");
 
-const unwrapKey = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined => {
-  if (value === undefined) return undefined;
-  return typeof value === "string" ? value : Redacted.value(value);
+const unwrapKey = (value: unknown): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  if (Redacted.isRedacted(value)) {
+    const inner = Redacted.value(value);
+    return typeof inner === "string" ? inner : undefined;
+  }
+  return undefined;
 };
 
 const ipv4Of = (server: Server): string | undefined => {
@@ -187,6 +202,14 @@ export const openSshClient = Effect.fn(function* (input: {
       ),
     );
 
+  const toSshError = (error: unknown) =>
+    error instanceof SshError
+      ? error
+      : new SshError({
+          message: `ssh failed: ${String(error)}`,
+          host: input.host,
+        });
+
   const scp = (local: string | Uint8Array<ArrayBufferLike>, remote: string) =>
     Effect.gen(function* () {
       let localPath: string;
@@ -222,7 +245,7 @@ export const openSshClient = Effect.fn(function* (input: {
           stderr: result.stderr,
         });
       }
-    });
+    }).pipe(Effect.mapError(toSshError));
 
   return { exec, scp, close } satisfies SshClient & {
     close: Effect.Effect<void>;
@@ -240,7 +263,8 @@ export const sshClientForServer = Effect.fn(function* (
     });
   }
   const privateKey =
-    unwrapKey(options?.privateKey) ?? unwrapKey(server.privateKey);
+    unwrapKey(options?.privateKey) ??
+    unwrapKey((server as { privateKey?: unknown }).privateKey);
   if (privateKey === undefined) {
     return yield* new SshError({
       message: `Server '${server.LogicalId}' has no deploy SSH private key`,
@@ -251,7 +275,16 @@ export const sshClientForServer = Effect.fn(function* (
     host,
     privateKey,
     user: options?.user,
-  });
+  }).pipe(
+    Effect.mapError((error) =>
+      error instanceof SshError
+        ? error
+        : new SshError({
+            message: `ssh failed: ${String(error)}`,
+            host,
+          }),
+    ),
+  );
 });
 
 export const SshLive = Layer.effect(

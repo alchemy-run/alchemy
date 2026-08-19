@@ -23,6 +23,9 @@
     {
       "path": "./distilled/packages/neon/tsconfig.json"
     },
+    {
+      "path": "./distilled/packages/hetzner/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"

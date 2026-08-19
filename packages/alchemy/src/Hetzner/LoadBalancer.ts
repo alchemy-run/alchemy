@@ -44,7 +44,7 @@ const DEFAULT_TIMEOUT_IDLE = 15;
  * A resource-valued prop: the resource itself, or an Effect that produces
  * it (so `yield* Server(...)` and `Server(...)` both type-check).
  */
-export type Ref<T> = T | Effect.Effect<T, never, Providers>;
+type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 /**
  * Server identity a Load Balancer target can point at. A `Hetzner.Server`
@@ -1464,40 +1464,22 @@ export const LoadBalancerProvider = () =>
           })
           .pipe(
             Effect.retry(busyRetry),
-            Effect.catchTag("Conflict", () =>
-              getByName(name).pipe(
-                Effect.flatMap((hit) =>
-                  hit !== undefined &&
-                  matchesPlacement(hit, location, networkZone)
-                    ? Effect.succeed({
-                        load_balancer: hit,
-                        action: undefined,
-                      })
-                    : Services.loadBalancers.createLoadBalancer({
-                        name,
-                        load_balancer_type: loadBalancerType,
-                        algorithm: { type: algorithm },
-                        labels: desiredLabels,
-                        public_interface: publicInterface,
-                        ...(location !== undefined ? { location } : {}),
-                        ...(networkZone !== undefined
-                          ? { network_zone: networkZone }
-                          : {}),
-                        ...(networks[0] !== undefined
-                          ? { network: networks[0] }
-                          : {}),
-                        ...(services.length > 0
-                          ? { services: services.map(toCreateService) }
-                          : {}),
-                      }),
-                ),
-              ),
-            ),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        if (created.action) {
-          yield* waitForAction(created.action);
+        if (created !== undefined) {
+          if (created.action) {
+            yield* waitForAction(created.action);
+          }
+          current = created.load_balancer;
+        } else {
+          const hit = yield* getByName(name);
+          if (
+            hit !== undefined &&
+            matchesPlacement(hit, location, networkZone)
+          ) {
+            current = hit;
+          }
         }
-        current = created.load_balancer;
       }
 
       if (current === undefined) {

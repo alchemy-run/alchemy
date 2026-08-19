@@ -26,15 +26,15 @@ export const Wall = Hetzner.Firewall(
       applyTo: [server],
       rules: [
         {
-          direction: "in",
-          protocol: "tcp",
+          direction: "in" as const,
+          protocol: "tcp" as const,
           port: "22",
           sourceIps: ["0.0.0.0/0", "::/0"],
           description: "ssh",
         },
         {
-          direction: "in",
-          protocol: "tcp",
+          direction: "in" as const,
+          protocol: "tcp" as const,
           port: String(API_PORT),
           sourceIps: ["0.0.0.0/0", "::/0"],
           description: "api",
@@ -53,11 +53,11 @@ export const Edge = Hetzner.LoadBalancer(
       loadBalancerType: "lb11",
       services: [
         {
-          protocol: "http",
+          protocol: "http" as const,
           listenPort: 80,
           destinationPort: API_PORT,
           healthCheck: {
-            protocol: "http",
+            protocol: "http" as const,
             port: API_PORT,
             interval: 3,
             timeout: 2,
@@ -66,7 +66,7 @@ export const Edge = Hetzner.LoadBalancer(
           },
         },
       ],
-      targets: [{ type: "server", server }],
+      targets: [{ type: "server" as const, server }],
     };
   }),
 );

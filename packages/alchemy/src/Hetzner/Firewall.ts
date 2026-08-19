@@ -625,7 +625,7 @@ export const FirewallProvider = () =>
       // Ensure — create if missing. A Conflict is a name-race; look up
       // the existing firewall and fall through to sync.
       if (current === undefined) {
-        current = yield* ensureFirewall({
+        yield* ensureFirewall({
           name,
           labels,
           rules,

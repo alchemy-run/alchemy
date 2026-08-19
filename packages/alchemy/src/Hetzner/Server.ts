@@ -862,50 +862,19 @@ export const ServerProvider = () =>
                   }
                 : undefined,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(name).pipe(
-                Effect.flatMap((hit) =>
-                  hit !== undefined
-                    ? Effect.succeed({
-                        server: hit,
-                        action: undefined,
-                        next_actions: [],
-                      })
-                    : Services.servers.createServer({
-                        name,
-                        server_type: news.serverType,
-                        image: news.image,
-                        location,
-                        labels: desiredLabels,
-                        start_after_create: startAfterCreate,
-                        ssh_keys: sshKeyIds.length > 0 ? sshKeyIds : undefined,
-                        networks:
-                          networkIds.length > 0 ? networkIds : undefined,
-                        firewalls:
-                          firewallIds.length > 0
-                            ? firewallIds.map((firewall) => ({ firewall }))
-                            : undefined,
-                        volumes: volumeIds.length > 0 ? volumeIds : undefined,
-                        placement_group: placementGroupId,
-                        user_data: userData,
-                        public_net:
-                          news.enableIpv4 !== undefined ||
-                          news.enableIpv6 !== undefined
-                            ? {
-                                enable_ipv4: news.enableIpv4 ?? true,
-                                enable_ipv6: news.enableIpv6 ?? true,
-                              }
-                            : undefined,
-                      }),
-                ),
-              ),
-            ),
-          );
-        if (created.action) {
-          yield* waitForActions([created.action, ...created.next_actions]);
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          if (created.action) {
+            yield* waitForActions([created.action, ...created.next_actions]);
+          }
+          current = yield* waitUntilReady(created.server.id);
+        } else {
+          const hit = yield* getByName(name);
+          if (hit === undefined) {
+            return yield* new ServerNotResolved({ name });
+          }
+          current = yield* waitUntilReady(hit.id);
         }
-        current = yield* waitUntilReady(created.server.id);
       }
 
       // Sync name + labels against observed cloud labels, not olds.

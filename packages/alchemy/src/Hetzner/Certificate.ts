@@ -290,24 +290,27 @@ const deleteById = (id: number) =>
 
 const waitForManagedIssuance = (id: number) =>
   Services.certificates.getCertificate({ id }).pipe(
-    Effect.flatMap(({ certificate }) => {
-      const issuance = certificate.status?.issuance;
-      if (issuance === "failed") {
-        return new CertificateIssuanceFailed({
-          certificateId: id,
-          code: certificate.status?.error?.code,
-          message:
-            certificate.status?.error?.message ?? "Certificate issuance failed",
-        });
-      }
-      if (issuance !== undefined && issuance !== "completed") {
-        return new CertificateIssuancePending({
-          certificateId: id,
-          issuance,
-        });
-      }
-      return Effect.succeed(certificate);
-    }),
+    Effect.flatMap(({ certificate }) =>
+      Effect.gen(function* () {
+        const issuance = certificate.status?.issuance;
+        if (issuance === "failed") {
+          return yield* new CertificateIssuanceFailed({
+            certificateId: id,
+            code: certificate.status?.error?.code,
+            message:
+              certificate.status?.error?.message ??
+              "Certificate issuance failed",
+          });
+        }
+        if (issuance !== undefined && issuance !== "completed") {
+          return yield* new CertificateIssuancePending({
+            certificateId: id,
+            issuance,
+          });
+        }
+        return certificate;
+      }),
+    ),
     Effect.retry({
       while: (e) =>
         e._tag === "Hetzner.CertificateIssuancePending" ||
@@ -318,9 +321,10 @@ const waitForManagedIssuance = (id: number) =>
         e._tag === "BadGateway" ||
         e._tag === "GatewayTimeout",
       times: 10,
-      schedule: Schedule.exponential(Duration.millis(500), 1.5).pipe(
-        Schedule.union(Schedule.spaced(Duration.seconds(5))),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential(Duration.millis(500), 1.5),
+        Schedule.spaced(Duration.seconds(5)),
+      ]),
     }),
   );
 
@@ -335,19 +339,27 @@ const ensureCreated = Effect.fn(function* ({
 }) {
   const created =
     news.type === "managed"
-      ? yield* Services.certificates.createCertificate({
-          name,
-          type: "managed",
-          domain_names: news.domainNames,
-          labels: desiredLabels,
-        })
-      : yield* Services.certificates.createCertificate({
-          name,
-          type: "uploaded",
-          certificate: news.certificate,
-          private_key: news.privateKey,
-          labels: desiredLabels,
-        });
+      ? yield* Services.certificates
+          .createCertificate({
+            name,
+            type: "managed",
+            domain_names: news.domainNames,
+            labels: desiredLabels,
+          })
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)))
+      : yield* Services.certificates
+          .createCertificate({
+            name,
+            type: "uploaded",
+            certificate: news.certificate,
+            private_key: news.privateKey,
+            labels: desiredLabels,
+          })
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+
+  if (created === undefined) {
+    return undefined;
+  }
 
   const cleanup = deleteById(created.certificate.id);
   if (created.action) {
@@ -455,7 +467,7 @@ export const CertificateProvider = () =>
           name,
           news,
           desiredLabels,
-        }).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        });
         current =
           created ??
           (yield* observe({

@@ -37,7 +37,7 @@ export type VolumeStatus = "available" | "creating";
  * A resource-valued prop: the resource itself, or an Effect that produces
  * it (so `yield* Server(...)` and `Server(...)` both type-check).
  */
-export type Ref<T> = T | Effect.Effect<T, never, Providers>;
+type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 /**
  * Server identity a Volume can attach to at create time. Accepts a
@@ -187,6 +187,10 @@ class VolumeTimeout extends Data.TaggedError("VolumeTimeout")<{
   status: string;
 }> {}
 
+class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{
+  name: string;
+}> {}
+
 const asFormat = (
   format: string | null | undefined,
 ): VolumeFormat | undefined =>
@@ -317,8 +321,11 @@ const waitUntilGone = (volumeId: number) =>
     }),
   );
 
-const serverIdOf = (server: VolumeServer | undefined): number | undefined =>
-  server?.serverId;
+const serverIdOf = (value: unknown): number | undefined => {
+  if (value == null || typeof value !== "object") return undefined;
+  const id = (value as { serverId?: unknown }).serverId;
+  return typeof id === "number" ? id : undefined;
+};
 
 export const VolumeProvider = () =>
   Provider.succeed(Volume, {
@@ -393,36 +400,19 @@ export const VolumeProvider = () =>
             automount:
               desiredServerId !== undefined ? news.automount : undefined,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(name).pipe(
-                Effect.flatMap((hit) =>
-                  hit !== undefined
-                    ? Effect.succeed({
-                        volume: hit,
-                        action: undefined,
-                        next_actions: [],
-                      })
-                    : Services.volumes.createVolume({
-                        name,
-                        size: Math.max(news.size, MIN_SIZE_GB),
-                        format: news.format,
-                        location,
-                        labels: desiredLabels,
-                        server: desiredServerId,
-                        automount:
-                          desiredServerId !== undefined
-                            ? news.automount
-                            : undefined,
-                      }),
-                ),
-              ),
-            ),
-          );
-        if (created.action) {
-          yield* waitForActions([created.action, ...created.next_actions]);
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          if (created.action) {
+            yield* waitForActions([created.action, ...created.next_actions]);
+          }
+          current = yield* waitUntilAvailable(created.volume.id);
+        } else {
+          const hit = yield* getByName(name);
+          if (hit === undefined) {
+            return yield* new VolumeNotCreated({ name });
+          }
+          current = yield* waitUntilAvailable(hit.id);
         }
-        current = yield* waitUntilAvailable(created.volume.id);
       }
 
       // Sync name + labels against observed cloud labels, not olds.

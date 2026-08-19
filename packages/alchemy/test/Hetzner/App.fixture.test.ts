@@ -172,10 +172,13 @@ test.skipIf(!hasHetznerCreds)(
     const body = yield* client.get(url).pipe(
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.json
+          ? res.json.pipe(
+              Effect.mapError(() => new ApiNotReady({ status: res.status })),
+            )
           : Effect.fail(new ApiNotReady({ status: res.status })),
       ),
       Effect.retry({
+        while: (e) => e._tag === "ApiNotReady",
         schedule: Schedule.exponential("500 millis"),
         times: 10,
       }),

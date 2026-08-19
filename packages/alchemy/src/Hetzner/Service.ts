@@ -229,11 +229,11 @@ export const ServiceProvider = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ news, output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           if (output === undefined) return undefined;
           const serverId =
             output.serverId ??
-            (news !== undefined ? serverIdOf(news.server) : undefined);
+            (olds !== undefined ? serverIdOf(olds.server) : undefined);
           if (serverId === undefined) return undefined;
           const live = yield* Services.servers.getServer({ id: serverId }).pipe(
             Effect.map(({ server }) => server),

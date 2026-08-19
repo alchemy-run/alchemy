@@ -80,7 +80,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(fetched.firewall.id).toEqual(created.id);
       expect(fetched.firewall.name).toEqual(created.name);
       expect(fetched.firewall.applied_to).toEqual([]);
-      expect(fetched.firewall.labels.env).toEqual("test");
+      expect(fetched.firewall.labels?.env).toEqual("test");
       expect(fetched.firewall.rules).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -117,8 +117,8 @@ test.provider.skipIf(!hasHetznerCreds)(
         id: updated.id,
       });
       expect(refetched.firewall.id).toEqual(created.id);
-      expect(refetched.firewall.labels.env).toEqual("prod");
-      expect(refetched.firewall.labels.role).toEqual("edge");
+      expect(refetched.firewall.labels?.env).toEqual("prod");
+      expect(refetched.firewall.labels?.role).toEqual("edge");
       expect(refetched.firewall.rules).toHaveLength(2);
 
       yield* stack.destroy();
