@@ -13,6 +13,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import type { BundledImageSource } from "./ImageSource.ts";
 
 /**
  * Docker login credentials for the account's private ECR registry, in the
@@ -95,7 +96,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
   return options.imageUri;
 });
 
-export interface ImageProps {
+interface ImagePropsBase {
   /**
    * URI of the target ECR repository, e.g. `repository.repositoryUri` from an
    * `ECR.Repository`. When omitted, the Image auto-creates (and owns) a
@@ -103,6 +104,17 @@ export interface ImageProps {
    * repository is force-deleted when the Image is destroyed.
    */
   repositoryUri?: string;
+  /**
+   * Target platform for the image build. Fargate defaults to X86_64, so the
+   * default pins `linux/amd64` — without it an image built on an ARM64 host
+   * (e.g. Apple Silicon) is rejected at task start.
+   * @default "linux/amd64"
+   */
+  platform?: string;
+}
+
+/** Build the image from a local Dockerfile and context. */
+export interface DockerfileImageProps extends ImagePropsBase {
   /**
    * Docker build context directory. Every file under the context (plus the
    * Dockerfile, platform, and build args) participates in the content hash
@@ -116,17 +128,21 @@ export interface ImageProps {
    */
   dockerfile?: string;
   /**
-   * Target platform for the image build. Fargate defaults to X86_64, so the
-   * default pins `linux/amd64` — without it an image built on an ARM64 host
-   * (e.g. Apple Silicon) is rejected at task start.
-   * @default "linux/amd64"
-   */
-  platform?: string;
-  /**
    * Docker build arguments (`--build-arg`).
    */
   buildArgs?: Record<string, string>;
 }
+
+/**
+ * Bundle an Effect program (`main`) into a generated image and push it
+ * to ECR. The same source shape as `AWS.ECS.Task` / `Kubernetes.Deployment`.
+ */
+export interface BundledImageProps extends ImagePropsBase, BundledImageSource {}
+
+export type ImageProps = DockerfileImageProps | BundledImageProps;
+
+const isBundledImageProps = (props: ImageProps): props is BundledImageProps =>
+  "main" in props && typeof props.main === "string";
 
 export interface Image extends Resource<
   "AWS.ECR.Image",
@@ -150,13 +166,13 @@ export interface Image extends Resource<
 > {}
 
 /**
- * A Docker image built from a local context and pushed to a private Amazon
- * ECR repository.
+ * A container image pushed to a private Amazon ECR repository.
  *
- * The image is identified by a content hash over the build context,
- * Dockerfile, platform, and build args. Reconcile rebuilds and pushes only
- * when that hash changes — a content change produces a new tag and digest on
- * the same resource, so replacement is never needed.
+ * Exactly one source: `context` (your Dockerfile) or `main` (bundle an
+ * Effect program). The image is identified by a content hash of that
+ * source. Reconcile rebuilds and pushes only when the hash changes — a
+ * content change produces a new tag and digest on the same resource, so
+ * replacement is never needed.
  *
  * @resource
  * @section Building Images
@@ -196,6 +212,20 @@ export interface Image extends Resource<
  *   sidecars: [{ name: "proxy", image: image.imageUri, essential: false }],
  * });
  * ```
+ *
+ * @section Bundling an Effect program
+ * @example Explicit repository + image, then a Kubernetes Deployment
+ * ```typescript
+ * const repository = yield* AWS.ECR.Repository("ApiRepository", {});
+ * const apiImage = yield* AWS.ECR.Image("ApiImage", {
+ *   repositoryUri: repository.repositoryUri,
+ *   main: import.meta.url,
+ * });
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   image: apiImage,
+ * });
+ * ```
  */
 export const Image = Resource<Image>("AWS.ECR.Image");
 
@@ -218,7 +248,16 @@ export const ImageProvider = () =>
           lowercase: true,
         });
 
-      const resolveBuildPaths = Effect.fn(function* (props: ImageProps) {
+      // Dynamic import: ImageSource.ts imports buildAndPushEcrImage from
+      // this file. A static import here would be a module-init cycle.
+      const { makeImageSource, makeBunBootstrap } = yield* Effect.promise(
+        () => import("./ImageSource.ts"),
+      );
+      const imageSource = yield* makeImageSource;
+
+      const resolveBuildPaths = Effect.fn(function* (
+        props: DockerfileImageProps,
+      ) {
         const context = path.resolve(props.context);
         const dockerfile = props.dockerfile
           ? path.isAbsolute(props.dockerfile)
@@ -243,7 +282,9 @@ export const ImageProvider = () =>
       // the target platform, and the build args. Absolute paths deliberately
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
-      const hashBuildInputs = Effect.fn(function* (props: ImageProps) {
+      const hashBuildInputs = Effect.fn(function* (
+        props: DockerfileImageProps,
+      ) {
         const { context, dockerfile } = yield* resolveBuildPaths(props);
         const hasher = yield* Effect.sync(() => crypto.createHash("sha256"));
         yield* Effect.sync(() =>
@@ -349,8 +390,14 @@ export const ImageProvider = () =>
         // new tag + digest on the same resource.
         diff: Effect.fn(function* ({ news, output }) {
           if (!isResolved(news) || !output) return undefined;
-          const hash = yield* hashBuildInputs(news);
-          if (hash !== output.imageTag) {
+          const hash = isBundledImageProps(news)
+            ? yield* imageSource.hash({
+                source: news,
+                platform: news.platform ?? "linux/amd64",
+                bootstrap: makeBunBootstrap(news.handler ?? "default"),
+              })
+            : yield* hashBuildInputs(news);
+          if (hash !== undefined && hash !== output.imageTag) {
             return { action: "update" } as const;
           }
         }),
@@ -375,6 +422,37 @@ export const ImageProvider = () =>
               );
               return { repositoryName, repositoryUri, ownsRepository: true };
             });
+
+          if (isBundledImageProps(news)) {
+            const resolved = yield* imageSource.resolve({
+              id,
+              source: news,
+              repositoryName,
+              repositoryUri,
+              platform: news.platform ?? "linux/amd64",
+              bootstrap: makeBunBootstrap(news.handler ?? "default"),
+              session,
+            });
+            const pushed = yield* describeImage(
+              resolved.repositoryName,
+              resolved.codeHash,
+            );
+            if (!pushed?.imageDigest) {
+              return yield* Effect.fail(
+                new Error(
+                  `Image ${resolved.imageUri} not found in ECR after push`,
+                ),
+              );
+            }
+            return {
+              imageUri: resolved.imageUri,
+              digest: pushed.imageDigest,
+              repositoryUri: resolved.repositoryUri,
+              repositoryName: resolved.repositoryName,
+              imageTag: resolved.codeHash,
+              ownsRepository,
+            };
+          }
 
           const { context, dockerfile } = yield* resolveBuildPaths(news);
           const imageTag = yield* hashBuildInputs(news);

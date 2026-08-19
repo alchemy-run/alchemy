@@ -79,8 +79,10 @@ load-balancer integration. Alchemy models it with:
   `compute: "auto"` turns on Auto Mode with sensible defaults.
 - [`Deployment`](/providers/kubernetes/deployment) — a replicated
   Kubernetes server (the Kubernetes analog of `AWS.ECS.Service`)
-  with the same three image sources as ECS: a registry `image`, a
-  Dockerfile `context`, or an inline Effect program via `main`.
+  with the same three image sources as ECS: a registry `image`
+  (mirrored into ECR, or `Image.ref` / `{ imageUri }` to pull
+  as-is), a Dockerfile `context`, or an inline Effect program via
+  `main`.
 - [`Job`](/providers/kubernetes/job) — run-to-completion work, or a
   `CronJob` when you set `schedule`.
 - [`Manifest`](/providers/kubernetes/manifest) and

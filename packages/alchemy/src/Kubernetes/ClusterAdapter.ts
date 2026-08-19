@@ -37,6 +37,7 @@ import type { InlineDockerfile } from "../Docker/Dockerfile.ts";
 import type { Stack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import type { Connection } from "./Connection.ts";
+import type { ImageValue } from "./Image.ts";
 
 /**
  * Per-resource engine services ambient inside every provider lifecycle
@@ -157,7 +158,9 @@ export type WorkloadServices =
 /**
  * The image-source shape shared by every workload: exactly one of `main`
  * (bundle an inline Effect program), `context`/`dockerfile` (build the
- * user's Dockerfile), or `image` (a pre-built registry reference).
+ * user's Dockerfile), or `image` (a pre-built registry reference — a
+ * string is mirrored on EKS; {@link Image.ref} / `{ imageUri }` are used
+ * verbatim).
  * Structurally mirrors the AWS container platforms' source props.
  */
 export interface WorkloadImageSource {
@@ -173,7 +176,11 @@ export interface WorkloadImageSource {
   build?: Bundle.BundleConfig;
   context?: string;
   dockerfile?: string | InlineDockerfile;
-  image?: string;
+  /**
+   * Pre-built image. A `string` is mirrored into the managed registry on
+   * EKS; {@link Image.ref} or `{ imageUri }` is used verbatim.
+   */
+  image?: string | ImageValue;
 }
 
 export interface WorkloadIdentityReconcileOptions {

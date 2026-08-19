@@ -128,15 +128,18 @@ replicated Kubernetes server — the Kubernetes analog of
 synthesizes a Kubernetes `Deployment` + `Service` (+
 `ServiceAccount`) and applies them via server-side apply, with the
 container image coming from exactly one of three sources flat on
-props: `image` (a registry reference, mirrored into ECR), `context`
+props: `image` (a pre-built registry reference), `context`
 (build your own Dockerfile), or `main` (bundle an inline Effect
 program). The simplest form runs a remote image with no Effect
-runtime in the container:
+runtime in the container. A bare string is **mirrored into a
+per-deployment ECR repository** so the nodes pull over IAM; wrap
+the same string in `Kubernetes.Image.ref(...)` to skip the copy
+when the cluster can already pull it:
 
 ```typescript
 const echo = yield* Kubernetes.Deployment("EchoServer", {
   cluster,
-  image: "registry.k8s.io/echoserver:1.10",
+  image: "registry.k8s.io/echoserver:1.10", // mirrored into ECR
   namespace: "default",
   replicas: 2,
   port: 8080,
@@ -145,6 +148,18 @@ const echo = yield* Kubernetes.Deployment("EchoServer", {
 
 echo.url;            // LoadBalancer hostname (an NLB on Auto Mode)
 echo.deploymentName; // K8s-native attrs: deploymentName, serviceName, ...
+
+// Already in a registry the nodes can pull — no extra ECR repo.
+const cache = yield* Kubernetes.Deployment("Cache", {
+  cluster,
+  image: Kubernetes.Image.ref(
+    "123456789012.dkr.ecr.us-east-1.amazonaws.com/apps@sha256:…",
+  ),
+});
+
+// Or pass a produced image resource (AWS.ECR.Image) — same direct path.
+const apiImage = yield* AWS.ECR.Image("ApiImage", { context: "./api" });
+const api = yield* Kubernetes.Deployment("Api", { cluster, image: apiImage });
 ```
 
 `serviceType: "LoadBalancer"` provisions a cloud load balancer and
@@ -160,7 +175,10 @@ bundled into a generated image instead — the same authoring model as
 `Deployment` accepts the same `{ env, policyStatements }` binding
 contract as a Lambda `Function`, so every AWS `Binding.Service`
 attaches environment variables to the Pod spec and IAM policy
-statements to a generated **Pod Identity role**:
+statements to a generated **Pod Identity role**.
+
+The compact form lets Deployment own the bundle and the per-workload
+ECR repository:
 
 ```typescript
 const api = yield* Kubernetes.Deployment(
@@ -178,6 +196,25 @@ const api = yield* Kubernetes.Deployment(
 );
 ```
 
+To own the repository and the image as their own resources, bundle
+`main` on `AWS.ECR.Image` and pass the result into Deployment.
+The image is not mirrored again — Deployment writes `apiImage.imageUri`
+onto the pod:
+
+```typescript
+const repository = yield* AWS.ECR.Repository("ApiRepository", {});
+const apiImage = yield* AWS.ECR.Image("ApiImage", {
+  repositoryUri: repository.repositoryUri,
+  main: import.meta.url,
+});
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: apiImage,
+  port: 3000,
+  replicas: 2,
+});
+```
+
 Every Kubernetes workload on EKS gets Pod Identity as standard:
 Alchemy creates
 the IAM role, wires it to the workload's ServiceAccount with a
@@ -192,7 +229,9 @@ Cloudflare Workers.
 ## Run-to-completion work with Job
 
 [`Kubernetes.Job`](/providers/kubernetes/job) runs a container to
-completion — the Kubernetes analog of `AWS.ECS.Task`. Same three image sources,
+completion — the Kubernetes analog of `AWS.ECS.Task`. Same three image sources
+(a bare `image` string still mirrors into ECR; `Image.ref` / `{ imageUri }`
+pull as-is),
 same bindings and Pod Identity; an Effect impl returns `{ run }`
 instead of `{ fetch }`, executing to completion inside the Pod:
 
