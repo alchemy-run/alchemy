@@ -1,9 +1,15 @@
-import { runBuildCommand, runComputeAutoBuild } from "@/Prisma/ComputeBuild";
+import {
+  runBuildCommand,
+  runComputeAutoBuild,
+  runComputeStaticBuild,
+} from "@/Prisma/ComputeBuild";
+import { createComputeArchive } from "@/Prisma/ComputeArchive";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { gunzipSync } from "node:zlib";
 
 const inspectBuildEnvironmentCommand = [
   JSON.stringify(process.execPath),
@@ -687,6 +693,99 @@ describe("Prisma Compute auto-build", () => {
       }).pipe(Effect.provide(PlatformServices)),
   );
 
+  it.effect("auto-detects a Vite static SPA", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-vite-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const viteBin = path.join(binDir, "vite");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ devDependencies: { vite: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        viteBin,
+        [
+          "#!/bin/sh",
+          "set -eu",
+          "mkdir -p dist/assets",
+          "printf '<h1>Vite SPA</h1>' > dist/index.html",
+          "printf 'console.log(1)' > dist/assets/app.js",
+          "",
+        ].join("\n"),
+      );
+      yield* fs.chmod(viteBin, 0o755);
+
+      const artifact = yield* runComputeAutoBuild({ appPath: root });
+
+      expect(artifact.entrypoint).toBe("server.mjs");
+      expect(artifact.defaultPort).toBe(8080);
+      expect(artifact.archiveIgnorePrefix).toBe("public");
+      expect(
+        yield* fs.readFileString(
+          path.join(artifact.directory, "public", "index.html"),
+        ),
+      ).toBe("<h1>Vite SPA</h1>");
+
+      yield* withStaticSiteServer(artifact.directory, (origin) =>
+        Effect.gen(function* () {
+          const response = yield* request(`${origin}/dashboard`);
+          expect(response.status).toBe(200);
+          expect(yield* responseText(response)).toBe("<h1>Vite SPA</h1>");
+        }),
+      );
+
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("detects TanStack Start before the Vite fallback", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-tanstack-start-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const viteBin = path.join(binDir, "vite");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({
+          dependencies: { "@tanstack/react-start": "0.0.0-test" },
+          devDependencies: { vite: "0.0.0-test" },
+        }),
+      );
+      yield* fs.writeFileString(
+        viteBin,
+        [
+          "#!/bin/sh",
+          "set -eu",
+          "mkdir -p .output/server",
+          "printf 'console.log(\"start\")' > .output/server/index.mjs",
+          "",
+        ].join("\n"),
+      );
+      yield* fs.chmod(viteBin, 0o755);
+
+      const artifact = yield* runComputeAutoBuild({ appPath: root });
+
+      expect(artifact.entrypoint).toBe("server/index.mjs");
+      expect(artifact.defaultPort).toBe(3000);
+      expect(
+        yield* fs.readFileString(
+          path.join(artifact.directory, "server", "index.mjs"),
+        ),
+      ).toContain('console.log("start")');
+
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("bounds retained build stdout", () =>
     Effect.gen(function* () {
       const error = yield* runBuildCommand({
@@ -829,3 +928,314 @@ describe("Prisma Compute auto-build", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 });
+
+describe("Prisma Compute static-site build", () => {
+  it.effect("packages a prebuilt index without running a command", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-index-",
+      });
+      yield* fs.writeFileString(path.join(root, "index.html"), "hello static");
+
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        outdir: ".",
+      });
+
+      yield* withStaticSiteServer(artifact.directory, (origin) =>
+        Effect.gen(function* () {
+          const response = yield* request(`${origin}/`);
+          expect(response.status).toBe(200);
+          expect(yield* responseText(response)).toBe("hello static");
+        }),
+      );
+
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("packages and serves static files with SPA fallback", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-",
+      });
+      yield* fs.writeFileString(
+        path.join(root, "build.mjs"),
+        [
+          'import { mkdir } from "node:fs/promises";',
+          'await mkdir("dist/assets", { recursive: true });',
+          'await mkdir("dist/docs", { recursive: true });',
+          'await Bun.write("dist/index.html", "<h1>app shell</h1>");',
+          'await Bun.write("dist/assets/app.js", "console.log(\'asset\')");',
+          'await Bun.write("dist/docs/index.html", "<h1>docs</h1>");',
+          'await Bun.write("dist/docs #1.html", "encoded asset");',
+          "",
+        ].join("\n"),
+      );
+
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        command: `${JSON.stringify(process.execPath)} build.mjs`,
+        outdir: "dist",
+        spa: true,
+      });
+
+      expect(artifact.entrypoint).toBe("server.mjs");
+      expect(artifact.defaultPort).toBe(8080);
+      expect(
+        yield* fs.readFileString(
+          path.join(artifact.directory, "public", "index.html"),
+        ),
+      ).toBe("<h1>app shell</h1>");
+      expect(yield* fs.exists(path.join(root, "server.mjs"))).toBe(false);
+
+      yield* withStaticSiteServer(artifact.directory, (origin) =>
+        Effect.gen(function* () {
+          const rootResponse = yield* request(`${origin}/`);
+          expect(rootResponse.status).toBe(200);
+          expect(yield* responseText(rootResponse)).toBe("<h1>app shell</h1>");
+
+          const assetResponse = yield* request(`${origin}/assets/app.js`);
+          expect(assetResponse.status).toBe(200);
+          expect(assetResponse.headers.get("content-type")).toContain(
+            "javascript",
+          );
+          expect(yield* responseText(assetResponse)).toBe(
+            "console.log('asset')",
+          );
+
+          const directoryResponse = yield* request(`${origin}/docs/`);
+          expect(directoryResponse.status).toBe(200);
+          expect(yield* responseText(directoryResponse)).toBe("<h1>docs</h1>");
+
+          const encodedResponse = yield* request(`${origin}/docs%20%231.html`);
+          expect(encodedResponse.status).toBe(200);
+          expect(yield* responseText(encodedResponse)).toBe("encoded asset");
+
+          const fallbackResponse = yield* request(
+            `${origin}/dashboard/settings`,
+          );
+          expect(fallbackResponse.status).toBe(200);
+          expect(yield* responseText(fallbackResponse)).toBe(
+            "<h1>app shell</h1>",
+          );
+
+          const headResponse = yield* request(`${origin}/assets/app.js`, {
+            method: "HEAD",
+          });
+          expect(headResponse.status).toBe(200);
+          expect(headResponse.headers.get("content-length")).toBe("20");
+          expect(yield* responseText(headResponse)).toBe("");
+
+          const postResponse = yield* request(`${origin}/`, {
+            method: "POST",
+          });
+          expect(postResponse.status).toBe(405);
+          expect(postResponse.headers.get("allow")).toBe("GET, HEAD");
+
+          const traversalResponse = yield* request(`${origin}/..%2Fsecret`);
+          expect(traversalResponse.status).toBe(400);
+        }),
+      );
+
+      yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("serves a custom root page without enabling SPA fallback", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-no-spa-",
+      });
+      yield* fs.makeDirectory(path.join(root, "dist"));
+      yield* fs.writeFileString(
+        path.join(root, "dist", "home.html"),
+        "static home",
+      );
+
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+        indexPage: "home.html",
+      });
+
+      yield* withStaticSiteServer(artifact.directory, (origin) =>
+        Effect.gen(function* () {
+          const rootResponse = yield* request(`${origin}/`);
+          expect(rootResponse.status).toBe(200);
+          expect(yield* responseText(rootResponse)).toBe("static home");
+
+          const missingResponse = yield* request(`${origin}/missing`);
+          expect(missingResponse.status).toBe(404);
+          expect(yield* responseText(missingResponse)).toBe("Not Found");
+        }),
+      );
+
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("scopes archive ignores to the static output", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-ignore-",
+      });
+      yield* fs.makeDirectory(path.join(root, "dist", "assets"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(root, "dist", "index.html"),
+        "static home",
+      );
+      yield* fs.writeFileString(
+        path.join(root, "dist", "assets", "app.mjs"),
+        "app",
+      );
+      yield* fs.writeFileString(
+        path.join(root, "dist", "assets", "app.js.map"),
+        "source map",
+      );
+
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+      });
+      const archive = yield* createComputeArchive({
+        directory: artifact.directory,
+        entrypoint: artifact.entrypoint,
+        ignore: ["assets/*.map", "*.mjs"],
+        ignorePrefix: artifact.archiveIgnorePrefix,
+      }).pipe(Effect.ensuring(artifact.cleanup));
+      const tarText = new TextDecoder().decode(
+        yield* Effect.sync(() => gunzipSync(archive)),
+      );
+
+      expect(tarText).toContain("bundle/server.mjs");
+      expect(tarText).toContain("bundle/public/index.html");
+      expect(tarText).toContain("bundle/public/assets/app.mjs");
+      expect(tarText).not.toContain("bundle/public/assets/app.js.map");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("rejects unsafe output and index paths", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-paths-",
+      });
+
+      const outdirError = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "../dist",
+      }).pipe(Effect.flip);
+      expect((outdirError as Error).message).toContain(
+        "outdir must be a relative path",
+      );
+
+      const indexError = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+        indexPage: "../index.html",
+      }).pipe(Effect.flip);
+      expect((indexError as Error).message).toContain(
+        "indexPage must be a relative file path",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("fails when the build output or index page is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-missing-",
+      });
+
+      const outputError = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+      }).pipe(Effect.flip);
+      expect((outputError as Error).message).toContain(
+        "did not produce an output directory",
+      );
+
+      yield* fs.makeDirectory(path.join(root, "dist"));
+      const indexError = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+      }).pipe(Effect.flip);
+      expect((indexError as Error).message).toContain(
+        "did not produce index.html",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+});
+
+const withStaticSiteServer = <A, E, R>(
+  directory: string,
+  use: (origin: string) => Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const listener = Bun.listen({
+        hostname: "127.0.0.1",
+        port: 0,
+        socket: { data() {} },
+      });
+      const port = listener.port;
+      listener.stop(true);
+      return {
+        origin: `http://127.0.0.1:${port}`,
+        process: Bun.spawn([process.execPath, "server.mjs"], {
+          cwd: directory,
+          env: { ...process.env, PORT: String(port) },
+          stdout: "pipe",
+          stderr: "pipe",
+        }),
+      };
+    }),
+    ({ origin }) => use(origin),
+    ({ process }) =>
+      Effect.tryPromise(async () => {
+        process.kill();
+        await process.exited;
+      }).pipe(Effect.ignore),
+  );
+
+const request = (url: string, init?: RequestInit) =>
+  Effect.tryPromise({
+    try: async () => {
+      let error: unknown;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        try {
+          return await fetch(url, init);
+        } catch (cause) {
+          error = cause;
+          await Bun.sleep(20);
+        }
+      }
+      throw error;
+    },
+    catch: (cause) => cause,
+  });
+
+const responseText = (response: Response) =>
+  Effect.tryPromise({
+    try: () => response.text(),
+    catch: (cause) => cause,
+  });

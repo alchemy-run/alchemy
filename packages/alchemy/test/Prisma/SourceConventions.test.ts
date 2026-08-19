@@ -70,7 +70,7 @@ const documentedResources = [
 ] as const;
 
 const resourceConfigInterfaces = {
-  Compute: ["ComputeBuild", "ComputeDev", "ComputeProps"],
+  Compute: ["ComputeBuild", "ComputeDev", "ComputeProps", "ComputeStaticBuild"],
   Connection: ["ConnectionEnvOptions"],
   Database: ["DatabaseDev"],
 } as const;
