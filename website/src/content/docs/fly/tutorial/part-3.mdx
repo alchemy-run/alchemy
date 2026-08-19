@@ -1,6 +1,6 @@
 ---
 title: "Part 3: Persist Data with a Volume"
-description: Attach a Fly Volume, mount it into your Service with the MountVolume binding, and store files that survive deploys.
+description: Mount a Fly disk into your Service with MountVolume and store files that survive deploys.
 sidebar:
   order: 3
 ---
@@ -15,41 +15,15 @@ storage — and mount it into the Service so files survive deploys.
 
 :::caution[One Volume, one Machine]
 A Fly Volume attaches to **one** Machine. Two Services cannot mount
-the same Volume. Keep the mount on this API Service (or move it to a
-dedicated worker later).
+the same disk. `count: 3` on a Service creates three independent
+Volumes, one per replica — not one shared disk.
 :::
 
-## Declare a Volume
+## Mount a disk into the Service
 
-Add a Volume next to the App in `src/app.ts`. The region must match
-the Service's:
-
-```diff lang="typescript"
-// src/app.ts
-import * as Fly from "alchemy/Fly";
-
-export const Site = Fly.App("Site");
-
-export const PublicIp = Fly.IpAssignment("Shared", {
-  app: Site,
-  type: "shared_v4",
-});
-+
-+export const Data = Fly.Volume("data", {
-+  app: Site,
-+  region: "iad",
-+  sizeGb: 1,
-+});
-```
-
-`sizeGb` is in GB (1 is the minimum) and can **grow in place** —
-Fly cannot shrink a Volume. Pass the `Site` declaration directly;
-resource-valued props accept the resource or an Effect producing it.
-
-## Mount it into the Service
-
-Inside the Service's init, bind the Volume with `Fly.MountVolume` —
-pass the declaration directly, no yielding required:
+There is no standalone Volume resource. Inside the Service's init,
+`Fly.MountVolume({ path, sizeGb })` creates a per-replica disk in
+the Service's app and region:
 
 ```diff lang="typescript"
 // src/api.ts
@@ -57,14 +31,13 @@ import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
--import { Site } from "./app.ts";
-+import { Data, Site } from "./app.ts";
+import { Site } from "./app.ts";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
   { app: Site, main: import.meta.url, region: "iad", port: 3000 },
   Effect.gen(function* () {
-+    const mount = yield* Fly.MountVolume(Data, { path: "/data" });
++    const mount = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
 
     return {
       fetch: /* ... */,
@@ -74,8 +47,8 @@ export default class Api extends Fly.Service<Api>()(
 ```
 
 `MountVolume` is a **binding**: at deploy time it tells the Service
-"put this Volume in `config.mounts` at `/data`", and at runtime it
-hands you the resolved `mount.path` and `mount.volumeId`.
+"create a 1 GB Volume and put it in `config.mounts` at `/data`", and
+at runtime it hands you the resolved `mount.path`.
 
 ## Provide the binding layer
 
@@ -84,7 +57,7 @@ Bindings declare a capability; layers implement it. Provide
 
 ```diff lang="typescript"
   Effect.gen(function* () {
-    const mount = yield* Fly.MountVolume(Data, { path: "/data" });
+    const mount = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
 
     return {
       fetch: /* ... */,
@@ -163,19 +136,17 @@ return HttpServerResponse.text("Hello from Fly!");
   </TabItem>
 </Tabs>
 
-<Terminal content={`[u]Plan[/u]: [g]1 to create[/g], [y]1 to update[/y]
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
 
-[g]+[/g] [b]data[/b] [d](Fly.Volume)[/d]
 [y]~[/y] [b]Api[/b] [d](Fly.Service)[/d]
 
 Proceed?
 ◉ Yes ○ No
-[g]✓[/g] [b]data[/b] [d](Fly.Volume)[/d] [g]created[/g]
 [g]✓[/g] [b]Api[/b] [d](Fly.Service)[/d] [y]updated[/y]`} />
 
-During the Service's deploy, Alchemy writes the Volume into the
-Machine's `config.mounts` at `/data`. The Volume must already exist
-in `iad` — same region as the Machine.
+During the Service's deploy, Alchemy creates the Volume and writes
+it into the Machine's `config.mounts` at `/data`. The disk lives in
+the Service's region (`iad`).
 
 ## Try it out
 
@@ -188,9 +159,8 @@ curl https://myapp-site-dev-a1b2c3d4.fly.dev/hello.txt
 # → Hello, Volume!
 ```
 
-Ship another code change and deploy — the file is still there. The
-Volume is a separate resource with its own lifecycle: even if the
-Machine is replaced, the Volume re-attaches on the next deploy.
+Ship another code change and deploy — the file is still there. If
+the Machine is replaced, the Volume re-attaches on the next deploy.
 
 ## Recap
 

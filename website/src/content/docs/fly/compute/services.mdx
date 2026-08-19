@@ -38,6 +38,9 @@ export default class Api extends Fly.Service<Api>()(
   Changing it **replaces** the Service.
 - `main: import.meta.url` — this file is the bundle entrypoint.
 - `region` — defaults to `iad`. Changing it replaces.
+- `count` — number of Machines to keep running. Fly's proxy
+  load-balances `{app}.fly.dev` across them. Default `1`. Each
+  replica gets its own Volume from every `MountVolume` binding.
 - `port` — written to `PORT` and used as the Fly proxy
   `internal_port`. Default `3000`. HTTP 80 and HTTPS 443 are
   published unless you override `services`.
@@ -45,8 +48,9 @@ export default class Api extends Fly.Service<Api>()(
   on that port; omit it for a [background service](#background-services).
 
 The resolved resource exposes `url` (`https://{appName}.fly.dev`
-when a proxy service is configured), `machineId`, `region`, `state`,
-and the bundle's `code.hash`.
+when a proxy service is configured), `machineId` (replica 0),
+`machineIds`, `count`, `mounts`, `region`, `state`, and the
+bundle's `code.hash`.
 
 ## What a deploy does
 
@@ -60,8 +64,9 @@ Docker must be running on the machine that runs `alchemy deploy`:
 3. Build `linux/amd64` from `image` (default `oven/bun:1`) and push
    to `registry.fly.io/{app}:{logicalId}-{hash}` using an App deploy
    token.
-4. Create or update the Machine, apply
-   [MountVolume](/fly/data/volumes) mounts, wait until `started`.
+4. Create or update `count` Machines, apply
+   [MountVolume](/fly/data/volumes) disks (one Volume per replica),
+   wait until `started`.
 
 On later deploys Alchemy compares the bundle hash: unchanged code is
 a no-op; changed code is a new image and an in-place Machine update.
@@ -157,9 +162,11 @@ Fly restarts it.
 
 ## Multiple Services, one App
 
-Each Service is its own Machine with its own image, env, and
-lifecycle. Point several at the same `app`. A Volume attaches to
-**one** Machine — mount it on exactly one Service:
+Each Service is its own replica set of Machines with its own image,
+env, and lifecycle. Point several at the same `app`. A Volume
+attaches to **one** Machine — `MountVolume` inside a Service with
+`count: 3` creates three disks, not one shared disk. Scale by
+changing `count`; the Fly proxy load-balances published services:
 
 ```typescript
 class Api extends Fly.Service<Api>()(

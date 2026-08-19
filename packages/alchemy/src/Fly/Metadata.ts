@@ -17,6 +17,7 @@ export const alchemyMetadataKeys = {
   stage: "alchemy.stage",
   id: "alchemy.id",
   type: "alchemy.type",
+  replica: "alchemy.replica",
 } as const;
 
 export type FlyAlchemyType = "Fly.Machine" | "Fly.Service";

@@ -1,13 +1,15 @@
 ---
 title: Apps
-description: Fly Apps as Alchemy resources — the parent namespace for Machines, Services, Volumes, Secrets, IPs, and certificates.
+description: Fly Apps as Alchemy resources — the parent namespace for Machines, Services, Secrets, IPs, and certificates.
 ---
 
 A [`Fly.App`](/providers/fly/app) is the parent for every other Fly
-resource. It is a globally unique name in the Fly fleet (DNS-safe,
-leading letter, max 30 characters) plus an organization. There is
-no update API: `name`, `orgSlug`, and `network` **replace**;
-`enableSubdomains` is create-only.
+resource (Machines, Services, Secrets, IPs, certificates). It is a
+globally unique name in the Fly fleet (DNS-safe, leading letter,
+max 30 characters) plus an organization. There is no update API:
+`name`, `orgSlug`, and `network` **replace**; `enableSubdomains` is
+create-only. Disks hang off Machines / Services via `mounts` /
+`MountVolume` — there is no standalone Volume resource.
 
 ## Create an App
 
@@ -54,12 +56,15 @@ it just to pass it along:
 
 ```typescript
 // src/app.ts
+import * as Fly from "alchemy/Fly";
+import * as Redacted from "effect/Redacted";
+
 export const Site = Fly.App("Site");
 
-export const Data = Fly.Volume("data", {
+export const Marker = Fly.Secret("Marker", {
   app: Site,
-  region: "iad",
-  sizeGb: 1,
+  name: "API_TOKEN",
+  value: Redacted.make("not-a-real-token"),
 });
 ```
 
@@ -74,8 +79,9 @@ Changing `name`, `orgSlug`, or `network` **replaces** the App. A
 same-name replace deletes the old App first — Fly cannot have two
 Apps with the same name.
 
-`alchemy destroy` deletes children (Machines, Volumes, Secrets, IPs,
-certificates) then the App (`appsDelete`).
+`alchemy destroy` deletes children (Machines, Services, Secrets, IPs,
+certificates — and the Volumes those Machines mounted) then the App
+(`appsDelete`).
 
 ## Where next
 

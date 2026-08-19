@@ -20,7 +20,6 @@ import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
 import { Service, ServiceProvider } from "./Service.ts";
 import { SignHttp } from "./SignHttp.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
-import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
 import { WriteSecretHttp } from "./WriteSecretHttp.ts";
 
@@ -68,7 +67,6 @@ export const providers = () =>
       Secret,
       SecretKey,
       Service,
-      Volume,
       VolumeSnapshot,
     ]),
   ).pipe(
@@ -81,7 +79,6 @@ export const providers = () =>
         SecretProvider(),
         SecretKeyProvider(),
         ServiceProvider(),
-        VolumeProvider(),
         VolumeSnapshotProvider(),
       ),
     ),

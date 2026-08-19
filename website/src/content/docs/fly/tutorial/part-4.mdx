@@ -27,8 +27,6 @@ import * as Fly from "alchemy/Fly";
 export const Site = Fly.App("Site");
 
 export const PublicIp = Fly.IpAssignment("Shared", { /* ... */ });
-
-export const Data = Fly.Volume("data", { /* ... */ });
 +
 +export const ApiToken = Fly.Secret("ApiToken", {
 +  app: Site,
@@ -47,11 +45,11 @@ directly, no yielding required:
 
 ```diff lang="typescript"
 // src/api.ts
--import { Data, Site } from "./app.ts";
-+import { ApiToken, Data, Site } from "./app.ts";
+-import { Site } from "./app.ts";
++import { ApiToken, Site } from "./app.ts";
 
   Effect.gen(function* () {
-    const mount = yield* Fly.MountVolume(Data, { path: "/data" });
+    const mount = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
 +    const secrets = yield* Fly.ReadSecret(ApiToken);
 
     return {

@@ -1,8 +1,5 @@
 import { Services } from "@distilled.cloud/fly-io";
-import type {
-  Volume as FlyVolume,
-  VolumeSnapshot as FlyVolumeSnapshot,
-} from "@distilled.cloud/fly-io/machines";
+import type { VolumeSnapshot as FlyVolumeSnapshot } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -10,11 +7,9 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { listOwnedApps } from "./App.ts";
 import type { App } from "./App.ts";
-import { matchesAlchemyPhysicalName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
-import type { Volume } from "./Volume.ts";
+import { listOwnedVolumes } from "./Volume.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -30,10 +25,11 @@ export interface VolumeSnapshotProps {
    */
   app: Ref<App>;
   /**
-   * Volume to snapshot. Changing it replaces the snapshot. Identity is
-   * the snapshot `id` returned by a subsequent `volumesListSnapshots`.
+   * Fly Volume id to snapshot (`vol_…`). Changing it replaces the
+   * snapshot. Identity is the snapshot `id` returned by a subsequent
+   * `volumesListSnapshots`.
    */
-  volume: Ref<Volume>;
+  volumeId: string;
 }
 
 export type VolumeSnapshot = Resource<
@@ -68,24 +64,26 @@ export type VolumeSnapshot = Resource<
  *
  * Create is fire-and-forget (`createVolumeSnapshot`); identity is the
  * snapshot `id` from a subsequent `volumesListSnapshots`. There is no
- * delete API and no mutable props — `app` and `volume` replace. Destroy
- * is a no-op; snapshots follow Volume `snapshot_retention` / Volume
- * delete. `nuke` skips this type.
+ * delete API and no mutable props — `app` and `volumeId` replace.
+ * Destroy is a no-op; snapshots follow Volume `snapshot_retention` /
+ * Volume delete. `nuke` skips this type.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/volumes-resource/
  *
  * @section Creating a Snapshot
- * @example Snapshot a Volume
+ * @example Snapshot a mounted disk
  * ```typescript
  * const site = yield* Fly.App("Site");
- * const data = yield* Fly.Volume("Data", {
+ * const box = yield* Fly.Machine("Box", {
  *   app: site,
- *   sizeGb: 1,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ *   mounts: [{ path: "/data", sizeGb: 1 }],
  * });
  * const snap = yield* Fly.VolumeSnapshot("Nightly", {
  *   app: site,
- *   volume: data,
+ *   volumeId: box.mounts[0].volumeId,
  * });
  * ```
  */
@@ -122,6 +120,7 @@ const appNameOf = (value: unknown): string | undefined => {
 };
 
 const volumeIdOf = (value: unknown): string | undefined => {
+  if (typeof value === "string" && value.length > 0) return value;
   if (value == null || typeof value !== "object") return undefined;
   const id = (value as { volumeId?: unknown }).volumeId;
   return typeof id === "string" && id.length > 0 ? id : undefined;
@@ -197,35 +196,6 @@ const waitForNewSnapshot = (
     ),
   );
 
-const listOwnedVolumes = Effect.fn(function* () {
-  const apps = yield* listOwnedApps();
-  const groups = yield* Effect.forEach(
-    apps,
-    (app) =>
-      Services.machines.volumesList({ app_name: app.appName }).pipe(
-        Effect.map((volumes) =>
-          volumes.flatMap((volume) => {
-            if (!matchesAlchemyPhysicalName(volume.name)) return [];
-            const volumeId = volume.id;
-            if (volumeId === undefined || volumeId.length === 0) return [];
-            return [{ appName: app.appName, volumeId, volume }];
-          }),
-        ),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(
-            [] as Array<{
-              appName: string;
-              volumeId: string;
-              volume: FlyVolume;
-            }>,
-          ),
-        ),
-      ),
-    { concurrency: 8 },
-  );
-  return groups.flat();
-});
-
 export const VolumeSnapshotProvider = () =>
   Provider.succeed(VolumeSnapshot, {
     stables: ["snapshotId", "volumeId", "appName"],
@@ -237,7 +207,7 @@ export const VolumeSnapshotProvider = () =>
       const desiredApp = appNameOf(news.app);
       const appChanged =
         desiredApp !== undefined && desiredApp !== output.appName;
-      const desiredVolume = volumeIdOf(news.volume);
+      const desiredVolume = volumeIdOf(news.volumeId);
       const volumeChanged =
         desiredVolume !== undefined && desiredVolume !== output.volumeId;
       if (appChanged || volumeChanged) {
@@ -247,9 +217,8 @@ export const VolumeSnapshotProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      const appName =
-        output?.appName ?? appNameOf(olds?.app) ?? appNameOf(olds?.volume);
-      const volumeId = output?.volumeId ?? volumeIdOf(olds?.volume);
+      const appName = output?.appName ?? appNameOf(olds?.app);
+      const volumeId = output?.volumeId ?? volumeIdOf(olds?.volumeId);
       if (appName === undefined || volumeId === undefined) return undefined;
       const snapshotId = output?.snapshotId;
       if (snapshotId === undefined || snapshotId.length === 0) {
@@ -282,13 +251,12 @@ export const VolumeSnapshotProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as VolumeSnapshotProps);
-      const appName =
-        appNameOf(props.app) ?? appNameOf(props.volume) ?? output?.appName;
-      const volumeId = volumeIdOf(props.volume) ?? output?.volumeId;
+      const appName = appNameOf(props.app) ?? output?.appName;
+      const volumeId = volumeIdOf(props.volumeId) ?? output?.volumeId;
       if (appName === undefined || volumeId === undefined) {
         return yield* new VolumeSnapshotRefsMissing({
           message:
-            "Fly.VolumeSnapshot requires a resolved App with appName and a Volume with volumeId.",
+            "Fly.VolumeSnapshot requires a resolved App with appName and a volumeId.",
         });
       }
 

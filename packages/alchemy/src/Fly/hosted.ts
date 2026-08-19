@@ -19,7 +19,7 @@ import {
   type HostRuntimeContext,
 } from "../Server/Process.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
+import type { DiskSpec, ServiceBinding } from "./MountVolume.ts";
 
 export type FlyHostRuntimeContext = HostRuntimeContext;
 
@@ -124,26 +124,28 @@ export const collectBindingState = (
   const env = active
     .map((binding) => binding?.data?.env)
     .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
-  const mounts: Array<{ volume: string; path: string }> = [];
+  const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
   for (const binding of active) {
     for (const mount of binding?.data?.mounts ?? []) {
-      const key = `${mount.volume}:${mount.path}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (seen.has(mount.path)) continue;
+      seen.add(mount.path);
       mounts.push(mount);
     }
   }
   return { env, mounts };
 };
 
-export const defaultHttpServices = (port: number): FlyMachineService[] => [
+export const defaultHttpServices = (
+  port: number,
+  count = 1,
+): FlyMachineService[] => [
   {
     protocol: "tcp",
     internal_port: port,
     autostart: true,
     autostop: "off",
-    min_machines_running: 1,
+    min_machines_running: count,
     ports: [
       { port: 80, handlers: ["http"], force_https: true },
       { port: 443, handlers: ["tls", "http"] },

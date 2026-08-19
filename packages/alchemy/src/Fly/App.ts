@@ -69,7 +69,7 @@ export type App = Resource<
 >;
 
 /**
- * A Fly.io App — the parent for Machines, Volumes, Secrets and Services.
+ * A Fly.io App — the parent for Machines, Services, Secrets and IPs.
  *
  * Fly Apps have no labels. Ownership is the physical name (generated via
  * `createPhysicalName` + a leading-letter force) plus child metadata on
@@ -296,6 +296,31 @@ export const AppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const appName = output.appName;
       if (appName.length === 0) return;
+      const volumes = yield* Services.machines
+        .volumesList({ app_name: appName })
+        .pipe(
+          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+        );
+      yield* Effect.forEach(
+        volumes,
+        (volume) => {
+          const volumeId = volume.id;
+          if (
+            volumeId === undefined ||
+            volumeId.length === 0 ||
+            !matchesAlchemyPhysicalName(volume.name)
+          ) {
+            return Effect.void;
+          }
+          return Services.machines
+            .volumeDelete({ app_name: appName, volume_id: volumeId })
+            .pipe(
+              Effect.asVoid,
+              Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
+            );
+        },
+        { concurrency: 4 },
+      );
       yield* Services.machines
         .appsDelete({ app_name: appName })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));

@@ -24,7 +24,6 @@ export * from "./Sign.ts";
 export * from "./SignHttp.ts";
 export * from "./Verify.ts";
 export * from "./VerifyHttp.ts";
-export * from "./Volume.ts";
 export * from "./VolumeSnapshot.ts";
 export * from "./WriteSecret.ts";
 export * from "./WriteSecretHttp.ts";

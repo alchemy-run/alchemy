@@ -29,13 +29,14 @@ const web = yield* Fly.Machine("Web", {
 ```
 
 `region` replaces on change; `image` updates in place. Guest
-defaults to shared-cpu 1× / 256 MB. `services` is the Fly proxy:
-published ports and handlers (`http`, `tls`, …). Omit `services`
-(or pass `[]`) for a worker that should not be reachable from the
-internet.
+defaults to shared-cpu 1× / 256 MB. `count` is the replica pool
+(default `1`) — Fly's proxy load-balances published `services`
+across them. Omit `services` (or pass `[]`) for a worker that
+should not be reachable from the internet.
 
-The resolved resource exposes `machineId`, `privateIp`, `state`,
-`region`, and `url` when a proxy service is published — see the
+The resolved resource exposes `machineId` (replica 0), `machineIds`,
+`count`, `privateIp`, `state`, `region`, `mounts`, and `url` when a
+proxy service is published — see the
 [`Machine` reference](/providers/fly/machine).
 
 `{app}.fly.dev` over IPv4 still needs an
@@ -61,15 +62,15 @@ seen at least that secrets version.
 
 ## Mounts
 
-Pass volumes as `mounts`. The Volume must already exist in the same
-region; a Volume attaches to one Machine:
+Pass disks as `mounts`. Alchemy creates one Volume per replica in
+the Machine's app and region — a Volume attaches to one Machine:
 
 ```typescript
 const box = yield* Fly.Machine("Box", {
   app: Site,
   region: "iad",
   image: "nginx:alpine",
-  mounts: [{ volume: Data, path: "/data" }],
+  mounts: [{ path: "/data", sizeGb: 1 }],
 });
 ```
 

@@ -2,11 +2,11 @@ import * as Fly from "alchemy/Fly";
 import { ServerHost } from "alchemy/Server";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { Data, MARKER, MARKER_FILE, Site, VOLUME_PATH } from "./shared.ts";
+import { MARKER, MARKER_FILE, Site, VOLUME_PATH } from "./shared.ts";
 
 /**
- * Background Service: mounts {@link Data} at `/data` and writes a marker
- * file. No public proxy ports — {@link Api} is the HTTP surface.
+ * Background Service: mounts a per-replica disk at `/data` and writes a
+ * marker file. No public proxy ports — {@link Api} is the HTTP surface.
  */
 export default class Worker extends Fly.Service<Worker>()(
   "Worker",
@@ -18,8 +18,7 @@ export default class Worker extends Fly.Service<Worker>()(
     services: [],
   },
   Effect.gen(function* () {
-    const volume = yield* Data;
-    const mount = yield* Fly.MountVolume(volume, { path: VOLUME_PATH });
+    const mount = yield* Fly.MountVolume({ path: VOLUME_PATH, sizeGb: 1 });
     const host = yield* ServerHost;
 
     yield* host.run(

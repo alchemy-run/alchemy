@@ -50,69 +50,6 @@ const waitUntilAppGone = (appName: string) =>
     }),
   );
 
-const waitMachine = (
-  appName: string,
-  machineId: string,
-  state: "started" | "destroyed",
-) => {
-  const wait = Services.machines
-    .machinesWait({
-      app_name: appName,
-      machine_id: machineId,
-      state,
-      timeout: 8,
-    })
-    .pipe(Effect.asVoid);
-  if (state === "destroyed") {
-    return wait.pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.retry({
-        times: 6,
-        schedule: Schedule.exponential("500 millis"),
-        while: (e) => e._tag === "GatewayTimeout",
-      }),
-    );
-  }
-  return wait.pipe(
-    Effect.retry({
-      times: 6,
-      schedule: Schedule.exponential("500 millis"),
-      while: (e) => e._tag === "NotFound" || e._tag === "GatewayTimeout",
-    }),
-  );
-};
-
-/**
- * Fly refuses snapshots of a never-mounted volume (`BadRequest`:
- * "unable to perform backup against uninitialized volume"). Mount
- * once on a cheapest nginx Machine so the filesystem is formatted,
- * then destroy the Machine so the Volume can be deleted later.
- */
-const initializeVolume = (appName: string, volumeId: string) =>
-  Effect.gen(function* () {
-    const machine = yield* Services.machines.machinesCreate({
-      app_name: appName,
-      region: "iad",
-      config: {
-        image: "nginx:alpine",
-        guest: { cpu_kind: "shared", cpus: 1, memory_mb: 256 },
-        mounts: [{ volume: volumeId, path: "/data" }],
-        auto_destroy: true,
-      },
-    });
-    const machineId = machine.id;
-    if (machineId === undefined || machineId.length === 0) return;
-    yield* waitMachine(appName, machineId, "started");
-    yield* Services.machines
-      .machinesDelete({
-        app_name: appName,
-        machine_id: machineId,
-        force: true,
-      })
-      .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    yield* waitMachine(appName, machineId, "destroyed");
-  });
-
 const listedHas = (appName: string, volumeId: string, snapshotId: string) =>
   Services.machines
     .volumesListSnapshots({
@@ -125,6 +62,16 @@ const listedHas = (appName: string, volumeId: string, snapshotId: string) =>
       ),
     );
 
+const box = (id: string, app: Fly.App, name: string) =>
+  Fly.Machine(id, {
+    app,
+    name,
+    region: "iad",
+    image: "nginx:alpine",
+    guest: { cpus: 1, memoryMb: 256 },
+    mounts: [{ path: "/data", sizeGb: 1, autoBackupEnabled: false }],
+  });
+
 test.provider.skipIf(!hasFlyCreds)(
   "create, update, and destroy a volume snapshot",
   (stack) =>
@@ -134,30 +81,18 @@ test.provider.skipIf(!hasFlyCreds)(
       const base = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("SnapSite");
-          const volume = yield* Fly.Volume("SnapData", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
+          const volume = yield* box("SnapData", app, "snap-data");
           return { app, volume };
         }),
       );
 
-      yield* initializeVolume(base.app.appName, base.volume.volumeId);
-
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("SnapSite");
-          const volume = yield* Fly.Volume("SnapData", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
+          const volume = yield* box("SnapData", app, "snap-data");
           const snapshot = yield* Fly.VolumeSnapshot("Nightly", {
             app,
-            volume,
+            volumeId: base.volume.mounts[0]!.volumeId,
           });
           return { app, volume, snapshot };
         }),
@@ -166,11 +101,13 @@ test.provider.skipIf(!hasFlyCreds)(
       expect(created.snapshot.snapshotId).toEqual(expect.any(String));
       expect(created.snapshot.snapshotId.length).toBeGreaterThan(0);
       expect(created.snapshot.appName).toEqual(created.app.appName);
-      expect(created.snapshot.volumeId).toEqual(created.volume.volumeId);
+      expect(created.snapshot.volumeId).toEqual(
+        created.volume.mounts[0]?.volumeId,
+      );
 
       const fetched = yield* listedHas(
         created.app.appName,
-        created.volume.volumeId,
+        created.volume.mounts[0]!.volumeId,
         created.snapshot.snapshotId,
       );
       expect(fetched).toBeDefined();
@@ -179,22 +116,19 @@ test.provider.skipIf(!hasFlyCreds)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("SnapSite");
-          const volume = yield* Fly.Volume("SnapData", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
+          const volume = yield* box("SnapData", app, "snap-data");
           const snapshot = yield* Fly.VolumeSnapshot("Nightly", {
             app,
-            volume,
+            volumeId: created.volume.mounts[0]!.volumeId,
           });
           return { app, volume, snapshot };
         }),
       );
 
       expect(updated.snapshot.snapshotId).toEqual(created.snapshot.snapshotId);
-      expect(updated.snapshot.volumeId).toEqual(created.volume.volumeId);
+      expect(updated.snapshot.volumeId).toEqual(
+        created.volume.mounts[0]?.volumeId,
+      );
       expect(updated.snapshot.appName).toEqual(created.app.appName);
 
       const provider = yield* Provider.findProvider(Fly.VolumeSnapshot);
@@ -204,19 +138,19 @@ test.provider.skipIf(!hasFlyCreds)(
       );
       expect(listed).toBeDefined();
       expect(listed?.appName).toEqual(created.app.appName);
-      expect(listed?.volumeId).toEqual(created.volume.volumeId);
+      expect(listed?.volumeId).toEqual(created.volume.mounts[0]?.volumeId);
 
       yield* stack.destroy();
 
       const volumeGone = yield* waitUntilVolumeGone(
         created.volume.appName,
-        created.volume.volumeId,
+        created.volume.mounts[0]!.volumeId,
       );
       expect(volumeGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider.skipIf(!hasFlyCreds)(
@@ -228,68 +162,37 @@ test.provider.skipIf(!hasFlyCreds)(
       const base = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("SnapReplaceSite");
-          const volumeA = yield* Fly.Volume("SnapReplaceA", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
-          const volumeB = yield* Fly.Volume("SnapReplaceB", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
+          const volumeA = yield* box("SnapReplaceA", app, "snap-a");
+          const volumeB = yield* box("SnapReplaceB", app, "snap-b");
           return { app, volumeA, volumeB };
         }),
       );
 
-      yield* initializeVolume(base.app.appName, base.volumeA.volumeId);
-      yield* initializeVolume(base.app.appName, base.volumeB.volumeId);
-
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("SnapReplaceSite");
-          const volumeA = yield* Fly.Volume("SnapReplaceA", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
-          const volumeB = yield* Fly.Volume("SnapReplaceB", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
+          const volumeA = yield* box("SnapReplaceA", app, "snap-a");
+          const volumeB = yield* box("SnapReplaceB", app, "snap-b");
           const snapshot = yield* Fly.VolumeSnapshot("Retarget", {
             app,
-            volume: volumeA,
+            volumeId: base.volumeA.mounts[0]!.volumeId,
           });
           return { app, volumeA, volumeB, snapshot };
         }),
       );
 
-      expect(created.snapshot.volumeId).toEqual(created.volumeA.volumeId);
+      expect(created.snapshot.volumeId).toEqual(
+        created.volumeA.mounts[0]?.volumeId,
+      );
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("SnapReplaceSite");
-          const volumeA = yield* Fly.Volume("SnapReplaceA", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
-          const volumeB = yield* Fly.Volume("SnapReplaceB", {
-            app,
-            region: "iad",
-            sizeGb: 1,
-            autoBackupEnabled: false,
-          });
+          const volumeA = yield* box("SnapReplaceA", app, "snap-a");
+          const volumeB = yield* box("SnapReplaceB", app, "snap-b");
           const snapshot = yield* Fly.VolumeSnapshot("Retarget", {
             app,
-            volume: volumeB,
+            volumeId: created.volumeB.mounts[0]!.volumeId,
           });
           return { app, volumeA, volumeB, snapshot };
         }),
@@ -298,13 +201,17 @@ test.provider.skipIf(!hasFlyCreds)(
       expect(replaced.snapshot.snapshotId).not.toEqual(
         created.snapshot.snapshotId,
       );
-      expect(replaced.snapshot.volumeId).toEqual(replaced.volumeB.volumeId);
-      expect(replaced.snapshot.volumeId).not.toEqual(created.volumeA.volumeId);
+      expect(replaced.snapshot.volumeId).toEqual(
+        replaced.volumeB.mounts[0]?.volumeId,
+      );
+      expect(replaced.snapshot.volumeId).not.toEqual(
+        created.volumeA.mounts[0]?.volumeId,
+      );
       expect(replaced.snapshot.appName).toEqual(created.app.appName);
 
       const fetched = yield* listedHas(
         replaced.app.appName,
-        replaced.volumeB.volumeId,
+        replaced.volumeB.mounts[0]!.volumeId,
         replaced.snapshot.snapshotId,
       );
       expect(fetched).toBeDefined();
@@ -314,16 +221,16 @@ test.provider.skipIf(!hasFlyCreds)(
 
       const oldGone = yield* waitUntilVolumeGone(
         created.volumeA.appName,
-        created.volumeA.volumeId,
+        created.volumeA.mounts[0]!.volumeId,
       );
       expect(oldGone).toEqual("gone");
       const newGone = yield* waitUntilVolumeGone(
         replaced.volumeB.appName,
-        replaced.volumeB.volumeId,
+        replaced.volumeB.mounts[0]!.volumeId,
       );
       expect(newGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

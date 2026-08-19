@@ -17,16 +17,6 @@ export const Site = Fly.App("Site", {
 });
 
 /**
- * Volume {@link Worker} mounts at {@link VOLUME_PATH}. Fly attaches a
- * Volume to one Machine — the same volume on two Services is invalid.
- */
-export const Data = Fly.Volume("Data", {
-  app: Site,
-  region: "iad",
-  sizeGb: 1,
-});
-
-/**
  * App secret {@link Api} reads via {@link Fly.ReadSecret}. Fly also
  * injects it into Machines as an env var named {@link SECRET_NAME}.
  */

@@ -11,7 +11,6 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Api from "./fixtures/app/api.ts";
 import {
-  Data as Volume,
   Marker,
   PublicIp,
   SECRET_NAME,
@@ -49,7 +48,6 @@ const Stack = Alchemy.Stack(
   },
   Effect.gen(function* () {
     const site = yield* Site;
-    const volume = yield* Volume;
     const secret = yield* Marker;
     const ip = yield* PublicIp;
     const worker = yield* Worker;
@@ -58,8 +56,7 @@ const Stack = Alchemy.Stack(
       appName: site.appName,
       appId: site.appId,
       appUrl: site.url,
-      volumeId: volume.volumeId,
-      volumeName: volume.name,
+      workerMounts: worker.mounts,
       secretName: secret.name,
       ip: ip.ip,
       workerMachineId: worker.machineId,
@@ -91,7 +88,7 @@ test.skipIf(!hasFlyCreds)(
     expect(out.appName).toMatch(/^[a-z][a-z0-9-]*$/);
     expect(out.appName.length).toBeLessThanOrEqual(30);
     expect(out.appId).toEqual(expect.any(String));
-    expect(out.volumeId).toEqual(expect.any(String));
+    expect(out.workerMounts[0]?.volumeId).toEqual(expect.any(String));
     expect(out.secretName).toEqual(SECRET_NAME);
     expect(out.ip).toEqual(expect.any(String));
     expect(out.workerMachineId).toEqual(expect.any(String));
@@ -135,15 +132,17 @@ test.skipIf(!hasFlyCreds)(
       "Fly.Service",
     );
     expect(liveWorker.config?.mounts?.[0]?.path).toEqual(VOLUME_PATH);
-    expect(liveWorker.config?.mounts?.[0]?.volume).toEqual(out.volumeId);
+    expect(liveWorker.config?.mounts?.[0]?.volume).toEqual(
+      out.workerMounts[0]?.volumeId,
+    );
 
     const liveVolume = yield* distilled(
       Services.machines.volumesGetById({
         app_name: out.appName,
-        volume_id: out.volumeId,
+        volume_id: out.workerMounts[0]!.volumeId,
       }),
     );
-    expect(liveVolume.id).toEqual(out.volumeId);
+    expect(liveVolume.id).toEqual(out.workerMounts[0]?.volumeId);
     expect(liveVolume.attached_machine_id).toEqual(out.workerMachineId);
 
     const liveSecret = yield* distilled(

@@ -8,7 +8,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Api from "./fixtures/api.ts";
-import { Data, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import { MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -69,18 +69,19 @@ test.provider.skipIf(!hasFlyCreds)(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Site;
-          const volume = yield* Data(app);
           const ip = yield* Fly.IpAssignment("Shared", {
             app,
             type: "shared_v4",
           });
           const api = yield* Api;
-          return { app, volume, ip, api };
+          return { app, ip, api };
         }),
       );
 
       expect(deployed.api.machineId).toEqual(expect.any(String));
       expect(deployed.api.machineId.length).toBeGreaterThan(0);
+      expect(deployed.api.machineIds).toEqual([deployed.api.machineId]);
+      expect(deployed.api.count).toEqual(1);
       expect(deployed.api.appName).toEqual(deployed.app.appName);
       expect(deployed.api.name).toEqual(expect.any(String));
       expect(deployed.api.region).toEqual("iad");
@@ -90,7 +91,8 @@ test.provider.skipIf(!hasFlyCreds)(
       );
       expect(deployed.api.code.hash).toEqual(expect.any(String));
       expect(deployed.api.code.hash.length).toBeGreaterThan(0);
-      expect(deployed.volume.region).toEqual("iad");
+      expect(deployed.api.mounts[0]?.path).toEqual(VOLUME_PATH);
+      expect(deployed.api.mounts[0]?.volumeId).toEqual(expect.any(String));
 
       const fetched = yield* Services.machines.machinesShow({
         app_name: deployed.api.appName,
@@ -112,14 +114,15 @@ test.provider.skipIf(!hasFlyCreds)(
       );
       expect(fetched.config?.mounts?.[0]?.path).toEqual(VOLUME_PATH);
       expect(fetched.config?.mounts?.[0]?.volume).toEqual(
-        deployed.volume.volumeId,
+        deployed.api.mounts[0]?.volumeId,
       );
+      expect(fetched.config?.metadata?.["alchemy.replica"]).toEqual("0");
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
 
       const liveVolume = yield* Services.machines.volumesGetById({
-        app_name: deployed.volume.appName,
-        volume_id: deployed.volume.volumeId,
+        app_name: deployed.api.appName,
+        volume_id: deployed.api.mounts[0]!.volumeId,
       });
       expect(liveVolume.attached_machine_id).toEqual(deployed.api.machineId);
 
@@ -143,9 +146,7 @@ test.provider.skipIf(!hasFlyCreds)(
           schedule: Schedule.spaced("4 seconds"),
           times: 10,
         }),
-        Effect.map(
-          (value) => value as { text: string; path: string; volumeId: string },
-        ),
+        Effect.map((value) => value as { text: string; path: string }),
       );
       expect(body.path).toEqual(VOLUME_PATH);
       expect(body.text).toEqual(MARKER);

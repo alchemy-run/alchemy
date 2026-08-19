@@ -1,4 +1,3 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type {
   FlyMachineConfig,
   FlyMachineGuest,
@@ -6,33 +5,38 @@ import type {
   FlyMachineMount,
   FlyMachineRestart,
   FlyMachineService,
-  ImageRef as FlyImageRef,
   Machine as FlyMachine,
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
-import { App, listOwnedApps } from "./App.ts";
+import { App } from "./App.ts";
 import {
-  alchemyMetadataKeys,
   createFlyResourceName,
-  createMachineMetadata,
   diffMachineMetadata,
-  isAlchemyOwnedMetadata,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
+import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
-import type { Volume } from "./Volume.ts";
+import {
+  deleteReplicaSet,
+  listReplicaSets,
+  observeReplicaSet,
+  reconcileReplicas,
+  resolveCount,
+  volumeIdsOf,
+  type Replica,
+  type ReplicaSet,
+} from "./replicas.ts";
+
+export type { Replica };
 
 const DEFAULT_REGION = "iad";
 const DEFAULT_CPU_KIND = "shared";
 const DEFAULT_CPUS = 1;
 const DEFAULT_MEMORY_MB = 256;
-const WAIT_TIMEOUT_SECONDS = 8;
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -119,14 +123,7 @@ export interface MachineService {
   minMachinesRunning?: number;
 }
 
-export interface MachineMount {
-  /**
-   * Volume to attach. Accepts a `Fly.Volume` or `{ volumeId }` stub.
-   */
-  volume: Ref<Volume | { volumeId: string }>;
-  /** Path inside the Machine to mount the Volume. */
-  path: string;
-}
+export type MachineMount = DiskSpec;
 
 export interface MachineProps {
   /**
@@ -146,6 +143,14 @@ export interface MachineProps {
    */
   region?: string;
   /**
+   * Number of Machines to keep running. Fly's proxy load-balances
+   * published `services` across them. Each replica gets its own
+   * Volume from every {@link mounts} group.
+   *
+   * @default 1
+   */
+  count?: number;
+  /**
    * Docker image reference. Updated in place via `machinesUpdate`.
    */
   image: string;
@@ -162,7 +167,9 @@ export interface MachineProps {
    */
   services?: MachineService[];
   /**
-   * Volumes to attach. Also collected from `MountVolume` bindings.
+   * Disks to attach. Each entry is a Fly volume group: `count`
+   * independent Volumes, one mounted on each replica. Also collected
+   * from `MountVolume` bindings.
    */
   mounts?: MachineMount[];
   /**
@@ -171,7 +178,8 @@ export interface MachineProps {
   init?: MachineInit;
   /**
    * User metadata. Alchemy ownership keys (`alchemy.stack` /
-   * `alchemy.stage` / `alchemy.id` / `alchemy.type`) are always merged.
+   * `alchemy.stage` / `alchemy.id` / `alchemy.type` /
+   * `alchemy.replica`) are always merged.
    */
   metadata?: Record<string, string>;
   /**
@@ -209,17 +217,19 @@ export type Machine = Resource<
   {
     /** Parent Fly App name. */
     appName: string;
-    /** Fly Machine id. */
+    /** Fly Machine id of replica 0. */
     machineId: string;
-    /** Machine name (unique per App). */
+    /** Fly Machine ids of every replica. */
+    machineIds: string[];
+    /** Machine name of replica 0 (unique per App). */
     name: string;
-    /** Region the Machine is running in. */
+    /** Region the Machines are running in. */
     region: string;
-    /** Observed state (`created`, `started`, `stopped`, …). */
+    /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
     state: string;
-    /** Fly instance / version id, if the API returned one. */
+    /** Fly instance / version id of replica 0, if the API returned one. */
     instanceId: string | undefined;
-    /** Internal 6PN address. */
+    /** Internal 6PN address of replica 0. */
     privateIp: string | undefined;
     /** Parsed image reference from Fly. */
     imageRef: MachineImageRef | undefined;
@@ -230,27 +240,30 @@ export type Machine = Resource<
      * a proxy service. `undefined` when no services are configured.
      */
     url: string | undefined;
+    /** Number of Machines in the replica set. */
+    count: number;
+    /** Disks mounted on replica 0. */
+    mounts: MountedDisk[];
+    /** Every replica in the set. */
+    replicas: Replica[];
   },
-  {
-    /** Environment variables collected from bindings. */
-    env?: Record<string, any>;
-    /**
-     * Volumes to attach. Collected from `Fly.MountVolume` when the
-     * Machine is the bind host.
-     */
-    mounts?: Array<{ volume: string; path: string }>;
-  },
+  ServiceBinding,
   Providers
 >;
 
 /**
  * A raw Fly.io Firecracker Machine — a VM that runs a public Docker image
- * under an App. Image, guest, env, services, mounts, metadata and restart
- * update in place via `machinesUpdate`. Name, region and App replace.
+ * under an App. `count` is the replica pool (Fly's proxy load-balances
+ * published services). Image, guest, env, services, mounts, metadata and
+ * restart update in place via `machinesUpdate`. Name, region and App
+ * replace.
+ *
+ * Disks are declared as `{ path, sizeGb }` — Alchemy creates one Volume
+ * per replica in a Fly name-group. There is no standalone Volume resource.
  *
  * Ownership is stamped on `config.metadata` (`alchemy.stack` /
- * `alchemy.stage` / `alchemy.id` / `alchemy.type=Fly.Machine`). Fly Apps
- * have no labels.
+ * `alchemy.stage` / `alchemy.id` / `alchemy.type=Fly.Machine` /
+ * `alchemy.replica`). Fly Apps have no labels.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/machines-resource/
@@ -283,14 +296,32 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Attaching a Volume
- * @example Mount a Volume
+ * @section Scaling
+ * @example Three replicas behind the Fly proxy
  * ```typescript
- * const data = yield* Fly.Volume("Data", { app: site, sizeGb: 1 });
  * const web = yield* Fly.Machine("Web", {
  *   app: site,
+ *   region: "iad",
  *   image: "nginx:alpine",
- *   mounts: [{ volume: data, path: "/data" }],
+ *   count: 3,
+ *   services: [
+ *     {
+ *       protocol: "tcp",
+ *       internalPort: 80,
+ *       ports: [{ port: 80, handlers: ["http"] }],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Attaching a disk
+ * @example Mount a per-replica Volume
+ * ```typescript
+ * const box = yield* Fly.Machine("Box", {
+ *   app: site,
+ *   region: "iad",
+ *   image: "postgres:16",
+ *   mounts: [{ path: "/data", sizeGb: 10 }],
  * });
  * ```
  */
@@ -311,18 +342,10 @@ export class MachineAppNotResolved extends Data.TaggedError(
 
 type MachineBinding = Machine["Binding"];
 
-const waitBackoff = Schedule.exponential("500 millis");
-
 const appNameOf = (value: unknown): string | undefined => {
   if (value == null || typeof value !== "object") return undefined;
   const name = (value as { appName?: unknown }).appName;
   return typeof name === "string" && name.length > 0 ? name : undefined;
-};
-
-const volumeIdOf = (value: unknown): string | undefined => {
-  if (value == null || typeof value !== "object") return undefined;
-  const id = (value as { volumeId?: unknown }).volumeId;
-  return typeof id === "string" && id.length > 0 ? id : undefined;
 };
 
 const compactRecord = (
@@ -352,128 +375,28 @@ const resolveMachineName = (
     return yield* createFlyResourceName(id);
   });
 
-const gone = (machine: FlyMachine | undefined) =>
-  machine === undefined || machine.state === "destroyed";
-
-const toImageRef = (
-  ref: FlyImageRef | undefined,
-): MachineImageRef | undefined => {
-  if (ref === undefined) return undefined;
-  const imageRef: MachineImageRef = {
-    registry: ref.registry,
-    repository: ref.repository,
-    tag: ref.tag,
-    digest: ref.digest,
-  };
-  return imageRef.registry === undefined &&
-    imageRef.repository === undefined &&
-    imageRef.tag === undefined &&
-    imageRef.digest === undefined
-    ? undefined
-    : imageRef;
+const mergeBindings = (
+  bindings: readonly ResourceBinding<MachineBinding>[],
+) => {
+  const env: Record<string, any> = {};
+  const mounts: DiskSpec[] = [];
+  for (const binding of bindings) {
+    Object.assign(env, binding.data?.env);
+    if (binding.data?.mounts) mounts.push(...binding.data.mounts);
+  }
+  return { env, mounts };
 };
 
-const toGuestAttrs = (
-  guest: FlyMachineGuest | undefined,
-): MachineGuest | undefined => {
-  if (guest === undefined) return undefined;
-  return {
-    cpuKind: guest.cpu_kind,
-    cpus: guest.cpus,
-    memoryMb: guest.memory_mb,
-    gpuKind: guest.gpu_kind,
-    gpus: guest.gpus,
-  };
+const mergeDisks = (
+  props: DiskSpec[] | undefined,
+  bindingMounts: DiskSpec[],
+): DiskSpec[] => {
+  const byPath = new Map<string, DiskSpec>();
+  for (const disk of [...(props ?? []), ...bindingMounts]) {
+    byPath.set(disk.path, disk);
+  }
+  return [...byPath.values()];
 };
-
-const hasPublishedService = (services: FlyMachineService[] | undefined) =>
-  (services ?? []).some((service) =>
-    (service.ports ?? []).some(
-      (port) => port.port !== undefined || port.start_port !== undefined,
-    ),
-  );
-
-const toAttrs = (
-  machine: FlyMachine,
-  appName: string,
-): Machine["Attributes"] => {
-  const name = machine.name ?? "";
-  return {
-    appName,
-    machineId: machine.id ?? "",
-    name,
-    region: machine.region ?? "",
-    state: machine.state ?? "",
-    instanceId: machine.instance_id,
-    privateIp: machine.private_ip,
-    imageRef: toImageRef(machine.image_ref),
-    guest: toGuestAttrs(machine.config?.guest),
-    url: hasPublishedService(machine.config?.services)
-      ? `https://${appName}.fly.dev`
-      : undefined,
-  };
-};
-
-const getById = (appName: string, machineId: string) =>
-  Services.machines
-    .machinesShow({ app_name: appName, machine_id: machineId })
-    .pipe(
-      Effect.map((machine) => (gone(machine) ? undefined : machine)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
-
-const listByApp = (appName: string) =>
-  Services.machines.machinesList({ app_name: appName }).pipe(
-    Effect.map((machines) => machines.filter((machine) => !gone(machine))),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
-  );
-
-const getByName = (appName: string, name: string) =>
-  listByApp(appName).pipe(
-    Effect.map((machines) => machines.find((machine) => machine.name === name)),
-  );
-
-const isOwnedMachine = (machine: FlyMachine) => {
-  const metadata = compactRecord(machine.config?.metadata);
-  return (
-    isAlchemyOwnedMetadata(metadata) &&
-    metadata[alchemyMetadataKeys.type] === "Fly.Machine"
-  );
-};
-
-const waitStarted = (appName: string, machineId: string) =>
-  Services.machines
-    .machinesWait({
-      app_name: appName,
-      machine_id: machineId,
-      state: "started",
-      timeout: WAIT_TIMEOUT_SECONDS,
-    })
-    .pipe(
-      Effect.retry({
-        times: 6,
-        schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout",
-      }),
-    );
-
-const waitDestroyed = (appName: string, machineId: string) =>
-  Services.machines
-    .machinesWait({
-      app_name: appName,
-      machine_id: machineId,
-      state: "destroyed",
-      timeout: WAIT_TIMEOUT_SECONDS,
-    })
-    .pipe(
-      Effect.as(undefined),
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.retry({
-        times: 6,
-        schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout",
-      }),
-    );
 
 const toFlyGuest = (guest: MachineGuest | undefined): FlyMachineGuest => {
   const fly: FlyMachineGuest = {
@@ -518,37 +441,6 @@ const toFlyService = (service: MachineService): FlyMachineService => ({
     end_port: port.endPort,
   })),
 });
-
-const mergeBindings = (
-  bindings: readonly ResourceBinding<MachineBinding>[],
-) => {
-  const env: Record<string, any> = {};
-  const mounts: Array<{ volume: string; path: string }> = [];
-  for (const binding of bindings) {
-    Object.assign(env, binding.data?.env);
-    if (binding.data?.mounts) mounts.push(...binding.data.mounts);
-  }
-  return { env, mounts };
-};
-
-const desiredMounts = (
-  props: MachineProps,
-  bindingMounts: Array<{ volume: string; path: string }>,
-): FlyMachineMount[] => {
-  const fromProps = (props.mounts ?? []).flatMap((mount) => {
-    const volume = volumeIdOf(mount.volume);
-    return volume === undefined ? [] : [{ volume, path: mount.path }];
-  });
-  const seen = new Set<string>();
-  const mounts: FlyMachineMount[] = [];
-  for (const mount of [...fromProps, ...bindingMounts]) {
-    const key = `${mount.volume}:${mount.path}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    mounts.push(mount);
-  }
-  return mounts;
-};
 
 const desiredEnv = (
   props: MachineProps,
@@ -700,25 +592,28 @@ const configDrifted = (
   );
 };
 
-const ensureStarted = Effect.fn(function* (
-  appName: string,
-  machine: FlyMachine,
-  skipLaunch: boolean,
-) {
-  const machineId = machine.id;
-  if (machineId === undefined || skipLaunch) return machine;
-  const state = machine.state;
-  if (state !== "started" && state !== "starting") {
-    yield* Services.machines
-      .machinesStart({
-        app_name: appName,
-        machine_id: machineId,
-      })
-      .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
-  }
-  yield* waitStarted(appName, machineId);
-  return (yield* getById(appName, machineId)) ?? machine;
+const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
+  appName: set.appName,
+  machineId: set.machineId,
+  machineIds: set.machineIds,
+  name: set.name,
+  region: set.region,
+  state: set.state,
+  instanceId: set.instanceId,
+  privateIp: set.privateIp,
+  imageRef: set.imageRef,
+  guest: set.guest,
+  url: set.url,
+  count: set.count,
+  mounts: set.mounts,
+  replicas: set.replicas,
 });
+
+const machineIdsOf = (output: Machine["Attributes"] | undefined) =>
+  output?.machineIds ??
+  (output?.machineId !== undefined && output.machineId.length > 0
+    ? [output.machineId]
+    : []);
 
 export const MachineProvider = () =>
   Provider.succeed(Machine, {
@@ -749,35 +644,20 @@ export const MachineProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const appName = appNameOf(olds?.app) ?? output?.appName;
       const name = yield* resolveMachineName(id, olds?.name, output?.name);
-      const found =
-        (output?.machineId !== undefined && appName !== undefined
-          ? yield* getById(output.appName || appName, output.machineId)
-          : undefined) ??
-        (appName !== undefined ? yield* getByName(appName, name) : undefined);
-      if (found === undefined || appName === undefined) return undefined;
-      const attrs = toAttrs(
-        found,
-        appNameOf(olds?.app) ?? output?.appName ?? appName,
-      );
-      if (output !== undefined) return attrs;
-      return isOwnedMachine(found) ? attrs : Unowned(attrs);
+      const found = yield* observeReplicaSet({
+        appName,
+        id,
+        type: "Fly.Machine",
+        machineIds: machineIdsOf(output),
+        baseName: name,
+      });
+      if (found === undefined) return undefined;
+      return toAttrs(found);
     }),
 
     list: Effect.fn(function* () {
-      const apps = yield* listOwnedApps();
-      const groups = yield* Effect.forEach(
-        apps,
-        (app) =>
-          listByApp(app.appName).pipe(
-            Effect.map((machines) =>
-              machines
-                .filter(isOwnedMachine)
-                .map((machine) => toAttrs(machine, app.appName)),
-            ),
-          ),
-        { concurrency: 8 },
-      );
-      return groups.flat();
+      const sets = yield* listReplicaSets("Fly.Machine");
+      return sets.map(toAttrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
@@ -790,108 +670,72 @@ export const MachineProvider = () =>
       }
       const name = yield* resolveMachineName(id, props.name, output?.name);
       const region = props.region ?? output?.region ?? DEFAULT_REGION;
+      const count = resolveCount(props.count);
       const skipLaunch = props.skipLaunch === true;
-      const alchemy = yield* createMachineMetadata(id, "Fly.Machine");
       const bound = mergeBindings(bindings ?? []);
-      const mounts = desiredMounts(props, bound.mounts);
+      const disks = mergeDisks(props.mounts, bound.mounts);
       const env = desiredEnv(props, bound.env);
-      const metadata = desiredMetadata(props, alchemy);
       const guest = toFlyGuest(props.guest);
       const services = props.services?.map(toFlyService);
       const restart = props.restart ? toFlyRestart(props.restart) : undefined;
       const init = props.init ? toFlyInit(props.init) : undefined;
-      const config = buildConfig({
-        image: props.image,
-        guest,
-        env,
-        services,
-        mounts,
-        metadata,
-        restart,
-        autoDestroy: props.autoDestroy,
-        init,
-      });
 
-      // Observe by cached id, then desired name. A create-first replacement
-      // still has the old generation live under a different name.
-      let current =
-        output?.machineId !== undefined
-          ? yield* getById(output.appName || appName, output.machineId)
-          : undefined;
-      if (current === undefined) {
-        current = yield* getByName(appName, name);
-      }
-
-      if (current === undefined) {
-        const created = yield* Services.machines
-          .machinesCreate({
-            app_name: appName,
-            name,
-            region,
-            config,
-            skip_launch: skipLaunch ? true : undefined,
-            min_secrets_version: props.minSecretsVersion,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current = created ?? (yield* getByName(appName, name));
-        if (current === undefined || current.id === undefined) {
-          return yield* new MachineNotCreated({ name, appName });
-        }
-      }
-
-      const machineId = current.id;
-      if (machineId === undefined || machineId.length === 0) {
-        return yield* new MachineNotCreated({ name, appName });
-      }
-
-      if (
-        configDrifted(current, {
-          image: props.image,
-          guest,
-          env,
-          services,
-          mounts,
-          metadata,
-          restart,
-          autoDestroy: props.autoDestroy,
-          init,
-        })
-      ) {
-        const updated = yield* Services.machines
-          .machinesUpdate({
-            app_name: appName,
-            machine_id: machineId,
-            config,
-            skip_launch: skipLaunch ? true : undefined,
-            min_secrets_version: props.minSecretsVersion,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (updated !== undefined) current = updated;
-      }
-
-      current = yield* ensureStarted(appName, current, skipLaunch);
-      const fresh = yield* getById(appName, current.id ?? machineId);
-      return toAttrs(fresh ?? current, appName);
+      const set = yield* reconcileReplicas({
+        id,
+        type: "Fly.Machine",
+        appName,
+        baseName: name,
+        region,
+        count,
+        disks,
+        skipLaunch,
+        minSecretsVersion: props.minSecretsVersion,
+        outputMachineIds: machineIdsOf(output),
+        preferVolumeIds: (output?.replicas ?? []).map((replica) =>
+          replica.mounts.map((mount) => mount.volumeId),
+        ),
+        configDrifted: (machine, desired) =>
+          configDrifted(machine, {
+            image: props.image,
+            guest,
+            env,
+            services,
+            mounts: desired.mounts,
+            metadata: desiredMetadata(props, desired.metadata),
+            restart,
+            autoDestroy: props.autoDestroy,
+            init,
+          }),
+        buildConfig: ({ mounts, metadata }) =>
+          buildConfig({
+            image: props.image,
+            guest,
+            env,
+            services,
+            mounts,
+            metadata: desiredMetadata(props, metadata),
+            restart,
+            autoDestroy: props.autoDestroy,
+            init,
+          }),
+      }).pipe(
+        Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
+          Effect.fail(
+            new MachineNotCreated({
+              name: error.name,
+              appName: error.appName,
+            }),
+          ),
+        ),
+      );
+      return toAttrs(set);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const appName = output.appName;
-      const machineId = output.machineId;
-      if (appName.length === 0 || machineId.length === 0) return;
-      yield* Services.machines
-        .machinesDelete({
-          app_name: appName,
-          machine_id: machineId,
-          force: true,
-        })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.retry({
-            while: (e) => e._tag === "Conflict",
-            times: 6,
-            schedule: waitBackoff,
-          }),
-        );
-      yield* waitDestroyed(appName, machineId);
+      yield* deleteReplicaSet({
+        appName: output.appName,
+        machineIds: machineIdsOf(output),
+        volumeIds: volumeIdsOf(output),
+      });
     }),
   });

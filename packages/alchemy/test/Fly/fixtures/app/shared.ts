@@ -11,12 +11,6 @@ export const Site = Fly.App("Site", {
   enableSubdomains: true,
 });
 
-export const Data = Fly.Volume("Data", {
-  app: Site,
-  region: "iad",
-  sizeGb: 1,
-});
-
 export const Marker = Fly.Secret("Marker", {
   app: Site,
   name: SECRET_NAME,

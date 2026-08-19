@@ -54,6 +54,8 @@ test.provider.skipIf(!hasFlyCreds)(
 
       expect(created.machineId).toEqual(expect.any(String));
       expect(created.machineId.length).toBeGreaterThan(0);
+      expect(created.machineIds).toEqual([created.machineId]);
+      expect(created.count).toEqual(1);
       expect(created.appName).toEqual(expect.any(String));
       expect(created.name).toEqual(expect.any(String));
       expect(created.region).toEqual("iad");
@@ -75,6 +77,7 @@ test.provider.skipIf(!hasFlyCreds)(
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
       expect(fetched.config?.metadata?.["alchemy.type"]).toEqual("Fly.Machine");
+      expect(fetched.config?.metadata?.["alchemy.replica"]).toEqual("0");
       expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(
         expect.any(String),
       );
