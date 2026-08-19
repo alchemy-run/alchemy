@@ -24,6 +24,7 @@ packages:
 catalogs:
   auth:
     "@better-auth/drizzle-adapter": ^1.7.1
+    "@better-auth/kysely-adapter": ^1.7.1
     better-auth: ^1.7.1
   aws:
     "@aws/durable-execution-sdk-js": ^2.1.0

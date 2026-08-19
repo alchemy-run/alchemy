@@ -270,6 +270,6 @@ Every SQL layer migrates automatically during `alchemy deploy` via an internal a
 
 - runs **only at apply** (never at plan, never inside the deployed runtime — the migration code is dead-code-eliminated from bundles),
 - re-runs only when the auth schema (plugins, additional fields, indexes) or the target database changes,
-- is additive and idempotent (`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing). Required columns with no default are refused on populated tables.
+- is additive and idempotent (`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing). Missing `account.issuer` values are backfilled automatically; the deploy fails instead of guessing on identity collisions, Microsoft rows without `oid`, or leftover SCIM / OAuth-application tables.
 
 Opt out with `migrate: false` and manage the schema yourself (`npx auth@latest generate`). Multiple `BetterAuth` instances in one stack: give each a distinct `id` to disambiguate the secret + migration resources.

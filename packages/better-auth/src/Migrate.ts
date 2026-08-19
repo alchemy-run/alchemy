@@ -5,6 +5,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { getSchema } from "better-auth/db";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { prepareSchemaUpgrades } from "./AccountIdentity.ts";
 import type { DatabaseService } from "./Database.ts";
 import { BetterAuthMigrationError } from "./Errors.ts";
 
@@ -148,6 +149,7 @@ const runMigrationWith = (
           ),
         );
       }
+      yield* prepareSchemaUpgrades(options, database);
       const { getMigrations, UnsafeMigrationError } = yield* Effect.promise(
         () => import("better-auth/db/migration"),
       );

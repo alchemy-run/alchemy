@@ -31,10 +31,11 @@ Unchanged input ⇒ the Action no-ops without touching the database.
 (`CREATE TABLE` / `ADD COLUMN` / `CREATE INDEX` on what's missing), so
 re-running a greenfield or already-migrated database is always safe.
 
-Adding a required column with no default to a populated table is refused
-(for example `account.issuer`). Complete the
-[upgrade-guide backfill](https://www.better-auth.com/docs/guides/1-7-upgrade-guide)
-before re-deploying.
+Populated databases missing `account.issuer` are upgraded in place from
+provider IDs and stored Microsoft `id_token` claims. Deploy fails when
+`(issuer, accountId)` collides, a Microsoft row has no `oid`, or leftover
+`scimProvider` / `oauthApplication` tables still have rows — those last
+two need the [upgrade guide](https://www.better-auth.com/docs/guides/1-7-upgrade-guide).
 
 The host Function/Worker depends on the migration through its
 environment, so first-deploy traffic cannot race the schema.
