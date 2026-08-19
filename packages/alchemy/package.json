@@ -215,6 +215,18 @@
       "worker": "./src/Neon/*/index.ts",
       "import": "./lib/Neon/*/index.js"
     },
+    "./Hetzner": {
+      "types": "./lib/Hetzner/index.d.ts",
+      "bun": "./src/Hetzner/index.ts",
+      "worker": "./src/Hetzner/index.ts",
+      "import": "./lib/Hetzner/index.js"
+    },
+    "./Hetzner/*": {
+      "types": "./lib/Hetzner/*.d.ts",
+      "bun": "./src/Hetzner/*.ts",
+      "worker": "./src/Hetzner/*.ts",
+      "import": "./lib/Hetzner/*.js"
+    },
     "./Prisma": {
       "types": "./lib/Prisma/index.d.ts",
       "bun": "./src/Prisma/index.ts",
@@ -372,6 +384,7 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:effect",
