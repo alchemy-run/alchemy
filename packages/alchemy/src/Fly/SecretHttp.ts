@@ -115,9 +115,7 @@ const mintDeployToken = (
   machines.appCreateDeployToken({ app_name: appName }).pipe(
     Effect.provideContext(ambient),
     Effect.map((res) => res.token),
-    Effect.catchTag(["Forbidden", "NotFound", "BadRequest"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catch(() => Effect.succeed(undefined as string | undefined)),
     Effect.flatMap((token) => {
       if (token !== undefined && token.length > 0) {
         return Effect.succeed(token);

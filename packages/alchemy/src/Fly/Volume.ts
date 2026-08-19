@@ -280,11 +280,11 @@ const waitUntilReady = (appName: string, volumeId: string) =>
       return Effect.succeed(volume);
     }),
     Effect.retry({
-      while: (e) => e._tag === "VolumePending",
+      while: (e) => e._tag === "Fly.VolumePending",
       times: 8,
       schedule: backoff,
     }),
-    Effect.catchTag("VolumePending", () => getById(appName, volumeId)),
+    Effect.catchTag("Fly.VolumePending", () => getById(appName, volumeId)),
   );
 
 const waitUntilGone = (appName: string, volumeId: string) =>

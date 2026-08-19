@@ -188,11 +188,13 @@ const waitForNewSnapshot = (
       return Effect.fail(new VolumeSnapshotPending({ volumeId }));
     }),
     Effect.retry({
-      while: (e) => e._tag === "VolumeSnapshotPending",
+      while: (e) => e._tag === "Fly.VolumeSnapshotPending",
       times: 8,
       schedule: backoff,
     }),
-    Effect.catchTag("VolumeSnapshotPending", () => Effect.succeed(undefined)),
+    Effect.catchTag("Fly.VolumeSnapshotPending", () =>
+      Effect.succeed(undefined),
+    ),
   );
 
 const listOwnedVolumes = Effect.fn(function* () {

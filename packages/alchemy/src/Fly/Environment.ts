@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 
 export class FlyOrgNotFound extends Data.TaggedError("Fly.OrgNotFound")<{
   message: string;
@@ -56,9 +57,12 @@ export const fromCredentials = () =>
     FlyEnvironment,
     Effect.gen(function* () {
       const creds = yield* Credentials;
-      return creds.pipe(
+      const http = yield* HttpClient.HttpClient;
+      return yield* creds.pipe(
         Effect.flatMap((resolved) =>
           resolveOrgSlug().pipe(
+            Effect.provideService(Credentials, creds),
+            Effect.provideService(HttpClient.HttpClient, http),
             Effect.map((orgSlug) => ({
               ...resolved,
               orgSlug,

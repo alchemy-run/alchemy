@@ -1,6 +1,8 @@
+import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { type SecretAuth, makeHttpSecretBinding } from "./SecretHttp.ts";
 import { ReadSecret, type ReadSecretClient } from "./ReadSecret.ts";
 
@@ -12,7 +14,7 @@ export const ReadSecretHttp = Layer.effect(
       makeClient: secretReadClient,
     }),
   ),
-);
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromEnv));
 
 /** Build the read-only client over an injectable auth and App name. */
 export const secretReadClient = (

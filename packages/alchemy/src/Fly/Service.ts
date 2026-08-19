@@ -351,7 +351,7 @@ const waitStarted = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout" || e._tag === "Conflict",
+        while: (e) => e._tag === "GatewayTimeout",
       }),
     );
 
@@ -369,7 +369,7 @@ const waitDestroyed = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout" || e._tag === "Conflict",
+        while: (e) => e._tag === "GatewayTimeout",
       }),
     );
 

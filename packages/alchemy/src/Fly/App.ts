@@ -139,10 +139,6 @@ const getByName = (appName: string) =>
     .appsShow({ app_name: appName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const missingAsFalse = Effect.catchTag(["NotFound", "Forbidden"], () =>
-  Effect.succeed(false),
-);
-
 const hasAlchemyMachines = (appName: string) =>
   Services.machines.machinesList({ app_name: appName }).pipe(
     Effect.map((machines) =>
@@ -150,7 +146,7 @@ const hasAlchemyMachines = (appName: string) =>
         isAlchemyOwnedMetadata(machine.config?.metadata),
       ),
     ),
-    missingAsFalse,
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
 const hasAlchemyNamed = (names: Array<string | undefined>) =>
@@ -161,7 +157,7 @@ const hasAlchemyVolumes = (appName: string) =>
     Effect.map((volumes) =>
       hasAlchemyNamed(volumes.map((volume) => volume.name)),
     ),
-    missingAsFalse,
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
 const hasAlchemySecrets = (appName: string) =>
@@ -169,7 +165,7 @@ const hasAlchemySecrets = (appName: string) =>
     Effect.map((res) =>
       hasAlchemyNamed((res.secrets ?? []).map((secret) => secret.name)),
     ),
-    missingAsFalse,
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
 const hasAlchemySecretKeys = (appName: string) =>
@@ -177,7 +173,7 @@ const hasAlchemySecretKeys = (appName: string) =>
     Effect.map((res) =>
       hasAlchemyNamed((res.secret_keys ?? []).map((key) => key.name)),
     ),
-    missingAsFalse,
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
 const isOwnedApp = (app: FlyApp) =>

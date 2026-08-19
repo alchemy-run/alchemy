@@ -69,7 +69,7 @@ const waitMachine = (
       Effect.retry({
         times: 6,
         schedule: Schedule.exponential("500 millis"),
-        while: (e) => e._tag !== "NotFound",
+        while: (e) => e._tag === "GatewayTimeout",
       }),
     );
   }

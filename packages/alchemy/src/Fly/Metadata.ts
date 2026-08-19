@@ -89,7 +89,7 @@ export const hasAlchemyMetadata = Effect.fn(function* (
 
 /** True when observed Machine metadata was stamped by Alchemy. */
 export const isAlchemyOwnedMetadata = (
-  metadata: Record<string, string> | null | undefined,
+  metadata: Record<string, string | undefined> | null | undefined,
 ): boolean => {
   const stack = metadata?.[alchemyMetadataKeys.stack];
   return stack !== undefined && stack.length > 0;
