@@ -328,7 +328,11 @@ test.provider.skipIf(!hasHetznerCreds || managedEnabled)(
           .deleteCertificate({ id: certificate.id })
           .pipe(Effect.catchTag("NotFound", () => Effect.void));
         if (outcome !== undefined && Result.isFailure(outcome)) {
-          expect(outcome.failure._tag).toEqual("ActionFailed");
+          // Issuance for a domain Hetzner does not host either fails the
+          // Action or is still pending when the bounded poll expires.
+          expect(["ActionFailed", "ActionTimeout"]).toContain(
+            outcome.failure._tag,
+          );
         } else {
           expect(certificate.status?.issuance).not.toEqual("completed");
         }

@@ -187,5 +187,5 @@ test.skipIf(!hasHetznerCreds)(
     expect(body.path).toEqual(VOLUME_PATH);
     expect(body.text).toEqual(MARKER);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

@@ -143,6 +143,17 @@ export const Service: Platform<
   ServiceRuntimeContext
 > = Platform("Hetzner.Service", {
   createRuntimeContext: createHetznerHostRuntimeContext("Hetzner.Service"),
+  // `{ server: Box }` at module scope is an Effect. Yield it here so the
+  // Server is registered and `news.server` is resolved attributes at
+  // reconcile (same DX as `yield* Server(...)` inside Effect.gen).
+  transformProps: (_id, props) =>
+    Effect.gen(function* () {
+      if (globalThis.__ALCHEMY_RUNTIME__) return props;
+      const server = Effect.isEffect(props.server)
+        ? yield* props.server as Effect.Effect<Server, never, Providers>
+        : props.server;
+      return { ...props, server };
+    }),
 });
 
 export class ServiceError extends Data.TaggedError("Hetzner.ServiceError")<{

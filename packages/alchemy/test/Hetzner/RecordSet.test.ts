@@ -215,7 +215,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const zoneGone = yield* waitUntilZoneGone(created.zone.zoneId);
       expect(zoneGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(

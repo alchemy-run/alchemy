@@ -66,6 +66,8 @@ test.provider.skipIf(!hasHetznerCreds)(
           const Probe = Action(
             "Probe",
             Effect.gen(function* () {
+              // Capture the record-set Output so Probe waits for Www.
+              yield* recordSet.id;
               const dns = yield* Hetzner.ReadWriteDns(zone);
               return Effect.fn(function* () {
                 const listed = yield* dns.listRecordSets({

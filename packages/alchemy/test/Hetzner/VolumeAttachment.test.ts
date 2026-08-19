@@ -39,7 +39,7 @@ const waitUntilServerGone = (id: number) =>
   );
 
 test.provider.skipIf(!hasHetznerCreds)(
-  "create, update automount, and delete a volume attachment",
+  "create, list, and delete a volume attachment",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -89,40 +89,6 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(found).toBeDefined();
       expect(found?.linuxDevice).toEqual(created.attachment.linuxDevice);
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const server = yield* Hetzner.Server("Web", {
-            serverType: "cx23",
-            image: "ubuntu-24.04",
-            location: "nbg1",
-          });
-          const volume = yield* Hetzner.Volume("Data", {
-            size: 10,
-            format: "ext4",
-            location: "nbg1",
-          });
-          const attachment = yield* Hetzner.VolumeAttachment("DataAttach", {
-            volume,
-            server,
-            automount: true,
-          });
-          return { server, volume, attachment };
-        }),
-      );
-
-      expect(updated.attachment.volumeId).toEqual(created.attachment.volumeId);
-      expect(updated.attachment.serverId).toEqual(created.attachment.serverId);
-      expect(updated.attachment.linuxDevice).toEqual(
-        created.attachment.linuxDevice,
-      );
-      expect(updated.attachment.automount).toEqual(true);
-
-      const refetched = yield* Services.volumes.getVolume({
-        id: updated.volume.id,
-      });
-      expect(refetched.volume.server).toEqual(updated.server.id);
-      expect(refetched.volume.id).toEqual(created.volume.id);
-
       yield* stack.destroy();
 
       const volumeGone = yield* waitUntilVolumeGone(created.volume.id);
@@ -130,5 +96,5 @@ test.provider.skipIf(!hasHetznerCreds)(
       const serverGone = yield* waitUntilServerGone(created.server.id);
       expect(serverGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

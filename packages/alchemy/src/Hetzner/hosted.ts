@@ -1,4 +1,5 @@
 import { Services } from "@distilled.cloud/hetzner";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -17,6 +18,13 @@ import type { ServiceBinding } from "./MountVolume.ts";
 import { openSshClient, type SshClient } from "./Ssh.ts";
 
 export type HetznerHostRuntimeContext = HostRuntimeContext;
+
+class VolumeAttachTimeout extends Data.TaggedError(
+  "Hetzner.VolumeAttachTimeout",
+)<{
+  volumeId: number;
+  serverId: number;
+}> {}
 
 export const createHetznerHostRuntimeContext = createHostRuntimeContext;
 
@@ -253,9 +261,13 @@ WantedBy=multi-user.target
       if (volume.server !== input.serverId) {
         if (volume.server !== null) {
           yield* Services.volumeActions.detachVolume({ id: volumeId }).pipe(
-            Effect.tap(({ action }) => waitForAction(action)),
+            Effect.tap(({ action }) =>
+              waitForAction(action).pipe(
+                Effect.catchTag("ActionTimeout", () => Effect.void),
+              ),
+            ),
             Effect.catchTag(
-              ["NotFound", "UnprocessableEntity"],
+              ["NotFound", "UnprocessableEntity", "Locked", "Conflict"],
               () => Effect.void,
             ),
           );
@@ -267,15 +279,50 @@ WantedBy=multi-user.target
             automount: true,
           })
           .pipe(
-            Effect.tap(({ action }) => waitForAction(action)),
-            Effect.catchTag("UnprocessableEntity", () => Effect.void),
+            Effect.tap(({ action }) =>
+              waitForAction(action).pipe(
+                Effect.catchTag("ActionTimeout", () => Effect.void),
+              ),
+            ),
+            Effect.catchTag(
+              ["UnprocessableEntity", "Locked", "Conflict"],
+              () => Effect.void,
+            ),
           );
         volume = yield* Services.volumes.getVolume({ id: volumeId }).pipe(
-          Effect.map(({ volume }) => volume),
+          Effect.flatMap(({ volume }) =>
+            volume.server === input.serverId
+              ? Effect.succeed(volume)
+              : Effect.fail({ _tag: "AttachPending" as const }),
+          ),
+          Effect.retry({
+            while: (e) =>
+              e._tag === "AttachPending" ||
+              e._tag === "TooManyRequests" ||
+              e._tag === "Locked",
+            times: 10,
+            schedule: Schedule.min([
+              Schedule.exponential(Duration.millis(500), 1.5),
+              Schedule.spaced(Duration.seconds(5)),
+            ]),
+          }),
+          Effect.catchIf(
+            (e) => e._tag === "AttachPending",
+            () =>
+              Services.volumes.getVolume({ id: volumeId }).pipe(
+                Effect.map(({ volume }) => volume),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              ),
+          ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       }
-      if (volume === undefined) continue;
+      if (volume === undefined || volume.server !== input.serverId) {
+        return yield* new VolumeAttachTimeout({
+          volumeId,
+          serverId: input.serverId,
+        });
+      }
 
       const device = volume.linux_device;
       const fsType = volume.format === "xfs" ? "xfs" : "ext4";

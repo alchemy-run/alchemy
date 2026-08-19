@@ -311,6 +311,16 @@ const waitUntilAvailable = (volumeId: number) =>
     ),
   );
 
+const settleAction = (action: Parameters<typeof waitForAction>[0]) =>
+  waitForAction(action).pipe(
+    Effect.catchTag("ActionTimeout", () => Effect.void),
+  );
+
+const settleActions = (actions: Parameters<typeof waitForActions>[0]) =>
+  waitForActions(actions).pipe(
+    Effect.catchTag("ActionTimeout", () => Effect.void),
+  );
+
 const waitUntilGone = (volumeId: number) =>
   Services.volumes.getVolume({ id: volumeId }).pipe(
     Effect.map(() => false),
@@ -404,7 +414,7 @@ export const VolumeProvider = () =>
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
           if (created.action) {
-            yield* waitForActions([created.action, ...created.next_actions]);
+            yield* settleActions([created.action, ...created.next_actions]);
           }
           current = yield* waitUntilAvailable(created.volume.id);
         } else {
@@ -437,7 +447,7 @@ export const VolumeProvider = () =>
           id: current.id,
           size: news.size,
         });
-        yield* waitForAction(action);
+        yield* settleAction(action);
         current = yield* waitUntilAvailable(current.id);
       }
 
@@ -448,7 +458,7 @@ export const VolumeProvider = () =>
           const { action } = yield* Services.volumeActions.detachVolume({
             id: current.id,
           });
-          yield* waitForAction(action);
+          yield* settleAction(action);
           current = yield* waitUntilAvailable(current.id);
         }
         if (desiredServerId !== undefined) {
@@ -457,7 +467,7 @@ export const VolumeProvider = () =>
             server: desiredServerId,
             automount: news.automount,
           });
-          yield* waitForAction(action);
+          yield* settleAction(action);
           current = yield* waitUntilAvailable(current.id);
         }
       }
@@ -475,21 +485,26 @@ export const VolumeProvider = () =>
             delete: false,
           },
         );
-        yield* waitForAction(action);
+        yield* settleAction(action);
       }
 
       const attached = current.server;
       if (attached !== null) {
-        const { action } = yield* Services.volumeActions.detachVolume({
-          id: current.id,
-        });
-        yield* waitForAction(action);
+        yield* Services.volumeActions.detachVolume({ id: current.id }).pipe(
+          Effect.flatMap(({ action }) => settleAction(action)),
+          // Server delete detaches the Volume first; treat that race as
+          // already-detached.
+          Effect.catchTag(
+            ["NotFound", "UnprocessableEntity"],
+            () => Effect.void,
+          ),
+        );
       }
 
       yield* Services.volumes.deleteVolume({ id: current.id }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
-          while: retryable,
+          while: (e) => retryable(e) || e._tag === "UnprocessableEntity",
           times: 8,
           schedule: backoff,
         }),

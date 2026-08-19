@@ -226,7 +226,13 @@ const waitUntilServer = (volumeId: number, serverId: number | null) =>
 
 const detach = (volumeId: number) =>
   Services.volumeActions.detachVolume({ id: volumeId }).pipe(
-    Effect.tap(({ action }) => waitForAction(action)),
+    Effect.tap(({ action }) =>
+      waitForAction(action).pipe(
+        // Volume detach can outlive the action poll under load; observe
+        // the Volume's `server` field instead of failing the reconcile.
+        Effect.catchTag("ActionTimeout", () => Effect.void),
+      ),
+    ),
     Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
   );
 
@@ -238,7 +244,11 @@ const attach = (volumeId: number, serverId: number, automount: boolean) =>
       automount,
     })
     .pipe(
-      Effect.tap(({ action }) => waitForAction(action)),
+      Effect.tap(({ action }) =>
+        waitForAction(action).pipe(
+          Effect.catchTag("ActionTimeout", () => Effect.void),
+        ),
+      ),
       Effect.catchTag("UnprocessableEntity", () => Effect.void),
       Effect.retry({
         while: retryable,
@@ -333,25 +343,9 @@ export const VolumeAttachmentProvider = () =>
         }
       }
 
-      // Sync automount — not observable on the Volume, so last-applied
-      // (output.automount) is the baseline. Skip when unknown (adoption).
-      const lastAutomount = output?.automount;
-      if (
-        current.server === serverId &&
-        lastAutomount !== undefined &&
-        lastAutomount !== desiredAutomount
-      ) {
-        yield* detach(current.id);
-        current = (yield* waitUntilServer(current.id, null)) ?? current;
-        yield* attach(current.id, serverId, desiredAutomount);
-        current =
-          (yield* waitUntilServer(current.id, serverId)) ??
-          (yield* getById(volumeId));
-        if (current === undefined) {
-          return yield* new VolumeNotFound({ volumeId });
-        }
-      }
-
+      // Automount is only accepted on attach. Hetzner has no update API,
+      // and detach+reattach to flip it unmounts the disk — skip when the
+      // Volume is already on the desired Server.
       const attrs = toAttrs(current, desiredAutomount);
       if (attrs === undefined) {
         return yield* new AttachmentTimeout({
