@@ -134,11 +134,10 @@ export type Volume = Resource<
  * Size can grow in place (min 10 GB). Format and location are immutable
  * (changing either replaces the Volume). Hetzner cannot shrink a Volume.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#volumes
  *
- * @section Creating a Volume
- * @example Unattached Volume
+ * ### Creating a Volume
+ * **Example:** Unattached Volume
  * ```typescript
  * const volume = yield* Hetzner.Volume("data", {
  *   size: 10,
@@ -147,7 +146,7 @@ export type Volume = Resource<
  * });
  * ```
  *
- * @example Named Volume with labels
+ * **Example:** Named Volume with labels
  * ```typescript
  * const volume = yield* Hetzner.Volume("data", {
  *   name: "app-data",
@@ -158,8 +157,8 @@ export type Volume = Resource<
  * });
  * ```
  *
- * @section Attaching to a Server
- * @example Create-time attach
+ * ### Attaching to a Server
+ * **Example:** Create-time attach
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   serverType: "cx22",
@@ -173,6 +172,8 @@ export type Volume = Resource<
  *   automount: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Volume = Resource<Volume>("Hetzner.Volume");
 

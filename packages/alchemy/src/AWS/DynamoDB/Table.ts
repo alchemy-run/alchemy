@@ -252,9 +252,8 @@ export interface Table extends Resource<
  * `Table` owns the lifecycle of the physical table while the binding contract
  * allows runtime-specific integrations such as Lambda table event sources to
  * request stream configuration without forcing a circular input prop.
- * @resource
- * @section Creating Tables
- * @example Basic Table
+ * ### Creating Tables
+ * **Example:** Basic Table
  * ```typescript
  * import * as DynamoDB from "alchemy/AWS/DynamoDB";
  *
@@ -266,7 +265,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Table with Sort Key and TTL
+ * **Example:** Table with Sort Key and TTL
  * ```typescript
  * const table = yield* DynamoDB.Table("SessionsTable", {
  *   partitionKey: "userId",
@@ -283,7 +282,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Table with Global Secondary Index
+ * **Example:** Table with Global Secondary Index
  * ```typescript
  * const table = yield* DynamoDB.Table("OrdersTable", {
  *   partitionKey: "pk",
@@ -303,7 +302,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Multi-Attribute GSI Keys
+ * **Example:** Multi-Attribute GSI Keys
  * GSI partition and sort keys may be composed of up to four attributes each,
  * indexing natural domain attributes directly instead of synthetic
  * concatenated keys. Partition attributes are hashed together (queries must
@@ -344,12 +343,12 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @section Runtime Operations
+ * ### Runtime Operations
  * Bind DynamoDB operations in the init phase and use them in runtime
  * handlers. Bindings inject the table name and grant scoped IAM
  * permissions automatically.
  *
- * @example Read and write items
+ * **Example:** Read and write items
  * ```typescript
  * // init
  * const getItem = yield* AWS.DynamoDB.GetItem(table);
@@ -369,8 +368,8 @@ export interface Table extends Resource<
  * };
  * ```
  *
- * @section Table Features
- * @example Resource Policy
+ * ### Table Features
+ * **Example:** Resource Policy
  * ```typescript
  * const table = yield* DynamoDB.Table("SharedTable", {
  *   partitionKey: "pk",
@@ -387,7 +386,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Kinesis Streaming Destination
+ * **Example:** Kinesis Streaming Destination
  * ```typescript
  * import * as Kinesis from "alchemy/AWS/Kinesis";
  *
@@ -402,7 +401,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Contributor Insights
+ * **Example:** Contributor Insights
  * ```typescript
  * const table = yield* DynamoDB.Table("HotKeyTable", {
  *   partitionKey: "pk",
@@ -411,12 +410,12 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @section DynamoDB Streams
+ * ### DynamoDB Streams
  * Process change data capture events from a DynamoDB table using a
  * Lambda event source mapping. The stream is enabled automatically
  * through the binding contract.
  *
- * @example Process table changes
+ * **Example:** Process table changes
  * ```typescript
  * // init
  * yield* DynamoDB.consumeTableChanges(
@@ -427,6 +426,8 @@ export interface Table extends Resource<
  *   }),
  * );
  * ```
+ *
+ * @resource
  */
 export const Table = Resource<Table>("AWS.DynamoDB.Table");
 

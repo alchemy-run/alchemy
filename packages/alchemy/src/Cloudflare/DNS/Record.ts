@@ -194,11 +194,8 @@ export type Record = Resource<
  * with an error listing the candidates. To adopt one record out of such
  * a set, declare its current `content`/`priority` verbatim first, then
  * change them in a follow-up deploy.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Proxied CNAME pointing at a tunnel
- * @example Route a subdomain through a Cloudflare Tunnel
+ * ### Proxied CNAME pointing at a tunnel
+ * **Example:** Route a subdomain through a Cloudflare Tunnel
  * ```typescript
  * yield* Cloudflare.DNS.Record("AdminCname", {
  *   zoneId: zone.zoneId,
@@ -210,8 +207,8 @@ export type Record = Resource<
  * });
  * ```
  *
- * @section Plain A record
- * @example Direct A record (not proxied)
+ * ### Plain A record
+ * **Example:** Direct A record (not proxied)
  * ```typescript
  * yield* Cloudflare.DNS.Record("ApiA", {
  *   zoneId: zone.zoneId,
@@ -222,8 +219,8 @@ export type Record = Resource<
  * });
  * ```
  *
- * @section Structured service binding records
- * @example SVCB record
+ * ### Structured service binding records
+ * **Example:** SVCB record
  * ```typescript
  * yield* Cloudflare.DNS.Record("McpSvcb", {
  *   zoneId: zone.zoneId,
@@ -237,7 +234,7 @@ export type Record = Resource<
  * });
  * ```
  *
- * @example HTTPS record
+ * **Example:** HTTPS record
  * ```typescript
  * yield* Cloudflare.DNS.Record("WebsiteHttps", {
  *   zoneId: zone.zoneId,
@@ -250,6 +247,10 @@ export type Record = Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const Record = Resource<Record>("Cloudflare.DNS.Record", {
   aliases: ["Cloudflare.Dns.Record"],

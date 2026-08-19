@@ -37,17 +37,16 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * the Router's KV store. The Router's CF function matches incoming requests to
  * routes by host pattern and path prefix, then delegates to `routeSite()` for
  * static site routing or directly sets URL/S3 origins.
- * @resource
- * @section Creating Routers
- * @example Basic Router
+ * ### Creating Routers
+ * **Example:** Basic Router
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   domain: { name: "example.com", hostedZoneId },
  * });
  * ```
  *
- * @section Inline Routes
- * @example URL And Bucket Routes
+ * ### Inline Routes
+ * **Example:** URL And Bucket Routes
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   routes: {
@@ -57,8 +56,8 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * });
  * ```
  *
- * @section Attaching Sites
- * @example Serve A StaticSite Through The Router
+ * ### Attaching Sites
+ * **Example:** Serve A StaticSite Through The Router
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   invalidation: { paths: "all", wait: true },
@@ -74,6 +73,8 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Router = Effect.fn("AWS.Website.Router")(
   function* (id: string, props: RouterProps) {

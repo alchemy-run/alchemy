@@ -143,16 +143,13 @@ export type Database = Resource<
  *
  * D1 is a serverless relational database that runs at the edge. Create a
  * database as a resource, then bind it to a Worker to run SQL queries.
- * @resource
- * @product D1
- * @category Storage & Databases
- * @section Creating a Database
- * @example Basic database
+ * ### Creating a Database
+ * **Example:** Basic database
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db");
  * ```
  *
- * @example Database with location hint
+ * **Example:** Database with location hint
  * The primary copy of the data is stored in the chosen region; reads can be
  * served closer to users when read replication is enabled.
  * ```typescript
@@ -161,7 +158,7 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Database with read replication
+ * **Example:** Database with read replication
  * Read replication is the only mutable property after creation — toggling it
  * triggers an update rather than a replacement.
  * ```typescript
@@ -170,14 +167,14 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Database in a specific jurisdiction
+ * **Example:** Database in a specific jurisdiction
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
  *   jurisdiction: "eu",
  * });
  * ```
  *
- * @section Migrations
+ * ### Migrations
  * Point `migrations` at a folder of migration files. Already-applied
  * migrations are skipped on subsequent deploys; new files are detected
  * automatically and applied as part of the next update.
@@ -190,14 +187,14 @@ export type Database = Resource<
  * No baselining required. Legacy Alchemy tracking tables are detected by
  * column shape and upgraded in place.
  *
- * @example Apply migrations from a directory
+ * **Example:** Apply migrations from a directory
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
  *   migrations: "./migrations",
  * });
  * ```
  *
- * @example Drizzle migrations (adopts an existing drizzle-kit-migrated database)
+ * **Example:** Drizzle migrations (adopts an existing drizzle-kit-migrated database)
  * ```typescript
  * const schema = yield* Drizzle.Schema("app-schema", {
  *   schema: "./src/schema.ts",
@@ -208,31 +205,31 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Custom bookkeeping table name
+ * **Example:** Custom bookkeeping table name
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
  *   migrations: { dir: "./migrations", table: "my_migrations" },
  * });
  * ```
  *
- * @section Importing SQL
+ * ### Importing SQL
  * Use `importFiles` to seed the database with raw `.sql` files via Cloudflare's
  * D1 import API. Each file is hashed; only files whose contents change are
  * re-imported on subsequent deploys.
  *
- * @example Seed a database with SQL files
+ * **Example:** Seed a database with SQL files
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
  *   importFiles: ["./seed/users.sql", "./seed/posts.sql"],
  * });
  * ```
  *
- * @section Cloning a Database
+ * ### Cloning a Database
  * `clone` performs a full export → import from a source database during
  * creation. It accepts a `D1Database` resource, a `{ databaseId }`, or a
  * `{ name }` to look up by name.
  *
- * @example Clone by passing the source resource directly
+ * **Example:** Clone by passing the source resource directly
  * ```typescript
  * const source = yield* Cloudflare.D1.Database("source-db");
  * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
@@ -240,22 +237,22 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Clone by databaseId
+ * **Example:** Clone by databaseId
  * ```typescript
  * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: { databaseId: "abcdef12-3456-7890-abcd-ef1234567890" },
  * });
  * ```
  *
- * @example Clone by name
+ * **Example:** Clone by name
  * ```typescript
  * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: { name: "source-db" },
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Using D1 inside a Worker
+ * ### Binding to a Worker
+ * **Example:** Using D1 inside a Worker
  * ```typescript
  * const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *
@@ -271,6 +268,10 @@ export type Database = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/d1/
+ *
+ * @resource
+ * @product D1
+ * @category Storage & Databases
  */
 export const Database = Resource<Database>("Cloudflare.D1Database");
 

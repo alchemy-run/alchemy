@@ -131,8 +131,8 @@ interface Lease {
  * Postgres releases the session lock when the connection drops; no recovery
  * bookkeeping is needed.
  *
- * @section Using the Postgres State Store
- * @example Connection URL from configuration
+ * ### Using the Postgres State Store
+ * **Example:** Connection URL from configuration
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import { postgresState } from "alchemy/State/PostgresState";
@@ -150,7 +150,7 @@ interface Lease {
  * );
  * ```
  *
- * @example Caller-owned pool
+ * **Example:** Caller-owned pool
  * ```typescript
  * import * as PgClient from "@effect/sql-pg/PgClient";
  * import * as Config from "effect/Config";

@@ -246,9 +246,8 @@ export interface Database extends Resource<
  * name and branch attachment can converge in place. Destroying this resource
  * deletes its database and data.
  *
- * @resource
- * @section Creating a Database
- * @example Database in a project
+ * ### Creating a Database
+ * **Example:** Database in a project
  * ```typescript
  * const project = yield* Prisma.Project("app", { createDatabase: false });
  * const database = yield* Prisma.Database("db", {
@@ -257,13 +256,15 @@ export interface Database extends Resource<
  * });
  * ```
  *
- * @example Database attached to a preview branch
+ * **Example:** Database attached to a preview branch
  * ```typescript
  * const database = yield* Prisma.Database("preview-db", {
  *   project,
  *   branchId: preview.branchId,
  * });
  * ```
+ *
+ * @resource
  */
 export const Database = Resource<Database>("Prisma.Database");
 

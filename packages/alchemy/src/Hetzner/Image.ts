@@ -161,11 +161,10 @@ export type Image = Resource<
  * backup→snapshot conversion update in place. Changing the source Server
  * replaces the Image.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#images
  *
- * @section Creating a Snapshot
- * @example Snapshot from a Server
+ * ### Creating a Snapshot
+ * **Example:** Snapshot from a Server
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   serverType: "cx22",
@@ -179,15 +178,15 @@ export type Image = Resource<
  * });
  * ```
  *
- * @example Snapshot with generated description
+ * **Example:** Snapshot with generated description
  * ```typescript
  * const image = yield* Hetzner.Image("backup", {
  *   server: { serverId: 42 },
  * });
  * ```
  *
- * @section Updating a Snapshot
- * @example Description, labels, and protection
+ * ### Updating a Snapshot
+ * **Example:** Description, labels, and protection
  * ```typescript
  * const image = yield* Hetzner.Image("golden", {
  *   server,
@@ -196,6 +195,8 @@ export type Image = Resource<
  *   deleteProtection: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Image = Resource<Image>("Hetzner.Image");
 

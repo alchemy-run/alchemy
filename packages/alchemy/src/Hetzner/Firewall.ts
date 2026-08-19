@@ -145,11 +145,10 @@ export interface Firewall extends Resource<
  *
  * Name, rules, labels, and `applyTo` are all mutable. Changing the name
  * updates the existing firewall in place (it is unique per project).
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#firewalls
  *
- * @section Creating a Firewall
- * @example Basic firewall
+ * ### Creating a Firewall
+ * **Example:** Basic firewall
  * ```typescript
  * const web = yield* Hetzner.Firewall("web", {
  *   rules: [
@@ -163,7 +162,7 @@ export interface Firewall extends Resource<
  * });
  * ```
  *
- * @example Firewall applied to a Server
+ * **Example:** Firewall applied to a Server
  * ```typescript
  * const server = yield* Hetzner.Server("app", {
  *   image: "ubuntu-24.04",
@@ -183,8 +182,8 @@ export interface Firewall extends Resource<
  * });
  * ```
  *
- * @section Updating rules
- * @example Replace the rule set
+ * ### Updating rules
+ * **Example:** Replace the rule set
  * ```typescript
  * const web = yield* Hetzner.Firewall("web", {
  *   rules: [
@@ -203,6 +202,8 @@ export interface Firewall extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const Firewall = Resource<Firewall>("Hetzner.Firewall");
 

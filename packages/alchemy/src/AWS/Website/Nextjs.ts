@@ -151,16 +151,15 @@ export interface NextjsProps {
  * no cloud resources are declared; `Alchemy.remote()` opts back into the
  * full live deployment.
  *
- * @resource
- * @section Creating Next.js Sites
- * @example Basic Next.js App
+ * ### Creating Next.js Sites
+ * **Example:** Basic Next.js App
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
@@ -171,8 +170,8 @@ export interface NextjsProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Tune The Server Function
+ * ### Server Configuration
+ * **Example:** Tune The Server Function
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
@@ -184,6 +183,8 @@ export interface NextjsProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
   function* (id: string, props: NextjsProps = {}) {

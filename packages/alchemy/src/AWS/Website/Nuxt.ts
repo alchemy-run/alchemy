@@ -27,16 +27,15 @@ export interface NuxtProps extends FrameworkSiteProps {
  * `@alchemy.run/frontend-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
  * streaming enabled) — both must be installed in your project.
  *
- * @resource
- * @section Creating Nuxt Sites
- * @example Basic Nuxt App
+ * ### Creating Nuxt Sites
+ * **Example:** Basic Nuxt App
  * ```typescript
  * const site = yield* AWS.Website.Nuxt("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.Nuxt("Web", {
  *   rootDir: "./app",
@@ -47,8 +46,8 @@ export interface NuxtProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Tune The Server Function
+ * ### Server Configuration
+ * **Example:** Tune The Server Function
  * ```typescript
  * const site = yield* AWS.Website.Nuxt("Web", {
  *   rootDir: "./app",
@@ -60,6 +59,8 @@ export interface NuxtProps extends FrameworkSiteProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Nuxt = (id: string, props: NuxtProps = {}) =>
   makeFrameworkSite(id, props, {

@@ -49,6 +49,10 @@ jobs:
 
       - name: Run Typecheck
         run: pnpm tsc -b
+
+      - name: Check API JSDocs
+        run: pnpm docs:check-jsdoc
+
       # An internal PR carrying `deploy-website` gets a full Astro build in
       # website.yml via StaticSite. That build runs the same output validators,
       # so avoid building the site a second time here. Forks still run this

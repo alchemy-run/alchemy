@@ -82,8 +82,8 @@ export interface ReadBucketClient {
  * environment cannot write, and {@link ReadBucketClient} exposes no write
  * operations either.
  *
- * @section Binding a Bucket
- * @example Read objects from Prisma Compute
+ * ### Binding a Bucket
+ * **Example:** Read objects from Prisma Compute
  * ```typescript
  * export default Prisma.Compute(
  *   "api",

@@ -144,16 +144,15 @@ export interface ConfigurationSet extends Resource<
  * Attach event destinations with `SES.ConfigurationSetEventDestination` to
  * stream send/delivery/bounce/complaint events to SNS, EventBridge, or
  * CloudWatch.
- * @resource
- * @section Creating Configuration Sets
- * @example Basic Configuration Set
+ * ### Creating Configuration Sets
+ * **Example:** Basic Configuration Set
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
  * const configSet = yield* SES.ConfigurationSet("Default", {});
  * ```
  *
- * @example Require TLS and Publish Reputation Metrics
+ * **Example:** Require TLS and Publish Reputation Metrics
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("Strict", {
  *   tlsPolicy: "REQUIRE",
@@ -161,15 +160,15 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
- * @example Suppress Bounces and Complaints
+ * **Example:** Suppress Bounces and Complaints
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("Suppressing", {
  *   suppressedReasons: ["BOUNCE", "COMPLAINT"],
  * });
  * ```
  *
- * @section Open and Click Tracking
- * @example Host Tracking Links on Your Own Domain
+ * ### Open and Click Tracking
+ * **Example:** Host Tracking Links on Your Own Domain
  * ```typescript
  * // The redirect domain must be a verified subdomain you own with a valid
  * // certificate. Omit `tracking` entirely to keep SES's current setting.
@@ -181,8 +180,8 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
- * @section Virtual Deliverability Manager
- * @example Collect Engagement Metrics for This Configuration Set
+ * ### Virtual Deliverability Manager
+ * **Example:** Collect Engagement Metrics for This Configuration Set
  * ```typescript
  * // Requires account-level VDM — see SES.AccountSettings.
  * const configSet = yield* SES.ConfigurationSet("Measured", {
@@ -193,8 +192,8 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
- * @section Event Destinations
- * @example Stream Events to SNS
+ * ### Event Destinations
+ * **Example:** Stream Events to SNS
  * ```typescript
  * const topic = yield* SNS.Topic("EmailEvents", {});
  * const destination = yield* SES.ConfigurationSetEventDestination("ToSns", {
@@ -203,6 +202,8 @@ export interface ConfigurationSet extends Resource<
  *   snsDestination: { topicArn: topic.topicArn },
  * });
  * ```
+ *
+ * @resource
  */
 export const ConfigurationSet = Resource<ConfigurationSet>(
   "AWS.SES.ConfigurationSet",

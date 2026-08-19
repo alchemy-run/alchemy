@@ -383,11 +383,10 @@ export type LoadBalancer = Resource<
  * Load Balancer). Type can grow in place. Server targets take a
  * `Hetzner.Server`; HTTPS listeners take `Hetzner.Certificate`s.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#load-balancers
  *
- * @section Creating a Load Balancer
- * @example Basic TCP Load Balancer
+ * ### Creating a Load Balancer
+ * **Example:** Basic TCP Load Balancer
  * ```typescript
  * const lb = yield* Hetzner.LoadBalancer("edge", {
  *   location: "nbg1",
@@ -398,7 +397,7 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
- * @example With a Server target
+ * **Example:** With a Server target
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   serverType: "cx23",
@@ -414,8 +413,8 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
- * @section HTTPS with a Certificate
- * @example Terminate TLS
+ * ### HTTPS with a Certificate
+ * **Example:** Terminate TLS
  * ```typescript
  * const cert = yield* Hetzner.Certificate("web", {
  *   certificate: pem,
@@ -433,8 +432,8 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
- * @section Private Networks
- * @example Attach to a Network
+ * ### Private Networks
+ * **Example:** Attach to a Network
  * ```typescript
  * const network = yield* Hetzner.Network("vpc", {
  *   ipRange: "10.0.0.0/16",
@@ -449,6 +448,8 @@ export type LoadBalancer = Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const LoadBalancer = Resource<LoadBalancer>("Hetzner.LoadBalancer");
 

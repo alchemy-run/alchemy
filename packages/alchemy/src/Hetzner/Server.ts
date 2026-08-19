@@ -252,11 +252,10 @@ export type Server = Resource<
  * delete protection, and (when set) Networks / Firewalls / Volumes /
  * Placement Group update in place. SSH keys are injected only at create.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#servers
  *
- * @section Creating a Server
- * @example Basic Server
+ * ### Creating a Server
+ * **Example:** Basic Server
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   serverType: "cpx12",
@@ -265,7 +264,7 @@ export type Server = Resource<
  * });
  * ```
  *
- * @example Named Server with labels
+ * **Example:** Named Server with labels
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   name: "app-web",
@@ -276,8 +275,8 @@ export type Server = Resource<
  * });
  * ```
  *
- * @section Attachments
- * @example SSH key and Placement Group
+ * ### Attachments
+ * **Example:** SSH key and Placement Group
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
  *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
@@ -291,6 +290,8 @@ export type Server = Resource<
  *   placementGroup: group,
  * });
  * ```
+ *
+ * @resource
  */
 export const Server = Resource<Server>("Hetzner.Server");
 

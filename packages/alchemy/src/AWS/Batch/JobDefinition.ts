@@ -296,9 +296,8 @@ const createJobDefinitionRuntimeContext = (
  * statements to the managed job role and inject their environment variables
  * into the container.
  *
- * @resource
- * @section Creating Job Definitions
- * @example Busybox echo job (low-level container form)
+ * ### Creating Job Definitions
+ * **Example:** Busybox echo job (low-level container form)
  * ```typescript
  * const jobDef = yield* Batch.JobDefinition("EchoJob", {
  *   image: "public.ecr.aws/docker/library/busybox:latest",
@@ -307,7 +306,7 @@ const createJobDefinitionRuntimeContext = (
  * });
  * ```
  *
- * @example Sized job with environment
+ * **Example:** Sized job with environment
  * ```typescript
  * const jobDef = yield* Batch.JobDefinition("EtlJob", {
  *   image: image.imageUri,
@@ -321,8 +320,8 @@ const createJobDefinitionRuntimeContext = (
  * });
  * ```
  *
- * @section Effect-Native Jobs
- * @example Tagged class with an inline run-to-completion Effect
+ * ### Effect-Native Jobs
+ * **Example:** Tagged class with an inline run-to-completion Effect
  * ```typescript
  * export default class Nightly extends Batch.JobDefinition<Nightly>()(
  *   "Nightly",
@@ -339,7 +338,7 @@ const createJobDefinitionRuntimeContext = (
  * ) {}
  * ```
  *
- * @example Eager inline job
+ * **Example:** Eager inline job
  * ```typescript
  * export default Batch.JobDefinition(
  *   "Reindex",
@@ -350,7 +349,7 @@ const createJobDefinitionRuntimeContext = (
  * );
  * ```
  *
- * @example Plain external script (bundled as-is)
+ * **Example:** Plain external script (bundled as-is)
  * ```typescript
  * // ./job.ts runs top-level and exits; Alchemy bundles + containerizes it.
  * const jobDef = yield* Batch.JobDefinition("Script", {
@@ -358,7 +357,7 @@ const createJobDefinitionRuntimeContext = (
  * });
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -366,7 +365,7 @@ const createJobDefinitionRuntimeContext = (
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -389,13 +388,15 @@ const createJobDefinitionRuntimeContext = (
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
  *   build: { pure: false },
  * }
  * ```
+ *
+ * @resource
  */
 export const JobDefinition: Platform<
   JobDefinition,
