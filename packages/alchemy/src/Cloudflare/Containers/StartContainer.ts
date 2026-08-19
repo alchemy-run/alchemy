@@ -66,9 +66,55 @@ const getStartCoordination = (key: object) => {
   return coordination;
 };
 
+/**
+ * Options accepted by {@link layer} — Cloudflare's own container startup
+ * options plus Alchemy-only scheduling knobs layered on top.
+ */
+export interface ContainerLayerOptions extends ContainerStartupOptions {
+  /**
+   * Keep this Durable Object's container warm for its lifetime: after the
+   * initial eager start, periodically re-run the same readiness check that a
+   * real request would (restart the container and re-probe its default
+   * port if it has gone idle/cold) on this schedule — instead of waiting for
+   * the next real request to discover it needs a fresh boot.
+   *
+   * This keeps *one* container warm; it does not create a pool of spares.
+   * Cloudflare binds a container 1:1 to the Durable Object that owns it, so
+   * there is no such thing as a pre-warmed instance handed off to a
+   * different DO. To warm containers ahead of their first real request
+   * (across many DOs), see {@link warmPool} instead.
+   *
+   * A tick where the container is already warm costs a single local state
+   * read (no Cloudflare API round trip, no billing impact) plus a
+   * ready-port cache hit — both lock-free, so it never contends with real
+   * traffic. Only a container that has actually gone cold pays the restart
+   * + readiness cost, and it pays it on the schedule's cadence rather than
+   * on the critical path of the next real request.
+   *
+   * Typed `Schedule<unknown, void>` because only the schedule's *cadence* is
+   * used: its output is never consumed (`unknown` accepts any schedule the
+   * caller already has), and each tick is fed the ignored `void` result of
+   * the readiness check, so combinators like `Schedule.upTo` that inspect
+   * their input still compose.
+   *
+   * @example Keep warm every 4 minutes, bounded to a 1-hour session window
+   * ```typescript
+   * import * as Duration from "effect/Duration";
+   * import * as Schedule from "effect/Schedule";
+   *
+   * Cloudflare.Containers.layer(Sandbox, {
+   *   keepWarm: Schedule.spaced(Duration.minutes(4)).pipe(
+   *     Schedule.upTo({ duration: Duration.hours(1) }),
+   *   ),
+   * });
+   * ```
+   */
+  keepWarm?: Schedule.Schedule<unknown, void>;
+}
+
 export const layer = <Image extends Container.Decl.Any>(
   container: Image,
-  options?: ContainerStartupOptions,
+  options?: ContainerLayerOptions,
 ) => {
   const id = (container as any)["~alchemy/Id"] as string;
   // Provide the *started* instance under the same tag `yield* MyContainer`
@@ -84,7 +130,18 @@ export const layer = <Image extends Container.Decl.Any>(
  */
 export const startContainer = Effect.fn(function* <
   Image extends Container.Decl.Any,
->(containerEff: Image, options?: ContainerStartupOptions) {
+>(containerEff: Image, options?: ContainerLayerOptions) {
+  // `keepWarm` is an Alchemy-only scheduling knob layered on top of
+  // Cloudflare's real container startup options — split it off here so
+  // `container.start()` below only ever sees the keys Cloudflare declares,
+  // rather than relying on the runtime tolerating an unknown extra key.
+  const keepWarm = options?.keepWarm;
+  let startupOptions: ContainerStartupOptions | undefined;
+  if (options !== undefined) {
+    const { keepWarm: _stripped, ...rest } = options;
+    startupOptions = rest;
+  }
+
   const bindEff = (containerEff as any)["~alchemy/Container/Binding"] as
     | Effect.Effect<Effect.Effect<Container>, never, any>
     | undefined;
@@ -202,7 +259,7 @@ export const startContainer = Effect.fn(function* <
       // A (re)start means nothing is listening yet — clear any stale ready
       // marks from a previous run so the next request re-probes this instance.
       yield* Effect.sync(() => readyPorts.clear());
-      yield* container.start(options).pipe(
+      yield* container.start(startupOptions).pipe(
         Effect.catchDefect((defect) => Effect.fail(classifyDefect(defect, -1))),
         // A rate limit is transient — back off well clear of the per-second
         // window and try again a few times before surfacing it.
@@ -399,6 +456,30 @@ export const startContainer = Effect.fn(function* <
   if (phase === "runtime") {
     // erase the RuntimeContext color (we are applying it eagerly as an optimization only during runtime)
     yield* ensureRunning as Effect.Effect<void>;
+
+    if (keepWarm) {
+      // Proactively re-run the full readiness check (not just `ensureRunning`)
+      // on the given schedule, so a container that went idle/cold between
+      // real requests is already warm again by the time the next one
+      // arrives — port 3000 mirrors the same convention `base.fetch` below
+      // uses for the container's default RPC/fetch port. Forked into the
+      // layer's scope (the DO's runtime): the fiber outlives any single
+      // request but is interrupted with the runtime instead of leaking, and
+      // an erroring tick never fails the DO — the eager start above already
+      // covers the first run, so a transient failure here just means the
+      // next tick tries again. This loop is why the start can't simply be
+      // awaited: the initial start *is* awaited just above; the re-check
+      // repeats for the DO's whole life.
+      yield* Effect.forkScoped(
+        ensureReady(3000).pipe(
+          Effect.tapError((err) =>
+            Effect.logDebug(`keepWarm tick failed: ${err}`),
+          ),
+          Effect.ignore,
+          Effect.repeat(keepWarm),
+        ),
+      );
+    }
   }
 
   // The container exposes its non-`fetch` shape methods (declared on the

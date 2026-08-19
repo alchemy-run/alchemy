@@ -5,3 +5,4 @@ export * from "./ContainerPlatform.ts";
 export * from "./ContainerProvider.ts";
 export * from "./LocalContainerProvider.ts";
 export * from "./StartContainer.ts";
+export * from "./WarmPool.ts";

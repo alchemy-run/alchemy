@@ -478,6 +478,47 @@ if (request.url === "/sandbox/exec" && request.method === "POST") {
 method retries with backoff while the container is still booting,
 so you don't have to coordinate readiness yourself.
 
+## Bonus: keep the container warm between requests
+
+Right now, if Cloudflare puts the Sandbox container to sleep during
+an idle stretch, the next `exec`/`hello` call pays a full restart.
+Add `keepWarm` to the same layer call to re-check it on a schedule
+instead:
+
+```diff lang="typescript"
+// src/Agent.ts
+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
++import * as Schedule from "effect/Schedule";
+import { Sandbox } from "./Sandbox.ts";
+
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
+  "Agents",
+  Effect.gen(function* () {
+    const sandbox = yield* Sandbox;
+    // ... unchanged ...
+  }).pipe(
+    Effect.provide(
+      Cloudflare.Containers.layer(Sandbox, {
+        enableInternet: true,
++        keepWarm: Schedule.spaced(Duration.minutes(4)).pipe(
++          Schedule.upTo({ duration: Duration.hours(1) }),
++        ),
+      }),
+    ),
+  ),
+) {}
+```
+
+A tick where the container is already warm costs a single local
+state read — no extra Cloudflare API calls, no billing impact — so
+this is safe to leave on for any container that expects bursty
+traffic. `keepWarm` only keeps *this* container warm for the life of
+its own Durable Object; to warm containers **before** their first
+real request, across many DOs, see
+[Warm containers ahead of the first request](/cloudflare/compute/containers#warm-containers-ahead-of-the-first-request).
+
 Next you'll [add a Workflow](/cloudflare/compute/workflows) to
 orchestrate multi-step durable work that the container or DOs can
 trigger — perfect for jobs that need to outlive any single request.
