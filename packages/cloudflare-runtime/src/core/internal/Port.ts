@@ -120,6 +120,14 @@ export interface Ports {
    * Note that this is best-effort; the caller should include retry logic to handle race conditions.
    */
   readonly reserve: (port: number) => Effect.Effect<void>;
+  /**
+   * Drops the reservation taken by `find`/`check`/`waitFor` once the
+   * listener that held the port is gone. Without this, a server stopped and
+   * re-requested within the reservation TTL (e.g. a dev worker deleted and
+   * re-created, or a same-process serve retry) observes its own stale
+   * reservation and silently drifts to the next port.
+   */
+  readonly release: (port: number) => Effect.Effect<void>;
 }
 
 const HOSTS: Set<string> = new Set([
@@ -309,5 +317,13 @@ export const make = (options: PortsOptions) =>
               ),
         ),
       reserve,
+      release: (port) =>
+        Effect.sync(() => {
+          globalReservations.delete(port);
+        }).pipe(
+          // Also drop the negative cache entry so the next `find`/`check`
+          // re-probes instead of treating the port as taken for up to 30s.
+          Effect.andThen(Cache.invalidate(cache, port)),
+        ),
     } as Ports;
   });

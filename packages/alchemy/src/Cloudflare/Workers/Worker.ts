@@ -980,7 +980,14 @@ export interface WorkerProps<
         /**
          * Port the local dev server listens on. If the port is unavailable,
          * the next free port is used unless {@link strictPort} is `true`.
-         * @default 1337
+         *
+         * When omitted, the port is **sticky**: the port this Worker served
+         * on in the previous `alchemy dev` session is reused (recorded under
+         * `.alchemy/local/worker-ports/`), so every Worker in the stack
+         * keeps a stable URL across sessions. A first-ever start hunts up
+         * from `1337`. Pass `0` for a fresh OS-assigned port on every
+         * session.
+         * @default the previous session's port, or 1337
          */
         port?: number;
         /**

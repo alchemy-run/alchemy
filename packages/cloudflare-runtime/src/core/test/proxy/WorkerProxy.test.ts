@@ -1,8 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import * as NodeNet from "node:net";
 import * as Internet from "../../globals/Internet.ts";
 import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
@@ -363,6 +365,27 @@ layer(services, { excludeTestServices: true })((it) => {
           .pipe(Effect.flip);
         assert(error instanceof ConfigError);
         expect(Workerd.isAddressInUseError(error)).toBe(true);
+      }),
+  );
+
+  it.effect(
+    "releases its port reservation on close so the port can be re-requested immediately",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const port = yield* PortHelpers.find(0);
+
+        const scope = yield* Scope.make();
+        const first = yield* proxy.serve({ port }).pipe(Scope.provide(scope));
+        expect(Number(first.url.port)).toBe(port);
+        yield* Scope.close(scope, Exit.void);
+
+        // Without the release, the reservation taken while probing lingers
+        // for its TTL after the listener is gone, and a re-request for the
+        // same port (a deleted-and-recreated dev worker) silently drifts to
+        // the next port.
+        const second = yield* proxy.serve({ port });
+        expect(Number(second.url.port)).toBe(port);
       }),
   );
 
