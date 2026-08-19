@@ -11,6 +11,7 @@ import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Floci from "@alchemy.run/floci";
 
 import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
 import { flociServices } from "../AWS/Local/FlociServices.ts";
@@ -285,6 +286,13 @@ if (Option.getOrElse(alchemyTestDevOverride(), () => false)) {
   // The gateway cert is self-signed; Bun/Node would otherwise reject the
   // upgrade. Scoped to ALCHEMY_TEST_DEV only.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  // Local workerd trusts no self-signed certs and ignores the flag above
+  // (it's C++, not Node). Its runtime DOES fold `NODE_EXTRA_CA_CERTS` into
+  // workerd's outbound `trustedCertificates` (see cloudflare-runtime
+  // Internet.ts), so point it at the emulator CA bundle that `ensureFloci`
+  // refreshes on every health check. Set here — before the RPC spawner or
+  // any vite child forks — so the whole dev process tree inherits it.
+  process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
 }
 
 const flociWebsiteHttp = Layer.effect(
