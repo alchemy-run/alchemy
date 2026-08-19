@@ -145,7 +145,7 @@ export const resolveSidecar = (options: MakeOptions): boolean =>
   options.sidecar ?? resolveDev(options);
 
 /**
- * The per-file sidecar runtime created by each adapter's `make(...)`.
+ * The sidecar runtime handed to each adapter's `make(...)`.
  *
  * `provide` installs a lazy {@link RpcProviderProxy} facade into an effect.
  * Installing the facade is free: the spawner HTTP server only starts (and,
@@ -153,12 +153,17 @@ export const resolveSidecar = (options: MakeOptions): boolean =>
  * actually requests a session — i.e. when a deploy/destroy builds an
  * RPC-backed local provider. A dev file that never does starts nothing.
  *
- * The real spawner build is memoized (one per test file) and lands in the
- * handle's OWN scope — deliberately not the adapter's shared scope, which
- * `destroy(Stack)` closes as soon as any test calls it (self-contained tests
- * destroy mid-file, and the sidecar must survive for the file's remaining
- * tests). Adapters run `close` from the same final cleanup hook that closes
- * the shared scope.
+ * The spawner (and the sidecar children it forks) is a PROCESS-WIDE
+ * SINGLETON shared by every test file, refcounted per handle: all files run
+ * in one bun process, and a per-file sidecar means a per-file bun child that
+ * imports the entire alchemy + distilled module graph — dozens of concurrent
+ * files at hundreds of MB each OOMs the machine. Stack isolation is
+ * preserved because each RPC session carries its own stack environment (see
+ * `SESSION_ENV_PARAM` in Local/RpcServerEnvironment.ts) and the child builds
+ * a provider context per stack. The singleton's scope closes when the LAST
+ * handle closes; `Test.make` runs at collection time (before any test), so
+ * the refcount cannot dip to zero while later files still need it. Adapters
+ * run `close` from the same final cleanup hook that closes the shared scope.
  */
 export interface SidecarHandle {
   readonly provide: <A, E, R>(
@@ -167,42 +172,68 @@ export interface SidecarHandle {
   readonly close: Effect.Effect<void>;
 }
 
+interface SidecarSingleton {
+  readonly lazy: Layer.Layer<RpcProviderProxy.RpcProviderProxy>;
+  readonly scope: Scope.Closeable;
+  refs: number;
+}
+
+const sidecarSingletons = new Map<string, SidecarSingleton>();
+
 export const makeSidecarHandle = (
   options: MakeOptions,
 ): SidecarHandle | undefined => {
   if (!resolveSidecar(options)) return undefined;
-  const scope = Scope.makeUnsafe("sequential");
-  const memoMap = Layer.makeMemoMapUnsafe();
-  const real = sidecarProxy(options);
-  const lazy = Layer.effect(
-    RpcProviderProxy.RpcProviderProxy,
-    Effect.gen(function* () {
-      // Capture the ambient platform context (provided by `toEffect`) so the
-      // deferred spawner build can run inside a provider's `get` without
-      // leaking platform requirements onto the RpcProviderProxy interface.
-      // The MemoMap dedupes concurrent first calls, so the file gets exactly
-      // one spawner no matter how many tests race.
-      const context = yield* Effect.context<never>();
-      const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
-        Effect.map((built) =>
-          Context.get(built, RpcProviderProxy.RpcProviderProxy),
-        ),
-        Effect.provideContext(context as Context.Context<any>),
-        Effect.orDie,
-      );
-      return RpcProviderProxy.RpcProviderProxy.of({
-        get: (serverEntryUrl, providerName) =>
-          Effect.flatMap(realProxy, (proxy) =>
-            proxy.get(serverEntryUrl, providerName),
+  const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
+  let singleton = sidecarSingletons.get(key);
+  if (singleton === undefined) {
+    const scope = Scope.makeUnsafe("sequential");
+    const memoMap = Layer.makeMemoMapUnsafe();
+    const real = sidecarProxy(options);
+    const lazy = Layer.effect(
+      RpcProviderProxy.RpcProviderProxy,
+      Effect.gen(function* () {
+        // Capture the ambient platform context (provided by `toEffect`) so
+        // the deferred spawner build can run inside a provider's `get`
+        // without leaking platform requirements onto the RpcProviderProxy
+        // interface. The shared MemoMap dedupes concurrent first calls, so
+        // the PROCESS gets exactly one spawner no matter how many files race.
+        const context = yield* Effect.context<never>();
+        const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
+          Effect.map((built) =>
+            Context.get(built, RpcProviderProxy.RpcProviderProxy),
           ),
-      });
-    }),
-  );
+          Effect.provideContext(context as Context.Context<any>),
+          Effect.orDie,
+        );
+        return RpcProviderProxy.RpcProviderProxy.of({
+          get: (serverEntryUrl, providerName) =>
+            Effect.flatMap(realProxy, (proxy) =>
+              proxy.get(serverEntryUrl, providerName),
+            ),
+        });
+      }),
+    );
+    singleton = { lazy, scope, refs: 0 };
+    sidecarSingletons.set(key, singleton);
+  }
+  singleton.refs += 1;
+  const instance = singleton;
+  let closed = false;
   return {
-    provide: (eff) => Effect.provide(eff, lazy),
-    close: Effect.suspend(() => Scope.close(scope, Exit.void)).pipe(
-      Effect.ignore,
-    ),
+    provide: (eff) => Effect.provide(eff, instance.lazy),
+    close: Effect.suspend(() => {
+      // Idempotent per handle: destroy(Stack) and the fallback afterAll can
+      // both run it without double-decrementing.
+      if (closed) return Effect.void;
+      closed = true;
+      instance.refs -= 1;
+      if (instance.refs > 0) return Effect.void;
+      if (sidecarSingletons.get(key) === instance) {
+        sidecarSingletons.delete(key);
+      }
+      return Scope.close(instance.scope, Exit.void);
+    }).pipe(Effect.ignore),
   };
 };
 
