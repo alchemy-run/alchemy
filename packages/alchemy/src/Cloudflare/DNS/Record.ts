@@ -138,6 +138,15 @@ export type Record = Resource<
  * set. This protects hand-edited records (especially the apex `A`/`AAAA`
  * and email DKIM/SPF records that the dashboard often manages) from
  * being clobbered.
+ *
+ * Several records may legitimately share `(name, type)` — MX fallbacks,
+ * multiple TXT records, round-robin A records. When the scan finds more
+ * than one candidate, the declared `content` (and `priority`) must match
+ * exactly one record; a record with no exact match is treated as missing
+ * (a new sibling record is created), and a still-ambiguous match fails
+ * with an error listing the candidates. To adopt one record out of such
+ * a set, declare its current `content`/`priority` verbatim first, then
+ * change them in a follow-up deploy.
  * @resource
  * @product DNS
  * @category Domains & DNS
@@ -246,7 +255,10 @@ export const RecordProvider = () =>
       //    behind the adopt policy before reconcile ever runs.
       let foundByScan = false;
       if (!observed) {
-        const existing = yield* findByNameType(zoneId, news.name, news.type);
+        const existing = yield* findByNameType(zoneId, news.name, news.type, {
+          content,
+          priority: news.priority,
+        });
         if (existing) {
           foundByScan = true;
           observed = existing;
@@ -283,7 +295,10 @@ export const RecordProvider = () =>
             // existing record instead of failing the deploy. Ownership was
             // already gated by `read`/the adopt policy upstream.
             Effect.catchTag("DnsRecordAlreadyExists", () =>
-              findByNameType(zoneId, news.name, news.type).pipe(
+              findByNameType(zoneId, news.name, news.type, {
+                content,
+                priority: news.priority,
+              }).pipe(
                 Effect.flatMap((existing) =>
                   existing
                     ? Effect.succeed({ record: existing, raced: true } as const)
@@ -382,12 +397,18 @@ export const RecordProvider = () =>
       // `(zoneId, name, type)` may already exist. DNS records carry no
       // ownership markers we can inspect, so we cannot prove we created
       // it — brand it `Unowned` so the engine refuses to take over
-      // unless `adopt` is set.
+      // unless `adopt` is set. Several records may legitimately share
+      // `(name, type)` (MX fallbacks, multiple TXT/A records) — the
+      // declared `content`/`priority` disambiguate which one this
+      // resource corresponds to.
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       const name = output?.name ?? olds?.name;
       const type = output?.type ?? olds?.type;
       if (zoneId && name && type) {
-        const observed = yield* findByNameType(zoneId, name, type);
+        const observed = yield* findByNameType(zoneId, name, type, {
+          content: (olds?.content as string | undefined) ?? output?.content,
+          priority: olds?.priority as number | undefined,
+        });
         const attrs = toAttributes(observed, zoneId);
         if (attrs) return Unowned(attrs);
       }
@@ -407,27 +428,78 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
     return narrowRecord(r as Parameters<typeof narrowRecord>[0]);
   });
 
+/**
+ * Property match used to disambiguate between several records sharing
+ * `(name, type)` — MX fallbacks, multiple TXT records, round-robin A
+ * records are all legitimate Cloudflare configurations.
+ */
+interface RecordMatch {
+  readonly content?: string;
+  readonly priority?: number;
+}
+
 // Locate an existing record by `(zoneId, name, type)`. Cloudflare accepts
 // relative names on writes but returns FQDNs on reads, so check the supplied
 // name first and then its zone-qualified form. Used both for the adoption path
 // and to surface a conflict when the caller hasn't opted into adoption.
-const findByNameType = (zoneId: string, name: string, type: RecordType) =>
-  findExactByNameType(zoneId, name, type).pipe(
+//
+// `(name, type)` alone is NOT a unique identity — several records may share
+// it. A single candidate is returned as-is (preserving the adopt-then-modify
+// flow where the desired content differs from the live record). With multiple
+// candidates, the desired `content`/`priority` must select exactly one:
+//   - exactly one exact match -> that record
+//   - no exact match          -> `undefined` (a new sibling record is created)
+//   - several exact matches   -> fail with an actionable error
+const findByNameType = (
+  zoneId: string,
+  name: string,
+  type: RecordType,
+  match: RecordMatch,
+) =>
+  listExactByNameType(zoneId, name, type).pipe(
     Effect.flatMap((found) => {
-      if (found) return Effect.succeed(found);
+      if (found.length > 0) return Effect.succeed(found);
 
       return zones.getZone({ zoneId }).pipe(
         Effect.flatMap((zone) => {
           const normalizedName = normalizeRecordName(name, zone.name);
           return normalizedName === name
-            ? Effect.succeed(undefined)
-            : findExactByNameType(zoneId, normalizedName, type);
+            ? Effect.succeed([] as ObservedRecord[])
+            : listExactByNameType(zoneId, normalizedName, type);
         }),
+      );
+    }),
+    Effect.flatMap((candidates) => {
+      if (candidates.length === 0) return Effect.succeed(undefined);
+      if (candidates.length === 1) return Effect.succeed(candidates[0]);
+      const narrowed = candidates.filter(
+        (r) =>
+          (match.content === undefined || r.content === match.content) &&
+          (match.priority === undefined || r.priority === match.priority),
+      );
+      if (narrowed.length === 1) return Effect.succeed(narrowed[0]);
+      if (narrowed.length === 0) return Effect.succeed(undefined);
+      return Effect.fail(
+        new Error(
+          `Multiple DNS records in zone ${zoneId} match (name=${name}, ` +
+            `type=${type}) and the desired content/priority does not ` +
+            `select exactly one. Set \`content\`` +
+            (type === "MX" || type === "URI" ? " and `priority`" : "") +
+            ` to exactly match the record this resource should adopt ` +
+            `(you can change it afterwards). Candidates:\n` +
+            candidates
+              .map(
+                (r) =>
+                  `  - id=${r.id} content=${JSON.stringify(r.content)}` +
+                  (r.priority === undefined ? "" : ` priority=${r.priority}`),
+              )
+              .join("\n"),
+        ),
       );
     }),
   );
 
-const findExactByNameType = (zoneId: string, name: string, type: RecordType) =>
+const listExactByNameType = (zoneId: string, name: string, type: RecordType) =>
   dns.listRecords
     .items({
       zoneId,
@@ -437,12 +509,9 @@ const findExactByNameType = (zoneId: string, name: string, type: RecordType) =>
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) =>
-        Array.from(chunk).find((r) => r.name === name && r.type === type),
-      ),
-      Effect.map((found) =>
-        found === undefined
-          ? undefined
-          : narrowRecord(found as Parameters<typeof narrowRecord>[0]),
+        Array.from(chunk)
+          .filter((r) => r.name === name && r.type === type)
+          .map((r) => narrowRecord(r as Parameters<typeof narrowRecord>[0])),
       ),
     );
 
