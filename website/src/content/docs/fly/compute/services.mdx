@@ -66,6 +66,35 @@ Docker must be running on the machine that runs `alchemy deploy`:
 On later deploys Alchemy compares the bundle hash: unchanged code is
 a no-op; changed code is a new image and an in-place Machine update.
 
+Override the base image with `image` (must still run bun —
+default `oven/bun:1`). Override the Fly proxy with `services`;
+pass `services: []` for a process that should not be published.
+
+:::note[Deploy waits for `started`, not `/health`]
+Alchemy waits until the Machine is `started` (`machinesWait`). It
+does not poll `/health` — serving that route is still a good idea
+for humans and for Fly's own checks later, but omitting it does not
+fail the deploy.
+:::
+
+## Reachability
+
+The `url` is `https://{appName}.fly.dev` when a proxy service is
+configured (the default HTTP 80 + HTTPS 443). That hostname needs
+an address on the App:
+
+- [`IpAssignment`](/fly/networking) `type: "shared_v4"` — free
+  shared Anycast IPv4. This is what you want for fly.dev over IPv4.
+- `v6` — free dedicated IPv6.
+- `v4` — billed dedicated IPv4; may 400 if the org has no quota.
+
+Without a `shared_v4` (or dedicated `v4`), IPv4 clients never reach
+the App. Fly's proxy terminates TLS on 443.
+
+For a hostname you control, request a
+[`Certificate`](/fly/networking#certificates) (`kind: "acme"`) and
+point DNS at the App.
+
 ## Environment & config
 
 Pass static values with `env`; read them at runtime through Effect's
@@ -91,11 +120,10 @@ export default class Api extends Fly.Service<Api>()(
 ```
 
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
-Fly [App secrets](/fly/data/secrets) are injected as env vars unless
-the Machine skips secrets. Binding-injected `env` is merged first;
-your `env` wins on conflict. See
-[Secrets & Config](/environments/secrets) for handling secret
-values.
+Fly [App secrets](/fly/data/secrets) are injected as Machine env
+vars. Binding-injected `env` is merged first; your `env` wins on
+conflict. See [Secrets & Config](/environments/secrets) for handling
+secret values.
 
 ## Background services
 

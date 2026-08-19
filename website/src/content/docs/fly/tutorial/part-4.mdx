@@ -25,6 +25,10 @@ import * as Fly from "alchemy/Fly";
 +import * as Redacted from "effect/Redacted";
 
 export const Site = Fly.App("Site");
+
+export const PublicIp = Fly.IpAssignment("Shared", { /* ... */ });
+
+export const Data = Fly.Volume("data", { /* ... */ });
 +
 +export const ApiToken = Fly.Secret("ApiToken", {
 +  app: Site,
@@ -38,8 +42,8 @@ it and Alchemy generates an ownership-stamped name instead.
 
 ## Bind `ReadSecret`
 
-Inside the Service init, bind the Secret. Pass the declaration
-directly:
+Inside the Service's init, bind the Secret — pass the declaration
+directly, no yielding required:
 
 ```diff lang="typescript"
 // src/api.ts
@@ -53,16 +57,24 @@ directly:
     return {
       fetch: /* ... */,
     };
--  }).pipe(Effect.provide(Fly.MountVolumeLive)),
-+  }).pipe(
-+    Effect.provide(Fly.MountVolumeLive),
-+    Effect.provide(Fly.ReadSecretHttp),
-+  ),
+  }).pipe(Effect.provide(Fly.MountVolumeLive)),
 ```
 
-`ReadSecretHttp` is the layer that implements the binding — at
-deploy time it can mint an App deploy token for the Machine; at
-runtime it calls the Machines API (or reads the injected env).
+`ReadSecret` is a **binding**: at deploy time it can mint an App
+deploy token for the Machine, and at runtime it hands you a client
+whose `get()` defaults to this Secret.
+
+## Provide the binding layer
+
+Bindings declare a capability; layers implement it. Provide
+`ReadSecretHttp` next to `MountVolumeLive`:
+
+```typescript
+  }).pipe(
+    Effect.provide(Fly.MountVolumeLive),
+    Effect.provide(Fly.ReadSecretHttp),
+  ),
+```
 
 ## Serve the secret's name
 
@@ -77,6 +89,8 @@ if (url.pathname === "/secret") {
   const got = yield* secrets.get().pipe(Effect.orDie);
   return HttpServerResponse.json({ name: got.name });
 }
+const fs = yield* FileSystem.FileSystem;
+const file = `${mount.path}${url.pathname}`;
 ```
 
 `secrets.get()` defaults to the bound Secret. Fly only returns
@@ -133,9 +147,10 @@ curl https://myapp-site-dev-a1b2c3d4.fly.dev/secret
 
 :::tip[Your own domain?]
 Declare a [`Fly.Certificate`](/fly/networking#certificates) for a
-hostname you control (`kind: "acme"`) and point DNS at the App.
-Dedicated IPv4 (`IpAssignment` `type: "v4"`) is billed and
-quota-gated — prefer `shared_v4` or `v6` unless you need one.
+hostname you control (`kind: "acme"`) and point DNS at the App —
+the ACME challenge records live on `cert.dnsRequirements`. Dedicated
+IPv4 (`IpAssignment` `type: "v4"`) is billed and quota-gated —
+prefer `shared_v4` or `v6` unless you need one.
 :::
 
 ## Clean up

@@ -108,6 +108,15 @@ Inspect what's stored (secrets are redacted):
 alchemy profile show
 ```
 
+:::note[Docker is required for Services]
+[`Fly.Service`](/fly/compute/services) bundles your Effect program,
+builds a `linux/amd64` image, and pushes it to `registry.fly.io`.
+Have [Docker](https://docs.docker.com/get-docker/) running on the
+machine that runs `alchemy deploy`. Raw
+[`Fly.Machine`](/fly/compute/machines)s that use a public image
+(`nginx:alpine`) do not need it.
+:::
+
 ## State storage
 
 Fly has no object-storage state backend of its own, so pick one of:

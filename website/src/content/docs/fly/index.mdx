@@ -57,6 +57,7 @@ the [tutorial](/fly/tutorial/part-1).
 | A raw container              | [Machine](/fly/compute/machines) with an `image`                          |
 | A background worker          | [Service](/fly/compute/services) with `ServerHost.run`                    |
 | Persistent disk              | [Volume + MountVolume](/fly/data/volumes)                                 |
+| Restore a disk               | [VolumeSnapshot](/fly/data/volumes#snapshots) + `snapshotId`              |
 | Config / API tokens          | [Secret + ReadSecret](/fly/data/secrets)                                  |
 | `{app}.fly.dev` over IPv4    | [IpAssignment](/fly/networking) `type: "shared_v4"`                       |
 | Your own domain              | [Certificate](/fly/networking#certificates) (ACME)                        |

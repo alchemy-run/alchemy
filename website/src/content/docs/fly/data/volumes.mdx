@@ -22,12 +22,9 @@ export const Data = Fly.Volume("data", {
 
 `sizeGb` can **grow in place** via `volumesExtend` — shrinking
 **replaces the Volume and destroys its data**. `region` and `app`
-replace. Encryption and filesystem type are create-only.
-
-Scheduled snapshots default on (`autoBackupEnabled`). Snapshot
-retention updates in place. Restore with `snapshotId` or fork with
-`sourceVolumeId` (create-only). On-demand snapshots are
-[`VolumeSnapshot`](/providers/fly/volumesnapshot).
+replace. Encryption and filesystem type are create-only. The
+resolved resource exposes `volumeId`, `name`, `region`, `sizeGb`,
+`state`, and `attachedMachineId`.
 
 ## Mount into a Service (recommended)
 
@@ -77,11 +74,38 @@ const box = yield* Fly.Machine("Box", {
 });
 ```
 
+## Snapshots
+
+Scheduled snapshots default on (`autoBackupEnabled`). Snapshot
+retention updates in place. An on-demand snapshot is
+[`VolumeSnapshot`](/providers/fly/volumesnapshot) — create is
+fire-and-forget; destroy is a no-op (snapshots follow Volume
+retention):
+
+```typescript
+export const Nightly = Fly.VolumeSnapshot("Nightly", {
+  app: Site,
+  volume: Data,
+});
+```
+
+Restore into a new Volume with `snapshotId`, or fork with
+`sourceVolumeId` (both create-only):
+
+```typescript
+export const Restored = Fly.Volume("restored", {
+  app: Site,
+  region: "iad",
+  sizeGb: 1,
+  snapshotId: Nightly.snapshotId,
+});
+```
+
 ## Where next
 
 - [Tutorial part 3](/fly/tutorial/part-3) — mount a Volume into
   a Service step by step.
 - [Services](/fly/compute/services) — the platform doing the
   mounting.
-- [`Volume` reference](/providers/fly/volume) — every prop and
-  attribute.
+- [`Volume` reference](/providers/fly/volume) and
+  [`VolumeSnapshot` reference](/providers/fly/volumesnapshot).

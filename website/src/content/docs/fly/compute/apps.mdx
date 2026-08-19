@@ -34,6 +34,18 @@ The resolved resource exposes `appName`, `appId`, `orgSlug`,
 Org defaults to the current token (`currentTokenShow`). Isolated
 `network` is an optional 6PN name; changing it replaces the App.
 
+`enableSubdomains: true` turns on `*.{appName}.fly.dev`. It is
+create-only — Fly has no App update API, so flipping it later is
+ignored.
+
+## fly.dev URL
+
+`url` is always `https://{appName}.fly.dev`. Nothing answers there
+until a [Machine](/fly/compute/machines) or
+[Service](/fly/compute/services) publishes a proxy service **and**
+the App has an [IP assignment](/fly/networking) (`shared_v4` for
+IPv4). The App itself is just the namespace.
+
 ## Module-scope declarations
 
 Declare the App once and pass it into every child. Resource-valued
@@ -58,10 +70,18 @@ names (and into Machine metadata / Volume and Secret names) so
 `list()` and nuke only see rows we created. Prefer omitting `name`
 in tests and CI so names stay unique and reclaimable.
 
+Changing `name`, `orgSlug`, or `network` **replaces** the App. A
+same-name replace deletes the old App first — Fly cannot have two
+Apps with the same name.
+
+`alchemy destroy` deletes children (Machines, Volumes, Secrets, IPs,
+certificates) then the App (`appsDelete`).
+
 ## Where next
 
 - [Tutorial part 1](/fly/tutorial/part-1) — deploy an App from an
   empty directory.
 - [Services](/fly/compute/services) — run Effect programs as
   Machines in the App.
+- [Machines](/fly/compute/machines) — raw container images.
 - [`App` reference](/providers/fly/app) — every prop and attribute.

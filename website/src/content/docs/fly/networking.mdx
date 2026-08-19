@@ -19,11 +19,11 @@ export const PublicIp = Fly.IpAssignment("Shared", {
 });
 ```
 
-| `type`       | What you get                         | Cost      |
-| ------------ | ------------------------------------ | --------- |
-| `shared_v4`  | Shared Anycast IPv4                  | Free      |
-| `v6`         | Dedicated IPv6                       | Free      |
-| `v4`         | Dedicated IPv4                       | Billed; may 400 on quota |
+| `type`      | What you get        | Cost                      |
+| ----------- | ------------------- | ------------------------- |
+| `shared_v4` | Shared Anycast IPv4 | Free                      |
+| `v6`        | Dedicated IPv6      | Free                      |
+| `v4`        | Dedicated IPv4      | Billed; may 400 on quota  |
 
 `shared_v4` is what you want for `{app}.fly.dev` over IPv4. Dedicated
 `v4` is a replacement key (type / region / network / serviceName).
@@ -44,12 +44,51 @@ export const Cert = Fly.Certificate("Www", {
 });
 ```
 
-Point DNS at the App (A/AAAA or the ACME challenge records on
-`cert.dns`). `"custom"` uploads a PEM (`fullchain` + `privateKey`);
-generate fixtures once as constants, never at test time.
+Point DNS at the App — A/AAAA to the assigned addresses, or the
+ACME challenge records on `cert.dnsRequirements`. `"custom"` uploads
+a PEM (`fullchain` + `privateKey`); generate fixtures once as
+constants, never at test time.
+
+Hostname is the identity. `app`, `hostname`, and `kind` replace;
+custom certificate material updates in place. ACME re-validates via
+`appCertificatesCheck` while `configured` is false.
 
 ACME on a hostname you don't control is skipIf-gated in tests
 (`FLY_TEST_DOMAIN`); an ungated probe asserts the typed rejection.
+
+## Put it together: a custom hostname
+
+Allocate addresses, request ACME, and point DNS at the App:
+
+```typescript
+export const PublicIp = Fly.IpAssignment("Shared", {
+  app: Site,
+  type: "shared_v4",
+});
+
+export const V6 = Fly.IpAssignment("V6", {
+  app: Site,
+  type: "v6",
+});
+
+export const Www = Fly.Certificate("Www", {
+  app: Site,
+  hostname: "www.example.com",
+  kind: "acme",
+});
+```
+
+Then at your registrar:
+
+- An **A** record for `www` → `PublicIp.ip` (the shared Anycast
+  IPv4).
+- An **AAAA** record for `www` → `V6.ip`.
+- Whatever extra records `Www.dnsRequirements` lists for the ACME
+  challenge (`acmeChallenge`, ownership TXT, …).
+
+Fly's proxy terminates TLS on 443 once the certificate is
+`configured`. Dedicated IPv4 (`type: "v4"`) is billed and
+quota-gated — skip it unless you need one.
 
 ## Where next
 

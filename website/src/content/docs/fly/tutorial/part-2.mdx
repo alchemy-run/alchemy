@@ -129,6 +129,21 @@ startup. The inner `fetch` generator is the **Runtime phase** — it
 runs per request.
 :::
 
+## Pin a region
+
+Fly Machines live in a region. The default is `iad` (Ashburn) —
+set it explicitly so the Volume you add in Part 3 can match:
+
+```diff lang="typescript"
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+-  { app: Site, main: import.meta.url },
++  { app: Site, main: import.meta.url, region: "iad" },
+```
+
+Changing `region` later **replaces** the Service (a new Machine in
+the new region).
+
 ## Set the port
 
 Give the Service an explicit port so the Fly proxy knows where to
@@ -137,14 +152,13 @@ forward:
 ```diff lang="typescript"
 export default class Api extends Fly.Service<Api>()(
   "Api",
--  { app: Site, main: import.meta.url },
+-  { app: Site, main: import.meta.url, region: "iad" },
 +  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
 ```
 
 The port is written to the process environment as `PORT` and used as
 the Machine's `internal_port`. By default Alchemy publishes HTTP 80
-and HTTPS 443 on the Fly proxy in front of it. `region: "iad"` pins
-the Machine to Ashburn.
+and HTTPS 443 on the Fly proxy in front of it.
 
 ## Add a health route
 
@@ -219,7 +233,13 @@ export const Site = Fly.App("Site");
 +});
 ```
 
-Yield it from the Stack so it is part of the graph:
+`type: "shared_v4"` is the free Anycast address. Dedicated `v4` is
+billed and may 400 if the org has no IPv4 quota; prefer `v6` or
+`shared_v4` unless you need a dedicated address.
+
+## Register the address in the Stack
+
+Yield the assignment from the Stack so it is part of the graph:
 
 ```diff lang="typescript"
 import Api from "./src/api.ts";
@@ -231,10 +251,6 @@ import Api from "./src/api.ts";
 +    yield* PublicIp;
     const api = yield* Api;
 ```
-
-`type: "shared_v4"` is the free Anycast address. Dedicated `v4` is
-billed and may 400 if the org has no IPv4 quota; prefer `v6` or
-`shared_v4` unless you need a dedicated address.
 
 ## Deploy
 
