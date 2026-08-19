@@ -140,6 +140,14 @@ export const execStack = Effect.fn(function* ({
             return;
           }
         }
+        // Smoke-test kill switch: `ALCHEMY_DEV_ONCE=1 alchemy dev` exits after
+        // the first apply instead of keeping the dev session alive — apply
+        // failures propagate (non-zero exit) instead of being swallowed, so
+        // scripts and CI can assert "dev deploys cleanly" without a timeout.
+        const devOnce =
+          dev &&
+          (process.env.ALCHEMY_DEV_ONCE === "1" ||
+            process.env.ALCHEMY_DEV_ONCE === "true");
         // In dev, a failed apply must not drain the keep-alive below:
         // `alchemy dev` runs under `bun --watch`, which cancels watch mode
         // entirely on a clean exit (oven-sh/bun#10983), so completing here
@@ -148,17 +156,18 @@ export const execStack = Effect.fn(function* ({
         // renderer only shows the failure status) so the keep-alive engages
         // and the rest of the stack keeps serving, but re-propagate a pure
         // interruption (Ctrl-C / fiber kill) so dev still shuts down cleanly.
-        const applyPlan = dev
-          ? apply(updatePlan).pipe(
-              Effect.catchCause((cause) =>
-                Cause.hasInterruptsOnly(cause)
-                  ? Effect.failCause(cause)
-                  : Console.error(
-                      `alchemy dev: apply failed; keeping dev alive so healthy resources keep serving.\n${Cause.pretty(cause)}`,
-                    ).pipe(Effect.as(undefined)),
-              ),
-            )
-          : apply(updatePlan);
+        const applyPlan =
+          dev && !devOnce
+            ? apply(updatePlan).pipe(
+                Effect.catchCause((cause) =>
+                  Cause.hasInterruptsOnly(cause)
+                    ? Effect.failCause(cause)
+                    : Console.error(
+                        `alchemy dev: apply failed; keeping dev alive so healthy resources keep serving.\n${Cause.pretty(cause)}`,
+                      ).pipe(Effect.as(undefined)),
+                ),
+              )
+            : apply(updatePlan);
         const outputs = yield* applyPlan;
 
         if (outputs !== undefined) {
@@ -166,6 +175,9 @@ export const execStack = Effect.fn(function* ({
         }
 
         if (dev) {
+          if (devOnce) {
+            return;
+          }
           return yield* Effect.never;
         }
       }

@@ -1122,8 +1122,10 @@ export const providers = () =>
           flociDual(CloudFront.KeyValueStore, () =>
             CloudFront.KeyValueStoreProvider(),
           ),
-          CloudFront.KvEntriesProvider(),
-          CloudFront.KvRoutesUpdateProvider(),
+          flociDual(CloudFront.KvEntries, () => CloudFront.KvEntriesProvider()),
+          flociDual(CloudFront.KvRoutesUpdate, () =>
+            CloudFront.KvRoutesUpdateProvider(),
+          ),
           flociDual(CloudFront.OriginAccessControl, () =>
             CloudFront.OriginAccessControlProvider(),
           ),
@@ -1612,7 +1614,10 @@ export const providers = () =>
             WAFv2.WebACLAssociationProvider(),
           ),
           flociDual(WAFv2.WebACL, () => WAFv2.WebACLProvider()),
-          Website.AssetDeploymentProvider(),
+          flociDual(Website.AssetDeployment, () =>
+            Website.AssetDeploymentProvider(),
+          ),
+          // ServerProvider is internally dual (LocalProvider.make → ServerLocal).
           Website.ServerProvider(),
           XRay.GroupProvider(),
           XRay.ResourcePolicyProvider(),
