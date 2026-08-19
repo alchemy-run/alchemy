@@ -9,6 +9,7 @@ import * as Binding from "../Binding.ts";
 import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
+import type { App } from "./App.ts";
 import type { Secret } from "./Secret.ts";
 import type { SecretKey } from "./SecretKey.ts";
 
@@ -71,6 +72,40 @@ export const makeHttpSecretBinding = <
         appNameEff,
         secretNameEff,
       );
+    });
+  });
+
+/**
+ * Same scaffolding as {@link makeHttpSecretBinding}, but the target is
+ * an {@link App} (no secret name). Used by ListSecrets.
+ */
+export const makeHttpAppBinding = <Client>(options: {
+  makeClient: (auth: SecretAuth, appName: Effect.Effect<string>) => Client;
+}) =>
+  Effect.gen(function* () {
+    const context = yield* Effect.context<
+      Credentials | HttpClient.HttpClient
+    >();
+
+    return Effect.fn(function* (app: App) {
+      const appName = yield* app.appName as unknown as Effect.Effect<unknown>;
+      const appNameEff = toNameEffect(appName);
+
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isFlyHost(host)) {
+          const resolvedAppName = yield* appNameEff;
+          const token = yield* mintDeployToken(resolvedAppName, context);
+          yield* host.bind`${app}`({
+            env: {
+              FLY_API_TOKEN: token,
+              FLY_APP_NAME: resolvedAppName,
+            },
+          });
+        }
+      }
+
+      return options.makeClient(makeSecretAuth(context), appNameEff);
     });
   });
 

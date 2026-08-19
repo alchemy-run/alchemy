@@ -42,7 +42,7 @@ the [tutorial](/fly/tutorial/part-1).
 
 - **[Secrets](/fly/data/secrets)** — App-level values Fly injects as
   Machine env vars. Manage them as resources; read them at runtime
-  with `ReadSecret` / `WriteSecret`. KMS keys are `SecretKey` plus
+  with `GetSecret` / `ListSecrets` / `WriteSecret`. KMS keys are `SecretKey` plus
   `Encrypt` / `Decrypt` / `Sign` / `Verify`.
 
 ## Networking
@@ -61,7 +61,7 @@ the [tutorial](/fly/tutorial/part-1).
 | Persistent disk              | [MountVolume](/fly/data/volumes) or Machine `mounts`                      |
 | N replicas behind fly.dev    | Service / Machine `count`                                                 |
 | Restore a disk               | [VolumeSnapshot](/fly/data/volumes#snapshots) + mount `snapshotId`        |
-| Config / API tokens          | [Secret + ReadSecret](/fly/data/secrets)                                  |
+| Config / API tokens          | [Secret + GetSecret](/fly/data/secrets)                                   |
 | Sign / encrypt in-app        | [SecretKey](/fly/data/secrets#kms-keys) + `Encrypt` / `Sign`              |
 | `{app}.fly.dev` over IPv4    | [IpAssignment](/fly/networking) `type: "shared_v4"`                       |
 | Your own domain              | [Certificate](/fly/networking#certificates) (ACME)                        |

@@ -5,7 +5,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { API_PORT, Marker, SECRET_NAME, Site } from "./shared.ts";
 
 /**
- * HTTP Service: reads the App secret via {@link Fly.ReadSecret} and
+ * HTTP Service: reads the App secret via {@link Fly.GetSecret} and
  * serves it back by name (never the plaintext).
  */
 export default class Api extends Fly.Service<Api>()(
@@ -19,14 +19,14 @@ export default class Api extends Fly.Service<Api>()(
   },
   Effect.gen(function* () {
     const secret = yield* Marker;
-    const secrets = yield* Fly.ReadSecret(secret);
+    const get = yield* Fly.GetSecret(secret);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://service");
         if (url.pathname === "/secret") {
-          const got = yield* secrets.get().pipe(Effect.orDie);
+          const got = yield* get().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             ok: true,
             name: got.name,
@@ -38,5 +38,5 @@ export default class Api extends Fly.Service<Api>()(
         });
       }),
     };
-  }).pipe(Effect.provide(Fly.ReadSecretHttp)),
+  }).pipe(Effect.provide(Fly.GetSecretHttp)),
 ) {}

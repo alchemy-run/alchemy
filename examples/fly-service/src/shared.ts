@@ -17,7 +17,7 @@ export const Site = Fly.App("Site", {
 });
 
 /**
- * App secret {@link Api} reads via {@link Fly.ReadSecret}. Fly also
+ * App secret {@link Api} reads via {@link Fly.GetSecret}. Fly also
  * injects it into Machines as an env var named {@link SECRET_NAME}.
  */
 export const Marker = Fly.Secret("Marker", {

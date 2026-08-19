@@ -4,6 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -50,7 +51,7 @@ const waitAppGone = (appName: string) =>
   );
 
 test.provider.skipIf(!hasFlyCreds)(
-  "ReadWriteSecret: get, list, create, update and delete an app secret",
+  "GetSecret, ListSecrets, and WriteSecret round-trip an app secret",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -67,32 +68,40 @@ test.provider.skipIf(!hasFlyCreds)(
             "Probe",
             Effect.gen(function* () {
               const secretName = yield* secret.name;
-              const secrets = yield* Fly.ReadWriteSecret(secret);
+              const get = yield* Fly.GetSecret(secret);
+              const list = yield* Fly.ListSecrets(app);
+              const write = yield* Fly.WriteSecret(secret);
               return Effect.fn(function* () {
-                const listed = yield* secrets.list();
-                const got = yield* secrets.get();
+                const listed = yield* list();
+                const got = yield* get();
 
-                yield* secrets.create(CREATED_NAME, VALUE_A);
-                const created = yield* secrets.get(CREATED_NAME);
+                yield* write.create(CREATED_NAME, VALUE_A);
+                const afterCreate = yield* list();
 
-                yield* secrets.update(CREATED_NAME, VALUE_B);
-                const updated = yield* secrets.get(CREATED_NAME);
-
-                yield* secrets.delete(CREATED_NAME);
+                yield* write.update(CREATED_NAME, VALUE_B);
+                yield* write.delete(CREATED_NAME);
 
                 return {
                   secretName,
                   listedNames: (listed.secrets ?? []).flatMap((row) =>
                     row.name === undefined ? [] : [row.name],
                   ),
+                  afterCreateNames: (afterCreate.secrets ?? []).flatMap(
+                    (row) => (row.name === undefined ? [] : [row.name]),
+                  ),
                   gotName: got.name,
                   gotDigest: got.digest,
-                  createdName: created.name,
-                  createdDigest: created.digest,
-                  updatedDigest: updated.digest,
                 };
               });
-            }).pipe(Effect.provide(Fly.ReadWriteSecretHttp)),
+            }).pipe(
+              Effect.provide(
+                Layer.mergeAll(
+                  Fly.GetSecretHttp,
+                  Fly.ListSecretsHttp,
+                  Fly.WriteSecretHttp,
+                ),
+              ),
+            ),
           );
 
           return {
@@ -106,10 +115,8 @@ test.provider.skipIf(!hasFlyCreds)(
       expect(out.probe.gotName).toEqual(out.secret.name);
       expect(out.probe.gotDigest).toEqual(expect.any(String));
       expect(out.probe.listedNames).toContain(out.secret.name);
-      expect(out.probe.createdName).toEqual(CREATED_NAME);
-      expect(out.probe.createdDigest).toEqual(expect.any(String));
-      expect(out.probe.updatedDigest).toEqual(expect.any(String));
-      expect(out.probe.updatedDigest).not.toEqual(out.probe.createdDigest);
+      expect(out.probe.afterCreateNames).toContain(CREATED_NAME);
+      expect(out.probe.afterCreateNames).toContain(out.secret.name);
 
       const fetched = yield* Services.machines.secretGet({
         app_name: out.secret.appName,

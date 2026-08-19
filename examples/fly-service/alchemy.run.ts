@@ -2,7 +2,7 @@
  * A Fly.io app that exercises the full module-scope graph:
  *
  * - `Site` — parent App (`src/shared.ts`)
- * - `Marker` — App Secret the Api reads via `Fly.ReadSecret`
+ * - `Marker` — App Secret the Api reads via `Fly.GetSecret`
  * - `PublicIp` — shared IPv4 so `{app}.fly.dev` answers
  * - `Api` — HTTP Service on port 3000 (`src/api.ts`)
  * - `Worker` — background Service that writes a volume marker (`src/worker.ts`)

@@ -12,8 +12,9 @@ import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
 import { Machine, MachineProvider } from "./Machine.ts";
 import { DecryptHttp } from "./DecryptHttp.ts";
 import { EncryptHttp } from "./EncryptHttp.ts";
+import { GetSecretHttp } from "./GetSecretHttp.ts";
+import { ListSecretsHttp } from "./ListSecretsHttp.ts";
 import { MountVolumeLive } from "./MountVolume.ts";
-import { ReadSecretHttp } from "./ReadSecretHttp.ts";
 import { ReadWriteSecretHttp } from "./ReadWriteSecretHttp.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
@@ -83,7 +84,8 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(MountVolumeLive),
-    Layer.provideMerge(ReadSecretHttp),
+    Layer.provideMerge(GetSecretHttp),
+    Layer.provideMerge(ListSecretsHttp),
     Layer.provideMerge(WriteSecretHttp),
     Layer.provideMerge(ReadWriteSecretHttp),
     Layer.provideMerge(EncryptHttp),
