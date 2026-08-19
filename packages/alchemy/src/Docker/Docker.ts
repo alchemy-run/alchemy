@@ -53,6 +53,7 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         command: Array<string> | undefined;
         memory: string | undefined;
+        "memory-swap": string | undefined;
         "security-opt": Array<string> | undefined;
         "read-only": boolean | undefined;
         label?: Record<string, string>;

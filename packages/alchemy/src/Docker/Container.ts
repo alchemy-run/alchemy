@@ -57,6 +57,12 @@ export interface ContainerProps {
    */
   memory?: string;
   /**
+   * Memory-plus-swap limit, same format. Docker's default is 2x `memory`,
+   * which lets a container thrash in swap instead of OOM-killing cleanly;
+   * set equal to `memory` to disable swap for the container.
+   */
+  memorySwap?: string;
+  /**
    * Set `no-new-privileges`, preventing processes in the container from
    * gaining privileges via setuid/setgid binaries.
    *
@@ -515,6 +521,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
         rm: news.removeOnExit ?? false,
         memory: news.memory,
+        "memory-swap": news.memorySwap,
         "security-opt": news.noNewPrivileges
           ? ["no-new-privileges"]
           : undefined,
