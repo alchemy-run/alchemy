@@ -1399,7 +1399,7 @@ export const providers = () =>
           LakeFormation.OptInProvider(),
           LakeFormation.PermissionsProvider(),
           LakeFormation.ResourceProvider(),
-          Lambda.AliasProvider(),
+          flociDual(Lambda.Alias, () => Lambda.AliasProvider()),
           // Requires the alchemy floci fork ≥ 1.6.0-alchemy.2: the
           // reconciler's ownership scan calls lambda ListTags on
           // `event-source-mapping:` ARNs, which stock floci 1.6.0 rejects.
@@ -1412,8 +1412,8 @@ export const providers = () =>
             live: () => Lambda.FunctionProvider(),
             local: () => Lambda.FlociFunctionProvider(),
           }),
-          Lambda.LayerVersionProvider(),
-          Lambda.VersionProvider(),
+          flociDual(Lambda.LayerVersion, () => Lambda.LayerVersionProvider()),
+          flociDual(Lambda.Version, () => Lambda.VersionProvider()),
           Lambda.MicrovmImageProvider(),
           Lambda.NetworkConnectorProvider(),
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
