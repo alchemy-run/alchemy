@@ -2735,7 +2735,6 @@ export const LiveWorkerProvider = () =>
         const forbidden = (
           [
             ["name", news.name],
-            ["assets", news.assets],
             ["namespace", news.namespace],
             ["crons", news.crons],
             ["tailConsumers", news.tailConsumers],
@@ -2846,12 +2845,13 @@ export const LiveWorkerProvider = () =>
         yield* Effect.logInfo(
           `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
         );
-        const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
-          id,
-          parentName,
-          news,
-          { skipAssetsRead: true },
-        );
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, parentName, news, {
+          skipAssetsRead: false,
+        });
         const metadataHash = yield* resolveWorkerMetadataHash({
           props: news,
           bindings,
@@ -2881,6 +2881,25 @@ export const LiveWorkerProvider = () =>
                 : item,
           ),
         );
+        let metadataAssets:
+          | workers.CreateScriptVersionRequest["metadata"]["assets"]
+          | undefined;
+        if (assets) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker version: uploading assets for ${parentName}`,
+          );
+          const { jwt } = yield* uploadAssets(
+            accountId,
+            parentName,
+            assets,
+            session,
+          );
+          metadataAssets = {
+            jwt,
+            config: mergeAssetsConfigFiles(assets.config, assets),
+          };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
         appendAlchemyAndEnvBindings(
           metadataBindings,
           news,
@@ -2895,6 +2914,7 @@ export const LiveWorkerProvider = () =>
             scriptName: parentName,
             metadata: {
               mainModule: bundle.main!,
+              assets: metadataAssets,
               bindings: metadataBindings,
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
@@ -3602,13 +3622,6 @@ export const LiveWorkerProvider = () =>
           output?.hash !== undefined &&
           !dispatchNamespace
         ) {
-          if (metadataAssets !== undefined) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `Worker '${name}' has static assets, which the versions API cannot carry — gradual rollouts (version.traffic) are not supported for Workers with assets.`,
-              }),
-            );
-          }
           const migratedClasses = [
             ...migrations.newClasses,
             ...migrations.newSqliteClasses,
@@ -3632,7 +3645,9 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
               metadata: {
                 mainModule: metadata.mainModule!,
+                assets: metadata.assets,
                 bindings: metadata.bindings,
+                keepAssets: metadata.keepAssets,
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
                 cacheOptions: metadata.cacheOptions,
