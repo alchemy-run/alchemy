@@ -94,9 +94,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Secrets (Cloudflare credentials, etc.) are injected by
-      # `doppler run` from the `alchemy-v2` project — `prod` config on
-      # main, `dev` config everywhere else.
+      # Main/prod use the production account; PR stages use the test account.
       - name: Deploy
         working-directory: website
         run: bun alchemy deploy --stage "$STAGE" --yes
@@ -106,6 +104,17 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ (env.STAGE == 'main' || env.STAGE == 'prod') && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+
+      # PR builds upload zero-traffic versions of this Worker. Refresh the
+      # parent from merged main using the same test account as PR previews.
+      - name: Deploy preview parent
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: website
+        run: bun alchemy deploy --stage preview-base --yes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          BUILD_SHA: ${{ github.sha }}
 
   cleanup:
     name: Cleanup
