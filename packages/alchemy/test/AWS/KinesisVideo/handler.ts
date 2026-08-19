@@ -17,7 +17,7 @@ export class KinesisVideoTestFunction extends AWS.Lambda.Function<AWS.Lambda.Fun
 export default KinesisVideoTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // every route fans out to GetDataEndpoint/GetSignalingChannelEndpoint
     // plus the data-plane call; the 3s default is too tight
     timeout: Duration.seconds(30),

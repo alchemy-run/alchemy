@@ -98,7 +98,7 @@ export type Certificate = Resource<
  * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
+ *   privateKey: yield* Config.redacted("AOP_CLIENT_KEY"),
  * });
  * ```
  *
@@ -108,7 +108,7 @@ export type Certificate = Resource<
  * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
+ *   privateKey: yield* Config.redacted("AOP_CLIENT_KEY"),
  * });
  *
  * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {

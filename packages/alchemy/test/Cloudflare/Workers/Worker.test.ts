@@ -8,6 +8,7 @@ import * as Output from "@/Output";
 import { Stack } from "@/Stack";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { initialCwd } from "@/Util/Node.ts";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -58,6 +59,7 @@ describe.concurrent("Cloudflare.Worker", () => {
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
           yield* R2.Bucket("Bucket", {
+            forceDestroy: true,
             storageClass: "Standard",
           });
 
@@ -1891,8 +1893,12 @@ export default {
             return yield* Cloudflare.Worker("OutputMainWorker", {
               isExternal: true,
               workersDev: true,
+              // `build.outdir` is persisted relative to the initial cwd —
+              // resolve it against `initialCwd` (per Build's contract), not
+              // live `process.cwd()`, which another suite's in-process build
+              // can transiently chdir away.
               main: Output.map(build.outdir, (dir) =>
-                pathe.resolve(dir, "worker.mjs"),
+                pathe.resolve(initialCwd, dir, "worker.mjs"),
               ),
             });
           }),

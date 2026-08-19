@@ -19,42 +19,20 @@ function Home() {
   const [data, setData] = useState(initialData);
 
   return (
-    <main
-      style={{
-        maxWidth: 720,
-        margin: "0 auto",
-        padding: "4rem 1.5rem",
-      }}
-    >
-      <h1 style={{ margin: 0, fontSize: "2.5rem" }}>TanStack Start</h1>
-      <p style={{ marginTop: "1rem", fontSize: "1.125rem", lineHeight: 1.6 }}>
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <h1 className="m-0 text-3xl font-bold">TanStack Start</h1>
+      <p className="mt-4 text-lg leading-relaxed">
         This is the minimal app scaffold in{" "}
         <code>examples/cloudflare-tanstack</code>.
       </p>
-      <p style={{ marginTop: "1rem", lineHeight: 1.6 }}>{data.message}</p>
-      <p
-        style={{
-          padding: "0.75rem 1rem",
-          background: "#e2e8f0",
-          borderRadius: 8,
-          fontFamily: "ui-monospace, SFMono-Regular, monospace",
-        }}
-      >
-        {data.time}
-      </p>
+      <p className="mt-4 leading-relaxed">{data.message}</p>
+      <p className="rounded-lg bg-slate-200 px-4 py-3 font-mono">{data.time}</p>
       <button
         type="button"
         onClick={async () => {
           setData(await getServerTime());
         }}
-        style={{
-          padding: "0.75rem 1rem",
-          border: "none",
-          borderRadius: 8,
-          background: "#0f172a",
-          color: "#fff",
-          cursor: "pointer",
-        }}
+        className="cursor-pointer rounded-lg border-none bg-slate-900 px-4 py-3 text-white"
       >
         Refresh from server
       </button>

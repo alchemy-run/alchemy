@@ -1,3 +1,4 @@
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
@@ -5,9 +6,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import IdpLookupWorker from "./fixtures/idp-lookup-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -323,6 +330,344 @@ test.provider("moving an IdP between scopes replaces it", (stack) =>
     yield* stack.destroy();
     yield* expectGone(zoneId, accountId, zoneScoped.identityProviderId);
   }).pipe(logLevel),
+);
+
+// Adoption + data-source coverage below. Live IdPs carry no ownership
+// markers, so the provider locates them by name (or by type for the
+// singleton `cloudflare` / `onetimepin` types) and the engine gates
+// takeover behind `adopt(true)`.
+
+const forbiddenRetryPolicy = {
+  schedule: Schedule.exponential("500 millis"),
+  times: 8,
+} as const;
+
+const retryForbidden = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e): boolean => e._tag === "Forbidden",
+      ...forbiddenRetryPolicy,
+    }),
+  );
+
+interface LiveIdp {
+  readonly id?: string | null;
+  readonly name?: string | null;
+  readonly type?: string | null;
+}
+
+const findLiveIdp = (
+  accountId: string,
+  predicate: (idp: { name: string; type: string }) => boolean,
+) =>
+  retryForbidden(
+    zeroTrust.listIdentityProvidersForAccount.items({ accountId }).pipe(
+      Stream.filter(predicate),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+      Effect.map((idp): LiveIdp | undefined => idp as LiveIdp | undefined),
+    ),
+  );
+
+/**
+ * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
+ * whether the engine raised it as a typed failure or a defect.
+ */
+const findOwnedError = (
+  cause: Cause.Cause<unknown>,
+): OwnedBySomeoneElse | undefined =>
+  cause.reasons
+    .map((reason) =>
+      Cause.isFailReason(reason)
+        ? reason.error
+        : Cause.isDieReason(reason)
+          ? reason.defect
+          : undefined,
+    )
+    .find(
+      (value): value is OwnedBySomeoneElse =>
+        value instanceof OwnedBySomeoneElse,
+    );
+
+test.provider(
+  "adoption — existing IdP errors without adopt, takes over with adopt(true)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Create the IdP out-of-band so the stack has no state of its own for
+      // it — exactly the "already configured in the dashboard" scenario. A
+      // leftover from an interrupted run is fine: it is the same fixture.
+      const NAME = "alchemy-zt-idp-adopt";
+      const pre =
+        (yield* findLiveIdp(accountId, (idp) => idp.name === NAME)) ??
+        (yield* retryForbidden(
+          zeroTrust.createIdentityProviderForAccount({
+            accountId,
+            name: NAME,
+            type: "oidc",
+            config: oidcConfig,
+          }),
+        ).pipe(Effect.map((created): LiveIdp => created as LiveIdp)));
+      expect(pre.id).toBeTruthy();
+
+      // Without `adopt`: Access IdPs carry no ownership markers, so the
+      // engine cannot prove we created it and refuses to take it over.
+      const error = yield* stack
+        .deploy(
+          Cloudflare.Access.IdentityProvider("AdoptOidc", {
+            name: NAME,
+            type: "oidc",
+            config: oidcConfig,
+          }),
+        )
+        .pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+        );
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      // With `adopt(true)`: the engine takes over the pre-existing IdP
+      // (same physical id) — no duplicate create.
+      const adopted = yield* stack.deploy(
+        Cloudflare.Access.IdentityProvider("AdoptOidc", {
+          name: NAME,
+          type: "oidc",
+          config: oidcConfig,
+        }).pipe(adopt(true)),
+      );
+      expect(adopted.identityProviderId).toEqual(pre.id);
+
+      // Adopted means owned — destroy deletes the live IdP.
+      yield* stack.destroy();
+      yield* expectGone(undefined, accountId, adopted.identityProviderId);
+    }).pipe(logLevel),
+);
+
+// The `cloudflare` (WARP) IdP is an account singleton whose display name is
+// `""` when provisioned from the Zero Trust dashboard. Both rounds run in
+// ONE sequential case because the singleton is account-global and
+// `test.provider` cases within a file run concurrently.
+test.provider(
+  "adoption — cloudflare-type IdP by empty name, then by type alone",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const findWarp = findLiveIdp(
+        accountId,
+        (idp) => idp.type === "cloudflare",
+      );
+
+      // Round 1 — the user-reported regression: an explicit `name: ""` must
+      // match the live IdP (a truthiness check used to swallow `""` and
+      // probe for a generated physical name instead, so the provider tried
+      // to create a second singleton and failed).
+      const pre1 =
+        (yield* findWarp) ??
+        (yield* retryForbidden(
+          zeroTrust.createIdentityProviderForAccount({
+            accountId,
+            name: "",
+            type: "cloudflare",
+            config: { restrictToAccountMembers: true },
+          }),
+        ).pipe(Effect.map((created): LiveIdp => created as LiveIdp)));
+      expect(pre1.id).toBeTruthy();
+
+      const adopted1 = yield* stack.deploy(
+        Cloudflare.Access.IdentityProvider("CloudflareIDP", {
+          name: "",
+          type: "cloudflare",
+          config: { restrictToAccountMembers: true },
+        }).pipe(adopt(true)),
+      );
+      expect(adopted1.identityProviderId).toEqual(pre1.id);
+      expect(adopted1.name).toEqual("");
+
+      yield* stack.destroy();
+      yield* expectGone(undefined, accountId, adopted1.identityProviderId);
+
+      // Round 2 — omitted name: singletons are located by type and keep
+      // their observed display name (no rename to a generated physical
+      // name).
+      const pre2 = yield* retryForbidden(
+        zeroTrust.createIdentityProviderForAccount({
+          accountId,
+          name: "",
+          type: "cloudflare",
+          config: { restrictToAccountMembers: true },
+        }),
+      ).pipe(Effect.map((created): LiveIdp => created as LiveIdp));
+      expect(pre2.id).toBeTruthy();
+
+      const adopted2 = yield* stack.deploy(
+        Cloudflare.Access.IdentityProvider("CloudflareIDP", {
+          type: "cloudflare",
+          config: { restrictToAccountMembers: true },
+        }).pipe(adopt(true)),
+      );
+      expect(adopted2.identityProviderId).toEqual(pre2.id);
+      expect(adopted2.name).toEqual("");
+
+      yield* stack.destroy();
+      yield* expectGone(undefined, accountId, adopted2.identityProviderId);
+    }).pipe(logLevel),
+);
+
+test.provider(
+  "getIdentityProvider data source feeds another resource's props",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const NAME = "alchemy-zt-idp-lookup";
+
+      // First deploy creates the IdP alone so the live IdP exists before
+      // the next plan's data-source Output resolves.
+      const idp = yield* stack.deploy(
+        Cloudflare.Access.IdentityProvider("LookupOidc", {
+          name: NAME,
+          type: "oidc",
+          config: oidcConfig,
+        }),
+      );
+
+      // Second deploy consumes the lookup Output IN PLACE OF a resource
+      // reference: `allowedIdps` receives the looked-up id — the "gate an
+      // application on an IdP managed outside the stack" use case.
+      const result = yield* stack.deploy(
+        Effect.gen(function* () {
+          const same = yield* Cloudflare.Access.IdentityProvider("LookupOidc", {
+            name: NAME,
+            type: "oidc",
+            config: oidcConfig,
+          });
+          yield* Cloudflare.Zone.Zone("TestZone", {
+            name: zoneName,
+          }).pipe(adopt(true));
+          const app = yield* Cloudflare.Access.Application("LookupGatedApp", {
+            type: "self_hosted",
+            domain: `alchemy-test-idp-lookup.${zoneName}`,
+            sessionDuration: "24h",
+            allowedIdps: [
+              Cloudflare.Access.getIdentityProvider({
+                name: NAME,
+              }).identityProviderId.as<string>(),
+            ],
+          });
+          return {
+            deployedId: same.identityProviderId,
+            app,
+            missing: Cloudflare.Access.getIdentityProvider({
+              name: "alchemy-zt-idp-lookup-nonexistent",
+            }),
+          };
+        }),
+      );
+
+      expect(result.deployedId).toEqual(idp.identityProviderId);
+      expect(result.missing).toBeUndefined();
+      expect(result.app.applicationId).toBeTruthy();
+
+      // The application's allowed-IdP list must carry the looked-up id —
+      // verified out-of-band against the live application.
+      const liveApp = yield* zeroTrust
+        .getAccessApplicationForAccount({
+          accountId,
+          appId: result.app.applicationId,
+        })
+        .pipe(
+          Effect.retry({
+            while: (e): boolean => e._tag === "Forbidden",
+            ...forbiddenRetryPolicy,
+          }),
+        );
+      const allowed =
+        (liveApp as { allowedIdps?: ReadonlyArray<string | null> | null })
+          .allowedIdps ?? [];
+      expect(allowed).toContain(idp.identityProviderId);
+
+      yield* stack.destroy();
+      yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
+    }).pipe(logLevel),
+);
+
+class LookupNotServing extends Data.TaggedError("LookupNotServing")<{
+  message: string;
+}> {}
+
+test.provider(
+  "GetIdentityProvider binding resolves the IdP at runtime inside a Worker",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const idp = yield* Cloudflare.Access.IdentityProvider(
+            "WorkerLookupOidc",
+            {
+              name: "alchemy-zt-idp-worker-lookup",
+              type: "oidc",
+              config: oidcConfig,
+            },
+          );
+          const worker = yield* IdpLookupWorker;
+          return { idp, worker };
+        }),
+      );
+
+      // Anchor on the expected marker, never a bare 200 — fresh workers.dev
+      // hostnames serve a placeholder with 200 while propagating, and the
+      // freshly-minted scoped token can 403 (→ worker 500) for ~30s.
+      const client = yield* HttpClient.HttpClient;
+      const body = yield* client.get(`${deployed.worker.url}/`).pipe(
+        Effect.flatMap((res) =>
+          Effect.gen(function* () {
+            const text = yield* res.text;
+            if (res.status !== 200 || !text.includes("identityProviderId")) {
+              return yield* new LookupNotServing({
+                message: `status=${res.status} body=${text.slice(0, 300)}`,
+              });
+            }
+            return JSON.parse(text) as {
+              identityProviderId: string | null;
+              type: string | null;
+            };
+          }),
+        ),
+        Effect.retry({
+          while: (e): boolean => e._tag === "LookupNotServing",
+          schedule: Schedule.max([
+            Schedule.min([
+              Schedule.exponential("1 second"),
+              Schedule.spaced("5 seconds"),
+            ]),
+            Schedule.recurs(15),
+          ]),
+        }),
+      );
+
+      expect(body.identityProviderId).toEqual(deployed.idp.identityProviderId);
+      expect(body.type).toEqual("oidc");
+
+      yield* stack.destroy();
+      yield* expectGone(
+        undefined,
+        deployed.idp.accountId,
+        deployed.idp.identityProviderId,
+      );
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 // Compile-time contract of the per-type configs — never executed. The

@@ -9,8 +9,24 @@ import type { HttpServer } from "effect/unstable/http/HttpServer";
 import type { ServeError } from "effect/unstable/http/HttpServerError";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { WebSocketConstructor } from "effect/unstable/socket/Socket";
+import { disableCrossSpawnChdir } from "./Node.ts";
 
 const isBun = typeof Bun !== "undefined";
+
+const importPlatformPeer = <A>(
+  peerDependency: "@effect/platform-bun" | "@effect/platform-node",
+  load: () => Promise<A>,
+): Promise<A> =>
+  load().catch(() => {
+    console.error(
+      [
+        `Alchemy could not load the required peer dependency "${peerDependency}".`,
+        `Install a compatible version of "${peerDependency}" in the same project as "alchemy".`,
+        "If it is already installed, you may be running a globally installed Alchemy CLI; run the project-local CLI instead.",
+      ].join("\n"),
+    );
+    process.exit(1);
+  });
 
 /**
  * Constructs a layer with different implementations for Bun and Node.
@@ -41,15 +57,27 @@ export type PlatformServices =
 export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
   bun: async () => {
     const [BunServices, BunSocket] = await Promise.all([
-      import("@effect/platform-bun/BunServices"),
-      import("@effect/platform-bun/BunSocket"),
+      importPlatformPeer(
+        "@effect/platform-bun",
+        () => import("@effect/platform-bun/BunServices"),
+      ),
+      importPlatformPeer(
+        "@effect/platform-bun",
+        () => import("@effect/platform-bun/BunSocket"),
+      ),
     ]);
     return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
   },
   node: async () => {
     const [NodeServices, NodeSocket] = await Promise.all([
-      import("@effect/platform-node/NodeServices"),
-      import("@effect/platform-node/NodeSocket"),
+      importPlatformPeer(
+        "@effect/platform-node",
+        () => import("@effect/platform-node/NodeServices"),
+      ),
+      importPlatformPeer(
+        "@effect/platform-node",
+        () => import("@effect/platform-node/NodeSocket"),
+      ),
     ]);
     return Layer.merge(
       NodeServices.layer,
@@ -82,18 +110,24 @@ export const runMain = <E, A>(
     readonly teardown?: Teardown | undefined;
   },
 ): void => {
+  // Every alchemy process (CLI, exec child, sidecar, build/dev runners)
+  // runs concurrent effects that depend on a stable working directory —
+  // forbid cross-spawn's transient process-wide chdir (see Util/Node.ts).
+  disableCrossSpawnChdir();
   const opts = {
     ...options,
     teardown: options?.teardown ?? exitingTeardown,
   };
   if (isBun) {
-    void import("@effect/platform-bun/BunRuntime").then((BunRuntime) =>
-      BunRuntime.runMain(effect, opts),
-    );
+    void importPlatformPeer(
+      "@effect/platform-bun",
+      () => import("@effect/platform-bun/BunRuntime"),
+    ).then((BunRuntime) => BunRuntime.runMain(effect, opts));
   } else {
-    void import("@effect/platform-node/NodeRuntime").then((NodeRuntime) =>
-      NodeRuntime.runMain(effect, opts),
-    );
+    void importPlatformPeer(
+      "@effect/platform-node",
+      () => import("@effect/platform-node/NodeRuntime"),
+    ).then((NodeRuntime) => NodeRuntime.runMain(effect, opts));
   }
 };
 
@@ -103,7 +137,10 @@ export const httpServer = (
 ): Layer.Layer<HttpServer, ServeError> =>
   platformLayer({
     bun: async () => {
-      const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
+      const BunHttpServer = await importPlatformPeer(
+        "@effect/platform-bun",
+        () => import("@effect/platform-bun/BunHttpServer"),
+      );
       // `idleTimeout: 0` disables Bun's default 10s request idle timeout.
       // The RPC spawner serves a long-lived `/logs` stream (sidecar output
       // forwarded to the exec child's renderer) that can legitimately sit
@@ -112,7 +149,10 @@ export const httpServer = (
     },
     node: async () => {
       const [NodeHttpServer, Http] = await Promise.all([
-        import("@effect/platform-node/NodeHttpServer"),
+        importPlatformPeer(
+          "@effect/platform-node",
+          () => import("@effect/platform-node/NodeHttpServer"),
+        ),
         import("node:http"),
       ]);
       return NodeHttpServer.layerServer(Http.createServer, { host, port });

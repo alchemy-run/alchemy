@@ -467,7 +467,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "InvalidArgumentException" &&
       /role|assume|trust|principal/i.test(
-        (e as { Message?: string }).Message ?? "",
+        (e as { message?: string }).message ?? "",
       ),
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });

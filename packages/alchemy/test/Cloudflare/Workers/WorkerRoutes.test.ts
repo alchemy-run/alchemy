@@ -120,7 +120,7 @@ const T1_ADDED = `${zoneName}/${routeSuffix}/t1/other/*`;
 const T1_MATCH_URL = `https://${zoneName}/${routeSuffix}/t1/api/ping`;
 const T1_MISS_URL = `https://${zoneName}/${routeSuffix}/t1/unknown`;
 
-test.provider.skipIf(!zoneName)(
+test.provider(
   "creates, keeps, updates, and removes worker zone routes",
   (stack) =>
     Effect.gen(function* () {
@@ -236,7 +236,7 @@ test.provider.skipIf(!zoneName)(
 const T2_KEPT = `${zoneName}/${routeSuffix}/t2/api/*`;
 const T2_DRIFT = `${zoneName}/${routeSuffix}/t2/drift/*`;
 
-test.provider.skipIf(!zoneName)(
+test.provider(
   "removes out-of-band routes on update and detaches routes on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -320,7 +320,7 @@ test.provider.skipIf(!zoneName)(
 
 const T3_PATTERN = `${zoneName}/${routeSuffix}/t3/api/*`;
 
-test.provider.skipIf(!zoneName)(
+test.provider(
   "refuses to steal a route pattern attached to another Worker",
   (stack) =>
     Effect.gen(function* () {

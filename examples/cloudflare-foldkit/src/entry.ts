@@ -1,3 +1,5 @@
+import "./styles.css";
+
 import { Runtime } from "foldkit";
 
 import { init, Message, Model, update, view } from "./main.ts";

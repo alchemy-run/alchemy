@@ -13,6 +13,7 @@ import * as Bookmark from "./Access/Bookmark.ts";
 import * as AccessCert from "./Access/Certificate.ts";
 import * as CustomPage from "./Access/CustomPage.ts";
 import * as Group from "./Access/Group.ts";
+import { GetIdentityProviderHttp } from "./Access/GetIdentityProviderHttp.ts";
 import * as AccessIdp from "./Access/IdentityProvider.ts";
 import * as AccessInfraTarget from "./Access/InfrastructureTarget.ts";
 import * as AccessKeyConfig from "./Access/KeyConfiguration.ts";
@@ -676,6 +677,8 @@ export const providers = () =>
         RandomProvider(),
       ),
     ),
+    // Plan-executable data-source capabilities (`Binding.Service.execute`).
+    Layer.provideMerge(GetIdentityProviderHttp),
     Layer.provide(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,

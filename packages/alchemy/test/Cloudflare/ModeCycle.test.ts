@@ -8,6 +8,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { Stack } from "@/Stack";
+import { State, type ResourceState } from "@/State";
 import { inDev } from "../test.resources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -48,7 +50,9 @@ test.provider(
           const namespace = yield* Cloudflare.KV.Namespace("CycleKV").pipe(
             Alchemy.remote(liveKV),
           );
-          const bucket = yield* Cloudflare.R2.Bucket("CycleBucket");
+          const bucket = yield* Cloudflare.R2.Bucket("CycleBucket", {
+            forceDestroy: true,
+          });
           const database = yield* Cloudflare.D1.Database("CycleDB");
           return { namespace, bucket, database };
         });
@@ -109,4 +113,60 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+/**
+ * Regression: state rows written by alchemy versions before providerMode
+ * stamping (≤ 2.0.0-beta.64) in dev mode have no `providerMode` stamp but
+ * carry `dev:`-marker identities. A plain destroy on a newer version must
+ * infer "local" from the marker and route the delete to the local provider
+ * variant instead of handing the `dev:` id to the live provider — the
+ * Cloudflare API rejects it with `BadRequest: There is a malformed
+ * parameter in the request`, permanently wedging the destroy.
+ */
+test.provider(
+  "a legacy pre-stamping dev queue row (no providerMode, dev: id) destroys cleanly in live mode",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const state = yield* yield* State;
+      const stk = yield* Stack;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // The exact shape `alchemy dev` on beta.64 persisted for a local
+      // queue: a fabricated `dev:<uuid>` id and no providerMode field.
+      const fqn = "LegacyDevQueue";
+      yield* state.set({
+        stack: stk.name,
+        stage: stk.stage,
+        fqn,
+        value: {
+          kind: "resource",
+          status: "created",
+          fqn,
+          logicalId: fqn,
+          instanceId: "beta64legacyrow0",
+          namespace: undefined,
+          resourceType: "Cloudflare.Queues.Queue",
+          providerVersion: 0,
+          props: {},
+          attr: {
+            queueId: "dev:00000000-0000-4000-8000-000000000000",
+            queueName: "legacy-dev-queue",
+            accountId,
+          },
+          bindings: [],
+          downstream: [],
+        } satisfies ResourceState,
+      });
+
+      // Live-mode destroy: the marker-inferred local variant deletes the
+      // row (a no-op against its empty in-memory registry) — no cloud call.
+      yield* stack.destroy();
+
+      expect(
+        yield* state.get({ stack: stk.name, stage: stk.stage, fqn }),
+      ).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

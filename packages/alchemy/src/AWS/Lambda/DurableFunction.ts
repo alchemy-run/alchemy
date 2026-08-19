@@ -74,13 +74,13 @@ export type DurableFunctionInitServices =
  * Properties of an {@link DurableFunction | AWS.Lambda.DurableFunction}.
  *
  * A DurableFunction accepts every {@link FunctionProps | Function prop}
- * except `url` (every invocation of a durable function arrives as the
+ * except `functionUrl` (every invocation of a durable function arrives as the
  * durable-execution envelope — there is no HTTP surface), plus the
  * `DurableConfig` tuning knobs below.
  */
 export interface DurableFunctionProps extends Omit<
   FunctionZipProps,
-  "url" | "durableConfig"
+  "functionUrl" | "durableConfig"
 > {
   /**
    * Maximum total duration of a durable execution, from start to terminal
@@ -329,7 +329,7 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
     ...rest,
     // Every invocation of a DurableConfig'd function arrives as the durable
     // envelope — a Function URL could never be served.
-    url: false,
+    functionUrl: false,
     build: {
       ...build,
       install: withDurableSdkInstall(build?.install),
@@ -546,7 +546,7 @@ const composeDurableImpl = (
  * `Durable.step`s replay from the checkpoint log without re-executing.
  *
  * Every invocation of a durable function arrives as the durable-execution
- * envelope, so a DurableFunction has no HTTP surface (`url` is disabled) —
+ * envelope, so a DurableFunction has no HTTP surface (`functionUrl` is disabled) —
  * it does one thing: run durable orchestrations. Reusing a logical id
  * between a plain `Function` and a `DurableFunction` replaces the physical
  * function (DurableConfig cannot be flipped in place).

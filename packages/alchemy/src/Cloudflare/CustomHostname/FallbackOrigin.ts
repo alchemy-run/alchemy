@@ -211,11 +211,9 @@ interface ObservedFallbackOrigin {
 // typed in the distilled union as `FallbackOriginNotFound`.
 const observeFallbackOrigin = (zoneId: string) =>
   customHostnames.getFallbackOrigin({ zoneId }).pipe(
-    Effect.map(
-      (r): ObservedFallbackOrigin => ({
-        origin: r.origin ?? undefined,
-        status: r.status ?? undefined,
-      }),
-    ),
+    Effect.map((r): ObservedFallbackOrigin => ({
+      origin: r.origin ?? undefined,
+      status: r.status ?? undefined,
+    })),
     Effect.catchTag("FallbackOriginNotFound", () => Effect.succeed(undefined)),
   );

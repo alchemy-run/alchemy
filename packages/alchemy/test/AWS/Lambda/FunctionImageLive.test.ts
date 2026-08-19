@@ -33,7 +33,7 @@ const imageFunction = (
     env: {
       IMAGE_FUNCTION_ENV: "bound",
     },
-    url: false,
+    functionUrl: false,
   });
 
 const zipFunction = (functionName: string) =>
@@ -42,7 +42,7 @@ const zipFunction = (functionName: string) =>
     main: `${import.meta.dirname}/timeout-handler.ts`,
     handler: "handler",
     isExternal: true,
-    url: false,
+    functionUrl: false,
   });
 
 // Docker builds, ECR pushes, Lambda propagation, and the provider's bounded
@@ -182,7 +182,7 @@ test.provider.skipIf(skipLive)(
                   imageConfig,
                   architecture: "x86_64",
                   env: { IMAGE_FUNCTION_ENV: "external" },
-                  url: false,
+                  functionUrl: false,
                 });
           return { image, func };
         });

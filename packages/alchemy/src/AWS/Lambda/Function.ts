@@ -11,26 +11,16 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
-import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  hashPackageInstallIdentity,
-  installResolvedPackages,
-  matchesPackageRoot,
-  normalizeInstallTargets,
-  resolvePackageInstallIdentity,
-  type PackageInstall,
-} from "../../Bundle/InstalledPackages.ts";
-import * as TempRoot from "../../Bundle/TempRoot.ts";
+import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
@@ -40,7 +30,6 @@ import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
-import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
 import { Stack } from "../../Stack.ts";
@@ -62,6 +51,7 @@ import {
   syncEventInvokeConfig,
   type EventInvokeConfig,
 } from "./EventInvokeConfig.ts";
+import { makeFunctionBundler } from "./FunctionBundle.ts";
 import {
   decodeFunctionImageSource,
   type FunctionImageAttributes,
@@ -174,7 +164,7 @@ export type AccessPointRef = string | { accessPointArn: string };
 export type LayerRef = string | { layerVersionArn: string };
 
 /** Resolve a {@link LayerRef} to its layer version ARN. */
-const layerVersionArnOf = (layer: LayerRef): string =>
+export const layerVersionArnOf = (layer: LayerRef): string =>
   typeof layer === "string" ? layer : layer.layerVersionArn;
 
 /**
@@ -213,11 +203,11 @@ export interface FunctionUrlConfig {
 export interface FunctionCommonProps extends PlatformProps {
   /**
    * Whether to create a Lambda function URL, or its configuration.
-   * `true` creates a public Function URL with `authType: "NONE"`.
-   * Set `false` to disable the Function URL.
+   * `functionUrl: true` creates a public Function URL with `authType: "NONE"`.
+   * Set `functionUrl: false` to disable the Function URL.
    * @default true
    */
-  url?: boolean | FunctionUrlConfig;
+  functionUrl?: boolean | FunctionUrlConfig;
   functionName?: string;
   /**
    * Instruction set architecture for the Lambda function.
@@ -303,6 +293,18 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * Entry module for the bundled Lambda function.
    */
   main: string;
+  /**
+   * Set to `false` to skip bundling and deploy `main`'s directory as-is:
+   * every file in the directory containing `main` ships in the code
+   * archive, preserving relative paths. Use for framework outputs that are
+   * already self-contained deployment units (e.g. nitro's
+   * `.output/server`, OpenNext's server functions) where re-bundling can
+   * break `require`s of packaged `node_modules`. Implies external mode:
+   * `handler` names an export of `main`, and the Lambda handler string is
+   * derived from `main`'s basename (e.g. `index.mjs` → `index.handler`).
+   * @default true
+   */
+  bundle?: false;
   image?: never;
   imageConfig?: never;
   /**
@@ -454,6 +456,31 @@ const imageConfigForUpdate = (
     : undefined;
 
 /**
+ * The Lambda `Handler` string for a function's props: `<file>.<export>`.
+ * Bundled functions always emit `index.js`; prebuilt directories
+ * (`bundle: false`) keep `main`'s own basename. The export half honors
+ * `handler` only outside Effect mode (see the note at the call site).
+ */
+const handlerStringOf = (props: FunctionZipProps): string => {
+  const externalMode = props.isExternal || props.bundle === false;
+  // `main` may be an unresolved Output during precreate (the stub's mock
+  // code exports `index.*` anyway); the real Handler is applied at
+  // reconcile, where props are resolved.
+  const base =
+    props.bundle === false && typeof props.main === "string"
+      ? props.main
+          .slice(
+            Math.max(
+              props.main.lastIndexOf("/"),
+              props.main.lastIndexOf("\\"),
+            ) + 1,
+          )
+          .replace(/\.[^.]+$/, "")
+      : "index";
+  return `${base}.${externalMode ? (props.handler ?? "default") : "default"}`;
+};
+
+/**
  * Normalize a {@link FunctionProps.timeout} to whole seconds.
  *
  * State JSON round-trips flatten a `Duration` to its `toJSON` shape
@@ -530,14 +557,14 @@ export type FunctionServices = Credentials | Region | AWSEnvironment;
 
 export type FunctionShape = Main<FunctionServices>;
 
-interface NormalizedFunctionUrlConfig {
+export interface NormalizedFunctionUrlConfig {
   authType: Lambda.FunctionUrlAuthType;
   cors?: Lambda.Cors;
   invokeMode: Lambda.InvokeMode;
 }
 
-const normalizeFunctionUrl = (
-  url: FunctionProps["url"] = true,
+export const normalizeFunctionUrl = (
+  url: FunctionProps["functionUrl"] = true,
 ): NormalizedFunctionUrlConfig | undefined => {
   if (url === false) {
     return undefined;
@@ -553,26 +580,6 @@ const normalizeFunctionUrl = (
     cors: url.cors,
     invokeMode: url.invokeMode ?? "BUFFERED",
   };
-};
-
-/**
- * Evaluates a user-supplied Rolldown `external` option (string, RegExp, array,
- * or predicate) for a single module id, preserving its original semantics.
- */
-const matchesConfiguredExternal = (
-  external: rolldown.InputOptions["external"],
-  moduleId: string,
-  parentId: string | undefined,
-  isResolved: boolean,
-): boolean => {
-  if (external === undefined) return false;
-  if (typeof external === "function") {
-    return external(moduleId, parentId, isResolved) === true;
-  }
-  const matchers = Array.isArray(external) ? external : [external];
-  return matchers.some((matcher) =>
-    typeof matcher === "string" ? matcher === moduleId : matcher.test(moduleId),
-  );
 };
 
 /**
@@ -621,7 +628,7 @@ const matchesConfiguredExternal = (
  *
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
- *   url: true,
+ *   functionUrl: true,
  * });
  * ```
  *
@@ -691,7 +698,7 @@ const matchesConfiguredExternal = (
  *     },
  *   },
  *   architecture: "arm64",
- *   url: false,
+ *   functionUrl: false,
  * });
  * ```
  *
@@ -714,7 +721,7 @@ const matchesConfiguredExternal = (
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const getItem = yield* AWS.DynamoDB.GetItem(table);
@@ -738,7 +745,7 @@ const matchesConfiguredExternal = (
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
- *   url: true,
+ *   functionUrl: true,
  * });
  * ```
  *
@@ -746,7 +753,7 @@ const matchesConfiguredExternal = (
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
- *   url: {
+ *   functionUrl: {
  *     authType: "AWS_IAM",
  *   },
  * });
@@ -1115,8 +1122,9 @@ export const FunctionProvider = () =>
     Effect.gen(function* () {
       const stack = yield* Stack;
 
-      const fs = yield* FileSystem.FileSystem;
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+      // Code bundling lives in FunctionBundle.ts so the floci local
+      // provider's watch loop can rebuild the identical artifact.
+      const { bundleCode } = yield* makeFunctionBundler;
       const functionImage = yield* makeFunctionImage;
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
@@ -1344,272 +1352,6 @@ export const FunctionProvider = () =>
 
         yield* Effect.logDebug(`attached policy ${id}`);
         return role;
-      });
-
-      const bundleCode = Effect.fn(function* (
-        id: string,
-        props: FunctionZipProps,
-      ) {
-        const {
-          output: buildOutput,
-          install,
-          pure: _pure,
-          bundleAnalyzer: _bundleAnalyzer,
-          ...inputOptions
-        } = props.build ?? {};
-        const sourcemap = buildOutput?.sourcemap ?? true;
-        const uploadSourceMap = props.uploadSourceMap ?? true;
-
-        const realMain = yield* TempRoot.resolveMainPath(props.main);
-        const cwd = yield* TempRoot.findCwdForBundle(realMain);
-
-        const rolldownSourcemap = sourcemap;
-        const architecture = props.architecture ?? "x86_64";
-
-        // Explicit install roots are excluded from the bundle and installed
-        // into the deployment artifact. build.external stays a pure Rolldown
-        // escape hatch and is not installed by Alchemy.
-        const requested = yield* normalizeInstallTargets(install);
-        const installRoots = new Set(Object.keys(requested));
-        const configuredExternal = inputOptions.external;
-        const externalOption = (
-          moduleId: string,
-          parentId: string | undefined,
-          isResolved: boolean,
-        ): boolean => {
-          if (moduleId.startsWith("@aws-sdk/")) return true;
-          for (const root of installRoots) {
-            if (matchesPackageRoot(moduleId, root)) return true;
-          }
-          return matchesConfiguredExternal(
-            configuredExternal,
-            moduleId,
-            parentId,
-            isResolved,
-          );
-        };
-
-        const buildBundle = Effect.fn(function* (
-          entry: string,
-          plugins?: rolldown.RolldownPluginOption,
-        ) {
-          return yield* Bundle.build(
-            {
-              ...inputOptions,
-              input: entry,
-              cwd,
-              external: externalOption,
-              platform: "node",
-              // Workspace tests and generated service patches execute
-              // distilled from `src` through its `bun` export condition.
-              // Resolve the deployed Lambda bundle the same way so a live
-              // binding test cannot silently exercise stale `lib` output.
-              resolve: {
-                ...inputOptions.resolve,
-                conditionNames: [
-                  "bun",
-                  ...(
-                    inputOptions.resolve?.conditionNames ?? [
-                      "node",
-                      "import",
-                      "module",
-                      "default",
-                    ]
-                  ).filter((condition) => condition !== "bun"),
-                ],
-              },
-              plugins: [inputOptions.plugins, plugins],
-            },
-            {
-              ...buildOutput,
-              format: "esm",
-              sourcemap: rolldownSourcemap,
-              minify: buildOutput?.minify ?? false,
-              entryFileNames: "index.js",
-              codeSplitting: buildOutput?.codeSplitting ?? false,
-            },
-            props.build,
-          );
-        });
-
-        const bundleOutput = props.isExternal
-          ? yield* buildBundle(realMain)
-          : yield* buildBundle(
-              realMain,
-              virtualEntryPlugin(
-                (importPath) => `
-import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import { registerLambdaExtension } from "alchemy/AWS/Lambda/RuntimeExtension";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
-import * as Context from "effect/Context";
-import * as Scope from "effect/Scope";
-import { MinimumLogLevel } from "effect/References";
-
-import entrypoint from ${JSON.stringify(importPath)};
-
-// Register the internal extension: it buys the Shutdown phase (SIGTERM +
-// 500 ms) — without any registered extension the sandbox is killed with no
-// signal at all, and init-level finalizers would never run.
-await registerLambdaExtension();
-
-// Instance scope: the sandbox-lifetime layer build lives under it, and it is
-// closed on SIGTERM (Lambda's Shutdown phase) so init-level finalizers run
-// before the sandbox dies. Each invocation still gets its own request scope
-// from the handler dispatch.
-const instanceScope = Scope.makeUnsafe();
-
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  nodeServicesLayer,
-  fetchHttpClientLayer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-const entryLayer = layer.pipe(
-  Layer.provideMerge(stack),
-  Layer.provideMerge(Credentials.fromEnv()),
-  Layer.provideMerge(Region.fromEnv()),
-  Layer.provideMerge(platform),
-  Layer.provideMerge(
-    Layer.succeed(
-      ConfigProvider.ConfigProvider,
-      // Auto-bound \`Config\` values arrive in the env as
-      // \`{"_tag":"Redacted","value":...}\` markers; reify them so a \`Config\`
-      // re-read inside a handler decodes the raw source value.
-      reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-    )
-  ),
-  Layer.provideMerge(
-    Layer.succeed(
-      MinimumLogLevel,
-      process.env.DEBUG ? "Debug" : "Info",
-    )
-  ),
-);
-
-// Build the layer stack against the instance scope (not a transient
-// \`Effect.provide\`/\`Effect.scoped\` region) so services and init-level
-// finalizers live for the sandbox and are released at Shutdown.
-const handlerEffect = Layer.buildWithScope(entryLayer, instanceScope).pipe(
-  Effect.flatMap((context) =>
-    tag.pipe(
-      Effect.flatMap(func => func.RuntimeContext.exports),
-      Effect.flatMap(exports => exports.handler),
-      Effect.provideContext(context),
-    )
-  ),
-  Scope.provide(instanceScope),
-);
-
-const handler = await Effect.runPromise(handlerEffect);
-
-// Lambda's Shutdown phase: close the instance scope so init-level
-// finalizers run, then exit inside the 500 ms budget. SIGKILL follows if we
-// overstay, so finalizers must be fast and best-effort.
-process.on("SIGTERM", () => {
-  console.log("[alchemy] SIGTERM — closing instance scope");
-  Effect.runPromise(Scope.close(instanceScope, Exit.void))
-    .catch((error) => console.error("[alchemy] shutdown finalizers failed", error))
-    .finally(() => process.exit(0));
-});
-
-export default handler;
-`,
-              ),
-            );
-
-        const mainFile = bundleOutput.files[0];
-        const code =
-          typeof mainFile.content === "string"
-            ? new TextEncoder().encode(mainFile.content)
-            : mainFile.content;
-
-        const includeSourceMaps =
-          uploadSourceMap && (sourcemap === true || sourcemap === "hidden");
-
-        const extraFiles = bundleOutput.files
-          .slice(1)
-          .filter(
-            (f: Bundle.BundleFile) =>
-              includeSourceMaps || !f.path.endsWith(".map"),
-          )
-          .map((f: Bundle.BundleFile) => ({
-            path: f.path,
-            content: f.content,
-          }));
-
-        // Resolve install versions without running npm so `diff` can compare a
-        // stable identity hash. The archive build performs the install.
-        const installIdentity = yield* resolvePackageInstallIdentity({
-          cwd,
-          requested,
-        });
-        const resolved = installIdentity.resolved;
-        const hasInstalledPackages = Object.keys(resolved).length > 0;
-
-        // Identity hash drives change detection in `diff`. With native packages,
-        // the installed bytes are not captured by the bundle hash, so fold the
-        // resolved versions, package-manager lockfile, and architecture in
-        // instead of installing.
-        const identityHash = hasInstalledPackages
-          ? yield* hashPackageInstallIdentity({
-              bundleHash: bundleOutput.hash,
-              identity: installIdentity,
-              architecture,
-            })
-          : bundleOutput.hash;
-
-        const buildArchive = Effect.gen(function* () {
-          const installedPackageFiles = hasInstalledPackages
-            ? yield* installResolvedPackages({
-                resolved,
-                overrides: installIdentity.overrides,
-                architecture,
-              })
-            : [];
-          const archiveFiles = [...extraFiles, ...installedPackageFiles];
-          const archive = yield* zipCode(
-            code,
-            archiveFiles.length > 0 ? archiveFiles : undefined,
-          );
-          // The S3 asset key is content-addressed, so the archive hash must be a
-          // true hash of the bytes when native packages are present.
-          const archiveHash =
-            installedPackageFiles.length > 0
-              ? yield* sha256(archive)
-              : bundleOutput.hash;
-          return { archive, archiveHash };
-        });
-
-        return { identityHash, buildArchive };
       });
 
       const withNodeSourceMaps = (
@@ -1959,12 +1701,11 @@ export default handler;
                 // bundled as-is (isExternal). Honoring it in Effect mode
                 // deploys a Lambda that dies at init with
                 // Runtime.HandlerNotFound.
-                Handler: `index.${news.isExternal ? (news.handler ?? "default") : "default"}`,
-                Runtime: news.runtime ?? "nodejs22.x",
+                Handler: handlerStringOf(news),
+                Runtime: news.runtime ?? "nodejs24.x",
                 PackageType: "Zip" as const,
               }),
-          Architectures:
-            news.architecture === undefined ? undefined : [news.architecture],
+          Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
@@ -2002,10 +1743,24 @@ export default handler;
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
+          // If it exists and contains these tags, we will assume it was created
+          // by alchemy but state was lost, so if it exists, let's adopt it.
+          // Some backends (e.g. local emulators) omit `Tags` on GetFunction —
+          // fall back to ListTags before concluding the function is foreign.
+          Effect.flatMap((f) =>
+            f.Tags !== undefined
+              ? Effect.succeed(hasTags(tags, f.Tags))
+              : Lambda.listTags({
+                  Resource: f.Configuration?.FunctionArn ?? "",
+                }).pipe(
+                  Effect.map((r) => hasTags(tags, r.Tags ?? {})),
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed(false),
+                  ),
+                ),
+          ),
           Effect.filterOrFail(
-            // if it exists and contains these tags, we will assume it was created by alchemy
-            // but state was lost, so if it exists, let's adopt it
-            (f) => hasTags(tags, f.Tags),
+            (owned) => owned,
             () =>
               // TODO(sam): add custom
               new Error("Function tags do not match expected values"),
@@ -2170,8 +1925,8 @@ export default handler;
         currentFunctionUrl,
       }: {
         functionName: string;
-        url: FunctionProps["url"];
-        oldUrl?: FunctionProps["url"];
+        url: FunctionProps["functionUrl"];
+        oldUrl?: FunctionProps["functionUrl"];
         currentFunctionUrl?: string;
       }) {
         const desired = normalizeFunctionUrl(url);
@@ -2324,8 +2079,8 @@ export default handler;
           }
           if (
             !deepEqual(
-              normalizeFunctionUrl(olds.url),
-              normalizeFunctionUrl(news.url),
+              normalizeFunctionUrl(olds.functionUrl),
+              normalizeFunctionUrl(news.functionUrl),
             )
           ) {
             return { action: "update" };
@@ -2742,8 +2497,8 @@ export default handler;
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
-            url: news.url,
-            oldUrl: olds?.url,
+            url: news.functionUrl,
+            oldUrl: olds?.functionUrl,
             currentFunctionUrl: output?.functionUrl,
           });
 

@@ -1,6 +1,7 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
@@ -85,7 +86,16 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     "build-arg": options.buildArgs,
     args: options.args,
   });
-  yield* docker.image.push(options.imageUri, credentials);
+  // Pushes are idempotent; transient registry-transport failures (Docker
+  // Desktop's embedded proxy timing out under load, ECR 503s, credential
+  // helper contention) resolve on a bounded re-attempt.
+  yield* docker.image.push(options.imageUri, credentials).pipe(
+    Effect.retry({
+      while: (): boolean => true,
+      schedule: Schedule.exponential("2 seconds"),
+      times: 3,
+    }),
+  );
   return options.imageUri;
 });
 

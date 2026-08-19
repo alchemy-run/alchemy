@@ -1,4 +1,4 @@
-import { isPythonMain } from "./PythonWorkerBundle.ts";
+import { isPythonMain } from "./Sources/Python.ts";
 import type { WorkerProps } from "./Worker.ts";
 
 // TODO: figure out why the later one from workerd breaks

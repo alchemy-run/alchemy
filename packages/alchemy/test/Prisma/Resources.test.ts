@@ -50,6 +50,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { AlchemyContext } from "@/AlchemyContext";
 
 type Call = [operation: string, input?: unknown];
 type Equal<A, B> =
@@ -394,6 +395,12 @@ const makeClient = () => {
   return { client, calls };
 };
 
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
 const providerLayer = (client: PrismaManagementClient) =>
   Layer.mergeAll(
     ProjectProvider(),
@@ -405,7 +412,10 @@ const providerLayer = (client: PrismaManagementClient) =>
     CustomDomainProvider(),
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),
-  ).pipe(Layer.provide(Layer.succeed(PrismaClient, client)));
+  ).pipe(
+    Layer.provide(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
+  );
 
 const reconcileInput = <Props, Attrs>(
   id: string,
@@ -4045,6 +4055,7 @@ describe("Prisma resource providers", () => {
       Effect.provide(
         ProjectProvider().pipe(
           Layer.provide(Layer.succeed(PrismaClient, client)),
+          Layer.provide(liveProviderContext),
         ),
       ),
       Effect.provide(FetchHttpClient.layer),
@@ -4143,6 +4154,7 @@ describe("Prisma resource providers", () => {
       Effect.provide(
         ProjectProvider().pipe(
           Layer.provide(Layer.succeed(PrismaClient, client)),
+          Layer.provide(liveProviderContext),
         ),
       ),
       Effect.provide(FetchHttpClient.layer),
@@ -4236,6 +4248,7 @@ describe("Prisma resource providers", () => {
       Effect.provide(
         ProjectProvider().pipe(
           Layer.provide(Layer.succeed(PrismaClient, client)),
+          Layer.provide(liveProviderContext),
         ),
       ),
       Effect.provide(FetchHttpClient.layer),

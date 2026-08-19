@@ -30,7 +30,7 @@ export interface FilterLogEventsRequest extends Omit<
  * ```typescript
  * // Provide the FilterLogEventsHttp layer on the Function's init Effect.
  * export default SearchFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
  *     const filterLogEvents = yield* AWS.Logs.FilterLogEvents(logGroup);

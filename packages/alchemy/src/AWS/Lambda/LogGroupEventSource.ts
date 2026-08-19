@@ -35,7 +35,7 @@ export const decodeCloudWatchLogsEvent = (
   Effect.try({
     try: () =>
       JSON.parse(
-        gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString("utf8"),
+        gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString(),
       ) as LogsSubscriptionPayload,
     catch: (cause) =>
       new Error("failed to decode CloudWatch Logs subscription payload", {
@@ -135,17 +135,15 @@ export const LogGroupEventSource = Layer.effect(
                 }
                 yield* process(
                   Stream.fromArray(
-                    payload.logEvents.map(
-                      (logEvent): LogEventRecord => ({
-                        id: logEvent.id,
-                        timestamp: logEvent.timestamp,
-                        message: logEvent.message,
-                        logGroup: payload.logGroup,
-                        logStream: payload.logStream,
-                        owner: payload.owner,
-                        subscriptionFilters: payload.subscriptionFilters,
-                      }),
-                    ),
+                    payload.logEvents.map((logEvent): LogEventRecord => ({
+                      id: logEvent.id,
+                      timestamp: logEvent.timestamp,
+                      message: logEvent.message,
+                      logGroup: payload.logGroup,
+                      logStream: payload.logStream,
+                      owner: payload.owner,
+                      subscriptionFilters: payload.subscriptionFilters,
+                    })),
                   ),
                 );
               }).pipe(Effect.orDie);

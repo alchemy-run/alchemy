@@ -3,6 +3,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Output from "../Output.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -212,7 +219,7 @@ const ensureDefaultBranchApp = (
     }
   });
 
-export const CustomDomainProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     CustomDomain,
     Effect.gen(function* () {
@@ -371,3 +378,31 @@ export const CustomDomainProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(CustomDomain, ["customDomainId"], ({ id, news }) => ({
+    customDomainId: devId("custom-domain", id),
+    hostname: news.hostname,
+    appId: attrOrString(news.app, "appId"),
+    status: "active",
+    foundryStatus: "active",
+    failureReason: null,
+    failureCategory: null,
+    certExpiresAt: null,
+    dnsRecords: [
+      {
+        type: "CNAME" as const,
+        name: news.hostname,
+        value: "localhost",
+        ttl: null,
+      },
+    ],
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+export const CustomDomainProvider = () =>
+  ProviderLayer.dual(CustomDomain, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

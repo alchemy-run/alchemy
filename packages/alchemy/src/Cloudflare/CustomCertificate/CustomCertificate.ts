@@ -282,12 +282,11 @@ export const CustomCertificateProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map(
-                    (cert): Attributes =>
-                      toAttributes(cert, {
-                        type: "legacy_custom",
-                        contentHash: "",
-                      }),
+                  (page.result ?? []).map((cert): Attributes =>
+                    toAttributes(cert, {
+                      type: "legacy_custom",
+                      contentHash: "",
+                    }),
                   ),
                 ),
               ),

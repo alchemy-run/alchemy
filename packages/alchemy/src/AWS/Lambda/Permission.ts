@@ -235,12 +235,10 @@ export const PermissionProvider = () =>
                     .filter(
                       (s): s is { Sid: string } => typeof s.Sid === "string",
                     )
-                    .map(
-                      (s): PermissionAttrs => ({
-                        statementId: s.Sid,
-                        functionName,
-                      }),
-                    );
+                    .map((s): PermissionAttrs => ({
+                      statementId: s.Sid,
+                      functionName,
+                    }));
                 }).pipe(
                   // Functions with no resource policy / removed out of band
                   // between list and getPolicy — skip them.

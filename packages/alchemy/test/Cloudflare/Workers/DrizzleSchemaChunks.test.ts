@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
+import { initialCwd } from "@/Util/Node.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -61,9 +62,13 @@ const Stack = Alchemy.Stack(
   }),
 );
 
+// Anchored to `initialCwd` instead of a live-cwd `path.resolve`: another
+// suite's in-process build (e.g. a Waku source build) can transiently chdir
+// the whole test process, and a live read racing that window resolves under
+// an unrelated directory.
 const bundleDir = Effect.gen(function* () {
   const path = yield* Path.Path;
-  return path.resolve(".alchemy/bundles/DrizzleSchemaChunks");
+  return path.resolve(initialCwd, ".alchemy/bundles/DrizzleSchemaChunks");
 });
 
 // `cleanDir: true` on the stack's output options drops chunks from previous

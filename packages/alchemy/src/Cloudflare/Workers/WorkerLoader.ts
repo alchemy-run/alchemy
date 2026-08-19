@@ -27,12 +27,12 @@ export interface WorkerLoaderWorkerCode {
   streamingTails?: Fetcher[];
 }
 
-export type WorkerEntrypoint<Shape = unknown> = Fetcher & {
+export type DynamicWorkerEntrypoint<Shape = unknown> = Fetcher & {
   [K in keyof Shape]: Shape[K];
 };
 
 export interface WorkerStub extends Fetcher {
-  getEntrypoint<Shape = unknown>(name?: string): WorkerEntrypoint<Shape>;
+  getEntrypoint<Shape = unknown>(name?: string): DynamicWorkerEntrypoint<Shape>;
 }
 
 export type WorkerLoader = {
@@ -278,7 +278,7 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
             ) =>
               Effect.flatMap(Effect.context<Req>(), (context) =>
                 Effect.sync(() =>
-                  wrapWorkerEntrypoint(
+                  wrapDynamicWorkerEntrypoint(
                     loader.get(name, () =>
                       asEffect(getCode()).pipe(
                         Effect.provide(context),
@@ -320,7 +320,9 @@ const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
   streamingTails: loader.streamingTails?.map((t) => t.raw),
 });
 
-const wrapWorkerEntrypoint = <Shape>(raw: any): WorkerEntrypoint<Shape> =>
+const wrapDynamicWorkerEntrypoint = <Shape>(
+  raw: any,
+): DynamicWorkerEntrypoint<Shape> =>
   Object.assign(makeRpcStub<any>(raw), fromCloudflareFetcher(raw));
 
 const wrapWorkerStub = (raw: any): WorkerStub => {
@@ -328,7 +330,7 @@ const wrapWorkerStub = (raw: any): WorkerStub => {
   return {
     ...defaultEntrypoint,
     getEntrypoint: <Shape>(name?: string) =>
-      wrapWorkerEntrypoint<Shape>(
+      wrapDynamicWorkerEntrypoint<Shape>(
         name ? raw.getEntrypoint(name) : raw.getEntrypoint(),
       ),
   };

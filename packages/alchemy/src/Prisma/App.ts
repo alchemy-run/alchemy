@@ -3,6 +3,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -229,7 +236,7 @@ const validateAppProps = (props: AppProps) =>
     }
   });
 
-export const AppProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     App,
     Effect.gen(function* () {
@@ -431,3 +438,21 @@ export const AppProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(App, ["appId"], ({ id, news }) => ({
+    appId: devId("app", id),
+    name: news.displayName ?? id,
+    projectId: attrOrString(news.project, "projectId"),
+    regionId: news.regionId ?? "us-east-1",
+    branchId: news.branchId ?? null,
+    latestDeploymentId: null,
+    appEndpointDomain: "localhost",
+    createdAt: DEV_TIMESTAMP,
+  }));
+
+export const AppProvider = () =>
+  ProviderLayer.dual(App, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

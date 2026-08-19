@@ -2,7 +2,6 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -25,11 +24,16 @@ import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
+import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
+import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { resolveZoneId } from "../Zone/lookup.ts";
+import {
+  resolveZoneId,
+  type Reference as ZoneReference,
+} from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
   mergeAssetsConfigFiles,
@@ -40,6 +44,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
@@ -58,8 +63,9 @@ import type {
   WorkerBinding,
   WorkerSettingsBinding,
 } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -469,7 +475,49 @@ export interface ResolvedWorkerDomain {
   name: string;
   aliases: string[];
   redirects: string[];
+  /** Pinned zone from props, when the caller set zoneId / zone / zoneName. */
+  zone?: ZoneReference;
 }
+
+const isZoneReference = (value: unknown): value is ZoneReference => {
+  if (typeof value === "string") return true;
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { zoneId?: unknown; name?: unknown };
+  return (
+    typeof candidate.zoneId === "string" &&
+    (candidate.name === undefined || typeof candidate.name === "string")
+  );
+};
+
+/** Collapse Worker.domain zone pin fields to one {@link ZoneReference}. */
+export const resolveWorkerDomainZone = (
+  config:
+    | {
+        readonly zoneId?: unknown;
+        readonly zoneName?: unknown;
+        readonly zone?: unknown;
+      }
+    | undefined,
+): ZoneReference | undefined => {
+  if (config === undefined) return undefined;
+  if (typeof config.zoneId === "string") return config.zoneId;
+  if (isZoneReference(config.zone)) return config.zone;
+  if (typeof config.zoneName === "string") return config.zoneName;
+  return undefined;
+};
+
+/** Whether an existing attachment must move to satisfy an explicit zone pin. */
+export const shouldRecreateWorkerDomainAttachment = (
+  liveZoneId: string,
+  desiredZoneId: string | undefined,
+): boolean => desiredZoneId !== undefined && liveZoneId !== desiredZoneId;
+
+// After deleting a custom-domain attachment, Cloudflare can briefly retain
+// ownership of the hostname and reject the replacement with code 100116.
+const workerDomainConflictSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(8),
+]);
 
 // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
 // Cloudflare API receives the form it stores domains in. `new URL(...)`
@@ -525,7 +573,10 @@ export const resolveWorkerDomain = (
         }),
       );
     }
-    return { name, aliases, redirects };
+    const zone = resolveWorkerDomainZone(config);
+    return zone === undefined
+      ? { name, aliases, redirects }
+      : { name, aliases, redirects, zone };
   });
 
 const isWorkersDevHostname = (hostname: string) =>
@@ -581,12 +632,16 @@ export const stateWorkerDomain = (
           name?: unknown;
           aliases?: unknown[];
           redirects?: unknown[];
+          zone?: ZoneReference;
+          zoneId?: unknown;
+          zoneName?: unknown;
         } | null;
         domains?: unknown[];
       }
     | undefined;
   const domain = state?.domain;
   if (domain && typeof domain.name === "string") {
+    const zone = resolveWorkerDomainZone(domain);
     return {
       name: domain.name,
       aliases: (domain.aliases ?? []).filter(
@@ -595,6 +650,7 @@ export const stateWorkerDomain = (
       redirects: (domain.redirects ?? []).filter(
         (h): h is string => typeof h === "string",
       ),
+      ...(zone === undefined ? {} : { zone }),
     };
   }
   const legacy = stateCustomDomains(state?.domains);
@@ -699,6 +755,55 @@ const retryableScriptPut = (
  *
  * @internal
  */
+/**
+ * A cached `workerId` attribute usable as the immutable script ID — rules
+ * out the legacy shape (older releases persisted the script *name*), the
+ * `dev:`-marked local identity, and the precreate stub's provisional `""`.
+ */
+const cachedWorkerId = (
+  value: string | undefined,
+  scriptName: string,
+): string | undefined =>
+  value !== undefined &&
+  value !== "" &&
+  value !== scriptName &&
+  !value.startsWith("dev:")
+    ? value
+    : undefined;
+
+export class WorkerIdNotFound extends Data.TaggedError("WorkerIdNotFound")<{
+  scriptName: string;
+  message: string;
+}> {}
+
+/**
+ * Resolve a script's immutable Worker ID (carried as `tag` on Cloudflare's
+ * wire) by script name. Neither the settings endpoints nor GET /content
+ * expose it, so scan the account's script listing lazily and stop at the
+ * first match. The listing is eventually consistent, so a missing entry is
+ * retried briefly before failing.
+ */
+const findWorkerId = (accountId: string, scriptName: string) =>
+  workers.listScripts.items({ accountId }).pipe(
+    Stream.filter((script) => script.id === scriptName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.flatMap((script) =>
+      script?.tag != null
+        ? Effect.succeed(script.tag)
+        : Effect.fail(
+            new WorkerIdNotFound({
+              scriptName,
+              message: `Cloudflare Worker: could not resolve the immutable ID of script '${scriptName}' from the account listing`,
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "WorkerIdNotFound",
+      schedule: Schedule.max([Schedule.spaced(2000), Schedule.recurs(3)]),
+    }),
+  );
+
 const putWorkerScript = (params: {
   accountId: string;
   scriptName: string;
@@ -759,7 +864,23 @@ const deleteWorkerScript = (
         force: true,
       });
     }
-    return yield* workers.deleteScript({ accountId, scriptName, force: true });
+    return yield* workers
+      .deleteScript({ accountId, scriptName, force: true })
+      .pipe(
+        // The script is still registered as a queue consumer (even with
+        // `force`). Normally the sibling Consumer resource detaches first,
+        // but state loss (e.g. a consumer row rewritten by a pre-stamping
+        // dev run) can strand a live consumer pointing at this script with
+        // nothing left to delete it. The script is going away, so any
+        // consumer wiring pointing at it is dead — detach and retry.
+        Effect.catchTag("QueueConsumerConflict", () =>
+          detachQueueConsumersOfScript(accountId, scriptName).pipe(
+            Effect.andThen(
+              workers.deleteScript({ accountId, scriptName, force: true }),
+            ),
+          ),
+        ),
+      );
   });
 
 /**
@@ -995,6 +1116,10 @@ const resolveWorkerMetadataHash = ({
     logpush: props.logpush,
     observability: props.observability,
     placement: props.placement,
+    // The source descriptor is plain JSON data; hashing it means
+    // switching providers (or changing provider options) triggers an
+    // update even when no hash slot the new source computes differs.
+    source: props.source,
     tags: props.tags,
     // Reduce each consumer to its script name: a referenced Worker's other
     // attributes (hash, url, ...) change on every consumer deploy, which
@@ -1186,41 +1311,34 @@ export const LiveWorkerProvider = () =>
         });
 
       /**
-       * Infer the Cloudflare Zone ID for a given hostname by listing the
-       * account's zones and matching the hostname against each zone's name —
-       * walking up the DNS label hierarchy until a match is found.
+       * Resolve a hostname to a Cloudflare zone id. An explicit pin
+       * (`zoneId` / zone name / `{ zoneId }`) wins. Otherwise look the
+       * hostname up with {@link resolveZoneId} (`GET /zones?name=` per
+       * parent label) — never by listing the account's first page of zones.
        */
       const inferZoneIdForHostname = (
         hostname: string,
         zoneCache: Map<string, string>,
+        zone?: ZoneReference,
       ) =>
         Effect.gen(function* () {
-          const cached = zoneCache.get(hostname);
+          const cacheKey =
+            zone === undefined
+              ? hostname
+              : `${hostname}:${typeof zone === "string" ? zone : zone.zoneId}`;
+          const cached = zoneCache.get(cacheKey);
           if (cached) return cached;
-
-          const zoneList = yield* zones
-            .listZones({})
-            .pipe(Effect.map((response) => response.result ?? []));
-          for (const zone of zoneList) {
-            zoneCache.set(zone.name, zone.id);
-          }
-
-          const parts = hostname.split(".");
-          for (let i = 0; i < parts.length - 1; i++) {
-            const candidate = parts.slice(i).join(".");
-            const match = zoneList.find((z) => z.name === candidate);
-            if (match) {
-              zoneCache.set(hostname, match.id);
-              return match.id;
-            }
-          }
-          return yield* Effect.die(
-            `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
-              "Ensure the parent zone exists in this account.",
-          );
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const zoneId = yield* resolveZoneId({ accountId, zone, hostname });
+          zoneCache.set(cacheKey, zoneId);
+          return zoneId;
         });
 
-      const reconcileDomains = (scriptName: string, desired: string[]) =>
+      const reconcileDomains = (
+        scriptName: string,
+        desired: string[],
+        zone?: ZoneReference,
+      ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Always query the live state of domains attached to *this*
@@ -1278,12 +1396,28 @@ export const LiveWorkerProvider = () =>
           // clear message rather than silently re-routing traffic.
           const attachDomain = Effect.fn(function* (hostname: string) {
             const live = liveByHostname.get(hostname);
-            if (live) {
+            const desiredZoneId =
+              zone === undefined
+                ? undefined
+                : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
+            if (
+              live &&
+              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
+            ) {
               return {
                 hostname: live.hostname,
                 id: live.id,
                 zoneId: live.zoneId,
               };
+            }
+
+            if (live) {
+              // Cloudflare cannot change the zone of an existing custom
+              // domain in place. Delete only this still-desired attachment,
+              // then recreate it below with the explicitly requested zone.
+              yield* workers
+                .deleteDomain({ accountId, domainId: live.id })
+                .pipe(Effect.catchTag("DomainNotFound", () => Effect.void));
             }
 
             // Not attached to this Worker — but it could still belong
@@ -1312,7 +1446,9 @@ export const LiveWorkerProvider = () =>
               );
             }
 
-            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            const zoneId =
+              desiredZoneId ??
+              (yield* inferZoneIdForHostname(hostname, zoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
@@ -1331,6 +1467,10 @@ export const LiveWorkerProvider = () =>
                     Schedule.exponential(200),
                     Schedule.recurs(15),
                   ]),
+                }),
+                Effect.retry({
+                  while: (error) => error._tag === "HostnameAlreadyInUse",
+                  schedule: workerDomainConflictSchedule,
                 }),
               );
             return {
@@ -2115,10 +2255,7 @@ export const LiveWorkerProvider = () =>
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s), which is only needed for vite-based workers at build time —
-        // not for every Worker definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
+        const Vite = yield* loadVite;
         const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
@@ -2167,7 +2304,8 @@ export const LiveWorkerProvider = () =>
               // package) — absolutize before handing it over (#796).
               main: props.vite?.main
                 ? path.resolve(
-                    props.vite.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite.rootDir ?? ".",
                     props.vite.main,
                   )
                 : undefined,
@@ -2183,8 +2321,11 @@ export const LiveWorkerProvider = () =>
                   ...(props.assets && typeof props.assets !== "string"
                     ? props.assets
                     : undefined),
+                  // `clientDirectory` from the build child is absolute;
+                  // the base only matters as a legacy fallback.
                   directory: path.resolve(
-                    props.vite?.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite?.rootDir ?? ".",
                     clientDirectory,
                   ),
                   // The resolved Vite `base` is what rewrote the URLs in
@@ -2194,7 +2335,7 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
-            hashViteInput(
+            Vite.hashViteInput(
               props.vite?.rootDir,
               props.vite?.memo,
               externalWorkspaces,
@@ -2215,58 +2356,49 @@ export const LiveWorkerProvider = () =>
         };
       });
 
-      const hashViteInput = Effect.fn(function* <E>(
-        rootDir: string = process.cwd(),
-        options: ViteOptions["memo"],
-        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
-      ) {
-        // Relative paths participate in memo hashes and surface in outputs;
-        // keep them POSIX so Windows and CI agree.
-        const relativeToRoot = (cwd: string) =>
-          path.relative(rootDir, cwd).replaceAll("\\", "/");
-        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-            Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
-          );
-        const hashRoot = hashWorkspaceDirectory(rootDir, options);
-        if (Array.isArray(options?.workspaces)) {
-          return yield* Effect.all(
-            [
-              hashRoot,
-              ...options.workspaces.map(({ cwd, ...options }) =>
-                hashWorkspaceDirectory(cwd, options),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.flatMap(([root, ...workspaces]) =>
-              sha256Object([root, ...workspaces.sort()]),
-            ),
-            Effect.map((hash) => ({ hash, workspaces: undefined })),
-          );
-        }
-        const [root, workspaces] = yield* Effect.all(
-          [hashRoot, additionalWorkspaces],
-          { concurrency: "unbounded" },
-        );
-        const workspaceHashes = yield* Effect.forEach(
-          workspaces,
-          (cwd) => hashWorkspaceDirectory(cwd),
-          { concurrency: "unbounded" },
-        );
-        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
-        return {
-          hash,
-          workspaces: Array.from(workspaces).map(relativeToRoot),
-        };
-      });
+      // Loaded lazily: `./Sources/Vite.ts` pulls in
+      // `@alchemy.run/cloudflare-runtime/vite` (~0.5s), which is only
+      // needed for vite-based workers at build time — not for every Worker
+      // definition at module-load time.
+      const loadVite = Effect.promise(() => import("./Sources/Vite.ts"));
 
       const prepareAssetsAndBundle = (
         id: string,
+        workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
+          // External source provider (`props.source`): the provider is
+          // self-contained — it supplies the bundle, optionally its own
+          // assets (framework builds), and the hash slots it owns. The
+          // props-level `assets` directory is still read here for sources
+          // that don't own assets.
+          if (props.source) {
+            const source = yield* resolveSource(props);
+            const ctx = makeSourceContext({
+              id,
+              workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            });
+            const [output, propsAssets] = yield* Effect.all(
+              [
+                source.build(ctx),
+                source.ownsAssets || opts.skipAssetsRead
+                  ? Effect.undefined
+                  : prepareAssets(props.assets),
+              ],
+              { concurrency: "unbounded" },
+            );
+            return {
+              assets: output.assets ?? propsAssets,
+              bundle: output.bundle,
+              input: output.hash.input,
+              additionalWorkspaces: output.hash.additionalWorkspaces,
+            };
+          }
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
@@ -2616,6 +2748,7 @@ export const LiveWorkerProvider = () =>
             ["placement", news.placement],
             ["limits", news.limits],
             ["workersDev", news.workersDev],
+            ["access", news.access],
             ["vite", news.vite],
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
@@ -2715,6 +2848,7 @@ export const LiveWorkerProvider = () =>
         );
         const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
           id,
+          parentName,
           news,
           { skipAssetsRead: true },
         );
@@ -2731,12 +2865,20 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"]["hash"];
         // Lower the `Worker.URL` sentinel into the aliased preview URL —
         // same lowering `putWorker` performs, with the alias standing in
-        // for the script's own URL.
+        // for the script's own URL. `Worker.Self` lowers to a
+        // service binding on the parent script (versions have no name of
+        // their own).
         const metadataBindings = bindings.flatMap((b) =>
           (b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
-              : item,
+              : item.type === "self_service"
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                  }
+                : item,
           ),
         );
         appendAlchemyAndEnvBindings(
@@ -2878,7 +3020,12 @@ export const LiveWorkerProvider = () =>
           ...(versionedUrl ? [versionedUrl] : []),
         ];
         return {
-          workerId: parentName,
+          // A version worker never owns a script — carry the *parent*
+          // script's immutable ID (its preview URLs are protected through
+          // the parent).
+          workerId:
+            cachedWorkerId(output?.workerId, parentName) ??
+            (yield* findWorkerId(accountId, parentName)),
           workerName: parentName,
           namespace: undefined,
           logpush: undefined,
@@ -2951,7 +3098,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, {
+        } = yield* prepareAssetsAndBundle(id, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -2983,6 +3130,11 @@ export const LiveWorkerProvider = () =>
             // Cloudflare has no native binding for it.
             if (item.type === "self_url") {
               return { type: "plain_text", name: item.name, text: selfUrl! };
+            }
+            // Lower the `Worker.Self` sentinel into a service
+            // binding targeting this Worker's own physical name.
+            if (item.type === "self_service") {
+              return { type: "service", name: item.name, service: name };
             }
             if (
               item.type === "durable_object_namespace" &&
@@ -3044,7 +3196,15 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
             keepAssets = true;
-            metadataAssets = { config: assets.config };
+            // Fold the build-emitted `_headers`/`_redirects` into the PUT
+            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
+            // files and carry them on the read result, but only `readAssets`
+            // pre-merges them — without this, framework header/redirect
+            // rules never reach Cloudflare. Idempotent for pre-merged
+            // configs (explicit config wins).
+            metadataAssets = {
+              config: mergeAssetsConfigFiles(assets.config, assets),
+            };
           } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
@@ -3057,7 +3217,8 @@ export const LiveWorkerProvider = () =>
             );
             metadataAssets = {
               jwt,
-              config: assets.config,
+              // Same `_headers`/`_redirects` fold as the keep path above.
+              config: mergeAssetsConfigFiles(assets.config, assets),
             };
           }
           metadataBindings.push({
@@ -3420,7 +3581,12 @@ export const LiveWorkerProvider = () =>
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
         let deploymentId: string | undefined;
-        let worker: { id?: string | null; logpush?: boolean | null };
+        let worker: {
+          id?: string | null;
+          logpush?: boolean | null;
+          /** The immutable script id (Cloudflare's script "tag"). */
+          tag?: string | null;
+        };
         // A gradual rollout (`version.traffic` < 100) deploys through the
         // versions API instead of the full-cutover script PUT. That's only
         // possible when the script already has a live deployment to split
@@ -3577,7 +3743,15 @@ export const LiveWorkerProvider = () =>
         // reconciliation.
         if (dispatchNamespace) {
           return {
-            workerId: worker.id ?? name,
+            workerId:
+              worker.tag ??
+              cachedWorkerId(output?.workerId, name) ??
+              (yield* Effect.fail(
+                new WorkerIdNotFound({
+                  scriptName: name,
+                  message: `Cloudflare Worker: the dispatch-namespace upload for '${name}' did not return the script's immutable ID`,
+                }),
+              )),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
@@ -3718,7 +3892,11 @@ export const LiveWorkerProvider = () =>
               ),
               Effect.catch(() => Effect.succeed([])),
             );
-          const reconciled = yield* reconcileDomains(name, desiredHostnames);
+          const reconciled = yield* reconcileDomains(
+            name,
+            desiredHostnames,
+            domainConfig?.zone,
+          );
           const zoneIdByHostname = new Map([
             ...liveBeforeReconcile,
             ...reconciled.map((d) => [d.hostname, d.zoneId] as const),
@@ -3824,7 +4002,14 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         return {
-          workerId: worker.id ?? name,
+          // The immutable script ID. The gradual-rollout branch deploys via
+          // the versions API (no script PUT response), and rows persisted by
+          // older releases carried the script *name* here — both fall back
+          // to a lazy listing lookup.
+          workerId:
+            worker.tag ??
+            cachedWorkerId(output?.workerId, name) ??
+            (yield* findWorkerId(accountId, name)),
           workerName: name,
           namespace: undefined,
           logpush: worker.logpush ?? undefined,
@@ -3949,6 +4134,45 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
+        // External source provider: the source recomputes the hash slots
+        // it owns (without building where it can) and any defined slot
+        // that differs from state means an update. `additionalWorkspaces`
+        // is auxiliary metadata for the input hash, never a change signal.
+        if (props.source) {
+          const source = yield* resolveSource(props);
+          const slots = yield* source.hash(
+            makeSourceContext({
+              id,
+              workerName: output.workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            }),
+            output.hash,
+          );
+          for (const slot of ["bundle", "input", "assets"] as const) {
+            if (
+              slots[slot] !== undefined &&
+              slots[slot] !== output.hash?.[slot]
+            ) {
+              return true;
+            }
+          }
+          if (source.ownsAssets) {
+            // Source-owned assets are covered by the `input` hash.
+            return false;
+          }
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
+          if (assetsHash === undefined) {
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
+        }
         if (props.script !== undefined) {
           const scriptHash = yield* hashScript(props.script);
           if (scriptHash !== output.hash?.bundle) {
@@ -3957,7 +4181,8 @@ export const LiveWorkerProvider = () =>
           return yield* assetsChanged(props.assets, output);
         }
         if (props.vite) {
-          const { hash } = yield* hashViteInput(
+          const Vite = yield* loadVite;
+          const { hash } = yield* Vite.hashViteInput(
             props.vite.rootDir,
             props.vite.memo,
             Effect.succeed(output.hash?.additionalWorkspaces ?? []),
@@ -4023,7 +4248,9 @@ export const LiveWorkerProvider = () =>
                         ? [
                             {
                               accountId,
-                              workerId: script.id,
+                              // Practically always present; an empty value
+                              // is healed by the per-script read.
+                              workerId: script.tag ?? "",
                               workerName: script.id,
                               namespace: undefined,
                               logpush: script.logpush ?? undefined,
@@ -4116,7 +4343,12 @@ export const LiveWorkerProvider = () =>
           const domainKey = (d: ResolvedWorkerDomain | undefined) =>
             d === undefined
               ? ""
-              : JSON.stringify([d.name, d.aliases, [...d.redirects].sort()]);
+              : JSON.stringify([
+                  d.name,
+                  d.aliases,
+                  [...d.redirects].sort(),
+                  d.zone ?? null,
+                ]);
           // An omitted `domain` unmanages the surface (#942): reconcile
           // carries previously-observed custom domains forward in state, so
           // comparing the empty desired config against those would report a
@@ -4200,7 +4432,14 @@ export const LiveWorkerProvider = () =>
             oldWorkerName === workerName &&
             newDoClassNames.length === oldDoClassNames.length &&
             newDoClassNames.every((name, i) => name === oldDoClassNames[i]);
+          // Rows persisted by older releases carried the script *name* in
+          // `workerId` (interrupted precreates a provisional ""). Plan one
+          // update even when nothing else changed, so reconcile re-records
+          // the immutable Worker ID.
+          const legacyWorkerId =
+            cachedWorkerId(output.workerId, output.workerName) === undefined;
           if (
+            legacyWorkerId ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -4214,10 +4453,11 @@ export const LiveWorkerProvider = () =>
               accountId,
             ))
           ) {
-            // `workerId` is always stable across an update; seed it so it
-            // survives now that `diff.stables` overrides `provider.stables`
-            // rather than being merged with it.
-            const stables: string[] = ["workerId"];
+            // The immutable script ID is always stable across an update —
+            // except the healing update above, where its value is about to
+            // change from the legacy shape to the real ID (downstream
+            // consumers must see the fresh value).
+            const stables: string[] = legacyWorkerId ? [] : ["workerId"];
             if (oldWorkerName === workerName) {
               stables.push("workerName");
             }
@@ -4289,7 +4529,10 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: skipping stub for version worker ${id}`,
             );
             return {
-              workerId: name,
+              // Provisional: a version worker resolves its parent's
+              // immutable ID at reconcile — nothing observes this stub row
+              // (version workers have no circular bindings).
+              workerId: "",
               workerName: name,
               namespace: undefined,
               logpush: undefined,
@@ -4316,7 +4559,10 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: skipping stub for dispatch-namespace worker ${name}`,
             );
             return {
-              workerId: name,
+              // Provisional: reconcile records the real immutable ID from
+              // the dispatch upload — nothing observes this stub row (user
+              // workers are dispatched by name, never bound circularly).
+              workerId: "",
               workerName: name,
               namespace:
                 typeof news.namespace === "string" ? news.namespace : undefined,
@@ -4412,6 +4658,7 @@ export const LiveWorkerProvider = () =>
             existingSettings?.bindings,
           );
 
+          let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
             // `read` + AdoptPolicy. Either we own it (matching tags) or
@@ -4429,7 +4676,7 @@ export const LiveWorkerProvider = () =>
                   `export class ${className} extends DurableObject {}`,
               )
               .join("\n")}`;
-            yield* putWorkerScript({
+            placeholder = yield* putWorkerScript({
               accountId,
               scriptName: name,
               dispatchNamespace,
@@ -4513,7 +4760,11 @@ export const LiveWorkerProvider = () =>
           }
 
           return {
-            workerId: name,
+            // The placeholder upload's tag (or, when adopting an existing
+            // script, the listing lookup); reconcile re-records it after
+            // the full deploy.
+            workerId:
+              placeholder?.tag ?? (yield* findWorkerId(accountId, name)),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
@@ -4580,7 +4831,29 @@ export const LiveWorkerProvider = () =>
               );
               const attrs = {
                 accountId,
-                workerId: workerName,
+                // Rows persisted by older releases carried the script name
+                // here — treat those as unknown and fetch the real ID from
+                // the dispatch-namespace script endpoint.
+                workerId:
+                  cachedWorkerId(output?.workerId, workerName) ??
+                  (yield* wfp
+                    .getDispatchNamespaceScript({
+                      accountId,
+                      dispatchNamespace,
+                      scriptName: workerName,
+                    })
+                    .pipe(
+                      Effect.flatMap((r) =>
+                        r.script?.tag != null
+                          ? Effect.succeed(r.script.tag)
+                          : Effect.fail(
+                              new WorkerIdNotFound({
+                                scriptName: workerName,
+                                message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
+                              }),
+                            ),
+                      ),
+                    )),
                 workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
@@ -4707,7 +4980,13 @@ export const LiveWorkerProvider = () =>
             );
             const attrs = {
               accountId,
-              workerId: workerName,
+              // The settings endpoint doesn't expose the immutable ID;
+              // reuse the cached value, falling back to a lazy listing
+              // lookup for unknown/legacy rows (older releases persisted
+              // the script *name* here) so adoption records the real ID.
+              workerId:
+                cachedWorkerId(output?.workerId, workerName) ??
+                (yield* findWorkerId(accountId, workerName)),
               workerName,
               namespace: undefined,
               logpush: settings.logpush ?? undefined,

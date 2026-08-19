@@ -863,7 +863,7 @@ export const LifecyclePolicyProvider = () =>
             // surface as a typed not-found so the engine can retry the plan.
             return yield* Effect.fail(
               new dlm.ResourceNotFoundException({
-                Message: `DLM lifecycle policy ${policyId} disappeared during reconcile`,
+                message: `DLM lifecycle policy ${policyId} disappeared during reconcile`,
               }),
             );
           }
