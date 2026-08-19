@@ -1350,7 +1350,7 @@ export const providers = () =>
           GreengrassV2.ComponentVersionProvider(),
           GreengrassV2.DeploymentProvider(),
           HealthLake.FHIRDatastoreProvider(),
-          IAM.AccessKeyProvider(),
+          flociDual(IAM.AccessKey, () => IAM.AccessKeyProvider()),
           IAM.AccountAliasProvider(),
           IAM.AccountPasswordPolicyProvider(),
           IAM.GroupMembershipProvider(),
@@ -1366,7 +1366,7 @@ export const providers = () =>
           IAM.ServiceSpecificCredentialProvider(),
           IAM.SigningCertificateProvider(),
           IAM.SSHPublicKeyProvider(),
-          IAM.UserProvider(),
+          flociDual(IAM.User, () => IAM.UserProvider()),
           IAM.VirtualMFADeviceProvider(),
         ),
         Layer.mergeAll(
@@ -1414,8 +1414,10 @@ export const providers = () =>
           }),
           flociDual(Lambda.LayerVersion, () => Lambda.LayerVersionProvider()),
           flociDual(Lambda.Version, () => Lambda.VersionProvider()),
-          Lambda.MicrovmImageProvider(),
-          Lambda.NetworkConnectorProvider(),
+          flociDual(Lambda.MicrovmImage, () => Lambda.MicrovmImageProvider()),
+          flociDual(Lambda.NetworkConnector, () =>
+            Lambda.NetworkConnectorProvider(),
+          ),
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
