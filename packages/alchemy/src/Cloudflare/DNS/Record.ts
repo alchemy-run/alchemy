@@ -42,12 +42,26 @@ export type RecordType =
   | (string & {});
 
 /**
- * Structured DNS record components accepted by Cloudflare.
- *
- * The applicable fields depend on the record {@link RecordType}. For example,
- * `SVCB` and `HTTPS` records use `priority`, `target`, and `value`.
+ * Cloudflare's structured DNS record components, keyed by record type.
  */
-export type RecordData = NonNullable<dns.CreateRecordRequest["data"]>;
+export interface RecordDataByType {
+  CAA: dns.RecordsCreateRequestDataCAARecord;
+  CERT: dns.RecordsCreateRequestDataCERTRecord;
+  DNSKEY: dns.RecordsCreateRequestDataDNSKEYRecord;
+  DS: dns.RecordsCreateRequestDataDSRecord;
+  HTTPS: dns.RecordsCreateRequestDataHTTPSRecord;
+  LOC: dns.RecordsCreateRequestDataLOCRecord;
+  NAPTR: dns.RecordsCreateRequestDataNAPTRRecord;
+  SMIMEA: dns.RecordsCreateRequestDataSMIMEARecord;
+  SRV: dns.RecordsCreateRequestDataSRVRecord;
+  SSHFP: dns.RecordsCreateRequestDataSSHFPRecord;
+  SVCB: dns.RecordsCreateRequestDataHTTPSRecord;
+  TLSA: dns.RecordsCreateRequestDataSMIMEARecord;
+  URI: dns.RecordsCreateRequestDataURIRecord;
+}
+
+/** Structured DNS record components accepted by Cloudflare. */
+export type RecordData = RecordDataByType[keyof RecordDataByType];
 
 export interface RecordCommonProps {
   /**
@@ -65,13 +79,6 @@ export interface RecordCommonProps {
    * `string`) so it is statically knowable inside `diff`.
    */
   name: string;
-  /**
-   * Record type. Stable — changing triggers replacement.
-   *
-   * Declared as plain `string` (narrowed to {@link RecordType}) so
-   * `diff` can compare without resolving an `Input`.
-   */
-  type: RecordType;
   /**
    * TTL in seconds (`60`–`86400`), or `"1"` for Cloudflare's "automatic"
    * setting. Must be `"1"` when `proxied` is `true`.
@@ -95,42 +102,47 @@ export interface RecordCommonProps {
    * Custom tags shown in the dashboard. No effect on DNS responses.
    */
   tags?: ReadonlyArray<string>;
-  /**
-   * Priority — required for `MX` and `URI` records. For structured record
-   * types such as `SVCB` and `HTTPS`, set `priority` inside {@link RecordData}.
-   */
+}
+
+type StringRecordType = Exclude<RecordType, keyof RecordDataByType | "MX">;
+
+type StringRecordProps = {
+  /** Record type. Stable — changing triggers replacement. */
+  type: StringRecordType;
+  /** Formatted record value. Mutable — patched in place. */
+  content: string;
+  priority?: never;
+};
+
+interface MxRecordProps {
+  /** Record type. Stable — changing triggers replacement. */
+  type: "MX";
+  /** Mail server hostname. Mutable — patched in place. */
+  content: string;
+  /** Mail server priority; lower values are preferred. */
   priority?: number;
 }
 
-/**
- * Input properties for a Cloudflare DNS record.
- *
- * Supply either a formatted `content` string or Cloudflare's structured
- * `data` components. The two representations are mutually exclusive.
- */
+type StructuredRecordProps = {
+  [Type in keyof RecordDataByType]: {
+    /** Record type. Stable — changing triggers replacement. */
+    type: Type;
+    /**
+     * Record value as formatted DNS content or typed Cloudflare components.
+     * Mutable — patched in place.
+     */
+    content: string | RecordDataByType[Type];
+    /**
+     * Top-level priority, used by URI records. SRV, SVCB, and HTTPS put their
+     * priority inside structured `content`.
+     */
+    priority?: Type extends "URI" ? number : never;
+  };
+}[keyof RecordDataByType];
+
+/** Input properties for a Cloudflare DNS record. */
 export type RecordProps = RecordCommonProps &
-  (
-    | {
-        /**
-         * Formatted record value. Interpretation depends on `type` — an A
-         * record's content is an IPv4, a CNAME's is a target hostname, etc.
-         *
-         * Mutable — patched in place.
-         */
-        content: string;
-        data?: never;
-      }
-    | {
-        content?: never;
-        /**
-         * Structured record components. Required for record types such as
-         * `SVCB` and `HTTPS`, whose fields Cloudflare validates individually.
-         *
-         * Mutable — patched in place.
-         */
-        data: RecordData;
-      }
-  );
+  (StringRecordProps | MxRecordProps | StructuredRecordProps);
 
 export interface RecordAttributes {
   /** Cloudflare-assigned DNS record UUID. */
@@ -141,10 +153,10 @@ export interface RecordAttributes {
   name: string;
   /** Record type. */
   type: RecordType;
-  /** Formatted record value, when Cloudflare returns one. */
-  content: string | undefined;
+  /** Formatted record value returned by Cloudflare. */
+  content: string;
   /** Structured record components, when Cloudflare returns them. */
-  data: RecordData | undefined;
+  data?: RecordData;
   /** Resolved TTL (Cloudflare echoes `1` for "automatic"). */
   ttl: number;
   /** Whether the record is proxied. */
@@ -217,10 +229,10 @@ export type Record = Resource<
  *   zoneId: zone.zoneId,
  *   name: "_mcp._agents.example.com",
  *   type: "SVCB",
- *   data: {
+ *   content: {
  *     priority: 1,
  *     target: "mcp.example.com.",
- *     value: 'mandatory=alpn,port alpn="h2,h3" port="443"',
+ *     value: 'mandatory="alpn,port" alpn="h2,h3" port="443"',
  *   },
  * });
  * ```
@@ -231,7 +243,7 @@ export type Record = Resource<
  *   zoneId: zone.zoneId,
  *   name: "example.com",
  *   type: "HTTPS",
- *   data: {
+ *   content: {
  *     priority: 1,
  *     target: ".",
  *     value: 'alpn="h2,h3"',
@@ -319,7 +331,8 @@ export const RecordProvider = () =>
       let foundByScan = false;
       if (!observed) {
         const existing = yield* findByNameType(zoneId, news.name, news.type, {
-          content,
+          content: body.content,
+          data: body.data,
           priority: news.priority,
         });
         if (existing) {
@@ -330,52 +343,40 @@ export const RecordProvider = () =>
 
       // 3. Ensure.
       if (!observed) {
-        const created = yield* dns
-          .createRecord({
-            zoneId,
-            name: body.name,
-            type: body.type,
-            content: body.content,
-            data: body.data,
-            ttl: body.ttl,
-            proxied: body.proxied,
-            comment: body.comment,
-            tags: body.tags === undefined ? undefined : Array.from(body.tags),
-            priority: body.priority,
-          })
-          .pipe(
-            Effect.map(
-              (r) =>
-                ({
-                  record: narrowRecord(r as Parameters<typeof narrowRecord>[0]),
-                  raced: false,
-                }) as const,
-            ),
-            // A record with this `(name, type)` can already exist that the
-            // scan above missed — a leftover from an interrupted run, or a
-            // concurrent reconcile that won the create race. Cloudflare
-            // answers `An identical record already exists.`
-            // (`DnsRecordAlreadyExists`). Self-heal: re-scan and adopt the
-            // existing record instead of failing the deploy. Ownership was
-            // already gated by `read`/the adopt policy upstream.
-            Effect.catchTag("DnsRecordAlreadyExists", () =>
-              findByNameType(zoneId, news.name, news.type, {
-                content,
-                priority: news.priority,
-              }).pipe(
-                Effect.flatMap((existing) =>
-                  existing
-                    ? Effect.succeed({ record: existing, raced: true } as const)
-                    : Effect.fail(
-                        new Error(
-                          `Cloudflare reported an identical DNS record for ` +
-                            `(${news.name}, ${news.type}) but it could not be found`,
-                        ),
+        const created = yield* dns.createRecord({ zoneId, ...body }).pipe(
+          Effect.map(
+            (r) =>
+              ({
+                record: narrowRecord(r as Parameters<typeof narrowRecord>[0]),
+                raced: false,
+              }) as const,
+          ),
+          // A record with this `(name, type)` can already exist that the
+          // scan above missed — a leftover from an interrupted run, or a
+          // concurrent reconcile that won the create race. Cloudflare
+          // answers `An identical record already exists.`
+          // (`DnsRecordAlreadyExists`). Self-heal: re-scan and adopt the
+          // existing record instead of failing the deploy. Ownership was
+          // already gated by `read`/the adopt policy upstream.
+          Effect.catchTag("DnsRecordAlreadyExists", () =>
+            findByNameType(zoneId, news.name, news.type, {
+              content: body.content,
+              data: body.data,
+              priority: news.priority,
+            }).pipe(
+              Effect.flatMap((existing) =>
+                existing
+                  ? Effect.succeed({ record: existing, raced: true } as const)
+                  : Effect.fail(
+                      new Error(
+                        `Cloudflare reported an identical DNS record for ` +
+                          `(${news.name}, ${news.type}) but it could not be found`,
                       ),
-                ),
+                    ),
               ),
             ),
-          );
+          ),
+        );
         observed = created.record;
         // A raced/adopted record is treated like a scanned-existing one so
         // the sync step converges its mutable fields; a genuine fresh create
@@ -400,15 +401,7 @@ export const RecordProvider = () =>
           const updated = yield* dns.updateRecord({
             zoneId,
             dnsRecordId: observed.id,
-            name: body.name,
-            type: body.type,
-            content: body.content,
-            data: body.data,
-            ttl: body.ttl,
-            proxied: body.proxied,
-            comment: body.comment,
-            tags: body.tags === undefined ? undefined : Array.from(body.tags),
-            priority: body.priority,
+            ...body,
           });
           observed = narrowRecord(
             updated as Parameters<typeof narrowRecord>[0],
@@ -420,7 +413,7 @@ export const RecordProvider = () =>
       if (
         !observed.id ||
         !observed.type ||
-        (observed.content === undefined && observed.data === undefined) ||
+        observed.content === undefined ||
         observed.ttl === undefined
       ) {
         return yield* Effect.fail(
@@ -472,7 +465,13 @@ export const RecordProvider = () =>
       const type = output?.type ?? olds?.type;
       if (zoneId && name && type) {
         const observed = yield* findByNameType(zoneId, name, type, {
-          content: olds?.content ?? output?.content,
+          content:
+            typeof olds?.content === "string"
+              ? olds.content
+              : olds?.content === undefined
+                ? output?.content
+                : undefined,
+          data: typeof olds?.content === "object" ? olds.content : output?.data,
           priority: olds?.priority,
         });
         const attrs = toAttributes(observed, zoneId);
@@ -501,12 +500,13 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
  */
 interface RecordMatch {
   readonly content?: string;
+  readonly data?: RecordData;
   readonly priority?: number;
 }
 
 /**
  * Raised when several DNS records share `(name, type)` and the declared
- * `content`/`priority` do not select exactly one of them — adoption must
+ * `content`/`data`/`priority` do not select exactly one of them — adoption must
  * never pick a record arbitrarily.
  */
 export class AmbiguousDnsRecordError extends Data.TaggedError(
@@ -518,6 +518,7 @@ export class AmbiguousDnsRecordError extends Data.TaggedError(
   readonly candidates: ReadonlyArray<{
     readonly id?: string;
     readonly content?: string;
+    readonly data?: RecordData;
     readonly priority?: number;
   }>;
   readonly message: string;
@@ -531,7 +532,7 @@ export class AmbiguousDnsRecordError extends Data.TaggedError(
 // `(name, type)` alone is NOT a unique identity — several records may share
 // it. A single candidate is returned as-is (preserving the adopt-then-modify
 // flow where the desired content differs from the live record). With multiple
-// candidates, the desired `content`/`priority` must select exactly one:
+// candidates, the desired record value/priority must select exactly one:
 //   - exactly one exact match -> that record
 //   - no exact match          -> `undefined` (a new sibling record is created)
 //   - several exact matches   -> fail with an actionable error
@@ -561,6 +562,8 @@ const findByNameType = (
         const narrowed = candidates.filter(
           (r) =>
             (match.content === undefined || r.content === match.content) &&
+            (match.data === undefined ||
+              recordDataEquals(match.data, r.data)) &&
             (match.priority === undefined || r.priority === match.priority),
         );
         if (narrowed.length === 1) return narrowed[0];
@@ -572,11 +575,12 @@ const findByNameType = (
           candidates: candidates.map((r) => ({
             id: r.id,
             content: r.content,
+            data: r.data,
             priority: r.priority,
           })),
           message:
             `Multiple DNS records in zone ${zoneId} match (name=${name}, ` +
-            `type=${type}) and the desired content/priority does not ` +
+            `type=${type}) and the desired record value/priority does not ` +
             `select exactly one. Set \`content\`` +
             (type === "MX" || type === "URI" ? " and `priority`" : "") +
             ` to exactly match the record this resource should adopt ` +
@@ -585,6 +589,9 @@ const findByNameType = (
               .map(
                 (r) =>
                   `  - id=${r.id} content=${JSON.stringify(r.content)}` +
+                  (r.data === undefined
+                    ? ""
+                    : ` data=${JSON.stringify(r.data)}`) +
                   (r.priority === undefined ? "" : ` priority=${r.priority}`),
               )
               .join("\n"),
@@ -669,7 +676,7 @@ const toAttributes = (
     !observed?.id ||
     !observed.name ||
     !observed.type ||
-    (observed.content === undefined && observed.data === undefined) ||
+    observed.content === undefined ||
     observed.ttl === undefined
   ) {
     return undefined;
@@ -698,7 +705,7 @@ interface RecordMutableBodyCommon {
   ttl: number;
   proxied?: boolean;
   comment?: string;
-  tags?: ReadonlyArray<string>;
+  tags?: string[];
   priority?: number;
 }
 
@@ -719,12 +726,12 @@ const buildMutableBody = (news: RecordProps): RecordMutableBody => {
           : (news.ttl as number),
     proxied: news.proxied,
     comment: news.comment,
-    tags: news.tags,
+    tags: news.tags === undefined ? undefined : Array.from(news.tags),
     priority: news.priority,
   };
-  return news.data === undefined
+  return typeof news.content === "string"
     ? { ...common, content: news.content }
-    : { ...common, data: news.data };
+    : { ...common, data: news.content };
 };
 
 // ---------------------------------------------------------------------------

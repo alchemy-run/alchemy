@@ -47,7 +47,7 @@ const SVCB_DATA_V1 = {
 const SVCB_DATA_V2 = {
   priority: 1,
   target: `svc.${zoneName}.`,
-  value: 'mandatory=alpn,port alpn="h2,h3" port="8443"',
+  value: 'mandatory="alpn,port" alpn="h2,h3" port="8443"',
 } satisfies Cloudflare.DNS.RecordData;
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -166,13 +166,13 @@ test.provider(
             zoneId,
             name: NAME_SVCB,
             type: "SVCB",
-            data: SVCB_DATA_V1,
+            content: SVCB_DATA_V1,
           }).pipe(adopt(true));
         }),
       );
 
       expect(initial.type).toEqual("SVCB");
-      expect(initial.content).toBeUndefined();
+      expect(typeof initial.content).toEqual("string");
       expect(initial.data).toEqual(SVCB_DATA_V1);
 
       const created = yield* getRecord(zoneId, initial.recordId);
@@ -204,7 +204,7 @@ test.provider(
             zoneId,
             name: NAME_SVCB,
             type: "SVCB",
-            data: SVCB_DATA_V2,
+            content: SVCB_DATA_V2,
           }).pipe(adopt(true));
         }),
       );
@@ -243,7 +243,7 @@ test.provider(
             zoneId,
             name: NAME_HTTPS,
             type: "HTTPS",
-            data,
+            content: data,
           }).pipe(adopt(true));
         }),
       );
@@ -458,7 +458,7 @@ test.provider(
               zoneId,
               name: NAME_SVCB_ADOPT,
               type: "SVCB",
-              data: SVCB_DATA_V2,
+              content: SVCB_DATA_V2,
             });
           }),
         )
@@ -474,7 +474,7 @@ test.provider(
             zoneId,
             name: NAME_SVCB_ADOPT,
             type: "SVCB",
-            data: SVCB_DATA_V2,
+            content: SVCB_DATA_V2,
           }).pipe(adopt(true));
         }),
       );
