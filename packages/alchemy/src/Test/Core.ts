@@ -280,6 +280,13 @@ const rewriteAwsVirtualHostToFloci = (
   );
 };
 
+if (Option.getOrElse(alchemyTestDevOverride(), () => false)) {
+  // Floci rewrites WebSocket invoke URLs onto wss://127.0.0.1:4566/ws/...
+  // The gateway cert is self-signed; Bun/Node would otherwise reject the
+  // upgrade. Scoped to ALCHEMY_TEST_DEV only.
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 const flociWebsiteHttp = Layer.effect(
   HttpClient.HttpClient,
   Effect.map(HttpClient.HttpClient, (client) =>
@@ -513,8 +520,19 @@ export const scratchStack = <ROut>(
       ? Layer.succeed(State.State, State.InMemoryService({}))
       : Layer.provide(State.localState(), PlatformServices);
 
+  // `withProviders` already pins test-body distilled to Floci, but the stack
+  // *program* is composed under `AWS.providers()`'s live Endpoint. Dual
+  // providers still hit Floci in lifecycle ops; user-program distilled
+  // (e.g. ECS Service `findHostedZoneId`) would otherwise query real AWS.
+  const pinProgramToFloci = <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, R> =>
+    Option.getOrElse(alchemyTestDevOverride(), () => false)
+      ? (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
+      : effect;
+
   const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
-    (effect as Effect.Effect<any, any, never>).pipe(
+    (pinProgramToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
         providers: options.providers,
@@ -531,7 +549,7 @@ export const scratchStack = <ROut>(
     );
 
   const buildPlan = (effect: Effect.Effect<any, any, any>) =>
-    (effect as Effect.Effect<any, any, never>).pipe(
+    (pinProgramToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
         providers: options.providers,

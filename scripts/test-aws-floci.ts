@@ -51,7 +51,11 @@ for (let i = 0; i < args.length; i++) {
   const arg = args[i]!;
   if (arg.startsWith("-")) {
     flags.push(arg);
-    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
+    if (
+      flagsWithValue.has(arg) &&
+      args[i + 1] &&
+      !args[i + 1]!.startsWith("-")
+    ) {
       flags.push(args[++i]!);
     }
     continue;
@@ -95,12 +99,13 @@ if (!flags.includes("--profile")) {
   flags.unshift("--profile", "testing");
 }
 if (!flags.includes("--concurrency") && !flags.includes("-c")) {
-  // Every concurrent file deploys real stacks against the LOCAL emulator:
-  // each Lambda cold start is a Docker container on this machine. The old
-  // default of 200 (tuned while the env bug made this script run against
-  // live AWS, where concurrency is free) cold-starts hundreds of containers
-  // at once and OOMs the host. 64 keeps the Docker footprint bounded.
-  flags.unshift("--concurrency", "64");
+  // Every concurrent file deploys real stacks against the LOCAL emulator —
+  // in-process deploys, the shared sidecar child, and a Docker container per
+  // Lambda cold start all scale with this number. 64 (tuned while the env
+  // bug made this script run against live AWS, where concurrency is free)
+  // ballooned to ~60GB RSS on a full-suite run; 12 was ~4.5GB but too slow.
+  // 32 matches the live-suite sweet spot from AGENTS.md.
+  flags.unshift("--concurrency", "32");
 }
 
 const proc = Bun.spawn(["bun", "alchemy-test", ...files.sort(), ...flags], {
