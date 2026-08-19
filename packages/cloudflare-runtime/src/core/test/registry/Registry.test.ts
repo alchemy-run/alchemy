@@ -235,14 +235,17 @@ describe.each(watcherModes)(
   },
 );
 
-// The filesystem watcher is best-effort: `fs.watch` fails outright when the
-// platform runs out of watches (inotify limits on Linux/WSL) or the directory
-// is unmounted, and it silently drops events on virtualised and network
-// filesystems. A registry that stops refreshing is invisible — a worker in one
-// process never learns that a worker in another process came up, and its
-// service bindings answer "worker not found" for the rest of the session — so
-// discovery must not depend on the watcher alone.
-describe("Registry (broken filesystem watcher)", () => {
+// The filesystem watcher is best-effort, and it stops in two shapes: the
+// stream FAILS (`fs.watch` rejected outright — inotify limits, an unmounted
+// directory) or it ENDS (the handle closed), which is indistinguishable from
+// an idle watcher. Either way a registry that stops refreshing is invisible —
+// a worker in one process never learns that a worker in another process came
+// up, and its service bindings answer "worker not found" for the rest of the
+// session — so discovery must not depend on the watcher alone.
+describe.each([
+  ["fails", () => Stream.die(new Error("inotify watch limit reached"))],
+  ["ends", () => Stream.empty],
+] as const)("Registry (watcher %s)", (label, watch) => {
   const services = Registry.RegistryLive.pipe(
     Layer.provideMerge(Paths.PathsLive),
     Layer.provide(configProvider({ fileSystemSupportsWatcher: true })),
@@ -250,10 +253,7 @@ describe("Registry (broken filesystem watcher)", () => {
       Layer.effect(
         FileSystem.FileSystem,
         Effect.map(FileSystem.FileSystem, (fs) =>
-          FileSystem.FileSystem.of({
-            ...fs,
-            watch: () => Stream.die(new Error("inotify watch limit reached")),
-          }),
+          FileSystem.FileSystem.of({ ...fs, watch }),
         ),
       ).pipe(Layer.provide(NodeServices.layer)),
     ),
@@ -267,7 +267,7 @@ describe("Registry (broken filesystem watcher)", () => {
       const directory = yield* Paths.state("alchemy", "registry");
       yield* Registry.Registry;
 
-      const scriptName = "test-worker-broken-watcher";
+      const scriptName = `test-worker-watcher-${label}`;
       // Another process registering a worker is just a file appearing in the
       // directory — this registry never sees the `write` call, so a re-read of
       // the directory is the only way it can discover the entry.

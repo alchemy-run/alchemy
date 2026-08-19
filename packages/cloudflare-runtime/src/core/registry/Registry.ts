@@ -1,3 +1,4 @@
+import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
@@ -141,6 +142,19 @@ export const RegistryLive = Layer.effect(
     const poll = (interval: Duration.Input) =>
       Stream.fromEffect(refresh).pipe(Stream.repeat(Schedule.spaced(interval)));
 
+    // The watcher stopped delivering events, so polling is the only signal
+    // left — switch to the unwatched rate. A registry that stops refreshing
+    // is otherwise invisible: a worker in one process never learns that a
+    // worker in another process came up, and its service bindings answer
+    // "worker not found" for the rest of the session.
+    const watcherStopped = (reason: string, cause?: Cause.Cause<unknown>) =>
+      Stream.fromEffect(
+        Effect.logDebug(
+          `The registry filesystem watcher ${reason}; polling instead`,
+          cause,
+        ),
+      ).pipe(Stream.merge(poll(UNWATCHED_POLL_INTERVAL)));
+
     // The `fileSystemSupportsWatcher` flag is set to false on Windows and true everywhere else.
     // The flag can be overridden using a ConfigProvider, e.g. for testing.
     // Without a watcher, polling is the only discovery signal; with one, it
@@ -155,24 +169,17 @@ export const RegistryLive = Layer.effect(
             // watcher-triggered read cannot be overwritten by an older one.
             Stream.merge(Stream.succeed(undefined)),
             Stream.mapEffect(() => refresh),
-            Stream.catchCause((cause) =>
-              // The watcher died (inotify limits, an unmounted directory).
-              // Polling is now the only signal, so switch to the unwatched
-              // rate rather than leaving the registry frozen.
-              Stream.fromEffect(
-                Effect.logDebug(
-                  "The registry filesystem watcher stopped; polling instead",
-                  cause,
-                ),
-              ).pipe(Stream.merge(poll(UNWATCHED_POLL_INTERVAL))),
-            ),
-            // `fs.watch` is best-effort even while it is alive: virtualised
-            // and network filesystems (WSL drive mounts, containers, NFS)
-            // drop events. A registry that stops seeing writes is invisible
-            // — a worker in one process never learns that a worker in
-            // another process came up, and its service bindings answer
-            // "worker not found" for the rest of the session — so keep a
-            // slow poll running underneath as a safety net.
+            // An `fs.watch` handle that closes ENDS this stream rather than
+            // failing it, so a dead watcher is indistinguishable from an idle
+            // one: `runDrain` completes, the forked fiber retires, and the
+            // registry silently stops refreshing. That is the shape of the
+            // freeze, not just the error case below.
+            Stream.concat(Stream.suspend(() => watcherStopped("ended"))),
+            Stream.catchCause((cause) => watcherStopped("failed", cause)),
+            // `fs.watch` is best-effort even while it is alive: platforms and
+            // filesystems differ in which events they deliver, and some drop
+            // them under load. Keep a slow poll running underneath so
+            // discovery is eventually consistent whatever the watcher does.
             Stream.merge(poll(WATCHED_POLL_INTERVAL)),
           )
         : poll(UNWATCHED_POLL_INTERVAL)
