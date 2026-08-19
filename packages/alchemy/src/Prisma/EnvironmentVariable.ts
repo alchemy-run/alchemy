@@ -3,6 +3,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -247,7 +254,7 @@ const ensureVariableIdentity = (
         ),
       );
 
-export const EnvironmentVariableProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     EnvironmentVariable,
     Effect.gen(function* () {
@@ -415,3 +422,27 @@ export const EnvironmentVariableProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(
+    EnvironmentVariable,
+    ["environmentVariableId"],
+    ({ id, news }) => ({
+      environmentVariableId: devId("environment-variable", id),
+      projectId: attrOrString(news.project, "projectId"),
+      branchId: news.branchId ?? null,
+      class: news.class,
+      key: news.key,
+      value: news.value,
+      valueKid: devId("value-kid", id),
+      isManagedBySystem: false,
+      createdAt: DEV_TIMESTAMP,
+      updatedAt: DEV_TIMESTAMP,
+    }),
+  );
+
+export const EnvironmentVariableProvider = () =>
+  ProviderLayer.dual(EnvironmentVariable, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

@@ -1017,6 +1017,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/prisma/data/postgres" },
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
+                { label: "Buckets", link: "/prisma/data/buckets" },
               ],
             },
             {

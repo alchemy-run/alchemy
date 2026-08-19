@@ -172,6 +172,23 @@ export type BucketProps = {
    * configuration.
    */
   cors?: BucketCorsRule[];
+  /**
+   * Allow alchemy to delete every object in the bucket when the bucket
+   * itself is deleted.
+   *
+   * R2 refuses to delete a bucket that still has objects in it — that
+   * refusal is the last line of defense for your data, so alchemy does not
+   * bypass it by default: destroying a non-empty bucket fails with
+   * `BucketNotEmpty` and both the bucket and its objects survive. Set this
+   * to `true` for buckets whose contents are disposable (caches, previews,
+   * test fixtures).
+   *
+   * `alchemy unsafe nuke` empties buckets regardless, since it is an
+   * explicitly operator-confirmed account teardown.
+   *
+   * @default false
+   */
+  forceDestroy?: boolean;
 };
 
 export type Bucket = Resource<
@@ -390,6 +407,30 @@ export type Bucket = Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * @section Deleting a Bucket
+ *
+ * R2 refuses to delete a bucket that still has objects in it, and alchemy
+ * does not bypass that refusal: destroying a non-empty bucket fails with
+ * `BucketNotEmpty` and both the bucket and its objects survive. Opt into
+ * emptying the bucket first with `forceDestroy` for buckets whose contents
+ * are disposable.
+ *
+ * @example Empty the bucket on destroy
+ * ```typescript
+ * const cache = yield* Cloudflare.R2.Bucket("Cache", {
+ *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * @example Keep the bucket even when the stack goes away
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const uploads = yield* Cloudflare.R2.Bucket("Uploads").pipe(
+ *   RemovalPolicy.retain(),
+ * );
  * ```
  */
 export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
@@ -1100,7 +1141,7 @@ export const ProviderLive = () =>
             cors,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds = {}, output, force }) {
           yield* Effect.all(
             (output.domains ?? []).map((domain) =>
               r2
@@ -1120,7 +1161,21 @@ export const ProviderLive = () =>
             { concurrency: "unbounded" },
           );
 
-          yield* emptyBucket(output.bucketName, output.jurisdiction);
+          // Whether we may destroy the bucket's CONTENTS.
+          // - `olds.forceDestroy` — the user opted in on the resource props.
+          // - `force` — set only by `alchemy unsafe nuke`, an explicitly
+          //   operator-confirmed account teardown. Nuke enumerates buckets
+          //   straight from the cloud (its `olds` is Attributes, not Props),
+          //   so `forceDestroy` is never present there.
+          //
+          // Without either, the objects are left alone and R2's own refusal
+          // to delete a non-empty bucket (`BucketNotEmpty`) stands — that
+          // refusal is the data protection users rely on, and emptying the
+          // bucket to get past it is how a stack teardown turns into
+          // irreversible data loss (#1248).
+          if (olds.forceDestroy === true || force === true) {
+            yield* emptyBucket(output.bucketName, output.jurisdiction);
+          }
           yield* r2
             .deleteBucket({
               accountId: output.accountId,

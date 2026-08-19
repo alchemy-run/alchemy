@@ -26,6 +26,7 @@ import type { InputProps } from "../Input.ts";
 import * as Output from "../Output.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
@@ -764,7 +765,11 @@ export const Compute: Platform<
       env,
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          // Prisma env keys are validated to the uppercase POSIX shape
+          // ([A-Z_][A-Z0-9_]*), so the storage key is uppercased here. The
+          // runtime `get` receives the key this returns, so both halves
+          // agree without a second mapping.
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
           env[key] = output.pipe(
             Output.map((value) =>
               Redacted.isRedacted(value)
@@ -2127,7 +2132,7 @@ const activeBindingEnv = (
       >,
     );
 
-export const ComputeProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
@@ -2915,3 +2920,9 @@ export const ComputeDevProvider = () =>
       };
     }),
   );
+
+export const ComputeProvider = () =>
+  ProviderLayer.dual(Compute, {
+    local: () => ComputeDevProvider(),
+    live: () => ProviderLive(),
+  });
