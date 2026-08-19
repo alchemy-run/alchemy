@@ -8,6 +8,7 @@ import {
   type DatabaseService,
   type DirectDatabase,
 } from "./Database.ts";
+import { wrapD1ForMigrations } from "./d1Migrations.ts";
 import type { BetterAuthMigrationError } from "./Errors.ts";
 
 /**
@@ -102,7 +103,8 @@ export const CloudflareD1 = (
               // Apply half — materialize the HTTP D1 facade.
               return Effect.map(
                 local.raw,
-                (database) => database as DirectDatabase,
+                (database) =>
+                  wrapD1ForMigrations(database) as unknown as DirectDatabase,
               );
             }).pipe(
               Effect.provide(Cloudflare.D1.QueryDatabaseLocal),
