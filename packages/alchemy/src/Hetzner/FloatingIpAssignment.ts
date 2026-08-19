@@ -9,6 +9,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { waitForAction } from "./actions.ts";
+import { alchemyStackSelector } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
 export class FloatingIpAssignmentError extends Data.TaggedError(
@@ -192,9 +193,10 @@ const assignTo = (ip: CloudFloatingIp, serverId: number) =>
 export const FloatingIpAssignmentProvider = () =>
   Provider.succeed(FloatingIpAssignment, {
     stables: ["floatingIpId", "serverId"],
+    nuke: { dependsOn: ["Hetzner.FloatingIp", "Hetzner.Server"] },
     list: Effect.fn(function* () {
       const items = yield* Services.floatingIps.listFloatingIps
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),

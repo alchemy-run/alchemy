@@ -15,6 +15,7 @@ import { arrayEqualsUnordered } from "../Util/equal.ts";
 import { waitForAction } from "./actions.ts";
 import {
   alchemyLabelKeys,
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -440,14 +441,12 @@ export const CertificateProvider = () =>
     }),
 
     list: () =>
-      Services.certificates.listCertificates.items({ per_page: 50 }).pipe(
-        Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk)
-            .filter((cert) => cert.labels?.[alchemyLabelKeys.stack] != null)
-            .map(toAttrs),
+      Services.certificates.listCertificates
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk, toAttrs)),
         ),
-      ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* toName(id, news.name, output?.name);

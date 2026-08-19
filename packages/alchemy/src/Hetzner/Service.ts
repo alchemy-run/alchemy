@@ -210,6 +210,10 @@ export const ServiceProvider = () =>
 
       return Service.Provider.of({
         stables: ["serverId", "unitName"],
+        // systemd units have no Hetzner list API. Nuke deletes the
+        // Server they live on; empty list is the documented shape for
+        // parent-keyed resources (Provider.list).
+        nuke: { dependsOn: ["Hetzner.Server"] },
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ id, news, output }) {
           if (!isResolved(news)) return undefined;

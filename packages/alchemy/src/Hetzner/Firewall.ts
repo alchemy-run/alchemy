@@ -18,6 +18,7 @@ import { Resource } from "../Resource.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { waitForActions } from "./actions.ts";
 import {
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -552,7 +553,7 @@ export const FirewallProvider = () =>
     stables: ["id", "created"],
     list: Effect.fn(function* () {
       const rows = yield* Services.firewalls.listFirewalls
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(Stream.runCollect);
       return Array.from(rows, toAttrs);
     }),

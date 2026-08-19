@@ -18,6 +18,7 @@ import { recordsEqual } from "../Util/equal.ts";
 import { waitForZoneAction } from "./actions.ts";
 import {
   alchemyLabelKeys,
+  alchemyStackSelector,
   createInternalLabels,
   hasAlchemyLabels,
   labelSelector,
@@ -226,11 +227,9 @@ export const ZoneProvider = () =>
     stables: ["zoneId", "name", "mode"],
     list: Effect.fn(function* () {
       const zones = yield* Services.zones.listZones
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(Stream.runCollect);
-      return [...zones]
-        .filter((zone) => zone.labels?.[alchemyLabelKeys.stack] != null)
-        .map(toAttrs);
+      return [...zones].map(toAttrs);
     }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;

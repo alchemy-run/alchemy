@@ -14,6 +14,7 @@ import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import { findLocation } from "./Catalog.ts";
 import {
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -312,9 +313,10 @@ const disableProtection = (id: number) =>
 export const PrimaryIpProvider = () =>
   Provider.succeed(PrimaryIp, {
     stables: ["id", "ip", "type", "location", "locationId", "created"],
+    nuke: { dependsOn: ["Hetzner.Server"] },
     list: Effect.fn(function* () {
       const items = yield* Services.primaryIps.listPrimaryIps
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
@@ -443,6 +445,12 @@ export const PrimaryIpProvider = () =>
       if (current === undefined) return;
       if (current.protection.delete) {
         yield* disableProtection(current.id);
+      }
+      if (current.assignee_id !== null) {
+        const { action } = yield* Services.primaryIpActions.unassignPrimaryIp({
+          id: current.id,
+        });
+        yield* waitForAction(action);
       }
       yield* Services.primaryIps
         .deletePrimaryIp({ id: current.id })

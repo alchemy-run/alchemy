@@ -13,6 +13,7 @@ import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import {
   alchemyLabelKeys,
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -233,14 +234,12 @@ export const PlacementGroupProvider = () =>
     }),
 
     list: () =>
-      Services.placementGroups.listPlacementGroups.items({ per_page: 50 }).pipe(
-        Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk)
-            .filter((group) => group.labels?.[alchemyLabelKeys.stack] != null)
-            .map(toAttrs),
+      Services.placementGroups.listPlacementGroups
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk, toAttrs)),
         ),
-      ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const type = news.type ?? DEFAULT_TYPE;

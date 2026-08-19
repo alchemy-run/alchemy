@@ -14,6 +14,7 @@ import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import { findLocation } from "./Catalog.ts";
 import {
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -283,9 +284,10 @@ export class FloatingIpNotCreated extends Data.TaggedError(
 export const FloatingIpProvider = () =>
   Provider.succeed(FloatingIp, {
     stables: ["id", "ip", "type", "homeLocation", "homeLocationId", "created"],
+    nuke: { dependsOn: ["Hetzner.Server"] },
     list: Effect.fn(function* () {
       const items = yield* Services.floatingIps.listFloatingIps
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
@@ -408,6 +410,12 @@ export const FloatingIpProvider = () =>
       if (current === undefined) return;
       if (current.protection.delete) {
         yield* disableProtection(current.id);
+      }
+      if (current.server !== null) {
+        const { action } = yield* Services.floatingIpActions.unassignFloatingIp(
+          { id: current.id },
+        );
+        yield* waitForAction(action);
       }
       yield* Services.floatingIps
         .deleteFloatingIp({ id: current.id })

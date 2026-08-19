@@ -16,6 +16,7 @@ import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import { waitForAction, waitForActions } from "./actions.ts";
 import {
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -332,7 +333,7 @@ export const VolumeProvider = () =>
     stables: ["id", "linuxDevice", "location", "locationId", "created"],
     list: Effect.fn(function* () {
       const items = yield* Services.volumes.listVolumes
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),

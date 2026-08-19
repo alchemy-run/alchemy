@@ -12,6 +12,7 @@ import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import {
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -490,10 +491,12 @@ export const NetworkProvider = () =>
     stables: ["networkId", "created"],
 
     list: Effect.fn(function* () {
-      return yield* Services.networks.listNetworks.items({ per_page: 50 }).pipe(
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk, toAttrs)),
-      );
+      return yield* Services.networks.listNetworks
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk, toAttrs)),
+        );
     }),
 
     diff: Effect.fn(function* ({ news, output }) {

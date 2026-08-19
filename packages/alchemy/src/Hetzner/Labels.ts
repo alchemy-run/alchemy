@@ -18,6 +18,12 @@ export const alchemyLabelKeys = {
   id: "alchemy.id",
 } as const;
 
+/**
+ * Hetzner `label_selector` matching any resource Alchemy stamped with
+ * `alchemy.stack`. Used by `list` so nuke only enumerates our rows.
+ */
+export const alchemyStackSelector = alchemyLabelKeys.stack;
+
 const TAG_PREFIX = "alchemy::";
 
 export const toLabelKey = (tagKey: string): string =>

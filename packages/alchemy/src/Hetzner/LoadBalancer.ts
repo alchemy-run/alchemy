@@ -18,6 +18,7 @@ import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import type { Certificate } from "./Certificate.ts";
 import {
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -1376,7 +1377,7 @@ export const LoadBalancerProvider = () =>
 
     list: Effect.fn(function* () {
       const items = yield* Services.loadBalancers.listLoadBalancers
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),

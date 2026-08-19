@@ -9,6 +9,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { waitForAction } from "./actions.ts";
+import { alchemyStackSelector } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -249,9 +250,10 @@ const attach = (volumeId: number, serverId: number, automount: boolean) =>
 export const VolumeAttachmentProvider = () =>
   Provider.succeed(VolumeAttachment, {
     stables: ["volumeId", "serverId", "linuxDevice"],
+    nuke: { dependsOn: ["Hetzner.Volume", "Hetzner.Server"] },
     list: Effect.fn(function* () {
       const items = yield* Services.volumes.listVolumes
-        .items({ per_page: 50 })
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),

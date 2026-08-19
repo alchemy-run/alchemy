@@ -12,6 +12,7 @@ import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import {
   alchemyLabelKeys,
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -188,14 +189,12 @@ export const SshKeyProvider = () =>
     }),
 
     list: () =>
-      Services.sshKeys.listSshKeys.items({ per_page: 50 }).pipe(
-        Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk)
-            .filter((key) => key.labels?.[alchemyLabelKeys.stack] != null)
-            .map(toAttrs),
+      Services.sshKeys.listSshKeys
+        .items({ label_selector: alchemyStackSelector, per_page: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk, toAttrs)),
         ),
-      ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* toName(id, news.name, output?.name);

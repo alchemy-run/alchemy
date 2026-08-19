@@ -19,6 +19,7 @@ import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import {
   alchemyLabelKeys,
+  alchemyStackSelector,
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
@@ -395,14 +396,16 @@ export const ImageProvider = () =>
     ],
     list: Effect.fn(function* () {
       const items = yield* Services.images.listImages
-        .items({ type: ["snapshot", "backup"], per_page: 50 })
+        .items({
+          type: ["snapshot", "backup"],
+          label_selector: alchemyStackSelector,
+          per_page: 50,
+        })
         .pipe(
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-      return items
-        .filter((image) => image.labels?.[alchemyLabelKeys.stack] != null)
-        .map(toAttrs);
+      return items.map(toAttrs);
     }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;

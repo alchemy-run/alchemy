@@ -19,6 +19,7 @@ import { recordsEqual as labelsEqual } from "../Util/equal.ts";
 import { waitForZoneAction } from "./actions.ts";
 import {
   alchemyLabelKeys,
+  alchemyStackSelector,
   createInternalLabels,
   hasAlchemyLabels,
   labelSelector,
@@ -370,6 +371,7 @@ const findByLabels = (zoneId: number, id: string) =>
 export const RecordSetProvider = () =>
   Provider.succeed(RecordSet, {
     stables: ["id", "zoneId", "name", "type"],
+    nuke: { dependsOn: ["Hetzner.Zone"] },
     list: Effect.fn(function* () {
       const zones = yield* Services.zones.listZones
         .items({ per_page: 50 })
@@ -380,7 +382,7 @@ export const RecordSetProvider = () =>
           Services.zoneRrsets.listZoneRrsets
             .items({
               id_or_name: String(zone.id),
-              label_selector: alchemyLabelKeys.stack,
+              label_selector: alchemyStackSelector,
               per_page: 100,
             })
             .pipe(
