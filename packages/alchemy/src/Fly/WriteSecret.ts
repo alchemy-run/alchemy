@@ -23,8 +23,6 @@ import type { Secret } from "./Secret.ts";
  * {@link WriteSecretHttp} on the Action / Service Effect.
  *
  * @binding
- * @product Machines
- * @category Secrets
  *
  * @section Mutating secrets at runtime
  * @example Create, rotate, and delete from an Action

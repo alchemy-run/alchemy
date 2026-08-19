@@ -1,0 +1,60 @@
+---
+title: IPs & certificates
+description: Shared and dedicated addresses for Fly Apps, plus ACME and uploaded TLS certificates.
+---
+
+The networking toolkit around your [App](/fly/compute/apps):
+**IP assignments** so `{app}.fly.dev` (and custom hostnames) answer,
+and **certificates** for TLS on a hostname you control.
+
+## IP assignments
+
+An [`IpAssignment`](/providers/fly/ipassignment) allocates an
+address onto an App:
+
+```typescript
+export const PublicIp = Fly.IpAssignment("Shared", {
+  app: Site,
+  type: "shared_v4",
+});
+```
+
+| `type`       | What you get                         | Cost      |
+| ------------ | ------------------------------------ | --------- |
+| `shared_v4`  | Shared Anycast IPv4                  | Free      |
+| `v6`         | Dedicated IPv6                       | Free      |
+| `v4`         | Dedicated IPv4                       | Billed; may 400 on quota |
+
+`shared_v4` is what you want for `{app}.fly.dev` over IPv4. Dedicated
+`v4` is a replacement key (type / region / network / serviceName).
+Prefer `v6` or `shared_v4` in tests.
+
+The resolved resource exposes `ip`, `type`, `shared`, and `region`.
+
+## Certificates
+
+A [`Certificate`](/providers/fly/certificate) covers a hostname on
+the App. Default `kind` is `"acme"` (Let's Encrypt):
+
+```typescript
+export const Cert = Fly.Certificate("Www", {
+  app: Site,
+  hostname: "www.example.com",
+  kind: "acme",
+});
+```
+
+Point DNS at the App (A/AAAA or the ACME challenge records on
+`cert.dns`). `"custom"` uploads a PEM (`fullchain` + `privateKey`);
+generate fixtures once as constants, never at test time.
+
+ACME on a hostname you don't control is skipIf-gated in tests
+(`FLY_TEST_DOMAIN`); an ungated probe asserts the typed rejection.
+
+## Where next
+
+- [Tutorial part 2](/fly/tutorial/part-2) — allocate `shared_v4` so
+  fly.dev answers.
+- [Apps](/fly/compute/apps) — the parent these attach to.
+- [`IpAssignment` reference](/providers/fly/ipassignment) and
+  [`Certificate` reference](/providers/fly/certificate).

@@ -1,0 +1,163 @@
+---
+title: Services
+description: Deploy Effect programs to Fly as Machines — HTTP handlers, background workers, env & config, image updates, and logs.
+---
+
+A [`Service`](/providers/fly/service) is your code on Fly: an Effect
+program that Alchemy bundles with Rolldown, bakes into a Docker
+image (`oven/bun:1` by default), pushes to
+`registry.fly.io/{app}:{id}-{hash}`, and runs as a
+[Machine](/fly/compute/machines). Several Services share one
+[App](/fly/compute/apps); each Service is its own Machine — not
+systemd units on a shared VM.
+
+## Declare a Service
+
+A Service is a class with an infrastructure definition and a runtime
+implementation:
+
+```typescript
+// src/api.ts
+import * as Fly from "alchemy/Fly";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Site } from "./app.ts";
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
+```
+
+- `app` — the parent App (a `Fly.App`, yielded or module-scope).
+  Changing it **replaces** the Service.
+- `main: import.meta.url` — this file is the bundle entrypoint.
+- `region` — defaults to `iad`. Changing it replaces.
+- `port` — written to `PORT` and used as the Fly proxy
+  `internal_port`. Default `3000`. HTTP 80 and HTTPS 443 are
+  published unless you override `services`.
+- `fetch` — returning it from the init Effect boots an HTTP server
+  on that port; omit it for a [background service](#background-services).
+
+The resolved resource exposes `url` (`https://{appName}.fly.dev`
+when a proxy service is configured), `machineId`, `region`, `state`,
+and the bundle's `code.hash`.
+
+## What a deploy does
+
+Docker must be running on the machine that runs `alchemy deploy`:
+
+1. Bundle `main` with Rolldown into a single ESM file (a generated
+   bootstrap wires up the Bun HTTP server, logging, and config from
+   the environment).
+2. Content-hash the bundle. If the hash matches the last deploy,
+   skip build and push.
+3. Build `linux/amd64` from `image` (default `oven/bun:1`) and push
+   to `registry.fly.io/{app}:{logicalId}-{hash}` using an App deploy
+   token.
+4. Create or update the Machine, apply
+   [MountVolume](/fly/data/volumes) mounts, wait until `started`.
+
+On later deploys Alchemy compares the bundle hash: unchanged code is
+a no-op; changed code is a new image and an in-place Machine update.
+
+## Environment & config
+
+Pass static values with `env`; read them at runtime through Effect's
+`Config` (the runtime's `ConfigProvider` is backed by the process
+environment):
+
+```typescript
+import * as Config from "effect/Config";
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  {
+    app: Site,
+    main: import.meta.url,
+    port: 3000,
+    env: { GREETING: "hello" },
+  },
+  Effect.gen(function* () {
+    const greeting = yield* Config.string("GREETING");
+    // ...
+  }),
+) {}
+```
+
+Alchemy also injects `PORT` (when `port` is set) and stack metadata.
+Fly [App secrets](/fly/data/secrets) are injected as env vars unless
+the Machine skips secrets. Binding-injected `env` is merged first;
+your `env` wins on conflict. See
+[Secrets & Config](/environments/secrets) for handling secret
+values.
+
+## Background services
+
+Omit `port`/`fetch` (and pass `services: []` so Fly does not publish
+a proxy) and use `ServerHost.run` to register a long-running loop:
+
+```typescript
+// src/worker.ts
+import * as Fly from "alchemy/Fly";
+import { ServerHost } from "alchemy/Server";
+import * as Effect from "effect/Effect";
+import { Site } from "./app.ts";
+
+export default class Worker extends Fly.Service<Worker>()(
+  "Worker",
+  { app: Site, main: import.meta.url, region: "iad", services: [] },
+  Effect.gen(function* () {
+    const host = yield* ServerHost;
+
+    yield* host.run(
+      Effect.gen(function* () {
+        return yield* Effect.never;
+      }).pipe(Effect.orDie),
+    );
+  }),
+) {}
+```
+
+The Machine's restart policy still applies — if the process exits,
+Fly restarts it.
+
+## Multiple Services, one App
+
+Each Service is its own Machine with its own image, env, and
+lifecycle. Point several at the same `app`. A Volume attaches to
+**one** Machine — mount it on exactly one Service:
+
+```typescript
+class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, port: 3000 },
+  /* HTTP */
+) {}
+
+class Worker extends Fly.Service<Worker>()(
+  "Worker",
+  { app: Site, main: import.meta.url, services: [] },
+  /* mounts Data at /data, writes files */
+) {}
+```
+
+## Logs
+
+Machine logs live in the Fly dashboard and `fly logs`. `alchemy
+logs` / `alchemy tail` don't support Fly Services yet.
+
+## Where next
+
+- [Tutorial part 2](/fly/tutorial/part-2) — build up a Service
+  step by step.
+- [Volumes](/fly/data/volumes) — persistent storage via the
+  `MountVolume` binding.
+- [Secrets](/fly/data/secrets) — App secrets and `ReadSecret`.
+- [`Service` reference](/providers/fly/service) — every prop
+  and attribute.

@@ -1,0 +1,87 @@
+---
+title: Volumes
+description: Durable region-local block storage for Fly Machines — mount into Services with the MountVolume binding.
+---
+
+A [`Volume`](/providers/fly/volume) is Fly's region-local block
+storage: a durable disk (1 GB minimum) with its own lifecycle,
+attachable to **one** Machine in the same region. Machines come and
+go; Volumes keep the data.
+
+## Create a Volume
+
+```typescript
+import * as Fly from "alchemy/Fly";
+
+export const Data = Fly.Volume("data", {
+  app: Site,
+  region: "iad",
+  sizeGb: 1,
+});
+```
+
+`sizeGb` can **grow in place** via `volumesExtend` — shrinking
+**replaces the Volume and destroys its data**. `region` and `app`
+replace. Encryption and filesystem type are create-only.
+
+Scheduled snapshots default on (`autoBackupEnabled`). Snapshot
+retention updates in place. Restore with `snapshotId` or fork with
+`sourceVolumeId` (create-only). On-demand snapshots are
+[`VolumeSnapshot`](/providers/fly/volumesnapshot).
+
+## Mount into a Service (recommended)
+
+The `MountVolume` binding is the highest-level path: inside a
+[Service](/fly/compute/services)'s init, bind the Volume to a path
+and use it as a plain directory at runtime. Pass the `Data`
+declaration directly — no yielding required:
+
+```typescript
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+  Effect.gen(function* () {
+    const mount = yield* Fly.MountVolume(Data, { path: "/data" });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const text = yield* fs.readFileString(`${mount.path}/hello.txt`);
+        // ...
+      }),
+    };
+  }).pipe(Effect.provide(Fly.MountVolumeLive)),
+) {}
+```
+
+At deploy time the binding writes `{ volume, path }` into the
+Machine's `config.mounts`. At runtime it hands you `mount.path` and
+`mount.volumeId`. The Volume **must** live in the Service's region.
+
+Two Services binding the same Volume is invalid — Fly attaches a
+Volume to one Machine. Put the mount on exactly one Service.
+
+If the Machine is replaced, the Volume re-attaches on the next
+deploy — the data rides along.
+
+## Attach from a Machine
+
+For a raw Machine, pass `mounts` on the resource:
+
+```typescript
+const box = yield* Fly.Machine("Box", {
+  app: Site,
+  region: "iad",
+  image: "nginx:alpine",
+  mounts: [{ volume: Data, path: "/data" }],
+});
+```
+
+## Where next
+
+- [Tutorial part 3](/fly/tutorial/part-3) — mount a Volume into
+  a Service step by step.
+- [Services](/fly/compute/services) — the platform doing the
+  mounting.
+- [`Volume` reference](/providers/fly/volume) — every prop and
+  attribute.

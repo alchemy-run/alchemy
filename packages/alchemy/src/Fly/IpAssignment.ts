@@ -79,6 +79,20 @@ export type IpAssignment = Resource<
   Providers
 >;
 
+const resolveIpAssignmentProps = (
+  props: IpAssignmentProps | Effect.Effect<IpAssignmentProps, never, Providers>,
+): Effect.Effect<IpAssignmentProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const app = Effect.isEffect(resolved.app)
+      ? yield* resolved.app as Effect.Effect<App, never, Providers>
+      : resolved.app;
+    return { ...resolved, app };
+  });
+
+const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
+
 /**
  * A dedicated or shared IP address assigned to a Fly.io App.
  *
@@ -122,22 +136,6 @@ export type IpAssignment = Resource<
  * });
  * ```
  */
-const resolveIpAssignmentProps = (
-  props: IpAssignmentProps | Effect.Effect<IpAssignmentProps, never, Providers>,
-): Effect.Effect<IpAssignmentProps, never, Providers> =>
-  Effect.gen(function* () {
-    const resolved = Effect.isEffect(props) ? yield* props : props;
-    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
-    const app = Effect.isEffect(resolved.app)
-      ? yield* resolved.app as Effect.Effect<App, never, Providers>
-      : resolved.app;
-    return { ...resolved, app };
-  });
-
-const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
-
-// Yield Effect-valued `app` at registration so `IpAssignment("X", { app: Site })`
-// works at module scope (Resource does not unwrap nested Effects).
 export const IpAssignment: typeof IpAssignmentResource = Object.assign(
   (
     id: string,

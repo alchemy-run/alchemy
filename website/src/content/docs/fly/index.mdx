@@ -1,0 +1,71 @@
+---
+title: Fly
+description: Build applications on Fly.io with Alchemy — Machines running your Effect programs as Services, plus volumes, secrets, IPs, and certificates, all in one typed program.
+---
+
+An Alchemy app on Fly.io is a **Fly App** — a globally unique
+namespace — with one or more **Machines** running your code. Effect
+programs deploy as **Services**: bundled with Rolldown, baked into a
+Docker image, pushed to `registry.fly.io`, and reconciled as a
+Machine. Around them you declare volumes, secrets, IP assignments,
+and certificates in the same TypeScript program.
+
+This is not Hetzner-on-Fly. A Fly Machine **is** the process — there
+is no SSH box with systemd units. N Services share one App; each
+Service is its own Machine.
+
+New here? [Set up your org and API token](/fly/setup), then start
+the [tutorial](/fly/tutorial/part-1).
+
+## Compute
+
+- **[Apps](/fly/compute/apps)** — the parent for every other
+  resource. Alchemy generates a globally unique name unless you pass
+  one. `https://{appName}.fly.dev` is the public URL.
+- **[Machines](/fly/compute/machines)** — a Firecracker VM running a
+  container image. Use this when you already have an image
+  (`nginx:alpine`, a registry tag). Region, guest size, proxy
+  services, env, and mounts are all props.
+- **[Services](/fly/compute/services)** — your Effect program as a
+  Machine. Alchemy bundles `main`, builds `oven/bun:1` (override with
+  `image`), pushes to `registry.fly.io/{app}:{id}-{hash}`, and
+  updates in place when the hash changes.
+
+## Storage
+
+- **[Volumes](/fly/data/volumes)** — region-local block storage.
+  Mount one into a Service with `MountVolume`. A Volume attaches to
+  **one** Machine — two Services cannot share it.
+
+## Secrets
+
+- **[Secrets](/fly/data/secrets)** — App-level values Fly injects as
+  Machine env vars. Manage them as resources; read them at runtime
+  with `ReadSecret` / `WriteSecret`. KMS keys are `SecretKey`.
+
+## Networking
+
+- **[IPs & certificates](/fly/networking)** — shared or dedicated
+  addresses (`IpAssignment`) so `{app}.fly.dev` answers over IPv4,
+  plus ACME or uploaded TLS certificates for your own hostname.
+
+## What are you building?
+
+| You're building              | Reach for                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| An HTTP API on Fly           | [App](/fly/compute/apps) + [Service](/fly/compute/services)               |
+| A raw container              | [Machine](/fly/compute/machines) with an `image`                          |
+| A background worker          | [Service](/fly/compute/services) with `ServerHost.run`                    |
+| Persistent disk              | [Volume + MountVolume](/fly/data/volumes)                                 |
+| Config / API tokens          | [Secret + ReadSecret](/fly/data/secrets)                                  |
+| `{app}.fly.dev` over IPv4    | [IpAssignment](/fly/networking) `type: "shared_v4"`                       |
+| Your own domain              | [Certificate](/fly/networking#certificates) (ACME)                        |
+
+## Where next
+
+- [Setup](/fly/setup) — create a Fly org, generate an API token, and
+  connect alchemy.
+- [Tutorial](/fly/tutorial/part-1) — from empty directory to an App
+  running an HTTP Service with a mounted Volume and a secret.
+- [Providers reference](/providers) — generated API docs for every
+  Fly resource Alchemy ships.

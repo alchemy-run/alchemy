@@ -116,6 +116,20 @@ export type Volume = Resource<
   Providers
 >;
 
+const resolveVolumeProps = (
+  props: VolumeProps | Effect.Effect<VolumeProps, never, Providers>,
+): Effect.Effect<VolumeProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const app = Effect.isEffect(resolved.app)
+      ? yield* resolved.app as Effect.Effect<App, never, Providers>
+      : resolved.app;
+    return { ...resolved, app };
+  });
+
+const VolumeResource = Resource<Volume>("Fly.Volume");
+
 /**
  * An unattached Fly.io Volume under an App. Size can grow in place
  * (`volumesExtend`); Fly cannot shrink. Name, region, encryption and
@@ -158,22 +172,6 @@ export type Volume = Resource<
  * });
  * ```
  */
-const resolveVolumeProps = (
-  props: VolumeProps | Effect.Effect<VolumeProps, never, Providers>,
-): Effect.Effect<VolumeProps, never, Providers> =>
-  Effect.gen(function* () {
-    const resolved = Effect.isEffect(props) ? yield* props : props;
-    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
-    const app = Effect.isEffect(resolved.app)
-      ? yield* resolved.app as Effect.Effect<App, never, Providers>
-      : resolved.app;
-    return { ...resolved, app };
-  });
-
-const VolumeResource = Resource<Volume>("Fly.Volume");
-
-// Yield Effect-valued `app` at registration so `Volume("Data", { app: Site })`
-// works at module scope (Resource does not unwrap nested Effects).
 export const Volume: typeof VolumeResource = Object.assign(
   (
     id: string,

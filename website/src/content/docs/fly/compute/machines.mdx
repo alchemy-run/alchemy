@@ -1,0 +1,84 @@
+---
+title: Machines
+description: Fly Machines as Alchemy resources — Firecracker VMs running a container image, with guest size, region, proxy services, env, and mounts.
+---
+
+A [`Fly.Machine`](/providers/fly/machine) is a Firecracker VM
+running a container image. Use it when you already have an image.
+For an Effect program, use a [Service](/fly/compute/services)
+instead — Service *is* a Machine, with the image built for you.
+
+## Launch a Machine
+
+The parent is an App. Pin a region, an image, and a guest:
+
+```typescript
+const web = yield* Fly.Machine("Web", {
+  app: Site,
+  region: "iad",
+  image: "nginx:alpine",
+  guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
+  services: [
+    {
+      protocol: "tcp",
+      internalPort: 80,
+      ports: [{ port: 80, handlers: ["http"] }],
+    },
+  ],
+});
+```
+
+`region` and `image` replace on change. Guest defaults to
+shared-cpu 1× / 256 MB. `services` is the Fly proxy: published
+ports and handlers (`http`, `tls`, …).
+
+The resolved resource exposes `machineId`, `privateIp`, `state`,
+`region`, and `url` when a proxy service is published — see the
+[`Machine` reference](/providers/fly/machine).
+
+## Env, restart, metadata
+
+```typescript
+const worker = yield* Fly.Machine("Worker", {
+  app: Site,
+  region: "iad",
+  image: "my-image:tag",
+  env: { LOG_LEVEL: "info" },
+  restart: { policy: "always" },
+});
+```
+
+Alchemy stamps `alchemy.stack` / `alchemy.stage` / `alchemy.id` /
+`alchemy.type` onto `config.metadata` so `list()` can find owned
+Machines. App secrets are injected as env unless you skip them.
+
+## Mounts
+
+Pass volumes as `mounts`. The Volume must already exist in the same
+region; a Volume attaches to one Machine:
+
+```typescript
+const box = yield* Fly.Machine("Box", {
+  app: Site,
+  region: "iad",
+  image: "nginx:alpine",
+  mounts: [{ volume: Data, path: "/data" }],
+});
+```
+
+From a Service, prefer [`MountVolume`](/fly/data/volumes) so the
+path is part of the binding graph.
+
+## Lifecycle
+
+Reconcile waits until the Machine is `started` (`machinesWait`,
+bounded). Delete force-destroys and waits until gone. `Conflict` on
+create/update/delete is treated as a race and retried.
+
+## Where next
+
+- [Services](/fly/compute/services) — bundle an Effect program into
+  a Machine.
+- [Volumes](/fly/data/volumes) — persistent disks.
+- [`Machine` reference](/providers/fly/machine) — every prop and
+  attribute.

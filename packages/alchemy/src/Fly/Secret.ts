@@ -57,6 +57,20 @@ export type Secret = Resource<
   Providers
 >;
 
+const resolveSecretProps = (
+  props: SecretProps | Effect.Effect<SecretProps, never, Providers>,
+): Effect.Effect<SecretProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const app = Effect.isEffect(resolved.app)
+      ? yield* resolved.app as Effect.Effect<App, never, Providers>
+      : resolved.app;
+    return { ...resolved, app };
+  });
+
+const SecretResource = Resource<Secret>("Fly.Secret");
+
 /**
  * A Fly.io App secret. Fly injects app secrets into Machines as
  * environment variables unless `skip_secrets` is set. The resource
@@ -95,22 +109,6 @@ export type Secret = Resource<
  * });
  * ```
  */
-const resolveSecretProps = (
-  props: SecretProps | Effect.Effect<SecretProps, never, Providers>,
-): Effect.Effect<SecretProps, never, Providers> =>
-  Effect.gen(function* () {
-    const resolved = Effect.isEffect(props) ? yield* props : props;
-    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
-    const app = Effect.isEffect(resolved.app)
-      ? yield* resolved.app as Effect.Effect<App, never, Providers>
-      : resolved.app;
-    return { ...resolved, app };
-  });
-
-const SecretResource = Resource<Secret>("Fly.Secret");
-
-// Yield Effect-valued `app` at registration so `Secret("X", { app: Site })`
-// works at module scope (Resource does not unwrap nested Effects).
 export const Secret: typeof SecretResource = Object.assign(
   (
     id: string,

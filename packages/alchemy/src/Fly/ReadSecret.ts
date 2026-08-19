@@ -19,8 +19,6 @@ import type { Secret } from "./Secret.ts";
  * {@link ReadSecretHttp} on the Action / Service Effect.
  *
  * @binding
- * @product Machines
- * @category Secrets
  *
  * @section Reading secrets at runtime
  * @example Get and list secrets from an Action

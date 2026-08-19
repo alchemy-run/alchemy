@@ -1,0 +1,67 @@
+---
+title: Apps
+description: Fly Apps as Alchemy resources — the parent namespace for Machines, Services, Volumes, Secrets, IPs, and certificates.
+---
+
+A [`Fly.App`](/providers/fly/app) is the parent for every other Fly
+resource. It is a globally unique name in the Fly fleet (DNS-safe,
+leading letter, max 30 characters) plus an organization. There is
+no update API: `name`, `orgSlug`, and `network` **replace**;
+`enableSubdomains` is create-only.
+
+## Create an App
+
+The minimal App generates its physical name:
+
+```typescript
+const site = yield* Fly.App("Site");
+```
+
+Pass a name when you need a stable `fly.dev` hostname:
+
+```typescript
+const site = yield* Fly.App("Site", {
+  name: "my-site",
+  orgSlug: "my-org",
+  enableSubdomains: true,
+});
+```
+
+The resolved resource exposes `appName`, `appId`, `orgSlug`,
+`status`, and `url` (`https://{appName}.fly.dev`) — see the
+[`App` reference](/providers/fly/app).
+
+Org defaults to the current token (`currentTokenShow`). Isolated
+`network` is an optional 6PN name; changing it replaces the App.
+
+## Module-scope declarations
+
+Declare the App once and pass it into every child. Resource-valued
+props accept the resource or an Effect producing it — never unwrap
+it just to pass it along:
+
+```typescript
+// src/app.ts
+export const Site = Fly.App("Site");
+
+export const Data = Fly.Volume("data", {
+  app: Site,
+  region: "iad",
+  sizeGb: 1,
+});
+```
+
+## Ownership
+
+Fly Apps have no labels. Alchemy stamps ownership into generated
+names (and into Machine metadata / Volume and Secret names) so
+`list()` and nuke only see rows we created. Prefer omitting `name`
+in tests and CI so names stay unique and reclaimable.
+
+## Where next
+
+- [Tutorial part 1](/fly/tutorial/part-1) — deploy an App from an
+  empty directory.
+- [Services](/fly/compute/services) — run Effect programs as
+  Machines in the App.
+- [`App` reference](/providers/fly/app) — every prop and attribute.

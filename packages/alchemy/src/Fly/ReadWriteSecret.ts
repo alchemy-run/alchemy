@@ -15,8 +15,6 @@ import type { WriteSecretClient } from "./WriteSecret.ts";
  * {@link ReadWriteSecretHttp} on the Action / Service Effect.
  *
  * @binding
- * @product Machines
- * @category Secrets
  *
  * @section Managing secrets at runtime
  * @example Full CRUD from an Action
