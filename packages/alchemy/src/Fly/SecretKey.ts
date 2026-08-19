@@ -69,8 +69,9 @@ export type SecretKey = Resource<
 
 /**
  * A Fly.io App KMS secret key — a crypto key stored in Fly KMS, not an
- * env secret. Generate a random key or set raw material. Encrypt / decrypt
- * / sign / verify are runtime ops, not v1 bindings.
+ * env secret. Generate a random key or set raw material. Use it at
+ * runtime with {@link Encrypt}, {@link Decrypt}, {@link Sign}, and
+ * {@link Verify}.
  *
  * @resource
  * @see https://docs.machines.dev/secrets/Secretkeys_list
@@ -92,6 +93,15 @@ export type SecretKey = Resource<
  *   type: "hs256",
  *   value: hmacBytes,
  * });
+ * ```
+ *
+ * @section Using a key
+ * @example Sign and verify
+ * ```typescript
+ * const sign = yield* Fly.Sign(key);
+ * const verify = yield* Fly.Verify(key);
+ * const { signature } = yield* sign({ plaintext: bytes });
+ * yield* verify({ plaintext: bytes, signature });
  * ```
  */
 export const SecretKey = Resource<SecretKey>("Fly.SecretKey");

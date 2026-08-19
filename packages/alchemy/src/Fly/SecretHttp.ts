@@ -10,6 +10,7 @@ import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 import type { Secret } from "./Secret.ts";
+import type { SecretKey } from "./SecretKey.ts";
 
 /**
  * Shared scaffolding for the HTTP-backed Fly Secret bindings.
@@ -23,7 +24,12 @@ import type { Secret } from "./Secret.ts";
  *
  * NOT exported from `index.ts`.
  */
-export const makeHttpSecretBinding = <Client>(options: {
+export type AppNamed = Secret | SecretKey;
+
+export const makeHttpSecretBinding = <
+  Target extends AppNamed,
+  Client,
+>(options: {
   makeClient: (
     auth: SecretAuth,
     appName: Effect.Effect<string>,
@@ -35,19 +41,23 @@ export const makeHttpSecretBinding = <Client>(options: {
       Credentials | HttpClient.HttpClient
     >();
 
-    return Effect.fn(function* (secret: Secret) {
-      // Action init yields Accessors (Effects) so the runner can resolve
-      // them after the Secret exists. Do not wrap with Effect.succeed —
-      // that freezes the accessor and sends "[object Object]" as app_name.
-      const appName = yield* secret.appName;
-      const secretName = yield* secret.name;
+    return Effect.fn(function* (resource: Target) {
+      // One yield registers the Action → resource dependency. Do not
+      // keep yielding until a string appears — that deadlocks stack
+      // evaluation. If the yield is still an Effect, pass it through.
+      const appName =
+        yield* resource.appName as unknown as Effect.Effect<unknown>;
+      const secretName =
+        yield* resource.name as unknown as Effect.Effect<unknown>;
+      const appNameEff = toNameEffect(appName);
+      const secretNameEff = toNameEffect(secretName);
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isFlyHost(host)) {
-          const resolvedAppName = yield* toName(appName);
+          const resolvedAppName = yield* appNameEff;
           const token = yield* mintDeployToken(resolvedAppName, context);
-          yield* host.bind`${secret}`({
+          yield* host.bind`${resource}`({
             env: {
               FLY_API_TOKEN: token,
               FLY_APP_NAME: resolvedAppName,
@@ -58,8 +68,8 @@ export const makeHttpSecretBinding = <Client>(options: {
 
       return options.makeClient(
         makeSecretAuth(context),
-        toNameEffect(appName),
-        toNameEffect(secretName),
+        appNameEff,
+        secretNameEff,
       );
     });
   });
@@ -89,12 +99,15 @@ export const makeSecretAuth = (
   },
 });
 
-const toName = (
-  value: string | Effect.Effect<string>,
-): Effect.Effect<string> =>
-  Effect.isEffect(value) ? value : Effect.succeed(value);
-
-const toNameEffect = toName;
+const toNameEffect = (value: unknown): Effect.Effect<string> => {
+  if (typeof value === "string") return Effect.succeed(value);
+  if (Effect.isEffect(value)) {
+    return value as Effect.Effect<string>;
+  }
+  return Effect.die(
+    "Fly secret binding expected a resolved app or secret name",
+  );
+};
 
 export const unwrapSecretValue = (
   value: Redacted.Redacted<string> | string,

@@ -10,12 +10,16 @@ import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
 import { Machine, MachineProvider } from "./Machine.ts";
+import { DecryptHttp } from "./DecryptHttp.ts";
+import { EncryptHttp } from "./EncryptHttp.ts";
 import { MountVolumeLive } from "./MountVolume.ts";
 import { ReadSecretHttp } from "./ReadSecretHttp.ts";
 import { ReadWriteSecretHttp } from "./ReadWriteSecretHttp.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
 import { Service, ServiceProvider } from "./Service.ts";
+import { SignHttp } from "./SignHttp.ts";
+import { VerifyHttp } from "./VerifyHttp.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
 import { WriteSecretHttp } from "./WriteSecretHttp.ts";
@@ -85,6 +89,10 @@ export const providers = () =>
     Layer.provideMerge(ReadSecretHttp),
     Layer.provideMerge(WriteSecretHttp),
     Layer.provideMerge(ReadWriteSecretHttp),
+    Layer.provideMerge(EncryptHttp),
+    Layer.provideMerge(DecryptHttp),
+    Layer.provideMerge(SignHttp),
+    Layer.provideMerge(VerifyHttp),
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FlyAuth),

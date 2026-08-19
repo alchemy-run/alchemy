@@ -3,6 +3,7 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type { Secret } from "./Secret.ts";
 import {
   type SecretAuth,
   makeHttpSecretBinding,
@@ -14,7 +15,7 @@ import { WriteSecret, type WriteSecretClient } from "./WriteSecret.ts";
 export const WriteSecretHttp = Layer.effect(
   WriteSecret,
   Effect.suspend(() =>
-    makeHttpSecretBinding({
+    makeHttpSecretBinding<Secret, WriteSecretClient>({
       makeClient: secretWriteClient,
     }),
   ),

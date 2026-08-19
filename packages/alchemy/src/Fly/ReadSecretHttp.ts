@@ -3,6 +3,7 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type { Secret } from "./Secret.ts";
 import { type SecretAuth, makeHttpSecretBinding } from "./SecretHttp.ts";
 import { ReadSecret, type ReadSecretClient } from "./ReadSecret.ts";
 
@@ -10,7 +11,7 @@ import { ReadSecret, type ReadSecretClient } from "./ReadSecret.ts";
 export const ReadSecretHttp = Layer.effect(
   ReadSecret,
   Effect.suspend(() =>
-    makeHttpSecretBinding({
+    makeHttpSecretBinding<Secret, ReadSecretClient>({
       makeClient: secretReadClient,
     }),
   ),

@@ -221,6 +221,9 @@ packages/alchemy/src/Fly/
   IpAssignment.ts
   Secret.ts
   SecretKey.ts
+  Encrypt.ts / Decrypt.ts / Sign.ts / Verify.ts
+  EncryptHttp.ts / DecryptHttp.ts / SignHttp.ts / VerifyHttp.ts
+  SecretKeyHttp.ts         # byte helpers (NOT exported)
   Service.ts               # Platform
   hosted.ts                # internal Service bundle/push helpers (NOT exported)
   MountVolume.ts           # Binding.Service
@@ -644,7 +647,8 @@ App secret **key** (crypto key), not an env secret.
 
 **Lifecycle**: observe `secretkeyGet`; ensure generate or set; no meaningful sync besides re-set when value changes; delete `secretkeyDelete`; list `secretkeysList` on owned apps.
 
-Encrypt/decrypt/sign/verify are **not** v1 bindings (runtime ops, not IaC).
+Runtime crypto is granular KMS-style bindings (`Encrypt(key)`,
+`Decrypt(key)`, `Sign(key)`, `Verify(key)`), not a `WriteSecretKey` bag.
 
 ---
 
@@ -756,6 +760,26 @@ token from `appCreateDeployToken` scoped to the App, not the user token
 when possible). Scaffolding mints that once per host, like R2 HTTP mints
 an `AccountApiToken`.
 
+### SecretKey Encrypt / Decrypt / Sign / Verify — HTTP only
+
+Same HTTP scaffolding as env secrets (`makeHttpSecretBinding`). One
+`Binding.Service` per operation, bound to a `SecretKey`:
+
+| File | Export | Distilled op |
+| --- | --- | --- |
+| `Encrypt.ts` / `EncryptHttp.ts` | `Encrypt`, `EncryptHttp` | `secretkeyEncrypt` |
+| `Decrypt.ts` / `DecryptHttp.ts` | `Decrypt`, `DecryptHttp` | `secretkeyDecrypt` |
+| `Sign.ts` / `SignHttp.ts` | `Sign`, `SignHttp` | `secretkeySign` |
+| `Verify.ts` / `VerifyHttp.ts` | `Verify`, `VerifyHttp` | `secretkeyVerify` |
+| `SecretKeyHttp.ts` | **not exported** | byte helpers |
+
+```ts
+const encrypt = yield* Fly.Encrypt(key);
+const { ciphertext } = yield* encrypt({ plaintext: bytes });
+```
+
+Generate / set / delete stay on the `SecretKey` resource.
+
 ---
 
 ## Distilled operations → resource / helper / out of scope
@@ -774,6 +798,7 @@ an `AccountApiToken`.
 | `secretCreate` / `secretGet` / `secretDelete` / `secretsList` | Secret + Secret HTTP bindings |
 | `secretsUpdate` | Secret batch helper (optional) |
 | `secretkeyGenerate` / `Set` / `Get` / `Delete` / `secretkeysList` | SecretKey |
+| `secretkeyEncrypt` / `Decrypt` / `Sign` / `Verify` | `Encrypt` / `Decrypt` / `Sign` / `Verify` HTTP bindings |
 | `appCreateDeployToken` | Service registry push |
 
 ### Out of scope (do not implement as resources)
@@ -791,7 +816,7 @@ an `AccountApiToken`.
 | `machinesUpdateMetadata2` | Duplicate of `machinesUpdateMetadata`. Do not call. |
 | `tokensAuthenticate` / `tokensAuthorize` / `tokensRequestKms` / `tokensRequestOIDC` | Auth/OIDC/KMS, not resources. |
 | `platformPlacementsPost` / `platformRegionsGet` | Capacity helpers, not resources. |
-| `secretkeyEncrypt` / `Decrypt` / `Sign` / `Verify` | Runtime crypto; not v1 bindings. |
+
 | GraphQL-only Postgres / Redis / Consul / `fly postgres` | **Not in distilled Machines API.** Out of scope until a distilled service exists. |
 | `fly.toml` / `fly deploy` / Machines Apps-v2 GraphQL | Not the Machines API. |
 
