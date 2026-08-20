@@ -17,9 +17,10 @@ browser terminal ──ws──▶ Worker ──▶ Durable Object ──https /
   keeps the VM coordinates in storage (so the VM is reused across commands, not
   re-booted), POSTs each command to the VM's streaming `/exec` route, and
   forwards stdout/stderr to the browser chunk-by-chunk.
-- **MicroVM** (`src/shell-image.ts` + `context/`) is a bun HTTP server that
-  spawns `sh -c <command>` and streams its combined output, ending with an
-  `__EXIT__:<code>` trailer.
+- **MicroVM** (`src/shell-image.ts`) is an **effectful image**: the module is
+  both the image declaration and the in-VM server. The bundled Effect program
+  spawns `sh -c <command>` (scoped `ChildProcessSpawner`) and streams its
+  interleaved stdout/stderr, ending with an `__EXIT__:<code>` trailer.
 
 ## Run it in dev
 
