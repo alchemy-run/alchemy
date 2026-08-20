@@ -15,20 +15,78 @@ Alchemy generates a unique name unless you pass one.
 const site = yield* Fly.App("Site");
 ```
 
+`url` is `https://{appName}.fly.dev`. Nothing answers there until a
+[Service](/fly/compute/services) or
+[Machine](/fly/compute/machines) publishes a proxy service and the
+App has an [IP assignment](/fly/networking).
+
+:::note
+Prefer omitting `name` in tests and CI so names stay unique and
+reclaimable.
+:::
+
+## A stable hostname
+
 Pass `name` when you need a stable `fly.dev` hostname.
 
 ```typescript
 const site = yield* Fly.App("Site", {
   name: "my-site",
-  orgSlug: "my-org",
-  enableSubdomains: true,
 });
 ```
 
-`url` is `https://{appName}.fly.dev`. Nothing answers there until a
-[Service](/fly/compute/services) or
-[Machine](/fly/compute/machines) publishes a proxy service and the
-App has an [IP assignment](/fly/networking).
+:::caution[Changing `name` replaces the App]
+Fly cannot have two Apps with the same name. Alchemy deletes the
+old App first, then creates the new one.
+:::
+
+## Organization
+
+Org defaults to the current token. Pass `orgSlug` to pin it.
+
+```diff lang="typescript"
+const site = yield* Fly.App("Site", {
+  name: "my-site",
++  orgSlug: "my-org",
+});
+```
+
+:::caution[Changing `orgSlug` replaces the App]
+The App is created in the new org. The old App is deleted.
+:::
+
+## Subdomains
+
+`enableSubdomains: true` turns on `*.{appName}.fly.dev`.
+
+```diff lang="typescript"
+const site = yield* Fly.App("Site", {
+  name: "my-site",
+  orgSlug: "my-org",
++  enableSubdomains: true,
+});
+```
+
+:::note[Create-only]
+Flipping `enableSubdomains` later is ignored.
+:::
+
+## Isolated network
+
+`network` is an optional 6PN name.
+
+```diff lang="typescript"
+const site = yield* Fly.App("Site", {
+  name: "my-site",
+  orgSlug: "my-org",
+  enableSubdomains: true,
++  network: "private",
+});
+```
+
+:::caution[Changing `network` replaces the App]
+The App is recreated on the new network.
+:::
 
 ## Module-scope declarations
 
@@ -44,22 +102,7 @@ export const Site = Fly.App("Site");
 Resource-valued props accept the resource or an Effect producing
 it. Do not unwrap it just to pass it along.
 
-## Reconcile
-
-Changing `name`, `orgSlug`, or `network` replaces the App. A
-same-name replace deletes the old App first. Fly cannot have two
-Apps with the same name.
-
-`enableSubdomains: true` turns on `*.{appName}.fly.dev`. It is
-create-only. Flipping it later is ignored.
-
-Org defaults to the current token. Isolated `network` is an
-optional 6PN name.
-
-Fly Apps have no labels. Alchemy stamps ownership into generated
-names (and into Machine metadata and Secret names) so `list()` and
-nuke only see rows we created. Prefer omitting `name` in tests and
-CI.
+## Destroy
 
 `alchemy destroy` deletes children, then the App.
 
