@@ -149,7 +149,8 @@ const program = Effect.scoped(
 
 runMain(
   program.pipe(
-    Effect.provide(RpcServerEnvironment.fromEnv()),
-    Effect.provide(PlatformServices),
+    Effect.provide(
+      RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices)),
+    ),
   ),
 );

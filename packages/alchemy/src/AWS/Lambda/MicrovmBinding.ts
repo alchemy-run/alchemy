@@ -355,17 +355,18 @@ const withRuntimeCredentials = <A, E>(
         // so the assumed-role credentials are reused (and only refreshed near
         // expiry) instead of re-assuming the role on every call.
         return yield* eff.pipe(
-          Effect.provide([
-            Layer.succeed(Credentials, access.credentials),
-            Layer.succeed(Region, Effect.succeed(reg)),
-            // `AWS_ENDPOINT_URL` from the worker env (bound under local dev
-            // by `ensureWorkerAwsAccess`); resolves undefined when unset, so
-            // live workers keep the real AWS endpoints. The shared
-            // assume-role resolver also reads this ambient Endpoint for its
-            // STS call.
-            Endpoint.fromEnv(),
-            FetchHttpClient.layer,
-          ]),
+          Effect.provide(
+            Layer.succeed(Credentials, access.credentials).pipe(
+              Layer.provideMerge(Layer.succeed(Region, Effect.succeed(reg))),
+              // `AWS_ENDPOINT_URL` from the worker env (bound under local
+              // dev by `ensureWorkerAwsAccess`); resolves undefined when
+              // unset, so live workers keep the real AWS endpoints. The
+              // shared assume-role resolver also reads this ambient
+              // Endpoint for its STS call.
+              Layer.provideMerge(Endpoint.fromEnv()),
+              Layer.provideMerge(FetchHttpClient.layer),
+            ),
+          ),
         );
       })
     : eff;

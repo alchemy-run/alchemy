@@ -408,9 +408,9 @@ export const withProviders = <A, E, R, ROut>(
             actions: {},
           }),
         ),
+        Layer.provideMerge(Layer.succeed(Stage, options.stage ?? "test")),
       ),
     ),
-    Effect.provide(Layer.succeed(Stage, options.stage ?? "test")),
   ) as Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>>;
 };
 
@@ -581,18 +581,23 @@ export const scratchStack = <ROut>(
       Plan.destroy({ name: stackName, stage }).pipe(
         Effect.flatMap(apply),
         Effect.asVoid,
-        Effect.provide(stateLayer),
-        Effect.provide(options.providers as Layer.Layer<any, never, any>),
         Effect.provide(
-          Layer.succeed(Stack, {
-            name: stackName,
-            stage,
-            resources: {},
-            bindings: {},
-            actions: {},
-          }),
+          stateLayer.pipe(
+            Layer.provideMerge(
+              options.providers as Layer.Layer<any, never, any>,
+            ),
+            Layer.provideMerge(
+              Layer.succeed(Stack, {
+                name: stackName,
+                stage,
+                resources: {},
+                bindings: {},
+                actions: {},
+              }),
+            ),
+            Layer.provideMerge(Layer.succeed(Stage, stage)),
+          ),
         ),
-        Effect.provide(Layer.succeed(Stage, stage)),
         provideFreshArtifactStore,
       ) as Effect.Effect<void, any, never>,
   };

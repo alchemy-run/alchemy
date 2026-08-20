@@ -58,8 +58,14 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     server,
     exportTypes,
   ).pipe(
-    Effect.provide(ViteAssets.ViteAssetsLive(server)),
-    Effect.provide(context),
+    // `provideMerge`: the assets layer's construction reads `Loopback` (and
+    // friends) from the runtime context, so the context must feed the layer,
+    // not just sit beside it.
+    Effect.provide(
+      ViteAssets.ViteAssetsLive(server).pipe(
+        Layer.provideMerge(Layer.succeedContext(context)),
+      ),
+    ),
     Scope.provide(scope),
     Effect.runPromise,
   );
