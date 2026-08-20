@@ -96,6 +96,42 @@ export type {
   RemoteContainerProps,
 };
 
+/**
+ * Props for an image-backed container declaration — either the plain props
+ * object, or an Effect that produces it.
+ *
+ * The Effect form is how a container reaches another resource's outputs. A
+ * class body is module scope, so there is nowhere to `yield*` a database,
+ * queue, or bucket; wrapping the props in `Effect.gen` moves the declaration
+ * into an Effect where sibling resources resolve normally and their
+ * attributes can be threaded into `env`:
+ *
+ * ```typescript
+ * export class Api extends Cloudflare.Container<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const { connection } = yield* Db;
+ *     return {
+ *       context: `${import.meta.dirname}/api`,
+ *       env: { DATABASE_URL: connection.databaseUrl },
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * A plain props object cannot do this: a module-scope resource declaration
+ * is an Effect, not a resolved handle, so `Db.connectionString` is
+ * `undefined` until something yields it.
+ */
+export type ImageContainerProps<Req = never> =
+  | InputProps<ExternalContainerProps>
+  | InputProps<RemoteContainerProps>
+  | Effect.Effect<
+      InputProps<ExternalContainerProps> | InputProps<RemoteContainerProps>,
+      Config.ConfigError,
+      Req
+    >;
+
 export type Container<Id extends string = string> = Named<Id> & {
   get running(): Effect.Effect<boolean, never, RuntimeContext>;
   start(
@@ -382,6 +418,72 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
+ * ### Environment Variables
+ * A container is a process, not a Worker: it has no bindings, so every
+ * piece of configuration reaches it through `env`. Each entry lands on
+ * the deployment and shows up in `process.env` inside the image —
+ * generated (`main`), built (`context`), or pre-built (`image`) alike.
+ * Wrap a secret in `Redacted` to keep it encrypted in state and out of
+ * plan output; the container still reads a plain string.
+ *
+ * **Example:** Plain and secret env values
+ * ```typescript
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   context: `${import.meta.dirname}/api`,
+ *   ports: [{ name: "http", port: 8080 }],
+ *   env: {
+ *     PORT: "8080",
+ *     SESSION_KEY: Redacted.make(process.env.SESSION_KEY!),
+ *   },
+ * }) {}
+ * ```
+ *
+ * ### Props from Other Resources
+ * A class body is module scope, so there is nowhere to `yield*` the
+ * database, queue, or bucket whose output you need — and a bare
+ * declaration is an Effect, not a resolved handle, so
+ * `Uploads.bucketName` reads as `undefined`. Pass the props as an
+ * `Effect.gen` instead: inside it sibling resources resolve normally,
+ * and the reference orders the deploy.
+ *
+ * **Example:** Threading a sibling resource's output into `env`
+ * ```typescript
+ * export const Uploads = Cloudflare.R2.Bucket("Uploads");
+ *
+ * export class Api extends Cloudflare.Container<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const uploads = yield* Uploads;
+ *     return {
+ *       context: `${import.meta.dirname}/api`,
+ *       env: { BUCKET_NAME: uploads.bucketName },
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * A SQL database works the same way. Hyperdrive is a *Worker* binding
+ * (`Cloudflare.Hyperdrive.Connect` only resolves inside a deployed
+ * Worker, as does `Prisma.Connect`), so a container connects over TCP
+ * with the provider's **pooled** connection string instead.
+ *
+ * **Example:** Passing a pooled database URL to the container
+ * ```typescript
+ * export class Api extends Cloudflare.Container<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const { branch } = yield* Db;
+ *     return {
+ *       context: `${import.meta.dirname}/api`,
+ *       env: { DATABASE_URL: branch.pooledConnectionUri },
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Start it with `Cloudflare.Containers.layer(Api, { enableInternet: true })`
+ * — without outbound networking the container never reaches the database.
+ *
  * ### Stack-level wiring
  * The `.make()` `export default` is the side-effect that registers
  * the container's runtime. It must be reachable from your
@@ -470,22 +572,15 @@ export type Container<Id extends string = string> = Named<Id> & {
  * @category Workers & Compute
  */
 export const Container: ResourceClassLike<ContainerApplication> & {
-  <DOShape = unknown, const Id extends string = string>(
+  <DOShape = unknown, const Id extends string = string, PropsReq = never>(
     id: Id,
-    props:
-      | InputProps<ExternalContainerProps>
-      | InputProps<RemoteContainerProps>,
-  ): Container.Decl<Container<Id>, {}, Id, never, DOShape>;
+    props: ImageContainerProps<PropsReq>,
+  ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
   <Self>(): {
-    <
-      const Id extends string,
-      Props extends
-        | InputProps<ExternalContainerProps>
-        | InputProps<RemoteContainerProps>,
-    >(
+    <const Id extends string, PropsReq = never>(
       id: Id,
-      props: Props,
-    ): Container.Decl<Self, {}, Id>;
+      props: ImageContainerProps<PropsReq>,
+    ): Container.Decl<Self, {}, Id, PropsReq>;
   };
   <Self, Shape>(): {
     <const Id extends string>(
@@ -530,8 +625,14 @@ export const Container: ResourceClassLike<ContainerApplication> & {
         // The Durable Object class name this container backs when bound on
         // an async Worker's `env` (see bindWorkerAsyncBindings). Defaults to
         // the binding name at bind time when no explicit `className` is set.
-        "~alchemy/Container/ClassName": (props as { className?: string })
-          ?.className,
+        // Effect-valued props cannot be read synchronously here, so carry
+        // the unresolved lookup and let `bindContainerClass` await it.
+        "~alchemy/Container/ClassName": Effect.isEffect(props)
+          ? Effect.map(
+              props as Effect.Effect<{ className?: string } | undefined>,
+              (resolved) => resolved?.className,
+            )
+          : (props as { className?: string })?.className,
         // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
         Application: resource,
         of: (shape: any) => shape,
@@ -565,7 +666,10 @@ export declare namespace Container {
      * identifies an async-bindable Container declaration in a Worker's `env`
      * (see `bindWorkerAsyncBindings`).
      */
-    readonly "~alchemy/Container/ClassName": string | undefined;
+    readonly "~alchemy/Container/ClassName":
+      | string
+      | undefined
+      | Effect.Effect<string | undefined>;
     /**
      * The underlying {@link ContainerApplication} resource declaration —
      * `yield*` it to get the application's Output attributes.
