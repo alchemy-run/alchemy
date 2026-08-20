@@ -19,6 +19,8 @@ export interface RemoteImageProps {
   tag?: string;
   /** Pull for this platform. */
   platform?: string;
+  /** Credentials for the pull. Required when the source image is private. */
+  auth?: ImageRegistry;
   /**
    * Pull even when an image with the same reference already exists locally.
    *
@@ -99,6 +101,19 @@ export interface RemoteImage extends Resource<
  * });
  * ```
  *
+ * @example Pull a private image
+ * ```typescript
+ * const app = yield* Docker.RemoteImage("app", {
+ *   name: "ghcr.io/acme/app",
+ *   tag: imageSha,
+ *   auth: {
+ *     server: "ghcr.io",
+ *     username: "octocat",
+ *     password: Config.redacted("GHCR_PULL_TOKEN"),
+ *   },
+ * });
+ * ```
+ *
  * @section Re-tagging and Pushing
  * @example Mirror a public image into your registry
  * ```typescript
@@ -170,7 +185,12 @@ export const RemoteImageProvider = () =>
           const context = dockerContextName(news.context);
           const sourceRef = remoteImageRef(news);
           yield* session.note(`Pulling Docker image: ${sourceRef}`);
-          yield* docker.image.pull(sourceRef, news.platform, context);
+          yield* docker.image.pull(
+            sourceRef,
+            news.platform,
+            context,
+            news.auth,
+          );
 
           const finalRef = targetImageRef(news);
           if (finalRef !== sourceRef) {

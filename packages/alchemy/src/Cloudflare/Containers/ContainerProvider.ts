@@ -474,7 +474,7 @@ export const LiveContainerProvider = () =>
             imageRef,
             {
               username,
-              password: credentials.password,
+              password: Redacted.make(credentials.password),
               server: registryId,
             },
             platform,
