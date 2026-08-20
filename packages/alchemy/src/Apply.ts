@@ -24,6 +24,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import {
+  type PlanDisplayOptions,
   type PlanStatusSession,
   type ScopedPlanStatusSession,
   Cli,
@@ -89,6 +90,10 @@ export type AppliedPlan<P extends Plan> = {
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
+export interface ApplyOptions {
+  planDisplay?: PlanDisplayOptions;
+}
+
 interface ResourceTracker {
   output: any;
   props: any;
@@ -148,6 +153,7 @@ const instrumentLifecycle =
 
 export const apply = <P extends Plan>(
   plan: P,
+  options: ApplyOptions = {},
 ): Effect.Effect<
   Input.Resolve<P["output"]>,
   | Output.InvalidReferenceError
@@ -176,7 +182,7 @@ export const apply = <P extends Plan>(
     }
 
     const cli = yield* Cli;
-    const session = yield* cli.startApplySession(plan);
+    const session = yield* cli.startApplySession(plan, options.planDisplay);
     const state = yield* yield* State;
     const stack = yield* Stack;
     const stage = yield* Stage;

@@ -6,6 +6,7 @@ import type {
   ActionDelete,
 } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
+import { diffDeclaredProperties, type PropertyChange } from "./PropertyDiff.ts";
 
 export interface TreeBinding {
   sid: string;
@@ -128,14 +129,24 @@ export interface FlattenedItem {
    * old generation was created with (always differs from `providerMode`).
    */
   fromProviderMode?: ProviderMode;
+  /**
+   * Declared properties carried to detailed create/update/replace renderers.
+   * An empty array is meaningful because the action may originate outside
+   * declared props, or a create may declare none.
+   */
+  propertyChanges?: PropertyChange[];
+}
+
+export interface FlattenTreeOptions {
+  includePropertyChanges?: boolean;
 }
 
 export function flattenTree(
   node: TreeNode,
-  depth = 0,
-  result: FlattenedItem[] = [],
+  options: FlattenTreeOptions = {},
 ): FlattenedItem[] {
-  flattenNamespace(node, depth, result);
+  const result: FlattenedItem[] = [];
+  flattenNamespace(node, 0, result, options);
   return result;
 }
 
@@ -143,6 +154,7 @@ const flattenNamespace = (
   node: TreeNode,
   depth: number,
   result: FlattenedItem[],
+  options: FlattenTreeOptions,
 ) => {
   const sortedResources = [...node.resources].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
@@ -166,7 +178,7 @@ const flattenNamespace = (
       action: deriveNamespaceAction(child),
       hasChildren: true,
     });
-    flattenNamespace(child, depth + 1, result);
+    flattenNamespace(child, depth + 1, result, options);
   }
 
   for (const resource of sortedResources) {
@@ -187,6 +199,16 @@ const flattenNamespace = (
         resource.state.providerMode !== resource.mode
           ? resource.state.providerMode
           : undefined,
+      propertyChanges:
+        options.includePropertyChanges &&
+        (resource.action === "create" ||
+          resource.action === "update" ||
+          resource.action === "replace")
+          ? diffDeclaredProperties(
+              resource.action === "create" ? {} : resource.state.props,
+              resource.props,
+            )
+          : undefined,
     });
     for (const binding of [...resource.bindings].sort((a, b) =>
       a.sid.localeCompare(b.sid),
@@ -201,7 +223,7 @@ const flattenNamespace = (
       });
     }
     if (childNamespace) {
-      flattenNamespace(childNamespace, depth + 1, result);
+      flattenNamespace(childNamespace, depth + 1, result, options);
     }
   }
 

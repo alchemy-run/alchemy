@@ -3,7 +3,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { render } from "ink";
 import type { Plan } from "../../Plan.ts";
-import { type PlanStatusSession, Cli } from "../Cli.ts";
+import {
+  type PlanDisplayOptions,
+  type PlanStatusSession,
+  Cli,
+} from "../Cli.ts";
 import type { ApplyEvent } from "../Event.ts";
 import { ApprovePlan } from "./components/ApprovePlan.tsx";
 import { Plan as PlanComponent } from "./components/Plan.tsx";
@@ -19,22 +23,37 @@ export const inkCLI = () =>
     }),
   );
 
-const approvePlan = Effect.fn(function* <P extends Plan>(plan: P) {
+const approvePlan = Effect.fn(function* <P extends Plan>(
+  plan: P,
+  options: PlanDisplayOptions = {},
+) {
   let approved = false;
   const { waitUntilExit } = render(
-    <ApprovePlan plan={plan} approve={(a) => (approved = a)} />,
+    <ApprovePlan
+      plan={plan}
+      detailed={options.detailed}
+      approve={(a) => (approved = a)}
+    />,
   );
   yield* Effect.promise(waitUntilExit);
   return approved;
 });
 
-const displayPlan = <P extends Plan>(plan: P): Effect.Effect<void> =>
+const displayPlan = <P extends Plan>(
+  plan: P,
+  options: PlanDisplayOptions = {},
+): Effect.Effect<void> =>
   Effect.sync(() => {
-    const { unmount } = render(<PlanComponent plan={plan} />);
+    const { unmount } = render(
+      <PlanComponent plan={plan} detailed={options.detailed} />,
+    );
     unmount();
   });
 
-const startApplySession = Effect.fn(function* <P extends Plan>(plan: P) {
+const startApplySession = Effect.fn(function* <P extends Plan>(
+  plan: P,
+  options: PlanDisplayOptions = {},
+) {
   // Print the plan preview once into scrollback before mounting the
   // animated progress region (mirrors LoggingCli, which prints the plan
   // lines at session start — `alchemy dev`/`--yes` runs never call
@@ -43,7 +62,7 @@ const startApplySession = Effect.fn(function* <P extends Plan>(plan: P) {
   // releases the Ink instance for PlanProgress; forwarded runtime logs then
   // insert BETWEEN the preview and the live region instead of piling above
   // the entire transcript.
-  yield* displayPlan(plan);
+  yield* displayPlan(plan, options);
   const listeners = new Set<(event: ApplyEvent) => void>();
   const { unmount } = render(
     <PlanProgress

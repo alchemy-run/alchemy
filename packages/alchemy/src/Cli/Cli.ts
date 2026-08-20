@@ -12,11 +12,22 @@ export interface ScopedPlanStatusSession extends PlanStatusSession {
   note: (note: string) => Effect.Effect<void>;
 }
 
+export interface PlanDisplayOptions {
+  detailed?: boolean;
+}
+
 export interface CLIService {
-  approvePlan: <P extends Plan>(plan: P) => Effect.Effect<boolean>;
-  displayPlan: <P extends Plan>(plan: P) => Effect.Effect<void>;
+  approvePlan: <P extends Plan>(
+    plan: P,
+    options?: PlanDisplayOptions,
+  ) => Effect.Effect<boolean>;
+  displayPlan: <P extends Plan>(
+    plan: P,
+    options?: PlanDisplayOptions,
+  ) => Effect.Effect<void>;
   startApplySession: <P extends Plan>(
     plan: P,
+    options?: PlanDisplayOptions,
   ) => Effect.Effect<PlanStatusSession>;
 }
 
