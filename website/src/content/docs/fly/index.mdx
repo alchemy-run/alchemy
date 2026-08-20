@@ -25,6 +25,9 @@ TypeScript program.
 - **[Services](/fly/compute/services)** — an Effect program running
   in a Machine. Alchemy bundles `main`, builds the image, and
   updates in place when the hash changes. Set `count` to scale.
+- **[Regions](/fly/compute/regions)** — the datacenter a Machine
+  and its Volumes live in. Default `iad`. Changing `region`
+  replaces the Machine.
 
 ## Storage
 

@@ -315,7 +315,8 @@ export type Machine = Resource<
  * :::
  *
  * @section Region
- * Fly Machines live in a region. Default is `iad`.
+ * Fly Machines live in a region. Default is `iad`. See
+ * [Regions](/fly/compute/regions) for the list of codes.
  *
  * @example Pin a region
  * ```typescript

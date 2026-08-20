@@ -26,7 +26,8 @@ Use `Fly.Machine` when you already have an image.
 
 ## Launch a Machine
 
-The parent is an App. Pin a region, an image, and a guest:
+The parent is an App. Pin a [region](/fly/compute/regions), an
+image, and a guest:
 
 ```typescript
 const web = yield* Fly.Machine("Web", {
@@ -155,6 +156,7 @@ exits.
 
 - [Services](/fly/compute/services) — bundle an Effect program into
   a Machine.
+- [Regions](/fly/compute/regions) — where a Machine lives.
 - [Volumes](/fly/data/volumes) — persistent disks.
 - [`Machine` reference](/providers/fly/machine) — every prop and
   attribute.

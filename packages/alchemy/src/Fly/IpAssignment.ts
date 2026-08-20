@@ -143,7 +143,8 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * ```
  *
  * @section Region
- * `region` pins a dedicated address. Shared Anycast ignores it.
+ * `region` pins a dedicated address. Shared Anycast ignores it. See
+ * [Regions](/fly/compute/regions) for the list of codes.
  *
  * @example Dedicated IPv4 in iad
  * ```typescript

@@ -237,7 +237,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * @section Pin a region
- * Fly Machines live in a region. Default is `iad`.
+ * Fly Machines live in a region. Default is `iad`. See
+ * [Regions](/fly/compute/regions) for the list of codes.
  *
  * @example Region
  * ```typescript

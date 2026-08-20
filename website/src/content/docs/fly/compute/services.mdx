@@ -63,8 +63,8 @@ Omit `fetch` for a [background service](#background-services).
 
 ## Pin a region
 
-Fly Machines live in a region. The default is `iad`. Changing
-`region` replaces the Service.
+Fly Machines live in a [region](/fly/compute/regions). The default
+is `iad`. Changing `region` replaces the Service.
 
 ```diff lang="typescript"
 export default class Api extends Fly.Service<Api>()(
@@ -270,6 +270,7 @@ logs` / `alchemy tail` don't support Fly Services yet.
 ## Where next
 
 The [tutorial](/fly/tutorial/part-2) builds a Service step by step.
+[Regions](/fly/compute/regions) lists codes and how Volumes follow.
 [Volumes](/fly/data/volumes) covers `MountVolume`.
 [Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.
