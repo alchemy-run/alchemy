@@ -75,9 +75,8 @@ export default class Api extends Fly.Service<Api>()(
 
 ## Set the port
 
-`port` is written to `PORT` and used as the Fly proxy
-`internal_port`. Default `3000`. HTTP 80 and HTTPS 443 are
-published unless you override `services`.
+`port` is the port the process listens on inside the Machine.
+Alchemy writes it to `PORT`. Default `3000`.
 
 ```diff lang="typescript"
 export default class Api extends Fly.Service<Api>()(
@@ -86,14 +85,69 @@ export default class Api extends Fly.Service<Api>()(
 +  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
 ```
 
-The resolved `url` is `https://{appName}.fly.dev` when a proxy
-service is configured.
+## The public URL
+
+Yield the Service in the Stack. `api.url` is
+`https://{appName}.fly.dev`. Alchemy does not create this hostname.
+It is the parent [App](/fly/compute/apps)'s fly.dev name. The
+Service does not get its own URL.
+
+```typescript
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Fly.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+`url` is `undefined` when you pass `services: []`.
+
+:::note[One fly.dev hostname per App]
+Every published Service on the App shares `{appName}.fly.dev`. Put
+one public Service on an App. Use `services: []` for workers.
+:::
+
+## Fly's proxy is the load balancer
+
+There is no LoadBalancer resource. Fly runs an Anycast proxy at the
+edge. Unless you override `services`, Alchemy publishes HTTP 80 and
+HTTPS 443 on that proxy and points them at `port` inside each
+Machine.
+
+A request to `https://{appName}.fly.dev` lands on Fly's edge. Fly
+terminates TLS on 443, picks one started Machine that published this
+service, and forwards to `port` where `fetch` runs.
+
+## An address so it answers
+
+`{app}.fly.dev` does not answer over IPv4 until the App has an
+[`IpAssignment`](/fly/networking). Allocate a shared Anycast IPv4
+on the same App and yield it next to the Service.
+
+```typescript
+export const PublicIp = Fly.IpAssignment("Shared", {
+  app: Site,
+  type: "shared_v4",
+});
+```
+
+```diff lang="typescript"
+  Effect.gen(function* () {
+    const api = yield* Api;
++    const ip = yield* PublicIp;
+    return { url: api.url, ip: ip.ip };
+  }),
+```
 
 ## Scale with `count`
 
-`count` is how many Machines to keep running. Default `1`. Fly's
-proxy load-balances `{app}.fly.dev` across them. Each replica gets
-its own Volume from every [`MountVolume`](/fly/data/volumes)
+`count` is how many Machines to keep running. Default `1`. They all
+publish the same proxy service, so they all sit behind
+`{app}.fly.dev`. Fly's proxy picks one Machine per request. Each
+replica gets its own Volume from every [`MountVolume`](/fly/data/volumes)
 binding.
 
 ```diff lang="typescript"
@@ -123,13 +177,6 @@ Override the base image with `image` (must still run bun). Pass
 Alchemy waits until the Machine is `started`. It does not poll
 `/health`. Omitting that route does not fail the deploy.
 :::
-
-## Reachability
-
-`api.url` is `https://{appName}.fly.dev`. That hostname needs an
-address on the App. Allocate a shared IPv4 and yield it next to the
-Service. For a hostname you control, add a Certificate on the same
-App. See [IPs & certificates](/fly/networking).
 
 ## Config
 

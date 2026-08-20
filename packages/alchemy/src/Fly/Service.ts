@@ -258,13 +258,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * :::
  *
  * @section Set the port
- * `port` is written to `PORT` and used as the Fly proxy
- * `internal_port`. Default is `3000`. HTTP 80 and HTTPS 443 are
- * published unless you override `services`.
- *
- * The resolved `url` is `https://{appName}.fly.dev` when a proxy
- * service is configured. That hostname needs an {@link IpAssignment}
- * on the App.
+ * `port` is the port the process listens on inside the Machine.
+ * Alchemy writes it to `PORT`. Default is `3000`.
  *
  * @example Port 3000
  * ```typescript
@@ -279,10 +274,82 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
+ * @section The public URL
+ * Yield the Service in the Stack. `api.url` is
+ * `https://{appName}.fly.dev`. Alchemy does not create this hostname.
+ * It is the parent {@link App}'s fly.dev name. The Service does not
+ * get its own URL.
+ *
+ * @example Stack output
+ * ```typescript
+ * export default Alchemy.Stack(
+ *   "MyApp",
+ *   { providers: Fly.providers(), state: Alchemy.localState() },
+ *   Effect.gen(function* () {
+ *     const api = yield* Api;
+ *     return { url: api.url };
+ *   }),
+ * );
+ * ```
+ *
+ * `url` is `undefined` when you pass `services: []` (nothing is
+ * published).
+ *
+ * :::note[One fly.dev hostname per App]
+ * Every published Service on the App shares `{appName}.fly.dev`. Put
+ * one public Service on an App. Use `services: []` for workers.
+ * :::
+ *
+ * @section Fly's proxy is the load balancer
+ * There is no LoadBalancer resource. Fly runs an Anycast proxy at
+ * the edge.
+ *
+ * @example Published ports
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Unless you override `services`, Alchemy publishes HTTP 80 and
+ * HTTPS 443 on that proxy and points them at `port` inside each
+ * Machine (`internal_port`). A request to
+ * `https://{appName}.fly.dev` lands on Fly's edge. Fly terminates
+ * TLS on 443, picks one started Machine that published this service,
+ * and forwards to `port` where `fetch` runs.
+ *
+ * @section An address so it answers
+ * `{app}.fly.dev` does not answer over IPv4 until the App has an
+ * {@link IpAssignment}. Allocate a shared Anycast IPv4 on the same
+ * App and yield it next to the Service.
+ *
+ * @example shared_v4
+ * ```typescript
+ * export const PublicIp = Fly.IpAssignment("Shared", {
+ *   app: Site,
+ *   type: "shared_v4",
+ * });
+ * ```
+ *
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const api = yield* Api;
+ *   const ip = yield* PublicIp;
+ *   return { url: api.url, ip: ip.ip };
+ * });
+ * ```
+ *
  * @section Scale with count
- * `count` is how many Machines to keep running. Default is `1`. Fly's
- * proxy load-balances `{app}.fly.dev` across them. Each replica gets
- * its own Volume from every {@link MountVolume} binding.
+ * `count` is how many Machines to keep running. Default is `1`. They
+ * all publish the same proxy service, so they all sit behind
+ * `{app}.fly.dev`. Fly's proxy picks one Machine per request. Each
+ * replica gets its own Volume from every {@link MountVolume} binding.
  *
  * @example Three replicas
  * ```typescript
