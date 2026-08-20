@@ -86,18 +86,15 @@ export type NotificationWebhook = Resource<
  * {@link NotificationPolicy | notification policies}. Cloudflare sends a
  * test POST to the URL when the webhook is created or updated, so the
  * endpoint must be live and respond with a 2xx.
- * @resource
- * @product Alerting
- * @category Observability & Analytics
- * @section Creating a Webhook destination
- * @example Generic webhook with a generated name
+ * ### Creating a Webhook destination
+ * **Example:** Generic webhook with a generated name
  * ```typescript
  * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   url: "https://alerts.example.com/cf",
  * });
  * ```
  *
- * @example Webhook with an auth secret
+ * **Example:** Webhook with an auth secret
  * The secret is sent in the `cf-webhook-auth` header on every dispatch.
  * ```typescript
  * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
@@ -107,8 +104,8 @@ export type NotificationWebhook = Resource<
  * });
  * ```
  *
- * @section Using with a Notification policy
- * @example Dispatch policy notifications to the webhook
+ * ### Using with a Notification policy
+ * **Example:** Dispatch policy notifications to the webhook
  * ```typescript
  * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
@@ -117,6 +114,10 @@ export type NotificationWebhook = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/notifications/get-started/configure-webhooks/
+ *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  */
 export const NotificationWebhook = Resource<NotificationWebhook>(TypeId);
 

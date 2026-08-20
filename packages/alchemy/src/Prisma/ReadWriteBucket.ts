@@ -39,8 +39,8 @@ export interface ReadWriteBucketClient
  * bucket keys have a `read` role, so that binding's credential genuinely
  * cannot write.
  *
- * @section Binding a Bucket
- * @example Read and write objects from Prisma Compute
+ * ### Binding a Bucket
+ * **Example:** Read and write objects from Prisma Compute
  * ```typescript
  * export default Prisma.Compute(
  *   "api",

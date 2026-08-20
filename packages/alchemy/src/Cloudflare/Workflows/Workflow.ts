@@ -534,12 +534,9 @@ export class WorkflowScope extends Context.Service<
  * })
  * ```
  *
- * @resource
- * @product Workflows
- * @category Workers & Compute
  *
- * @section Defining a Workflow
- * @example Minimal workflow
+ * ### Defining a Workflow
+ * **Example:** Minimal workflow
  * ```typescript
  * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
  *   "MyWorkflow",
@@ -551,7 +548,7 @@ export class WorkflowScope extends Context.Service<
  * ) {}
  * ```
  *
- * @example Setting a step limit
+ * **Example:** Setting a step limit
  * ```typescript
  * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
  *   "MyWorkflow",
@@ -564,8 +561,8 @@ export class WorkflowScope extends Context.Service<
  * ) {}
  * ```
  *
- * @section Step Primitives
- * @example Running a named task
+ * ### Step Primitives
+ * **Example:** Running a named task
  * ```typescript
  * const result = yield* Cloudflare.Workflows.task(
  *   "process-order",
@@ -573,7 +570,7 @@ export class WorkflowScope extends Context.Service<
  * );
  * ```
  *
- * @example Configuring retries and reading step context
+ * **Example:** Configuring retries and reading step context
  * ```typescript
  * const result = yield* Cloudflare.Workflows.task(
  *   "call-api",
@@ -585,7 +582,7 @@ export class WorkflowScope extends Context.Service<
  * );
  * ```
  *
- * @example Registering rollback
+ * **Example:** Registering rollback
  * ```typescript
  * yield* Cloudflare.Workflows.task("reserve-inventory", reserveInventory, {
  *   rollback: ({ output }) =>
@@ -594,12 +591,12 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
- * @example Sleeping between steps
+ * **Example:** Sleeping between steps
  * ```typescript
  * yield* Cloudflare.Workflows.sleep("cooldown", "30 seconds");
  * ```
  *
- * @example Waiting for an external event
+ * **Example:** Waiting for an external event
  * ```typescript
  * const event = yield* Cloudflare.Workflows.waitForEvent<{ approved: boolean }>(
  *   "approval",
@@ -609,7 +606,7 @@ export class WorkflowScope extends Context.Service<
  * event.payload.approved;
  * ```
  *
- * @example Accessing env bindings inside a task
+ * **Example:** Accessing env bindings inside a task
  * Bind a resource (e.g. `Namespace`, `Bucket`) in the workflow's
  * outer init phase to get a typed Effect-native client, then use it
  * directly inside `task`. `task` threads the binding's service
@@ -637,18 +634,18 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
- * @section Starting and Monitoring Instances
+ * ### Starting and Monitoring Instances
  * `create` mirrors Cloudflare's native Workflow API: pass workflow input in
  * `params`, pass `id` only when you need a deterministic instance ID, and omit
  * `id` to let Cloudflare generate one.
  *
- * @example Creating an instance from a Worker
+ * **Example:** Creating an instance from a Worker
  * ```typescript
  * const workflow = yield* MyWorkflow;
  * const instance = yield* workflow.create({ params: { orderId: "abc" } });
  * ```
  *
- * @example Creating an instance with id and retention
+ * **Example:** Creating an instance with id and retention
  * ```typescript
  * const instance = yield* workflow.create({
  *   id: "order-abc",
@@ -657,7 +654,7 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
- * @example Creating a batch
+ * **Example:** Creating a batch
  * ```typescript
  * const instances = yield* workflow.createBatch([
  *   { id: "order-a", params: { orderId: "a" } },
@@ -665,25 +662,25 @@ export class WorkflowScope extends Context.Service<
  * ]);
  * ```
  *
- * @example Checking instance status
+ * **Example:** Checking instance status
  * ```typescript
  * const workflow = yield* MyWorkflow;
  * const handle = yield* workflow.get(instanceId);
  * const status = yield* handle.status();
  * ```
  *
- * @example Sending events and restarting instances
+ * **Example:** Sending events and restarting instances
  * ```typescript
  * const instance = yield* workflow.get(instanceId);
  * yield* instance.sendEvent({ type: "approval", payload: { approved: true } });
  * yield* instance.restart({ from: { name: "approval", type: "waitForEvent" } });
  * ```
  *
- * @section Triggering from a Worker
+ * ### Triggering from a Worker
  * Wire the workflow into HTTP routes so callers can fire instances
  * and poll for completion.
  *
- * @example Workflow start + status routes
+ * **Example:** Workflow start + status routes
  * ```typescript
  * // src/worker.ts
  * const notifier = yield* MyWorkflow;
@@ -709,7 +706,7 @@ export class WorkflowScope extends Context.Service<
  * };
  * ```
  *
- * @section Binding in an Async Worker
+ * ### Binding in an Async Worker
  * When using an Async Worker (plain `async fetch` handler, no Effect
  * runtime), declare Workflows in the `env` prop of the Worker resource.
  * Pass a `Workflow` reference with a `className` matching the exported
@@ -717,7 +714,7 @@ export class WorkflowScope extends Context.Service<
  * is omitted, it defaults to the binding name. Use `Cloudflare.InferEnv`
  * to get a fully typed `env` object that includes the workflow binding.
  *
- * @example Declaring a Workflow binding in the stack
+ * **Example:** Declaring a Workflow binding in the stack
  * ```typescript
  * // alchemy.run.ts
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
@@ -732,7 +729,7 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
- * @example Using the Workflow from a plain async handler
+ * **Example:** Using the Workflow from a plain async handler
  * ```typescript
  * // src/worker.ts
  * import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
@@ -752,7 +749,7 @@ export class WorkflowScope extends Context.Service<
  * };
  * ```
  *
- * @section Cross-Script Binding in an Async Worker
+ * ### Cross-Script Binding in an Async Worker
  * Async Workers can also bind to a Workflow hosted by another Worker
  * script. The host Worker declares and exports the `WorkflowEntrypoint`
  * class. The consumer Worker declares a `Workflow` with `scriptName` set
@@ -760,7 +757,7 @@ export class WorkflowScope extends Context.Service<
  * only — Alchemy does not drive `putWorkflow` for the foreign class, so
  * deploy the host first.
  *
- * @example Consumer Worker binds to the host script
+ * **Example:** Consumer Worker binds to the host script
  * ```typescript
  * const consumer = yield* Cloudflare.Worker("Consumer", {
  *   main: "./src/consumer.ts",
@@ -773,11 +770,11 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
- * @section Testing Workflows
+ * ### Testing Workflows
  * Workflows run asynchronously, so tests start an instance and poll until it
  * reaches a terminal status. Keep polling bounded with `Effect.repeat`.
  *
- * @example Polling for workflow completion
+ * **Example:** Polling for workflow completion
  * ```typescript
  * test(
  *   "workflow completes",
@@ -805,6 +802,10 @@ export class WorkflowScope extends Context.Service<
  *   { timeout: 120_000 },
  * );
  * ```
+ *
+ * @resource
+ * @product Workflows
+ * @category Workers & Compute
  */
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
   ...args:

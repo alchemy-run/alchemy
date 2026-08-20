@@ -162,9 +162,8 @@ export interface Image extends Resource<
  * when that hash changes — a content change produces a new tag and digest on
  * the same resource, so replacement is never needed.
  *
- * @resource
- * @section Building Images
- * @example Push to an ECR Repository
+ * ### Building Images
+ * **Example:** Push to an ECR Repository
  * ```typescript
  * const repository = yield* AWS.ECR.Repository("AppRepository", {});
  * const image = yield* AWS.ECR.Image("AppImage", {
@@ -173,15 +172,15 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @example Auto-created Repository
+ * **Example:** Auto-created Repository
  * ```typescript
  * const image = yield* AWS.ECR.Image("AppImage", {
  *   context: "./app",
  * });
  * ```
  *
- * @section Build Configuration
- * @example Custom Dockerfile, Platform, and Build Args
+ * ### Build Configuration
+ * **Example:** Custom Dockerfile, Platform, and Build Args
  * ```typescript
  * const image = yield* AWS.ECR.Image("WorkerImage", {
  *   repositoryUri: repository.repositoryUri,
@@ -192,14 +191,16 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @section Consuming the Image
- * @example Reference from a Task Definition
+ * ### Consuming the Image
+ * **Example:** Reference from a Task Definition
  * ```typescript
  * const task = yield* AWS.ECS.Task("ApiTask", {
  *   main: import.meta.url,
  *   sidecars: [{ name: "proxy", image: image.imageUri, essential: false }],
  * });
  * ```
+ *
+ * @resource
  */
 export const Image = Resource<Image>("AWS.ECR.Image");
 

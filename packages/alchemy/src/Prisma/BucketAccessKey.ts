@@ -93,9 +93,8 @@ export interface BucketAccessKey extends Resource<
  * Changing the bucket, name, or role replaces the key with fresh
  * credentials.
  *
- * @resource
- * @section Creating a Bucket Access Key
- * @example Read-write credentials for a bucket
+ * ### Creating a Bucket Access Key
+ * **Example:** Read-write credentials for a bucket
  * ```typescript
  * const key = yield* Prisma.BucketAccessKey("uploads-key", {
  *   bucket,
@@ -103,8 +102,8 @@ export interface BucketAccessKey extends Resource<
  * });
  * ```
  *
- * @section Binding to Platforms
- * @example Pass S3 credentials to Compute env
+ * ### Binding to Platforms
+ * **Example:** Pass S3 credentials to Compute env
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project,
@@ -117,6 +116,8 @@ export interface BucketAccessKey extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const BucketAccessKey = Resource<BucketAccessKey>(
   "Prisma.BucketAccessKey",

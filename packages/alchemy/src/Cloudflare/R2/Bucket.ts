@@ -213,24 +213,21 @@ export type Bucket = Resource<
  *
  * R2 provides zero-egress-fee object storage. Create a bucket as a resource,
  * then bind it to a Worker to read and write objects at runtime.
- * @resource
- * @product R2
- * @category Storage & Databases
- * @section Creating a Bucket
- * @example Basic R2 bucket
+ * ### Creating a Bucket
+ * **Example:** Basic R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket");
  * ```
  *
- * @example Bucket with location hint
+ * **Example:** Bucket with location hint
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   locationHint: "wnam",
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Reading and writing objects
+ * ### Binding to a Worker
+ * **Example:** Reading and writing objects
  * ```typescript
  * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
@@ -244,7 +241,7 @@ export type Bucket = Resource<
  * }
  * ```
  *
- * @example Streaming upload with content length
+ * **Example:** Streaming upload with content length
  * ```typescript
  * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
@@ -253,7 +250,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Custom Domains
+ * ### Custom Domains
  *
  * Attach one or more custom domains to serve bucket objects from a hostname
  * you control. The domain's zone must already exist in your Cloudflare
@@ -261,14 +258,14 @@ export type Bucket = Resource<
  * pass a `Cloudflare.Zone.Zone` resource, a zone ID, or any hostname inside the
  * zone via the `zone` field.
  *
- * @example Single custom domain
+ * **Example:** Single custom domain
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com" }],
  * });
  * ```
  *
- * @example Multiple custom domains
+ * **Example:** Multiple custom domains
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [
@@ -278,14 +275,14 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Disable a custom domain without removing it
+ * **Example:** Disable a custom domain without removing it
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com", enabled: false }],
  * });
  * ```
  *
- * @example Custom domain with explicit zone and TLS settings
+ * **Example:** Custom domain with explicit zone and TLS settings
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("ExampleZone", {
  *   name: "example.com",
@@ -302,7 +299,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Object Lifecycle Rules
+ * ### Object Lifecycle Rules
  *
  * Configure lifecycle rules to automatically delete objects, abort
  * incomplete multipart uploads, or transition objects to InfrequentAccess
@@ -310,7 +307,7 @@ export type Bucket = Resource<
  * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
  * for details and limits (max 1000 rules per bucket).
  *
- * @example Delete objects 30 days after upload
+ * **Example:** Delete objects 30 days after upload
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
@@ -324,7 +321,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Transition to InfrequentAccess after 60 days, delete after 365
+ * **Example:** Transition to InfrequentAccess after 60 days, delete after 365
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
@@ -345,7 +342,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Abort incomplete multipart uploads after 7 days
+ * **Example:** Abort incomplete multipart uploads after 7 days
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
@@ -359,7 +356,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section CORS
+ * ### CORS
  *
  * Configure CORS rules so browsers can make cross-origin requests against
  * the bucket's public (custom domain / r2.dev) or S3 API endpoints. Pass an
@@ -367,7 +364,7 @@ export type Bucket = Resource<
  * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/cors/)
  * for details.
  *
- * @example Allow cross-origin reads from any origin
+ * **Example:** Allow cross-origin reads from any origin
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   cors: [
@@ -379,7 +376,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Browser range reads (e.g. PMTiles map tiles)
+ * **Example:** Browser range reads (e.g. PMTiles map tiles)
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "tiles.example.com" }],
@@ -395,7 +392,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Allow uploads from a web app
+ * **Example:** Allow uploads from a web app
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   cors: [
@@ -409,7 +406,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Deleting a Bucket
+ * ### Deleting a Bucket
  *
  * R2 refuses to delete a bucket that still has objects in it, and alchemy
  * does not bypass that refusal: destroying a non-empty bucket fails with
@@ -417,14 +414,14 @@ export type Bucket = Resource<
  * emptying the bucket first with `forceDestroy` for buckets whose contents
  * are disposable.
  *
- * @example Empty the bucket on destroy
+ * **Example:** Empty the bucket on destroy
  * ```typescript
  * const cache = yield* Cloudflare.R2.Bucket("Cache", {
  *   forceDestroy: true,
  * });
  * ```
  *
- * @example Keep the bucket even when the stack goes away
+ * **Example:** Keep the bucket even when the stack goes away
  * ```typescript
  * import * as RemovalPolicy from "alchemy/RemovalPolicy";
  *
@@ -432,6 +429,10 @@ export type Bucket = Resource<
  *   RemovalPolicy.retain(),
  * );
  * ```
+ *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  */
 export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
   aliases: ["Cloudflare.R2Bucket"],

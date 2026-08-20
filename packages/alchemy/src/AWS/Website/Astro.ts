@@ -66,16 +66,15 @@ export interface AstroProps extends FrameworkSiteProps {
  * from S3. With `astro: { output: "static" }` every page is prerendered
  * and the deploy is assets-only — no Lambda.
  *
- * @resource
- * @section Creating Astro Sites
- * @example Basic Astro App
+ * ### Creating Astro Sites
+ * **Example:** Basic Astro App
  * ```typescript
  * const site = yield* AWS.Website.Astro("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.Astro("Web", {
  *   rootDir: "./app",
@@ -86,8 +85,8 @@ export interface AstroProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Static Sites
- * @example Fully Static Astro Site
+ * ### Static Sites
+ * **Example:** Fully Static Astro Site
  * ```typescript
  * const site = yield* AWS.Website.Astro("Docs", {
  *   rootDir: "./docs",
@@ -96,8 +95,8 @@ export interface AstroProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Tune The Server Function
+ * ### Server Configuration
+ * **Example:** Tune The Server Function
  * ```typescript
  * const site = yield* AWS.Website.Astro("Web", {
  *   rootDir: "./app",
@@ -109,6 +108,8 @@ export interface AstroProps extends FrameworkSiteProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Astro = (id: string, props: AstroProps = {}) => {
   // Server output is the documented default: astro's own zero-config

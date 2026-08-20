@@ -71,11 +71,8 @@ export type Rule = Resource<
  *
  * Rules forward inbound mail matching `matchers` to the listed actions
  * (forward to a verified destination, drop, or hand off to a Worker).
- * @resource
- * @product Email
- * @category Email
- * @section Forwarding Mail
- * @example Forward `info@` to a verified destination
+ * ### Forwarding Mail
+ * **Example:** Forward `info@` to a verified destination
  * ```typescript
  * const rule = yield* Cloudflare.Email.Rule("InfoForward", {
  *   zone: "example.com",
@@ -83,6 +80,10 @@ export type Rule = Resource<
  *   actions: [{ type: "forward", value: ["ops@example.com"] }],
  * });
  * ```
+ *
+ * @resource
+ * @product Email
+ * @category Email
  */
 export const Rule = Resource<Rule>("Cloudflare.Email.Rule", {
   aliases: ["Cloudflare.EmailRule"],

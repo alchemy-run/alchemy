@@ -12,12 +12,9 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * `ReadWriteDns(zone)` so calls take no zone id. Provide
  * {@link ReadWriteDnsHttp} on the Action / Function Effect.
  *
- * @binding
- * @product DNS
- * @category Domains & DNS
  *
- * @section Managing RRSets at runtime
- * @example Full CRUD from an Action
+ * ### Managing RRSets at runtime
+ * **Example:** Full CRUD from an Action
  * Bind the client in the Action's Init phase and provide
  * {@link ReadWriteDnsHttp}.
  * ```typescript
@@ -44,6 +41,8 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  *   }).pipe(Effect.provide(Hetzner.ReadWriteDnsHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface ReadWriteDns extends Binding.Service<
   ReadWriteDns,

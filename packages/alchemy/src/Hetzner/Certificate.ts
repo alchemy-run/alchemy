@@ -140,11 +140,10 @@ export type Certificate = Resource<
  * `name` and `labels` update in place. Changing the type, the uploaded
  * PEM/key, or the managed domain list replaces the Certificate.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#certificates
  *
- * @section Uploading a Certificate
- * @example Generated name
+ * ### Uploading a Certificate
+ * **Example:** Generated name
  * ```typescript
  * const cert = yield* Hetzner.Certificate("web", {
  *   certificate: pem,
@@ -152,7 +151,7 @@ export type Certificate = Resource<
  * });
  * ```
  *
- * @example Explicit name and labels
+ * **Example:** Explicit name and labels
  * ```typescript
  * const cert = yield* Hetzner.Certificate("web", {
  *   name: "my-website-cert",
@@ -162,14 +161,16 @@ export type Certificate = Resource<
  * });
  * ```
  *
- * @section Managed Let's Encrypt
- * @example Issue for Hetzner DNS domains
+ * ### Managed Let's Encrypt
+ * **Example:** Issue for Hetzner DNS domains
  * ```typescript
  * const cert = yield* Hetzner.Certificate("le", {
  *   type: "managed",
  *   domainNames: ["example.com", "www.example.com"],
  * });
  * ```
+ *
+ * @resource
  */
 export const Certificate = Resource<Certificate>("Hetzner.Certificate");
 

@@ -94,16 +94,15 @@ export type PlacementGroup = Resource<
  *
  * Servers are attached from the Server resource (not here).
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#placement-groups
  *
- * @section Creating a Placement Group
- * @example Basic spread group
+ * ### Creating a Placement Group
+ * **Example:** Basic spread group
  * ```typescript
  * const group = yield* Hetzner.PlacementGroup("web");
  * ```
  *
- * @example Named group with labels
+ * **Example:** Named group with labels
  * ```typescript
  * const group = yield* Hetzner.PlacementGroup("web", {
  *   name: "web-spread",
@@ -111,6 +110,8 @@ export type PlacementGroup = Resource<
  *   labels: { role: "web" },
  * });
  * ```
+ *
+ * @resource
  */
 export const PlacementGroup = Resource<PlacementGroup>(
   "Hetzner.PlacementGroup",

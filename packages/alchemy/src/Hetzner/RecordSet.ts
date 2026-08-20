@@ -170,11 +170,10 @@ export type RecordSet = Resource<
  * RRSet. Records, TTL, labels, and change protection update in place.
  * Only primary Zones accept RRSet edits.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#zone-rrsets
  *
- * @section Creating an RRSet
- * @example A records on a subdomain
+ * ### Creating an RRSet
+ * **Example:** A records on a subdomain
  * ```typescript
  * const zone = yield* Hetzner.Zone("example", {
  *   name: "example.com",
@@ -191,7 +190,7 @@ export type RecordSet = Resource<
  * });
  * ```
  *
- * @example Apex A record from a Primary IP
+ * **Example:** Apex A record from a Primary IP
  * ```typescript
  * const ip = yield* Hetzner.PrimaryIp("web-ip", {
  *   type: "ipv4",
@@ -205,8 +204,8 @@ export type RecordSet = Resource<
  * });
  * ```
  *
- * @section Updating records
- * @example Replace the record set and TTL
+ * ### Updating records
+ * **Example:** Replace the record set and TTL
  * ```typescript
  * const www = yield* Hetzner.RecordSet("www", {
  *   zone,
@@ -216,6 +215,8 @@ export type RecordSet = Resource<
  *   ttl: 600,
  * });
  * ```
+ *
+ * @resource
  */
 export const RecordSet = Resource<RecordSet>("Hetzner.RecordSet");
 

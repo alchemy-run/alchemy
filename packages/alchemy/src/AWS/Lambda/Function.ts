@@ -615,13 +615,12 @@ export const normalizeFunctionUrl = (
  * extension. See
  * [Sandbox scope vs invocation scope](/aws/compute/lambda#sandbox-scope-vs-invocation-scope).
  * :::
- * @resource
- * @section Async Functions
+ * ### Async Functions
  * Point `main` at a file that exports a standard Lambda handler. No
  * Effect runtime is included in the bundle. Useful when migrating
  * existing Lambda functions or when you don't need Effect.
  *
- * @example Defining an async Lambda in your stack
+ * **Example:** Defining an async Lambda in your stack
  * ```typescript
  * // alchemy.run.ts
  * import * as AWS from "alchemy/AWS";
@@ -632,7 +631,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Function using ARM64
+ * **Example:** Function using ARM64
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ArmFunction", {
  *   main: "./src/handler.ts",
@@ -640,7 +639,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Function with a native package (Sharp)
+ * **Example:** Function with a native package (Sharp)
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ImageProcessor", {
  *   main: "./src/handler.ts",
@@ -651,7 +650,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Writing the async handler
+ * **Example:** Writing the async handler
  * ```typescript
  * // src/handler.ts
  * export const handler = async (event: any) => {
@@ -662,13 +661,13 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
- * @section Container Image Functions
+ * ### Container Image Functions
  * Set `image` instead of `main` to deploy an existing private ECR image or to
  * build and publish a local Docker context. Image sources must be literal
  * because Lambda's pre-create phase needs the deployable image before normal
  * Output resolution.
  *
- * @example Existing ECR image with runtime overrides
+ * #### Existing ECR image with runtime overrides
  * ```typescript
  * const func = yield* AWS.Lambda.Function("Worker", {
  *   image: {
@@ -687,7 +686,7 @@ export const normalizeFunctionUrl = (
  * a new digest, Alchemy updates the Lambda function even though the URI string
  * is unchanged. External repositories are never modified or deleted.
  *
- * @example Build a Lambda container image
+ * #### Build a Lambda container image
  * ```typescript
  * const func = yield* AWS.Lambda.Function("JavaFunction", {
  *   image: {
@@ -712,12 +711,12 @@ export const normalizeFunctionUrl = (
  * CMD ["com.example.Handler::handleRequest"]
  * ```
  *
- * @section Effect Functions
+ * ### Effect Functions
  * Pass the Effect implementation as the third argument. Bindings
  * attach IAM permissions and environment variables at deploy time,
  * while the runtime execution context collects listeners and exports.
  *
- * @example Effect Function with HTTP handler
+ * **Example:** Effect Function with HTTP handler
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
@@ -740,8 +739,8 @@ export const normalizeFunctionUrl = (
  * ) {}
  * ```
  *
- * @section Configuration
- * @example Function with URL
+ * ### Configuration
+ * **Example:** Function with URL
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
@@ -749,7 +748,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Function URL with IAM auth
+ * **Example:** Function URL with IAM auth
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
@@ -759,7 +758,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Function in a VPC
+ * **Example:** Function in a VPC
  * ```typescript
  * const func = yield* AWS.Lambda.Function("VpcFunction", {
  *   main: "./src/handler.ts",
@@ -770,7 +769,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Async invocation retries and failure destination
+ * **Example:** Async invocation retries and failure destination
  * ```typescript
  * const func = yield* AWS.Lambda.Function("AsyncFunction", {
  *   main: "./src/handler.ts",
@@ -786,7 +785,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -794,7 +793,7 @@ export const normalizeFunctionUrl = (
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults. Listing a package that also
  * declares `"sideEffects": false` (or `[]`) in its `package.json` opts it
@@ -810,7 +809,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
@@ -818,12 +817,12 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @section EFS File Systems
+ * ### EFS File Systems
  * Mount an EFS access point into the function's `/mnt/…` file system. The
  * function must be attached to a VPC that can reach an EFS mount target for
  * the file system.
  *
- * @example Mount an EFS access point via props
+ * **Example:** Mount an EFS access point via props
  * ```typescript
  * const accessPoint = yield* AWS.EFS.AccessPoint("FilesAccess", {
  *   fileSystemId: fileSystem.fileSystemId,
@@ -840,7 +839,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Mount via the host-agnostic EFS.mount binding
+ * **Example:** Mount via the host-agnostic EFS.mount binding
  * `EFS.mount` wires the same mount config plus least-privilege IAM through
  * the binding channel and works on both Lambda and ECS hosts.
  * ```typescript
@@ -856,11 +855,11 @@ export const normalizeFunctionUrl = (
  * ) {}
  * ```
  *
- * @section S3 Bindings
+ * ### S3 Bindings
  * Bind S3 operations in the init phase to give the function IAM
  * permissions and inject the bucket name as an environment variable.
  *
- * @example Read and write S3 objects
+ * **Example:** Read and write S3 objects
  * ```typescript
  * // init
  * const getObject = yield* S3.GetObject(bucket);
@@ -876,11 +875,11 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
- * @section DynamoDB Bindings
+ * ### DynamoDB Bindings
  * Bind DynamoDB operations in the init phase to grant table-scoped
  * IAM permissions.
  *
- * @example Get and put items
+ * **Example:** Get and put items
  * ```typescript
  * // init
  * const getItem = yield* AWS.DynamoDB.GetItem(table);
@@ -896,10 +895,10 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
- * @section SQS Bindings
+ * ### SQS Bindings
  * Bind SQS operations in the init phase to send messages to a queue.
  *
- * @example Send a message
+ * **Example:** Send a message
  * ```typescript
  * // init
  * const sendMessage = yield* SQS.SendMessage(queue);
@@ -915,11 +914,11 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
- * @section SNS Bindings
+ * ### SNS Bindings
  * Bind SNS operations in the init phase to publish messages to a
  * topic.
  *
- * @example Publish a notification
+ * **Example:** Publish a notification
  * ```typescript
  * // init
  * const publish = yield* AWS.SNS.Publish(topic);
@@ -936,11 +935,11 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
- * @section Kinesis Bindings
+ * ### Kinesis Bindings
  * Bind Kinesis operations in the init phase to put records into a
  * stream.
  *
- * @example Put a record
+ * **Example:** Put a record
  * ```typescript
  * // init
  * const putRecord = yield* AWS.Kinesis.PutRecord(stream);
@@ -957,11 +956,11 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
- * @section Event Sources
+ * ### Event Sources
  * Lambda functions can be triggered by event sources like SQS queues,
  * DynamoDB streams, S3 notifications, SNS topics, and Kinesis streams.
  *
- * @example Process SQS messages
+ * **Example:** Process SQS messages
  * ```typescript
  * yield* SQS.consumeQueueMessages(queue,
  *   Effect.fn(function* (message) {
@@ -970,7 +969,7 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
- * @example Process DynamoDB stream changes
+ * **Example:** Process DynamoDB stream changes
  * ```typescript
  * yield* AWS.DynamoDB.consumeTableChanges(table, {
  *   StreamViewType: "NEW_AND_OLD_IMAGES",
@@ -981,7 +980,7 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
- * @example Process S3 notifications
+ * **Example:** Process S3 notifications
  * ```typescript
  * yield* AWS.S3.consumeBucketEvents(bucket, {
  *   events: ["s3:ObjectCreated:*"],
@@ -993,6 +992,8 @@ export const normalizeFunctionUrl = (
  *   ),
  * );
  * ```
+ *
+ * @resource
  */
 export const Function: Platform<
   Function,

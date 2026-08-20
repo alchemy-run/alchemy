@@ -44,12 +44,9 @@ import type { Zone } from "./Zone.ts";
  * that must reach `success` before a subsequent read is guaranteed to
  * see the change. Poll with {@link waitForZoneAction}.
  *
- * @binding
- * @product DNS
- * @category Domains & DNS
  *
- * @section Mutating RRSets at runtime
- * @example Create, replace records, and delete from an Action
+ * ### Mutating RRSets at runtime
+ * **Example:** Create, replace records, and delete from an Action
  * Bind the client in the Action's Init phase and provide {@link WriteDnsHttp}.
  * ```typescript
  * import * as Alchemy from "alchemy";
@@ -77,6 +74,8 @@ import type { Zone } from "./Zone.ts";
  *   }).pipe(Effect.provide(Hetzner.WriteDnsHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface WriteDns extends Binding.Service<
   WriteDns,

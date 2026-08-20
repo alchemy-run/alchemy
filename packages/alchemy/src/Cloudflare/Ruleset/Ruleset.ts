@@ -78,11 +78,8 @@ export type Ruleset = Resource<
  *
  * This resource owns the entire ruleset for a phase entrypoint. Rules managed
  * elsewhere in the same phase can be overwritten on deploy.
- * @resource
- * @product Rulesets
- * @category Rules & Configuration
- * @section WAF Rules
- * @example Block probes in the custom firewall phase
+ * ### WAF Rules
+ * **Example:** Block probes in the custom firewall phase
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  * const waf = yield* Cloudflare.Ruleset.Ruleset("WafRules", {
@@ -97,6 +94,10 @@ export type Ruleset = Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  */
 export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset", {
   aliases: ["Cloudflare.Ruleset"],

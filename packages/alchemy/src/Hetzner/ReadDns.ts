@@ -17,12 +17,9 @@ import type { Zone } from "./Zone.ts";
  * API token). The zone is fixed by `ReadDns(zone)` so calls take no
  * zone id. Provide {@link ReadDnsHttp} on the Action / Function Effect.
  *
- * @binding
- * @product DNS
- * @category Domains & DNS
  *
- * @section Reading RRSets at runtime
- * @example List and get RRSets from an Action
+ * ### Reading RRSets at runtime
+ * **Example:** List and get RRSets from an Action
  * Bind the client in the Action's Init phase and provide {@link ReadDnsHttp}.
  * Pass the {@link Zone} resource directly (it's an `Effect`), or
  * `yield* Zone` for a resolved value.
@@ -43,6 +40,8 @@ import type { Zone } from "./Zone.ts";
  *   }).pipe(Effect.provide(Hetzner.ReadDnsHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface ReadDns extends Binding.Service<
   ReadDns,

@@ -104,33 +104,30 @@ export interface NuxtProps<
  * declared via a custom `main` entry only exist in the production build
  * and are not servable in dev yet.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Nuxt App
+ * ### Deploying a Nuxt App
  * A single call builds and deploys the app — server-rendered pages, API
  * routes, prerendered pages, and client assets included.
  *
- * @example Basic Nuxt site
+ * **Example:** Basic Nuxt site
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website");
  * ```
  *
- * @example Nuxt project in a subdirectory
+ * **Example:** Nuxt project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   rootDir: "apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Values passed via `env` are exposed to server routes and SSR through
  * nitro's `cloudflare_module` runtime contract:
  * `event.context.cloudflare.env` (plus `event.context.cf` and
  * `event.context.cloudflare.context.waitUntil`).
  *
- * @example Reading env from an API route
+ * **Example:** Reading env from an API route
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   env: {
@@ -144,7 +141,7 @@ export interface NuxtProps<
  * // }));
  * ```
  *
- * @example Binding an R2 bucket
+ * **Example:** Binding an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
@@ -155,12 +152,12 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Prerendering
+ * ### Prerendering
  * Routes marked for prerendering in `routeRules` (or via
  * `nitro.prerender`) render at build time into `.output/public` and are
  * served as static assets — no Worker invocation.
  *
- * @example Prerendering a route
+ * **Example:** Prerendering a route
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   nuxt: {
@@ -171,7 +168,7 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Custom Worker Exports (Durable Objects)
+ * ### Custom Worker Exports (Durable Objects)
  * Nitro's entry module is the Worker's exports seam. Point `main` at your
  * own module that re-exports nitro's runtime handler (imported from
  * `nitropack/presets/cloudflare/runtime/cloudflare-module`) and adds
@@ -179,7 +176,7 @@ export interface NuxtProps<
  * Worker for their namespace bindings to resolve. Every framework route
  * keeps working through the re-exported handler.
  *
- * @example Custom entry hosting a Durable Object
+ * **Example:** Custom entry hosting a Durable Object
  * ```typescript
  * // worker-entry.ts
  * // import nitroHandler from "nitropack/presets/cloudflare/runtime/cloudflare-module";
@@ -196,13 +193,13 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Dev
+ * ### Dev
  * `alchemy dev` runs Nuxt's own dev server (nitro dev, full HMR) with
  * `event.context.cloudflare` served wrangler-free through
  * cloudflare-runtime's platform proxy: resource bindings resolve against
  * a local workerd instance, and literal `env` values overlay them.
  *
- * @example Reading bindings in dev and production alike
+ * **Example:** Reading bindings in dev and production alike
  * ```typescript
  * // server/api/greeting.ts — identical code in dev and deployed
  * // export default defineEventHandler((event) => ({
@@ -213,12 +210,12 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when the project
  * lives in a large repository.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   memo: {
@@ -227,20 +224,20 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Limitations
+ * ### Limitations
  * Nitro's `isr` route rule (incremental static regeneration) is
  * implemented only by the Vercel and Netlify presets — on Cloudflare it
  * is silently ignored at build time, and the route renders on demand in
  * the Worker like any other SSR route. Use `prerender` for build-time
  * static routes, or `cache` route rules for runtime caching.
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Nuxt` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.Nuxt<Website>()(
  *   "Website",
@@ -248,6 +245,10 @@ export interface NuxtProps<
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Nuxt: {
   <Self>(): {

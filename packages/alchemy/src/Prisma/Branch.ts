@@ -98,9 +98,8 @@ export interface Branch extends Resource<
  * changes only the default branch; Alchemy restores the previous default
  * before deleting a promoted branch.
  *
- * @resource
- * @section Creating a Branch
- * @example Preview branch
+ * ### Creating a Branch
+ * **Example:** Preview branch
  * ```typescript
  * const branch = yield* Prisma.Branch("preview", {
  *   project: project.projectId,
@@ -111,8 +110,8 @@ export interface Branch extends Resource<
  * branch.isDefault; // false
  * ```
  *
- * @section Promoting a Branch
- * @example Make a preview branch the default
+ * ### Promoting a Branch
+ * **Example:** Make a preview branch the default
  * ```typescript
  * const release = yield* Prisma.Branch("release", {
  *   project,
@@ -123,6 +122,8 @@ export interface Branch extends Resource<
  * release.role;      // still "preview"
  * release.isDefault; // true
  * ```
+ *
+ * @resource
  */
 export const Branch = Resource<Branch>("Prisma.Branch");
 

@@ -77,13 +77,12 @@ export interface EgressOnlyInternetGateway extends Resource<
  * VPC (`vpcId` is required); the gateway must be paired with an IPv6
  * {@link Route} to actually carry traffic.
  *
- * @resource
- * @section Creating an Egress-Only Internet Gateway
+ * ### Creating an Egress-Only Internet Gateway
  * The gateway is created and attached to `vpcId` in a single step. Because the
  * attachment is intrinsic, changing `vpcId` replaces the gateway rather than
  * moving it.
  *
- * @example Basic Egress-Only Internet Gateway
+ * **Example:** Basic Egress-Only Internet Gateway
  * ```typescript
  * const egressOnlyIgw = yield* AWS.EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
  *   vpcId: myVpc.vpcId,
@@ -93,7 +92,7 @@ export interface EgressOnlyInternetGateway extends Resource<
  * `egressOnlyInternetGatewayId` (prefixed `eigw-`) is referenced from a
  * route's `egressOnlyInternetGatewayId` target.
  *
- * @example Egress-Only Internet Gateway with Tags
+ * **Example:** Egress-Only Internet Gateway with Tags
  * ```typescript
  * const egressOnlyIgw = yield* AWS.EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
  *   vpcId: myVpc.vpcId,
@@ -103,12 +102,12 @@ export interface EgressOnlyInternetGateway extends Resource<
  * The `tags` map is merged with the alchemy auto-tags and can be updated in
  * place without replacing the gateway.
  *
- * @section Routing IPv6 Egress Traffic
+ * ### Routing IPv6 Egress Traffic
  * A gateway alone does nothing until a private route table sends IPv6 traffic
  * to it. Pair it with a `::/0` {@link Route} so private, IPv6-addressed
  * instances can reach the internet outbound-only.
  *
- * @example IPv6 Default Route to the Egress-Only Gateway
+ * **Example:** IPv6 Default Route to the Egress-Only Gateway
  * ```typescript
  * const egressOnlyIgw = yield* AWS.EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
  *   vpcId: myVpc.vpcId,
@@ -123,6 +122,8 @@ export interface EgressOnlyInternetGateway extends Resource<
  * Instances in subnets associated with `privateRouteTable` can now make
  * outbound IPv6 connections (updates, API calls) while remaining unreachable
  * from the public internet.
+ *
+ * @resource
  */
 export const EgressOnlyInternetGateway = Resource<EgressOnlyInternetGateway>(
   "AWS.EC2.EgressOnlyInternetGateway",
