@@ -12,7 +12,7 @@ bun alchemy state tree
 ```
 
 <Terminal content={`AlchemyEffectWebsite
-├─ dev_sam
+├─ dev-sam
 │  ├─ Bucket
 │  └─ Worker
 └─ prod
@@ -38,7 +38,7 @@ bun alchemy state stages --stack myapp
 Lists every stage recorded under `myapp`.
 
 ```sh
-bun alchemy state resources --stack myapp --stage dev_sam
+bun alchemy state resources --stack myapp --stage dev-sam
 ```
 
 Prints the FQNs tracked under that stack/stage — the addresses
@@ -57,14 +57,14 @@ single JSON document to filter locally — see
 ## Debugging a bad diff
 
 ```sh
-bun alchemy state get --stack myapp --stage dev_sam --fqn Bucket
+bun alchemy state get --stack myapp --stage dev-sam --fqn Bucket
 ```
 
 This is the persisted props/attrs the planner diffs against — see
 [state](/cli/state) for the output encoding. Compare it with what
 `alchemy plan` says it wants to change. Three usual causes:
 
-**Wrong stage.** `--stage` defaults to `dev_$USER` (e.g. `dev_sam`),
+**Wrong stage.** `--stage` defaults to `dev-$USER` (e.g. `dev-sam`),
 so a plan that "wants to create everything" often just means you're
 looking at a stage you never deployed. Run
 `state stages --stack myapp` and confirm which stage actually has

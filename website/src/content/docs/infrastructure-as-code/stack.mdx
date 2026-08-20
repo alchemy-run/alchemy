@@ -118,14 +118,14 @@ The CLI renders them after every successful deploy:
 ## Stages
 
 Every deploy targets a **stage** — an isolated instance of the stack
-like `dev_sam`, `staging`, or `prod`. The stage defaults to
-`dev_$USER`, so each developer gets their own environment
+like `dev-sam`, `staging`, or `prod`. The stage defaults to
+`dev-$USER`, so each developer gets their own environment
 automatically. State and physical names are namespaced by stage.
 
 ```sh
 # Each stage = its own state file + its own physical names.
-$ alchemy deploy --stage dev_sam     # -> myapp-dev_sam-photos-a3f1
-$ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
+$ alchemy deploy --stage dev-sam     # -> myapp-dev-sam-photos-a3f1
+$ alchemy deploy --stage pr-147      # -> myapp-pr-147-photos-9b2c
 $ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
 
 # Three independent deployments. Destroying one
@@ -148,7 +148,7 @@ import * as Console from "effect/Console";
 Effect.gen(function* () {
   const stack = yield* Stack;
   yield* Console.log(stack.name); // "MyApp"
-  yield* Console.log(stack.stage); // "dev_sam"
+  yield* Console.log(stack.stage); // "dev-sam"
 
   const queue = yield* SQS.Queue("Jobs").pipe(
     RemovalPolicy.retain(stack.stage === "prod"),
