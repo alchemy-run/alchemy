@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -93,6 +94,10 @@ function runLifecycle(verbose: boolean) {
           yield* Effect.sync(() =>
             console.log("✔ created and persisted 20 local resources"),
           );
+          yield* pauseForReview(
+            verbose,
+            "Press Enter to show the compact update plan...",
+          );
 
           yield* Effect.sync(() =>
             console.log("\nStep 2/3: plan updated stack"),
@@ -103,6 +108,10 @@ function runLifecycle(verbose: boolean) {
           if (!verbose) {
             yield* Effect.sync(() => verifyCompactPlan(compact));
           }
+          yield* pauseForReview(
+            verbose,
+            "Press Enter to show the detailed update plan...",
+          );
 
           const detailed = yield* Effect.tryPromise(() =>
             runCli(cli, runtime, ["plan", "--detailed"], "updated", verbose),
@@ -114,6 +123,10 @@ function runLifecycle(verbose: boolean) {
             console.log(
               "✔ compact and detailed plans verified for 20 resources",
             ),
+          );
+          yield* pauseForReview(
+            verbose,
+            "Press Enter to remove the temporary state and exit...",
           );
         }),
       (runtime) =>
@@ -129,6 +142,21 @@ function runLifecycle(verbose: boolean) {
     );
   });
 }
+
+const pauseForReview = (enabled: boolean, message: string) =>
+  enabled
+    ? Effect.promise(async () => {
+        const readline = createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        try {
+          await readline.question(`\n${message}`);
+        } finally {
+          readline.close();
+        }
+      })
+    : Effect.void;
 
 async function runCli(
   cli: string,
