@@ -1,9 +1,11 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { makeCaptureContext } from "./ActionRuntimeContext.ts";
 import { toFqn } from "./FQN.ts";
+import { ForcePolicy } from "./ForcePolicy.ts";
 import type { Input } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
@@ -45,6 +47,14 @@ export interface ActionLike<
    * {@link RuntimeContext}. Empty when the Action captures nothing.
    */
   readonly Captures: Record<string, Output.Output>;
+  /**
+   * Per-action force policy captured from the ambient {@link ForcePolicy}
+   * at registration time (e.g. via `.pipe(force(true))`). `true` re-runs the
+   * body even when the input hash is unchanged; `false` pins the action as
+   * never-forced, overriding the run-level `--force`. `undefined` means no
+   * action-scoped override.
+   */
+  readonly Force: boolean | undefined;
   /** Resolved runner — populated by the init effect (if any). */
   readonly Run: (input: In) => Effect.Effect<Out, any, any>;
   /** @internal phantom */
@@ -288,6 +298,9 @@ const registerAction = <
       LogicalId: id,
       Input: input,
       Captures: captures,
+      Force: yield* Effect.serviceOption(ForcePolicy).pipe(
+        Effect.map(Option.getOrUndefined),
+      ),
       Run: run,
       Output: undefined as any,
     };

@@ -15,6 +15,8 @@ export {
 } from "./Binding.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
+export { force } from "./ForcePolicy.ts";
+export * as ForcePolicy from "./ForcePolicy.ts";
 export * from "./Input.ts";
 export * from "./InstanceId.ts";
 export * from "./KeyPair.ts";

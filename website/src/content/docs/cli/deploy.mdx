@@ -51,12 +51,27 @@ When the plan contains no changes, the approval prompt is skipped automatically.
 | `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)                                                                               |
 | `--yes`             | Skip the approval prompt                                                                                                   |
 | `--dry-run`         | Show the plan without applying (same as `alchemy plan`)                                                                    |
-| `--force`           | Force updates for resources that would otherwise no-op                                                                     |
+| `--force[=<ids>]`   | Re-run resources/actions that would otherwise no-op. `--force` for the whole stack, `--force=Seed,Api` for a selection      |
 | `--adopt`           | Adopt pre-existing cloud resources that conflict with this stack instead of failing. Useful for re-importing into a fresh state store. |
 | `--profile <name>`  | Auth profile to use (defaults to `default` or `$ALCHEMY_PROFILE`)                                                          |
 | `--env-file <path>` | Load environment variables from a file                                                                                     |
 
 How `--adopt` decides what to take over is covered in [Adopting Resources](/cli/adopting-resources).
+
+`--force` re-runs `reconcile` (and [Action](/infrastructure-as-code/action)
+bodies) that the plan would otherwise report as no-ops. Pass an inline,
+comma-separated value to force just part of the stack — each entry is a
+logical ID (`Seed`) or a fully-qualified name (`Backend/Seed`), and an
+entry matching nothing fails the plan:
+
+```sh
+alchemy deploy --force=Seed
+```
+
+Note the `=`: `--force Seed` would be read as `--force` plus a stack
+file named `Seed`. A declaration piped through
+[`force()`](/infrastructure-as-code/resource-lifecycle#forcing-a-re-run)
+overrides the flag either way.
 
 `--dry-run` runs the exact same code path as [`alchemy plan`](/cli/plan) — see that page for the plan output format.
 

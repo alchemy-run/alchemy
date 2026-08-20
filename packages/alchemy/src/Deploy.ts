@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
+import type { ForceSelection } from "./ForcePolicy.ts";
 import type { Input } from "./Input.ts";
 import * as Plan from "./Plan.ts";
 import { evalStack, type CompiledStack, type StackEffect } from "./Stack.ts";
@@ -20,7 +21,8 @@ export const deploy = <A>({
   dev?: boolean;
   /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */
   scope?: Scope.Scope;
-  force?: boolean;
+  /** `true` forces every node; a list forces only those logical IDs / FQNs. */
+  force?: ForceSelection;
 }) =>
   evalStack(
     stack,

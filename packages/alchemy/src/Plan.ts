@@ -30,6 +30,12 @@ import {
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
+import {
+  isForced as resolveForced,
+  unknownForceTarget,
+  unmatched as unmatchedForceTargets,
+  type ForceSelection,
+} from "./ForcePolicy.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
@@ -286,7 +292,14 @@ export type Plan<Output = any> = {
 };
 
 export interface MakePlanOptions {
-  force?: boolean;
+  /**
+   * Which nodes to force (re-run even when nothing changed): `true` for the
+   * whole stack, or a list of logical IDs / FQNs to force just those. A
+   * declaration decorated with `force(...)` overrides this per node.
+   *
+   * @see {@link ForceSelection}
+   */
+  force?: ForceSelection;
 }
 
 export const make = <A>(
@@ -334,6 +347,44 @@ export const make = <A>(
         onSome: (c) => c.adopt,
       });
     });
+
+    // ── Forcing ──────────────────────────────────────────────────────────
+    //
+    // `--force` (the whole stack) or `--force=Seed,Api` (a selection), with
+    // a per-declaration `force(...)` decoration winning over both. An entry
+    // that names nothing is a typo — fail loudly rather than silently
+    // forcing nothing.
+    const forceSelection = options.force;
+    {
+      const targets = [
+        ...resources.map((r) => ({ fqn: r.FQN, logicalId: r.LogicalId })),
+        ...actions.map((a) => ({ fqn: a.FQN, logicalId: a.LogicalId })),
+      ];
+      const unknown = unmatchedForceTargets(forceSelection, targets);
+      if (unknown.length > 0) {
+        yield* Effect.die(
+          unknownForceTarget(
+            unknown,
+            [...new Set(targets.map((t) => t.logicalId))].sort(),
+          ),
+        );
+      }
+    }
+
+    /**
+     * Is this node forced on this run? `Force` is the declaration-level
+     * policy captured at registration (`.pipe(force(true))` /
+     * `.pipe(force(false))`); it wins over the run-level selection.
+     */
+    const isForced = (node: {
+      FQN: string;
+      LogicalId: string;
+      Force?: boolean | undefined;
+    }): boolean =>
+      resolveForced(node.Force, forceSelection, {
+        fqn: node.FQN,
+        logicalId: node.LogicalId,
+      });
 
     // The run-level default provider mode (`alchemy dev` → "local",
     // `alchemy deploy` → "live"). A resource-scoped `remote()` (captured on
@@ -702,7 +753,7 @@ export const make = <A>(
               // re-reconciled. Expose only the stable attributes and let
               // apply re-evaluate the rest against the forced reconcile's
               // fresh output.
-              if (options.force) {
+              if (isForced(resource)) {
                 return withStables(oldState?.attr);
               }
               if (
@@ -1407,7 +1458,7 @@ export const make = <A>(
                       } as UpdateDiff | NoopDiff),
                   ),
                   Effect.map((diff) =>
-                    options.force && diff.action === "noop"
+                    isForced(resource) && diff.action === "noop"
                       ? ({
                           action: "update",
                         } satisfies UpdateDiff)
@@ -1633,7 +1684,7 @@ export const make = <A>(
             const prior = oldState as ActionState | undefined;
             const sameInput =
               prior?.status === "ran" && prior.inputHash === inputHash;
-            if (sameInput && !options.force) {
+            if (sameInput && !isForced(action)) {
               return [
                 fqn,
                 {
@@ -1654,7 +1705,7 @@ export const make = <A>(
                 input: action.Input,
                 state: prior,
                 downstream,
-                forced: !!options.force,
+                forced: isForced(action),
               } satisfies ActionRun,
             ] as const;
           }),
@@ -1760,6 +1811,7 @@ export const make = <A>(
                   Type: persisted.actionType,
                   Input: persisted.input,
                   Captures: {},
+                  Force: undefined,
                   Run: () => undefined as any,
                   Output: undefined as any,
                 } satisfies ActionLike,
@@ -1846,6 +1898,7 @@ export const make = <A>(
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
                     Adopt: undefined,
+                    Force: undefined,
                     RequiresImplementation: undefined,
                     Mode: oldState.providerMode,
                     FormerFqns: undefined,
@@ -1900,6 +1953,9 @@ export const make = <A>(
         "alchemy.stage": stack.stage,
         "alchemy.resources.count": Object.keys(stack.resources).length,
         "alchemy.force": !!options.force,
+        "alchemy.force.selection": Array.isArray(options.force)
+          ? options.force.join(",")
+          : undefined,
       },
     }),
   );

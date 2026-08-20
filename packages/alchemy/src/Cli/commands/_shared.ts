@@ -11,6 +11,7 @@ import * as S from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
+import * as Primitive from "effect/unstable/cli/Primitive";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -26,6 +27,7 @@ import {
 import { AwsAuth } from "../../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import type { ForceSelection } from "../../ForcePolicy.ts";
 import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
@@ -148,11 +150,71 @@ export const yes = Flag.boolean("yes").pipe(
   Flag.withDefault(false),
 );
 
-export const force = Flag.boolean("force").pipe(
+/**
+ * A flag the parser treats as a switch — a bare `--force` is legal and never
+ * swallows the following positional — but which also accepts an inline value
+ * (`--force=Seed,Api`).
+ *
+ * Effect's CLI has no first-class "optional value" flag: the parser decides
+ * whether to consume the next token by asking `Primitive.isBoolean`, which is
+ * a `_tag === "Boolean"` check, and an `=`-attached value is handed to the
+ * primitive's `parse` before that check runs. So a string primitive wearing
+ * the Boolean tag gets us both behaviors: `--force` parses the synthesized
+ * literal `"true"`, `--no-force` parses `"false"`, and `--force=A,B` parses
+ * `"A,B"`. `--force A,B` (space-separated) is NOT supported — that token
+ * stays positional, which is exactly what keeps `alchemy deploy --force
+ * main.ts` working.
+ *
+ * The three shapes are pinned by test/Cli/forceFlag.test.ts so a change to
+ * that internal contract fails loudly instead of silently.
+ */
+const optionalValuePrimitive: Primitive.Primitive<string> = Object.assign(
+  Object.create(Object.getPrototypeOf(Primitive.string)),
+  Primitive.string,
+  { _tag: "Boolean", parse: (value: string) => Effect.succeed(value) },
+);
+
+const optionalValueFlag = (name: string): Flag.Flag<string> => {
+  const flag = Flag.boolean(name);
+  return Object.assign(Object.create(Object.getPrototypeOf(flag)), flag, {
+    primitiveType: optionalValuePrimitive,
+  }) as unknown as Flag.Flag<string>;
+};
+
+const BOOLEAN_LITERALS: Record<string, boolean> = {
+  true: true,
+  "1": true,
+  y: true,
+  yes: true,
+  on: true,
+  false: false,
+  "0": false,
+  n: false,
+  no: false,
+  off: false,
+};
+
+/**
+ * Parse the raw `--force` value into a {@link ForceSelection}: the switch
+ * forms give a boolean, an inline value gives the comma-separated list.
+ */
+export const parseForceValue = (raw: string): ForceSelection => {
+  const literal = BOOLEAN_LITERALS[raw.trim().toLowerCase()];
+  if (literal !== undefined) return literal;
+  const ids = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return ids.length > 0 ? ids : false;
+};
+
+export const force = optionalValueFlag("force").pipe(
   Flag.withDescription(
-    "Force updates for resources that would otherwise no-op",
+    "Re-run resources/actions that would otherwise no-op. " +
+      "Use --force=Seed,Api to force only those (logical ID or FQN).",
   ),
-  Flag.withDefault(false),
+  Flag.withDefault("false"),
+  Flag.map(parseForceValue),
 );
 
 export const script = Argument.file("main", {

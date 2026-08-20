@@ -39,7 +39,14 @@ export const ExecStackOptions = Schema.Struct({
   envFile: Schema.OptionFromOptional(Schema.String),
   profile: Schema.optional(Schema.String),
   dryRun: Schema.optional(Schema.Boolean),
-  force: Schema.optional(Schema.Boolean),
+  /**
+   * `true` forces every node, an array forces just those logical IDs / FQNs
+   * (`--force=Seed,Api`). Encoded into `ALCHEMY_EXEC_OPTIONS` for the dev
+   * child process, so it has to survive a JSON round-trip.
+   */
+  force: Schema.optional(
+    Schema.Union([Schema.Boolean, Schema.Array(Schema.String)]),
+  ),
   yes: Schema.optional(Schema.Boolean),
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
@@ -54,6 +61,9 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.main": args.main,
   "alchemy.dry_run": !!args.dryRun,
   "alchemy.force": !!args.force,
+  "alchemy.force.selection": Array.isArray(args.force)
+    ? args.force.join(",")
+    : undefined,
   "alchemy.destroy": !!args.destroy,
   "alchemy.dev": !!args.dev,
   "alchemy.adopt": !!args.adopt,
@@ -237,6 +247,7 @@ export const destroyCommand = Command.make(
 export const planCommand = Command.make(
   "plan",
   {
+    force,
     main: script,
     envFile,
     stage,

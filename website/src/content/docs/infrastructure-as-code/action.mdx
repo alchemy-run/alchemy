@@ -166,7 +166,7 @@ An Action has only two terminal states:
 
 | Action | Symbol | When |
 | --- | --- | --- |
-| **run**  | `λ` | First time, or `inputHash` differs from the last persisted run, or `--force` is set |
+| **run**  | `λ` | First time, `inputHash` differs from the last persisted run, or the Action is [forced](#forcing-a-re-run) |
 | **skip** | `·` | Persisted `inputHash` matches the newly resolved input |
 
 There is no `replace` and no `delete`. When an Action is removed from the
@@ -182,10 +182,48 @@ differs means "run".
 ### Forcing a re-run
 
 ```sh
-alchemy deploy --force
+alchemy deploy --force        # every skip becomes a run
+alchemy deploy --force=Seed   # just this Action
 ```
 
-`--force` flips every `skip` to `run` at plan time, including actions.
+`--force` flips `skip` to `run` at plan time. With no value it forces
+the whole stack (resources included); with a comma-separated value it
+forces only the named nodes, each a logical ID (`Seed`) or a
+fully-qualified name (`Backend/Seed`). Naming something the stack does
+not declare fails the plan instead of quietly forcing nothing.
+
+The same works in dev, which is usually where an on-demand re-run is
+wanted:
+
+```json title="package.json"
+{
+  "scripts": {
+    "dev": "alchemy dev",
+    "dev:seed": "alchemy dev --force=Seed"
+  }
+}
+```
+
+An Action can also decide for itself, with the `force()` decoration:
+
+```typescript
+import { force } from "alchemy";
+import * as Config from "effect/Config";
+
+const seed = yield* Seed({ url: database.url }).pipe(
+  force(yield* Config.boolean("SEED").pipe(Config.withDefault(false))),
+);
+```
+
+```sh
+alchemy dev            # seeds once, then skips
+SEED=1 alchemy dev     # re-seeds
+```
+
+The decoration wins over the CLI flag, so `force(false)` pins an Action
+as never-forced even under a blanket `--force`. See
+[Forcing a re-run](/infrastructure-as-code/resource-lifecycle#forcing-a-re-run)
+for how the same decoration applies to Resources.
 
 ### Dependencies
 

@@ -226,6 +226,50 @@ the `Unowned(attrs)` brand. The engine routes:
 See [Provider › read](/infrastructure-as-code/provider#read) for the implementation
 contract and [Adopting Resources](/cli/adopting-resources) for the CLI flag.
 
+## Forcing a re-run
+
+A resource whose props and bindings are unchanged plans as a
+**no-op**. Forcing upgrades that no-op to an `update`, so
+`reconcile` runs again and re-converges against real cloud state.
+Nothing else about the plan changes — a create stays a create, a
+replacement stays a replacement.
+
+Force a whole run from the CLI, or name what to force:
+
+```sh
+alchemy deploy --force            # every resource and action
+alchemy deploy --force=Seed       # just Seed
+alchemy deploy --force=Seed,Api   # a comma-separated selection
+```
+
+Each entry is a logical ID (`Seed`) or a fully-qualified name
+(`Backend/Seed`). An entry matching nothing fails the plan rather than
+silently forcing nothing.
+
+Force a single declaration instead by piping it through `force()`,
+which — like `retain()` and `adopt()` — applies to everything declared
+inside the piped effect:
+
+```typescript
+import { force } from "alchemy";
+
+Effect.gen(function* () {
+  // re-reconciled on every deploy
+  const bucket = yield* R2.Bucket("Uploads").pipe(force(true));
+
+  // ...and only when SEED is set
+  const seed = yield* SeedDatabase({ url: db.url }).pipe(
+    force(yield* Config.boolean("SEED").pipe(Config.withDefault(false))),
+  );
+
+  // never forced, not even by `--force`
+  const api = yield* Cloudflare.Worker("Api", { ... }).pipe(force(false));
+});
+```
+
+The declaration wins over the CLI, which makes `force(false)` a real
+opt-out of a blanket `--force`.
+
 ## Errors
 
 - **Retryable errors** (eventual consistency, dependency races) are

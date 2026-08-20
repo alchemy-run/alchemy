@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
+import { ForcePolicy } from "./ForcePolicy.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps, PropsInput } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
@@ -135,6 +136,14 @@ export interface ResourceLike<
    * resource-scoped override — the planner falls back to the stack/CLI default.
    */
   Adopt: boolean | undefined;
+  /**
+   * Per-resource force policy captured from the ambient {@link ForcePolicy}
+   * at registration time (e.g. via `.pipe(force(true))`). `true` re-runs
+   * `reconcile` even when nothing changed; `false` pins the resource as
+   * never-forced, overriding the run-level `--force`. `undefined` means no
+   * resource-scoped override — the planner falls back to the run selection.
+   */
+  Force: boolean | undefined;
   /**
    * Per-resource provider mode captured from the ambient
    * {@link ProviderModePolicy} at registration time. `"live"` when the
@@ -466,6 +475,9 @@ export function Resource<R extends ResourceLike>(
           Effect.map(Option.getOrElse(() => defaultRemovalPolicy)),
         ),
         Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(
+          Effect.map(Option.getOrUndefined),
+        ),
+        Force: yield* Effect.serviceOption(ForcePolicy).pipe(
           Effect.map(Option.getOrUndefined),
         ),
         Mode: ambientMode,
