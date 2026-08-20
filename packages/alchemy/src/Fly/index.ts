@@ -17,8 +17,6 @@ export * from "./Machine.ts";
 export * from "./Metadata.ts";
 export * from "./MountVolume.ts";
 export * from "./Providers.ts";
-export * from "./ReadWriteSecret.ts";
-export * from "./ReadWriteSecretHttp.ts";
 export * from "./Secret.ts";
 export * from "./SecretKey.ts";
 export * from "./Service.ts";

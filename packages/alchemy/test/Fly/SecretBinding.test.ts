@@ -147,3 +147,64 @@ test.provider.skipIf(!hasFlyCreds)(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+test.provider.skipIf(!hasFlyCreds)(
+  "ListSecrets reaches across another App from an Action",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const site = yield* Fly.App("Site");
+          const other = yield* Fly.App("Other");
+          const marker = yield* Fly.Secret("OnOther", {
+            app: other,
+            name: "CROSS_APP",
+            value: VALUE_A,
+          });
+
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* marker.name;
+              const listSite = yield* Fly.ListSecrets(site);
+              const listOther = yield* Fly.ListSecrets(other);
+              return Effect.fn(function* () {
+                const siteListed = yield* listSite();
+                const otherListed = yield* listOther();
+                return {
+                  siteNames: (siteListed.secrets ?? []).flatMap((row) =>
+                    row.name === undefined ? [] : [row.name],
+                  ),
+                  otherNames: (otherListed.secrets ?? []).flatMap((row) =>
+                    row.name === undefined ? [] : [row.name],
+                  ),
+                };
+              });
+            }).pipe(Effect.provide(Fly.ListSecretsHttp)),
+          );
+
+          return {
+            site,
+            other,
+            marker,
+            probe: yield* Probe({}),
+          };
+        }),
+      );
+
+      expect(out.probe.otherNames).toContain("CROSS_APP");
+      expect(out.probe.siteNames).not.toContain("CROSS_APP");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(out.other.appName, "CROSS_APP");
+      expect(gone).toEqual("gone");
+      const siteGone = yield* waitAppGone(out.site.appName);
+      expect(siteGone).toEqual("gone");
+      const otherGone = yield* waitAppGone(out.other.appName);
+      expect(otherGone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

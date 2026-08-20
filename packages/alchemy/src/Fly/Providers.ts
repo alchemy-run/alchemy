@@ -15,7 +15,6 @@ import { EncryptHttp } from "./EncryptHttp.ts";
 import { GetSecretHttp } from "./GetSecretHttp.ts";
 import { ListSecretsHttp } from "./ListSecretsHttp.ts";
 import { MountVolumeLive } from "./MountVolume.ts";
-import { ReadWriteSecretHttp } from "./ReadWriteSecretHttp.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
 import { Service, ServiceProvider } from "./Service.ts";
@@ -87,7 +86,6 @@ export const providers = () =>
     Layer.provideMerge(GetSecretHttp),
     Layer.provideMerge(ListSecretsHttp),
     Layer.provideMerge(WriteSecretHttp),
-    Layer.provideMerge(ReadWriteSecretHttp),
     Layer.provideMerge(EncryptHttp),
     Layer.provideMerge(DecryptHttp),
     Layer.provideMerge(SignHttp),

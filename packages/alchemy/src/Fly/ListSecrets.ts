@@ -13,6 +13,12 @@ import type { App } from "./App.ts";
  * fixed by `ListSecrets(app)`; calls take no `app_name`. Provide
  * {@link ListSecretsHttp} on the Action / Service Effect.
  *
+ * From an Action, the org `FLY_API_TOKEN` can list any App in the
+ * org — `ListSecrets(other)` is how you reach across Apps. From a
+ * Machine, Fly deploy tokens are per-App: `ListSecrets(site)` on a
+ * Service in `site` works; mixing Apps on one host shares one
+ * `FLY_API_TOKEN` and is not supported.
+ *
  * Plaintext is only returned from inside a Machine in the same App.
  *
  * @binding
@@ -21,6 +27,12 @@ import type { App } from "./App.ts";
  * @example List secrets on an App
  * ```typescript
  * const list = yield* Fly.ListSecrets(Site);
+ * const { secrets } = yield* list();
+ * ```
+ *
+ * @example List another App from an Action
+ * ```typescript
+ * const list = yield* Fly.ListSecrets(Other);
  * const { secrets } = yield* list();
  * ```
  */
