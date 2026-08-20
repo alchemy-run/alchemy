@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test"
   },
   "dependencies": {
     "@distilled.cloud/aws": "workspace:*",
