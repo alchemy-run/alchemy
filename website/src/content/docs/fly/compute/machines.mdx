@@ -45,18 +45,67 @@ const web = yield* Fly.Machine("Web", {
 ```
 
 `region` replaces on change. `image` updates in place. Guest
-defaults to shared-cpu 1× / 256 MB. `count` is how many Machines
-to keep (default `1`). Fly's proxy load-balances published
-`services` across them. Omit `services` (or pass `[]`) for a
-worker that should not be reachable from the internet.
-
-The resolved resource exposes `machineId` (replica 0), `machineIds`,
-`count`, `privateIp`, `state`, `region`, `mounts`, and `url` when a
-proxy service is published — see the
-[`Machine` reference](/providers/fly/machine).
+defaults to shared-cpu 1× / 256 MB. Omit `services` (or pass `[]`)
+for a worker that should not be reachable from the internet.
 
 `{app}.fly.dev` over IPv4 still needs an
 [`IpAssignment`](/fly/networking) on the parent App.
+
+## Scale up
+
+Each Machine resource is one VM. Yield another Machine to add
+capacity. Fly's proxy load-balances published `services` across
+them.
+
+```typescript
+const web1 = yield* Fly.Machine("Web1", {
+  app: Site,
+  region: "iad",
+  image: "nginx:alpine",
+  services: [
+    {
+      protocol: "tcp",
+      internalPort: 80,
+      ports: [{ port: 80, handlers: ["http"] }],
+    },
+  ],
+});
+
+const web2 = yield* Fly.Machine("Web2", {
+  app: Site,
+  region: "iad",
+  image: "nginx:alpine",
+  services: [
+    {
+      protocol: "tcp",
+      internalPort: 80,
+      ports: [{ port: 80, handlers: ["http"] }],
+    },
+  ],
+});
+```
+
+A [`Service`](/fly/compute/services) still scales with `count`. That
+is one program, many Machines. `Fly.Machine` is one resource, one
+VM.
+
+## Scale down
+
+Remove a Machine from the stack. The next deploy deletes it.
+
+```diff lang="typescript"
+  const web1 = yield* Fly.Machine("Web1", {
+    app: Site,
+    region: "iad",
+    image: "nginx:alpine",
+  });
+-
+- const web2 = yield* Fly.Machine("Web2", {
+-   app: Site,
+-   region: "iad",
+-   image: "nginx:alpine",
+- });
+```
 
 ## Env, restart, metadata
 
@@ -78,8 +127,8 @@ seen at least that secrets version.
 
 ## Mounts
 
-Pass disks as `mounts`. Alchemy creates one Volume per replica in
-the Machine's app and region. A Volume attaches to one Machine.
+Pass disks as `mounts`. Alchemy creates a Volume in the Machine's
+app and region. A Volume attaches to one Machine.
 
 ```typescript
 const box = yield* Fly.Machine("Box", {

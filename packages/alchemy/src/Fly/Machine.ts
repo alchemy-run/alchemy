@@ -415,7 +415,7 @@ export type Machine = Resource<
  * keeps that many Machines up for the service.
  *
  * Autostop only stops Machines that already exist. It does not mint
- * new ones. Size the pool with `count`.
+ * new ones. Yield more Machine resources to size the pool.
  *
  * @example Stop when idle
  * ```typescript
@@ -436,18 +436,33 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Scale with count
- * `count` is how many Machines to keep running. Default is `1`. Fly's
- * proxy load-balances published `services` across them. Each replica
- * gets its own Volume from every `mounts` group.
+ * @section Scale up
+ * Each Machine resource is one VM. Yield another Machine to add
+ * capacity. Fly's proxy load-balances published `services` across
+ * them.
  *
- * @example Three replicas
+ * A {@link Service} still scales with `count`. That is one program,
+ * many Machines.
+ *
+ * @example Two Machines
  * ```typescript
- * const web = yield* Fly.Machine("Web", {
+ * const web1 = yield* Fly.Machine("Web1", {
  *   app: Site,
  *   region: "iad",
  *   image: "nginx:alpine",
- *   count: 3,
+ *   services: [
+ *     {
+ *       protocol: "tcp",
+ *       internalPort: 80,
+ *       ports: [{ port: 80, handlers: ["http"] }],
+ *     },
+ *   ],
+ * });
+ *
+ * const web2 = yield* Fly.Machine("Web2", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
  *   services: [
  *     {
  *       protocol: "tcp",
@@ -458,10 +473,28 @@ export type Machine = Resource<
  * });
  * ```
  *
+ * @section Scale down
+ * Remove a Machine from the stack. The next deploy deletes it.
+ *
+ * @example Drop Web2
+ * ```diff
+ *   const web1 = yield* Fly.Machine("Web1", {
+ *     app: Site,
+ *     region: "iad",
+ *     image: "nginx:alpine",
+ *   });
+ * -
+ * - const web2 = yield* Fly.Machine("Web2", {
+ * -   app: Site,
+ * -   region: "iad",
+ * -   image: "nginx:alpine",
+ * - });
+ * ```
+ *
  * @section Attach a disk
- * Pass disks as `mounts`. Alchemy creates one Volume per replica in
- * the Machine's app and region. A Volume attaches to one Machine.
- * There is no standalone Volume resource.
+ * Pass disks as `mounts`. Alchemy creates a Volume in the Machine's
+ * app and region. A Volume attaches to one Machine. There is no
+ * standalone Volume resource.
  *
  * `sizeGb` can grow in place. Shrinking is not supported. Encryption,
  * filesystem type, `snapshotId`, and `sourceVolumeId` are create-only.

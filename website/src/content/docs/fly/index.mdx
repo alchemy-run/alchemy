@@ -54,7 +54,7 @@ TypeScript program.
 | A raw container              | [Machine](/fly/compute/machines) with an `image`                          |
 | A background worker          | [Service](/fly/compute/services) with `ServerHost.run`                    |
 | Persistent disk              | [MountVolume](/fly/data/volumes) or Machine `mounts`                      |
-| N replicas behind fly.dev    | Service / Machine `count`                                                 |
+| N replicas behind fly.dev    | Service `count`, or more [Machine](/fly/compute/machines) resources       |
 | Restore a disk               | [VolumeSnapshot](/fly/data/volumes#snapshots) + mount `snapshotId`        |
 | Config / API tokens          | [`Config.redacted`](/fly/data/secrets). [`Fly.Secret`](/fly/data/secrets) when Fly should own it |
 | Sign / encrypt in-app        | [SecretKey](/fly/data/secrets#kms-keys) + `Encrypt` / `Sign`              |
