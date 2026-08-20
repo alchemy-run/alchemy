@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import {
   PlatformError,
@@ -495,6 +496,19 @@ export const DockerLive = Layer.effect(
     // race. Only the command holding the returned dir reads this config;
     // everything else keeps using the global docker config (buildx builders,
     // `docker context`, etc. intact).
+    //
+    // Docker also resolves *contexts* from DOCKER_CONFIG, so the isolated
+    // dir symlinks the global `contexts/` — without it, `--context <name>`
+    // fails with "context not found" for every authenticated command.
+    const globalDockerConfigDir = Config.string("DOCKER_CONFIG").pipe(
+      Config.orElse(() =>
+        Config.string("HOME").pipe(
+          Config.orElse(() => Config.string("USERPROFILE")),
+          Config.map((home) => path.join(home, ".docker")),
+        ),
+      ),
+      Config.option,
+    );
     const credentialConfigDir = Effect.fn(function* (
       credentials: ImageRegistry,
     ) {
@@ -512,6 +526,18 @@ export const DockerLive = Layer.effect(
         });
       });
       yield* fs.writeFileString(path.join(dir, "config.json"), config);
+      const global = yield* globalDockerConfigDir.pipe(
+        Effect.orElseSucceed(() => Option.none<string>()),
+      );
+      if (Option.isSome(global)) {
+        const contexts = path.join(global.value, "contexts");
+        const hasContexts = yield* fs
+          .exists(contexts)
+          .pipe(Effect.orElseSucceed(() => false));
+        if (hasContexts) {
+          yield* fs.symlink(contexts, path.join(dir, "contexts"));
+        }
+      }
       return dir;
     });
 
