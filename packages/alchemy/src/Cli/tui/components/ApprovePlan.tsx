@@ -8,11 +8,12 @@ import { Plan } from "./Plan.tsx";
 
 export interface ApprovePlanProps {
   plan: AlchemyPlan;
+  detailed?: boolean;
   approve: (result: boolean) => void;
 }
 
 export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
-  const { plan, approve } = props;
+  const { plan, detailed = false, approve } = props;
   const [selected, setSelected] = useState(0);
   const { exit } = useApp();
 
@@ -27,7 +28,7 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
 
   return (
     <Box flexDirection="column">
-      <Plan plan={plan} />
+      <Plan plan={plan} detailed={detailed} />
       <Box marginTop={1}>
         <Text>Proceed?</Text>
       </Box>

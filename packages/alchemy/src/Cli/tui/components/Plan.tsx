@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useMemo, type JSX } from "react";
 
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type {
   Plan as AlchemyPlan,
   BindingAction,
@@ -16,11 +16,24 @@ import {
   type ActionVerb,
 } from "../../NamespaceTree.ts";
 import { formatModeNote } from "../../ModeTag.ts";
+import {
+  fitCreatedPropertyValue,
+  fitPropertyChangeValues,
+  formatPropertyPath,
+  propertyDiffLayout,
+  toFormattedPropertyChange,
+  type FormattedPropertyChange,
+  type PropertyChange,
+  type PropertyValue,
+} from "../../PropertyDiff.ts";
 
 export interface PlanProps {
   plan: AlchemyPlan;
+  detailed?: boolean;
 }
-export function Plan({ plan }: PlanProps): JSX.Element {
+export function Plan({ plan, detailed = false }: PlanProps): JSX.Element {
+  const { stdout } = useStdout();
+  const terminalColumns = stdout.columns ?? 120;
   const items = useMemo(
     () =>
       [
@@ -40,9 +53,8 @@ export function Plan({ plan }: PlanProps): JSX.Element {
 
   const flatItems = useMemo(() => {
     const tree = buildNamespaceTree(items, taskItems);
-    return flattenTree(tree);
-  }, [items, taskItems]);
-
+    return flattenTree(tree, { includePropertyChanges: detailed });
+  }, [detailed, items, taskItems]);
   if (items.length === 0 && taskItems.length === 0) {
     return <Text color="gray">No changes planned</Text>;
   }
@@ -96,7 +108,7 @@ export function Plan({ plan }: PlanProps): JSX.Element {
         )}
       </Box>
       <Box flexDirection="column" marginTop={1}>
-        {flatItems.map((item) => {
+        {flatItems.map((item, index) => {
           const indent = "  ".repeat(item.depth);
           const color = getActionColor(item.action);
           const icon = getActionIcon(item.action);
@@ -152,32 +164,94 @@ export function Plan({ plan }: PlanProps): JSX.Element {
             priorMode: item.fromProviderMode,
             defaultMode: plan.defaultMode,
           });
+          const resourceRowProps = {
+            indent,
+            color,
+            icon,
+            id: item.id,
+            resourceType: item.resourceType,
+            bindingCount: item.bindingCount,
+            modeNote,
+          };
+          if (!detailed) {
+            return <ResourceRow key={key} {...resourceRowProps} />;
+          }
+
+          const propertyColumns = Math.max(0, terminalColumns - indent.length);
+          const propertyLayout =
+            item.action !== "create" && item.propertyChanges?.length
+              ? propertyDiffLayout(
+                  item.propertyChanges.map(toFormattedPropertyChange),
+                  propertyColumns,
+                )
+              : undefined;
           return (
-            <Box key={key} flexDirection="row">
-              <Text>{indent}</Text>
-              <Box width={2}>
-                <Text color={color}>{icon} </Text>
-              </Box>
-              <Box>
-                <Text bold>{item.id}</Text>
-              </Box>
-              <Box marginLeft={1}>
-                <Text color="blackBright">({item.resourceType})</Text>
-              </Box>
-              {modeNote && (
-                <Box marginLeft={1}>
-                  <Text color="blackBright">({modeNote})</Text>
-                </Box>
+            <Box key={key} flexDirection="column" marginTop={index > 0 ? 1 : 0}>
+              <ResourceRow {...resourceRowProps} />
+              {item.propertyChanges?.length === 0 && (
+                <Text color="gray">
+                  {`${indent}  `}
+                  {item.action === "create"
+                    ? "no declared properties"
+                    : "no declared property changes"}
+                </Text>
               )}
-              {item.bindingCount !== undefined && item.bindingCount > 0 && (
-                <Box marginLeft={1}>
-                  <Text color="cyan">({item.bindingCount} bindings)</Text>
-                </Box>
+              {item.propertyChanges && item.propertyChanges.length > 0 && (
+                <PropertyChanges
+                  changes={item.propertyChanges}
+                  indent={`${indent}  `}
+                  layout={propertyLayout}
+                  columns={propertyColumns}
+                  created={item.action === "create"}
+                />
               )}
             </Box>
           );
         })}
       </Box>
+    </Box>
+  );
+}
+
+function ResourceRow({
+  indent,
+  color,
+  icon,
+  id,
+  resourceType,
+  bindingCount,
+  modeNote,
+}: {
+  indent: string;
+  color: Color;
+  icon: string;
+  id: string;
+  resourceType?: string;
+  bindingCount?: number;
+  modeNote?: string;
+}): JSX.Element {
+  return (
+    <Box flexDirection="row">
+      <Text>{indent}</Text>
+      <Box width={2}>
+        <Text color={color}>{icon} </Text>
+      </Box>
+      <Box>
+        <Text bold>{id}</Text>
+      </Box>
+      <Box marginLeft={1}>
+        <Text color="blackBright">({resourceType})</Text>
+      </Box>
+      {modeNote && (
+        <Box marginLeft={1}>
+          <Text color="blackBright">({modeNote})</Text>
+        </Box>
+      )}
+      {bindingCount !== undefined && bindingCount > 0 && (
+        <Box marginLeft={1}>
+          <Text color="cyan">({bindingCount} bindings)</Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -209,3 +283,133 @@ const getActionIcon = (action: AnyAction): string =>
   })[action] ?? "?";
 
 const actionColor = (action: CRUD["action"]): Color => getActionColor(action);
+
+function PropertyChanges({
+  changes,
+  indent,
+  layout,
+  columns,
+  created,
+}: {
+  changes: PropertyChange[];
+  indent: string;
+  layout: ReturnType<typeof propertyDiffLayout>;
+  columns: number;
+  created: boolean;
+}): JSX.Element {
+  const rows = changes.map(toFormattedPropertyChange);
+
+  if (created) {
+    return (
+      <>
+        {rows.map((row) => (
+          <Text key={`${row.kind}/${row.path}`}>
+            {indent}
+            <Text color="green">+</Text>{" "}
+            <Text bold>{formatPropertyPath(row.path)}</Text>
+            {"  "}
+            <PropertyValueText
+              text={fitCreatedPropertyValue(row, columns)}
+              value={row.afterValue}
+              fallbackColor="green"
+            />
+          </Text>
+        ))}
+      </>
+    );
+  }
+
+  if (!layout) {
+    return (
+      <>
+        {rows.flatMap((row) => [
+          <Text key={`${row.kind}/${row.path}`}>
+            {indent}
+            <Text color={propertyChangeColor(row.kind)}>
+              {propertyChangeSymbol(row.kind)}
+            </Text>{" "}
+            <Text bold>{row.path}</Text>
+          </Text>,
+          <Text key={`${row.kind}/${row.path}/before`}>
+            {indent} <Text color="gray">├─ before</Text>
+            {"  "}
+            <PropertyValueText
+              text={row.before}
+              value={row.beforeValue}
+              fallbackColor={beforeColor(row.kind)}
+            />
+          </Text>,
+          <Text key={`${row.kind}/${row.path}/after`}>
+            {indent} <Text color="gray">└─ after </Text>
+            {"  "}
+            <PropertyValueText
+              text={row.after}
+              value={row.afterValue}
+              fallbackColor={afterColor(row.kind)}
+            />
+          </Text>,
+        ])}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {rows.map((row) => {
+        const values = fitPropertyChangeValues(row, layout);
+        return (
+          <Text key={`${row.kind}/${row.path}`}>
+            {indent}
+            <Text color={propertyChangeColor(row.kind)}>
+              {propertyChangeSymbol(row.kind)}
+            </Text>{" "}
+            <Text bold>{formatPropertyPath(row.path)}</Text>
+            {"  "}
+            <PropertyValueText
+              text={values.before}
+              value={row.beforeValue}
+              fallbackColor={beforeColor(row.kind)}
+            />
+            <Text color="gray"> → </Text>
+            <PropertyValueText
+              text={values.after}
+              value={row.afterValue}
+              fallbackColor={afterColor(row.kind)}
+            />
+          </Text>
+        );
+      })}
+    </>
+  );
+}
+
+const propertyChangeSymbol = (kind: FormattedPropertyChange["kind"]): string =>
+  kind === "add" ? "+" : kind === "remove" ? "-" : "~";
+
+const propertyChangeColor = (kind: FormattedPropertyChange["kind"]): Color =>
+  kind === "add" ? "green" : kind === "remove" ? "red" : "yellow";
+
+const beforeColor = (kind: FormattedPropertyChange["kind"]): Color =>
+  kind === "add" ? "gray" : "red";
+
+const afterColor = (kind: FormattedPropertyChange["kind"]): Color =>
+  kind === "remove" ? "gray" : "green";
+
+function PropertyValueText({
+  text,
+  value,
+  fallbackColor,
+}: {
+  text: string;
+  value: PropertyValue | undefined;
+  fallbackColor: Color;
+}): JSX.Element {
+  const color: Color = !value
+    ? "yellow"
+    : value.kind === "redacted"
+      ? "magenta"
+      : value.kind === "known-after-apply" || value.kind === "computed"
+        ? "cyan"
+        : fallbackColor;
+  return <Text color={color}>{text}</Text>;
+}

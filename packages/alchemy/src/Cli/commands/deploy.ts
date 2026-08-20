@@ -44,6 +44,7 @@ export const ExecStackOptions = Schema.Struct({
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
   adopt: Schema.optional(Schema.Boolean),
+  detailed: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
 export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
@@ -67,6 +68,13 @@ const adopt = Flag.boolean("adopt").pipe(
   Flag.withDefault(false),
 );
 
+const detailed = Flag.boolean("detailed").pipe(
+  Flag.withDescription(
+    "Show declared property changes for updates and replacements",
+  ),
+  Flag.withDefault(false),
+);
+
 const runStack = Effect.fn(function* ({
   main,
   stage,
@@ -78,6 +86,7 @@ const runStack = Effect.fn(function* ({
   destroy = false,
   dev = false,
   adopt = false,
+  detailed = false,
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
 
@@ -125,7 +134,7 @@ const runStack = Effect.fn(function* ({
         ? yield* Plan.destroy(stack)
         : yield* Plan.make(stack, { force });
       if (dryRun) {
-        yield* cli.displayPlan(updatePlan);
+        yield* cli.displayPlan(updatePlan, { detailed });
       } else {
         const hasChanges =
           Object.keys(updatePlan.deletions).length > 0 ||
@@ -135,7 +144,7 @@ const runStack = Effect.fn(function* ({
               node.bindings.some((b) => b.action !== "noop"),
           );
         if (!yes && hasChanges) {
-          const approved = yield* cli.approvePlan(updatePlan);
+          const approved = yield* cli.approvePlan(updatePlan, { detailed });
           if (!approved) {
             return;
           }
@@ -149,7 +158,7 @@ const runStack = Effect.fn(function* ({
         // and the rest of the stack keeps serving, but re-propagate a pure
         // interruption (Ctrl-C / fiber kill) so dev still shuts down cleanly.
         const applyPlan = dev
-          ? apply(updatePlan).pipe(
+          ? apply(updatePlan, { planDisplay: { detailed } }).pipe(
               Effect.catchCause((cause) =>
                 Cause.hasInterruptsOnly(cause)
                   ? Effect.failCause(cause)
@@ -158,7 +167,7 @@ const runStack = Effect.fn(function* ({
                     ).pipe(Effect.as(undefined)),
               ),
             )
-          : apply(updatePlan);
+          : apply(updatePlan, { planDisplay: { detailed } });
         const outputs = yield* applyPlan;
 
         if (outputs !== undefined) {
@@ -209,6 +218,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
     adopt,
+    detailed,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
@@ -241,6 +251,7 @@ export const planCommand = Command.make(
     envFile,
     stage,
     profile,
+    detailed,
   },
   instrumentCommand(
     "plan",
