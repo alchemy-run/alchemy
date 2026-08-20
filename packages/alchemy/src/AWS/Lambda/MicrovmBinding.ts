@@ -1,3 +1,9 @@
+import type {
+  AwsCredentialProviderError,
+  ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as HashMap from "effect/HashMap";
 import * as Layer from "effect/Layer";
@@ -6,17 +12,11 @@ import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Endpoint from "@distilled.cloud/aws/Endpoint";
-import { Region } from "@distilled.cloud/aws/Region";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
-import type {
-  AwsCredentialProviderError,
-  ResolvedCredentials,
-} from "@distilled.cloud/aws/Credentials";
 import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
 import { Credentials, makeAssumeRoleResolver } from "../Credentials.ts";
 import { AccessKey } from "../IAM/AccessKey.ts";
@@ -355,14 +355,17 @@ const withRuntimeCredentials = <A, E>(
         // so the assumed-role credentials are reused (and only refreshed near
         // expiry) instead of re-assuming the role on every call.
         return yield* eff.pipe(
-          Effect.provide(Layer.succeed(Credentials, access.credentials)),
-          Effect.provide(Layer.succeed(Region, Effect.succeed(reg))),
-          // `AWS_ENDPOINT_URL` from the worker env (bound under local dev by
-          // `ensureWorkerAwsAccess`); resolves undefined when unset, so live
-          // workers keep the real AWS endpoints. The shared assume-role
-          // resolver also reads this ambient Endpoint for its STS call.
-          Effect.provide(Endpoint.fromEnv()),
-          Effect.provide(FetchHttpClient.layer),
+          Effect.provide([
+            Layer.succeed(Credentials, access.credentials),
+            Layer.succeed(Region, Effect.succeed(reg)),
+            // `AWS_ENDPOINT_URL` from the worker env (bound under local dev
+            // by `ensureWorkerAwsAccess`); resolves undefined when unset, so
+            // live workers keep the real AWS endpoints. The shared
+            // assume-role resolver also reads this ambient Endpoint for its
+            // STS call.
+            Endpoint.fromEnv(),
+            FetchHttpClient.layer,
+          ]),
         );
       })
     : eff;
