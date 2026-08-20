@@ -4,9 +4,25 @@ description: A Firecracker VM running a container image.
 ---
 
 A [`Fly.Machine`](/providers/fly/machine) is a Firecracker VM
-running a container image. Use it when you already have an image.
-For an Effect program, use a [Service](/fly/compute/services).
-Service builds the image for you.
+running a container image.
+
+Prefer a [`Service`](/fly/compute/services) when the program is
+Effect. A Service is effectful, supports bindings, and scales with
+`count`. Alchemy builds and pushes the image.
+
+```typescript
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
+```
+
+Use `Fly.Machine` when you already have an image.
 
 ## Launch a Machine
 
