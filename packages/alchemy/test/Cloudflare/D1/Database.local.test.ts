@@ -13,6 +13,11 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import D1EffectWorker from "./fixtures/effect-worker.ts";
+import {
+  PRISMA_STUDIO_INTROSPECTION_REQUEST,
+  type PrismaStudioIntrospectionRow,
+} from "./fixtures/prisma-studio-introspection.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command (see
@@ -167,6 +172,55 @@ test.provider(
       };
       expect(body.names).toEqual(["alice", "bob"]);
       expect(body.count).toBe(2);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "IntrospectDatabaseBinding answers Prisma Studio's exact introspection query locally",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(D1EffectWorker);
+      const init = yield* Effect.promise(() =>
+        fetch(`${worker.url}/init`, { method: "POST" }),
+      );
+      expect(init.ok).toBe(true);
+
+      const response = yield* Effect.promise(() =>
+        fetch(`${worker.url}/prisma-studio-query`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(PRISMA_STUDIO_INTROSPECTION_REQUEST),
+        }),
+      );
+      expect(response.ok).toBe(true);
+      const [, rows] = (yield* Effect.promise(() => response.json())) as [
+        null,
+        PrismaStudioIntrospectionRow[],
+      ];
+      const users = rows.find((table) => table.name === "users");
+      expect(users?.sql).toContain("CREATE TABLE");
+      expect(users?.columns).toEqual([
+        expect.objectContaining({
+          name: "id",
+          datatype: "INTEGER",
+          pk: 1,
+        }),
+        expect.objectContaining({
+          name: "style",
+          datatype: "TEXT",
+          pk: 0,
+        }),
+        expect.objectContaining({
+          name: "name",
+          datatype: "TEXT",
+          pk: 0,
+        }),
+      ]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

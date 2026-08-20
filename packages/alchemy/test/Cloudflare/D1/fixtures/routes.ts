@@ -1,7 +1,12 @@
+import type { IntrospectDatabaseClient } from "@/Cloudflare/D1/IntrospectDatabase.ts";
 import type { QueryDatabaseClient } from "@/Cloudflare/D1/QueryDatabase.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  isPrismaStudioIntrospectionRequest,
+  toPrismaStudioIntrospection,
+} from "./prisma-studio-introspection.ts";
 
 /**
  * Modality-agnostic D1 route handlers driving the Effect-native
@@ -20,7 +25,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *   GET  /users/:id  — db.prepare(...).bind(id).first()
  *   GET  /raw        — db.raw -> direct runtime D1Database access
  */
-export const d1Routes = (db: QueryDatabaseClient, style: string) =>
+export const d1Routes = (
+  db: QueryDatabaseClient,
+  inspector: IntrospectDatabaseClient,
+  style: string,
+) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://x");
@@ -96,6 +105,18 @@ export const d1Routes = (db: QueryDatabaseClient, style: string) =>
           .first<{ count: number }>(),
       );
       return yield* HttpServerResponse.json({ count: result?.count ?? 0 });
+    }
+
+    if (request.method === "POST" && url.pathname === "/prisma-studio-query") {
+      const body = yield* request.json;
+      if (!isPrismaStudioIntrospectionRequest(body)) {
+        return yield* HttpServerResponse.json(
+          [{ name: "Error", message: "Unexpected Studio query" }],
+          { status: 400 },
+        );
+      }
+      const rows = toPrismaStudioIntrospection(yield* inspector.schema);
+      return yield* HttpServerResponse.json([null, rows]);
     }
 
     return HttpServerResponse.text("Not Found", { status: 404 });

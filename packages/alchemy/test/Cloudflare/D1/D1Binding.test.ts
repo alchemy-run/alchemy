@@ -9,6 +9,10 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import Stack from "./fixtures/stack.ts";
+import {
+  PRISMA_STUDIO_INTROSPECTION_REQUEST,
+  type PrismaStudioIntrospectionRow,
+} from "./fixtures/prisma-studio-introspection.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -150,9 +154,44 @@ const exercise = (base: string) =>
     expect(rawBody.count).toBe(4);
   });
 
+const exerciseIntrospection = (base: string) =>
+  Effect.gen(function* () {
+    yield* untilOk(HttpClient.execute(HttpClientRequest.post(`${base}/init`)));
+    const response = yield* untilOk(
+      HttpClient.execute(
+        HttpClientRequest.post(`${base}/prisma-studio-query`).pipe(
+          HttpClientRequest.bodyJsonUnsafe(PRISMA_STUDIO_INTROSPECTION_REQUEST),
+        ),
+      ),
+    );
+    const [, rows] = (yield* response.json) as [
+      null,
+      PrismaStudioIntrospectionRow[],
+    ];
+    const users = rows.find((table) => table.name === "users");
+    expect(users?.sql).toContain("CREATE TABLE");
+    expect(users?.columns).toEqual([
+      expect.objectContaining({
+        name: "id",
+        datatype: "INTEGER",
+        pk: 1,
+      }),
+      expect.objectContaining({
+        name: "style",
+        datatype: "TEXT",
+        pk: 0,
+      }),
+      expect.objectContaining({
+        name: "name",
+        datatype: "TEXT",
+        pk: 0,
+      }),
+    ]);
+  });
+
 /**
  * End-to-end test of `Cloudflare.D1.QueryDatabase(...)` against a real
- * Cloudflare Worker + D1 database, covering BOTH invocation styles against
+ * Cloudflare Worker + D1 database, covering both invocation styles against
  * one shared database:
  *
  * - effect-worker: `yield* Cloudflare.D1.QueryDatabase(db)` in Init with
@@ -184,6 +223,15 @@ test(
   Effect.gen(function* () {
     const out = yield* stack;
     yield* exercise(out.asyncWorkerUrl);
+  }).pipe(logLevel),
+  { timeout: TEST_TIMEOUT },
+);
+
+test(
+  "effect-worker: answers Prisma Studio's exact introspection query through the native binding",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    yield* exerciseIntrospection(out.effectWorkerUrl);
   }).pipe(logLevel),
   { timeout: TEST_TIMEOUT },
 );
