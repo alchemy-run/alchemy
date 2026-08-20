@@ -88,8 +88,8 @@ export interface ConnectClient {
  * Provide `Prisma.ConnectBinding` on the host implementation so Alchemy can
  * register the deploy-time binding and resolve the client at runtime.
  *
- * @section Binding a Connection
- * @example Use a connection inside Prisma Compute
+ * ### Binding a Connection
+ * **Example:** Use a connection inside Prisma Compute
  * ```typescript
  * export default Prisma.Compute(
  *   "api",

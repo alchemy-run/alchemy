@@ -49,7 +49,8 @@
     "magic-string": "catalog:cloudflare-runtime",
     "sharp": "catalog:cloudflare-runtime",
     "unenv": "catalog:cloudflare-runtime",
-    "workerd": "catalog:cloudflare-runtime"
+    "workerd": "catalog:cloudflare-runtime",
+    "yauzl": "catalog:cloudflare-runtime"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:cloudflare-runtime",

@@ -2,7 +2,6 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -31,7 +30,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { resolveZoneId } from "../Zone/lookup.ts";
+import {
+  resolveZoneId,
+  type Reference as ZoneReference,
+} from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
   mergeAssetsConfigFiles,
@@ -473,7 +475,49 @@ export interface ResolvedWorkerDomain {
   name: string;
   aliases: string[];
   redirects: string[];
+  /** Pinned zone from props, when the caller set zoneId / zone / zoneName. */
+  zone?: ZoneReference;
 }
+
+const isZoneReference = (value: unknown): value is ZoneReference => {
+  if (typeof value === "string") return true;
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { zoneId?: unknown; name?: unknown };
+  return (
+    typeof candidate.zoneId === "string" &&
+    (candidate.name === undefined || typeof candidate.name === "string")
+  );
+};
+
+/** Collapse Worker.domain zone pin fields to one {@link ZoneReference}. */
+export const resolveWorkerDomainZone = (
+  config:
+    | {
+        readonly zoneId?: unknown;
+        readonly zoneName?: unknown;
+        readonly zone?: unknown;
+      }
+    | undefined,
+): ZoneReference | undefined => {
+  if (config === undefined) return undefined;
+  if (typeof config.zoneId === "string") return config.zoneId;
+  if (isZoneReference(config.zone)) return config.zone;
+  if (typeof config.zoneName === "string") return config.zoneName;
+  return undefined;
+};
+
+/** Whether an existing attachment must move to satisfy an explicit zone pin. */
+export const shouldRecreateWorkerDomainAttachment = (
+  liveZoneId: string,
+  desiredZoneId: string | undefined,
+): boolean => desiredZoneId !== undefined && liveZoneId !== desiredZoneId;
+
+// After deleting a custom-domain attachment, Cloudflare can briefly retain
+// ownership of the hostname and reject the replacement with code 100116.
+const workerDomainConflictSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(8),
+]);
 
 // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
 // Cloudflare API receives the form it stores domains in. `new URL(...)`
@@ -529,7 +573,10 @@ export const resolveWorkerDomain = (
         }),
       );
     }
-    return { name, aliases, redirects };
+    const zone = resolveWorkerDomainZone(config);
+    return zone === undefined
+      ? { name, aliases, redirects }
+      : { name, aliases, redirects, zone };
   });
 
 const isWorkersDevHostname = (hostname: string) =>
@@ -585,12 +632,16 @@ export const stateWorkerDomain = (
           name?: unknown;
           aliases?: unknown[];
           redirects?: unknown[];
+          zone?: ZoneReference;
+          zoneId?: unknown;
+          zoneName?: unknown;
         } | null;
         domains?: unknown[];
       }
     | undefined;
   const domain = state?.domain;
   if (domain && typeof domain.name === "string") {
+    const zone = resolveWorkerDomainZone(domain);
     return {
       name: domain.name,
       aliases: (domain.aliases ?? []).filter(
@@ -599,6 +650,7 @@ export const stateWorkerDomain = (
       redirects: (domain.redirects ?? []).filter(
         (h): h is string => typeof h === "string",
       ),
+      ...(zone === undefined ? {} : { zone }),
     };
   }
   const legacy = stateCustomDomains(state?.domains);
@@ -1259,41 +1311,34 @@ export const LiveWorkerProvider = () =>
         });
 
       /**
-       * Infer the Cloudflare Zone ID for a given hostname by listing the
-       * account's zones and matching the hostname against each zone's name —
-       * walking up the DNS label hierarchy until a match is found.
+       * Resolve a hostname to a Cloudflare zone id. An explicit pin
+       * (`zoneId` / zone name / `{ zoneId }`) wins. Otherwise look the
+       * hostname up with {@link resolveZoneId} (`GET /zones?name=` per
+       * parent label) — never by listing the account's first page of zones.
        */
       const inferZoneIdForHostname = (
         hostname: string,
         zoneCache: Map<string, string>,
+        zone?: ZoneReference,
       ) =>
         Effect.gen(function* () {
-          const cached = zoneCache.get(hostname);
+          const cacheKey =
+            zone === undefined
+              ? hostname
+              : `${hostname}:${typeof zone === "string" ? zone : zone.zoneId}`;
+          const cached = zoneCache.get(cacheKey);
           if (cached) return cached;
-
-          const zoneList = yield* zones
-            .listZones({})
-            .pipe(Effect.map((response) => response.result ?? []));
-          for (const zone of zoneList) {
-            zoneCache.set(zone.name, zone.id);
-          }
-
-          const parts = hostname.split(".");
-          for (let i = 0; i < parts.length - 1; i++) {
-            const candidate = parts.slice(i).join(".");
-            const match = zoneList.find((z) => z.name === candidate);
-            if (match) {
-              zoneCache.set(hostname, match.id);
-              return match.id;
-            }
-          }
-          return yield* Effect.die(
-            `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
-              "Ensure the parent zone exists in this account.",
-          );
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const zoneId = yield* resolveZoneId({ accountId, zone, hostname });
+          zoneCache.set(cacheKey, zoneId);
+          return zoneId;
         });
 
-      const reconcileDomains = (scriptName: string, desired: string[]) =>
+      const reconcileDomains = (
+        scriptName: string,
+        desired: string[],
+        zone?: ZoneReference,
+      ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Always query the live state of domains attached to *this*
@@ -1351,12 +1396,28 @@ export const LiveWorkerProvider = () =>
           // clear message rather than silently re-routing traffic.
           const attachDomain = Effect.fn(function* (hostname: string) {
             const live = liveByHostname.get(hostname);
-            if (live) {
+            const desiredZoneId =
+              zone === undefined
+                ? undefined
+                : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
+            if (
+              live &&
+              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
+            ) {
               return {
                 hostname: live.hostname,
                 id: live.id,
                 zoneId: live.zoneId,
               };
+            }
+
+            if (live) {
+              // Cloudflare cannot change the zone of an existing custom
+              // domain in place. Delete only this still-desired attachment,
+              // then recreate it below with the explicitly requested zone.
+              yield* workers
+                .deleteDomain({ accountId, domainId: live.id })
+                .pipe(Effect.catchTag("DomainNotFound", () => Effect.void));
             }
 
             // Not attached to this Worker — but it could still belong
@@ -1385,7 +1446,9 @@ export const LiveWorkerProvider = () =>
               );
             }
 
-            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            const zoneId =
+              desiredZoneId ??
+              (yield* inferZoneIdForHostname(hostname, zoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
@@ -1404,6 +1467,10 @@ export const LiveWorkerProvider = () =>
                     Schedule.exponential(200),
                     Schedule.recurs(15),
                   ]),
+                }),
+                Effect.retry({
+                  while: (error) => error._tag === "HostnameAlreadyInUse",
+                  schedule: workerDomainConflictSchedule,
                 }),
               );
             return {
@@ -3825,7 +3892,11 @@ export const LiveWorkerProvider = () =>
               ),
               Effect.catch(() => Effect.succeed([])),
             );
-          const reconciled = yield* reconcileDomains(name, desiredHostnames);
+          const reconciled = yield* reconcileDomains(
+            name,
+            desiredHostnames,
+            domainConfig?.zone,
+          );
           const zoneIdByHostname = new Map([
             ...liveBeforeReconcile,
             ...reconciled.map((d) => [d.hostname, d.zoneId] as const),
@@ -4272,7 +4343,12 @@ export const LiveWorkerProvider = () =>
           const domainKey = (d: ResolvedWorkerDomain | undefined) =>
             d === undefined
               ? ""
-              : JSON.stringify([d.name, d.aliases, [...d.redirects].sort()]);
+              : JSON.stringify([
+                  d.name,
+                  d.aliases,
+                  [...d.redirects].sort(),
+                  d.zone ?? null,
+                ]);
           // An omitted `domain` unmanages the surface (#942): reconcile
           // carries previously-observed custom domains forward in state, so
           // comparing the empty desired config against those would report a

@@ -26,6 +26,7 @@ import type { InputProps } from "../Input.ts";
 import * as Output from "../Output.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
@@ -555,8 +556,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * to another actor. Use a durable, locked state backend and inspect the App's
  * deployment history after an interrupted create.
  *
- * @section Deploying an App
- * @example Deploy a directory with an entrypoint
+ * ### Deploying an App
+ * **Example:** Deploy a directory with an entrypoint
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -566,7 +567,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Deploy an Effect-native HTTP app
+ * **Example:** Deploy an Effect-native HTTP app
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -584,7 +585,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -592,7 +593,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `bundle.extra.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -615,7 +616,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: "./src/app.ts",
@@ -623,8 +624,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * }
  * ```
  *
- * @section Runtime Bindings
- * @example Bind a Prisma Connection
+ * ### Runtime Bindings
+ * **Example:** Bind a Prisma Connection
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -647,7 +648,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * );
  * ```
  *
- * @example Build before upload and replace old versions
+ * **Example:** Build before upload and replace old versions
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -667,7 +668,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Auto-build a framework app
+ * **Example:** Auto-build a framework app
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -677,7 +678,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Deploy a prebuilt tar.gz artifact
+ * **Example:** Deploy a prebuilt tar.gz artifact
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -686,8 +687,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @section Deployment Health
- * @example Require application readiness before promotion
+ * ### Deployment Health
+ * **Example:** Require application readiness before promotion
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project,
@@ -701,8 +702,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @section Local Development
- * @example Run locally during alchemy dev
+ * ### Local Development
+ * **Example:** Run locally during alchemy dev
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -764,7 +765,11 @@ export const Compute: Platform<
       env,
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          // Prisma env keys are validated to the uppercase POSIX shape
+          // ([A-Z_][A-Z0-9_]*), so the storage key is uppercased here. The
+          // runtime `get` receives the key this returns, so both halves
+          // agree without a second mapping.
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
           env[key] = output.pipe(
             Output.map((value) =>
               Redacted.isRedacted(value)
@@ -2127,7 +2132,7 @@ const activeBindingEnv = (
       >,
     );
 
-export const ComputeProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
@@ -2915,3 +2920,9 @@ export const ComputeDevProvider = () =>
       };
     }),
   );
+
+export const ComputeProvider = () =>
+  ProviderLayer.dual(Compute, {
+    local: () => ComputeDevProvider(),
+    live: () => ProviderLive(),
+  });

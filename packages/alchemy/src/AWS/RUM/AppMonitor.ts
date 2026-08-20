@@ -132,9 +132,8 @@ export interface AppMonitor extends Resource<
  * An Amazon CloudWatch RUM app monitor that collects client-side telemetry
  * (page load times, JavaScript errors, user behavior) from your web
  * application.
- * @resource
- * @section Creating App Monitors
- * @example Monitor a single domain
+ * ### Creating App Monitors
+ * **Example:** Monitor a single domain
  * ```typescript
  * import * as RUM from "alchemy/AWS/RUM";
  *
@@ -143,7 +142,7 @@ export interface AppMonitor extends Resource<
  * });
  * ```
  *
- * @example Sample all sessions and collect every telemetry type
+ * **Example:** Sample all sessions and collect every telemetry type
  * ```typescript
  * const monitor = yield* RUM.AppMonitor("SiteMonitor", {
  *   domain: "*.example.com",
@@ -155,8 +154,8 @@ export interface AppMonitor extends Resource<
  * });
  * ```
  *
- * @section Log Retention and Custom Events
- * @example Copy telemetry to CloudWatch Logs and accept custom events
+ * ### Log Retention and Custom Events
+ * **Example:** Copy telemetry to CloudWatch Logs and accept custom events
  * ```typescript
  * const monitor = yield* RUM.AppMonitor("SiteMonitor", {
  *   domainList: ["example.com", "app.example.com"],
@@ -164,6 +163,8 @@ export interface AppMonitor extends Resource<
  *   customEvents: "ENABLED",
  * });
  * ```
+ *
+ * @resource
  */
 export const AppMonitor = Resource<AppMonitor>("AWS.RUM.AppMonitor");
 

@@ -166,11 +166,8 @@ export type LegacyPipeline = Resource<
  * A legacy pipeline accepts JSON events over HTTP (and/or a Worker
  * `pipelines` binding) and batches them into an R2 bucket using
  * S3-compatible credentials.
- * @resource
- * @product Pipelines
- * @category Storage & Databases
- * @section Creating a Legacy Pipeline
- * @example HTTP ingest into R2
+ * ### Creating a Legacy Pipeline
+ * **Example:** HTTP ingest into R2
  * The S3-compatible credentials are derived from a Cloudflare API token:
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
@@ -189,7 +186,7 @@ export type LegacyPipeline = Resource<
  * // POST events to pipeline.endpoint
  * ```
  *
- * @example Tuned batching and CORS
+ * **Example:** Tuned batching and CORS
  * ```typescript
  * const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("ingest", {
  *   source: [
@@ -206,6 +203,10 @@ export type LegacyPipeline = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
+ *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  */
 export const LegacyPipeline = Resource<LegacyPipeline>(TypeId);
 

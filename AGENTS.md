@@ -184,7 +184,7 @@ This is the only doc generator that produces user-facing output. ([scripts/gener
 
 1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
 2. Parses TypeScript with `ts-morph`
-3. Extracts the page-level summary plus `@section` / `@example` blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
+3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 
 **Layer pages** (`@layer`) document exported Layer factories — the pluggable implementations of a Context service (e.g. better-auth's database layers). Alongside the shared tags, a Layer declares what it satisfies and needs:
@@ -193,13 +193,16 @@ This is the only doc generator that produces user-facing output. ([scripts/gener
 /**
  * Neon database layer for Better Auth over Neon's serverless driver.
  *
+ * ### Connecting from a Worker or Lambda
+ * **Example:** Worker or Lambda with Neon-backed Better Auth
+ * ```typescript
+ * // ...
+ * ```
+ *
  * @layer
  * @provides BetterAuth.Database
  * @peer @neondatabase/serverless
  * @product Neon
- *
- * @section Connecting from a Worker or Lambda
- * @example ...
  */
 export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<Database> => ...
 ```
@@ -209,7 +212,16 @@ export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<
 
 Both render as a metadata line under the page's `Source:` blockquote. Every Layer implementation should carry these annotations — a Layer without them is an undocumented integration surface.
 
-After editing JSDoc on a resource, run `pnpm docs:gen` to refresh the website docs.
+Keep all API-generator metadata tags (`@resource`, `@binding`, `@layer`,
+`@product`, `@category`, `@provides`, and `@peer`) together at the very end of
+the JSDoc block. Do not put prose, sections, or examples after them: TypeScript
+treats subsequent content as part of the block tag, which breaks editor JSDoc
+rendering. The generator also supports `@group` as an alias for `@category` and
+`@label` as an alias for `@product`.
+
+After editing JSDoc on a resource, run `pnpm docs:gen` to refresh the website
+docs. Run `pnpm docs:check-jsdoc` to validate the source layout, or
+`pnpm docs:fix-jsdoc` to normalize it automatically.
 
 **Writing good documentation:** When adding or updating a resource, ensure all Props and Attrs have JSDoc comments:
 
@@ -233,13 +245,15 @@ The `@default` tag is used to document default values and will appear in the gen
 
 ### Examples and Sections (IMPORTANT)
 
-**Examples are critical for documentation.** Every resource should have examples demonstrating common use cases. Use `@section` and `@example` JSDoc tags on the main Resource export to organize examples into a navigable table of contents.
+**Examples are critical for documentation.** Every resource should have examples demonstrating common use cases. Use Markdown headings and labels on the main Resource export to organize examples into a navigable table of contents.
 
 **Format:**
 
-- `@section <Section Title>` - Creates a heading in the Examples section and adds an entry to the Quick Reference table of contents
-- `@example <Example Title>` - Creates a subheading for a specific code example (must follow a `@section`)
+- `### <Section Title>` - Creates a heading in the Examples section and adds an entry to the Quick Reference table of contents
+- `**Example:** <Example Title>` - Creates a labeled code example (must follow a section heading)
+- A level-three heading that is ordinary page prose rather than an example section must end with `<!-- api-prose -->`; the generator removes the marker and preserves it as `###` in the output
 - Code blocks inside examples use standard markdown fenced code blocks (` `)
+- Put the API-generator metadata tags after all sections and examples
 
 **Example:**
 
@@ -247,28 +261,28 @@ The `@default` tag is used to document default values and will appear in the gen
 /**
  * An S3 bucket for storing objects.
  *
- * @section Creating a Bucket
- * @example Basic Bucket
+ * ### Creating a Bucket
+ * **Example:** Basic Bucket
  * ```typescript
  * const bucket = yield* Bucket("my-bucket", {});
  * ```
  *
- * @example Bucket with Force Destroy
+ * **Example:** Bucket with Force Destroy
  * ```typescript
  * const bucket = yield* Bucket("my-bucket", {
  *   forceDestroy: true,
  * });
  * ```
  *
- * @section Reading Objects
- * @example Get Object from Bucket
+ * ### Reading Objects
+ * **Example:** Get Object from Bucket
  * ```typescript
  * const response = yield* getObject(bucket, { key: "my-key" });
  * const body = yield* Effect.tryPromise(() => response.Body?.transformToString());
  * ```
  *
- * @section Writing Objects
- * @example Put Object to Bucket
+ * ### Writing Objects
+ * **Example:** Put Object to Bucket
  * ```typescript
  * yield* putObject(bucket, {
  *   key: "hello.txt",
@@ -276,13 +290,15 @@ The `@default` tag is used to document default values and will appear in the gen
  *   contentType: "text/plain",
  * });
  * ```
+ *
+ * @resource
  */
 export const Bucket = Resource<...>("AWS.S3.Bucket");
 ````
 
 This generates:
 
-1. A "Quick Reference" section with links to each `@section`
+1. A "Quick Reference" section with links to each `###` section
 2. An "Examples" section with organized code examples under each section heading
 
 **Best practices for examples:**
@@ -690,7 +706,7 @@ Never use `Date.now()` when constructing the physical name of a resource. You sh
 
 See the [VPC Smoke Test](./test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
-11. Add the resource-level JSDoc (`@section` + `@example` blocks) and field-level JSDoc on each prop/attribute on the source `.ts` file. Then run `pnpm docs:gen` to refresh `website/src/content/docs/providers/{Cloud}/{Resource}.md`. Do NOT manually edit the generated markdown.
+11. Add the resource-level JSDoc (`###` section headings + `**Example:**` labels, with generator metadata tags last) and field-level JSDoc on each prop/attribute on the source `.ts` file. Run `pnpm docs:check-jsdoc`, then `pnpm docs:gen` to refresh `website/src/content/docs/providers/{Cloud}/{Resource}.md`. Do NOT manually edit the generated markdown.
 
 # Typed Error Doctrine (distilled)
 

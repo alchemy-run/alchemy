@@ -74,14 +74,13 @@ export interface Swarm extends Resource<
  * `docker swarm join --token <token> <manager-ip>:2377` on each additional
  * machine (`docker swarm join-token worker` on the manager prints the
  * command). Alchemy manages the swarm's workloads through the manager.
- * @resource
- * @section Creating a Swarm
- * @example Local single-node swarm
+ * ### Creating a Swarm
+ * **Example:** Local single-node swarm
  * ```typescript
  * const swarm = yield* Docker.Swarm("swarm");
  * ```
  *
- * @example Remote engine over SSH
+ * **Example:** Remote engine over SSH
  * ```typescript
  * const vps = yield* Docker.Context("vps", {
  *   docker: "host=ssh://deploy@example.com",
@@ -92,8 +91,8 @@ export interface Swarm extends Resource<
  * });
  * ```
  *
- * @section Using an Existing Swarm
- * @example Reference without owning
+ * ### Using an Existing Swarm
+ * **Example:** Reference without owning
  * ```typescript
  * // Services don't require a Swarm resource — point them at an engine that
  * // is already a manager and the swarm's lifecycle stays external: destroy
@@ -104,15 +103,15 @@ export interface Swarm extends Resource<
  * });
  * ```
  *
- * @example Adopt an already-initialized engine
+ * **Example:** Adopt an already-initialized engine
  * ```typescript
  * // Adoption makes the swarm part of the stack — destroy then dissolves
  * // the node's membership.
  * const swarm = yield* Docker.Swarm("swarm").pipe(adopt(true));
  * ```
  *
- * @section Deploying into the Swarm
- * @example Service ordered after the swarm
+ * ### Deploying into the Swarm
+ * **Example:** Service ordered after the swarm
  * ```typescript
  * const swarm = yield* Docker.Swarm("swarm");
  * const web = yield* Docker.Service("web", {
@@ -122,6 +121,8 @@ export interface Swarm extends Resource<
  *   ports: [{ external: 8080, internal: 80 }],
  * });
  * ```
+ *
+ * @resource
  */
 export const Swarm = Resource<Swarm>("Docker.Swarm");
 

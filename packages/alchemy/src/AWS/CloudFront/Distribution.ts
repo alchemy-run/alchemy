@@ -497,9 +497,8 @@ export interface Distribution extends Resource<
  * `Distribution` manages the CDN layer for static sites and HTTP origins such
  * as Lambda Function URLs and ALBs. It exposes the distribution domain and
  * hosted zone ID needed for Route 53 alias records.
- * @resource
- * @section Creating Distributions
- * @example CDN in Front of an HTTP Origin
+ * ### Creating Distributions
+ * **Example:** CDN in Front of an HTTP Origin
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -521,7 +520,7 @@ export interface Distribution extends Resource<
  * });
  * ```
  *
- * @example Private S3 Origin
+ * **Example:** Private S3 Origin
  * ```typescript
  * const distribution = yield* Distribution("WebsiteCdn", {
  *   aliases: ["www.example.com"],
@@ -546,8 +545,8 @@ export interface Distribution extends Resource<
  * });
  * ```
  *
- * @section Invalidating the Cache
- * @example Purge Paths on Deploy
+ * ### Invalidating the Cache
+ * **Example:** Purge Paths on Deploy
  * ```typescript
  * // declaratively, whenever `version` changes:
  * yield* AWS.CloudFront.Invalidation("PurgeBlog", {
@@ -559,6 +558,8 @@ export interface Distribution extends Resource<
  *
  * To purge at runtime from a Lambda Function, bind
  * `CloudFront.CreateInvalidation(distribution)` instead.
+ *
+ * @resource
  */
 export const Distribution = Resource<Distribution>(
   "AWS.CloudFront.Distribution",

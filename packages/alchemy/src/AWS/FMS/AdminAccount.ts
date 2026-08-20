@@ -63,13 +63,13 @@ export interface AdminAccount extends Resource<
  * tracked by Alchemy state — adopting a pre-existing admin account that Alchemy
  * did not create requires `--adopt`, and destroy disassociates the admin.
  *
- * @section Designating the FMS admin
- * @example Designate the caller as the FMS admin
+ * ### Designating the FMS admin
+ * **Example:** Designate the caller as the FMS admin
  * ```typescript
  * const admin = yield* FMS.AdminAccount("FmsAdmin", {});
  * ```
  *
- * @example Designate a specific member account
+ * **Example:** Designate a specific member account
  * ```typescript
  * const admin = yield* FMS.AdminAccount("FmsAdmin", {
  *   adminAccount: "123456789012",

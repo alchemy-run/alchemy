@@ -65,22 +65,21 @@ export interface Volume extends Resource<
  * Pre-existing same-name volumes are treated as foreign until the engine is
  * allowed to adopt them with `--adopt` or `adopt(true)`.
  *
- * @resource
  *
- * @section Creating Volumes
- * @example Basic volume
+ * ### Creating Volumes
+ * **Example:** Basic volume
  * ```typescript
  * const data = yield* Docker.Volume("data", {
  *   name: "app-data",
  * });
  * ```
  *
- * @example PostgreSQL data volume
+ * **Example:** PostgreSQL data volume
  * ```typescript
  * const data = yield* Docker.Volume("postgres-data");
  * ```
  *
- * @example Driver options and labels
+ * **Example:** Driver options and labels
  * ```typescript
  * const data = yield* Docker.Volume("db-data", {
  *   driver: "local",
@@ -95,14 +94,16 @@ export interface Volume extends Resource<
  * });
  * ```
  *
- * @section Docker Context
- * @example Create a volume in a named Docker context
+ * ### Docker Context
+ * **Example:** Create a volume in a named Docker context
  * ```typescript
  * const data = yield* Docker.Volume("data", {
  *   name: "app-data",
  *   context: "remote-build",
  * });
  * ```
+ *
+ * @resource
  */
 export const Volume = Resource<Volume>("Docker.Volume");
 

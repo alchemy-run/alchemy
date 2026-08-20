@@ -67,7 +67,7 @@ const adopt = Flag.boolean("adopt").pipe(
   Flag.withDefault(false),
 );
 
-export const execStack = Effect.fn(function* ({
+const runStack = Effect.fn(function* ({
   main,
   stage,
   envFile,
@@ -184,6 +184,31 @@ export const execStack = Effect.fn(function* ({
     }).pipe(Effect.provide(stack.services));
   }).pipe(Effect.provide(services));
 });
+
+// In dev, failures OUTSIDE the apply guard above must not exit the process
+// either: the user saves mid-edit states where importing the stack module
+// itself throws (missing export, module-evaluation crash), or planning fails
+// against the half-edited program. Those failures escape `runStack` before
+// the apply-level guard exists, and exiting here kills the `--watch` session
+// (oven-sh/bun#10983), so dev would stop reloading on subsequent saves. Log
+// the cause and park forever; the watcher restarts the run on the next file
+// change. Pure interruption (Ctrl-C / fiber kill) still propagates so dev
+// shuts down cleanly.
+export const devKeepAlive = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  effect.pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.failCause(cause)
+        : Console.error(
+            `alchemy dev: run failed; waiting for the next file change to retry.\n${Cause.pretty(cause)}`,
+          ).pipe(Effect.andThen(Effect.never)),
+    ),
+  );
+
+export const execStack = (options: ExecStackOptions) =>
+  options.dev ? devKeepAlive(runStack(options)) : runStack(options);
 
 export const deployCommand = Command.make(
   "deploy",

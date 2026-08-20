@@ -90,11 +90,8 @@ export type ProxyEndpoint = Resource<
  * Zero Trust plans. The kind is immutable; name and `ips` converge in
  * place. Accounts are limited to a small number of proxy endpoints, so
  * prefer reusing one per account.
- * @resource
- * @product Gateway
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Proxy Endpoint
- * @example Identity-based endpoint (all plans)
+ * ### Creating a Proxy Endpoint
+ * **Example:** Identity-based endpoint (all plans)
  * ```typescript
  * const proxy = yield* Cloudflare.Gateway.ProxyEndpoint("UserProxy", {
  *   kind: "identity",
@@ -103,7 +100,7 @@ export type ProxyEndpoint = Resource<
  * const host = `${proxy.subdomain}.proxy.cloudflare-gateway.com`;
  * ```
  *
- * @example IP allowlist endpoint (Enterprise)
+ * **Example:** IP allowlist endpoint (Enterprise)
  * ```typescript
  * const proxy = yield* Cloudflare.Gateway.ProxyEndpoint("OfficeProxy", {
  *   kind: "ip",
@@ -112,6 +109,10 @@ export type ProxyEndpoint = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/agentless/pac-files/
+ *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  */
 export const ProxyEndpoint = Resource<ProxyEndpoint>(TypeId);
 
