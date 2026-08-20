@@ -60,31 +60,72 @@ export type VolumeSnapshot = Resource<
 >;
 
 /**
- * An on-demand snapshot of a Fly.io Volume.
+ * A Fly.VolumeSnapshot is an on-demand snapshot of a mounted disk.
  *
- * Create is fire-and-forget (`createVolumeSnapshot`); identity is the
- * snapshot `id` from a subsequent `volumesListSnapshots`. There is no
- * delete API and no mutable props — `app` and `volumeId` replace.
- * Destroy is a no-op; snapshots follow Volume `snapshot_retention` /
- * Volume delete. `nuke` skips this type.
+ * Create is fire-and-forget. Identity is the snapshot id from a
+ * subsequent list. Destroy is a no-op. Snapshots follow Volume
+ * retention. `nuke` skips this type.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/volumes-resource/
  *
- * @section Creating a Snapshot
+ * @section Create a snapshot
+ * Point it at a Volume id from the parent {@link Machine} or
+ * {@link Service} (`mounts[0].volumeId`).
+ *
  * @example Snapshot a mounted disk
  * ```typescript
- * const site = yield* Fly.App("Site");
  * const box = yield* Fly.Machine("Box", {
- *   app: site,
+ *   app: Site,
  *   region: "iad",
  *   image: "nginx:alpine",
  *   mounts: [{ path: "/data", sizeGb: 1 }],
  * });
- * const snap = yield* Fly.VolumeSnapshot("Nightly", {
- *   app: site,
+ *
+ * export const Nightly = Fly.VolumeSnapshot("Nightly", {
+ *   app: Site,
  *   volumeId: box.mounts[0].volumeId,
  * });
+ * ```
+ *
+ * :::caution[Changing `app` or `volumeId` replaces the snapshot]
+ * A new snapshot is created. There is no delete API for the old one.
+ * It follows Volume `snapshot_retention`.
+ * :::
+ *
+ * @section Restore
+ * Restore into a new disk with `snapshotId` on the mount. Create-only.
+ * The new Machine gets a copy. The original Volume is unchanged.
+ *
+ * @example Restore onto a Machine
+ * ```typescript
+ * const restored = yield* Fly.Machine("Restored", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ *   mounts: [{ path: "/data", sizeGb: 1, snapshotId: Nightly.snapshotId }],
+ * });
+ * ```
+ *
+ * @section Restore into a Service
+ * Pass `snapshotId` on {@link MountVolume}. Same create-only rule.
+ *
+ * @example Restore onto a Service
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+ *   Effect.gen(function* () {
+ *     const disk = yield* Fly.MountVolume({
+ *       path: "/data",
+ *       sizeGb: 1,
+ *       snapshotId: Nightly.snapshotId,
+ *     });
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text(disk.path)),
+ *     };
+ *   }).pipe(Effect.provide(Fly.MountVolumeLive)),
+ * ) {}
  * ```
  */
 export const VolumeSnapshot = Resource<VolumeSnapshot>("Fly.VolumeSnapshot");

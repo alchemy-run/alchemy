@@ -7,10 +7,20 @@ import { ListSecrets } from "./ListSecrets.ts";
 import { makeHttpAppBinding } from "./SecretHttp.ts";
 
 /**
- * HTTP implementation of {@link ListSecrets}.
+ * HTTP implementation of {@link ListSecrets}. Provide it on the
+ * {@link Service} or Action Effect.
  *
  * @layer
  * @provides Fly.ListSecrets
+ *
+ * @section Provide the layer
+ * @example On an Action
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const list = yield* Fly.ListSecrets(Site);
+ *   // ...
+ * }).pipe(Effect.provide(Fly.ListSecretsHttp))
+ * ```
  */
 export const ListSecretsHttp = Layer.effect(
   ListSecrets,

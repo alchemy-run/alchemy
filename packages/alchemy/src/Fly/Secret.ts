@@ -72,41 +72,129 @@ const resolveSecretProps = (
 const SecretResource = Resource<Secret>("Fly.Secret");
 
 /**
- * A Fly.io App secret. Fly injects app secrets into Machines as
- * environment variables unless `skip_secrets` is set. The resource
- * manages the app-level value; the plaintext is never stored in
- * attributes or logged.
+ * A Fly.Secret is an App vault entry. Fly injects it as an environment
+ * variable on every Machine. Use it when the value is shared and
+ * managed in one place by Fly.
+ *
+ * For a secret only this {@link Service} reads from `.env` at deploy
+ * time, yield `Config.redacted` instead. Do not pass `env: { ... }` on
+ * a Service.
  *
  * @resource
  * @see https://fly.io/docs/apps/secrets/
  *
- * @section Creating a Secret
+ * @section Config.redacted on a Service
+ * Most secrets in a Service come from your `.env`. Yield
+ * `Config.redacted` in init. Alchemy binds the value onto the Machine.
+ *
+ * @example Bind from .env
+ * ```typescript
+ * import * as Config from "effect/Config";
+ * import * as Redacted from "effect/Redacted";
+ *
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const apiKey = yield* Config.redacted("API_KEY");
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const token = Redacted.value(apiKey);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Create a Secret
+ * Wrap the value with `Redacted.make` so it is never logged. The
+ * plaintext is never stored in attributes. Omit `name` and Alchemy
+ * generates an ownership-stamped name.
+ *
  * @example Generated name
  * ```typescript
- * const site = yield* Fly.App("Site");
  * const dbUrl = yield* Fly.Secret("DatabaseUrl", {
- *   app: site,
+ *   app: Site,
  *   value: Redacted.make("postgres://…"),
  * });
  * ```
  *
- * @example Explicit env-var name
+ * :::caution[Changing `app` replaces the Secret]
+ * The value is created on the new App. The old name is deleted.
+ * :::
+ *
+ * @section Env-var name
+ * `name` is the env-var Machines see. It is stored as-is
+ * (case-sensitive).
+ *
+ * @example Explicit name
  * ```typescript
- * const apiKey = yield* Fly.Secret("ApiKey", {
- *   app: site,
- *   name: "API_KEY",
+ * export const ApiToken = Fly.Secret("ApiToken", {
+ *   app: Site,
+ *   name: "API_TOKEN",
  *   value: Redacted.make("sk_live_…"),
  * });
  * ```
  *
- * @section Updating a Secret
- * @example Rotate the value
+ * :::caution[Changing `name` replaces the Secret]
+ * Fly cannot rename a secret. Alchemy creates the new name, then
+ * deletes the old one.
+ * :::
+ *
+ * @section Rotate the value
+ * Updating `value` is in place via `secretsUpdate`.
+ *
+ * @example New value
  * ```typescript
- * const apiKey = yield* Fly.Secret("ApiKey", {
- *   app: site,
- *   name: "API_KEY",
+ * export const ApiToken = Fly.Secret("ApiToken", {
+ *   app: Site,
+ *   name: "API_TOKEN",
  *   value: Redacted.make("sk_live_rotated"),
  * });
+ * ```
+ *
+ * @section Get a secret at runtime
+ * {@link GetSecret} is bound to one Secret. Provide
+ * {@link GetSecretHttp}. Fly only returns plaintext from a Machine in
+ * the same App. From a deploy-time Action you get metadata (name,
+ * digest, timestamps).
+ *
+ * @example GetSecret
+ * ```typescript
+ * const get = yield* Fly.GetSecret(ApiToken);
+ * const got = yield* get();
+ * ```
+ *
+ * @section List secrets
+ * {@link ListSecrets} is bound to an {@link App}. From an Action, the
+ * org token can list any App in the org. From a Machine, deploy tokens
+ * are per-App. Mixing Apps on one Machine shares one `FLY_API_TOKEN`
+ * and is not supported.
+ *
+ * @example ListSecrets
+ * ```typescript
+ * const list = yield* Fly.ListSecrets(Site);
+ * const { secrets } = yield* list();
+ * ```
+ *
+ * @section Write secrets
+ * {@link WriteSecret} creates, updates, and deletes by name. Provide
+ * {@link WriteSecretHttp} on the Action or Service Effect.
+ *
+ * @example Rotate from an Action
+ * ```typescript
+ * const Seed = Alchemy.Action(
+ *   "Seed",
+ *   Effect.gen(function* () {
+ *     const secrets = yield* Fly.WriteSecret(ApiToken);
+ *
+ *     return Effect.fn(function* () {
+ *       yield* secrets.update("API_TOKEN", Redacted.make("sk_live_rotated"));
+ *     });
+ *   }).pipe(Effect.provide(Fly.WriteSecretHttp)),
+ * );
  * ```
  */
 export const Secret: typeof SecretResource = Object.assign(

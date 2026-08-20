@@ -94,46 +94,131 @@ const resolveIpAssignmentProps = (
 const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
 
 /**
- * A dedicated or shared IP address assigned to a Fly.io App.
+ * A Fly.IpAssignment is an address on an {@link App}. A {@link Service}
+ * publishes ports. Fly's proxy load-balances `{app}.fly.dev` across
+ * Machines that publish a proxy service.
  *
- * Identity is the allocated `ip`. The resource is existence-only: observe
- * `appIPAssignmentsList` for that address and create via
- * `appIPAssignmentsCreate` when missing. There is no in-place update —
- * `type`, `region`, `network`, `serviceName`, and `app` all replace.
- *
- * Dedicated IPv4 (`type: "v4"`) is billed. Prefer `v6` or `shared_v4` unless
- * the org has IPv4 quota.
+ * Identity is the allocated `ip`. There is no in-place update.
  *
  * @resource
  * @see https://fly.io/docs/networking/services/
  *
- * @section Allocating an address
- * @example Dedicated IPv6
- * ```typescript
- * const site = yield* Fly.App("Site");
- * const ip = yield* Fly.IpAssignment("Public", {
- *   app: site,
- *   type: "v6",
- * });
- * ```
+ * @section Shared IPv4
+ * `shared_v4` is a shared Anycast IPv4. It is free. This is what you
+ * want for fly.dev over IPv4. Yield it next to the Service.
  *
- * @example Shared IPv4
+ * @example Allocate shared_v4
  * ```typescript
- * const site = yield* Fly.App("Site");
- * const ip = yield* Fly.IpAssignment("Shared", {
- *   app: site,
+ * export const PublicIp = Fly.IpAssignment("Shared", {
+ *   app: Site,
  *   type: "shared_v4",
  * });
  * ```
  *
- * @example Dedicated IPv4 in a region
+ * :::caution[Changing `type` or `app` replaces the assignment]
+ * A new address is allocated. The old one is released.
+ * :::
+ *
+ * @section Dedicated IPv6
+ * `v6` is a dedicated IPv6. It is free.
+ *
+ * @example Allocate v6
  * ```typescript
- * const site = yield* Fly.App("Site");
- * const ip = yield* Fly.IpAssignment("Dedicated", {
- *   app: site,
+ * export const V6 = Fly.IpAssignment("V6", {
+ *   app: Site,
+ *   type: "v6",
+ * });
+ * ```
+ *
+ * @section Dedicated IPv4
+ * `v4` is a billed dedicated IPv4. It may 400 if the org has no
+ * quota. Prefer `shared_v4` or `v6` in tests.
+ *
+ * @example Allocate v4
+ * ```typescript
+ * export const Dedicated = Fly.IpAssignment("Dedicated", {
+ *   app: Site,
+ *   type: "v4",
+ * });
+ * ```
+ *
+ * @section Region
+ * `region` pins a dedicated address. Shared Anycast ignores it.
+ *
+ * @example Dedicated IPv4 in iad
+ * ```typescript
+ * export const Dedicated = Fly.IpAssignment("Dedicated", {
+ *   app: Site,
  *   type: "v4",
  *   region: "iad",
  * });
+ * ```
+ *
+ * :::caution[Changing `region` replaces the assignment]
+ * A new address is allocated in the new region.
+ * :::
+ *
+ * @section Service name
+ * `serviceName` binds the address to a Fly proxy service. Changing it
+ * replaces the assignment.
+ *
+ * @example Bind to a named service
+ * ```typescript
+ * export const PublicIp = Fly.IpAssignment("Shared", {
+ *   app: Site,
+ *   type: "shared_v4",
+ *   serviceName: "http",
+ * });
+ * ```
+ *
+ * :::caution[Changing `serviceName` replaces the assignment]
+ * A new address is allocated bound to the new service.
+ * :::
+ *
+ * @section Isolated network
+ * `network` is an optional 6PN name. Create-only.
+ *
+ * @example Custom network
+ * ```typescript
+ * export const Private = Fly.IpAssignment("Private", {
+ *   app: Site,
+ *   type: "v6",
+ *   network: "private",
+ * });
+ * ```
+ *
+ * :::caution[Changing `network` replaces the assignment]
+ * A new address is allocated on the new network.
+ * :::
+ *
+ * @section Organization
+ * `orgSlug` defaults to the current token's org. It is not a
+ * replacement key.
+ *
+ * @example Pin an org
+ * ```typescript
+ * export const PublicIp = Fly.IpAssignment("Shared", {
+ *   app: Site,
+ *   type: "shared_v4",
+ *   orgSlug: "my-org",
+ * });
+ * ```
+ *
+ * @section Yield with a Service
+ * Allocate the address on the same App as the Service. `api.url` is
+ * `https://{appName}.fly.dev`.
+ *
+ * @example Stack outputs
+ * ```typescript
+ * export default Alchemy.Stack(
+ *   "MyApp",
+ *   { providers: Fly.providers(), state: Alchemy.localState() },
+ *   Effect.gen(function* () {
+ *     const api = yield* Api;
+ *     const ip = yield* PublicIp;
+ *     return { url: api.url, ip: ip.ip };
+ *   }),
+ * );
  * ```
  */
 export const IpAssignment: typeof IpAssignmentResource = Object.assign(

@@ -101,32 +101,75 @@ export type Certificate = Resource<
 >;
 
 /**
- * A Fly.io App TLS certificate. Request an ACME (Let's Encrypt)
- * certificate for a hostname, or upload a custom PEM.
+ * A Fly.Certificate covers a hostname on an {@link App}. Default
+ * `kind` is `"acme"` (Let's Encrypt). `"custom"` uploads a PEM.
  *
- * Hostname is the identity. `app`, `hostname`, and `kind` replace.
- * Custom certificate material updates in place. ACME re-validates via
- * `appCertificatesCheck` while `configured` is false.
+ * IPs and certificates attach to the App. A {@link Service} publishes
+ * ports. Fly's proxy terminates TLS on 443 once the certificate is
+ * `configured`.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/certificates-resource/
  *
  * @section ACME certificates
- * @example Request Let's Encrypt for a hostname
+ * Request Let's Encrypt for a hostname. The Service does not change.
+ * Yield the certificate in the Stack. Point DNS at the App.
+ *
+ * @example Let's Encrypt
  * ```typescript
- * const site = yield* Fly.App("Site");
- * const cert = yield* Fly.Certificate("Www", {
- *   app: site,
+ * export const Www = Fly.Certificate("Www", {
+ *   app: Site,
  *   hostname: "www.example.com",
  * });
  * ```
  *
+ * :::caution[Changing `hostname` replaces the Certificate]
+ * Hostname is the identity. The old hostname is deleted, then the new
+ * one is created.
+ * :::
+ *
+ * :::caution[Changing `app` or `kind` replaces the Certificate]
+ * The certificate is created on the new App or with the new issuer.
+ * :::
+ *
+ * @section DNS
+ * Point an A record at a `shared_v4` {@link IpAssignment} and an AAAA
+ * at `v6`. Plus whatever `dnsRequirements` lists for the ACME
+ * challenge. Alchemy re-checks via `appCertificatesCheck` while
+ * `configured` is false.
+ *
+ * Observed attrs include `status`, `configured`, `acmeRequested`,
+ * `dnsRequirements`, and `validation`.
+ *
+ * @example Yield next to a Service
+ * ```typescript
+ * export default Alchemy.Stack(
+ *   "MyApp",
+ *   { providers: Fly.providers(), state: Alchemy.localState() },
+ *   Effect.gen(function* () {
+ *     const api = yield* Api;
+ *     const ip = yield* PublicIp;
+ *     const v6 = yield* V6;
+ *     const www = yield* Www;
+ *     return {
+ *       url: api.url,
+ *       ip: ip.ip,
+ *       v6: v6.ip,
+ *       dns: www.dnsRequirements,
+ *     };
+ *   }),
+ * );
+ * ```
+ *
  * @section Custom certificates
+ * `"custom"` uploads `fullchain` and `privateKey`. Wrap the key with
+ * `Redacted.make` so it never logs. Never stored in attributes.
+ * Updating the PEM re-uploads in place.
+ *
  * @example Upload a PEM
  * ```typescript
- * const site = yield* Fly.App("Site");
- * const cert = yield* Fly.Certificate("Www", {
- *   app: site,
+ * export const Www = Fly.Certificate("Www", {
+ *   app: Site,
  *   hostname: "www.example.com",
  *   kind: "custom",
  *   fullchain: pem,

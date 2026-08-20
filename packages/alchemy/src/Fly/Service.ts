@@ -183,53 +183,347 @@ export type ServiceShape = Main<ServiceServices>;
 export type ServiceRuntimeContext = FlyHostRuntimeContext;
 
 /**
- * An Effect program hosted as a Fly.io Machine under an App.
- *
- * N Services share one App; each Service is its own replica set of
- * Machines (not systemd-on-a-box). `count` is the pool size — Fly's
- * proxy load-balances published services across them. `main` is bundled
- * with rolldown, baked into a Docker image, and pushed to
- * `registry.fly.io/{app}:{id}-{hash}`. Bind `Fly.MountVolume({ path,
- * sizeGb })` inside the impl to attach a per-replica disk.
+ * A Service is an Effect program running in a Fly.io Machine. Set
+ * `count` to scale it up or down. Several Services share one {@link App}.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/machines-resource/
  *
- * @section Hosting a Service
- * @example HTTP server on an App
+ * @section Declare a Service
+ * A Service is a class. Props describe the Machine. The Effect is the
+ * program that runs on it.
+ *
+ * `app` is the parent {@link App}. Pass the declaration directly,
+ * yielded or module-scope. `main: import.meta.url` is the bundle
+ * entrypoint. Alchemy bundles this file with Rolldown, builds a
+ * Docker image (default `oven/bun:1`), and pushes it to
+ * `registry.fly.io/{app}:{id}-{hash}`.
+ *
+ * @example Class + App + main
  * ```typescript
- * const Site = Fly.App("Site");
+ * // src/api.ts
+ * import * as Fly from "alchemy/Fly";
+ * import * as Effect from "effect/Effect";
+ * import { Site } from "./app.ts";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
- *   { app: Site, main: import.meta.url, region: "iad" },
+ *   { app: Site, main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {};
+ *   }),
+ * ) {}
+ * ```
+ *
+ * :::caution[Changing `app` replaces the Service]
+ * The new App gets a new replica set. The old Machines are deleted.
+ * :::
+ *
+ * @section Serve HTTP with fetch
+ * Return `fetch` from the init Effect to boot an HTTP server. Omit
+ * `fetch` for a background service.
+ *
+ * @example Hello
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     return {
- *       fetch: Effect.succeed(HttpServerResponse.json({ ok: true })),
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
  *     };
  *   }),
  * ) {}
  * ```
  *
- * @section Scaling
- * @example Three replicas behind the Fly proxy
+ * @section Pin a region
+ * Fly Machines live in a region. Default is `iad`.
+ *
+ * @example Region
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, region: "iad" },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * :::caution[Changing `region` replaces the Service]
+ * The replica set is created in the new region. The old Machines are
+ * deleted.
+ * :::
+ *
+ * @section Set the port
+ * `port` is written to `PORT` and used as the Fly proxy
+ * `internal_port`. Default is `3000`. HTTP 80 and HTTPS 443 are
+ * published unless you override `services`.
+ *
+ * The resolved `url` is `https://{appName}.fly.dev` when a proxy
+ * service is configured. That hostname needs an {@link IpAssignment}
+ * on the App.
+ *
+ * @example Port 3000
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Scale with count
+ * `count` is how many Machines to keep running. Default is `1`. Fly's
+ * proxy load-balances `{app}.fly.dev` across them. Each replica gets
+ * its own Volume from every {@link MountVolume} binding.
+ *
+ * @example Three replicas
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
  *   Effect.gen(function* () {
  *     return {
- *       fetch: Effect.succeed(HttpServerResponse.json({ ok: true })),
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
  *     };
  *   }),
  * ) {}
  * ```
  *
- * @section Volumes
- * @example Mount a per-replica disk
+ * @section Config
+ * Yield `Config` in init. Alchemy reads the value from the env of
+ * whoever deploys and writes it onto the Machine. Do not pass
+ * `env: { ... }` on a Service.
+ *
+ * `Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+ * `Redacted.value` only where you need the raw string.
+ *
+ * Alchemy also injects `PORT` (when `port` is set) and stack metadata.
+ * For a secret Fly should own and inject into every Machine on the
+ * App, use {@link Secret}.
+ *
+ * @example Config.redacted
  * ```typescript
- * const disk = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
- * // write/read files under disk.path inside the hosted process
+ * import * as Config from "effect/Config";
+ * import * as Redacted from "effect/Redacted";
+ *
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const apiKey = yield* Config.redacted("API_KEY");
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const token = Redacted.value(apiKey);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Mount a disk
+ * Bind {@link MountVolume} inside init. App and region come from the
+ * Service. `count: 3` creates three Volumes, one per replica. Provide
+ * {@link MountVolumeLive}.
+ *
+ * @example Per-replica disk
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const disk = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const fs = yield* FileSystem.FileSystem;
+ *         const text = yield* fs.readFileString(`${disk.path}/hello.txt`);
+ *         return HttpServerResponse.text(text);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Fly.MountVolumeLive)),
+ * ) {}
+ * ```
+ *
+ * @section Guest size
+ * `guest` is CPU kind, CPU count, and memory. Default is shared-cpu,
+ * 1 CPU, 256 MB. Set `gpuKind` and `gpus` for a GPU. Guest updates in
+ * place.
+ *
+ * @example Bigger guest
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     region: "iad",
+ *     port: 3000,
+ *     guest: { cpuKind: "shared", cpus: 2, memoryMb: 512 },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section A stable name
+ * Machine names are unique per App. Omit `name` and Alchemy generates
+ * one from the stack, stage, and logical ID.
+ *
+ * @example Explicit name
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, name: "api", port: 3000 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * :::caution[Changing `name` replaces the Service]
+ * Fly cannot rename a Machine. Alchemy creates the new name, then
+ * deletes the old replica set.
+ * :::
+ *
+ * @section Named export
+ * `handler` is the named export to load from `main`. Default is
+ * `"default"`.
+ *
+ * @example Custom handler
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, handler: "api", port: 3000 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Base image
+ * `image` is the generated Dockerfile's `FROM`. Default is
+ * `oven/bun:1`. It must still run bun. A content-hash change of
+ * `main` updates the Machine in place.
+ *
+ * @example Override FROM
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     image: "oven/bun:1.2",
+ *     port: 3000,
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Custom proxy services
+ * `services` defaults to HTTP 80 + HTTPS 443 toward `port`. Pass a
+ * custom list to change handlers or autostop. Pass `[]` so Fly does
+ * not publish a proxy.
+ *
+ * @example Unpublished process
+ * ```typescript
+ * export default class Worker extends Fly.Service<Worker>()(
+ *   "Worker",
+ *   { app: Site, main: import.meta.url, region: "iad", services: [] },
+ *   Effect.gen(function* () {
+ *     return {};
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Background services
+ * Omit `port` and `fetch`. Pass `services: []`. Use `ServerHost.run`
+ * for a long-running loop. If the process exits, Fly restarts it.
+ *
+ * @example ServerHost.run
+ * ```typescript
+ * import { ServerHost } from "alchemy/Server";
+ *
+ * export default class Worker extends Fly.Service<Worker>()(
+ *   "Worker",
+ *   { app: Site, main: import.meta.url, region: "iad", services: [] },
+ *   Effect.gen(function* () {
+ *     const host = yield* ServerHost;
+ *
+ *     yield* host.run(
+ *       Effect.gen(function* () {
+ *         return yield* Effect.never;
+ *       }).pipe(Effect.orDie),
+ *     );
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Bundle config
+ * `build` is Rolldown `input` / `output` overrides plus
+ * pure-annotation options. Use it when `main` needs extra entry
+ * points or externals.
+ *
+ * @example Externals
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     port: 3000,
+ *     build: { input: { external: ["sharp"] } },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Multiple Services, one App
+ * Each Service has its own Machines, image, and lifecycle. Point
+ * several at the same `app`.
+ *
+ * @example API and worker
+ * ```typescript
+ * class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ *
+ * class Worker extends Fly.Service<Worker>()(
+ *   "Worker",
+ *   { app: Site, main: import.meta.url, services: [] },
+ *   Effect.gen(function* () {
+ *     return {};
+ *   }),
+ * ) {}
  * ```
  */
 export const Service: Platform<

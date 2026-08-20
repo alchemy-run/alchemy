@@ -17,16 +17,18 @@ export interface VerifyResult {
 }
 
 /**
- * Verify a signature with a Fly {@link SecretKey}. The App and key name
- * are fixed by `Verify(key)`. A bad signature is a typed error from the
- * Machines API. Provide {@link VerifyHttp} on the Action / Service Effect.
+ * Verify a signature with a Fly {@link SecretKey}. The App and key
+ * name are fixed by `Verify(key)`.
  *
  * @binding
  *
- * @section Signing
- * @example Verify a signature
+ * @section Verify a signature
+ * Provide {@link VerifyHttp}. A bad signature is a typed error from
+ * the Machines API, not `valid: false`.
+ *
+ * @example Verify
  * ```typescript
- * const verify = yield* Fly.Verify(key);
+ * const verify = yield* Fly.Verify(Signing);
  * const { valid } = yield* verify({ plaintext, signature });
  * ```
  */

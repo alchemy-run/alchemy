@@ -69,37 +69,99 @@ export type App = Resource<
 >;
 
 /**
- * A Fly.io App — the parent for Machines, Services, Secrets and IPs.
- *
- * Fly Apps have no labels. Ownership is the physical name (generated via
- * `createPhysicalName` + a leading-letter force) plus child metadata on
- * Machines / Volumes / Secrets. There is no update API: `name`, `orgSlug`
- * and `network` replace; `enableSubdomains` is create-only.
+ * A Fly.App is a global namespace in your account. It contains Machines,
+ * Services, Secrets, IPs, and certificates.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/apps-resource/
  *
- * @section Creating an App
+ * @section Create an App
+ * Alchemy generates a unique name unless you pass one. `url` is
+ * `https://{appName}.fly.dev`. Nothing answers there until a
+ * {@link Service} or {@link Machine} publishes a proxy service and the App
+ * has an {@link IpAssignment}.
+ *
  * @example Generated name
  * ```typescript
  * const site = yield* Fly.App("Site");
  * ```
  *
- * @example Explicit name and org
+ * :::note
+ * Prefer omitting `name` in tests and CI so names stay unique and
+ * reclaimable.
+ * :::
+ *
+ * @section A stable hostname
+ * Pass `name` when you need a stable `fly.dev` hostname.
+ *
+ * @example Explicit name
+ * ```typescript
+ * const site = yield* Fly.App("Site", {
+ *   name: "my-site",
+ * });
+ * ```
+ *
+ * :::caution[Changing `name` replaces the App]
+ * Fly cannot have two Apps with the same name. Alchemy deletes the
+ * old App first, then creates the new one.
+ * :::
+ *
+ * @section Organization
+ * Org defaults to the current token. Pass `orgSlug` to pin it.
+ *
+ * @example Pin an org
  * ```typescript
  * const site = yield* Fly.App("Site", {
  *   name: "my-site",
  *   orgSlug: "my-org",
+ * });
+ * ```
+ *
+ * :::caution[Changing `orgSlug` replaces the App]
+ * The App is created in the new org. The old App is deleted.
+ * :::
+ *
+ * @section Subdomains
+ * `enableSubdomains: true` turns on `*.{appName}.fly.dev`.
+ *
+ * @example Enable subdomains
+ * ```typescript
+ * const site = yield* Fly.App("Site", {
+ *   name: "my-site",
  *   enableSubdomains: true,
  * });
  * ```
  *
+ * :::note[Create-only]
+ * Flipping `enableSubdomains` later is ignored.
+ * :::
+ *
  * @section Isolated network
+ * `network` is an optional 6PN name.
+ *
  * @example Custom network
  * ```typescript
  * const site = yield* Fly.App("Site", {
+ *   name: "my-site",
  *   network: "private",
  * });
+ * ```
+ *
+ * :::caution[Changing `network` replaces the App]
+ * The App is recreated on the new network.
+ * :::
+ *
+ * @section Module-scope declarations
+ * Declare the App once. Pass it into every child. Resource-valued props
+ * accept the resource or an Effect producing it. Do not unwrap it just
+ * to pass it along.
+ *
+ * @example Module-scope App
+ * ```typescript
+ * // src/app.ts
+ * import * as Fly from "alchemy/Fly";
+ *
+ * export const Site = Fly.App("Site");
  * ```
  */
 export const App = Resource<App>("Fly.App");

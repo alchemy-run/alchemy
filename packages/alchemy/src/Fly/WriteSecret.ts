@@ -13,37 +13,47 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Secret } from "./Secret.ts";
 
 /**
- * Binding that lets runtime code create, update, and delete Fly.io App
- * secrets.
+ * Create, update, and delete Fly.io App secrets at runtime.
  *
- * Authenticates with a deploy token minted via `appCreateDeployToken` when
- * the host is a {@link Machine} or {@link Service}, and with the ambient
- * `FLY_API_TOKEN` inside an Action. The App is fixed by
- * `WriteSecret(secret)` so calls take no `app_name`. Provide
- * {@link WriteSecretHttp} on the Action / Service Effect.
+ * The App is fixed by `WriteSecret(secret)`. Calls take no
+ * `app_name`. Inside a {@link Machine} or {@link Service}, Alchemy
+ * mints an App deploy token. Inside an Action, the ambient
+ * `FLY_API_TOKEN` is used.
  *
  * @binding
  *
- * @section Mutating secrets at runtime
- * @example Create, rotate, and delete from an Action
- * Bind the client in the Action's Init phase and provide {@link WriteSecretHttp}.
- * ```typescript
- * import * as Alchemy from "alchemy";
- * import * as Fly from "alchemy/Fly";
- * import * as Effect from "effect/Effect";
- * import * as Redacted from "effect/Redacted";
+ * @section Create
+ * Bind the client in init. Provide {@link WriteSecretHttp}. Wrap
+ * values with `Redacted.make`.
  *
+ * @example Create a secret
+ * ```typescript
  * const Seed = Alchemy.Action(
  *   "Seed",
  *   Effect.gen(function* () {
- *     const secrets = yield* Fly.WriteSecret(dbUrl);
+ *     const secrets = yield* Fly.WriteSecret(ApiToken);
+ *
  *     return Effect.fn(function* () {
  *       yield* secrets.create("API_KEY", Redacted.make("sk_live"));
- *       yield* secrets.update("API_KEY", Redacted.make("sk_live_rotated"));
- *       yield* secrets.delete("API_KEY");
  *     });
  *   }).pipe(Effect.provide(Fly.WriteSecretHttp)),
  * );
+ * ```
+ *
+ * @section Update
+ * `update` rotates by name (batch of one).
+ *
+ * @example Rotate
+ * ```typescript
+ * yield* secrets.update("API_KEY", Redacted.make("sk_live_rotated"));
+ * ```
+ *
+ * @section Delete
+ * `delete` removes a secret by name.
+ *
+ * @example Delete
+ * ```typescript
+ * yield* secrets.delete("API_KEY");
  * ```
  */
 export interface WriteSecret extends Binding.Service<

@@ -252,55 +252,199 @@ export type Machine = Resource<
 >;
 
 /**
- * A raw Fly.io Firecracker Machine — a VM that runs a public Docker image
- * under an App. `count` is the replica pool (Fly's proxy load-balances
- * published services). Image, guest, env, services, mounts, metadata and
- * restart update in place via `machinesUpdate`. Name, region and App
- * replace.
+ * A Fly.Machine is a Firecracker VM running a container image.
  *
- * Disks are declared as `{ path, sizeGb }` — Alchemy creates one Volume
- * per replica in a Fly name-group. There is no standalone Volume resource.
- *
- * Ownership is stamped on `config.metadata` (`alchemy.stack` /
- * `alchemy.stage` / `alchemy.id` / `alchemy.type=Fly.Machine` /
- * `alchemy.replica`). Fly Apps have no labels.
+ * Prefer a {@link Service} when the program is Effect. A Service is
+ * effectful, supports bindings, and scales with `count`. Alchemy builds
+ * and pushes the image. Use `Fly.Machine` when you already have an image.
  *
  * @resource
  * @see https://fly.io/docs/machines/api/machines-resource/
  *
- * @section Creating a Machine
- * @example Nginx in iad
+ * @section Prefer a Service
+ * Declare a {@link Service} when you own the program. Alchemy bundles
+ * `main`, builds `linux/amd64`, and pushes to `registry.fly.io`.
+ *
+ * @example Effect HTTP service
  * ```typescript
- * const site = yield* Fly.App("Site");
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @section Launch a Machine
+ * The parent is an {@link App}. Pin a region and an image. Guest
+ * defaults to shared-cpu 1× / 256 MB. `image` updates in place.
+ *
+ * @example Nginx
+ * ```typescript
  * const web = yield* Fly.Machine("Web", {
- *   app: site,
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ * });
+ * ```
+ *
+ * :::caution[Changing `app` replaces the Machine]
+ * The new App gets a new Machine. The old one is deleted.
+ * :::
+ *
+ * @section A stable name
+ * Machine names are unique per App. Omit `name` and Alchemy generates
+ * one from the stack, stage, and logical ID.
+ *
+ * @example Explicit name
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   name: "web",
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ * });
+ * ```
+ *
+ * :::caution[Changing `name` replaces the Machine]
+ * Fly cannot rename a Machine. Alchemy creates the new name, then
+ * deletes the old one.
+ * :::
+ *
+ * @section Region
+ * Fly Machines live in a region. Default is `iad`.
+ *
+ * @example Pin a region
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   region: "ewr",
+ *   image: "nginx:alpine",
+ * });
+ * ```
+ *
+ * :::caution[Changing `region` replaces the Machine]
+ * The Machine is created in the new region. The old one is deleted.
+ * :::
+ *
+ * @section Guest size
+ * `guest` is CPU kind, CPU count, and memory. Default is shared-cpu,
+ * 1 CPU, 256 MB. Guest updates in place.
+ *
+ * @example Shared CPU
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
  *   region: "iad",
  *   image: "nginx:alpine",
  *   guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
  * });
  * ```
  *
- * @example Machine with env and HTTP service
+ * @section GPU
+ * Set `gpuKind` and `gpus` on `guest` when the Machine should have a
+ * GPU.
+ *
+ * @example GPU guest
+ * ```typescript
+ * const worker = yield* Fly.Machine("Worker", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "my-gpu-image:tag",
+ *   guest: {
+ *     cpuKind: "performance",
+ *     cpus: 2,
+ *     memoryMb: 4096,
+ *     gpuKind: "a10",
+ *     gpus: 1,
+ *   },
+ * });
+ * ```
+ *
+ * @section Environment variables
+ * `env` is merged onto the Machine. Fly also injects App
+ * {@link Secret} values as env vars unless the Machine skips secrets.
+ *
+ * @example Set env
+ * ```typescript
+ * const worker = yield* Fly.Machine("Worker", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "my-image:tag",
+ *   env: { LOG_LEVEL: "info" },
+ * });
+ * ```
+ *
+ * @section Publish a proxy service
+ * `services` publishes ports on Fly's proxy. `{app}.fly.dev` over IPv4
+ * still needs an {@link IpAssignment} on the parent App. `url` is
+ * `https://{appName}.fly.dev` when a proxy service is configured.
+ *
+ * Handlers are `http`, `tls`, `pg_tls`, and similar. Set `forceHttps`
+ * to redirect HTTP to HTTPS. Use `startPort` / `endPort` for a
+ * published range.
+ *
+ * Omit `services` (or pass `[]`) for a process that should not be
+ * reachable from the internet.
+ *
+ * @example HTTP on port 80
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
- *   app: site,
+ *   app: Site,
+ *   region: "iad",
  *   image: "nginx:alpine",
- *   env: { NGINX_ENTRYPOINT_QUIET_LOGS: "1" },
  *   services: [
  *     {
  *       protocol: "tcp",
  *       internalPort: 80,
+ *       ports: [
+ *         { port: 80, handlers: ["http"], forceHttps: true },
+ *         { port: 443, handlers: ["tls", "http"] },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Autostart and autostop
+ * `autostart` starts the Machine when a request arrives. `autostop` is
+ * `"off"`, `"stop"`, `"suspend"`, or a boolean. `minMachinesRunning`
+ * keeps that many Machines up for the service.
+ *
+ * Autostop only stops Machines that already exist. It does not mint
+ * new ones. Size the pool with `count`.
+ *
+ * @example Stop when idle
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ *   services: [
+ *     {
+ *       protocol: "tcp",
+ *       internalPort: 80,
+ *       autostart: true,
+ *       autostop: "stop",
+ *       minMachinesRunning: 0,
  *       ports: [{ port: 80, handlers: ["http"] }],
  *     },
  *   ],
  * });
  * ```
  *
- * @section Scaling
- * @example Three replicas behind the Fly proxy
+ * @section Scale with count
+ * `count` is how many Machines to keep running. Default is `1`. Fly's
+ * proxy load-balances published `services` across them. Each replica
+ * gets its own Volume from every `mounts` group.
+ *
+ * @example Three replicas
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
- *   app: site,
+ *   app: Site,
  *   region: "iad",
  *   image: "nginx:alpine",
  *   count: 3,
@@ -314,14 +458,113 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Attaching a disk
- * @example Mount a per-replica Volume
+ * @section Attach a disk
+ * Pass disks as `mounts`. Alchemy creates one Volume per replica in
+ * the Machine's app and region. A Volume attaches to one Machine.
+ * There is no standalone Volume resource.
+ *
+ * `sizeGb` can grow in place. Shrinking is not supported. Encryption,
+ * filesystem type, `snapshotId`, and `sourceVolumeId` are create-only.
+ * See {@link MountVolume} for the full disk spec. From a Service,
+ * prefer `MountVolume` so the path is part of the binding graph.
+ *
+ * @example Mount `/data`
  * ```typescript
  * const box = yield* Fly.Machine("Box", {
- *   app: site,
+ *   app: Site,
  *   region: "iad",
  *   image: "postgres:16",
  *   mounts: [{ path: "/data", sizeGb: 10 }],
+ * });
+ * ```
+ *
+ * @section Init
+ * `init` overrides `cmd`, `entrypoint`, `exec`, swap, and TTY. Updates
+ * in place.
+ *
+ * @example Custom command
+ * ```typescript
+ * const box = yield* Fly.Machine("Box", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "postgres:16",
+ *   init: { cmd: ["postgres", "-c", "shared_buffers=256MB"] },
+ * });
+ * ```
+ *
+ * @section Restart policy
+ * `restart.policy` is `"no"`, `"always"`, `"on-failure"`, or
+ * `"spot-price"`. `maxRetries` applies when the policy is
+ * `"on-failure"`. Updates in place.
+ *
+ * @example Always restart
+ * ```typescript
+ * const worker = yield* Fly.Machine("Worker", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "my-image:tag",
+ *   restart: { policy: "always" },
+ * });
+ * ```
+ *
+ * @section Destroy on exit
+ * `autoDestroy: true` tears the Machine down when its main process
+ * exits. Default is `false`.
+ *
+ * @example One-shot Machine
+ * ```typescript
+ * const job = yield* Fly.Machine("Job", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "my-job:tag",
+ *   autoDestroy: true,
+ *   restart: { policy: "no" },
+ * });
+ * ```
+ *
+ * @section Skip launch
+ * `skipLaunch: true` creates or updates the config without starting
+ * the Machine. Default is `false`. Reconcile otherwise waits until
+ * the Machine is `started`.
+ *
+ * @example Config only
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ *   skipLaunch: true,
+ * });
+ * ```
+ *
+ * @section Metadata
+ * User keys on `metadata` merge with Alchemy ownership keys
+ * (`alchemy.stack`, `alchemy.stage`, `alchemy.id`, `alchemy.type`,
+ * `alchemy.replica`). Those ownership keys are always written so
+ * `list()` can find owned Machines. Fly Apps have no labels.
+ *
+ * @example User metadata
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ *   metadata: { role: "edge" },
+ * });
+ * ```
+ *
+ * @section Secrets version
+ * `minSecretsVersion` waits until the Machine has seen at least that
+ * App secrets version. Use it after rotating a {@link Secret} if the
+ * process must start with the new value.
+ *
+ * @example Wait for secrets
+ * ```typescript
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "nginx:alpine",
+ *   minSecretsVersion: 2,
  * });
  * ```
  */

@@ -11,10 +11,20 @@ import {
 } from "./SecretKeyHttp.ts";
 
 /**
- * HTTP implementation of {@link Encrypt}.
+ * HTTP implementation of {@link Encrypt}. Provide it on the
+ * {@link Service} or Action Effect.
  *
  * @layer
  * @provides Fly.Encrypt
+ *
+ * @section Provide the layer
+ * @example On a Service
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const encrypt = yield* Fly.Encrypt(Box);
+ *   // ...
+ * }).pipe(Effect.provide(Fly.EncryptHttp))
+ * ```
  */
 export const EncryptHttp = Layer.effect(
   Encrypt,

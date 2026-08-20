@@ -9,20 +9,33 @@ import type { Secret } from "./Secret.ts";
 
 /**
  * Fetch one Fly.io App secret. The App and name are fixed by
- * `GetSecret(secret)`; calls take no `app_name`. Provide
- * {@link GetSecretHttp} on the Action / Service Effect.
- *
- * Plaintext (`value`) is only returned from inside a Machine in the
- * same App. Deploy-time Actions get metadata (name, digest,
- * timestamps).
+ * `GetSecret(secret)`. Calls take no `app_name`.
  *
  * @binding
  *
- * @section Reading a secret
- * @example Get a bound Secret
+ * @section Read a secret
+ * Bind the client in init. Call it from `fetch` or an Action body.
+ * Provide {@link GetSecretHttp}.
+ *
+ * Fly only returns plaintext from a Machine in the same App. From a
+ * deploy-time Action you get metadata (name, digest, timestamps).
+ *
+ * @example GetSecret
  * ```typescript
- * const get = yield* Fly.GetSecret(dbUrl);
- * const got = yield* get();
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   { app: Site, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const get = yield* Fly.GetSecret(ApiToken);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const got = yield* get().pipe(Effect.orDie);
+ *         return HttpServerResponse.json({ name: got.name });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Fly.GetSecretHttp)),
+ * ) {}
  * ```
  */
 export interface GetSecret extends Binding.Service<

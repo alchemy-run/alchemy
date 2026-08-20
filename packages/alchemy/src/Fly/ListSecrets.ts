@@ -8,32 +8,45 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { App } from "./App.ts";
 
 /**
- * List Fly.io App secrets. Scoped to an {@link App} — Fly's list API
- * is `GET /apps/{app}/secrets`, not a single Secret. The App is
- * fixed by `ListSecrets(app)`; calls take no `app_name`. Provide
- * {@link ListSecretsHttp} on the Action / Service Effect.
- *
- * From an Action, the org `FLY_API_TOKEN` can list any App in the
- * org — `ListSecrets(other)` is how you reach across Apps. From a
- * Machine, Fly deploy tokens are per-App: `ListSecrets(site)` on a
- * Service in `site` works; mixing Apps on one host shares one
- * `FLY_API_TOKEN` and is not supported.
- *
- * Plaintext is only returned from inside a Machine in the same App.
+ * List Fly.io App secrets. Scoped to an {@link App}. Fly's list API
+ * is `GET /apps/{app}/secrets`, not a single Secret.
  *
  * @binding
  *
- * @section Listing secrets
- * @example List secrets on an App
+ * @section List this App
+ * The App is fixed by `ListSecrets(app)`. Calls take no `app_name`.
+ * Provide {@link ListSecretsHttp}.
+ *
+ * Plaintext is only returned from inside a Machine in the same App.
+ * From a deploy-time Action you get metadata (name, digest,
+ * timestamps).
+ *
+ * @example ListSecrets
  * ```typescript
  * const list = yield* Fly.ListSecrets(Site);
  * const { secrets } = yield* list();
  * ```
  *
- * @example List another App from an Action
+ * @section List another App
+ * From an Action, the org `FLY_API_TOKEN` can list any App in the
+ * org. `ListSecrets(other)` is how you reach across Apps.
+ *
+ * From a Machine, deploy tokens are per-App. Mixing Apps on one host
+ * shares one `FLY_API_TOKEN` and is not supported.
+ *
+ * @example Cross-app from an Action
  * ```typescript
- * const list = yield* Fly.ListSecrets(Other);
- * const { secrets } = yield* list();
+ * const Seed = Alchemy.Action(
+ *   "Seed",
+ *   Effect.gen(function* () {
+ *     const list = yield* Fly.ListSecrets(Other);
+ *
+ *     return Effect.fn(function* () {
+ *       const { secrets } = yield* list();
+ *       return secrets;
+ *     });
+ *   }).pipe(Effect.provide(Fly.ListSecretsHttp)),
+ * );
  * ```
  */
 export interface ListSecrets extends Binding.Service<

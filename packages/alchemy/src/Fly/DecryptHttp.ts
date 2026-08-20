@@ -12,10 +12,20 @@ import {
 } from "./SecretKeyHttp.ts";
 
 /**
- * HTTP implementation of {@link Decrypt}.
+ * HTTP implementation of {@link Decrypt}. Provide it on the
+ * {@link Service} or Action Effect.
  *
  * @layer
  * @provides Fly.Decrypt
+ *
+ * @section Provide the layer
+ * @example On a Service
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const decrypt = yield* Fly.Decrypt(Box);
+ *   // ...
+ * }).pipe(Effect.provide(Fly.DecryptHttp))
+ * ```
  */
 export const DecryptHttp = Layer.effect(
   Decrypt,

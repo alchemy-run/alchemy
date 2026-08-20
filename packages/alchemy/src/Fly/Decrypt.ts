@@ -18,20 +18,33 @@ export interface DecryptResult {
 }
 
 /**
- * Decrypt with a Fly {@link SecretKey}. The App and key name are fixed by
- * `Decrypt(key)`; calls take no `app_name`. Provide {@link DecryptHttp} on
- * the Action / Service Effect.
+ * Decrypt with a Fly {@link SecretKey}. The App and key name are fixed
+ * by `Decrypt(key)`.
  *
  * @binding
  *
- * @section Decrypting
- * @example Decrypt a payload
+ * @section Decrypt a payload
+ * Provide {@link DecryptHttp}. Plaintext comes back `Redacted`. Unwrap
+ * with `Redacted.value` only where you need the raw bytes.
+ *
+ * @example Decrypt
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
- * const decrypt = yield* Fly.Decrypt(key);
+ * const decrypt = yield* Fly.Decrypt(Box);
  * const { plaintext } = yield* decrypt({ ciphertext });
  * const bytes = Redacted.value(plaintext);
+ * ```
+ *
+ * @section Associated data
+ * `associatedData` must match the bytes passed to {@link Encrypt}.
+ *
+ * @example AEAD
+ * ```typescript
+ * const { plaintext } = yield* decrypt({
+ *   ciphertext,
+ *   associatedData: nonce,
+ * });
  * ```
  */
 export interface Decrypt extends Binding.Service<
