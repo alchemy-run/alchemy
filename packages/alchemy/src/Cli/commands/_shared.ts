@@ -31,6 +31,7 @@ import { HetznerAuth } from "../../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../../Prisma/AuthProvider.ts";
+import { StripeAuth } from "../../Stripe/AuthProvider.ts";
 import * as Stack from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
@@ -464,6 +465,7 @@ export const builtinAuth = Layer.mergeAll(
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,
+  StripeAuth,
 );
 
 /**
