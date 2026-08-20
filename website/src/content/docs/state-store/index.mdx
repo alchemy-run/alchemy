@@ -161,27 +161,35 @@ state: AWS.state({
 
 By default a state store talks to the same account the stack deploys
 into — both are resolved from the active Alchemy profile. Both
-cloud-backed stores accept an override, so state can live somewhere
-else: a locked-down state account, or one shared team account while each
-developer deploys into their own.
+cloud-backed stores look for an account in their surrounding context
+first, so piping one in moves state somewhere else: a locked-down state
+account, or one shared team account while each developer deploys into
+their own.
 
 ### AWS
 
 ```typescript
-state: AWS.state({
-  bucketName: "my-org-alchemy-state",
-  environment: AWS.assumeRoleEnvironment({
-    roleArn: "arn:aws:iam::111122223333:role/AlchemyState",
-    accountId: "111122223333",
-    region: "us-east-1",
-  }),
-}),
+state: AWS.state({ bucketName: "my-org-alchemy-state" }).pipe(
+  Layer.provide(
+    AWS.assumeRoleEnvironment({
+      roleArn: "arn:aws:iam::111122223333:role/AlchemyState",
+      accountId: "111122223333",
+      region: "us-east-1",
+    }),
+  ),
+),
 ```
+
+`AWS.state()` declares no environment requirement — it has to satisfy
+the stack's `state` slot, which only permits services a stack already
+has — so it resolves an `AWSEnvironment` from its context if one is
+there and falls back to the profile if not. That is why the layer is
+pipe-able even though its type says nothing about it.
 
 The profile's credentials sign the `AssumeRole` call; the temporary
 credentials it returns are cached and single-flighted until shortly
 before they expire. Region, credentials and endpoint are all derived
-from the environment, so it is the only thing to pass.
+from the environment, so it is the only thing to pipe in.
 
 In the state account, the role needs object permissions on the bucket
 plus the bucket-level settings the store reconciles on every run:
@@ -190,10 +198,10 @@ plus the bucket-level settings the store reconciles on every run:
 `s3:GetBucketPublicAccessBlock`, `s3:PutBucketPublicAccessBlock`,
 `s3:GetBucketOwnershipControls` and `s3:PutBucketOwnershipControls`.
 
-`environment` takes any `Layer<AWSEnvironment>` — static keys, a
-different STS chain, a local emulator. For full control over how the
-store itself is assembled, `AWS.s3State()` is the same store with its
-environment left open:
+Any `Layer<AWSEnvironment>` works — static keys, a different STS chain, a
+local emulator. If you would rather the type demand an environment than
+silently fall back to the profile, `AWS.s3State()` is the same store with
+the environment as a hard requirement:
 
 ```typescript
 state: AWS.s3State({ bucketName: "my-org-alchemy-state" }).pipe(
@@ -205,33 +213,43 @@ state: AWS.s3State({ bucketName: "my-org-alchemy-state" }).pipe(
 ### Cloudflare
 
 ```typescript
-state: Cloudflare.state({
-  accountId: process.env.STATE_CLOUDFLARE_ACCOUNT_ID!,
-  apiToken: process.env.STATE_CLOUDFLARE_API_TOKEN!,
-}),
+state: Cloudflare.state().pipe(
+  Layer.provide(
+    Cloudflare.CloudflareApiLive({
+      accountId: process.env.STATE_CLOUDFLARE_ACCOUNT_ID!,
+      apiToken: process.env.STATE_CLOUDFLARE_API_TOKEN!,
+    }),
+  ),
+),
 ```
 
 A Cloudflare account and the token that authenticates against it are
-resolved independently, so unlike AWS both have to be given together —
-an account id on its own is ignored. The state-store Worker and its
-Secrets Store secrets then bootstrap into that account instead of the
-profile's. Pass `credentials` / `environment` layers instead if you want
-to build them yourself.
+resolved independently, so unlike AWS both have to travel together — an
+account id on its own is ignored. `CloudflareApiLive` also accepts
+`credentials` / `environment` layers if you want to build them yourself.
 
-`Cloudflare.providers()` accepts the same options, so a stack can also
-deploy its *resources* into a non-default account.
+The state-store Worker and its Secrets Store secrets bootstrap into
+whichever account the store resolves, so the store and the infrastructure
+backing it never split across accounts.
+
+`Cloudflare.providers()` resolves its account the same way, so a stack
+can also deploy its *resources* into a non-default account.
 
 ### Everything else
 
 The Postgres and HTTP stores are already explicit — `postgresState({ url })`
 writes wherever the URL points, with no profile involved.
 
-### The override stays private
+### What the store does and doesn't share
 
-In every case the environment is provided *privately* to the state
-store. A stack composes its providers on top of its state layer, so an
-override that leaked out would silently redirect every resource in the
-stack into the state account. Providers keep using the profile.
+The account is read from context, never merged back out. A stack builds
+its providers on top of its state layer, so a state account that leaked
+out of the state store would silently redirect every resource in the
+stack into it.
+
+The flip side: piping an account in at the *stack* level rather than onto
+the state layer puts it in scope for both. Attach it to the state layer,
+as above, when you want it to apply to state alone.
 
 ## Postgres state store
 

@@ -1,5 +1,7 @@
 import { Retry } from "@distilled.cloud/cloudflare";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
@@ -718,6 +720,55 @@ export interface CloudflareApiOptions {
 }
 
 /**
+ * Credentials for {@link CloudflareApiLive}: explicit options first, then
+ * whatever the surrounding context provides, then the Alchemy profile.
+ *
+ * The context lookup is `Effect.serviceOption`, so it adds nothing to the
+ * layer's requirements — `providers()` / `state()` keep their current
+ * types while becoming pipe-able.
+ */
+const credentialsFor = (options: CloudflareApiOptions) =>
+  options.credentials ??
+  (options.apiToken !== undefined
+    ? Credentials.fromApiToken({
+        apiToken: Redacted.isRedacted(options.apiToken)
+          ? Redacted.value(options.apiToken)
+          : options.apiToken,
+      })
+    : Layer.unwrap(
+        Effect.map(
+          Effect.serviceOption(Credentials.Credentials),
+          Option.match({
+            onNone: () => Credentials.fromAuthProvider(),
+            onSome: (credentials) =>
+              Layer.succeed(Credentials.Credentials, credentials),
+          }),
+        ),
+      ));
+
+/** The account half of {@link credentialsFor}, same precedence. */
+const environmentFor = (options: CloudflareApiOptions) =>
+  options.environment ??
+  (options.accountId !== undefined && options.apiToken !== undefined
+    ? CloudflareEnvironment.ofApiToken({
+        accountId: options.accountId,
+        apiToken: options.apiToken,
+      })
+    : Layer.unwrap(
+        Effect.map(
+          Effect.serviceOption(CloudflareEnvironment.CloudflareEnvironment),
+          Option.match({
+            onNone: () => CloudflareEnvironment.fromProfile(),
+            onSome: (environment) =>
+              Layer.succeed(
+                CloudflareEnvironment.CloudflareEnvironment,
+                environment,
+              ),
+          }),
+        ),
+      ));
+
+/**
  * The foundation every effect tree that talks to the Cloudflare API
  * shares — credentials resolved through the Alchemy auth provider,
  * account environment, Access, profile + credential store — plus a
@@ -741,33 +792,23 @@ export interface CloudflareApiOptions {
  * them.
  *
  * Both halves that decide *which account* is talked to — the credentials
- * and the account environment — are overridable, which is how the state
- * store is pointed at an account other than the one a stack deploys into
- * (see {@link ../Cloudflare/StateStore/State.ts state}). Unlike AWS, a
- * Cloudflare account and its API token are resolved independently, so
- * both must be replaced together; passing `accountId` + `apiToken` does
- * that in one step.
+ * and the account environment — fall back to the surrounding context
+ * before the profile, so piping either in redirects everything built on
+ * top of this foundation:
+ *
+ * ```typescript
+ * Cloudflare.state().pipe(
+ *   Layer.provide(Cloudflare.CloudflareApiLive({ accountId, apiToken })),
+ * )
+ * ```
+ *
+ * Unlike AWS, a Cloudflare account and the token that authenticates
+ * against it are resolved independently, so both have to be replaced
+ * together; `accountId` + `apiToken` does that in one step.
  */
 export const CloudflareApiLive = (options: CloudflareApiOptions = {}) =>
-  (
-    options.credentials ??
-    (options.apiToken !== undefined
-      ? Credentials.fromApiToken({
-          apiToken: Redacted.isRedacted(options.apiToken)
-            ? Redacted.value(options.apiToken)
-            : options.apiToken,
-        })
-      : Credentials.fromAuthProvider())
-  ).pipe(
-    Layer.provideMerge(
-      options.environment ??
-        (options.accountId !== undefined && options.apiToken !== undefined
-          ? CloudflareEnvironment.ofApiToken({
-              accountId: options.accountId,
-              apiToken: options.apiToken,
-            })
-          : CloudflareEnvironment.fromProfile()),
-    ),
+  credentialsFor(options).pipe(
+    Layer.provideMerge(environmentFor(options)),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(ProfileLive),

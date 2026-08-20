@@ -54,28 +54,7 @@ import {
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
-export type CloudflareStateOptions = Cloudflare.CloudflareApiOptions;
-
-/**
- * State store backed by a Worker + Durable Object deployed to your
- * Cloudflare account.
- *
- * By default it uses the account the active Alchemy profile resolves to —
- * the same one `Cloudflare.providers()` deploys into. Pass `accountId` +
- * `apiToken` (or explicit `credentials` / `environment` layers) to keep
- * state in a different account:
- *
- * ```typescript
- * state: Cloudflare.state({
- *   accountId: process.env.STATE_CLOUDFLARE_ACCOUNT_ID!,
- *   apiToken: process.env.STATE_CLOUDFLARE_API_TOKEN!,
- * }),
- * ```
- *
- * The foundation is provided privately, so a state-account token never
- * reaches the stack's providers.
- */
-export const state = (options: CloudflareStateOptions = {}) =>
+export const state = () =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -101,7 +80,6 @@ export const state = (options: CloudflareStateOptions = {}) =>
             profileName,
             isCI,
             force: false,
-            api: options,
           });
         }
 
@@ -124,7 +102,6 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 }));
               if (shouldDeploy) {
                 return yield* bootstrap({
-                  ...options,
                   workerName: scriptName,
                   profile: profileName,
                 });
@@ -148,7 +125,6 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 stage: scriptName,
                 state: httpState,
                 force: false,
-                api: options,
               });
               return yield* makeCloudflareStateStore(stateStoreOptions);
             });
@@ -232,7 +208,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
           );
         } else if (autoUpdateStateStore) {
           // `--yes`: deploy the missing state store automatically (also in CI).
-          return yield* bootstrap(options);
+          return yield* bootstrap();
         } else if (isCI) {
           return yield* Effect.die(
             new AuthError({
@@ -246,7 +222,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
           }).pipe(
             Effect.flatMap((shouldDeploy) =>
               shouldDeploy
-                ? bootstrap(options)
+                ? bootstrap()
                 : Effect.die(new Clank.PromptCancelled()),
             ),
           );
@@ -262,13 +238,12 @@ export const state = (options: CloudflareStateOptions = {}) =>
     // policy the init-time subdomain/script/secrets probes run on the
     // SDK default and give up early under Cloudflare rate limiting.
     // `provide` (not `provideMerge`) so the distilled Retry tag stays
-    // out of this layer's public type — and so a state-account override
-    // never reaches the stack's providers.
-    Layer.provide(Cloudflare.CloudflareApiLive(options)),
+    // out of this layer's public type.
+    Layer.provide(Cloudflare.CloudflareApiLive()),
     Layer.orDie,
   );
 
-export interface BootstrapOptions extends Cloudflare.CloudflareApiOptions {
+export interface BootstrapOptions {
   /** @default "alchemy-state-store" */
   workerName?: string;
   /** @default false */
@@ -303,7 +278,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         profileName,
         isCI,
         force,
-        api: options,
       }).pipe(
         Effect.tap(() =>
           Clank.success(`Cloudflare State Store '${scriptName}' is ready.`),
@@ -354,7 +328,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
             stage: scriptName,
             state: httpState,
             force,
-            api: options,
           }),
         );
       } else {
@@ -367,7 +340,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         profileName,
         isCI,
         force,
-        api: options,
       }).pipe(
         Effect.tap(() =>
           Clank.success(`Cloudflare State Store '${scriptName}' is ready.`),
@@ -508,17 +480,10 @@ const deployStateStore = ({
   stage,
   state,
   force,
-  api,
 }: {
   stage: string;
   state: StateService;
   force?: boolean;
-  /**
-   * Account the state-store Worker itself is deployed into. Must match the
-   * account the store's API calls use, or bootstrap would create the Worker
-   * in one account and then probe for it in another.
-   */
-  api?: Cloudflare.CloudflareApiOptions;
 }) =>
   Effect.gen(function* () {
     yield* annotateAccountHash();
@@ -531,10 +496,7 @@ const deployStateStore = ({
       stack: Alchemy.Stack(
         "CloudflareStateStore",
         {
-          providers: Layer.mergeAll(
-            Cloudflare.providers(api ?? {}),
-            RandomProvider(),
-          ),
+          providers: Layer.mergeAll(Cloudflare.providers(), RandomProvider()),
           state: stateLayer,
         },
         Effect.gen(function* () {
@@ -589,13 +551,11 @@ const deployWithLocalState = ({
   isCI,
   force,
   profileName,
-  api,
 }: {
   scriptName: string;
   isCI: boolean;
   force: boolean;
   profileName: string;
-  api?: Cloudflare.CloudflareApiOptions;
 }) =>
   Effect.gen(function* () {
     const localState = yield* makeLocalState();
@@ -605,7 +565,6 @@ const deployWithLocalState = ({
       stage: localStage,
       state: localState,
       force,
-      api,
     });
 
     const { url } = yield* loginWithCloudflare(profileName, force);

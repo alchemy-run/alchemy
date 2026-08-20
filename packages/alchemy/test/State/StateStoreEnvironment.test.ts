@@ -1,4 +1,5 @@
 import { CredentialsStore } from "@/Auth/Credentials.ts";
+import { ProfileLive } from "@/Auth/Profile.ts";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { s3State, state as s3StateStore } from "@/AWS/StateStore/State.ts";
 import * as CloudflareCredentials from "@/Cloudflare/Credentials.ts";
@@ -86,24 +87,46 @@ const capturingHttpClient = (captured: CapturedRequest[]) =>
     );
   });
 
+/**
+ * Services a stack would normally supply around a state store. `state()`
+ * still *types* as needing the profile (the fallback branch is part of
+ * its type even when the piped-in environment wins), so tests supply it
+ * even though the fallback never builds here.
+ */
+const TestServices = Layer.mergeAll(PlatformServices, ProfileLive);
+
+/** Drive one state op through the given store layer. */
+const listThrough = <R>(layer: Layer.Layer<State, never, R>) =>
+  Effect.result(
+    Effect.gen(function* () {
+      const state = yield* yield* State;
+      return yield* state.list({ stack: "app", stage: "dev" });
+    }).pipe(Effect.provide(layer)),
+  );
+
+/** Assert a captured request went to the state account, in its region. */
+const expectStateAccountRequest = (request: CapturedRequest) => {
+  expect(request.url).toContain(STATE_BUCKET);
+  expect(request.url).toContain(`s3.${STATE_REGION}.amazonaws.com`);
+  // SigV4 credential scope proves the provided credentials signed it.
+  expect(request.authorization).toContain(`Credential=${STATE_ACCESS_KEY}/`);
+  expect(request.authorization).toContain(`/${STATE_REGION}/s3/aws4_request`);
+};
+
 describe("AWS S3 state store environment", () => {
   it.effect(
-    "signs and addresses its calls with the environment it was given",
+    "signs and addresses its calls with an environment piped into `state`",
     () =>
       Effect.gen(function* () {
         const captured: CapturedRequest[] = [];
 
-        const store = yield* Effect.result(
-          Effect.gen(function* () {
-            const state = yield* yield* State;
-            return yield* state.list({ stack: "app", stage: "dev" });
-          }).pipe(
-            Effect.provide(
-              s3State({ bucketName: STATE_BUCKET }).pipe(
-                Layer.provide(stateAccountEnvironment),
-                Layer.provide(capturingHttpClient(captured)),
-              ),
-            ),
+        // The headline: `AWS.state()` declares no environment requirement
+        // (it must satisfy the stack's `state` slot), but an environment
+        // piped in still wins over the profile default.
+        const store = yield* listThrough(
+          s3StateStore({ bucketName: STATE_BUCKET }).pipe(
+            Layer.provide(stateAccountEnvironment),
+            Layer.provide(capturingHttpClient(captured)),
           ),
         );
 
@@ -111,41 +134,45 @@ describe("AWS S3 state store environment", () => {
         // which account/region/credentials it failed against.
         expect(Result.isFailure(store)).toBe(true);
         expect(captured.length).toBeGreaterThan(0);
-
-        const first = captured[0]!;
-        // Region and bucket come from the provided environment, not from
-        // the ambient profile.
-        expect(first.url).toContain(STATE_BUCKET);
-        expect(first.url).toContain(`s3.${STATE_REGION}.amazonaws.com`);
-        // SigV4 credential scope proves the provided credentials signed it.
-        expect(first.authorization).toContain(
-          `Credential=${STATE_ACCESS_KEY}/`,
-        );
-        expect(first.authorization).toContain(
-          `/${STATE_REGION}/s3/aws4_request`,
-        );
-      }),
+        expectStateAccountRequest(captured[0]!);
+      }).pipe(Effect.provide(TestServices)),
     { timeout: 30_000 },
   );
 
-  it.effect("keeps that environment private to the state store", () =>
+  it.effect("`s3State` takes the environment as a hard requirement", () =>
+    Effect.gen(function* () {
+      const captured: CapturedRequest[] = [];
+
+      const store = yield* listThrough(
+        s3State({ bucketName: STATE_BUCKET }).pipe(
+          Layer.provide(stateAccountEnvironment),
+          Layer.provide(capturingHttpClient(captured)),
+        ),
+      );
+
+      expect(Result.isFailure(store)).toBe(true);
+      expect(captured.length).toBeGreaterThan(0);
+      expectStateAccountRequest(captured[0]!);
+    }),
+  );
+
+  it.effect("keeps the piped-in environment private to the state store", () =>
     Effect.gen(function* () {
       // Mirrors how `Alchemy.Stack` composes the two layers:
-      // `providers.pipe(Layer.provideMerge(state))`. If the state layer
-      // merged its environment out, `providers` would build against the
-      // state account.
+      // `providers.pipe(Layer.provideMerge(state))`. The state store reads
+      // the environment but never merges one out, so a providers-shaped
+      // layer built on top of it does not inherit the state account.
       const composed = ProvidersProbe.layer.pipe(
         Layer.provideMerge(
-          s3StateStore({
-            bucketName: STATE_BUCKET,
-            environment: stateAccountEnvironment,
-          }),
+          s3StateStore({ bucketName: STATE_BUCKET }).pipe(
+            Layer.provide(stateAccountEnvironment),
+          ),
         ),
       );
 
       const probe = yield* Effect.provide(ProvidersProbe, composed);
       expect(probe.sawEnvironment).toBe(false);
-    }).pipe(Effect.provide(PlatformServices)),
+    }).pipe(Effect.provide(TestServices)),
   );
 });
 
