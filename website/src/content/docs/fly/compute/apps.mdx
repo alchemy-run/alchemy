@@ -1,26 +1,21 @@
 ---
 title: Apps
-description: The parent namespace for Machines, Services, Secrets, IPs, and certificates.
+description: A global namespace containing Machines, Services, Secrets, IPs, and certificates.
 ---
 
-A [`Fly.App`](/providers/fly/app) is the parent for Machines,
-Services, Secrets, IPs, and certificates. The name is globally
-unique: DNS-safe, leading letter, max 30 characters. There is no
-update API. Changing `name`, `orgSlug`, or `network` replaces the
-App. `enableSubdomains` is create-only.
-
-Disks are declared on Machines and Services with `mounts` or
-`MountVolume`. There is no standalone Volume resource.
+A [`Fly.App`](/providers/fly/app) is a global namespace in your
+account. It contains Machines, Services, Secrets, IPs, and
+certificates.
 
 ## Create an App
 
-The minimal App generates its physical name:
+Alchemy generates a unique name unless you pass one.
 
 ```typescript
 const site = yield* Fly.App("Site");
 ```
 
-Pass a name when you need a stable `fly.dev` hostname:
+Pass `name` when you need a stable `fly.dev` hostname.
 
 ```typescript
 const site = yield* Fly.App("Site", {
@@ -30,65 +25,47 @@ const site = yield* Fly.App("Site", {
 });
 ```
 
-The resolved resource exposes `appName`, `appId`, `orgSlug`,
-`status`, and `url` (`https://{appName}.fly.dev`) — see the
-[`App` reference](/providers/fly/app).
-
-Org defaults to the current token (`currentTokenShow`). Isolated
-`network` is an optional 6PN name; changing it replaces the App.
-
-`enableSubdomains: true` turns on `*.{appName}.fly.dev`. It is
-create-only. Fly has no App update API, so flipping it later is
-ignored.
-
-## fly.dev URL
-
-`url` is always `https://{appName}.fly.dev`. Nothing answers there
-until a [Machine](/fly/compute/machines) or
-[Service](/fly/compute/services) publishes a proxy service **and**
-the App has an [IP assignment](/fly/networking) (`shared_v4` for
-IPv4). The App itself is just the namespace.
+`url` is `https://{appName}.fly.dev`. Nothing answers there until a
+[Service](/fly/compute/services) or
+[Machine](/fly/compute/machines) publishes a proxy service and the
+App has an [IP assignment](/fly/networking).
 
 ## Module-scope declarations
 
-Declare the App once and pass it into every child. Resource-valued
-props accept the resource or an Effect producing it — never unwrap
-it just to pass it along:
+Declare the App once. Pass it into every child.
 
 ```typescript
 // src/app.ts
 import * as Fly from "alchemy/Fly";
-import * as Redacted from "effect/Redacted";
 
 export const Site = Fly.App("Site");
-
-export const Marker = Fly.Secret("Marker", {
-  app: Site,
-  name: "API_TOKEN",
-  value: Redacted.make("not-a-real-token"),
-});
 ```
 
-## Ownership
+Resource-valued props accept the resource or an Effect producing
+it. Do not unwrap it just to pass it along.
 
-Fly Apps have no labels. Alchemy stamps ownership into generated
-names (and into Machine metadata / Volume and Secret names) so
-`list()` and nuke only see rows we created. Prefer omitting `name`
-in tests and CI so names stay unique and reclaimable.
+## Reconcile
 
-Changing `name`, `orgSlug`, or `network` **replaces** the App. A
+Changing `name`, `orgSlug`, or `network` replaces the App. A
 same-name replace deletes the old App first. Fly cannot have two
 Apps with the same name.
 
-`alchemy destroy` deletes children (Machines, Services, Secrets, IPs,
-certificates — and the Volumes those Machines mounted) then the App
-(`appsDelete`).
+`enableSubdomains: true` turns on `*.{appName}.fly.dev`. It is
+create-only. Flipping it later is ignored.
+
+Org defaults to the current token. Isolated `network` is an
+optional 6PN name.
+
+Fly Apps have no labels. Alchemy stamps ownership into generated
+names (and into Machine metadata and Secret names) so `list()` and
+nuke only see rows we created. Prefer omitting `name` in tests and
+CI.
+
+`alchemy destroy` deletes children, then the App.
 
 ## Where next
 
-- [Tutorial part 1](/fly/tutorial/part-1) — deploy an App from an
-  empty directory.
-- [Services](/fly/compute/services) — run Effect programs as
-  Machines in the App.
-- [Machines](/fly/compute/machines) — raw container images.
-- [`App` reference](/providers/fly/app) — every prop and attribute.
+The [tutorial](/fly/tutorial/part-1) deploys an App from an empty
+directory. [Services](/fly/compute/services) run in the App.
+[Machines](/fly/compute/machines) run a raw image. The
+[`App` reference](/providers/fly/app) lists every prop.
