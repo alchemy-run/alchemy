@@ -36,7 +36,7 @@ import * as path from "node:path";
  * workflow. Bumping this pin (with a new `x.y.z-alchemy.N` tag) is how an
  * emulator change reaches users.
  */
-export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.2";
+export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.4";
 
 /** Default gateway port (LocalStack-compatible). */
 export const DEFAULT_FLOCI_PORT = 4566;
@@ -225,7 +225,11 @@ export const checkHealth = (
 export const resolveImage = (config?: FlociConfig): Effect.Effect<string> =>
   Effect.sync(
     () =>
-      process.env.ALCHEMY_FLOCI_IMAGE ?? config?.image ?? DEFAULT_FLOCI_IMAGE,
+      // `|| undefined`: an empty env var (`ALCHEMY_FLOCI_IMAGE= cmd`) means
+      // "no override", not "run the image named ''" (an unrunnable docker ref).
+      (process.env.ALCHEMY_FLOCI_IMAGE || undefined) ??
+      config?.image ??
+      DEFAULT_FLOCI_IMAGE,
   );
 
 /** Whether a host TCP port is free (nothing is listening on it). */
