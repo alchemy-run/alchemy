@@ -33,22 +33,32 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
   "ShellSession",
   Effect.gen(function* () {
     // The session's VM coordinates, set by the `init` RPC and reused for every
-    // command in the session. Held in the instance closure — a session is one
-    // live DO instance for its lifetime; a hibernation wake drops the binding,
-    // at which point the browser reconnects and the Worker provisions afresh.
+    // command in the session. The closure copy is just a cache: workerd's
+    // hibernatable WebSockets SURVIVE DO eviction, so an idle session's next
+    // message wakes a fresh instance (empty closure) on the SAME socket — the
+    // browser never reconnects. The authoritative copy lives in DO storage and
+    // is rehydrated lazily.
     let coords: MicrovmCoords | undefined;
 
     return Effect.gen(function* () {
       const send = (socket: Cloudflare.WebSocket, text: string) =>
         socket.send(text).pipe(Effect.ignore);
 
+      const loadCoords = Effect.gen(function* () {
+        if (coords) return coords;
+        const state = yield* Cloudflare.DurableObjectState;
+        coords = yield* state.storage.get<MicrovmCoords>("coords");
+        return coords;
+      });
+
       const runCommand = (socket: Cloudflare.WebSocket, command: string) =>
         Effect.gen(function* () {
-          if (!coords) {
+          const current = yield* loadCoords;
+          if (!current) {
             yield* send(socket, "[session has no microvm]\n");
             return;
           }
-          const { endpoint, headers } = coords;
+          const { endpoint, headers } = current;
           const client = yield* HttpClient.HttpClient;
           const request = HttpClientRequest.post(
             `https://${endpoint}/exec`,
@@ -97,8 +107,12 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
       return {
         /** Pin this session to a provisioned MicroVM (called by the Worker). */
         init: (next: MicrovmCoords) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             coords = next;
+            // Persist so a hibernation wake (same socket, fresh instance)
+            // finds its VM again.
+            const state = yield* Cloudflare.DurableObjectState;
+            yield* state.storage.put("coords", next);
           }),
         fetch: Effect.gen(function* () {
           const [response, socket] = yield* Cloudflare.upgrade();
