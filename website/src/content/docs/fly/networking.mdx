@@ -1,15 +1,50 @@
 ---
 title: IPs & certificates
-description: Shared and dedicated addresses for Fly Apps, plus ACME and uploaded TLS certificates.
+description: Reach a Fly Service over fly.dev and on your own hostname.
 ---
 
-IP assignments make `{app}.fly.dev` and custom hostnames answer.
-Certificates add TLS on a hostname you control.
+IPs and certificates attach to the [App](/fly/compute/apps). The
+[Service](/fly/compute/services) publishes ports. Fly's proxy
+load-balances `{app}.fly.dev` across Machines that publish a proxy
+service.
 
-## IP assignments
+## Publish the Service
 
-An [`IpAssignment`](/providers/fly/ipassignment) allocates an
-address onto an App:
+A Service with `port` listens inside the Machine. Alchemy publishes
+HTTP 80 and HTTPS 443 on the Fly proxy in front of it.
+
+```typescript
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
+```
+
+Yield the Service in the Stack. `api.url` is
+`https://{appName}.fly.dev`.
+
+```typescript
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Fly.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+That hostname does not answer over IPv4 yet.
+
+## Allocate a shared IPv4
+
+Add a shared Anycast IPv4 on the same App. This is what you want for
+fly.dev over IPv4. It is free.
 
 ```typescript
 export const PublicIp = Fly.IpAssignment("Shared", {
@@ -18,53 +53,28 @@ export const PublicIp = Fly.IpAssignment("Shared", {
 });
 ```
 
-| `type`      | What you get        | Cost                      |
-| ----------- | ------------------- | ------------------------- |
-| `shared_v4` | Shared Anycast IPv4 | Free                      |
-| `v6`        | Dedicated IPv6      | Free                      |
-| `v4`        | Dedicated IPv4      | Billed; may 400 on quota  |
+Yield it next to the Service.
 
-`shared_v4` is what you want for `{app}.fly.dev` over IPv4. Dedicated
-`v4` is a replacement key (type / region / network / serviceName).
-Prefer `v6` or `shared_v4` in tests.
-
-The resolved resource exposes `ip`, `type`, `shared`, and `region`.
-
-## Certificates
-
-A [`Certificate`](/providers/fly/certificate) covers a hostname on
-the App. Default `kind` is `"acme"` (Let's Encrypt):
-
-```typescript
-export const Cert = Fly.Certificate("Www", {
-  app: Site,
-  hostname: "www.example.com",
-  kind: "acme",
-});
+```diff lang="typescript"
+  Effect.gen(function* () {
+    const api = yield* Api;
++    const ip = yield* PublicIp;
+    return { url: api.url, ip: ip.ip };
+  }),
 ```
 
-Point DNS at the App — A/AAAA to the assigned addresses, or the
-ACME challenge records on `cert.dnsRequirements`. `"custom"` uploads
-a PEM (`fullchain` + `privateKey`); generate fixtures once as
-constants, never at test time.
+`v6` is free dedicated IPv6. `v4` is billed dedicated IPv4 and may
+400 if the org has no quota. Prefer `shared_v4` or `v6` in tests.
 
-Hostname is the identity. `app`, `hostname`, and `kind` replace;
-custom certificate material updates in place. ACME re-validates via
-`appCertificatesCheck` while `configured` is false.
+Fly's proxy terminates TLS on 443. The Service still listens on
+`port` inside the Machine.
 
-ACME on a hostname you don't control is skipIf-gated in tests
-(`FLY_TEST_DOMAIN`); an ungated probe asserts the typed rejection.
+## Use your own hostname
 
-## Put it together: a custom hostname
-
-Allocate addresses, request ACME, and point DNS at the App:
+A Certificate covers a hostname on the App. Default `kind` is
+`"acme"` (Let's Encrypt). The Service does not change.
 
 ```typescript
-export const PublicIp = Fly.IpAssignment("Shared", {
-  app: Site,
-  type: "shared_v4",
-});
-
 export const V6 = Fly.IpAssignment("V6", {
   app: Site,
   type: "v6",
@@ -77,22 +87,20 @@ export const Www = Fly.Certificate("Www", {
 });
 ```
 
-Then at your registrar:
-
-- An **A** record for `www` → `PublicIp.ip` (the shared Anycast
-  IPv4).
-- An **AAAA** record for `www` → `V6.ip`.
-- Whatever extra records `Www.dnsRequirements` lists for the ACME
-  challenge (`acmeChallenge`, ownership TXT, …).
+Yield `Www` in the Stack. Point DNS at the App. An A record for
+`www` to `PublicIp.ip`. An AAAA record to `V6.ip`. Plus whatever
+`Www.dnsRequirements` lists for the ACME challenge.
 
 Fly's proxy terminates TLS on 443 once the certificate is
-`configured`. Dedicated IPv4 (`type: "v4"`) is billed and
-quota-gated — skip it unless you need one.
+`configured`.
+
+`"custom"` uploads a PEM (`fullchain` + `privateKey`). Hostname is
+the identity. Changing `app`, `hostname`, or `kind` replaces.
 
 ## Where next
 
-- [Tutorial part 2](/fly/tutorial/part-2) — allocate `shared_v4` so
-  fly.dev answers.
-- [Apps](/fly/compute/apps) — the parent these attach to.
-- [`IpAssignment` reference](/providers/fly/ipassignment) and
-  [`Certificate` reference](/providers/fly/certificate).
+The [tutorial](/fly/tutorial/part-2) allocates `shared_v4` so
+fly.dev answers. IPs and certificates hang off the
+[App](/fly/compute/apps). See the
+[`IpAssignment`](/providers/fly/ipassignment) and
+[`Certificate`](/providers/fly/certificate) references.

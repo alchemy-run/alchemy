@@ -126,24 +126,10 @@ Alchemy waits until the Machine is `started`. It does not poll
 
 ## Reachability
 
-`https://{appName}.fly.dev` needs an address on the App. Use a
-shared IPv4 for fly.dev over IPv4:
-
-```typescript
-export const PublicIp = Fly.IpAssignment("Shared", {
-  app: Site,
-  type: "shared_v4",
-});
-```
-
-`v6` is free dedicated IPv6. `v4` is billed dedicated IPv4 and may
-400 if the org has no quota. Without a `shared_v4` (or dedicated
-`v4`), IPv4 clients never reach the App. Fly's proxy terminates TLS
-on 443.
-
-For a hostname you control, request a
-[`Certificate`](/fly/networking#certificates) (`kind: "acme"`) and
-point DNS at the App.
+`api.url` is `https://{appName}.fly.dev`. That hostname needs an
+address on the App. Allocate a shared IPv4 and yield it next to the
+Service. For a hostname you control, add a Certificate on the same
+App. See [IPs & certificates](/fly/networking).
 
 ## Config
 
