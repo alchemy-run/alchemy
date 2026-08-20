@@ -80,9 +80,9 @@ export const TERMINAL_HTML = `<!doctype html>
   ws.addEventListener("close", () => {
     status.textContent = "closed";
     status.className = "status";
-    append("\\r\\n[connection closed]\\r\\n", "sys");
+    append("[connection closed]\\n", "sys");
   });
-  ws.addEventListener("error", () => append("\\r\\n[socket error]\\r\\n", "sys"));
+  ws.addEventListener("error", () => append("[socket error]\\n", "sys"));
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();

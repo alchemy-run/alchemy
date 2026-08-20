@@ -45,7 +45,7 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
       const runCommand = (socket: Cloudflare.WebSocket, command: string) =>
         Effect.gen(function* () {
           if (!coords) {
-            yield* send(socket, "\r\n[session has no microvm]\r\n");
+            yield* send(socket, "[session has no microvm]\n");
             return;
           }
           const { endpoint, headers } = coords;
@@ -57,31 +57,40 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
             HttpClientRequest.bodyJsonUnsafe({ command }),
           );
 
+          // Render like a real shell: forward output verbatim, swallow the
+          // VM's `\n__EXIT__:<code>` trailer (including the separator newline
+          // the server adds before it), and only make sure the next prompt
+          // starts on a fresh line when the command's output didn't end with
+          // one — no exit-status chatter.
+          let endedWithNewline = true;
           yield* HttpClientResponse.stream(client.execute(request)).pipe(
             Stream.decodeText(),
             Stream.runForEach((chunk) =>
               Effect.gen(function* () {
-                // The VM ends its stream with a `\n__EXIT__:<code>\n` trailer;
-                // render it as a prompt-style status line, not raw text.
                 const marker = chunk.indexOf(EXIT_MARKER);
                 if (marker === -1) {
-                  yield* send(socket, chunk);
+                  if (chunk) {
+                    endedWithNewline = chunk.endsWith("\n");
+                    yield* send(socket, chunk);
+                  }
                   return;
                 }
-                const before = chunk.slice(0, marker);
-                const code = chunk
-                  .slice(marker + EXIT_MARKER.length)
-                  .trim()
-                  .split(/\s/)[0];
-                if (before) yield* send(socket, before);
-                yield* send(socket, `\r\n[exit ${code}]\r\n`);
+                let before = chunk.slice(0, marker);
+                if (before.endsWith("\n")) {
+                  before = before.slice(0, -1);
+                }
+                if (before) {
+                  endedWithNewline = before.endsWith("\n");
+                  yield* send(socket, before);
+                }
               }),
             ),
           );
+          if (!endedWithNewline) {
+            yield* send(socket, "\n");
+          }
         }).pipe(
-          Effect.catch((error) =>
-            send(socket, `\r\n[error] ${String(error)}\r\n`),
-          ),
+          Effect.catch((error) => send(socket, `[error] ${String(error)}\n`)),
           Effect.provide(FetchHttpClient.layer),
         );
 
@@ -95,7 +104,7 @@ export default class ShellSession extends Cloudflare.DurableObject<ShellSession>
           const [response, socket] = yield* Cloudflare.upgrade();
           yield* send(
             socket,
-            "connected to microvm — type a command and press enter\r\n",
+            "connected to microvm — type a command and press enter\n",
           );
           return response;
         }),
