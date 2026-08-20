@@ -239,28 +239,60 @@ export default {
       // agents treat as a binary download instead of rendering. Force the
       // correct text type + charset since this branch only ever serves markdown.
       if (res.status !== 404)
-        return withContentType(res, "text/markdown; charset=utf-8");
+        return withoutIndexing(
+          withContentType(res, "text/markdown; charset=utf-8"),
+        );
     }
     const res = await env.ASSETS.fetch(request);
-    return withUtf8Charset(
-      await rewriteLlmsTxtOrigin(request, rewriteCanonicalHost(request, res)),
+    return withoutIndexing(
+      withUtf8Charset(
+        await rewriteAgentTextOrigin(
+          request,
+          rewriteCanonicalHost(request, res),
+        ),
+      ),
     );
   },
 };
 
 /**
- * `llms.txt` / `llms-full.txt` are generated at build time with absolute
- * canonical URLs, so a PR preview would hand agents an index that points back
- * at production. Rewrite the baked origin to the request's own origin — the
- * same treatment `rewriteCanonicalHost` gives HTML meta tags.
+ * Every page is mirrored as raw markdown (`/getting-started.md`, or the same
+ * URL requested with `Accept: text/markdown`) for agents. Search engines crawl
+ * those mirrors too and index them as separate documents — duplicating the HTML
+ * page and surfacing raw MDX (`import { Tabs } from "@astrojs/starlight/..."`)
+ * as the search result's snippet. `llms.txt` / `llms-full.txt` are the same
+ * kind of agent-facing text.
+ *
+ * Keep them crawlable (so the directive is actually seen) but out of the index.
  */
-const rewriteLlmsTxtOrigin = async (
+const withoutIndexing = (res: Response): Response => {
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("text/markdown") && !ct.includes("text/plain")) return res;
+  const next = new Response(res.body, res);
+  next.headers.set("x-robots-tag", "noindex");
+  return next;
+};
+
+/**
+ * `llms.txt` / `llms-full.txt` / `robots.txt` are generated at build time with
+ * absolute canonical URLs, so a PR preview would hand agents an index — and
+ * crawlers a sitemap — that points back at production. Rewrite the baked origin
+ * to the request's own origin — the same treatment `rewriteCanonicalHost` gives
+ * HTML meta tags.
+ */
+const AGENT_TEXT_PATHS = new Set([
+  "/llms.txt",
+  "/llms-full.txt",
+  "/robots.txt",
+]);
+
+const rewriteAgentTextOrigin = async (
   request: Request,
   res: Response,
 ): Promise<Response> => {
   const reqUrl = new URL(request.url);
   if (
-    (reqUrl.pathname !== "/llms.txt" && reqUrl.pathname !== "/llms-full.txt") ||
+    !AGENT_TEXT_PATHS.has(reqUrl.pathname) ||
     reqUrl.host === CANONICAL_HOST ||
     !res.ok
   ) {
