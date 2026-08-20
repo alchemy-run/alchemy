@@ -1,5 +1,6 @@
 import { Retry } from "@distilled.cloud/cloudflare";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
@@ -134,8 +135,11 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
  * Cloudflare providers, bindings, and credentials for Worker-based stacks.
+ *
+ * `options` selects the account and credentials every provider operation
+ * runs against; omitted, they come from the active Alchemy profile.
  */
-export const providers = () =>
+export const providers = (options: CloudflareApiOptions = {}) =>
   Layer.effect(
     Providers,
     Provider.collection([
@@ -684,9 +688,34 @@ export const providers = () =>
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually
     // demanded (dev runs, or deleting a local-mode row during deploy).
-    Layer.provideMerge(CloudflareApiLive()),
+    Layer.provideMerge(CloudflareApiLive(options)),
     Layer.orDie,
   );
+
+/**
+ * Which Cloudflare account an effect tree talks to, and how it
+ * authenticates. Defaults everywhere to the active Alchemy profile.
+ *
+ * Accepted by {@link providers} and by the Cloudflare state store, so a
+ * stack can deploy into one account while its state lives in another.
+ */
+export interface CloudflareApiOptions {
+  /**
+   * Cloudflare account every API call targets. Pair it with `apiToken`;
+   * on its own it is ignored, because a token minted for another account
+   * cannot authenticate against it.
+   */
+  readonly accountId?: string;
+  /**
+   * API token to authenticate with, instead of the active Alchemy
+   * profile's credentials.
+   */
+  readonly apiToken?: string | Redacted.Redacted<string>;
+  /** Full override of the credentials layer. Wins over `apiToken`. */
+  readonly credentials?: Layer.Layer<Credentials.Credentials>;
+  /** Full override of the account environment. Wins over `accountId`. */
+  readonly environment?: Layer.Layer<CloudflareEnvironment.CloudflareEnvironment>;
+}
 
 /**
  * The foundation every effect tree that talks to the Cloudflare API
@@ -710,10 +739,35 @@ export const providers = () =>
  * under load) are now tagged retryable at the source in the SDK's
  * global error map, so `makeDefault`'s transient detection covers
  * them.
+ *
+ * Both halves that decide *which account* is talked to — the credentials
+ * and the account environment — are overridable, which is how the state
+ * store is pointed at an account other than the one a stack deploys into
+ * (see {@link ../Cloudflare/StateStore/State.ts state}). Unlike AWS, a
+ * Cloudflare account and its API token are resolved independently, so
+ * both must be replaced together; passing `accountId` + `apiToken` does
+ * that in one step.
  */
-export const CloudflareApiLive = () =>
-  Credentials.fromAuthProvider().pipe(
-    Layer.provideMerge(CloudflareEnvironment.fromProfile()),
+export const CloudflareApiLive = (options: CloudflareApiOptions = {}) =>
+  (
+    options.credentials ??
+    (options.apiToken !== undefined
+      ? Credentials.fromApiToken({
+          apiToken: Redacted.isRedacted(options.apiToken)
+            ? Redacted.value(options.apiToken)
+            : options.apiToken,
+        })
+      : Credentials.fromAuthProvider())
+  ).pipe(
+    Layer.provideMerge(
+      options.environment ??
+        (options.accountId !== undefined && options.apiToken !== undefined
+          ? CloudflareEnvironment.ofApiToken({
+              accountId: options.accountId,
+              apiToken: options.apiToken,
+            })
+          : CloudflareEnvironment.fromProfile()),
+    ),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(ProfileLive),

@@ -62,7 +62,38 @@ export interface S3StateOptions {
    * @default `{ sseAlgorithm: "AES256" }`
    */
   encryption?: BucketEncryption;
+  /**
+   * AWS environment (account, region, credentials) that owns the state
+   * bucket. Everything the store talks to S3 with — credentials, region
+   * and endpoint — is derived from it.
+   *
+   * Defaults to the environment resolved from the active Alchemy profile,
+   * i.e. the same account the stack's resources deploy into. Pass a
+   * different environment to keep state in a separate account:
+   *
+   * ```typescript
+   * AWS.state({
+   *   bucketName: "my-org-alchemy-state",
+   *   environment: AWS.assumeRoleEnvironment({
+   *     roleArn: "arn:aws:iam::111122223333:role/AlchemyState",
+   *     accountId: "111122223333",
+   *     region: "us-east-1",
+   *   }),
+   * })
+   * ```
+   *
+   * The environment is provided privately to the state store, so a
+   * state-account environment never reaches the stack's providers.
+   */
+  environment?: AWSStateEnvironment;
 }
+
+/**
+ * Layer shape accepted by {@link S3StateOptions.environment} — anything
+ * that provides an {@link AWSEnvironment} out of the services a stack
+ * already has.
+ */
+export type AWSStateEnvironment = typeof DefaultEnvironment;
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
@@ -125,9 +156,65 @@ type S3Deps = Credentials | HttpClient | Region;
  * );
  * ```
  *
+ * ### Keeping state in a different account
+ * Pass an `environment` to store state in an account other than the one
+ * the stack deploys into. Credentials, region and endpoint are all
+ * derived from it, and it stays private to the state store.
+ *
+ * **Example:** State bucket in a dedicated account
+ * ```typescript
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   {
+ *     providers: AWS.providers(),
+ *     state: AWS.state({
+ *       bucketName: "my-org-alchemy-state",
+ *       environment: AWS.assumeRoleEnvironment({
+ *         roleArn: "arn:aws:iam::111122223333:role/AlchemyState",
+ *         accountId: "111122223333",
+ *         region: "us-east-1",
+ *       }),
+ *     }),
+ *   },
+ *   Effect.gen(function* () {
+ *     // ...
+ *   }),
+ * );
+ * ```
+ *
  * @resource
  */
 export const state = (options: S3StateOptions = {}) =>
+  s3State(options).pipe(
+    // `provide`, NOT `provideMerge`: the stack composes
+    // `providers.pipe(Layer.provideMerge(state))`, so anything merged here
+    // lands in the providers' build context. A custom (e.g. cross-account)
+    // environment leaking out that way would silently redirect every
+    // resource in the stack to the state account.
+    Layer.provide(options.environment ?? DefaultEnvironment),
+    Layer.provideMerge(AwsAuth),
+    Layer.provideMerge(CredentialsStoreLive),
+    Layer.orDie,
+  );
+
+/**
+ * The S3 state store with its {@link AWSEnvironment} left **open**.
+ *
+ * {@link state} is this layer with the profile-derived environment
+ * provided; use this directly when you want to supply the environment
+ * yourself and keep full control of how it is built:
+ *
+ * ```typescript
+ * AWS.s3State({ bucketName: "my-org-alchemy-state" }).pipe(
+ *   Layer.provide(myEnvironment),
+ *   Layer.orDie,
+ * )
+ * ```
+ *
+ * `Region`, `Credentials` and `Endpoint` are derived from the environment
+ * internally, so an environment layer is the only thing to provide.
+ */
+export const s3State = (options: S3StateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -142,13 +229,9 @@ export const state = (options: S3StateOptions = {}) =>
       return yield* Effect.cached(make);
     }),
   ).pipe(
-    Layer.provideMerge(AwsRegion.fromEnvironment),
-    Layer.provideMerge(AwsCredentials.fromEnvironment),
-    Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
-    Layer.provideMerge(AwsAuth),
-    Layer.provideMerge(CredentialsStoreLive),
-    Layer.orDie,
+    Layer.provide(AwsRegion.fromEnvironment),
+    Layer.provide(AwsCredentials.fromEnvironment),
+    Layer.provide(Endpoint.fromEnvironment),
   );
 
 /**
