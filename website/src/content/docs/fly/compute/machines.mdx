@@ -1,12 +1,12 @@
 ---
 title: Machines
-description: Fly Machines as Alchemy resources — Firecracker VMs running a container image, with guest size, region, proxy services, env, and mounts.
+description: A Firecracker VM running a container image.
 ---
 
 A [`Fly.Machine`](/providers/fly/machine) is a Firecracker VM
 running a container image. Use it when you already have an image.
-For an Effect program, use a [Service](/fly/compute/services)
-instead — Service *is* a Machine, with the image built for you.
+For an Effect program, use a [Service](/fly/compute/services).
+Service builds the image for you.
 
 ## Launch a Machine
 
@@ -28,11 +28,11 @@ const web = yield* Fly.Machine("Web", {
 });
 ```
 
-`region` replaces on change; `image` updates in place. Guest
-defaults to shared-cpu 1× / 256 MB. `count` is the replica pool
-(default `1`) — Fly's proxy load-balances published `services`
-across them. Omit `services` (or pass `[]`) for a worker that
-should not be reachable from the internet.
+`region` replaces on change. `image` updates in place. Guest
+defaults to shared-cpu 1× / 256 MB. `count` is how many Machines
+to keep (default `1`). Fly's proxy load-balances published
+`services` across them. Omit `services` (or pass `[]`) for a
+worker that should not be reachable from the internet.
 
 The resolved resource exposes `machineId` (replica 0), `machineIds`,
 `count`, `privateIp`, `state`, `region`, `mounts`, and `url` when a
@@ -63,7 +63,7 @@ seen at least that secrets version.
 ## Mounts
 
 Pass disks as `mounts`. Alchemy creates one Volume per replica in
-the Machine's app and region — a Volume attaches to one Machine:
+the Machine's app and region. A Volume attaches to one Machine.
 
 ```typescript
 const box = yield* Fly.Machine("Box", {

@@ -1,15 +1,16 @@
 ---
 title: Apps
-description: Fly Apps as Alchemy resources — the parent namespace for Machines, Services, Secrets, IPs, and certificates.
+description: The parent namespace for Machines, Services, Secrets, IPs, and certificates.
 ---
 
-A [`Fly.App`](/providers/fly/app) is the parent for every other Fly
-resource (Machines, Services, Secrets, IPs, certificates). It is a
-globally unique name in the Fly fleet (DNS-safe, leading letter,
-max 30 characters) plus an organization. There is no update API:
-`name`, `orgSlug`, and `network` **replace**; `enableSubdomains` is
-create-only. Disks hang off Machines / Services via `mounts` /
-`MountVolume` — there is no standalone Volume resource.
+A [`Fly.App`](/providers/fly/app) is the parent for Machines,
+Services, Secrets, IPs, and certificates. The name is globally
+unique: DNS-safe, leading letter, max 30 characters. There is no
+update API. Changing `name`, `orgSlug`, or `network` replaces the
+App. `enableSubdomains` is create-only.
+
+Disks are declared on Machines and Services with `mounts` or
+`MountVolume`. There is no standalone Volume resource.
 
 ## Create an App
 
@@ -37,7 +38,7 @@ Org defaults to the current token (`currentTokenShow`). Isolated
 `network` is an optional 6PN name; changing it replaces the App.
 
 `enableSubdomains: true` turns on `*.{appName}.fly.dev`. It is
-create-only — Fly has no App update API, so flipping it later is
+create-only. Fly has no App update API, so flipping it later is
 ignored.
 
 ## fly.dev URL
@@ -76,7 +77,7 @@ names (and into Machine metadata / Volume and Secret names) so
 in tests and CI so names stay unique and reclaimable.
 
 Changing `name`, `orgSlug`, or `network` **replaces** the App. A
-same-name replace deletes the old App first — Fly cannot have two
+same-name replace deletes the old App first. Fly cannot have two
 Apps with the same name.
 
 `alchemy destroy` deletes children (Machines, Services, Secrets, IPs,

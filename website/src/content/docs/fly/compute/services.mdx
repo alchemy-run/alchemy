@@ -1,15 +1,16 @@
 ---
 title: Services
-description: Deploy Effect programs to Fly as Machines — HTTP handlers, background workers, env & config, image updates, and logs.
+description: An Effect program running in a Fly Machine. Scale it with count.
 ---
 
-A [`Service`](/providers/fly/service) is your code on Fly: an Effect
-program that Alchemy bundles with Rolldown, bakes into a Docker
-image (`oven/bun:1` by default), pushes to
-`registry.fly.io/{app}:{id}-{hash}`, and runs as a
-[Machine](/fly/compute/machines). Several Services share one
-[App](/fly/compute/apps); each Service is its own Machine — not
-systemd units on a shared VM.
+A [`Service`](/providers/fly/service) is an Effect program running
+in a Fly.io [Machine](/fly/compute/machines). Set `count` to scale
+it up or down. Several Services share one
+[App](/fly/compute/apps).
+
+Alchemy bundles `main` with Rolldown, builds a Docker image
+(default `oven/bun:1`), and pushes it to
+`registry.fly.io/{app}:{id}-{hash}`.
 
 ## Declare a Service
 
@@ -162,11 +163,10 @@ Fly restarts it.
 
 ## Multiple Services, one App
 
-Each Service is its own replica set of Machines with its own image,
-env, and lifecycle. Point several at the same `app`. A Volume
-attaches to **one** Machine — `MountVolume` inside a Service with
-`count: 3` creates three disks, not one shared disk. Scale by
-changing `count`; the Fly proxy load-balances published services:
+Each Service has its own Machines, image, env, and lifecycle. Point
+several at the same `app`. A Volume attaches to one Machine.
+`MountVolume` with `count: 3` creates three disks. Change `count`
+to scale. Fly's proxy load-balances published services.
 
 ```typescript
 class Api extends Fly.Service<Api>()(

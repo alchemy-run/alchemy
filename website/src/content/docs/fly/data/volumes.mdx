@@ -1,17 +1,17 @@
 ---
 title: Volumes
-description: Durable region-local block storage for Fly Machines — mount into Services with MountVolume, or pass mounts on a Machine.
+description: A disk in one region, attached to one Machine.
 ---
 
-A Fly Volume is region-local block storage: a durable disk (1 GB
-minimum) attached to **one** Machine in the same region. Machines
-come and go; Volumes keep the data. Alchemy does not expose a
-standalone Volume resource — disks are created as a side effect of
+A Fly Volume is a disk in one region, attached to one Machine.
+Minimum size is 1 GB. Machines can be replaced. The Volume keeps
+the data.
+
+There is no standalone Volume resource. Create disks with
 [`MountVolume`](/providers/fly/mountvolume) or Machine `mounts`.
 
 Fly cannot share one Volume across two Machines. `count: 3` creates
-three Volumes in one Fly **name-group** (same name, independent
-disks), one per replica.
+three Volumes in one name-group, one per replica.
 
 ## Mount into a Service
 
@@ -96,7 +96,6 @@ const restored = yield* Fly.Machine("Restored", {
 
 - [Tutorial part 3](/fly/tutorial/part-3) — mount a disk into a
   Service step by step.
-- [Services](/fly/compute/services) — `count` and the platform doing
-  the mounting.
+- [Services](/fly/compute/services) — `count` and `MountVolume`.
 - [`MountVolume` reference](/providers/fly/mountvolume) and
   [`VolumeSnapshot` reference](/providers/fly/volumesnapshot).

@@ -8,10 +8,10 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-In [Part 1](/fly/tutorial/part-1) you deployed an App. Now you'll put
-code on it: a `Fly.Service` — an Effect program that Alchemy
-bundles, bakes into a Docker image, pushes to `registry.fly.io`, and
-runs as a Machine. No Dockerfile to write, no `fly.toml`.
+In [Part 1](/fly/tutorial/part-1) you deployed an App. Now you will
+deploy a `Fly.Service`: an Effect program running in a Fly Machine.
+Alchemy bundles it, builds a Docker image, and pushes it to
+`registry.fly.io`. No Dockerfile. No `fly.toml`.
 
 :::note[Prerequisites]
 Docker must be running. Alchemy builds `linux/amd64` images locally

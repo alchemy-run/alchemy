@@ -1,21 +1,17 @@
 ---
 title: Fly
-description: Build applications on Fly.io with Alchemy — Machines running your Effect programs as Services, plus volumes, secrets, IPs, and certificates, all in one typed program.
+description: Deploy Effect programs to Fly.io as Apps, Machines, and Services.
 ---
 
-An Alchemy app on Fly.io is a **Fly App** — a globally unique
-namespace — with one or more **Machines** running your code. Effect
-programs deploy as **Services**: bundled with Rolldown, baked into a
-Docker image, pushed to `registry.fly.io`, and reconciled as a
-Machine. Around them you declare disks, secrets, IP assignments,
-and certificates in the same TypeScript program.
+An App is a globally unique namespace. A Machine is a Firecracker VM
+running a container. A Service is an Effect program running in a Fly
+Machine. Set `count` to scale it up or down.
 
-This is not Hetzner-on-Fly. A Fly Machine **is** the process — there
-is no SSH box with systemd units. N Services share one App; each
-Service is its own Machine.
+Disks, secrets, IPs, and certificates are declared in the same
+TypeScript program.
 
-New here? [Set up your org and API token](/fly/setup), then start
-the [tutorial](/fly/tutorial/part-1).
+[Set up your org and API token](/fly/setup), then start the
+[tutorial](/fly/tutorial/part-1).
 
 ## Compute
 
@@ -26,10 +22,9 @@ the [tutorial](/fly/tutorial/part-1).
   container image. Use this when you already have an image
   (`nginx:alpine`, a registry tag). Region, guest size, proxy
   services, env, and mounts are all props.
-- **[Services](/fly/compute/services)** — your Effect program as a
-  Machine. Alchemy bundles `main`, builds `oven/bun:1` (override with
-  `image`), pushes to `registry.fly.io/{app}:{id}-{hash}`, and
-  updates in place when the hash changes.
+- **[Services](/fly/compute/services)** — an Effect program running
+  in a Machine. Alchemy bundles `main`, builds the image, and
+  updates in place when the hash changes. Set `count` to scale.
 
 ## Storage
 
