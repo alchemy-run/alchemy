@@ -145,33 +145,38 @@ For a hostname you control, request a
 [`Certificate`](/fly/networking#certificates) (`kind: "acme"`) and
 point DNS at the App.
 
-## Environment & config
+## Config
 
-Pass static values with `env`. Read them at runtime through
-Effect's `Config`:
+Yield `Config` in init. Alchemy reads the value from the env of
+whoever deploys and writes it onto the Machine. Do not pass
+`env: { ... }` on a Service.
 
 ```typescript
 import * as Config from "effect/Config";
+import * as Redacted from "effect/Redacted";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  {
-    app: Site,
-    main: import.meta.url,
-    port: 3000,
-    env: { GREETING: "hello" },
-  },
+  { app: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    const greeting = yield* Config.string("GREETING");
-    // ...
+    const apiKey = yield* Config.redacted("API_KEY");
+
+    return {
+      fetch: Effect.gen(function* () {
+        const token = Redacted.value(apiKey);
+        // ...
+      }),
+    };
   }),
 ) {}
 ```
 
+`Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+`Redacted.value` only where you need the raw string.
+
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
-Fly [App secrets](/fly/data/secrets) are injected as Machine env
-vars. Binding-injected `env` is merged first. Your `env` wins on
-conflict.
+For a secret Fly should own and inject into every Machine on the
+App, use [`Fly.Secret`](/fly/data/secrets).
 
 ## Background services
 
@@ -233,5 +238,5 @@ logs` / `alchemy tail` don't support Fly Services yet.
 
 The [tutorial](/fly/tutorial/part-2) builds a Service step by step.
 [Volumes](/fly/data/volumes) covers `MountVolume`.
-[Secrets](/fly/data/secrets) covers `GetSecret` and `ListSecrets`.
+[Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.

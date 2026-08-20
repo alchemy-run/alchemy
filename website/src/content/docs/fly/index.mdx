@@ -35,10 +35,10 @@ TypeScript program.
 
 ## Secrets
 
-- **[Secrets](/fly/data/secrets)** — App-level values Fly injects as
-  Machine env vars. Manage them as resources; read them at runtime
-  with `GetSecret` / `ListSecrets` / `WriteSecret`. KMS keys are `SecretKey` plus
-  `Encrypt` / `Decrypt` / `Sign` / `Verify`.
+- **[Secrets](/fly/data/secrets)** — `Config.redacted` in a Service
+  for values from `.env`. `Fly.Secret` when Fly should own a value
+  shared across Machines. KMS keys are `SecretKey` plus `Encrypt` /
+  `Decrypt` / `Sign` / `Verify`.
 
 ## Networking
 
@@ -56,7 +56,7 @@ TypeScript program.
 | Persistent disk              | [MountVolume](/fly/data/volumes) or Machine `mounts`                      |
 | N replicas behind fly.dev    | Service / Machine `count`                                                 |
 | Restore a disk               | [VolumeSnapshot](/fly/data/volumes#snapshots) + mount `snapshotId`        |
-| Config / API tokens          | [Secret + GetSecret](/fly/data/secrets)                                   |
+| Config / API tokens          | [`Config.redacted`](/fly/data/secrets). [`Fly.Secret`](/fly/data/secrets) when Fly should own it |
 | Sign / encrypt in-app        | [SecretKey](/fly/data/secrets#kms-keys) + `Encrypt` / `Sign`              |
 | `{app}.fly.dev` over IPv4    | [IpAssignment](/fly/networking) `type: "shared_v4"`                       |
 | Your own domain              | [Certificate](/fly/networking#certificates) (ACME)                        |
