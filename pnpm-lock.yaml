@@ -1531,6 +1531,25 @@ importers:
         specifier: 4.0.0-rc.110
         version: 4.0.0-rc.110
 
+  examples/cloudflare-microvm-shell:
+    dependencies:
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../distilled/packages/aws
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.110(effect@4.0.0-rc.110)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.110
+        version: 4.0.0-rc.110
+    devDependencies:
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+
   examples/cloudflare-neon-drizzle:
     dependencies:
       '@cloudflare/workers-types':

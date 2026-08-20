@@ -83,6 +83,15 @@ const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
       if (!pem.includes("BEGIN CERTIFICATE")) return;
       await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
       await fs.writeFile(FLOCI_CA_PATH, pem);
+      // Point local workerd (and any other child process spawned after this)
+      // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
+      // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
+      // so setting it here (before local workers spawn during the apply) only
+      // affects children, which is exactly the target. Never clobber a value
+      // the caller set deliberately.
+      if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
+        process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
+      }
     },
     catch: (cause) => new FlociError({ message: "ca sync failed", cause }),
   }).pipe(Effect.ignore);
