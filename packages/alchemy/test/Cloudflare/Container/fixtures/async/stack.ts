@@ -10,11 +10,19 @@ import type { AsyncEchoObject } from "./worker.ts";
  * The class implementation ships inside the worker script (from
  * `@cloudflare/containers`); `className` names the exported class since it
  * differs from the binding name (`ECHO`).
+ *
+ * The Container's logical id deliberately MATCHES the env key: the Worker's
+ * namespace binding and its `containers` script metadata are contributed
+ * under the same `sid`, and binding rows are collapsed by sid (last write
+ * wins). Splitting them across two `bind` calls dropped the namespace
+ * binding for exactly this shape, and the Worker uploaded the Container
+ * declaration itself as a `json` binding — `env.ECHO` was then a plain
+ * object and `getContainer` died with `t.idFromName is not a function`.
  */
 export const AsyncContainerWorker = Cloudflare.Worker("AsyncContainerWorker", {
   main: path.resolve(import.meta.dirname, "worker.ts"),
   env: {
-    ECHO: Cloudflare.Container<AsyncEchoObject>("AsyncEchoContainer", {
+    ECHO: Cloudflare.Container<AsyncEchoObject>("ECHO", {
       className: "AsyncEchoObject",
       image: "mendhak/http-https-echo:latest",
       observability: { logs: { enabled: true } },
