@@ -8,94 +8,138 @@ in a Fly.io [Machine](/fly/compute/machines). Set `count` to scale
 it up or down. Several Services share one
 [App](/fly/compute/apps).
 
-Alchemy bundles `main` with Rolldown, builds a Docker image
-(default `oven/bun:1`), and pushes it to
-`registry.fly.io/{app}:{id}-{hash}`.
-
 ## Declare a Service
 
-A Service is a class with an infrastructure definition and a runtime
-implementation:
+A Service is a class. Props describe the Machine. The Effect is the
+program that runs on it.
 
 ```typescript
 // src/api.ts
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Site } from "./app.ts";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+  { app: Site, main: import.meta.url },
   Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
-    };
+    return {};
   }),
 ) {}
 ```
 
-- `app` — the parent App (a `Fly.App`, yielded or module-scope).
-  Changing it **replaces** the Service.
-- `main: import.meta.url` — this file is the bundle entrypoint.
-- `region` — defaults to `iad`. Changing it replaces.
-- `count` — number of Machines to keep running. Fly's proxy
-  load-balances `{app}.fly.dev` across them. Default `1`. Each
-  replica gets its own Volume from every `MountVolume` binding.
-- `port` — written to `PORT` and used as the Fly proxy
-  `internal_port`. Default `3000`. HTTP 80 and HTTPS 443 are
-  published unless you override `services`.
-- `fetch` — returning it from the init Effect boots an HTTP server
-  on that port; omit it for a [background service](#background-services).
+`app` is the parent [App](/fly/compute/apps). Pass the declaration
+directly, yielded or module-scope. Changing `app` replaces the
+Service.
 
-The resolved resource exposes `url` (`https://{appName}.fly.dev`
-when a proxy service is configured), `machineId` (replica 0),
-`machineIds`, `count`, `mounts`, `region`, `state`, and the
-bundle's `code.hash`.
+`main: import.meta.url` is the bundle entrypoint. Alchemy bundles
+this file with Rolldown, builds a Docker image (default
+`oven/bun:1`), and pushes it to
+`registry.fly.io/{app}:{id}-{hash}`.
+
+## Serve HTTP with `fetch`
+
+Return `fetch` from the init Effect to boot an HTTP server.
+
+```diff lang="typescript"
+import * as Fly from "alchemy/Fly";
+import * as Effect from "effect/Effect";
++import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Site } from "./app.ts";
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url },
+  Effect.gen(function* () {
+-    return {};
++    return {
++      fetch: Effect.succeed(HttpServerResponse.text("hello")),
++    };
+  }),
+) {}
+```
+
+Omit `fetch` for a [background service](#background-services).
+
+## Pin a region
+
+Fly Machines live in a region. The default is `iad`. Changing
+`region` replaces the Service.
+
+```diff lang="typescript"
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+-  { app: Site, main: import.meta.url },
++  { app: Site, main: import.meta.url, region: "iad" },
+```
+
+## Set the port
+
+`port` is written to `PORT` and used as the Fly proxy
+`internal_port`. Default `3000`. HTTP 80 and HTTPS 443 are
+published unless you override `services`.
+
+```diff lang="typescript"
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+-  { app: Site, main: import.meta.url, region: "iad" },
++  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
+```
+
+The resolved `url` is `https://{appName}.fly.dev` when a proxy
+service is configured.
+
+## Scale with `count`
+
+`count` is how many Machines to keep running. Default `1`. Fly's
+proxy load-balances `{app}.fly.dev` across them. Each replica gets
+its own Volume from every [`MountVolume`](/fly/data/volumes)
+binding.
+
+```diff lang="typescript"
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+-  { app: Site, main: import.meta.url, region: "iad", port: 3000 },
++  { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+```
 
 ## What a deploy does
 
-Docker must be running on the machine that runs `alchemy deploy`:
+Docker must be running.
 
-1. Bundle `main` with Rolldown into a single ESM file (a generated
-   bootstrap wires up the Bun HTTP server, logging, and config from
-   the environment).
-2. Content-hash the bundle. If the hash matches the last deploy,
-   skip build and push.
-3. Build `linux/amd64` from `image` (default `oven/bun:1`) and push
-   to `registry.fly.io/{app}:{logicalId}-{hash}` using an App deploy
-   token.
-4. Create or update `count` Machines, apply
-   [MountVolume](/fly/data/volumes) disks (one Volume per replica),
-   wait until `started`.
+Alchemy bundles `main` with Rolldown. If the hash matches the last
+deploy, it skips build and push. Otherwise it builds `linux/amd64`
+from `image` (default `oven/bun:1`) and pushes to
+`registry.fly.io/{app}:{id}-{hash}`. Then it creates or updates
+`count` Machines and waits until they are `started`.
 
-On later deploys Alchemy compares the bundle hash: unchanged code is
-a no-op; changed code is a new image and an in-place Machine update.
+Changed code is a new image and an in-place Machine update.
+Unchanged code is a no-op.
 
-Override the base image with `image` (must still run bun —
-default `oven/bun:1`). Override the Fly proxy with `services`;
-pass `services: []` for a process that should not be published.
+Override the base image with `image` (must still run bun). Pass
+`services: []` for a process that should not be published.
 
 :::note[Deploy waits for `started`, not `/health`]
-Alchemy waits until the Machine is `started` (`machinesWait`). It
-does not poll `/health` — serving that route is still a good idea
-for humans and for Fly's own checks later, but omitting it does not
-fail the deploy.
+Alchemy waits until the Machine is `started`. It does not poll
+`/health`. Omitting that route does not fail the deploy.
 :::
 
 ## Reachability
 
-The `url` is `https://{appName}.fly.dev` when a proxy service is
-configured (the default HTTP 80 + HTTPS 443). That hostname needs
-an address on the App:
+`https://{appName}.fly.dev` needs an address on the App. Use a
+shared IPv4 for fly.dev over IPv4:
 
-- [`IpAssignment`](/fly/networking) `type: "shared_v4"` — free
-  shared Anycast IPv4. This is what you want for fly.dev over IPv4.
-- `v6` — free dedicated IPv6.
-- `v4` — billed dedicated IPv4; may 400 if the org has no quota.
+```typescript
+export const PublicIp = Fly.IpAssignment("Shared", {
+  app: Site,
+  type: "shared_v4",
+});
+```
 
-Without a `shared_v4` (or dedicated `v4`), IPv4 clients never reach
-the App. Fly's proxy terminates TLS on 443.
+`v6` is free dedicated IPv6. `v4` is billed dedicated IPv4 and may
+400 if the org has no quota. Without a `shared_v4` (or dedicated
+`v4`), IPv4 clients never reach the App. Fly's proxy terminates TLS
+on 443.
 
 For a hostname you control, request a
 [`Certificate`](/fly/networking#certificates) (`kind: "acme"`) and
@@ -103,9 +147,8 @@ point DNS at the App.
 
 ## Environment & config
 
-Pass static values with `env`; read them at runtime through Effect's
-`Config` (the runtime's `ConfigProvider` is backed by the process
-environment):
+Pass static values with `env`. Read them at runtime through
+Effect's `Config`:
 
 ```typescript
 import * as Config from "effect/Config";
@@ -127,14 +170,13 @@ export default class Api extends Fly.Service<Api>()(
 
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
 Fly [App secrets](/fly/data/secrets) are injected as Machine env
-vars. Binding-injected `env` is merged first; your `env` wins on
-conflict. See [Secrets & Config](/environments/secrets) for handling
-secret values.
+vars. Binding-injected `env` is merged first. Your `env` wins on
+conflict.
 
 ## Background services
 
-Omit `port`/`fetch` (and pass `services: []` so Fly does not publish
-a proxy) and use `ServerHost.run` to register a long-running loop:
+Omit `port` and `fetch`. Pass `services: []` so Fly does not
+publish a proxy. Use `ServerHost.run` for a long-running loop:
 
 ```typescript
 // src/worker.ts
@@ -158,15 +200,12 @@ export default class Worker extends Fly.Service<Worker>()(
 ) {}
 ```
 
-The Machine's restart policy still applies — if the process exits,
-Fly restarts it.
+If the process exits, Fly restarts it.
 
 ## Multiple Services, one App
 
 Each Service has its own Machines, image, env, and lifecycle. Point
-several at the same `app`. A Volume attaches to one Machine.
-`MountVolume` with `count: 3` creates three disks. Change `count`
-to scale. Fly's proxy load-balances published services.
+several at the same `app`.
 
 ```typescript
 class Api extends Fly.Service<Api>()(
@@ -178,9 +217,12 @@ class Api extends Fly.Service<Api>()(
 class Worker extends Fly.Service<Worker>()(
   "Worker",
   { app: Site, main: import.meta.url, services: [] },
-  /* mounts Data at /data, writes files */
+  /* mounts a disk, writes files */
 ) {}
 ```
+
+A Volume attaches to one Machine. `MountVolume` with `count: 3`
+creates three disks.
 
 ## Logs
 
@@ -189,11 +231,7 @@ logs` / `alchemy tail` don't support Fly Services yet.
 
 ## Where next
 
-- [Tutorial part 2](/fly/tutorial/part-2) — build up a Service
-  step by step.
-- [Volumes](/fly/data/volumes) — persistent storage via the
-  `MountVolume` binding.
-- [Secrets](/fly/data/secrets) — App secrets, `GetSecret` / `ListSecrets`, and KMS
-  `Encrypt` / `Sign`.
-- [`Service` reference](/providers/fly/service) — every prop
-  and attribute.
+The [tutorial](/fly/tutorial/part-2) builds a Service step by step.
+[Volumes](/fly/data/volumes) covers `MountVolume`.
+[Secrets](/fly/data/secrets) covers `GetSecret` and `ListSecrets`.
+The [`Service` reference](/providers/fly/service) lists every prop.
