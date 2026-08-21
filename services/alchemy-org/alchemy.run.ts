@@ -18,20 +18,32 @@
  * ```
  */
 import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { testAlchemy } from "./src/Repos.ts";
+import { SANDBOX } from "./src/SandboxChoice.ts";
 import Worker from "./src/Worker.ts";
 
 export default Alchemy.Stack(
   "Org",
   {
-    providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()),
+    providers: Layer.mergeAll(
+      GitHub.providers(),
+      Cloudflare.providers(),
+      // the MicroVM sandbox option provisions AWS resources (the image,
+      // its build role, the Worker's cross-cloud IAM user/role)
+      AWS.providers(),
+    ),
     state: Cloudflare.state(),
   },
-  Effect.gen(function* () {
+  program(),
+);
+
+function program() {
+  const stack = Effect.gen(function* () {
     const repo = yield* testAlchemy;
     const org = yield* Worker;
 
@@ -71,14 +83,23 @@ export default Alchemy.Stack(
       /** The backend's own door (the GitHub webhook targets this). */
       api: org.url,
     };
-  }).pipe(
-    // The session sandbox image. The STOCK slim image for now (bun +
-    // git + ripgrep; builds in seconds): the review pipeline clones its
-    // PR into /workspace per session, so nothing needs a pre-baked
-    // tree. The CIRCULAR image (src/Sandbox.ts — the whole alchemy
-    // repo checked out, installed, and compiled) swaps in here once
-    // the runtime builds images off the worker's startup path: baking
-    // it takes many minutes, and today that blocks every request.
-    Effect.provide(Cloudflare.AI.SandboxContainerRuntime),
-  ),
-);
+  });
+
+  // The session sandbox image, per the SANDBOX switch
+  // (src/SandboxChoice.ts) — branched at the PROGRAM level so each arm
+  // provides a single concrete Layer (a ternary inside Effect.provide
+  // makes a union of Layer types, which its overloads reject):
+  //
+  // - container (default): the STOCK slim Cloudflare Container image
+  //   (bun + git + ripgrep; builds in seconds). The CIRCULAR image
+  //   (src/Sandbox.ts — the whole alchemy repo baked in) swaps in
+  //   here once the runtime builds images off the worker's startup
+  //   path: baking it takes many minutes, and today that blocks
+  //   every request.
+  // - microvm: the SAME guest physics as an AWS Lambda MicroVM image
+  //   (Firecracker; built server-side on AWS — the account must be
+  //   onboarded to the MicroVM preview and `alchemy aws bootstrap`ed).
+  return SANDBOX === "microvm"
+    ? stack.pipe(Effect.provide(AWS.AI.SandboxMicrovmRuntime))
+    : stack.pipe(Effect.provide(Cloudflare.AI.SandboxContainerRuntime));
+}

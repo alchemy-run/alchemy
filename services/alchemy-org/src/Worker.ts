@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI";
+import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
@@ -26,13 +27,39 @@ import {
 } from "./tools/index.ts";
 import { ReadOutputLive } from "./tools/ReadOutput.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
+import { SANDBOX } from "./SandboxChoice.ts";
 
-/** Each session's own machine, resolved at CALL time from the session
- *  DO (the layers build in the shared per-isolate graph). ONE const —
- *  the toolbox, the spill store, and the checkout share the machine. */
-const SandboxSession = Cloudflare.AI.SandboxContainerSession({
+/** The container machine: a Cloudflare Container attached to the
+ *  session's Durable Object. */
+const ContainerSandbox = Cloudflare.AI.SandboxContainerSession({
   enableInternet: true,
 });
+
+/** The MicroVM machine: an AWS Lambda MicroVM launched from the shared
+ *  image, driven cross-cloud from this Worker (the HTTP/token binding
+ *  impls mint an IAM user + assume-role for the Worker). */
+const MicrovmSandbox = AWS.AI.SandboxMicrovmSession().pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      AWS.Lambda.RunMicrovmHttp,
+      AWS.Lambda.GetMicrovmHttp,
+      AWS.Lambda.CreateAuthTokenHttp,
+    ),
+  ),
+);
+
+type LayerR<L> = L extends Layer.Layer<any, any, infer R> ? R : never;
+
+/** Each session's own machine, resolved at CALL time from the session
+ *  (the layers build in the shared per-isolate graph). ONE const —
+ *  the toolbox, the spill store, and the checkout share the machine.
+ *  Widened to the union of both machines' requirements so the
+ *  ORG_SANDBOX ternary stays a single Layer type. */
+const SandboxSession: Layer.Layer<
+  AI.Sandbox,
+  never,
+  LayerR<typeof ContainerSandbox> | LayerR<typeof MicrovmSandbox>
+> = SANDBOX === "microvm" ? MicrovmSandbox : ContainerSandbox;
 
 /** The artifact store on that same machine (readOutput reads what the
  *  spill net and the bash tool parked). */
