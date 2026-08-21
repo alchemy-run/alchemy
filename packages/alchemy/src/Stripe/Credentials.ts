@@ -1,8 +1,5 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  Credentials,
-  credentials as stripeCredentials,
-} from "@distilled.cloud/stripe";
+import { Credentials } from "@distilled.cloud/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -29,12 +26,16 @@ export {
  * overridable with the `ALCHEMY_PROFILE` env/config value).
  *
  * Maps onto `@distilled.cloud/stripe`'s `{ apiKey, apiBaseUrl }` shape.
- * Distilled's `Credentials` service is an `Effect<Config>` (resolved per
- * request) whose `apiKey` must be a Redacted from distilled's `effect`
- * instance — `credentials()` re-wraps the unredacted key.
+ * Distilled's `Credentials` service is an `Effect<Config>` resolved per
+ * request. Credential loading is cached and deferred until first use so
+ * `Layer.build(providers())` succeeds for an unknown profile (CI / tests).
+ *
+ * Distilled's `apiKey` must be a Redacted from this `effect` instance —
+ * unredact the AuthProvider value and re-wrap.
  */
 export const fromAuthProvider = () =>
-  Layer.unwrap(
+  Layer.effect(
+    Credentials,
     Effect.gen(function* () {
       const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
@@ -44,24 +45,22 @@ export const fromAuthProvider = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
 
-      const creds = yield* profile
-        .loadOrConfigure(auth, profileName, { ci })
-        .pipe(
-          Effect.flatMap((config) =>
-            auth.read(profileName, config as StripeAuthConfig),
-          ),
-          Effect.mapError(
-            (e) =>
-              new ConfigError({
-                message: `Failed to resolve Stripe credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-          ),
-          Effect.orDie,
-        );
-
-      return stripeCredentials({
-        apiKey: Redacted.value(creds.apiKey),
-        apiBaseUrl: creds.apiBaseUrl,
-      });
+      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
+        Effect.flatMap((config) =>
+          auth.read(profileName, config as StripeAuthConfig),
+        ),
+        Effect.map((creds) => ({
+          apiKey: Redacted.make(Redacted.value(creds.apiKey)),
+          apiBaseUrl: creds.apiBaseUrl,
+        })),
+        Effect.mapError(
+          (e) =>
+            new ConfigError({
+              message: `Failed to resolve Stripe credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
+            }),
+        ),
+        Effect.orDie,
+        Effect.cached,
+      );
     }),
   );
