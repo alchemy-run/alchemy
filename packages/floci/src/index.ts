@@ -400,6 +400,12 @@ export const ensureFloci = (
       containerName,
       "-p",
       `${port}:4566`,
+      // Docker Desktop injects `host.docker.internal` automatically; native
+      // Linux Docker does not. The emulator needs it to reach a dev server
+      // running on the developer's machine (a CloudFront origin pointed at
+      // `localhost:<port>`, for one).
+      "--add-host",
+      "host.docker.internal:host-gateway",
       ...elbPorts.flatMap((p) => ["-p", `${p}:${p}`]),
       ...(config?.dockerSocket === false
         ? []

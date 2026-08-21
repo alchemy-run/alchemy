@@ -9,13 +9,15 @@ import {
   Function as LambdaFunction,
   type FunctionProps,
 } from "../Lambda/Function.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import { Server, type ServerDevProps } from "./Server.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
-import type {
-  WebsiteAssetsConfig,
-  WebsiteDomainProps,
-  WebsiteEdgeProps,
-  WebsiteInvalidationProps,
+import {
+  normalizeWebsiteDomain,
+  type WebsiteAssetsConfig,
+  type WebsiteDomainProps,
+  type WebsiteEdgeProps,
+  type WebsiteInvalidationProps,
 } from "./shared.ts";
 
 /**
@@ -175,13 +177,20 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(
     });
 
     if (isLocal) {
+      // Router-attached sites register with the Router in dev exactly as they
+      // do live — same resource types and ids — with the framework's dev
+      // server standing in for the S3 + Lambda origins.
+      const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, build.url)
+        : undefined;
       return {
         bucket: undefined,
         build,
         files: undefined,
         distribution: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         server: undefined,
         serverUrl: undefined,
         url: build.url,
