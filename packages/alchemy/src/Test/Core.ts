@@ -1,5 +1,6 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
+import * as Floci from "@alchemy.run/floci";
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -11,7 +12,6 @@ import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as Floci from "@alchemy.run/floci";
 
 import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
 import { flociServices } from "../AWS/Local/FlociServices.ts";
@@ -28,6 +28,7 @@ import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../Local/RpcSpawner.ts";
+import { ALCHEMY_DEV } from "../Phase.ts";
 import * as Plan from "../Plan.ts";
 import {
   type CompiledStack,
@@ -39,7 +40,6 @@ import {
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
-import { ALCHEMY_DEV } from "../Phase.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
@@ -550,7 +550,9 @@ export const scratchStack = <ROut>(
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        pinToFloci(Plan.make(compiled).pipe(Effect.flatMap(apply))).pipe(
+        Plan.make(compiled).pipe(
+          Effect.flatMap(apply),
+          pinToFloci,
           Effect.provide(compiled.services),
         ),
       ),
