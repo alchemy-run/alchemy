@@ -22,14 +22,23 @@ export const SandboxMicrovmBuildRole = Role("SandboxMicrovmBuildRole");
  * bun install and the bundled guest after this).
  *
  * - `git` + `ca-certificates` — clones and pushes;
- * - `ripgrep` — the `grep`/`glob` tools run `rg`.
+ * - `ripgrep` — the `grep`/`glob` tools run `rg`. NOT packaged in
+ *   AL2023's dnf repos, so it comes from the prebuilt GitHub release
+ *   binary (aarch64 ships `-gnu`, x86_64 ships `-musl` only).
  */
 export const SANDBOX_MICROVM_DOCKERFILE = `
 FROM ${MICROVM_BASE_DOCKER_IMAGE}
 
-RUN dnf install -y ca-certificates git ripgrep openssh-clients tar gzip \\
+RUN dnf install -y ca-certificates git openssh-clients tar gzip \\
   && dnf clean all \\
   && mkdir -p /workspace
+
+RUN case "$(uname -m)" in \\
+    aarch64) triple="aarch64-unknown-linux-gnu";; \\
+    *) triple="x86_64-unknown-linux-musl";; \\
+  esac \\
+  && curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-\${triple}.tar.gz" \\
+  | tar -xz --strip-components=1 -C /usr/local/bin --wildcards "*/rg"
 `;
 
 /**

@@ -3,7 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 
@@ -87,11 +87,10 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   port: number;
   build?: Bundle.BundleConfig;
 }) {
-  const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const realMain = yield* fs.realPath(main);
+  const realMain = yield* resolveMainPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
   const buildBundle = Effect.fn(function* (
