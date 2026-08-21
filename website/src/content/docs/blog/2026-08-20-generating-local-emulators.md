@@ -33,15 +33,15 @@ credentials. It shipped in
 
 ## We forked floci
 
-The emulator is [our fork](https://github.com/alchemy-run/floci)
-of [floci](https://floci.io), an MIT-licensed, LocalStack-style
-AWS emulator on the JVM. We forked because the factory is a
-fully automated fan-out, with fleets of agents producing fixes
-faster than any maintainer could reasonably review. We'd like to
-contribute upstream, but flooding the floci team with that
-maintenance burden isn't fair to them. It's easier to let
-alchemy's flywheel drive the emulator's development directly,
-and that requires a fork.
+We [forked](https://github.com/alchemy-run/floci)
+[floci](https://floci.io), an MIT-licensed, LocalStack-style AWS
+emulator on the JVM, because the factory is a fully automated
+fan-out, with fleets of agents producing fixes faster than any
+maintainer could reasonably review. We'd like to contribute
+upstream, but flooding the floci team with that maintenance
+burden isn't fair to them. It's easier to let alchemy's flywheel
+drive the emulator's development directly, and that requires a
+fork.
 
 In this release our patches span about 30 services: Lambda's
 streaming Function URLs, ELBv2's ALB data plane, AppSync's
