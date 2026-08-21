@@ -65,13 +65,26 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       ),
   );
 
+  // A websocket that drops (sidecar crash/restart, abnormal 1006 close)
+  // permanently breaks the capnweb session, and a cached broken session would
+  // poison every subsequent call — including test-runner retries.
+  // `onRpcBroken` fires on disconnect and evicts the entry, so the next `get`
+  // re-registers with the spawner (which respawns the sidecar child if it
+  // died). Assigned after the cache exists; the callback only fires on live
+  // sessions, which the cache must already contain.
+  let evictBrokenSession: (key: string) => void = () => {};
   const cache = yield* Cache.make({
     lookup: (key: string) => {
       const separator = key.indexOf(SESSION_KEY_SEPARATOR);
-      return getSession(key.slice(0, separator), key.slice(separator + 1));
+      return getSession(key.slice(0, separator), key.slice(separator + 1)).pipe(
+        Effect.tap((session) =>
+          Effect.sync(() => session.onRpcBroken(() => evictBrokenSession(key))),
+        ),
+      );
     },
     capacity: Infinity,
   });
+  evictBrokenSession = (key) => Effect.runFork(Cache.invalidate(cache, key));
 
   return RpcProviderProxy.of({
     get: Effect.fn(function* (mainUrl, providerName) {
@@ -81,15 +94,24 @@ const make = Effect.fn(function* (spawnerUrl: string) {
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
       });
-      const session = yield* Cache.get(
-        cache,
-        mainUrl + SESSION_KEY_SEPARATOR + sessionEnv,
-      );
-      const provider = yield* Effect.promise(
-        () =>
-          session.getProvider(providerName) as ReturnType<
-            RpcProxyApi["getProvider"]
-          >,
+      const key = mainUrl + SESSION_KEY_SEPARATOR + sessionEnv;
+      const fetchProvider = Effect.gen(function* () {
+        const session = yield* Cache.get(cache, key);
+        return yield* Effect.tryPromise(
+          () =>
+            session.getProvider(providerName) as ReturnType<
+              RpcProxyApi["getProvider"]
+            >,
+        );
+      });
+      // One in-place reconnect: if the session broke mid-call (the broken
+      // callback may not have evicted it yet), drop it and re-register once
+      // before giving up.
+      const provider = yield* fetchProvider.pipe(
+        Effect.catch(() =>
+          Cache.invalidate(cache, key).pipe(Effect.andThen(fetchProvider)),
+        ),
+        Effect.orDie,
       );
       // The served shape omits the process-local `mode`/`modes` variant
       // machinery (see RpcProviderService); the unwrapped stub is a plain

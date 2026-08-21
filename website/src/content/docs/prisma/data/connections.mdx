@@ -81,9 +81,9 @@ Accelerate-only database has no direct Postgres endpoint, so
 
 ## The Connect binding
 
-Inside a Prisma Compute app, AWS Lambda function, or Cloudflare
-Worker, `Prisma.Connect` resolves the bound connection at runtime as
-a typed client:
+Inside a Prisma Compute app, AWS Lambda function, Cloudflare Worker,
+or Cloudflare Container, `Prisma.Connect` resolves the bound
+connection at runtime as a typed client:
 
 ```typescript
 Effect.gen(function* () {
@@ -100,9 +100,16 @@ Effect.gen(function* () {
 ```
 
 At deploy time the binding carries the connection's outputs into the
-host's environment (env vars on Compute and Lambda, secret text
-bindings on Workers); at runtime `db.databaseUrl` and friends read
-them back as `Redacted` values.
+host's environment (env vars on Compute, Lambda, and Containers;
+secret text bindings on Workers); at runtime `db.databaseUrl` and
+friends read them back as `Redacted` values.
+
+A container is a real process with no workerd bindings, so env vars
+are its only channel — which is exactly why `Prisma.Connect` reaches
+it and `Cloudflare.Hyperdrive.Connect` does not. Start the container
+with `Cloudflare.Containers.layer(Api, { enableInternet: true })` so
+it can reach the database. See
+[Bind a capability into an effectful container](/cloudflare/compute/containers#bind-a-capability-into-an-effectful-container).
 
 ## Rotation
 

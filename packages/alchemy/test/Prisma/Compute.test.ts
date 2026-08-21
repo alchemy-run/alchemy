@@ -369,7 +369,11 @@ describe("Prisma Compute", () => {
         appName: "api",
         healthCheck: { path: "/api/health" },
         pollIntervalMs: 1,
-        urlReadinessTimeoutSeconds: 0.1,
+        // Wall-clock deadline (live clock). The mock succeeds on the second
+        // poll, so the pass path never waits this long — it only needs to
+        // not fire spuriously when a saturated event loop (full-suite run)
+        // delays the second poll beyond a tight budget.
+        urlReadinessTimeoutSeconds: 30,
       });
 
       expect(requests).toEqual([

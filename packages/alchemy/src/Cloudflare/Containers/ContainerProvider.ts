@@ -533,6 +533,7 @@ export const LiveContainerProvider = () =>
       const createApplication = Effect.fn(function* ({
         id,
         news,
+        bindings,
         name,
         configuration,
         durableObjects,
@@ -540,6 +541,7 @@ export const LiveContainerProvider = () =>
       }: {
         id: string;
         news: AnyContainerApplicationProps;
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         name: string;
         configuration: ContainerApplication.Configuration;
         durableObjects:
@@ -579,6 +581,7 @@ export const LiveContainerProvider = () =>
           return yield* upsertApplication({
             id,
             news,
+            bindings,
             existing: toAttributes(existingByName),
             durableObjects,
             session,
@@ -604,6 +607,7 @@ export const LiveContainerProvider = () =>
           return yield* upsertApplication({
             id,
             news,
+            bindings,
             existing: toAttributes(existing),
             durableObjects,
             session,
@@ -642,6 +646,7 @@ export const LiveContainerProvider = () =>
                   return yield* upsertApplication({
                     id,
                     news,
+                    bindings,
                     existing: toAttributes(existing),
                     durableObjects,
                     session,
@@ -674,12 +679,14 @@ export const LiveContainerProvider = () =>
       const upsertApplication = Effect.fn(function* ({
         id,
         news,
+        bindings,
         existing,
         durableObjects,
         session,
       }: {
         id: string;
         news: AnyContainerApplicationProps;
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         existing: ContainerApplication["Attributes"];
         // The DO attachment to (re)create with if the "existing" application
         // turns out to be gone. Threaded through so the update→create fallback
@@ -692,7 +699,7 @@ export const LiveContainerProvider = () =>
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
-        const env = makeContainerEnv(news, accountId);
+        const env = makeContainerEnv(news, accountId, bindings);
         const { build, imageRef, imageHash, dev } = yield* computeImage(
           id,
           news,
@@ -836,7 +843,7 @@ export const LiveContainerProvider = () =>
           const { imageHash, dev } = yield* computeImage(
             id,
             news,
-            makeContainerEnv(news, accountId),
+            makeContainerEnv(news, accountId, newBindings),
           );
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
@@ -865,6 +872,10 @@ export const LiveContainerProvider = () =>
           const result = yield* createApplication({
             id,
             news,
+            // Precreate runs before the engine resolves bindings (that is what
+            // breaks the worker <-> container cycle), so binding-injected env
+            // lands on the following reconcile.
+            bindings: [],
             name,
             configuration,
             durableObjects: undefined,
@@ -897,7 +908,7 @@ export const LiveContainerProvider = () =>
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const env = makeContainerEnv(news, accountId);
+          const env = makeContainerEnv(news, accountId, bindings);
           const { build, imageRef, imageHash, dev } = yield* computeImage(
             id,
             news,
@@ -964,6 +975,7 @@ export const LiveContainerProvider = () =>
                 return yield* upsertApplication({
                   id,
                   news,
+                  bindings,
                   existing: toAttributes(owner),
                   durableObjects,
                   session,
@@ -995,6 +1007,7 @@ export const LiveContainerProvider = () =>
             const result = yield* createApplication({
               id,
               news,
+              bindings,
               name,
               configuration,
               durableObjects,
@@ -1016,6 +1029,7 @@ export const LiveContainerProvider = () =>
             return yield* upsertApplication({
               id,
               news,
+              bindings,
               existing,
               durableObjects,
               session,
@@ -1030,6 +1044,7 @@ export const LiveContainerProvider = () =>
           const result = yield* createApplication({
             id,
             news,
+            bindings,
             name,
             configuration,
             durableObjects,
