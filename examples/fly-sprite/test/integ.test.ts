@@ -14,7 +14,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 
 const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const entitled = !!process.env.FLY_TEST_SPRITES;
 
 const fetchOk = (url: string) =>
   Effect.gen(function* () {
@@ -32,17 +31,15 @@ const fetchOk = (url: string) =>
     );
   });
 
-const stack =
-  hasFlyCreds && entitled
-    ? beforeAll(deploy(Stack), { timeout: 180_000 })
-    : null;
+const stack = hasFlyCreds
+  ? beforeAll(deploy(Stack), { timeout: 180_000 })
+  : null;
 
-afterAll.skipIf(!hasFlyCreds || !entitled || !!process.env.NO_DESTROY)(
-  destroy(Stack),
-  { timeout: 120_000 },
-);
+afterAll.skipIf(!hasFlyCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 120_000,
+});
 
-test.skipIf(!hasFlyCreds || !entitled)(
+test.skipIf(!hasFlyCreds)(
   "deploys an effectful Sprite and serves HTTP",
   Effect.gen(function* () {
     const out = yield* stack!;

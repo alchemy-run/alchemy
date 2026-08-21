@@ -17,7 +17,6 @@ const logLevel = Effect.provideService(
 );
 
 const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const fixedPlanEnabled = !!process.env.FLY_TEST_REDIS_FIXED;
 
 const waitUntilRedisGone = (redisId: string, name: string) =>
   Fly.findRedisAddOn({ id: redisId, name }).pipe(
@@ -267,7 +266,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds || !fixedPlanEnabled)(
+test.provider.skipIf(!hasFlyCreds)(
   "create redis on a fixed plan",
   (stack) =>
     Effect.gen(function* () {

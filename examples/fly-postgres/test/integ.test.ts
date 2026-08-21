@@ -14,7 +14,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 
 const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const mpgEnabled = !!process.env.FLY_TEST_MPG;
 
 const fetchOk = (url: string) =>
   Effect.gen(function* () {
@@ -32,17 +31,15 @@ const fetchOk = (url: string) =>
     );
   });
 
-const stack =
-  hasFlyCreds && mpgEnabled
-    ? beforeAll(deploy(Stack), { timeout: 300_000 })
-    : null;
+const stack = hasFlyCreds
+  ? beforeAll(deploy(Stack), { timeout: 300_000 })
+  : null;
 
-afterAll.skipIf(!hasFlyCreds || !mpgEnabled || !!process.env.NO_DESTROY)(
-  destroy(Stack),
-  { timeout: 180_000 },
-);
+afterAll.skipIf(!hasFlyCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 180_000,
+});
 
-test.skipIf(!hasFlyCreds || !mpgEnabled)(
+test.skipIf(!hasFlyCreds)(
   "attaches Managed Postgres and DATABASE_URL is present in the Service",
   Effect.gen(function* () {
     const out = yield* stack!;

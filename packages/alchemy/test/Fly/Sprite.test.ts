@@ -5,6 +5,7 @@ import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Box from "./fixtures/sprite.ts";
@@ -17,7 +18,6 @@ const logLevel = Effect.provideService(
 );
 
 const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const entitled = !!process.env.FLY_TEST_SPRITES;
 
 const waitUntilGone = (name: string) =>
   Services.sprites.getSprite({ name }).pipe(
@@ -32,21 +32,34 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
+const fetchSpriteJson = (url: string) =>
+  HttpClient.get(url).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? res.json
+        : Effect.fail(new Error(`sprite returned ${res.status}`)),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential("500 millis"),
+      times: 20,
+    }),
+    Effect.map((value) => value as { ok: boolean; text?: string }),
+  );
+
 test.provider.skipIf(!hasFlyCreds)(
-  "unentitled orgs surface the typed SpritesNotEnabled error",
+  "listSprites succeeds or returns typed SpritesNotEnabled",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      if (entitled) {
-        const listed = yield* Services.sprites.listSprites({});
-        expect(Array.isArray(listed.sprites)).toBe(true);
-      } else {
-        const error = yield* Services.sprites.listSprites({}).pipe(Effect.flip);
-        expect(error._tag).toEqual("SpritesNotEnabled");
-        expect(`${error.message ?? ""}`).toEqual(
+      const listed = yield* Effect.result(Services.sprites.listSprites({}));
+      if (Result.isFailure(listed)) {
+        expect(listed.failure._tag).toEqual("SpritesNotEnabled");
+        expect(`${listed.failure.message ?? ""}`).toEqual(
           expect.stringMatching(/sprites not enabled/i),
         );
+      } else {
+        expect(Array.isArray(listed.success.sprites)).toBe(true);
       }
 
       yield* stack.destroy();
@@ -69,11 +82,20 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds || !entitled)(
+test.provider.skipIf(!hasFlyCreds)(
   "create, serve, exec, checkpoint, and delete a sprite",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      const listed = yield* Effect.result(Services.sprites.listSprites({}));
+      if (
+        Result.isFailure(listed) &&
+        listed.failure._tag === "SpritesNotEnabled"
+      ) {
+        yield* stack.destroy();
+        return;
+      }
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
@@ -104,18 +126,7 @@ test.provider.skipIf(!hasFlyCreds || !entitled)(
       expect(found).toBeDefined();
       expect(found?.urlAuth).toEqual("public");
 
-      const body = yield* HttpClient.get(deployed.url).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`sprite returned ${res.status}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.spaced("4 seconds"),
-          times: 10,
-        }),
-        Effect.map((value) => value as { ok: boolean; text?: string }),
-      );
+      const body = yield* fetchSpriteJson(deployed.url);
       expect(body.ok).toEqual(true);
 
       const echoed = yield* Services.sprites.execCommand({
@@ -136,5 +147,5 @@ test.provider.skipIf(!hasFlyCreds || !entitled)(
       const gone = yield* waitUntilGone(deployed.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

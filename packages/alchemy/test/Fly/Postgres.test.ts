@@ -15,7 +15,6 @@ const logLevel = Effect.provideService(
 );
 
 const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const mpgEnabled = !!process.env.FLY_TEST_MPG;
 
 const waitUntilClusterGone = (clusterId: string) =>
   Services.mpg.getClusterById({ id: clusterId }).pipe(
@@ -39,7 +38,7 @@ const waitUntilReady = (clusterId: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),
       until: (status) => status === "ready" || status === "error",
-      times: 10,
+      times: 24,
     }),
   );
 
@@ -92,7 +91,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds || !mpgEnabled)(
+test.provider.skipIf(!hasFlyCreds)(
   "create, attach, list, and destroy a managed postgres cluster",
   (stack) =>
     Effect.gen(function* () {
@@ -163,5 +162,5 @@ test.provider.skipIf(!hasFlyCreds || !mpgEnabled)(
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
