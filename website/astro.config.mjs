@@ -996,6 +996,7 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                { label: "Sprites", link: "/fly/compute/sprites" },
                 { label: "Regions", link: "/fly/compute/regions" },
               ],
             },
@@ -1003,6 +1004,9 @@ export default defineConfig({
               label: "Data",
               items: [
                 { label: "Volumes", link: "/fly/data/volumes" },
+                { label: "Postgres", link: "/fly/data/postgres" },
+                { label: "Redis", link: "/fly/data/redis" },
+                { label: "Tigris", link: "/fly/data/tigris" },
                 { label: "Secrets", link: "/fly/data/secrets" },
               ],
             },

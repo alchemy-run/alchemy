@@ -1,12 +1,12 @@
 {
-  "name": "fly-app",
+  "name": "fly-redis",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/fly-app"
+    "directory": "examples/fly-redis"
   },
   "type": "module",
   "scripts": {

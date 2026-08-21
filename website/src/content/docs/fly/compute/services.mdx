@@ -270,7 +270,12 @@ logs` / `alchemy tail` don't support Fly Services yet.
 ## Where next
 
 The [tutorial](/fly/tutorial/part-2) builds a Service step by step.
+[Sprites](/fly/compute/sprites) are org-scoped sandboxes that
+hibernate — no parent App, no Docker image.
 [Regions](/fly/compute/regions) lists codes and how Volumes follow.
 [Volumes](/fly/data/volumes) covers `MountVolume`.
+[Postgres](/fly/data/postgres) attaches as `DATABASE_URL`.
+[Redis](/fly/data/redis) attaches as `REDIS_URL`.
+[Tigris](/fly/data/tigris) attaches as `AWS_*` / `BUCKET_NAME`.
 [Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.

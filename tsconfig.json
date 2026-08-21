@@ -185,6 +185,15 @@
       "path": "./examples/fly-sprite/tsconfig.json"
     },
     {
+      "path": "./examples/fly-redis/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-bucket/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-postgres/tsconfig.json"
+    },
+    {
       "path": "./examples/monorepo-single-stack/tsconfig.json"
     },
     {

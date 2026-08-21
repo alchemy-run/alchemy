@@ -4,7 +4,7 @@
  * - `Box` — HTTP Sprite (`src/box.ts`)
  *
  * A Sprite is org-scoped. There is no parent App. Alchemy bundles
- * `main` and runs it on the Sprite.
+ * `main` and runs it on the Sprite. Auth is FLY_API_TOKEN.
  */
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";

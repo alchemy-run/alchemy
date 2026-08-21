@@ -155,6 +155,10 @@ export type Redis = Resource<
  *
  * @example Attach
  * ```typescript
+ * import * as Config from "effect/Config";
+ * import * as Redacted from "effect/Redacted";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
  * const Cache = Fly.Redis("Cache");
  *
  * export default class Api extends Fly.Service<Api>()(
@@ -165,7 +169,9 @@ export type Redis = Resource<
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const redisUrl = yield* Config.redacted("REDIS_URL");
- *         return HttpServerResponse.text(Redacted.value(redisUrl) ? "ok" : "missing");
+ *         return HttpServerResponse.text(
+ *           Redacted.value(redisUrl) ? "ok" : "missing",
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(Fly.AttachLive)),
@@ -609,6 +615,9 @@ export interface AttachedRedis {
  *
  * @example Bind REDIS_URL
  * ```typescript
+ * import * as Config from "effect/Config";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },

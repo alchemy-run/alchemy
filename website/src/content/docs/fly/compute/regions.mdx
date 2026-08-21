@@ -1,14 +1,16 @@
 ---
 title: Regions
-description: Where Fly Machines and Volumes live. Alchemy defaults to iad.
+description: Where Fly Machines, Volumes, Postgres, and Redis live. Alchemy defaults to iad.
 ---
 
-A region is a Fly.io datacenter. [Machines](/fly/compute/machines)
-and [Volumes](/fly/data/volumes) live in one. An
+A region is a Fly.io datacenter. [Machines](/fly/compute/machines),
+[Volumes](/fly/data/volumes), [Postgres](/fly/data/postgres)
+clusters, and a [Redis](/fly/data/redis) primary live in one. An
 [App](/fly/compute/apps) is global. It is not pinned to a region.
 
 Alchemy defaults to `iad` (Ashburn, Virginia). Pass `region` to put
-a [Service](/fly/compute/services) or Machine somewhere else.
+a [Service](/fly/compute/services), Machine, or Postgres cluster
+somewhere else.
 
 ## Pin a Service
 
@@ -136,8 +138,42 @@ live set.
 A dedicated [`IpAssignment`](/fly/networking) can take `region`
 too. Shared Anycast (`shared_v4`) ignores it.
 
+## Postgres is regional
+
+The cluster lives in one region. Pass `region` on
+[`Fly.Postgres`](/fly/data/postgres), not on the App.
+
+```typescript
+const db = yield* Fly.Postgres("Db", {
+  region: "iad",
+});
+```
+
+:::caution[Changing `region` replaces the cluster]
+A new cluster is created in the new region. The old cluster is
+deleted. Data is not copied.
+:::
+
+## Redis primary
+
+[`Fly.Redis`](/fly/data/redis) takes `primaryRegion`. Default is
+`iad`. Read replicas are extra regions on `readRegions`.
+
+```typescript
+const cache = yield* Fly.Redis("Cache", {
+  primaryRegion: "iad",
+  readRegions: ["sjc"],
+});
+```
+
+:::caution[Changing `primaryRegion` replaces Redis]
+The primary region is immutable. The old database is deleted first.
+:::
+
 ## Where next
 
 [Services](/fly/compute/services) pin `region` on the class.
 [Machines](/fly/compute/machines) pin it on the resource.
 [Volumes](/fly/data/volumes) follow the parent.
+[Postgres](/fly/data/postgres) is a billed cluster in one region.
+[Redis](/fly/data/redis) pins `primaryRegion`.

@@ -1,0 +1,117 @@
+---
+title: Tigris
+description: S3-compatible object storage billed through Fly. The resource is Fly.Bucket.
+---
+
+A [`Fly.Bucket`](/providers/fly/bucket) is Tigris S3-compatible
+object storage, billed through Fly. It is org-scoped. There is no
+parent [App](/fly/compute/apps).
+
+[`AttachBucket`](/providers/fly/bucket) writes `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, and
+`BUCKET_NAME` onto the App as secrets. A
+[Service](/fly/compute/services) reads them with `Config.redacted`.
+Do not pass `env: { ... }`.
+
+## Create a Bucket
+
+Alchemy generates a unique name unless you pass one.
+
+```typescript
+const data = yield* Fly.Bucket("Data");
+```
+
+## A stable name
+
+Pass `name` when you need a stable Tigris bucket name.
+
+```typescript
+const data = yield* Fly.Bucket("Data", {
+  name: "my-bucket",
+});
+```
+
+:::caution[Changing `name` replaces the Bucket]
+Tigris cannot rename a bucket. Alchemy creates the new name, then
+deletes the old one.
+:::
+
+## Attach to a Service
+
+Yield `AttachBucket` in Service init. Provide `AttachBucketLive`.
+Fly injects the secrets as environment variables on every Machine.
+
+```typescript
+import * as Config from "effect/Config";
+import * as Redacted from "effect/Redacted";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    yield* Fly.AttachBucket(Data);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const bucket = yield* Config.redacted("BUCKET_NAME");
+        return HttpServerResponse.text(Redacted.value(bucket));
+      }),
+    };
+  }).pipe(Effect.provide(Fly.AttachBucketLive)),
+) {}
+```
+
+## Attach from the stack
+
+Pass the App as the second argument when you are not inside a
+Service.
+
+```typescript
+yield* Fly.AttachBucket(Data, Site);
+```
+
+## Public access
+
+Buckets are private by default. `public: true` serves objects
+without credentials.
+
+```typescript
+const assets = yield* Fly.Bucket("Assets", {
+  public: true,
+});
+```
+
+## Custom domain
+
+`domainName` sets `website.domain_name` on the add-on. Point a
+CNAME at `{name}.t3.tigrisbucket.io`.
+
+```typescript
+const assets = yield* Fly.Bucket("Assets", {
+  public: true,
+  domainName: "assets.example.com",
+});
+```
+
+## Organization
+
+Org defaults to the current token. Pass `orgSlug` to pin it.
+
+```typescript
+const data = yield* Fly.Bucket("Data", {
+  orgSlug: "my-org",
+});
+```
+
+:::caution[Changing `orgSlug` replaces the Bucket]
+The bucket is created in the new org. The old bucket is deleted.
+:::
+
+## Where next
+
+[Services](/fly/compute/services) is the Machine that reads the
+Tigris secrets.
+[Secrets](/fly/data/secrets) covers `Config.redacted` and
+`Fly.Secret`.
+The [`Bucket` reference](/providers/fly/bucket) lists every prop.

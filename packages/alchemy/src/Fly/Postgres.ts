@@ -202,6 +202,7 @@ export type Postgres = Resource<
  * @example Attach from a Service
  * ```typescript
  * import * as Config from "effect/Config";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",

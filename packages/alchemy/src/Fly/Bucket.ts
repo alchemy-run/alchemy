@@ -215,6 +215,7 @@ export type Bucket = Resource<
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as Redacted from "effect/Redacted";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -936,6 +937,10 @@ const writeBucketSecrets = (appName: string, bucket: Bucket) =>
  *
  * @example On a Service
  * ```typescript
+ * import * as Config from "effect/Config";
+ * import * as Redacted from "effect/Redacted";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },

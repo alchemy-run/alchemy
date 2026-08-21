@@ -139,18 +139,19 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
 /**
  * A Sprite is an Effect program running in a Fly.io Sprite. Sprites
  * are org-scoped Linux sandboxes. They hibernate when idle and wake
- * on demand. There is no parent {@link App}.
+ * on demand. There is no parent {@link App}. Unlike a {@link Service},
+ * Alchemy does not build a Docker image.
  *
  * @resource
  * @see https://sprites.dev/api/sprites
  *
  * @section Declare a Sprite
  * A Sprite is a class. Props describe the sandbox. The Effect is the
- * program that runs on it.
+ * program that runs on it. There is no parent App.
  *
  * `main: import.meta.url` is the bundle entrypoint. Alchemy bundles
  * this file with Rolldown, writes it onto the Sprite, and runs it as
- * a Sprite service on {@link port}.
+ * a Sprite service on {@link port}. Auth is `FLY_API_TOKEN`.
  *
  * @example Class + main
  * ```typescript
@@ -228,6 +229,7 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * @example Config.redacted
  * ```typescript
  * import * as Config from "effect/Config";
+ * import * as FileSystem from "effect/FileSystem";
  * import * as Redacted from "effect/Redacted";
  *
  * export default class Box extends Fly.Sprite<Box>()(
@@ -236,6 +238,7 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  *   Effect.gen(function* () {
  *     const apiKey = yield* Config.redacted("API_KEY");
  *     const fs = yield* FileSystem.FileSystem;
+ *     yield* fs.makeDirectory("/tmp", { recursive: true });
  *
  *     return {
  *       fetch: Effect.gen(function* () {

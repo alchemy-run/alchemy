@@ -8,7 +8,9 @@ running a container image.
 
 Prefer a [`Service`](/fly/compute/services) when the program is
 Effect. A Service is effectful, supports bindings, and scales with
-`count`. Alchemy builds and pushes the image.
+`count`. Alchemy builds and pushes the image. Prefer a
+[`Sprite`](/fly/compute/sprites) when the sandbox can hibernate —
+no parent App, no Docker image.
 
 ```typescript
 export default class Api extends Fly.Service<Api>()(

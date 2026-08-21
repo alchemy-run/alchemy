@@ -1,0 +1,134 @@
+---
+title: Postgres
+description: A billed Managed Postgres cluster. Attach it to a Service as DATABASE_URL.
+---
+
+A [`Fly.Postgres`](/providers/fly/postgres) is a Managed Postgres
+(MPG) cluster. It is billed. Do not wrap unmanaged `fly postgres`.
+
+Create the cluster, then
+[`AttachPostgres`](/providers/fly/attachpostgres) it on a
+[Service](/fly/compute/services). Fly writes `DATABASE_URL` as an
+App secret. The Service reads it with
+`Config.redacted("DATABASE_URL")`. Do not pass `env: {}`.
+
+## Create a cluster
+
+`region` is required. The cluster is regional. An
+[App](/fly/compute/apps) is global. Alchemy generates a unique name
+unless you pass one.
+
+```typescript
+const db = yield* Fly.Postgres("Db", {
+  region: "iad",
+});
+```
+
+Alchemy defaults compute to [`iad`](/fly/compute/regions). Pass
+another code to put the cluster somewhere else.
+
+:::caution[Billed]
+Managed Postgres is billed. Basic is about $38 per month.
+:::
+
+:::caution[Changing `region` replaces the cluster]
+A new cluster is created in the new region. The old cluster is
+deleted. Data is not copied.
+:::
+
+## Attach to a Service
+
+Yield `AttachPostgres` in Service init. Provide
+`AttachPostgresLive`. Read `DATABASE_URL` from `fetch`.
+
+```typescript
+import * as Config from "effect/Config";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { app: Site, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    yield* Fly.AttachPostgres(Db);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const databaseUrl = yield* Config.redacted("DATABASE_URL");
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }).pipe(Effect.provide(Fly.AttachPostgresLive)),
+) {}
+```
+
+`DATABASE_URL` is the pooled `pgbouncer_uri`. Fly also writes
+`DIRECT_DATABASE_URL` when a direct URI can be built.
+
+`Config.redacted("DATABASE_URL")` in init reads the deployer's
+`.env`. For the Fly-owned vault value, Attach the cluster and read
+`DATABASE_URL` from `fetch`.
+
+## Attach from the stack
+
+Pass `app` when you are not inside a Service.
+
+```typescript
+const site = yield* Fly.App("Site");
+const db = yield* Fly.Postgres("Db", { region: "iad" });
+yield* Fly.AttachPostgres(db, { app: site });
+```
+
+## Plan
+
+`plan` is the hardware size: `basic`, `starter`, `launch`,
+`scale`, `performance`. Default is `basic`.
+
+```typescript
+const db = yield* Fly.Postgres("Db", {
+  region: "iad",
+  plan: "starter",
+});
+```
+
+:::note[Create-only]
+Changing `plan` later is ignored. Fly has no cluster update API.
+:::
+
+## Volume size
+
+`volumeSizeGb` is the initial disk. Fly defaults to 10 GB.
+
+```typescript
+const db = yield* Fly.Postgres("Db", {
+  region: "iad",
+  volumeSizeGb: 20,
+});
+```
+
+:::note[Create-only]
+Changing `volumeSizeGb` later is ignored.
+:::
+
+## PostGIS
+
+`postgis: true` enables PostGIS at create.
+
+```typescript
+const db = yield* Fly.Postgres("Db", {
+  region: "iad",
+  postgis: true,
+});
+```
+
+:::note[Create-only]
+Flipping `postgis` later is ignored.
+:::
+
+## Where next
+
+[Regions](/fly/compute/regions) lists codes. Default is `iad`.
+[Services](/fly/compute/services) is the always-on Machine that
+reads `DATABASE_URL`.
+[Secrets](/fly/data/secrets) covers `Config.redacted`.
+The [`Postgres` reference](/providers/fly/postgres) lists every
+prop.

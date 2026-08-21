@@ -10,6 +10,10 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const site = yield* Fly.App("Site");
+    const ip = yield* Fly.IpAssignment("Shared", {
+      app: site,
+      type: "shared_v4",
+    });
     const web = yield* Fly.Machine("Web", {
       app: site,
       region: "iad",
@@ -26,6 +30,8 @@ export default Alchemy.Stack(
 
     return {
       url: site.url,
+      ip: ip.ip,
+      machineId: web.machineId,
     };
   }),
 );

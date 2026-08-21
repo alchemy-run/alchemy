@@ -18,7 +18,8 @@ a Fly organization, and an API token stored in a profile.
 - [Docker](https://docs.docker.com/get-docker/) for
   [Services](/fly/compute/services) (Alchemy builds and pushes an
   image). Raw [Machines](/fly/compute/machines) with a public image
-  do not need it.
+  do not need it. Neither do
+  [Sprites](/fly/compute/sprites).
 
 ## Create a Fly organization
 
@@ -37,7 +38,10 @@ In the dashboard:
    and Machines.
 3. Copy the token — Fly shows it **only once**.
 
-The official environment variable is `FLY_API_TOKEN`.
+The official environment variable is `FLY_API_TOKEN`. That token is
+enough for Apps, Machines, Services, Sprites, Postgres, Redis, and
+Tigris. Alchemy mints a Sprites bearer from it when you deploy a
+Sprite.
 
 ## Create a project directory
 
@@ -114,7 +118,9 @@ builds a `linux/amd64` image, and pushes it to `registry.fly.io`.
 Have [Docker](https://docs.docker.com/get-docker/) running on the
 machine that runs `alchemy deploy`. Raw
 [`Fly.Machine`](/fly/compute/machines)s that use a public image
-(`nginx:alpine`) do not need it.
+(`nginx:alpine`) do not need it. Neither do
+[`Fly.Sprite`](/fly/compute/sprites)s — Alchemy writes the bundle
+onto the Sprite.
 :::
 
 ## State storage
@@ -131,4 +137,6 @@ Fly has no object-storage state backend of its own, so pick one of:
 ## Next steps
 
 - [Tutorial part 1](/fly/tutorial/part-1) — deploy your first App.
+- [Sprites](/fly/compute/sprites) — an Effect program that
+  hibernates. No Docker.
 - [Fly overview](/fly) — the map of resources and guides.

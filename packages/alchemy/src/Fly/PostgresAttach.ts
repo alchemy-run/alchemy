@@ -60,6 +60,7 @@ export interface AttachedPostgres {
  * @example Bind DATABASE_URL
  * ```typescript
  * import * as Config from "effect/Config";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
