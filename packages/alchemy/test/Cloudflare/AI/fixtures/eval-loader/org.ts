@@ -86,15 +86,14 @@ export const scriptedModel = (code: string) => {
       generateText: (options) => Effect.sync(() => [...step(options)]),
       streamText: (options) =>
         Stream.fromIterable(step(options)).pipe(
-          Stream.flatMap(
-            (part): Stream.Stream<Response.StreamPartEncoded> =>
-              part.type === "text"
-                ? (Stream.make(
-                    { type: "text-start", id: "t" },
-                    { type: "text-delta", id: "t", delta: part.text },
-                    { type: "text-end", id: "t" },
-                  ) as unknown as Stream.Stream<Response.StreamPartEncoded>)
-                : Stream.make(part as Response.StreamPartEncoded),
+          Stream.flatMap((part): Stream.Stream<Response.StreamPartEncoded> =>
+            part.type === "text"
+              ? (Stream.make(
+                  { type: "text-start", id: "t" },
+                  { type: "text-delta", id: "t", delta: part.text },
+                  { type: "text-end", id: "t" },
+                ) as unknown as Stream.Stream<Response.StreamPartEncoded>)
+              : Stream.make(part as Response.StreamPartEncoded),
           ),
         ),
     }),

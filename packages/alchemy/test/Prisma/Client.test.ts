@@ -1351,6 +1351,17 @@ describe("PrismaClient", () => {
           yield* client.updateBranch("branch-1", { isDefault: true });
           yield* client.deleteBranch("branch-1");
 
+          yield* client.listBuckets({ projectId: "project-1" });
+          yield* client.getBucket("bucket-1");
+          yield* client.createBucket({
+            projectId: "project-1",
+            name: "uploads",
+          });
+          yield* client.deleteBucket("bucket-1");
+          yield* client.listBucketKeys("bucket-1", { limit: 1 });
+          yield* client.createBucketKey("bucket-1", { role: "read_write" });
+          yield* client.deleteBucketKey("bucket-1", "key-1");
+
           yield* client.getCustomDomain("domain-1");
           yield* client.deleteCustomDomain("domain-1");
           yield* client.retryCustomDomain("domain-1");
@@ -1484,6 +1495,13 @@ describe("PrismaClient", () => {
             ["POST", "/v1/projects/project-1/branches"],
             ["PATCH", "/v1/branches/branch-1"],
             ["DELETE", "/v1/branches/branch-1"],
+            ["GET", "/v1/buckets?projectId=project-1"],
+            ["GET", "/v1/buckets/bucket-1"],
+            ["POST", "/v1/buckets"],
+            ["DELETE", "/v1/buckets/bucket-1"],
+            ["GET", "/v1/buckets/bucket-1/keys?limit=1"],
+            ["POST", "/v1/buckets/bucket-1/keys"],
+            ["DELETE", "/v1/buckets/bucket-1/keys/key-1"],
             ["GET", "/v1/domains/domain-1"],
             ["DELETE", "/v1/domains/domain-1"],
             ["POST", "/v1/domains/domain-1/retry"],
@@ -1526,7 +1544,7 @@ describe("PrismaClient", () => {
           expect(routeInventoryFrom(captured)).toEqual(
             expectedManagementApiRoutes,
           );
-          expect(expectedManagementApiRoutes).toHaveLength(71);
+          expect(expectedManagementApiRoutes).toHaveLength(78);
           expect(captured[11]?.bodyJson).toEqual({
             recipientAccessToken: "recipient-token",
           });

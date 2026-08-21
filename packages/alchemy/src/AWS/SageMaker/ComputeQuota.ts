@@ -120,9 +120,8 @@ export interface ComputeQuota extends Resource<
  * A SageMaker HyperPod compute allocation (task governance) — reserves
  * instance capacity on an EKS-orchestrated HyperPod cluster for a team,
  * with fair-share weights and borrow/lend rules for idle compute.
- * @resource
- * @section Creating Compute Allocations
- * @example Team Quota with Borrowing
+ * ### Creating Compute Allocations
+ * **Example:** Team Quota with Borrowing
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -135,6 +134,8 @@ export interface ComputeQuota extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const ComputeQuota = Resource<ComputeQuota>(
   "AWS.SageMaker.ComputeQuota",

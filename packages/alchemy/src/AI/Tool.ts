@@ -39,19 +39,23 @@ export type ToolErrors<Refs> = Refs extends ErrorTerm
   : never;
 
 export type ToolParameters<Refs> = {
-  [N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
-    Refs,
-    N
-  >["schema"]["~type.optionality"] extends "optional"
-    ? never
-    : N]: ParamOf<Refs, N>["schema"]["Type"];
+  [
+    N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
+      Refs,
+      N
+    >["schema"]["~type.optionality"] extends "optional"
+      ? never
+      : N
+  ]: ParamOf<Refs, N>["schema"]["Type"];
 } & {
-  [N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
-    Refs,
-    N
-  >["schema"]["~type.optionality"] extends "optional"
-    ? N
-    : never]?: ParamOf<Refs, N>["schema"]["Type"];
+  [
+    N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
+      Refs,
+      N
+    >["schema"]["~type.optionality"] extends "optional"
+      ? N
+      : never
+  ]?: ParamOf<Refs, N>["schema"]["Type"];
 };
 
 /**

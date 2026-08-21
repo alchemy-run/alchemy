@@ -167,13 +167,11 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                     data: string;
                     quiet: number;
                   }>
-                ).map(
-                  (inboxRow): InboxRow => ({
-                    seq: inboxRow.seq,
-                    input: JSON.parse(inboxRow.data),
-                    quiet: inboxRow.quiet === 1,
-                  }),
-                );
+                ).map((inboxRow): InboxRow => ({
+                  seq: inboxRow.seq,
+                  input: JSON.parse(inboxRow.data),
+                  quiet: inboxRow.quiet === 1,
+                }));
               }),
               deleteInbox: (seqs) =>
                 Effect.sync(() => {

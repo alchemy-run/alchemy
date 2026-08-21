@@ -145,9 +145,8 @@ const resolveImageArchitecture = (
 ): Effect.Effect<Host.Architecture> => {
   const arches = [
     ...new Set(
-      (news.cpuConfigurations ?? []).map(
-        (config): Host.Architecture =>
-          config.architecture === "ARM_64" ? "arm64" : "amd64",
+      (news.cpuConfigurations ?? []).map((config): Host.Architecture =>
+        config.architecture === "ARM_64" ? "arm64" : "amd64",
       ),
     ),
   ];

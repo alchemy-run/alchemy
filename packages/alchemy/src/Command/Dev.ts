@@ -43,13 +43,12 @@ export interface Dev extends Resource<
  * attribute — useful for surfacing a dev server's local URL back out to
  * whatever resource declared this `Dev`.
  *
- * @resource
  *
- * @section Basic Usage
+ * ### Basic Usage
  * Pass a shell command that starts a long-lived dev server. Alchemy
  * runs it in the background and extracts the first URL it prints.
  *
- * @example Start a Vite dev server
+ * **Example:** Start a Vite dev server
  * ```typescript
  * const dev = yield* Dev("Frontend", {
  *   command: "npm run dev",
@@ -57,11 +56,11 @@ export interface Dev extends Resource<
  * yield* Console.log(dev.url); // e.g. "http://localhost:5173"
  * ```
  *
- * @section Working Directory
+ * ### Working Directory
  * Use `cwd` to run the command in a subdirectory — useful in
  * monorepos where each package has its own dev server.
  *
- * @example Monorepo package
+ * **Example:** Monorepo package
  * ```typescript
  * const dev = yield* Dev("Web", {
  *   command: "npm run dev",
@@ -69,12 +68,12 @@ export interface Dev extends Resource<
  * });
  * ```
  *
- * @section Environment Variables
+ * ### Environment Variables
  * Extra environment variables are merged on top of `process.env`.
  * Sensitive values can be wrapped in `Redacted` to keep them out
  * of logs and state files.
  *
- * @example Custom port and env
+ * **Example:** Custom port and env
  * ```typescript
  * const dev = yield* Dev("Api", {
  *   command: "npm run dev",
@@ -84,6 +83,8 @@ export interface Dev extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Dev = Resource<Dev>("Command.Dev");
 

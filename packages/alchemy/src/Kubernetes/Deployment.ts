@@ -278,9 +278,8 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * statements to a generated pod-identity role. On registry-less clusters
  * (`Kubernetes.KubeConfig(...)`) run pre-built `image` references and bind
  * through environment variables.
- * @resource
- * @section Creating a Deployment
- * @example Remote image on EKS (external — no Effect runtime in the container)
+ * ### Creating a Deployment
+ * **Example:** Remote image on EKS (external — no Effect runtime in the container)
  * ```typescript
  * const cluster = yield* AWS.EKS.Cluster("Cluster", { compute: "auto" });
  *
@@ -296,7 +295,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * nginx.deploymentName; // K8s-native attrs
  * ```
  *
- * @example Any cluster via kubeconfig
+ * **Example:** Any cluster via kubeconfig
  * ```typescript
  * const local = Kubernetes.KubeConfig({ context: "kind-dev" });
  *
@@ -308,7 +307,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Build your own Dockerfile
+ * **Example:** Build your own Dockerfile
  * ```typescript
  * const legacy = yield* Kubernetes.Deployment("LegacyApp", {
  *   cluster,
@@ -318,8 +317,8 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Effect Servers
- * @example Inline Effect server with a DynamoDB binding (EKS)
+ * ### Effect Servers
+ * **Example:** Inline Effect server with a DynamoDB binding (EKS)
  * ```typescript
  * const api = yield* Kubernetes.Deployment(
  *   "Api",
@@ -336,7 +335,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @example Tagged Effect server
+ * **Example:** Tagged Effect server
  * ```typescript
  * export class Api extends Kubernetes.Deployment<Api, {
  *   health: () => Effect.Effect<string>;
@@ -355,7 +354,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -363,7 +362,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -386,7 +385,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -394,8 +393,8 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * @section Kubernetes Escape Hatch
- * @example Tune the synthesized pod template
+ * ### Kubernetes Escape Hatch
+ * **Example:** Tune the synthesized pod template
  * ```typescript
  * const tuned = yield* Kubernetes.Deployment("Api", {
  *   cluster,
@@ -409,6 +408,8 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Deployment: Platform<
   Deployment,

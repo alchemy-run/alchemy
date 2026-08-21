@@ -10,11 +10,13 @@ export type EndpointParameters<
   Params,
   Injected extends PropertyKey = "owner" | "repo",
 > = {
-  [K in keyof Params as string extends K
-    ? never
-    : number extends K
+  [
+    K in keyof Params as string extends K
       ? never
-      : K extends Injected
+      : number extends K
         ? never
-        : K]: Params[K];
+        : K extends Injected
+          ? never
+          : K
+  ]: Params[K];
 };

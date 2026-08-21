@@ -18,6 +18,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Agents: l("bot"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
+  Hetzner: b("hetzner"),
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Prisma: b("prisma"),
@@ -65,6 +66,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
   Cloudflare: b("cloudflare"),
+  Hetzner: b("hetzner"),
   GitHub: b("github"),
   Neon: b("neon"),
   Planetscale: b("planetscale"),

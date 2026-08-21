@@ -132,11 +132,20 @@ afterAll(async () => {
     }
   }
   if (!process.env.NO_DESTROY && dockerAvailable) {
-    spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
-      cwd: root,
-      stdio: "inherit",
-      timeout: 120_000,
-    });
+    const destroyed = spawnSync(
+      "bun",
+      [alchemyBin, "destroy", "--stage", STAGE, "--yes"],
+      {
+        cwd: root,
+        stdio: "inherit",
+        timeout: 120_000,
+      },
+    );
+    if (destroyed.status !== 0) {
+      throw new Error(
+        `alchemy destroy exited ${destroyed.status} — local teardown must succeed`,
+      );
+    }
   }
 }, 180_000);
 

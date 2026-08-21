@@ -25,6 +25,7 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "Cloudflare", link: "/cloudflare" },
+      { label: "Hetzner", link: "/hetzner" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
@@ -999,6 +1000,36 @@ export default defineConfig({
           ],
         },
         {
+          label: "Hetzner",
+          items: [
+            { label: "Overview", link: "/hetzner" },
+            { label: "Setup", link: "/hetzner/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "hetzner/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Servers", link: "/hetzner/compute/servers" },
+                { label: "Services", link: "/hetzner/compute/services" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [{ label: "Volumes", link: "/hetzner/data/volumes" }],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Networking", link: "/hetzner/networking" },
+                { label: "DNS", link: "/hetzner/networking/dns" },
+              ],
+            },
+            providerResourcesEntry("Hetzner"),
+          ],
+        },
+        {
           label: "PlanetScale",
           items: [
             { label: "Overview", link: "/planetscale" },
@@ -1066,6 +1097,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/prisma/data/postgres" },
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
+                { label: "Buckets", link: "/prisma/data/buckets" },
               ],
             },
             {

@@ -573,12 +573,36 @@ const executeNode = (
     // ── noop ──
 
     if (node.action === "noop") {
-      // No work to do — the persisted attr is already stable. If the row was
-      // persisted under a legacy type name (the type was since renamed and
-      // carries the old name as an alias), migrate it to the canonical type
-      // so the state stops depending on the alias.
-      if (node.state.resourceType !== node.resource.Type) {
-        yield* commit({ ...node.state, resourceType: node.resource.Type });
+      // No work to do on the cloud resource — the persisted attr is already
+      // stable. Two pieces of row METADATA can still have drifted from the
+      // declaration, and this is the only pass that will ever see them:
+      //
+      // 1. `resourceType` — the row was persisted under a legacy type name
+      //    (the type was since renamed and carries the old name as an
+      //    alias); migrate it so the state stops depending on the alias.
+      // 2. `removalPolicy` — `RemovalPolicy.retain()` / `.destroy()` is a
+      //    decoration on the declaration, not a prop, so changing it never
+      //    produces a diff. Without this commit the new policy would never
+      //    reach state, and the orphan delete (which reads the policy from
+      //    the persisted row, see `Plan.ts`'s delete node) would act on the
+      //    stale one — destroying a resource the user had marked `retain`.
+      //    See https://github.com/alchemy-run/alchemy/issues/1248.
+      const policyChanged =
+        node.state.removalPolicy !== node.resource.RemovalPolicy;
+      if (node.state.resourceType !== node.resource.Type || policyChanged) {
+        yield* commit({
+          ...node.state,
+          resourceType: node.resource.Type,
+          removalPolicy: node.resource.RemovalPolicy,
+        });
+      }
+      // A policy flip is otherwise invisible (the row is a noop), and it is
+      // exactly the change a user wants confirmation of. Legacy rows with no
+      // persisted policy normalize silently — there is nothing to report.
+      if (policyChanged && node.state.removalPolicy !== undefined) {
+        yield* scopedSession.note(
+          `removal policy ${node.state.removalPolicy} → ${node.resource.RemovalPolicy}`,
+        );
       }
       yield* signalReadyStable;
       yield* storeAndSignal({

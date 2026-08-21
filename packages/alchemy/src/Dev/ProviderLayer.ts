@@ -86,12 +86,10 @@ export const dual = <
           memoMap,
           scope,
         ).pipe(
-          Effect.map(
-            (built): ProviderService<R> => ({
-              ...(built.mapUnsafe.get(cls.Type) as ProviderService<R>),
-              mode,
-            }),
-          ),
+          Effect.map((built): ProviderService<R> => ({
+            ...(built.mapUnsafe.get(cls.Type) as ProviderService<R>),
+            mode,
+          })),
         );
 
       // Memoized so each variant is constructed at most once per stack

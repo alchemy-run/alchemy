@@ -45,9 +45,8 @@ export interface KvEntries extends Resource<
  * Entries are stored with a `{namespace}:{key}` prefix to allow multiple
  * logical groups within a single store. Updates use batched optimistic
  * concurrency with automatic ETag retry.
- * @resource
- * @section Managing Entries
- * @example Basic Entries
+ * ### Managing Entries
+ * **Example:** Basic Entries
  * ```typescript
  * const entries = yield* KvEntries("Routes", {
  *   store: store.keyValueStoreArn,
@@ -59,7 +58,7 @@ export interface KvEntries extends Resource<
  * });
  * ```
  *
- * @example Purge Stale Keys
+ * **Example:** Purge Stale Keys
  * ```typescript
  * const entries = yield* KvEntries("Routes", {
  *   store: store.keyValueStoreArn,
@@ -68,6 +67,8 @@ export interface KvEntries extends Resource<
  *   purge: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const KvEntries = Resource<KvEntries>("AWS.CloudFront.KvEntries");
 

@@ -10,7 +10,7 @@ import * as Redacted from "effect/Redacted";
 import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
-import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
+import { DEFAULT_LOCAL_ENDPOINT, LOCAL_ACCOUNT_ID } from "../AuthProvider.ts";
 import * as Endpoint from "../Endpoint.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as Region from "../Region.ts";
@@ -21,7 +21,7 @@ import { provideProviderContext } from "./ProviderContext.ts";
  * computed from it (ARNs, queue URLs) double as proof that no real AWS
  * account was involved.
  */
-export const FLOCI_ACCOUNT_ID = "000000000000";
+export const FLOCI_ACCOUNT_ID = LOCAL_ACCOUNT_ID;
 
 /** Region every floci-emulated resource lives in. */
 export const FLOCI_REGION = "us-east-1";
@@ -68,7 +68,7 @@ let flociServicesLayer: ReturnType<typeof makeFlociServices> | undefined;
 /**
  * The floci-scoped override context for local-mode AWS providers, as a
  * **module-memoized layer reference** (see the note on
- * [Local/ProviderLayer.ts](../../Local/ProviderLayer.ts)): every
+ * [Dev/ProviderLayer.ts](../../Dev/ProviderLayer.ts)): every
  * {@link flociDual} registration shares this one reference, so the stack
  * build's MemoMap constructs it — and runs `ensureFloci()` — exactly once
  * per stack build, and only when a local-mode provider is actually demanded.

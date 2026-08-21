@@ -31,16 +31,15 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * kit adapter emitting a streaming Lambda handler) — both must be
  * installed in your project.
  *
- * @resource
- * @section Creating SvelteKit Sites
- * @example Basic SvelteKit App
+ * ### Creating SvelteKit Sites
+ * **Example:** Basic SvelteKit App
  * ```typescript
  * const site = yield* AWS.Website.SvelteKit("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.SvelteKit("Web", {
  *   rootDir: "./app",
@@ -51,8 +50,8 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Tune The Server Function
+ * ### Server Configuration
+ * **Example:** Tune The Server Function
  * ```typescript
  * const site = yield* AWS.Website.SvelteKit("Web", {
  *   rootDir: "./app",
@@ -64,6 +63,8 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
   makeFrameworkSite(id, props, {

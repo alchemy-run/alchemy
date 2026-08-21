@@ -118,34 +118,31 @@ export interface WakuProps<
  * served at their extensionless URLs (`/about`) via the default
  * `drop-trailing-slash` asset handling.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Waku Site
+ * ### Deploying a Waku Site
  * A single call builds the project and deploys the RSC server bundle plus
  * the client assets — no configuration required.
  *
- * @example Waku site
+ * **Example:** Waku site
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site");
  * ```
  *
- * @example Waku project in a subdirectory
+ * **Example:** Waku project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
  *   rootDir: "apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Pass resources through `env` like any other Worker. Server components
  * and API routes read them from the `cloudflare:workers` env at request
  * time. Prefer a guarded dynamic import in page modules — Waku's SSG step
  * renders static pages in Node, where a top-level
  * `import { env } from "cloudflare:workers"` cannot resolve.
  *
- * @example Binding an R2 bucket
+ * **Example:** Binding an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
@@ -156,14 +153,14 @@ export interface WakuProps<
  * });
  * ```
  *
- * @section Custom Worker Entry
+ * ### Custom Worker Entry
  * By default the deployed Worker entry is Waku's own RSC server entry.
  * When the Worker must export more than Waku's fetch handler — Durable
  * Object classes, additional handlers — point `main` at your own module
  * that wraps Waku's handler (imported from `virtual:waku/server-entry`)
  * and re-exports the extras.
  *
- * @example Custom entry hosting a Durable Object
+ * **Example:** Custom entry hosting a Durable Object
  * ```typescript
  * // src/worker-entry.ts
  * // import wakuHandler from "virtual:waku/server-entry";
@@ -180,12 +177,12 @@ export interface WakuProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project has
  * large directories that don't affect the build output.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
  *   memo: {
@@ -194,18 +191,22 @@ export interface WakuProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Waku` with no arguments returns a constructor you can `extend`
  * to declare the Worker as a named class. The class is both an `Effect`
  * you can `yield*` to deploy and a type you can reference elsewhere —
  * useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Waku Worker class
+ * **Example:** Declaring a Waku Worker class
  * ```typescript
  * class Site extends Cloudflare.Website.Waku<Site>()("Site") {}
  *
  * const site = yield* Site;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Waku: {
   <Self>(): {
@@ -216,10 +217,9 @@ export const Waku: {
         | Effect.Effect<InputProps<WakuProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -230,10 +230,9 @@ export const Waku: {
       | Effect.Effect<InputProps<WakuProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers
@@ -268,6 +267,7 @@ export const Waku: {
             source: {
               provider: WAKU_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 // Custom worker entry (wraps waku's handler via

@@ -90,11 +90,8 @@ export type SnippetRules = Resource<
  * Safety: when there is no prior state and the zone already has a
  * non-empty rule list, `read` reports it as `Unowned` and the engine
  * refuses to take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Snippets
- * @category Rules & Configuration
- * @section Activating Snippets
- * @example Route a path through a snippet
+ * ### Activating Snippets
+ * **Example:** Route a path through a snippet
  * ```typescript
  * const snippet = yield* Cloudflare.Snippets.Snippet("HeaderSnippet", {
  *   zoneId: zone.zoneId,
@@ -112,6 +109,10 @@ export type SnippetRules = Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
+ * @product Snippets
+ * @category Rules & Configuration
  */
 export const SnippetRules = Resource<SnippetRules>("Cloudflare.Snippets.Rules");
 

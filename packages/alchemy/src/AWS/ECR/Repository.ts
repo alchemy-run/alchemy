@@ -82,17 +82,16 @@ export interface Repository extends Resource<
 
 /**
  * An Amazon ECR repository for container images.
- * @resource
- * @section Creating Repositories
- * @example Task Image Repository
+ * ### Creating Repositories
+ * **Example:** Task Image Repository
  * ```typescript
  * const repo = yield* Repository("TaskRepository", {
  *   scanOnPush: true,
  * });
  * ```
  *
- * @section Repository Policies
- * @example Grant Lambda Pull Access
+ * ### Repository Policies
+ * **Example:** Grant Lambda Pull Access
  * ```typescript
  * const repo = yield* Repository("LambdaImages", {
  *   policy: {
@@ -108,6 +107,8 @@ export interface Repository extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Repository = Resource<Repository>("AWS.ECR.Repository");
 

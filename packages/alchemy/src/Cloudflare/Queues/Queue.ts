@@ -53,29 +53,26 @@ export type Queue = Resource<
  * Queues enable you to send and receive messages with guaranteed delivery.
  * Create a queue as a resource, then bind it to a Worker to send messages
  * at runtime. Register a consumer to process messages.
- * @resource
- * @product Queues
- * @category Storage & Databases
- * @section Creating a Queue
- * @example Basic queue
+ * ### Creating a Queue
+ * **Example:** Basic queue
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue");
  * ```
  *
- * @example Queue with explicit name
+ * **Example:** Queue with explicit name
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue", {
  *   name: "my-app-queue",
  * });
  * ```
  *
- * @section Binding to a Worker
+ * ### Binding to a Worker
  * In an Effect-style Worker, use `Cloudflare.Queues.WriteQueue` in
  * the init phase and provide `Cloudflare.Queues.WriteQueueBinding` in
  * the runtime layer. The returned `WriteQueueClient` exposes `send`
  * and `sendBatch`.
  *
- * @example Sending messages from a Worker
+ * **Example:** Sending messages from a Worker
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
@@ -107,6 +104,10 @@ export type Queue = Resource<
  *   }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
  * );
  * ```
+ *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  */
 export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
   aliases: ["Cloudflare.Queue"],

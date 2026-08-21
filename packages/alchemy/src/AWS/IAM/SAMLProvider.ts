@@ -59,15 +59,16 @@ export interface SAMLProvider extends Resource<
  *
  * `SAMLProvider` registers a SAML metadata document so IAM roles can trust an
  * external workforce or application identity provider.
- * @resource
- * @section Federating with SAML
- * @example Create a SAML Identity Provider
+ * ### Federating with SAML
+ * **Example:** Create a SAML Identity Provider
  * ```typescript
  * const provider = yield* SAMLProvider("WorkforceSaml", {
  *   name: "workforce-saml",
  *   samlMetadataDocument: "<EntityDescriptor>...</EntityDescriptor>",
  * });
  * ```
+ *
+ * @resource
  */
 export const SAMLProvider = Resource<SAMLProvider>("AWS.IAM.SAMLProvider");
 

@@ -111,9 +111,8 @@ export interface NetworkAcl extends Resource<
  * the actual rules live in `NetworkAclEntry` resources and subnet attachments
  * in `NetworkAclAssociation` resources. Changing `vpcId` replaces the ACL.
  *
- * @resource
- * @section Creating Network ACLs
- * @example Basic Network ACL
+ * ### Creating Network ACLs
+ * **Example:** Basic Network ACL
  * ```typescript
  * const acl = yield* AWS.EC2.NetworkAcl("PrivateNetworkAcl", {
  *   vpcId: vpc.vpcId,
@@ -124,11 +123,11 @@ export interface NetworkAcl extends Resource<
  * default-deny rules, so until you add entries it blocks all traffic on any
  * subnet you associate with it.
  *
- * @section Composing Rules and Associations
+ * ### Composing Rules and Associations
  * A network ACL is only useful once you attach rules and point subnets at it.
  * The typical pattern is one `NetworkAcl`, several `NetworkAclEntry` rules, and
  * one `NetworkAclAssociation` per subnet.
- * @example Network ACL with an Inbound Rule and Subnet Association
+ * **Example:** Network ACL with an Inbound Rule and Subnet Association
  * ```typescript
  * const acl = yield* AWS.EC2.NetworkAcl("PrivateNetworkAcl", {
  *   vpcId: vpc.vpcId,
@@ -152,6 +151,8 @@ export interface NetworkAcl extends Resource<
  * makes the subnet use this ACL instead of the VPC default. Build up the full
  * rule set by adding more `NetworkAclEntry` resources with increasing
  * `ruleNumber`s.
+ *
+ * @resource
  */
 export const NetworkAcl = Resource<NetworkAcl>("AWS.EC2.NetworkAcl");
 

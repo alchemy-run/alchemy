@@ -223,6 +223,11 @@ export interface AstroSourceOptions {
    */
   readonly sessionDevKV?: boolean;
   /**
+   * Runtime used to prerender static pages.
+   * @default "workerd"
+   */
+  readonly prerenderEnvironment?: "workerd" | "node";
+  /**
    * JSON-serializable subset of Astro config merged into the in-memory
    * `AstroInlineConfig`. The project's `astro.config.*` file loads
    * natively; astro merges this inline overlay OVER it (scalars here
@@ -836,6 +841,7 @@ export interface AstroBuildChildConfig {
   readonly sessionKVBindingName: string | undefined;
   readonly sessions: boolean | undefined;
   readonly sessionDevKV: boolean | undefined;
+  readonly prerenderEnvironment: "workerd" | "node" | undefined;
   readonly astro: AstroSourceOptions["astro"];
 }
 
@@ -860,6 +866,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
             sessionKVBindingName: config.sessionKVBindingName,
             sessions: config.sessions,
             sessionDevKV: config.sessionDevKV,
+            prerenderEnvironment: config.prerenderEnvironment,
           }),
           astro: config.astro,
         }),
@@ -889,6 +896,7 @@ const makeAstroSourceProvider = (
             sessionKVBindingName: options.sessionKVBindingName,
             sessions: options.sessions,
             sessionDevKV: options.sessionDevKV,
+            prerenderEnvironment: options.prerenderEnvironment,
           }),
           astro: options.astro,
         }),
@@ -914,6 +922,7 @@ const makeAstroSourceProvider = (
             sessionKVBindingName: options.sessionKVBindingName,
             sessions: options.sessions,
             sessionDevKV: options.sessionDevKV,
+            prerenderEnvironment: options.prerenderEnvironment,
             astro: options.astro,
           } satisfies AstroBuildChildConfig,
         }).pipe(

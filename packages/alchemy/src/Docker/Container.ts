@@ -133,10 +133,9 @@ export interface Container extends Resource<
  * manages Cloudflare's container platform; use pushed image references to bridge
  * Docker-built images into cloud container runtimes.
  *
- * @resource
  *
- * @section Running Containers
- * @example Nginx with a published port
+ * ### Running Containers
+ * **Example:** Nginx with a published port
  * ```typescript
  * const nginx = yield* Docker.Container("nginx", {
  *   image: "nginx:alpine",
@@ -145,8 +144,8 @@ export interface Container extends Resource<
  * });
  * ```
  *
- * @section Secret Environment
- * @example Redacted env var
+ * ### Secret Environment
+ * **Example:** Redacted env var
  * ```typescript
  * const password = yield* Config.redacted("POSTGRES_PASSWORD");
  * const db = yield* Docker.Container("postgres", {
@@ -158,8 +157,8 @@ export interface Container extends Resource<
  * });
  * ```
  *
- * @section Networks and Volumes
- * @example PostgreSQL with persistent storage
+ * ### Networks and Volumes
+ * **Example:** PostgreSQL with persistent storage
  * ```typescript
  * const network = yield* Docker.Network("app-network");
  * const data = yield* Docker.Volume("postgres-data");
@@ -175,8 +174,8 @@ export interface Container extends Resource<
  * const runtime = yield* Docker.inspectContainer(postgresName);
  * ```
  *
- * @section Traefik
- * @example Route a container through Traefik
+ * ### Traefik
+ * **Example:** Route a container through Traefik
  * ```typescript
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
@@ -189,8 +188,9 @@ export interface Container extends Resource<
  *   stopTimeout: "30 seconds",
  *   start: true,
  * });
+ * ```
  *
- * @example Use a Docker.Context resource
+ * **Example:** Use a Docker.Context resource
  * ```typescript
  * const remote = yield* Docker.Context("remote", {
  *   name: "remote-build",
@@ -202,6 +202,8 @@ export interface Container extends Resource<
  *   context: remote,
  * });
  * ```
+ *
+ * @resource
  */
 export const Container = Resource<Container>("Docker.Container");
 

@@ -11,19 +11,19 @@
   },
   "dependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@octanejs/adapter-cloudflare": "catalog:frameworks",
-    "@octanejs/vite-plugin": "catalog:frameworks",
+    "@octanejs/adapter-cloudflare": "catalog:frontend",
+    "@octanejs/vite-plugin": "catalog:frontend",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "octane": "catalog:frameworks",
+    "effect": "catalog:effect",
+    "octane": "catalog:frontend",
     "vite": "^8.0.0"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "catalog:",
-    "tailwindcss": "catalog:"
+    "@tailwindcss/vite": "catalog:frontend",
+    "tailwindcss": "catalog:frontend"
   },
   "repository": {
     "type": "git",

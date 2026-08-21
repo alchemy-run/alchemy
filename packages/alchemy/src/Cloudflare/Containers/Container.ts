@@ -134,10 +134,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * See the [Platform concept](/infrastructure-as-effects/functions-and-servers)
  * page for how this fits into the async / effect / layer
  * progression.
- * @resource
- * @product Containers
- * @category Workers & Compute
- * @section Container Layer
+ * ### Container Layer
  * Define the class and `.make()` in separate files. The class
  * declares the container's identity, configuration, and typed
  * shape. `.make()` provides the runtime implementation as a
@@ -145,7 +142,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * shape — it ensures your implementation matches the methods
  * declared on the class.
  *
- * @example Container class
+ * **Example:** Container class
  * ```typescript
  * // src/Sandbox.ts — the tag carries only the name + typed shape;
  * // configuration lives on `.make()`.
@@ -161,7 +158,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * >()("Sandbox") {}
  * ```
  *
- * @example Container .make()
+ * **Example:** Container .make()
  * ```typescript
  * // src/Sandbox.runtime.ts — props are the first argument to `.make()`
  * export default Sandbox.make(
@@ -189,14 +186,14 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
- * @section Async Workers
+ * ### Async Workers
  * An async Worker can host a container-backed Durable Object class that
  * ships as plain JavaScript — `@cloudflare/sandbox`'s `Sandbox`, or your
  * own class extending `@cloudflare/containers`' `Container`. The class
  * lives in the worker script; `Container` (the npm one) handles the
  * lifecycle and forwards `fetch` to the port inside the container.
  *
- * @example The worker script exports the container-backed class
+ * **Example:** The worker script exports the container-backed class
  * ```typescript
  * // src/worker.ts
  * import { Container } from "@cloudflare/containers";
@@ -215,7 +212,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * the binding name (the `env` key); set `className` when the exported class
  * is named differently.
  *
- * @example Binding the container-backed class in the stack
+ * **Example:** Binding the container-backed class in the stack
  * ```typescript
  * // alchemy.run.ts
  * import type { Sandbox } from "./src/worker.ts";
@@ -235,7 +232,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * `Cloudflare.InferEnv`, so the handler reaches the container with full
  * types.
  *
- * @example Reaching the container from the async handler
+ * **Example:** Reaching the container from the async handler
  * ```typescript
  * // src/worker.ts
  * import { getContainer } from "@cloudflare/containers";
@@ -249,7 +246,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * };
  * ```
  *
- * @section Image Sources
+ * ### Image Sources
  * A container's image comes from one of three sources, picked by which
  * prop you set:
  *
@@ -263,7 +260,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * you declare the class with its props inline and register it purely
  * via `Cloudflare.Containers.layer` from the hosting Durable Object.
  *
- * @example Effect-native image (`main`)
+ * **Example:** Effect-native image (`main`)
  * ```typescript
  * // Alchemy bundles this file's Effect program and bakes it into a
  * // generated image as the entrypoint.
@@ -283,7 +280,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
- * @example Build your own Dockerfile (`context` / `dockerfile`)
+ * **Example:** Build your own Dockerfile (`context` / `dockerfile`)
  * ```typescript
  * // Alchemy builds the Dockerfile against the context directory — no
  * // Effect bundling, no `.make()`. `dockerfile` defaults to
@@ -293,7 +290,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
- * @example Remote image (`image`)
+ * **Example:** Remote image (`image`)
  * ```typescript
  * // Alchemy pulls the public image and re-pushes it to Cloudflare's
  * // registry — no build, no bundling, no `.make()`.
@@ -302,7 +299,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
- * @example Reaching an arbitrary image's port from a Durable Object
+ * **Example:** Reaching an arbitrary image's port from a Durable Object
  * ```typescript
  * // `external` and `remote` images expose no RPC methods, so the DO
  * // talks to them purely over their TCP port via `getTcpPort`.
@@ -324,7 +321,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ) {}
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -332,7 +329,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -355,7 +352,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -363,7 +360,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }
  * ```
  *
- * @section Binding-Contributed Image Statements
+ * ### Binding-Contributed Image Statements
  * Bindings used inside an Effect-native container's `.make()` init can
  * contribute Dockerfile statements to the generated image via the
  * `Docker.Host` service (which every image-generating platform
@@ -376,7 +373,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * contribution serves both the `linux/amd64` deploy image and a
  * native-arch dev image.
  *
- * @example A container that FUSE-mounts a bucket, no Dockerfile needed
+ * **Example:** A container that FUSE-mounts a bucket, no Dockerfile needed
  * ```typescript
  * export default Sandbox.make(
  *   { main: import.meta.url },
@@ -387,7 +384,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
- * @section Local Development
+ * ### Local Development
  * Under `alchemy dev`, Effect-native (`main`) containers build their
  * dev image for the HOST architecture by default — on Apple Silicon
  * this avoids linux/amd64 emulation, which makes heavy image builds
@@ -397,7 +394,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * the deployed image always builds `linux/amd64`, Cloudflare's
  * container platform.
  *
- * @example Pin the dev image to amd64 (production parity)
+ * **Example:** Pin the dev image to amd64 (production parity)
  * ```typescript
  * export default Sandbox.make(
  *   {
@@ -410,7 +407,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
- * @section Configuration
+ * ### Configuration
  * The props object — the first argument to `.make()` — accepts `main`
  * (entrypoint file), `instanceType` (compute size), `runtime`
  * (`"bun"` or `"node"`), and `observability` settings. Use
@@ -418,7 +415,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * `instanceType` in prod while keeping the cheap `dev` instance for
  * preview environments.
  *
- * @example Stage-dependent configuration
+ * **Example:** Stage-dependent configuration
  * ```typescript
  * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
@@ -432,13 +429,13 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
- * @section Stack-level wiring
+ * ### Stack-level wiring
  * The `.make()` `export default` is the side-effect that registers
  * the container's runtime. It must be reachable from your
  * `alchemy.run.ts` so the bundler emits the runtime entrypoint.
  * Provide it on the Stack's generator with `Effect.provide`.
  *
- * @example Wiring SandboxLive into the Stack
+ * **Example:** Wiring SandboxLive into the Stack
  * ```typescript
  * // alchemy.run.ts
  * import SandboxLive from "./src/Sandbox.runtime.ts";
@@ -453,7 +450,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
- * @section Calling from a Durable Object
+ * ### Calling from a Durable Object
  * `yield* Sandbox` resolves a **running** container instance — every
  * method declared on the container's shape **plus** a `getTcpPort`
  * helper. Provide `Cloudflare.Containers.layer(Sandbox, …)` on the
@@ -462,7 +459,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * only the class is imported, the runtime implementation in
  * `Sandbox.runtime.ts` is tree-shaken out of the DO's bundle.
  *
- * @example Running a container from a DO
+ * **Example:** Running a container from a DO
  * ```typescript
  * export default class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agents",
@@ -482,12 +479,12 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ) {}
  * ```
  *
- * @section HTTP Requests to Container Ports
+ * ### HTTP Requests to Container Ports
  * Use `getTcpPort` on the running container instance to get a `fetch`
  * handle for a specific port. This lets you make HTTP requests to
  * servers running inside the container process.
  *
- * @example Fetching from a container port
+ * **Example:** Fetching from a container port
  * ```typescript
  * export default class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agents",
@@ -514,6 +511,10 @@ export type Container<Id extends string = string> = Named<Id> & {
  *   ),
  * ) {}
  * ```
+ *
+ * @resource
+ * @product Containers
+ * @category Workers & Compute
  */
 export const Container: ResourceClassLike<ContainerApplication> & {
   <DOShape = unknown, const Id extends string = string>(

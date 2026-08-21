@@ -60,7 +60,7 @@ export const OAUTH_ENDPOINTS = {
 };
 
 function generateState(length = 32): string {
-  return crypto.randomBytes(length).toString("base64url");
+  return Buffer.from(crypto.randomBytes(length)).toString("base64url");
 }
 
 function extractCredentials(json: {

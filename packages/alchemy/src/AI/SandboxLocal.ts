@@ -129,17 +129,15 @@ export const makeSandboxLocal: Effect.Effect<
           ] as const,
           { concurrency: 3 },
         ).pipe(
-          Effect.map(
-            ([exitCode, stdout, stderr]): SandboxExecResult => ({
-              success: exitCode === 0,
-              exitCode: exitCode as number,
-              stdout: stdout.text,
-              stderr: stderr.text,
-              stdoutTruncated: stdout.truncated,
-              stderrTruncated: stderr.truncated,
-              durationMs: Date.now() - startedAt,
-            }),
-          ),
+          Effect.map(([exitCode, stdout, stderr]): SandboxExecResult => ({
+            success: exitCode === 0,
+            exitCode: exitCode as number,
+            stdout: stdout.text,
+            stderr: stderr.text,
+            stdoutTruncated: stdout.truncated,
+            stderrTruncated: stderr.truncated,
+            durationMs: Date.now() - startedAt,
+          })),
           Effect.mapError((error) => String(error)),
           Effect.onInterrupt(() => terminate),
         );

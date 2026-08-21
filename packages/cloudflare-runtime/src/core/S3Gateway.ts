@@ -421,9 +421,12 @@ const deleteObjects = async (
   body: Buffer,
   res: NodeHttp.ServerResponse,
 ): Promise<void> => {
-  const keys = [...body.toString("utf8").matchAll(/<Key>([^<]*)<\/Key>/g)].map(
-    (match) => unescapeXml(match[1]!),
-  );
+  // decoded via TextDecoder rather than `body.toString("utf8")`: a
+  // latent tsgo (TS 7 preview) checker bug can degrade the global
+  // Buffer type in large programs and reject the encoding overload
+  const keys = [
+    ...new TextDecoder().decode(body).matchAll(/<Key>([^<]*)<\/Key>/g),
+  ].map((match) => unescapeXml(match[1]!));
   if (keys.length > 0) {
     await bucket.delete(keys);
   }
@@ -529,9 +532,12 @@ const completeMultipartUpload = async (
   res: NodeHttp.ServerResponse,
 ): Promise<void> => {
   // parts are assembled host-side and land as ONE simulator put, so R2's
-  // equal-part-size rule (and multipart etag shape) never applies in dev
+  // equal-part-size rule (and multipart etag shape) never applies in dev.
+  // TextDecoder instead of `body.toString("utf8")` — see deleteObjects.
   const partNumbers = [
-    ...body.toString("utf8").matchAll(/<PartNumber>(\d+)<\/PartNumber>/g),
+    ...new TextDecoder()
+      .decode(body)
+      .matchAll(/<PartNumber>(\d+)<\/PartNumber>/g),
   ].map((match) => Number(match[1]));
   const parts = await Promise.all(
     partNumbers.map((partNumber) =>

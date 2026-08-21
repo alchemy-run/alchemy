@@ -101,9 +101,8 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  * fresh on every execution. No socket is opened; feed the result into your
  * database driver. Provide the implementation with
  * `Effect.provide(AWS.RDS.ConnectHttp)`.
- * @binding
- * @section Connecting to a Database
- * @example Resolve Credentials from a Secret
+ * ### Connecting to a Database
+ * **Example:** Resolve Credentials from a Secret
  * ```typescript
  * export default MyFunction.make(
  *   { main: import.meta.url, functionUrl: true },
@@ -138,7 +137,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  * );
  * ```
  *
- * @example IAM Database Authentication
+ * **Example:** IAM Database Authentication
  * ```typescript
  * // init — grants rds-db:connect for the `app_iam` user; the runtime half
  * // presigns a short-lived (15 minute) auth token as the password
@@ -152,6 +151,8 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  * // driver's lazy-password hook so each new connection gets a fresh token
  * const info = yield* connect;
  * ```
+ *
+ * @binding
  */
 export interface Connect extends Binding.Service<
   Connect,

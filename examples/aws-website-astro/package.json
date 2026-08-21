@@ -10,17 +10,17 @@
     "test": "bun test"
   },
   "dependencies": {
-    "astro": "catalog:frameworks"
+    "astro": "catalog:frontend"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@distilled.cloud/aws": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@tailwindcss/vite": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@tailwindcss/vite": "catalog:frontend",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "tailwindcss": "catalog:",
-    "typescript": "catalog:"
+    "effect": "catalog:effect",
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:build"
   },
   "engines": {
     "node": ">=22"

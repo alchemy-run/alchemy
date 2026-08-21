@@ -71,9 +71,13 @@ const signAppJwt = (appId: string, pem: string) =>
         JSON.stringify({ iat: now - 60, exp: now + 540, iss: appId }),
       );
       const key = crypto.createPrivateKey(pem);
-      const signature = crypto
-        .sign("RSA-SHA256", Buffer.from(`${header}.${payload}`), key)
-        .toString("base64url");
+      // encoded via the base64url helper rather than a direct
+      // `.toString("base64url")`: a latent tsgo (TS 7 preview) checker
+      // bug can degrade the global Buffer type in large programs and
+      // reject encoding-taking toString overloads on Node API returns
+      const signature = base64url(
+        crypto.sign("RSA-SHA256", Buffer.from(`${header}.${payload}`), key),
+      );
       return `${header}.${payload}.${signature}`;
     },
     catch: (cause) =>

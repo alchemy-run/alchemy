@@ -132,11 +132,8 @@ export type Connection = Resource<
  * Hyperdrive accelerates and pools connections to existing PostgreSQL or
  * MySQL databases, exposing them to Workers via a binding. Create a config
  * as a resource, then bind it to a Worker to obtain a connection string.
- * @resource
- * @product Hyperdrive
- * @category Storage & Databases
- * @section Creating a Hyperdrive
- * @example Public Postgres origin
+ * ### Creating a Hyperdrive
+ * **Example:** Public Postgres origin
  * ```typescript
  * const hd = yield* Cloudflare.Hyperdrive.Connection("my-pg", {
  *   origin: {
@@ -150,12 +147,16 @@ export type Connection = Resource<
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Using Hyperdrive inside a Worker
+ * ### Binding to a Worker
+ * **Example:** Using Hyperdrive inside a Worker
  * ```typescript
  * const hd = yield* Cloudflare.Hyperdrive.Connect(MyConnection);
  * const url = yield* hd.connectionString;
  * ```
+ *
+ * @resource
+ * @product Hyperdrive
+ * @category Storage & Databases
  */
 export const Connection = Resource<Connection>("Cloudflare.Hyperdrive");
 

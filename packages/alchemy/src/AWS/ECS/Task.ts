@@ -334,9 +334,8 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * Beyond the primary container you can declare task-level configuration
  * (volumes, runtime platform, ephemeral storage, IPC/PID mode, placement
  * constraints) and append additional `sidecars` for multi-container tasks.
- * @resource
- * @section Creating a Task
- * @example Remote Image
+ * ### Creating a Task
+ * **Example:** Remote Image
  * ```typescript
  * const migrate = yield* Task("DbMigrate", {
  *   image: "public.ecr.aws/docker/library/busybox:stable",
@@ -346,7 +345,7 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * });
  * ```
  *
- * @example Build Your Own Dockerfile
+ * **Example:** Build Your Own Dockerfile
  * ```typescript
  * const render = yield* Task("RenderJob", {
  *   context: "./render",                    // dockerfile defaults to ./render/Dockerfile
@@ -356,7 +355,7 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * });
  * ```
  *
- * @example Inline Effect Program
+ * **Example:** Inline Effect Program
  * ```typescript
  * const drainer = yield* Task(
  *   "QueueDrainer",
@@ -373,8 +372,8 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * );
  * ```
  *
- * @section Multi-Container Tasks
- * @example Task with a Sidecar
+ * ### Multi-Container Tasks
+ * **Example:** Task with a Sidecar
  * ```typescript
  * const task = yield* Task("ApiTask", {
  *   main: import.meta.url,
@@ -390,7 +389,7 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * });
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -398,7 +397,7 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -421,7 +420,7 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -429,8 +428,8 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * }
  * ```
  *
- * @section Task-Level Configuration
- * @example ARM64 with EFS Volume and Ephemeral Storage
+ * ### Task-Level Configuration
+ * **Example:** ARM64 with EFS Volume and Ephemeral Storage
  * ```typescript
  * const task = yield* Task("WorkerTask", {
  *   main: import.meta.url,
@@ -448,7 +447,7 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  * });
  * ```
  *
- * @example Environment Files from S3
+ * **Example:** Environment Files from S3
  * ```typescript
  * const task = yield* Task("ApiTask", {
  *   main: import.meta.url,
@@ -457,6 +456,8 @@ export { createContainerRuntimeContext } from "../../Local/Process.ts";
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {

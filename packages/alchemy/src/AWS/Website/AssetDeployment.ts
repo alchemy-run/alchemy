@@ -104,9 +104,8 @@ export interface AssetDeployment extends Resource<
  * purge stale files under a prefix. `StaticSite` and `SsrSite` use it
  * internally — reach for it directly when you manage the bucket and CDN
  * yourself.
- * @resource
- * @section Deploying Files
- * @example Upload A Build Directory
+ * ### Deploying Files
+ * **Example:** Upload A Build Directory
  * ```typescript
  * const bucket = yield* AWS.S3.Bucket("SiteBucket", {});
  *
@@ -117,7 +116,7 @@ export interface AssetDeployment extends Resource<
  * });
  * ```
  *
- * @example Purge Stale Files And Override Caching
+ * **Example:** Purge Stale Files And Override Caching
  * ```typescript
  * const files = yield* AssetDeployment("WebsiteFiles", {
  *   bucket,
@@ -132,8 +131,8 @@ export interface AssetDeployment extends Resource<
  * });
  * ```
  *
- * @section Invalidation
- * @example Invalidate CloudFront On Content Change
+ * ### Invalidation
+ * **Example:** Invalidate CloudFront On Content Change
  * ```typescript
  * const files = yield* AssetDeployment("WebsiteFiles", {
  *   bucket,
@@ -148,6 +147,8 @@ export interface AssetDeployment extends Resource<
  *   paths: ["/*"],
  * });
  * ```
+ *
+ * @resource
  */
 export const AssetDeployment = Resource<AssetDeployment>(
   "AWS.Website.AssetDeployment",

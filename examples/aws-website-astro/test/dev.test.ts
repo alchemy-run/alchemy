@@ -88,8 +88,7 @@ const fetchOk = async (
 };
 
 /** Extract the stack-output URL the CLI prints on stdout. */
-const outputUrl = () =>
-  output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
+const outputUrl = () => output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
 
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.
@@ -114,11 +113,20 @@ afterAll(async () => {
     }
   }
   if (!process.env.NO_DESTROY) {
-    spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
-      cwd: root,
-      stdio: "inherit",
-      timeout: 120_000,
-    });
+    const destroyed = spawnSync(
+      "bun",
+      [alchemyBin, "destroy", "--stage", STAGE, "--yes"],
+      {
+        cwd: root,
+        stdio: "inherit",
+        timeout: 120_000,
+      },
+    );
+    if (destroyed.status !== 0) {
+      throw new Error(
+        `alchemy destroy exited ${destroyed.status} — local teardown must succeed`,
+      );
+    }
   }
 }, 180_000);
 

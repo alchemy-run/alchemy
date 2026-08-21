@@ -142,13 +142,11 @@ export const AssetsLive = Layer.effect(
           );
           return key;
         }).pipe(
-          Effect.mapError(
-            (err): AssetsError => ({
-              _tag: "AssetsUploadError",
-              message: `Failed to upload asset ${key}`,
-              cause: err,
-            }),
-          ),
+          Effect.mapError((err): AssetsError => ({
+            _tag: "AssetsUploadError",
+            message: `Failed to upload asset ${key}`,
+            cause: err,
+          })),
         );
       },
       hasAsset: Effect.fn(function* (hash: string) {
@@ -159,13 +157,11 @@ export const AssetsLive = Layer.effect(
           .pipe(
             Effect.map(() => true),
             Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.mapError(
-              (err): AssetsError => ({
-                _tag: "AssetsCheckError",
-                message: `Failed to check asset ${key}`,
-                cause: err,
-              }),
-            ),
+            Effect.mapError((err): AssetsError => ({
+              _tag: "AssetsCheckError",
+              message: `Failed to check asset ${key}`,
+              cause: err,
+            })),
           );
       }),
     };

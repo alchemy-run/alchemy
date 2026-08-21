@@ -163,6 +163,8 @@ export interface ConsumeRepositoryEventsOptions<
  *     ),
  * );
  * ```
+ *
+ * @binding
  */
 export function consumeRepositoryEvents<
   const E extends readonly RepositoryEventClass[] =

@@ -143,10 +143,14 @@ test.skipIf(!dockerAvailable)(
 
     // The first dev deploy builds the Api/SeedTask/Report images and pulls
     // the Web image before printing stack outputs.
-    const url = await pollUntil("url in stack outputs", () => outputUrl("url"), {
-      tries: 600,
-      delayMs: 1000,
-    });
+    const url = await pollUntil(
+      "url in stack outputs",
+      () => outputUrl("url"),
+      {
+        tries: 600,
+        delayMs: 1000,
+      },
+    );
     const apiUrl = await pollUntil("apiUrl in stack outputs", () =>
       outputUrl("apiUrl"),
     );

@@ -85,11 +85,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * The secret value is treated as redacted and is only ever sent to
  * Cloudflare at create time. Updating `scopes` or `comment` issues a
  * PATCH; changing `value` or `name` replaces the secret.
- * @resource
- * @product Secrets Store
- * @category Storage & Databases
- * @section Creating a Secret
- * @example Basic Secret
+ * ### Creating a Secret
+ * **Example:** Basic Secret
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
  * const apiKey = yield* Cloudflare.SecretsStore.Secret("ApiKey", {
@@ -98,8 +95,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Reading a secret at runtime
+ * ### Binding to a Worker
+ * **Example:** Reading a secret at runtime
  * ```typescript
  * const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(ApiKey);
  * // `apiKey` is itself an Effect that resolves to the secret value:
@@ -107,6 +104,10 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * // Or call `.get()` explicitly:
  * const value = yield* apiKey.get();
  * ```
+ *
+ * @resource
+ * @product Secrets Store
+ * @category Storage & Databases
  */
 export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret");
 
