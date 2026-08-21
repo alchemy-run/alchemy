@@ -112,6 +112,9 @@ jobs:
         with:
           ref: ${{ needs.build.outputs.sha }}
           fetch-depth: 0
+          # pnpm needs the distilled submodule (workspace member); the root
+          # `prepare` script also builds distilled/packages/cloudflare.
+          submodules: true
 
       - name: Setup pnpm, Node.js, Bun
         uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
