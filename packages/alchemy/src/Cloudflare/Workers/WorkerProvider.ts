@@ -3478,9 +3478,14 @@ export const LiveWorkerProvider = () =>
               previousClassName = observed.className;
             }
           }
-          // A class new to this script is a host move only when the
-          // declaration names a source that still owns its namespace.
-          // Otherwise it is a plain SQLite-backed create.
+          // A class new to this script is a host move when the declaration
+          // says so: `transferredFrom` lists the former host(s) — moves
+          // are always declared, never inferred, because a class deleted
+          // on one worker and created on another is otherwise ambiguous
+          // between "move the data" and "delete + fresh namespace". The
+          // declared source must be observed to still host the namespace;
+          // otherwise (fresh stage, transfer already completed) fall
+          // through to a plain create.
           const fromScript = !previousClassName
             ? dispatchNamespace
               ? undefined
