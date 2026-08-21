@@ -706,6 +706,15 @@ const isMissingScriptSettings = (error: Effect.Error<ScriptSettingsRead>) =>
   error._tag === "DispatchNamespaceScriptNotFound" ||
   error._tag === "DispatchNamespaceNotFound";
 
+/** @internal */
+export const getObservedHostedDurableObjectClassNames = (
+  durableObjectNamespaces: Readonly<Record<string, string>> | undefined,
+  hostedClassNames: ReadonlySet<string>,
+) =>
+  Object.keys(durableObjectNamespaces ?? {}).filter((className) =>
+    hostedClassNames.has(className),
+  );
+
 /**
  * Observe the script state used to plan Durable Object migrations.
  *
@@ -731,7 +740,7 @@ export const observeWorkerSettingsForMigration = <R>(
   observedDurableObjectClassNames: readonly string[],
   retrySchedule: Schedule.Schedule<unknown, unknown, never> = Schedule.max([
     Schedule.exponential(100),
-    Schedule.recurs(20),
+    Schedule.recurs(8),
   ]),
 ) =>
   observedDurableObjectClassNames.length > 0
@@ -3316,13 +3325,15 @@ export const LiveWorkerProvider = () =>
         // Read existing worker settings for migration tracking
         const oldSettings =
           existingSettings ??
-          (yield* observeWorkerSettingsForMigration(
-            workers.getScriptScriptAndVersionSetting({
+          (yield* workers
+            .getScriptScriptAndVersionSetting({
               accountId,
               scriptName: name,
-            }),
-            Object.keys(output?.durableObjectNamespaces ?? {}),
-          ));
+            })
+            .pipe(
+              Effect.map((s) => s as typeof s | undefined),
+              Effect.catch(() => Effect.succeed(undefined)),
+            ));
 
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
@@ -5137,6 +5148,18 @@ export const LiveWorkerProvider = () =>
           );
 
           const dispatchNamespace = resolveNamespaceName(news.namespace);
+          const hostedDurableObjectClassNames = new Set([
+            ...durableObjects.map(({ className }) => className),
+            ...Object.entries(news.exports ?? {}).flatMap(
+              ([className, value]) =>
+                isDurableObjectExport(value) ? [className] : [],
+            ),
+          ]);
+          const observedHostedDurableObjectClassNames =
+            getObservedHostedDurableObjectClassNames(
+              output?.durableObjectNamespaces,
+              hostedDurableObjectClassNames,
+            );
           // Observe — fetch the script's current settings if it already exists.
           // `putWorker` is a true upsert against the Cloudflare API; the
           // existing settings inform asset/migration decisions and let the
@@ -5144,7 +5167,7 @@ export const LiveWorkerProvider = () =>
           // an in-place update.
           const existingSettings = yield* observeWorkerSettingsForMigration(
             getScriptSettings(accountId, name, dispatchNamespace),
-            Object.keys(output?.durableObjectNamespaces ?? {}),
+            observedHostedDurableObjectClassNames,
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(

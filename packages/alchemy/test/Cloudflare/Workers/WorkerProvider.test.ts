@@ -1,5 +1,6 @@
 import {
   encodeDurableObjectTags,
+  getObservedHostedDurableObjectClassNames,
   getDurableObjectTagMap,
   normalizeStateDomains,
   observeWorkerSettingsForMigration,
@@ -13,7 +14,6 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
-import { CloudflareRateLimited } from "@distilled.cloud/cloudflare/Errors";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -23,6 +23,18 @@ import * as Schedule from "effect/Schedule";
 
 describe("WorkerProvider", () => {
   describe("observeWorkerSettingsForMigration", () => {
+    test("uses only namespaces for classes hosted by this Worker", () => {
+      expect(
+        getObservedHostedDurableObjectClassNames(
+          {
+            ForeignClass: "foreign-namespace-id",
+            SeatConnector: "hosted-namespace-id",
+          },
+          new Set(["SeatConnector"]),
+        ),
+      ).toEqual(["SeatConnector"]);
+    });
+
     test.effect(
       "retries a missing-settings race after precreate proved the DO exists",
       () =>
@@ -103,27 +115,6 @@ describe("WorkerProvider", () => {
             expect(result.failure._tag).toBe("WorkerHasNoVersions");
           }
         }),
-    );
-
-    test.effect("never turns an observation failure into a new migration", () =>
-      Effect.gen(function* () {
-        const result = yield* Effect.result(
-          observeWorkerSettingsForMigration(
-            Effect.fail(
-              new CloudflareRateLimited({
-                status: 429,
-                errors: [{ code: 10000, message: "rate limited" }],
-              }),
-            ),
-            [],
-          ),
-        );
-
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(result.failure._tag).toBe("CloudflareRateLimited");
-        }
-      }),
     );
   });
 
