@@ -260,74 +260,37 @@ before the container application that reads its name.
 
 ## Connect to a SQL database
 
-Hyperdrive is a *Worker* binding — `Cloudflare.Hyperdrive.Connect`
-only resolves inside a deployed Worker, and the same is true of
-`Prisma.Connect`. A container has neither, so it connects to
-Postgres or MySQL the ordinary way: a connection string over TCP.
-
-Give it the provider's **pooled** endpoint (Neon's pgbouncer URI,
-PlanetScale's PSBouncer URL, Prisma's pooled connection string) —
-nothing else is pooling those connections on the container's behalf:
+An **effectful** (`main`) container runs your Effect program, so it
+resolves a database capability the same way a Worker does — declare
+the connection once, then bind it:
 
 ```typescript
 // src/Db.ts
-import * as Neon from "alchemy/Neon";
+import * as Prisma from "alchemy/Prisma";
 import * as Effect from "effect/Effect";
 
-export const Db = Effect.gen(function* () {
-  const project = yield* Neon.Project("app-db", { region: "aws-us-east-1" });
-  const branch = yield* Neon.Branch("app-branch", { project });
-  return { project, branch };
+export const Connection = Effect.gen(function* () {
+  const project = yield* Prisma.Project("app", {
+    createDatabase: false,
+    region: "us-east-1",
+  });
+  const postgres = yield* Prisma.Postgres("db", {
+    project,
+    region: "us-east-1",
+  });
+  return yield* Prisma.Connection("api", { database: postgres });
 });
 ```
 
 ```typescript
-// src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { Db } from "./Db.ts";
-
-export class Api extends Cloudflare.Container<Api>()(
-  "Api",
-  Effect.gen(function* () {
-    const { branch } = yield* Db;
-    return {
-      context: `${import.meta.dirname}/api`,
-      ports: [{ name: "http", port: 8080 }],
-      env: {
-        DATABASE_URL: branch.pooledConnectionUri,
-        PORT: "8080",
-      },
-    };
-  }),
-) {}
-```
-
-Your image reads `DATABASE_URL` with whatever client it already
-uses — `pg`, Prisma, Rails, Django. Nothing about the container is
-alchemy-specific; only the value's provenance is.
-
-Then start it with outbound networking, or the container never
-reaches the database at all:
-
-```typescript
-Effect.provide(Cloudflare.Containers.layer(Api, { enableInternet: true }))
-```
-
-A Worker fronting the same database still binds Hyperdrive — see
-[Hyperdrive](/cloudflare/data/hyperdrive). The two coexist: point
-Hyperdrive at the *direct* origin (it pools for the Worker) and the
-container at the pooled one.
-
-## Bind a capability into an effectful container
-
-Everything above is manual env plumbing, which is what an arbitrary
-image needs — it knows nothing about alchemy. An **effectful**
-(`main`) container runs your Effect program, so it can resolve
-capabilities the same way a Worker does:
-
-```typescript
 // src/Api.runtime.ts
+import * as Prisma from "alchemy/Prisma";
+import * as SQL from "alchemy/SQL/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Api } from "./Api.ts";
+import { Connection } from "./Db.ts";
+
 export default Api.make(
   { main: import.meta.url },
   Effect.gen(function* () {
@@ -344,22 +307,74 @@ export default Api.make(
 );
 ```
 
-The container never sees a binding: it is a process, not a Worker.
-What it gets is environment variables — the capability writes them
-at deploy time and reads them back at runtime, so you never name
-`DATABASE_URL` yourself.
+You never name `DATABASE_URL`. The container has no bindings — it is
+a process, not a Worker — so `Prisma.Connect` writes the connection's
+outputs onto the deployment as environment variables and reads them
+back at runtime. The capability owns both ends.
 
-That divides capabilities cleanly in two. A capability whose config
-travels as env vars works in a container: `Prisma.Connect`, and the
+Start it with outbound networking, or the container never reaches the
+database at all:
+
+```typescript
+Effect.provide(Cloudflare.Containers.layer(Api, { enableInternet: true }))
+```
+
+## Connect an arbitrary image to a database
+
+An image you brought yourself knows nothing about alchemy, so there
+is no capability to bind — you name the variable and hand it the
+connection string. Give it the provider's **pooled** endpoint
+(Prisma's `databaseUrl` already prefers it; on Neon it is
+`branch.pooledConnectionUri`, on PlanetScale `role.connectionUrlPooled`),
+since nothing else is pooling those connections on the container's
+behalf:
+
+```typescript
+// src/Web.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { Connection } from "./Db.ts";
+
+export class Web extends Cloudflare.Container<Web>()(
+  "Web",
+  Effect.gen(function* () {
+    const connection = yield* Connection;
+    return {
+      context: `${import.meta.dirname}/web`,
+      ports: [{ name: "http", port: 8080 }],
+      env: {
+        DATABASE_URL: connection.databaseUrl,
+        PORT: "8080",
+      },
+    };
+  }),
+) {}
+```
+
+Your image reads `DATABASE_URL` with whatever client it already
+uses — `pg`, Prisma, Rails, Django. Nothing about the container is
+alchemy-specific; only the value's provenance is.
+
+A Worker fronting the same database still binds Hyperdrive — see
+[Hyperdrive](/cloudflare/data/hyperdrive). The two coexist: point
+Hyperdrive at the *direct* origin (it pools for the Worker) and the
+container at the pooled one.
+
+## Which capabilities reach a container
+
+The split follows the transport. A capability whose config travels as
+environment variables works in a container: `Prisma.Connect`, and the
 token-scoped HTTP clients for
 [R2](/cloudflare/data/r2), [KV](/cloudflare/data/kv), and
 [Queues](/cloudflare/messaging/queues) —
 `Cloudflare.R2.ReadWriteBucketHttp` and friends, which mint a scoped
-API token instead of using a native binding. A capability that *is*
-a workerd binding cannot: `Cloudflare.Hyperdrive.Connect`,
-`Cloudflare.D1.QueryDatabase`, and every `*Binding` layer resolve
-against the Workers runtime, which no container process has. Use the
-`*Http` layer where one exists, and env vars otherwise.
+API token instead of using a native binding.
+
+A capability that *is* a workerd binding cannot:
+`Cloudflare.Hyperdrive.Connect`, `Cloudflare.D1.QueryDatabase`, and
+every `*Binding` layer resolve against the Workers runtime, which no
+container process has. Use the `*Http` layer where one exists, and
+environment variables otherwise.
 
 ## Bind on an async Worker
 

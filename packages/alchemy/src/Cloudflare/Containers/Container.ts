@@ -462,27 +462,55 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ) {}
  * ```
  *
- * A SQL database works the same way. Hyperdrive is a *Worker* binding
- * (`Cloudflare.Hyperdrive.Connect` only resolves inside a deployed
- * Worker, as does `Prisma.Connect`), so a container connects over TCP
- * with the provider's **pooled** connection string instead.
+ * ### Database Connections
+ * An effectful (`main`) container runs your Effect program, so it
+ * resolves a database capability the same way a Worker does — you never
+ * name `DATABASE_URL`. The container has no bindings (it is a process,
+ * not a Worker), so `Prisma.Connect` writes the connection's outputs
+ * onto the deployment as environment variables and reads them back at
+ * runtime; the capability owns both ends.
  *
- * **Example:** Passing a pooled database URL to the container
+ * **Example:** Binding a Prisma connection inside the container runtime
  * ```typescript
- * export class Api extends Cloudflare.Container<Api>()(
- *   "Api",
+ * export default Api.make(
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const { branch } = yield* Db;
+ *     const db = yield* Prisma.Connect(Connection);
+ *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
+ *
+ *     return Api.of({
+ *       fetch: Effect.gen(function* () {
+ *         const users = yield* sql`SELECT * FROM users`;
+ *         return yield* HttpServerResponse.json(users);
+ *       }),
+ *     });
+ *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
+ * );
+ * ```
+ *
+ * An image you brought yourself knows nothing about alchemy, so there is
+ * no capability to bind — name the variable and hand it the provider's
+ * **pooled** connection string.
+ *
+ * **Example:** Passing a pooled database URL to an arbitrary image
+ * ```typescript
+ * export class Web extends Cloudflare.Container<Web>()(
+ *   "Web",
+ *   Effect.gen(function* () {
+ *     const connection = yield* Connection;
  *     return {
- *       context: `${import.meta.dirname}/api`,
- *       env: { DATABASE_URL: branch.pooledConnectionUri },
+ *       context: `${import.meta.dirname}/web`,
+ *       env: { DATABASE_URL: connection.databaseUrl },
  *     };
  *   }),
  * ) {}
  * ```
  *
- * Start it with `Cloudflare.Containers.layer(Api, { enableInternet: true })`
- * — without outbound networking the container never reaches the database.
+ * Either way, start it with
+ * `Cloudflare.Containers.layer(Api, { enableInternet: true })` — without
+ * outbound networking the container never reaches the database.
+ * `Cloudflare.Hyperdrive.Connect` is the one that cannot work here: it
+ * *is* a workerd binding, so no container process can resolve it.
  *
  * ### Stack-level wiring
  * The `.make()` `export default` is the side-effect that registers
