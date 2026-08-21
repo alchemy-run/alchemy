@@ -446,16 +446,28 @@ const createServerName = (
     );
   });
 
+/**
+ * Preinstall Bun so `Hetzner.Service`'s first deploy does not have to.
+ * Mirrors the SSH-side install in `./hosted.ts` — Ubuntu images ship curl
+ * but not unzip, and bun's installer needs both. Never fails the boot:
+ * `hosted.ts` installs Bun over SSH if this did not manage to.
+ */
 const ALCHEMY_BOOTSTRAP = `#!/bin/bash
 set -uo pipefail
 export HOME=/root
-command -v curl >/dev/null 2>&1 || {
-  apt-get update
+export BUN_INSTALL=/root/.bun
+export PATH="/root/.bun/bin:$PATH"
+if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+  apt-get update || true
   DEBIAN_FRONTEND=noninteractive apt-get install -y curl unzip ca-certificates || true
-}
-if [ ! -x /root/.bun/bin/bun ]; then
-  curl -fsSL https://bun.sh/install | bash || true
 fi
+if [ ! -x /root/.bun/bin/bun ]; then
+  for attempt in 1 2 3; do
+    curl -fsSL https://bun.sh/install | bash && break
+    sleep 5
+  done
+fi
+exit 0
 `;
 
 /** Hetzner rejects user data larger than 32 KiB. */
