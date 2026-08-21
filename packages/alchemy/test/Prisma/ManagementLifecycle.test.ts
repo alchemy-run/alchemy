@@ -26,6 +26,16 @@ import {
 } from "@/Prisma/SourceRepository";
 import * as Test from "@/Test/Alchemy";
 import { expect, it } from "alchemy-test";
+import {
+  conflict,
+  data,
+  type FakeManagementApi,
+  json,
+  makeFakeManagementApi,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -55,12 +65,35 @@ class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProvider
   "Prisma",
 ) {}
 
-const projectLayer = (client: PrismaManagementClient) =>
+const projectLayer = (
+  client: PrismaManagementClient,
+  fake: FakeManagementApi,
+) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaProject])).pipe(
     Layer.provideMerge(ProjectProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(fake.layer),
   );
+
+/** Wire serializers for the in-memory cloud's Types.ts-shaped records. */
+const toWireProject = (project: ApiProject) => ({
+  ...project,
+  logicalId: null,
+});
+
+const toWireDatabase = (database: ApiDatabase) => database;
+
+const toWireCreatedDatabase = (database: ApiDatabase) => ({
+  ...database,
+  apiKeys: [],
+  connectionString: "postgres://direct",
+  directConnection: {
+    host: "db.prisma.test",
+    user: "prisma",
+    pass: "secret",
+  },
+});
 
 const branchLayer = (client: PrismaManagementClient) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaBranch])).pipe(
@@ -449,8 +482,134 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
       }),
   } as unknown as PrismaManagementClient;
 
+  // The same in-memory cloud, served over the wire for the resources that
+  // call distilled operations instead of the client above.
+  const fake = makeFakeManagementApi((request) => {
+    const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+    if (request.pathname === "/v1/projects" && request.method === "GET") {
+      calls.push(["listProjects"]);
+      return page(
+        Array.from(projects.values()).map(currentProject).map(toWireProject),
+      );
+    }
+
+    if (request.pathname === "/v1/projects" && request.method === "POST") {
+      const input = request.bodyJson as {
+        name?: string;
+        region?: string;
+        createDatabase?: boolean;
+      };
+      calls.push(["createProject", input]);
+      const id = `project-${nextId++}`;
+      const project = apiProject(id, input.name ?? `project-${id}`, null);
+      projects.set(id, project);
+      const database =
+        input.createDatabase === false
+          ? null
+          : makeDatabase(project, { region: input.region, isDefault: true });
+      return data(
+        {
+          ...toWireProject(currentProject(project)),
+          database: database === null ? null : toWireCreatedDatabase(database),
+        },
+        { status: 201 },
+      );
+    }
+
+    if (segments.length === 3 && segments[1] === "projects") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
+        calls.push(["getProject", id]);
+        const stored = projects.get(id);
+        const project = stored
+          ? staleProjectReads > 0
+            ? {
+                ...currentProject(stored),
+                defaultRegion: staleProjectDefaultRegion,
+              }
+            : currentProject(stored)
+          : undefined;
+        if (staleProjectReads > 0) staleProjectReads -= 1;
+        return project === undefined
+          ? notFound("not found")
+          : data(toWireProject(project));
+      }
+      if (request.method === "PATCH") {
+        const input = request.bodyJson as {
+          name?: string;
+          settings?: Record<string, unknown>;
+        };
+        calls.push(["updateProject", { id, input }]);
+        const project = projects.get(id)!;
+        const updated = { ...project, name: input.name ?? project.name };
+        projects.set(id, updated);
+        return data(toWireProject(currentProject(updated)));
+      }
+      if (request.method === "DELETE") {
+        calls.push(["deleteProject", id]);
+        projects.delete(id);
+        for (const [databaseId, database] of databases) {
+          if (database.project.id === id) databases.delete(databaseId);
+        }
+        return json(null, { status: 204 });
+      }
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "projects" &&
+      segments[3] === "databases"
+    ) {
+      const projectId = segments[2]!;
+      if (request.method === "GET") {
+        calls.push(["listProjectDatabases", projectId]);
+        if (staleDatabaseLists > 0) {
+          staleDatabaseLists -= 1;
+          return page(staleDatabases.map(toWireDatabase));
+        }
+        return page(
+          Array.from(databases.values())
+            .filter((database) => database.project.id === projectId)
+            .map(toWireDatabase),
+        );
+      }
+      if (request.method === "POST") {
+        const input = request.bodyJson as {
+          region?: string;
+          isDefault?: boolean;
+        };
+        calls.push(["createProjectDatabase", { projectId, input }]);
+        if (conflictNextProjectDatabaseCreate) {
+          conflictNextProjectDatabaseCreate = false;
+          return conflict("default database promotion in progress");
+        }
+        const previousDefault = Array.from(databases.values()).find(
+          (database) => database.project.id === projectId && database.isDefault,
+        );
+        const created = makeDatabase(projects.get(projectId)!, input);
+        if (staleNextProjectDatabaseObservation) {
+          staleNextProjectDatabaseObservation = false;
+          staleProjectReads = 1;
+          staleProjectDefaultRegion = previousDefault?.region?.id ?? null;
+          staleDatabaseLists = 1;
+          staleDatabases = Array.from(databases.values())
+            .filter((database) => database.project.id === projectId)
+            .map((database) => ({
+              ...database,
+              isDefault: database.id === previousDefault?.id,
+            }));
+        }
+        return data(toWireCreatedDatabase(created), { status: 201 });
+      }
+    }
+
+    return unhandled(request);
+  });
+
   return {
     client,
+    fake,
     calls,
     databases,
     projects,
@@ -465,7 +624,9 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
 
 const foreignProject = apiProject("project-foreign", "app");
 const refusalCloud = makeProjectCloud([foreignProject]);
-const refusal = Test.make({ providers: projectLayer(refusalCloud.client) });
+const refusal = Test.make({
+  providers: projectLayer(refusalCloud.client, refusalCloud.fake),
+});
 
 refusal.test.provider(
   "Plan refuses cold adoption of a foreign Prisma project",
@@ -500,7 +661,10 @@ refusal.test.provider(
 
 const generatedProjectRecoveryCloud = makeProjectCloud();
 const generatedProjectRecovery = Test.make({
-  providers: projectLayer(generatedProjectRecoveryCloud.client),
+  providers: projectLayer(
+    generatedProjectRecoveryCloud.client,
+    generatedProjectRecoveryCloud.fake,
+  ),
 });
 
 generatedProjectRecovery.test.provider(
@@ -601,7 +765,7 @@ generatedProjectRecovery.test.provider(
 
 const adoptionCloud = makeProjectCloud([foreignProject]);
 const adoption = Test.make({
-  providers: projectLayer(adoptionCloud.client),
+  providers: projectLayer(adoptionCloud.client, adoptionCloud.fake),
   adopt: true,
 });
 
@@ -635,7 +799,7 @@ adoption.test.provider(
 
 const replacementCloud = makeProjectCloud();
 const replacement = Test.make({
-  providers: projectLayer(replacementCloud.client),
+  providers: projectLayer(replacementCloud.client, replacementCloud.fake),
 });
 
 replacement.test.provider(
@@ -686,7 +850,10 @@ replacement.test.provider(
 
 const eventuallyConsistentRegionCloud = makeProjectCloud();
 const eventuallyConsistentRegion = Test.make({
-  providers: projectLayer(eventuallyConsistentRegionCloud.client),
+  providers: projectLayer(
+    eventuallyConsistentRegionCloud.client,
+    eventuallyConsistentRegionCloud.fake,
+  ),
 });
 
 eventuallyConsistentRegion.test.provider(
@@ -735,7 +902,10 @@ eventuallyConsistentRegion.test.provider(
 
 const conflictingRegionCloud = makeProjectCloud();
 const conflictingRegion = Test.make({
-  providers: projectLayer(conflictingRegionCloud.client),
+  providers: projectLayer(
+    conflictingRegionCloud.client,
+    conflictingRegionCloud.fake,
+  ),
 });
 
 conflictingRegion.test.provider(
@@ -784,7 +954,7 @@ conflictingRegion.test.provider(
 
 const addDefaultCloud = makeProjectCloud();
 const addDefault = Test.make({
-  providers: projectLayer(addDefaultCloud.client),
+  providers: projectLayer(addDefaultCloud.client, addDefaultCloud.fake),
 });
 
 addDefault.test.provider(
@@ -826,7 +996,7 @@ addDefault.test.provider(
 
 const removeDefaultCloud = makeProjectCloud();
 const removeDefault = Test.make({
-  providers: projectLayer(removeDefaultCloud.client),
+  providers: projectLayer(removeDefaultCloud.client, removeDefaultCloud.fake),
 });
 
 removeDefault.test.provider(

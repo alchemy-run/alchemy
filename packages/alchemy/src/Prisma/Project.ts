@@ -1,3 +1,14 @@
+import {
+  type GetV1ProjectsByProjectIdDatabasesResponse,
+  type GetV1ProjectsResponse,
+  getV1Projects,
+  getV1ProjectsById,
+  getV1ProjectsByProjectIdDatabases,
+  patchV1ProjectsById,
+  postV1Projects,
+  postV1ProjectsByProjectIdDatabases,
+} from "@distilled.cloud/prisma-postgres/management";
+import { Retry } from "@distilled.cloud/prisma-postgres";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
@@ -8,27 +19,18 @@ import * as Provider from "../Provider.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
-import {
-  PrismaClient,
-  extractConnectionSecrets,
-  isConflict,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
+import { PrismaClient, extractConnectionSecrets } from "./Client.ts";
 import { destroyProjectApps } from "./ComputeLifecycle.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
+import type { ObservedDatabase, ObservedProject } from "./Internal/Observed.ts";
 import { isInputObject, isPrismaDevId } from "./Refs.ts";
 import type { Providers } from "./Providers.ts";
-import type {
-  Database,
-  PrismaSecretConnection,
-  PrismaRegionId,
-  Project as ApiProject,
-} from "./Types.ts";
+import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface ProjectProps {
   /**
@@ -156,10 +158,35 @@ export const Project = Resource<Project>("Prisma.Project");
 const createName = (id: string, name: string | undefined) =>
   name === undefined ? createPhysicalName({ id }) : Effect.succeed(name);
 
-const findProjectByName = (client: PrismaManagementClient, name: string) =>
-  client.listProjects().pipe(
+// Distilled emits the Management API's cursor-paginated list operations as
+// plain ops, so callers walk `pagination` themselves — the same shape the Neon
+// provider uses (see `src/Neon/Project.ts` findProjectByName).
+const listProjects = () =>
+  Effect.gen(function* () {
+    const projects: GetV1ProjectsResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getV1Projects(cursor === undefined ? {} : { cursor });
+      projects.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getV1Projects: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return projects;
+  });
+
+const findProjectByName = (name: string) =>
+  listProjects().pipe(
     Effect.flatMap((projects) => {
-      const matches = projects.filter((p: ApiProject) => p.name === name);
+      const matches = projects.filter((p) => p.name === name);
       return matches.length > 1
         ? Effect.fail(
             new Error(
@@ -177,11 +204,8 @@ const generatedProjectRecoverySchedule = Schedule.max([
   Schedule.recurs(6),
 ]);
 
-const recoverGeneratedProjectAfterConflict = (
-  client: PrismaManagementClient,
-  name: string,
-) =>
-  findProjectByName(client, name).pipe(
+const recoverGeneratedProjectAfterConflict = (name: string) =>
+  findProjectByName(name).pipe(
     Effect.flatMap((project) =>
       project
         ? Effect.succeed(project)
@@ -197,8 +221,35 @@ const recoverGeneratedProjectAfterConflict = (
     }),
   );
 
-const defaultDatabase = (client: PrismaManagementClient, projectId: string) =>
-  client.listProjectDatabases(projectId, { limit: 100 }).pipe(
+const listProjectDatabases = (projectId: string) =>
+  Effect.gen(function* () {
+    const databases: GetV1ProjectsByProjectIdDatabasesResponse["data"][number][] =
+      [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getV1ProjectsByProjectIdDatabases(
+        cursor === undefined
+          ? { projectId, limit: 100 }
+          : { projectId, limit: 100, cursor },
+      );
+      databases.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdDatabases: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return databases;
+  });
+
+const defaultDatabase = (projectId: string) =>
+  listProjectDatabases(projectId).pipe(
     Effect.flatMap((databases) => {
       const matches = databases.filter((db) => db.isDefault);
       return matches.length > 1
@@ -219,7 +270,7 @@ const defaultDatabaseConsistencySchedule = Schedule.max([
 ]);
 
 const requireDefaultDatabaseInRegion = (
-  database: ProjectDatabaseAttrs | undefined,
+  database: ObservedDatabase | undefined,
   projectName: string,
   desiredRegion: string,
 ) =>
@@ -233,30 +284,27 @@ const requireDefaultDatabaseInRegion = (
         ),
       );
 
-type ProjectDatabaseAttrs = Database;
+type ProjectDatabaseAttrs = ObservedDatabase;
 
 const observeDesiredDefaultDatabase = (
-  client: PrismaManagementClient,
   projectName: string,
   projectId: string,
   expectedDatabaseId: string,
   desiredRegion: string,
 ) =>
   Effect.gen(function* () {
-    const project = yield* client
-      .getProject(projectId)
-      .pipe(
-        Effect.catchIf(isNotFound, () =>
-          Effect.fail(
-            new DefaultDatabaseConsistencyError(
-              `Prisma project '${projectName}' (${projectId}) is not visible yet while verifying its new default database.`,
-            ),
+    const project = (yield* getV1ProjectsById({ id: projectId }).pipe(
+      Effect.catchTag("NotFound", () =>
+        Effect.fail(
+          new DefaultDatabaseConsistencyError(
+            `Prisma project '${projectName}' (${projectId}) is not visible yet while verifying its new default database.`,
           ),
         ),
-      );
+      ),
+    )).data;
     const database = yield* requireDefaultDatabaseInRegion(
-      yield* defaultDatabase(client, projectId).pipe(
-        Effect.catchIf(isNotFound, () =>
+      yield* defaultDatabase(projectId).pipe(
+        Effect.catchTag("NotFound", () =>
           Effect.fail(
             new DefaultDatabaseConsistencyError(
               `Prisma project '${projectName}' default database list is not visible yet.`,
@@ -290,8 +338,8 @@ const observeDesiredDefaultDatabase = (
   );
 
 const attrsFrom = (
-  project: ApiProject,
-  database: ProjectDatabaseAttrs | undefined,
+  project: ObservedProject,
+  database: ObservedDatabase | undefined,
   secrets: PrismaSecretConnection,
 ): Project["Attributes"] => ({
   projectId: project.id,
@@ -315,16 +363,18 @@ const ProviderLive = () =>
   Provider.effect(
     Project,
     Effect.gen(function* () {
+      // Only the delete path still needs the hand-rolled client: it delegates
+      // to destroyProjectApps, which D3 migrates along with ComputeLifecycle.
       const client = yield* PrismaClient;
       return {
         stables: ["projectId"],
         list: Effect.fn(function* () {
-          const projects = yield* client.listProjects();
+          const projects = yield* listProjects();
           return yield* Effect.forEach(
             projects,
             Effect.fn(function* (project) {
-              const database = yield* defaultDatabase(client, project.id).pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              const database = yield* defaultDatabase(project.id).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               );
               return attrsFrom(project, database, {});
             }),
@@ -421,18 +471,14 @@ const ProviderLive = () =>
             ? undefined
             : output?.projectId;
           const project = projectId
-            ? yield* client
-                .getProject(projectId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
-            : yield* findProjectByName(
-                client,
-                yield* createName(id, olds.name),
-              );
+            ? yield* getV1ProjectsById({ id: projectId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : yield* findProjectByName(yield* createName(id, olds.name));
           if (!project) return undefined;
-          const database = yield* defaultDatabase(client, project.id).pipe(
-            Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+          const database = yield* defaultDatabase(project.id).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
           const cachedSecrets =
             output?.databaseId === database?.id ? output : undefined;
@@ -457,14 +503,13 @@ const ProviderLive = () =>
           const outputProjectId = isPrismaDevId(output?.projectId)
             ? undefined
             : output?.projectId;
-          let project = outputProjectId
-            ? yield* client
-                .getProject(outputProjectId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+          let project: ObservedProject | undefined = outputProjectId
+            ? yield* getV1ProjectsById({ id: outputProjectId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : news.name === undefined
-              ? yield* findProjectByName(client, name)
+              ? yield* findProjectByName(name)
               : undefined;
 
           let createdDatabase: ProjectDatabaseAttrs | undefined;
@@ -472,54 +517,48 @@ const ProviderLive = () =>
           let createdProject = false;
           let recoverCreateSecrets = false;
           if (!project) {
-            const result = yield* client
-              .createProject({
-                name,
-                createDatabase: news.createDatabase ?? true,
-                region: news.region,
-              })
-              .pipe(
-                Effect.map((project) => ({
+            const result = yield* postV1Projects({
+              name,
+              createDatabase: news.createDatabase ?? true,
+              region: news.region,
+            }).pipe(
+              // A replayed create would make a second project; the retry
+              // policy cannot see the request, so opt out explicitly.
+              Retry.none,
+              Effect.map((response) => {
+                const project: ObservedProject = response.data;
+                return {
                   project,
-                  database:
-                    project.database === null
-                      ? undefined
-                      : {
-                          ...project.database,
-                          project: {
-                            id: project.id,
-                            url: project.url,
-                            name: project.name,
-                          },
-                        },
+                  database: response.data.database ?? undefined,
                   secrets: extractConnectionSecrets(
-                    project.database?.connections[0],
+                    response.data.database?.connections[0],
                   ),
                   created: true,
                   recoverSecrets: true,
-                })),
-                Effect.catchIf(isConflict, () =>
-                  news.name === undefined
-                    ? recoverGeneratedProjectAfterConflict(client, name).pipe(
-                        Effect.map((project) => ({
-                          project,
-                          database: undefined,
-                          secrets: {},
-                          // The generated physical name is owned by this
-                          // resource instance. Treat a conflict followed by an
-                          // exact read as lost-response recovery so write-only
-                          // default credentials are restored.
-                          created: false,
-                          recoverSecrets: true,
-                        })),
-                      )
-                    : Effect.fail(
-                        new Error(
-                          `Prisma project '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended project.`,
-                        ),
+                };
+              }),
+              Effect.catchTag("Conflict", () =>
+                news.name === undefined
+                  ? recoverGeneratedProjectAfterConflict(name).pipe(
+                      Effect.map((project) => ({
+                        project,
+                        database: undefined,
+                        secrets: {},
+                        // The generated physical name is owned by this
+                        // resource instance. Treat a conflict followed by an
+                        // exact read as lost-response recovery so write-only
+                        // default credentials are restored.
+                        created: false,
+                        recoverSecrets: true,
+                      })),
+                    )
+                  : Effect.fail(
+                      new Error(
+                        `Prisma project '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended project.`,
                       ),
-                ),
-              );
+                    ),
+              ),
+            );
             project = result.project;
             createdDatabase = result.database;
             secrets = result.secrets;
@@ -545,10 +584,9 @@ const ProviderLive = () =>
           }
 
           if (news.createDatabase === false && !createdProject) {
-            const existingDefault = yield* defaultDatabase(
-              client,
-              project.id,
-            ).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+            const existingDefault = yield* defaultDatabase(project.id).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            );
             if (existingDefault) {
               return yield* Effect.fail(
                 new Error(
@@ -566,18 +604,19 @@ const ProviderLive = () =>
           const settingsChanged =
             news.settings !== undefined || olds?.settings !== undefined;
           if (project.name !== name || settingsChanged) {
-            project = yield* client.updateProject(project.id, {
+            project = (yield* patchV1ProjectsById({
+              id: project.id,
               name,
               ...(settingsChanged ? { settings: news.settings ?? {} } : {}),
-            });
+            })).data;
           }
           const projectId = project.id;
 
           let database = createdDatabase;
           let defaultDatabaseChanged = false;
           if (news.createDatabase !== false && !database) {
-            database = yield* defaultDatabase(client, projectId).pipe(
-              Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+            database = yield* defaultDatabase(projectId).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             );
           }
 
@@ -592,14 +631,16 @@ const ProviderLive = () =>
             }
             if (!database) {
               defaultDatabaseChanged = true;
-              const created = yield* client
-                .createProjectDatabase(projectId, {
+              const created: ObservedDatabase =
+                yield* postV1ProjectsByProjectIdDatabases({
+                  projectId,
                   region: desiredRegion,
                   isDefault: true,
-                })
-                .pipe(
-                  Effect.catchIf(isConflict, () =>
-                    defaultDatabase(client, projectId).pipe(
+                }).pipe(
+                  Retry.none,
+                  Effect.map((response) => response.data),
+                  Effect.catchTag("Conflict", () =>
+                    defaultDatabase(projectId).pipe(
                       Effect.flatMap((database) =>
                         requireDefaultDatabaseInRegion(
                           database,
@@ -632,7 +673,6 @@ const ProviderLive = () =>
               );
             }
             const observed = yield* observeDesiredDefaultDatabase(
-              client,
               name,
               project.id,
               changedDatabaseId,

@@ -8,6 +8,7 @@ import {
 } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { Database, PrismaSecretConnection } from "../Types.ts";
+import type { ObservedDatabase } from "./Observed.ts";
 
 export const hasCanonicalConnectionSecrets = (
   secrets: PrismaSecretConnection,
@@ -67,7 +68,7 @@ const databaseCredentialsSchedule = Schedule.max([
 
 const waitForRotatableDatabase = (
   client: PrismaManagementClient,
-  database: Database,
+  database: ObservedDatabase,
 ) =>
   client.getDatabase(database.id).pipe(
     Effect.catchIf(isNotFound, () =>
@@ -103,9 +104,17 @@ const waitForRotatableDatabase = (
  * persistence. Prisma's ordinary database reads omit those values, so rotate
  * the observed default connection once when no canonical URL is available.
  */
-export const recoverDatabaseConnectionSecrets = Effect.fn(function* (
+export const recoverDatabaseConnectionSecrets: <D extends ObservedDatabase>(
   client: PrismaManagementClient,
-  initialDatabase: Database,
+  initialDatabase: D,
+  known: PrismaSecretConnection,
+) => Effect.Effect<
+  { database: D | Database; secrets: PrismaSecretConnection },
+  Error,
+  never
+> = Effect.fn(function* <D extends ObservedDatabase>(
+  client: PrismaManagementClient,
+  initialDatabase: D,
   known: PrismaSecretConnection,
 ) {
   if (initialDatabase.status === "failure") {
@@ -115,7 +124,7 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* (
       ),
     );
   }
-  let database = initialDatabase;
+  let database: D | Database = initialDatabase;
   const observedConnection =
     database.connections.find(
       (connection) => connection.id === database.defaultConnectionId,
