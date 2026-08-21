@@ -698,69 +698,6 @@ const getScriptSettings = (
     });
   });
 
-type ScriptSettingsRead = ReturnType<typeof getScriptSettings>;
-
-const isMissingScriptSettings = (error: Effect.Error<ScriptSettingsRead>) =>
-  error._tag === "WorkerNotFound" ||
-  error._tag === "WorkerHasNoVersions" ||
-  error._tag === "DispatchNamespaceScriptNotFound" ||
-  error._tag === "DispatchNamespaceNotFound";
-
-/** @internal */
-export const getObservedHostedDurableObjectClassNames = (
-  durableObjectNamespaces: Readonly<Record<string, string>> | undefined,
-  hostedClassNames: ReadonlySet<string>,
-) =>
-  Object.keys(durableObjectNamespaces ?? {}).filter((className) =>
-    hostedClassNames.has(className),
-  );
-
-/**
- * Observe the script state used to plan Durable Object migrations.
- *
- * A normal Worker is pre-created before reconcile. If that stub already
- * exposed a Durable Object namespace, a transient missing-settings response
- * cannot mean that the class is new: the precreate poll just proved it exists.
- * Retry that observation and fail closed if it never converges. Treating the
- * failed read as an absent Worker would emit `new_sqlite_classes` again and
- * Cloudflare rejects the duplicate create migration.
- *
- * Workers for Platforms user workers skip precreate. With no previously
- * observed Durable Object namespaces, a missing script is still a legitimate
- * greenfield create and remains `undefined`.
- *
- * @internal
- */
-export const observeWorkerSettingsForMigration = <R>(
-  read: Effect.Effect<
-    Effect.Success<ScriptSettingsRead>,
-    Effect.Error<ScriptSettingsRead>,
-    R
-  >,
-  observedDurableObjectClassNames: readonly string[],
-  retrySchedule: Schedule.Schedule<unknown, unknown, never> = Schedule.max([
-    Schedule.exponential(100),
-    Schedule.recurs(8),
-  ]),
-) =>
-  observedDurableObjectClassNames.length > 0
-    ? read.pipe(
-        Effect.retry({
-          while: isMissingScriptSettings,
-          schedule: retrySchedule,
-        }),
-      )
-    : read.pipe(
-        Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
-        Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
-          Effect.succeed(undefined),
-        ),
-        Effect.catchTag("DispatchNamespaceNotFound", () =>
-          Effect.succeed(undefined),
-        ),
-      );
-
 /**
  * Deploy-time binding validation rejects an upload whose bindings
  * reference a resource Cloudflare can't see (each resource type has
@@ -3335,7 +3272,11 @@ export const LiveWorkerProvider = () =>
               Effect.catch(() => Effect.succeed(undefined)),
             ));
 
-        const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
+        const oldTags = selectWorkerMigrationTags(
+          oldSettings,
+          output?.tags,
+          olds === undefined,
+        );
         const oldBindings = oldSettings?.bindings ?? [];
 
         // Parse the DO logical-id→class mapping from script tags (packed
@@ -5148,26 +5089,32 @@ export const LiveWorkerProvider = () =>
           );
 
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          const hostedDurableObjectClassNames = new Set([
-            ...durableObjects.map(({ className }) => className),
-            ...Object.entries(news.exports ?? {}).flatMap(
-              ([className, value]) =>
-                isDurableObjectExport(value) ? [className] : [],
-            ),
-          ]);
-          const observedHostedDurableObjectClassNames =
-            getObservedHostedDurableObjectClassNames(
-              output?.durableObjectNamespaces,
-              hostedDurableObjectClassNames,
-            );
           // Observe — fetch the script's current settings if it already exists.
           // `putWorker` is a true upsert against the Cloudflare API; the
           // existing settings inform asset/migration decisions and let the
           // reconciler converge whether the worker is brand-new, adopted, or
           // an in-place update.
-          const existingSettings = yield* observeWorkerSettingsForMigration(
-            getScriptSettings(accountId, name, dispatchNamespace),
-            observedHostedDurableObjectClassNames,
+          const existingSettings = yield* getScriptSettings(
+            accountId,
+            name,
+            dispatchNamespace,
+          ).pipe(
+            // After a pre-create stub (or under a busy account right after
+            // the first upload) the settings read can race the script
+            // registry and 404 with "has no versions". Treat it as "no
+            // existing settings" so reconcile proceeds to upload/converge.
+            // The dispatch-namespace endpoints raise
+            // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("WorkerHasNoVersions", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("DispatchNamespaceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(
@@ -5653,6 +5600,34 @@ export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
     }
   }
   return map;
+}
+
+/**
+ * Select the tags that describe the previous Durable Object migration state.
+ * Live settings are authoritative whenever they exist. During a create pass,
+ * a precreate stub may already have registered the classes even when its
+ * settings have not propagated yet, so its persisted tags are the fallback.
+ * Updates deliberately ignore cached tags when the Worker is missing so the
+ * normal upsert path can self-heal out-of-band deletion.
+ *
+ * @internal exported for unit testing.
+ */
+export function selectWorkerMigrationTags(
+  observedSettings:
+    | { readonly tags?: ReadonlyArray<string> | null }
+    | undefined,
+  precreatedTags: ReadonlyArray<string> | undefined,
+  isCreate: boolean,
+) {
+  return Array.from(
+    new Set(
+      observedSettings !== undefined
+        ? (observedSettings.tags ?? [])
+        : isCreate
+          ? (precreatedTags ?? [])
+          : [],
+    ),
+  );
 }
 
 const isDurableObjectTag = (tag: string) =>

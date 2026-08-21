@@ -1,9 +1,7 @@
 import {
   encodeDurableObjectTags,
-  getObservedHostedDurableObjectClassNames,
   getDurableObjectTagMap,
   normalizeStateDomains,
-  observeWorkerSettingsForMigration,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -11,111 +9,41 @@ import {
   shouldObserveWorkerCrons,
   shouldObserveWorkerDomains,
   shouldObserveWorkerRoutes,
+  selectWorkerMigrationTags,
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
-import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 describe("WorkerProvider", () => {
-  describe("observeWorkerSettingsForMigration", () => {
-    test("uses only namespaces for classes hosted by this Worker", () => {
-      expect(
-        getObservedHostedDurableObjectClassNames(
-          {
-            ForeignClass: "foreign-namespace-id",
-            SeatConnector: "hosted-namespace-id",
-          },
-          new Set(["SeatConnector"]),
-        ),
-      ).toEqual(["SeatConnector"]);
+  describe("selectWorkerMigrationTags", () => {
+    const precreatedTags = ["alchemy:dos:SeatConnector=SeatConnector"];
+
+    test("prevents a duplicate create migration when precreate settings are missing", () => {
+      const tags = selectWorkerMigrationTags(undefined, precreatedTags, true);
+
+      expect(getDurableObjectTagMap(tags)).toEqual({
+        SeatConnector: "SeatConnector",
+      });
     });
 
-    test.effect(
-      "retries a missing-settings race after precreate proved the DO exists",
-      () =>
-        Effect.gen(function* () {
-          const attempts = yield* Ref.make(0);
-          const observed = {
-            tags: ["alchemy:dos:SeatConnector=SeatConnector"],
-            bindings: [
-              {
-                type: "durable_object_namespace" as const,
-                name: "SeatConnector",
-                className: "SeatConnector",
-                namespaceId: "namespace-id",
-              },
-            ],
-          } satisfies workers.GetScriptScriptAndVersionSettingResponse;
-          const read = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
-            Effect.flatMap((attempt) =>
-              attempt === 1
-                ? Effect.fail(
-                    new workers.WorkerHasNoVersions({
-                      code: 10007,
-                      message: "Worker has no versions",
-                    }),
-                  )
-                : Effect.succeed(observed),
-            ),
-          );
+    test("keeps observed settings authoritative during create", () => {
+      const tags = selectWorkerMigrationTags(
+        { tags: [] },
+        precreatedTags,
+        true,
+      );
 
-          const settings = yield* observeWorkerSettingsForMigration(
-            read,
-            ["SeatConnector"],
-            Schedule.recurs(1),
-          );
+      expect(tags).toEqual([]);
+    });
 
-          expect(settings).toBe(observed);
-          expect(yield* Ref.get(attempts)).toBe(2);
-        }),
-    );
+    test("ignores cached tags on update when settings are missing", () => {
+      const tags = selectWorkerMigrationTags(undefined, precreatedTags, false);
 
-    test.effect(
-      "keeps a missing script as a greenfield create without a precreated DO",
-      () =>
-        Effect.gen(function* () {
-          const settings = yield* observeWorkerSettingsForMigration(
-            Effect.fail(
-              new workers.WorkerNotFound({
-                code: 10007,
-                message: "Worker not found",
-              }),
-            ),
-            [],
-          );
-
-          expect(settings).toBeUndefined();
-        }),
-    );
-
-    test.effect(
-      "fails closed when settings stay missing after a precreated DO",
-      () =>
-        Effect.gen(function* () {
-          const result = yield* Effect.result(
-            observeWorkerSettingsForMigration(
-              Effect.fail(
-                new workers.WorkerHasNoVersions({
-                  code: 10007,
-                  message: "Worker has no versions",
-                }),
-              ),
-              ["SeatConnector"],
-              Schedule.recurs(0),
-            ),
-          );
-
-          expect(Result.isFailure(result)).toBe(true);
-          if (Result.isFailure(result)) {
-            expect(result.failure._tag).toBe("WorkerHasNoVersions");
-          }
-        }),
-    );
+      expect(tags).toEqual([]);
+    });
   });
 
   describe("normalizeStateDomains", () => {
