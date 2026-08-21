@@ -1,0 +1,88 @@
+---
+title: Git
+description: Self-hosted git on Cloudflare Workers, Durable Objects, and R2 — assembled from swappable Effect layers into a Worker you own.
+---
+
+`@alchemy.run/git` is git hosting you run yourself: `git clone` and
+`git push` over smart HTTP, a typed REST plane, pull requests, and a
+GitHub-compatible API — deployed to your own Cloudflare account.
+
+It is a **service, not an appliance**. The package ships no Worker and
+no `main` function. Every component is an Effect `Context.Service` with
+swappable `Layer` implementations, and you assemble them into a Worker
+you control:
+
+```typescript
+import * as Git from "@alchemy.run/git";
+import * as Cloudflare from "alchemy/Cloudflare";
+
+const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),    // refs, objects, pull requests
+  Layer.provide(Git.RegistryDurableObject), // owner/name -> repoId
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs & clone bundles
+  Layer.provide(Git.AuthTokens),            // the minimal auth plugin
+);
+
+export default class GitHost extends Cloudflare.Worker<GitHost>()(
+  "git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+    return { fetch: git.fetch };
+  }).pipe(Effect.provide(GitLive)),
+) {}
+```
+
+That is the whole deployment. [Setup](/git/setup) walks it end to end,
+from an empty account to your first push.
+
+## Why blocks
+
+Because the interesting decisions are yours. Bytes live wherever you
+point them — R2, or S3 while compute stays on Cloudflare. Access
+control is a layer, so the bundled plugin gets you running and your own
+implementation replaces it without forking anything. And since you own
+the Worker, you own the HTTP surface: mount the git wire protocol
+publicly and put everything else behind your own routes.
+
+See [Building blocks](/git/blocks) for the graph, and
+[Authentication](/git/auth) for both halves of the auth story.
+
+## What you get
+
+**Git over HTTP.** Clone, incremental fetch, shallow clones, thin-pack
+push with full connectivity checking, atomic multi-ref pushes, and
+annotated tags. Standard clients, no extensions — see
+[Cloning & pushing](/git/clone-and-push).
+
+**A typed REST plane** at `/api/v1`, declared as an Effect `HttpApi`:
+repositories, refs with compare-and-swap writes, commit/tree/blob
+reads, and pull requests. See [Repositories](/git/repositories).
+
+**Pull requests** with server-side merge base, tree diffs, and
+fast-forward or three-way merges — [Pull requests](/git/pull-requests).
+
+**GitHub API compatibility** at `/api/v3`, so `gh api` and Octokit work
+against your host unmodified — [GitHub API
+compatibility](/git/github-api).
+
+## Proven on itself
+
+The alchemy monorepo hosts on it: full history, 44,051 objects, a
+67 MiB thin pack pushed in about 90 seconds and cloned back
+byte-identically under `git fsck --strict`. Push bodies stream rather
+than buffer, so push size is bounded by your storage, not by isolate
+memory. [Storage & maintenance](/git/storage) covers how objects are
+kept small over time.
+
+## Not a GitHub replacement
+
+There are no issues, reviews, comments, checks, or Actions — and no
+GraphQL, so `gh` porcelain commands like `gh pr create` do not work
+(`gh api` does). What it is: a git remote you own, with an API, that
+you can build on.
+
+Looking for the GitHub *provider* — managing repos, Actions secrets, and
+webhooks on github.com? That is [GitHub](/github).

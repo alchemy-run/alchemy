@@ -1070,6 +1070,20 @@ export default defineConfig({
           ],
         },
         {
+          label: "Git",
+          items: [
+            { label: "Overview", link: "/git" },
+            { label: "Setup", link: "/git/setup" },
+            { label: "Building blocks", link: "/git/blocks" },
+            { label: "Authentication", link: "/git/auth" },
+            { label: "Repositories", link: "/git/repositories" },
+            { label: "Cloning & pushing", link: "/git/clone-and-push" },
+            { label: "Pull requests", link: "/git/pull-requests" },
+            { label: "GitHub API compatibility", link: "/git/github-api" },
+            { label: "Storage & maintenance", link: "/git/storage" },
+          ],
+        },
+        {
           label: "Docker",
           items: [
             { label: "Overview", link: "/docker" },

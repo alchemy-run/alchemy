@@ -1,0 +1,174 @@
+---
+title: Authentication
+description: The bundled token plugin for a working host out of the box, and how to put your own authentication in front of it.
+---
+
+Access control has two halves, and which one you want depends on
+whether git-service is your whole product or a component inside it.
+
+**The bundled plugin** — `Git.AuthTokens` — gives you a working,
+secured host in one line. It knows about a deployer admin secret and
+per-repository tokens, and nothing else.
+
+**Your own** — the service is a service. You own the Worker and the
+HTTP surface, so your sessions, organizations, and roles live in your
+code, and git-service verifies the credentials your code decided to
+issue.
+
+Start with the plugin. Move to your own when you have users.
+
+## The bundled plugin
+
+Provide it in the layer graph and you are done:
+
+```typescript
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Git.AuthTokens),
+);
+```
+
+It recognizes two kinds of credential.
+
+**The admin secret**, read from `GIT_SERVICE_ADMIN_TOKEN` at deploy
+time and bound to the Worker as a secret. It manages repositories —
+create, fork, import, delete, and list every repo including private
+ones:
+
+```sh
+curl -X POST "$HOST/api/v1/repos" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner":"acme","name":"web","public":true}'
+```
+
+**Repository tokens**, prefixed `gs_`, scoped `read`, `write`, or
+`admin`, optionally expiring. These are what git clients use — the
+password field of an HTTPS remote:
+
+```sh
+git remote add origin "https://x:$TOKEN@$HOST/acme/web.git"
+```
+
+Creating a repository returns a `write` token so you can push
+immediately. Mint more against a repo, with a TTL, for CI:
+
+```sh
+curl -X POST "$HOST/api/v1/repos/acme/web/tokens" \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"ci","scope":"read","ttlSeconds":2592000}'
+```
+
+The secret is returned exactly once — only its SHA-256 is stored.
+
+### Public repositories
+
+A repo with `public: true` serves anonymous reads: REST reads, raw
+files, the ref advertisement, and `upload-pack`. `git clone` needs no
+credentials. Writes always need a token, and anonymous requests to
+private repos answer `401` with `WWW-Authenticate` so git prompts.
+
+### Where it stops
+
+The plugin has no notion of a user. There are no accounts, no
+organizations, no per-branch rules, and no way to say "Dana may push
+but Alex may not" — only "this token may write to this repo." That is
+deliberate: it is the smallest thing that makes a fresh deployment
+secure. Anything richer is the next section.
+
+## Bringing your own
+
+The service does not call out to your policy. You call in to it. Your
+Worker is the front door: you decide who is authenticated, and
+git-service honors the credentials you issued.
+
+The pattern is a **capability**. Your authenticated route decides
+whether the caller deserves git access, then mints a token scoped to
+one repository. Policy runs once, at issuance, in your code — not on
+every request through a callback:
+
+```typescript
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const TokenRoute = HttpRouter.add(
+  "POST",
+  "/repos/:owner/:name/tokens",
+  Effect.gen(function* () {
+    const { owner, name } = yield* HttpRouter.params;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+
+    // your auth, your rules — this example uses Better Auth
+    const auth = yield* BetterAuth;
+    const session = yield* auth.getSession(request.headers);
+    if (session === undefined) {
+      return HttpServerResponse.empty({ status: 401 });
+    }
+    if (!canPush(session.user, owner!)) {
+      return HttpServerResponse.empty({ status: 403 });
+    }
+
+    const git = yield* Git.Server;
+    const token = yield* git.issueToken({
+      repo: { owner: owner!, name: name! },
+      scope: "write",
+      subject: session.user.id,
+    });
+    return yield* HttpServerResponse.json(token);
+  }),
+);
+```
+
+`subject` is an opaque string you choose. git-service stores it and
+stamps it on pushes made with that token, so activity is attributed to
+your user without the service knowing what a user is.
+
+### Composing the routes
+
+`HttpRouter.add` returns a `Layer`, so your routes and the service's
+merge into one router:
+
+```typescript
+const Routes = Layer.mergeAll(
+  Git.WireRoutes, // git clients: verifies tokens itself, safe to expose
+  TokenRoute,     // yours
+  AuthRoutes,     // yours
+);
+
+export default class GitHost extends Cloudflare.Worker<GitHost>()(
+  "git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    return { fetch: yield* HttpRouter.toHttpEffect(Routes) };
+  }).pipe(Effect.provide(GitLive)),
+) {}
+```
+
+### What to expose, and what not to
+
+The distinction that matters:
+
+- **`Git.WireRoutes` is safe to expose publicly.** It talks to raw
+  `git` clients, which can only present HTTP Basic credentials, so it
+  verifies tokens itself and honors each repo's `public` flag.
+- **`Git.ApiRoutes` and the typed methods trust their caller.** They
+  assume they are already behind your front door. Mount the REST plane
+  only behind your own middleware, or skip it and call the methods from
+  your routes.
+
+Stated once: *anything a git client can reach verifies itself;
+everything else is behind your door.*
+
+Browsers follow the same rule. A single-page app holds a session
+cookie, not a git token — it calls your routes, and your routes call
+the service.
+
+### Attribution
+
+Commits already carry their own author and committer identity from the
+client, so pushes are attributed by git itself. `subject` covers the
+rest: which credential did this, mapped to whoever you say it is.

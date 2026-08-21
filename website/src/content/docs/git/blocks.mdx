@@ -1,0 +1,110 @@
+---
+title: Building blocks
+description: The layer graph behind a git host — what each block does, and how to replace one.
+---
+
+A git host is four decisions: where refs live, where names resolve,
+where bytes go, and who may do what. Each is a
+[Layer](/infrastructure-as-effects/layers), and you make all four in
+one graph:
+
+```typescript
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),    // refs, objects, pull requests
+  Layer.provide(Git.RegistryDurableObject), // owner/name -> repoId
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // bulk bytes
+  Layer.provide(Git.AuthTokens),            // access control
+);
+```
+
+One graph, one `Effect.provide`. Never a chain of `Effect.provide`
+calls — build the graph with `Layer.*` and provide it once.
+
+## `Git.Server`
+
+The top-level block: a `Context.Service` exposing the composed HTTP
+handler for all three planes — the git smart-HTTP wire, the typed REST
+API at `/api/v1`, and the [GitHub-compatible
+facade](/git/github-api) at `/api/v3`.
+
+```typescript
+Effect.gen(function* () {
+  const git = yield* Git.Server;
+  return { fetch: git.fetch };
+});
+```
+
+It is deliberately not a Worker. You construct the Worker, so you
+choose the name, the domain, the compatibility date, and what else runs
+alongside it.
+
+## `Git.ReposDurableObject`
+
+One Durable Object per repository, keyed by an internal id. It owns
+everything that must be consistent: refs, the object index, loose
+object bytes, tokens, the commit graph, and pull requests — all in the
+DO's SQLite.
+
+Refs live here because a git push is a compare-and-swap: the ref moved
+from the value the client expected, or the push is rejected. A single
+Durable Object gives that serialization for free, without a lock
+service. The wire protocol itself runs inside the DO, so a push's ref
+update is one `transactionSync`.
+
+## `Git.RegistryDurableObject`
+
+A singleton mapping `owner/name` to a repository id, enforcing
+uniqueness and serving listings. Listings render from denormalized
+columns so that listing a thousand repositories does not wake a
+thousand Durable Objects.
+
+The Worker caches resolutions in-isolate for a minute. A stale hit
+fails safe: each repo DO stores its own `owner/name` and rejects
+mismatched requests.
+
+## `Git.BlobStore`
+
+Bulk, immutable, content-addressed bytes: compacted packs, clone
+bundles, oversize objects, and spilled push bodies. The contract is
+exactly what the pack plane needs — ranged reads, whole-object writes,
+multipart writes of unknown length, delete, and prefix listing.
+
+Two implementations ship:
+
+```typescript
+Layer.provide(Git.BlobStoreR2(GitObjects))
+```
+
+```typescript
+Layer.provide(
+  Git.BlobStoreS3({ bucket: "my-git-objects", region: "us-east-1" }),
+)
+```
+
+`BlobStoreS3` speaks SigV4 over Effect's `HttpClient`, so it runs
+unchanged inside a Worker — compute on Cloudflare, bytes in S3, if
+that is where your data has to live. R2 remains the default for
+Cloudflare-hosted deployments: no egress fees and no cross-internet
+hop on the serving path.
+
+The package owns no bucket. You pass yours, and the one provided layer
+serves both places bytes are touched — the Worker streaming clone
+bundles, and the Durable Object reading and writing objects. See
+[Storage & maintenance](/git/storage).
+
+## `Git.AuthTokens`
+
+The bundled access-control plugin: a deployer admin secret plus
+per-repository scoped tokens. It is the smallest thing that makes a
+fresh deployment secure, and it is meant to be replaced once you have
+users. [Authentication](/git/auth) covers both halves.
+
+## Replacing a block
+
+Every block is a `Layer` producing a `Context.Service`, so swapping one
+is swapping a line. To move bytes to S3, change the `BlobStore` line —
+nothing else in the graph knows or cares.
+
+Blocks are also required, not optional: omit one and the graph fails to
+compile rather than failing at runtime. A missing `BlobStore` is a type
+error at build time, not a 500 on your first clone.

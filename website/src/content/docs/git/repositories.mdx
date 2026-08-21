@@ -1,0 +1,113 @@
+---
+title: Repositories
+description: Create, fork, import, and manage repositories over the typed REST plane.
+---
+
+Repositories are managed at `/api/v1/repos`, declared as an Effect
+`HttpApi` — so the same schema types the server, a generated client,
+and your tests.
+
+```typescript
+import { GitApi } from "@alchemy.run/git";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+
+const client = yield* HttpApiClient.make(GitApi, { baseUrl: host });
+
+const created = yield* client.repos.create({
+  payload: { owner: "acme", name: "web", public: true },
+});
+```
+
+Everything below is also plain HTTP — use `curl`, `fetch`, or the
+[GitHub-compatible facade](/git/github-api) if you already have
+Octokit code.
+
+## Creating
+
+```typescript
+yield* client.repos.create({
+  payload: {
+    owner: "acme",
+    name: "web",
+    description: "the marketing site",
+    defaultBranch: "main",   // defaults to "main"
+    public: true,            // defaults to false
+    readOnly: false,
+  },
+});
+```
+
+The response carries the repository, its clone URL, and a `write`
+token returned exactly once. A duplicate `owner/name` is a typed
+`RepoAlreadyExists` conflict.
+
+Owner and name are the public identity; internally the repo has a
+stable id, so renaming never moves data.
+
+## Visibility
+
+`public: true` serves anonymous reads — REST reads, raw files, the ref
+advertisement, and `upload-pack` — so `git clone` works with no
+credentials. Writes always need a token. Private repos answer `401`
+with `WWW-Authenticate` to anonymous callers, which is what makes git
+prompt for credentials rather than fail outright.
+
+Listings are visibility-filtered: the admin secret sees everything,
+everyone else sees public repos only.
+
+## Read-only
+
+`readOnly: true` rejects pushes in-band — the client gets a clear
+error on the ref rather than a transport failure. Useful for freezing
+a migrated repo or parking one you are decommissioning. It is a
+property of the repository, independent of who is asking.
+
+## Updating
+
+```typescript
+yield* client.repos.update({
+  params: { owner: "acme", repo: "web" },
+  payload: { description: "archived", readOnly: true },
+});
+```
+
+`defaultBranch` must name a branch that exists; pointing it at a
+missing ref is a typed `RefNotFound`.
+
+## Forking and importing
+
+Fork copies an existing repo server-side — no round trip through a
+client:
+
+```typescript
+yield* client.repos.fork({
+  params: { owner: "acme", repo: "web" },
+  payload: { targetOwner: "dana", targetName: "web" },
+});
+```
+
+Import pulls from any public git URL. Both return immediately with
+`status: "importing"`; poll `repos.get` until it reads `"ready"`.
+
+## Deleting
+
+```typescript
+yield* client.repos.delete({ params: { owner: "acme", repo: "web" } });
+```
+
+Delete answers `204` immediately and purges in the background: the
+name is released, and the repository's objects and blobs drain through
+a scheduled job. A second delete during the drain is an idempotent
+`204`, and re-issuing it re-arms a purge whose alarm was lost. Reads
+of a draining repo behave as if it were already gone.
+
+## Listing
+
+```typescript
+const page = yield* client.repos.list({ query: { owner: "acme" } });
+```
+
+Paginated with an opaque cursor. Listings come from the registry's
+denormalized columns rather than waking one Durable Object per row, so
+they stay flat as the account grows — object counts read as zero here.
+Fetch a repository directly for live stats.

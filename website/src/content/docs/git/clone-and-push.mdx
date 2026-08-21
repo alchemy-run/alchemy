@@ -1,0 +1,85 @@
+---
+title: Cloning & pushing
+description: The git wire protocol — what is supported, how credentials work, and how large pushes are handled.
+---
+
+The service speaks git's smart HTTP protocol. Standard clients work
+unmodified: no extensions, no wrapper CLI, no special configuration.
+
+```sh
+git clone "https://$HOST/acme/web.git"
+```
+
+## Credentials
+
+Tokens go in the password field of the remote URL. The username is
+ignored by convention, so any placeholder works:
+
+```sh
+git remote add origin "https://x:gs_YOUR_TOKEN@$HOST/acme/web.git"
+```
+
+For a public repository, reads need no credentials at all. To avoid
+putting a secret in `.git/config`, use a credential helper and let git
+prompt — an anonymous request to a private repo answers `401` with
+`WWW-Authenticate`, which is exactly the trigger git needs.
+
+See [Authentication](/git/auth) for minting tokens.
+
+## What is supported
+
+| Capability | Notes |
+| --- | --- |
+| Clone | Full clones served from a precomputed bundle when one is current |
+| Incremental fetch | `multi_ack_detailed` with `no-done` negotiation |
+| Shallow clone | `--depth`, including deepening a shallow clone |
+| Push | Thin packs with offset and reference deltas |
+| Atomic push | All refs move or none do |
+| Force push | Compare-and-swap on the old value |
+| Tags | Lightweight and annotated, with peeled advertisement |
+| Status reporting | `report-status` and `report-status-v2`, side-band |
+
+Every push runs a full connectivity check: the objects it references
+must already exist or arrive in the same pack, so a repository cannot
+be left with dangling references.
+
+Protocol v0 only. Clients that prefer v2 negotiate down automatically.
+
+## Large pushes
+
+Push size is not capped. The request body is streamed rather than
+buffered — up to 50 MiB stays in memory, and beyond that the body
+spills to blob storage through a multipart upload as it arrives, then
+parses back through bounded windows. Peak memory is roughly the
+threshold plus one part, whatever the push size.
+
+This matters more than it sounds: buffering the body of a large push
+exhausts an isolate's memory outright. The alchemy monorepo — 44,051
+objects in a 67 MiB thin pack — pushes in about 90 seconds and clones
+back byte-identical under `git fsck --strict`.
+
+## Clone performance
+
+A full clone of a repository whose refs have not moved is served from
+a precomputed bundle in blob storage, streamed by the Worker. The pack
+bytes never pass through the Durable Object, so concurrent clones
+scale with Workers and object storage rather than with one
+single-threaded object.
+
+When no current bundle exists — refs moved since the last one was cut
+— the clone is assembled dynamically, and a fresh bundle is scheduled.
+Incremental fetches always take the dynamic path; they are small by
+nature. See [Storage & maintenance](/git/storage).
+
+## Troubleshooting
+
+**Authentication prompts in a script.** Set `GIT_TERMINAL_PROMPT=0` so
+a missing credential fails immediately instead of hanging.
+
+**`git push` rejected with a ref message.** In-band rejections are the
+protocol working: a non-fast-forward, a stale compare-and-swap, or a
+read-only repository. The message names the ref.
+
+**A hung clone over a proxy.** The wire endpoints must be forwarded
+verbatim, preserving the request body stream and the `Host` header.
+Buffering proxies break streaming pushes.
