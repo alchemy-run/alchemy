@@ -103,6 +103,23 @@ const RegistryDigest = Schema.String.pipe(
 );
 const isRegistryDigest = Schema.is(RegistryDigest);
 
+class ContainerRegistryError extends Schema.TaggedError<ContainerRegistryError>()(
+  "ContainerRegistryError",
+  {
+    reason: Schema.Literals([
+      "CredentialsMissingUsername",
+      "ImageOutsideRegistry",
+      "InvalidImageReference",
+      "ManifestRequestFailed",
+      "InvalidManifestDigest",
+      "PushDigestMissing",
+    ]),
+    message: Schema.String,
+    imageRef: Schema.optional(Schema.String),
+    cause: Schema.optional(Schema.Defect({ includeStack: true })),
+  },
+) {}
+
 const digestFromImageRef = (imageRef: string) => {
   const separator = imageRef.lastIndexOf("@");
   if (separator === -1) return undefined;
@@ -118,6 +135,7 @@ export const LiveContainerProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const docker = yield* Docker;
+      const http = yield* HttpClient.HttpClient;
 
       const telemetry = yield* CloudflareLogs;
 
@@ -221,18 +239,21 @@ export const LiveContainerProvider = () =>
         constraints: props.constraints ?? {},
       });
 
-      const applicationConfigurationHash = (
+      const applicationConfigurationHash = Effect.fn(
+        "applicationConfigurationHash",
+      )(function* (
         scaling: ReturnType<typeof scalingDefaults>,
         affinities: ContainerApplication.Affinities | undefined,
         configuration: ContainerApplication.Configuration,
-      ) =>
-        sha256Object({
+      ) {
+        return yield* sha256Object({
           scaling,
           affinities: normalizeNulls(affinities),
           configuration,
         });
+      });
 
-      const registryCredentials = Effect.fn(function* (
+      const registryCredentials = Effect.fn("registryCredentials")(function* (
         props: AnyContainerApplicationProps,
         permissions: Array<"pull" | "push">,
       ) {
@@ -245,17 +266,12 @@ export const LiveContainerProvider = () =>
             permissions,
             expirationMinutes: 60,
           });
-        const username =
-          credentials.username ??
-          ("user" in credentials && typeof credentials.user === "string"
-            ? credentials.user
-            : undefined);
+        const username = credentials.username ?? credentials.user;
         if (!username) {
-          return yield* Effect.fail(
-            new Error(
-              "Cloudflare registry credentials did not include a username.",
-            ),
-          );
+          return yield* new ContainerRegistryError({
+            reason: "CredentialsMissingUsername",
+            message: `Cloudflare registry ${registryId} did not return a username`,
+          });
         }
         return {
           server: registryId,
@@ -264,44 +280,44 @@ export const LiveContainerProvider = () =>
         };
       });
 
-      const resolveRegistryDigest = Effect.fn(function* (
-        imageRef: string,
-        credentials: {
-          server: string;
-          username: string;
-          password: string | Redacted.Redacted<string>;
-        },
-      ) {
-        const embeddedDigest = digestFromImageRef(imageRef);
-        if (embeddedDigest !== undefined) return embeddedDigest;
+      const resolveRegistryDigest = Effect.fn("resolveRegistryDigest")(
+        function* (
+          imageRef: string,
+          credentials: {
+            server: string;
+            username: string;
+            password: string | Redacted.Redacted<string>;
+          },
+        ) {
+          const embeddedDigest = digestFromImageRef(imageRef);
+          if (embeddedDigest !== undefined) return embeddedDigest;
 
-        const registryHost = credentials.server
-          .replace(/^https?:\/\//, "")
-          .replace(/\/$/, "");
-        if (!imageRef.startsWith(`${registryHost}/`)) {
-          return yield* Effect.fail(
-            new Error(
-              `Cannot resolve the digest for image outside ${registryHost}: ${imageRef}`,
-            ),
-          );
-        }
-        const repositoryAndTag = imageRef.slice(registryHost.length + 1);
-        const tagSeparator = repositoryAndTag.lastIndexOf(":");
-        if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
-          return yield* Effect.fail(
-            new Error(
-              `Container image reference has no tag or digest: ${imageRef}`,
-            ),
-          );
-        }
-        const repository = repositoryAndTag.slice(0, tagSeparator);
-        const tag = repositoryAndTag.slice(tagSeparator + 1);
-        const manifestUrl = `https://${registryHost}/v2/${repository
-          .split("/")
-          .map(encodeURIComponent)
-          .join("/")}/manifests/${encodeURIComponent(tag)}`;
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.head(manifestUrl).pipe(
+          const registryHost = credentials.server
+            .replace(/^https?:\/\//, "")
+            .replace(/\/$/, "");
+          if (!imageRef.startsWith(`${registryHost}/`)) {
+            return yield* new ContainerRegistryError({
+              reason: "ImageOutsideRegistry",
+              message: `Cannot resolve an image outside registry ${registryHost}`,
+              imageRef,
+            });
+          }
+          const repositoryAndTag = imageRef.slice(registryHost.length + 1);
+          const tagSeparator = repositoryAndTag.lastIndexOf(":");
+          if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
+            return yield* new ContainerRegistryError({
+              reason: "InvalidImageReference",
+              message: "Container image reference has no tag or digest",
+              imageRef,
+            });
+          }
+          const repository = repositoryAndTag.slice(0, tagSeparator);
+          const tag = repositoryAndTag.slice(tagSeparator + 1);
+          const manifestUrl = `https://${registryHost}/v2/${repository
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/")}/manifests/${encodeURIComponent(tag)}`;
+          const request = HttpClientRequest.head(manifestUrl).pipe(
             HttpClientRequest.basicAuth(
               credentials.username,
               credentials.password,
@@ -310,39 +326,48 @@ export const LiveContainerProvider = () =>
               "Accept",
               "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
             ),
-          ),
-        ).pipe(
-          Effect.flatMap(HttpClientResponse.filterStatusOk),
-          Effect.mapError(
-            (cause) =>
-              new Error(
-                `Failed to resolve the registry digest for ${imageRef}`,
-                { cause },
-              ),
-          ),
-        );
-        const digest = response.headers["docker-content-digest"];
-        if (digest === undefined || !isRegistryDigest(digest)) {
-          return yield* Effect.fail(
-            new Error(
-              `Registry response did not include a valid digest for ${imageRef}`,
+          );
+          const response = yield* http.execute(request).pipe(
+            Effect.flatMap(HttpClientResponse.filterStatusOk),
+            Effect.mapError(
+              (cause) =>
+                new ContainerRegistryError({
+                  reason: "ManifestRequestFailed",
+                  message: "Failed to resolve the container registry digest",
+                  imageRef,
+                  cause,
+                }),
             ),
           );
-        }
-        return digest;
-      });
+          return yield* Schema.decodeUnknownEffect(RegistryDigest)(
+            response.headers["docker-content-digest"],
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ContainerRegistryError({
+                  reason: "InvalidManifestDigest",
+                  message: "Registry response did not include a valid digest",
+                  imageRef,
+                  cause,
+                }),
+            ),
+          );
+        },
+      );
 
-      const resolvePublishedImageRef = Effect.fn(function* (
-        props: AnyContainerApplicationProps,
-        imageRef: string,
-      ) {
-        const credentials = yield* registryCredentials(props, ["pull"]);
-        const digest = yield* resolveRegistryDigest(imageRef, credentials);
-        return {
-          imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
-          digest,
-        };
-      });
+      const resolvePublishedImageRef = Effect.fn("resolvePublishedImageRef")(
+        function* (props: AnyContainerApplicationProps, imageRef: string) {
+          let digest = digestFromImageRef(imageRef);
+          if (digest === undefined) {
+            const credentials = yield* registryCredentials(props, ["pull"]);
+            digest = yield* resolveRegistryDigest(imageRef, credentials);
+          }
+          return {
+            imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
+            digest,
+          };
+        },
+      );
 
       const computeImage = Effect.fn(function* (
         id: string,
@@ -498,7 +523,7 @@ export const LiveContainerProvider = () =>
         };
       });
 
-      const buildAndPushImage = Effect.fn(function* (
+      const buildAndPushImage = Effect.fn("buildAndPushImage")(function* (
         id: string,
         props: AnyContainerApplicationProps,
         build: ImageBuild,
@@ -640,11 +665,11 @@ export const LiveContainerProvider = () =>
             ? yield* resolveRegistryDigest(imageRef, credentials)
             : digestFromImageRef(parsedImageRef);
         if (digest === undefined) {
-          return yield* Effect.fail(
-            new Error(
-              `Container registry push did not produce a digest for ${imageRef}`,
-            ),
-          );
+          return yield* new ContainerRegistryError({
+            reason: "PushDigestMissing",
+            message: "Container registry push did not produce a digest",
+            imageRef,
+          });
         }
         return {
           imageRef:
