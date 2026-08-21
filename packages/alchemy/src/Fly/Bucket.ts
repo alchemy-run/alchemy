@@ -422,7 +422,10 @@ const toAttrs = (
     name,
     status: addOn.status ?? undefined,
     orgSlug,
-    public: options.public === true,
+    public:
+      typeof options.public === "boolean"
+        ? options.public
+        : (previous?.public ?? false),
     domainName: websiteDomain(options),
     accelerate: options.accelerate === true,
     ssoLink: addOn.ssoLink ?? undefined,
@@ -725,7 +728,23 @@ export const BucketProvider = () =>
       }
 
       const latest = (yield* findById(current.id)) ?? current;
-      return toAttrs(latest, output, { name, orgSlug });
+      const attrs = toAttrs(latest, output, { name, orgSlug });
+      const observedPublic = asRecord(latest.options).public;
+      return {
+        ...attrs,
+        public:
+          typeof observedPublic === "boolean"
+            ? observedPublic
+            : (props.public ?? attrs.public),
+        domainName:
+          websiteDomain(asRecord(latest.options)) ??
+          props.domainName ??
+          attrs.domainName,
+        accelerate:
+          typeof asRecord(latest.options).accelerate === "boolean"
+            ? (asRecord(latest.options).accelerate as boolean)
+            : (props.accelerate ?? attrs.accelerate),
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -764,9 +783,18 @@ const toName = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
 const readAttr = (value: unknown): Effect.Effect<unknown> =>
-  Effect.isEffect(value)
-    ? (value as Effect.Effect<unknown>)
-    : Effect.succeed(value);
+  Effect.gen(function* () {
+    if (
+      value == null ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      Redacted.isRedacted(value)
+    ) {
+      return value;
+    }
+    return yield* value as Effect.Effect<unknown>;
+  });
 
 const secretValueOf = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -847,7 +875,22 @@ export const attachBucketSecrets = Effect.fn(function* (
   for (const item of attached) {
     const name = item.name;
     if (name.length === 0) continue;
-    const row = yield* findByName(name);
+    const listed = yield* findByName(name);
+    const detail =
+      listed !== undefined
+        ? yield* Services.addons
+            .addOn({
+              id: listed.id,
+              name,
+              provider: TIGRIS,
+            })
+            .pipe(
+              Effect.catchTag("FlyIoParseError", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+        : undefined;
+    const row = detail ?? listed;
     if (row === undefined) continue;
     yield* putSecretValues(appName, envValuesOf(row));
   }
