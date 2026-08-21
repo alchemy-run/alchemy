@@ -50,7 +50,7 @@ One `ReadWriteBucket(Bucket)` call wires the binding, env var, and typed client 
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
 
 ```sh
-bun add alchemy@next effect@next
+bun add alchemy@latest effect@next
 ```
 
 ## GitHub Action
