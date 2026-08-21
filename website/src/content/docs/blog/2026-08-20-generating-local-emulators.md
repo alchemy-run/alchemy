@@ -80,6 +80,10 @@ buffered the stream, the test went red, the fix landed in the
 fork, and streaming now behaves the same locally as in
 `us-east-1`.
 
+The same goes for coverage gaps. Some operations in floci throw
+`UnsupportedOperation`. We never work around one in alchemy; we
+patch floci to support the operation. We're strict about this.
+
 ## Results
 
 The first convergence run took the 13-service suite from **253
