@@ -738,6 +738,7 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     hash?: {
       image: string;
+      digest?: string;
     };
     dev: DevContainerImage | undefined;
   },

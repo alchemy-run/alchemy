@@ -3,13 +3,21 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
+import {
+  parseRepoDigest,
+  repositoryFromImageRef,
+} from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -88,6 +96,18 @@ const normalizePrepushedRef = (
   return first !== undefined && /^[a-f0-9]{32}$/.test(first)
     ? image
     : `${registryId}/${accountId}/${rest}`;
+};
+
+const RegistryDigest = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^[a-z0-9]+:[a-f0-9]{64}$/i)),
+);
+const isRegistryDigest = Schema.is(RegistryDigest);
+
+const digestFromImageRef = (imageRef: string) => {
+  const separator = imageRef.lastIndexOf("@");
+  if (separator === -1) return undefined;
+  const digest = imageRef.slice(separator + 1);
+  return isRegistryDigest(digest) ? digest : undefined;
 };
 
 export const LiveContainerProvider = () =>
@@ -199,6 +219,163 @@ export const LiveContainerProvider = () =>
         maxInstances: props.maxInstances ?? 20,
         schedulingPolicy: props.schedulingPolicy ?? "default",
         constraints: props.constraints ?? {},
+      });
+
+      const containsConfiguredValue = (
+        actual: unknown,
+        configured: unknown,
+      ): boolean => {
+        if (Array.isArray(configured)) return deepEqual(actual, configured);
+        if (configured !== null && typeof configured === "object") {
+          if (
+            actual === null ||
+            typeof actual !== "object" ||
+            Array.isArray(actual)
+          ) {
+            return false;
+          }
+          return Object.entries(configured).every(([key, value]) =>
+            containsConfiguredValue(
+              (actual as Record<string, unknown>)[key],
+              value,
+            ),
+          );
+        }
+        return deepEqual(actual, configured);
+      };
+
+      const hasSameApplicationConfiguration = (
+        existing: ContainerApplication["Attributes"],
+        props: AnyContainerApplicationProps,
+        scaling: ReturnType<typeof scalingDefaults>,
+        affinities: ContainerApplication.Affinities | undefined,
+        configuration: ContainerApplication.Configuration,
+      ) =>
+        // Durable Object applications report their current autoscaled instance
+        // count here, not the zero requested for scale-from-zero. Only treat it
+        // as configuration when callers explicitly set a fixed count.
+        (props.instances === undefined ||
+          existing.instances === scaling.instances) &&
+        existing.maxInstances === scaling.maxInstances &&
+        existing.schedulingPolicy === scaling.schedulingPolicy &&
+        deepEqual(existing.constraints, scaling.constraints) &&
+        deepEqual(existing.affinities, normalizeNulls(affinities)) &&
+        // Cloudflare enriches the response with defaults and aliases such as
+        // runtime, network, memory, disk.sizeMb, command, and entrypoint. Match
+        // every field Alchemy configured while ignoring those server-owned
+        // additions, otherwise every apply sends a semantically empty update.
+        containsConfiguredValue(existing.configuration, configuration);
+
+      const registryCredentials = Effect.fn(function* (
+        props: AnyContainerApplicationProps,
+        permissions: Array<"pull" | "push">,
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const registryId = props.registryId ?? "registry.cloudflare.com";
+        const credentials =
+          yield* Containers.createContainerRegistryCredentials({
+            accountId,
+            registryId,
+            permissions,
+            expirationMinutes: 60,
+          });
+        const username =
+          credentials.username ??
+          ("user" in credentials && typeof credentials.user === "string"
+            ? credentials.user
+            : undefined);
+        if (!username) {
+          return yield* Effect.fail(
+            new Error(
+              "Cloudflare registry credentials did not include a username.",
+            ),
+          );
+        }
+        return {
+          server: registryId,
+          username,
+          password: credentials.password,
+        };
+      });
+
+      const resolveRegistryDigest = Effect.fn(function* (
+        imageRef: string,
+        credentials: {
+          server: string;
+          username: string;
+          password: string | Redacted.Redacted<string>;
+        },
+      ) {
+        const embeddedDigest = digestFromImageRef(imageRef);
+        if (embeddedDigest !== undefined) return embeddedDigest;
+
+        const registryHost = credentials.server
+          .replace(/^https?:\/\//, "")
+          .replace(/\/$/, "");
+        if (!imageRef.startsWith(`${registryHost}/`)) {
+          return yield* Effect.fail(
+            new Error(
+              `Cannot resolve the digest for image outside ${registryHost}: ${imageRef}`,
+            ),
+          );
+        }
+        const repositoryAndTag = imageRef.slice(registryHost.length + 1);
+        const tagSeparator = repositoryAndTag.lastIndexOf(":");
+        if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
+          return yield* Effect.fail(
+            new Error(
+              `Container image reference has no tag or digest: ${imageRef}`,
+            ),
+          );
+        }
+        const repository = repositoryAndTag.slice(0, tagSeparator);
+        const tag = repositoryAndTag.slice(tagSeparator + 1);
+        const manifestUrl = `https://${registryHost}/v2/${repository
+          .split("/")
+          .map(encodeURIComponent)
+          .join("/")}/manifests/${encodeURIComponent(tag)}`;
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.head(manifestUrl).pipe(
+            HttpClientRequest.basicAuth(
+              credentials.username,
+              credentials.password,
+            ),
+            HttpClientRequest.setHeader(
+              "Accept",
+              "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+            ),
+          ),
+        ).pipe(
+          Effect.flatMap(HttpClientResponse.filterStatusOk),
+          Effect.mapError(
+            (cause) =>
+              new Error(
+                `Failed to resolve the registry digest for ${imageRef}`,
+                { cause },
+              ),
+          ),
+        );
+        const digest = response.headers["docker-content-digest"];
+        if (digest === undefined || !isRegistryDigest(digest)) {
+          return yield* Effect.fail(
+            new Error(
+              `Registry response did not include a valid digest for ${imageRef}`,
+            ),
+          );
+        }
+        return digest;
+      });
+
+      const resolvePublishedImageRef = Effect.fn(function* (
+        props: AnyContainerApplicationProps,
+        imageRef: string,
+      ) {
+        const credentials = yield* registryCredentials(props, ["pull"]);
+        const digest = yield* resolveRegistryDigest(imageRef, credentials);
+        return {
+          imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
+          digest,
+        };
       });
 
       const computeImage = Effect.fn(function* (
@@ -360,9 +537,9 @@ export const LiveContainerProvider = () =>
         props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
+        previousImageRef: string | undefined,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
         const platform = "linux/amd64";
 
         if (build.kind === "prepushed") {
@@ -371,7 +548,15 @@ export const LiveContainerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Container image: using pre-pushed ${imageRef}`,
           );
-          return;
+          const published = yield* resolvePublishedImageRef(props, imageRef);
+          return {
+            ...published,
+            previousDigest:
+              previousImageRef === undefined
+                ? undefined
+                : (yield* resolvePublishedImageRef(props, previousImageRef))
+                    .digest,
+          };
         }
 
         if (build.kind === "remote") {
@@ -443,22 +628,7 @@ export const LiveContainerProvider = () =>
           yield* session.note(`Pushing container image ${imageRef}...`);
         }
 
-        const registryId = props.registryId ?? "registry.cloudflare.com";
-        const credentials =
-          yield* Containers.createContainerRegistryCredentials({
-            accountId,
-            registryId,
-            permissions: ["pull", "push"],
-            expirationMinutes: 60,
-          });
-        const username = credentials.username ?? (credentials as any).user;
-        if (!username) {
-          return yield* Effect.fail(
-            new Error(
-              "Cloudflare registry credentials did not include a username.",
-            ),
-          );
-        }
+        const credentials = yield* registryCredentials(props, ["pull", "push"]);
 
         // Cloudflare's container registry intermittently answers blob HEAD
         // probes with 500 under concurrent suite push load. Ride that out
@@ -469,13 +639,13 @@ export const LiveContainerProvider = () =>
         // host-arch `docker pull` adds arm64 next to our amd64), and an
         // un-scoped push then ships the wrong variant — Cloudflare's amd64
         // hosts never boot it and the app 503s "provisioning" forever.
-        yield* docker.image
+        const pushed = yield* docker.image
           .push(
             imageRef,
             {
-              username,
+              username: credentials.username,
               password: credentials.password,
-              server: registryId,
+              server: credentials.server,
             },
             platform,
           )
@@ -495,6 +665,30 @@ export const LiveContainerProvider = () =>
               ]),
             }),
           );
+        const parsedImageRef = parseRepoDigest(
+          imageRef,
+          `${pushed.stdout}\n${pushed.stderr}`,
+        );
+        const digest =
+          parsedImageRef === undefined
+            ? yield* resolveRegistryDigest(imageRef, credentials)
+            : digestFromImageRef(parsedImageRef);
+        if (digest === undefined) {
+          return yield* Effect.fail(
+            new Error(
+              `Container registry push did not produce a digest for ${imageRef}`,
+            ),
+          );
+        }
+        return {
+          imageRef:
+            parsedImageRef ?? `${repositoryFromImageRef(imageRef)}@${digest}`,
+          digest,
+          previousDigest:
+            previousImageRef === undefined
+              ? undefined
+              : yield* resolveRegistryDigest(previousImageRef, credentials),
+        };
       });
 
       const maybeCreateRollout = Effect.fn(function* ({
@@ -698,10 +892,54 @@ export const LiveContainerProvider = () =>
           news,
           env,
         );
-        const configuration = desiredConfiguration(news, env, imageRef);
-
+        let deploymentImageRef = existing.configuration.image;
+        let imageDigest = existing.hash?.digest;
         if (imageHash !== existing.hash?.image) {
-          yield* buildAndPushImage(id, news, build, imageRef, session);
+          const published = yield* buildAndPushImage(
+            id,
+            news,
+            build,
+            imageRef,
+            existing.hash?.digest === undefined
+              ? existing.configuration.image
+              : undefined,
+            session,
+          );
+          const existingDigest =
+            existing.hash?.digest ?? published.previousDigest;
+          deploymentImageRef =
+            published.digest === existingDigest
+              ? existing.configuration.image
+              : published.imageRef;
+          imageDigest = published.digest;
+        }
+        const configuration = desiredConfiguration(
+          news,
+          env,
+          deploymentImageRef,
+        );
+        const scaling = scalingDefaults(news);
+        if (
+          hasSameApplicationConfiguration(
+            existing,
+            news,
+            scaling,
+            news.affinities,
+            configuration,
+          )
+        ) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
+          );
+          yield* session.note(
+            `Container application ${existing.applicationName} is unchanged.`,
+          );
+          return {
+            ...existing,
+            configuration,
+            hash: { image: imageHash, digest: imageDigest },
+            dev,
+          };
         }
 
         yield* session.note(
@@ -713,7 +951,7 @@ export const LiveContainerProvider = () =>
           Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
-            ...scalingDefaults(news),
+            ...scaling,
             affinities: news.affinities,
             configuration,
           }),
@@ -736,7 +974,7 @@ export const LiveContainerProvider = () =>
               return yield* Containers.createContainerApplication({
                 accountId,
                 name: existing.applicationName,
-                ...scalingDefaults(news),
+                ...scaling,
                 affinities: news.affinities,
                 configuration,
                 durableObjects,
@@ -755,7 +993,12 @@ export const LiveContainerProvider = () =>
             rollout: news.rollout,
           });
         }
-        return { ...updated, configuration, hash: { image: imageHash }, dev };
+        return {
+          ...updated,
+          configuration,
+          hash: { image: imageHash, digest: imageDigest },
+          dev,
+        };
       });
 
       const getDurableObjects = (
@@ -855,8 +1098,19 @@ export const LiveContainerProvider = () =>
             news,
             env,
           );
-          const configuration = desiredConfiguration(news, env, imageRef);
-          yield* buildAndPushImage(id, news, build, imageRef, session);
+          const published = yield* buildAndPushImage(
+            id,
+            news,
+            build,
+            imageRef,
+            undefined,
+            session,
+          );
+          const configuration = desiredConfiguration(
+            news,
+            env,
+            published.imageRef,
+          );
 
           // Precreate intentionally omits the Durable Object attachment so the
           // worker can bind to this application id and break the circular
@@ -876,7 +1130,7 @@ export const LiveContainerProvider = () =>
           });
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
-            hash: { image: imageHash },
+            hash: { image: imageHash, digest: published.digest },
             dev,
           };
         }),
@@ -903,7 +1157,6 @@ export const LiveContainerProvider = () =>
             news,
             env,
           );
-          const configuration = desiredConfiguration(news, env, imageRef);
 
           // Observe — re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as
@@ -970,6 +1223,32 @@ export const LiveContainerProvider = () =>
                 });
               }
             }
+            let deploymentImageRef = existing.configuration.image;
+            let imageDigest = existing.hash?.digest;
+            if (imageHash !== existing.hash?.image) {
+              const published = yield* buildAndPushImage(
+                id,
+                news,
+                build,
+                imageRef,
+                existing.hash?.digest === undefined
+                  ? existing.configuration.image
+                  : undefined,
+                session,
+              );
+              const existingDigest =
+                existing.hash?.digest ?? published.previousDigest;
+              deploymentImageRef =
+                published.digest === existingDigest
+                  ? existing.configuration.image
+                  : published.imageRef;
+              imageDigest = published.digest;
+            }
+            const configuration = desiredConfiguration(
+              news,
+              env,
+              deploymentImageRef,
+            );
             yield* Effect.logInfo(
               `Cloudflare Container reconcile: recreating ${name} to attach durable object binding`,
             );
@@ -989,9 +1268,6 @@ export const LiveContainerProvider = () =>
             // doesn't re-adopt the just-deleted application and then try to
             // update a now-gone id (see `waitForApplicationDeleted`).
             yield* waitForApplicationDeleted(name, existing.applicationId);
-            if (imageHash !== existing.hash?.image) {
-              yield* buildAndPushImage(id, news, build, imageRef, session);
-            }
             const result = yield* createApplication({
               id,
               news,
@@ -1002,7 +1278,7 @@ export const LiveContainerProvider = () =>
             });
             return {
               ...("applicationId" in result ? result : toAttributes(result)),
-              hash: { image: imageHash },
+              hash: { image: imageHash, digest: imageDigest },
               dev,
             };
           }
@@ -1026,7 +1302,19 @@ export const LiveContainerProvider = () =>
           // then create. `createApplication` itself tolerates concurrent
           // creates by adopting an existing application with the same
           // name or namespace.
-          yield* buildAndPushImage(id, news, build, imageRef, session);
+          const published = yield* buildAndPushImage(
+            id,
+            news,
+            build,
+            imageRef,
+            undefined,
+            session,
+          );
+          const configuration = desiredConfiguration(
+            news,
+            env,
+            published.imageRef,
+          );
           const result = yield* createApplication({
             id,
             news,
@@ -1037,7 +1325,7 @@ export const LiveContainerProvider = () =>
           });
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
-            hash: { image: imageHash },
+            hash: { image: imageHash, digest: published.digest },
             dev,
           };
         }),
