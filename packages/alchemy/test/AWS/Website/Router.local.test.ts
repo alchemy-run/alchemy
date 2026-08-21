@@ -3,6 +3,7 @@ import { flociServices } from "@/AWS/Local/FlociServices.ts";
 import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -25,6 +26,13 @@ const fixtureDir = pathe.resolve(
   "fixtures",
   "staticsite-dev",
 );
+const viteFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "fixtures",
+  "vite-app",
+);
+// Clone under the alchemy package so `vite` resolves from the workspace's
+// hoisted node_modules (the fixture has no node_modules of its own).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const htmlPage = (marker: string) => `<!doctype html>
@@ -76,6 +84,111 @@ const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (
     htmlPage(marker),
   );
   return cwd;
+});
+
+/**
+ * What the Router answered with, when it isn't what the test expected.
+ *
+ * A typed failure (rather than an `expect` throw) so the assertion can be
+ * retried: the dev server behind the mount may still be warming up, and a
+ * live edit becomes visible one file-watcher tick after the write.
+ */
+class RouterBodyMismatch extends Data.TaggedError("RouterBodyMismatch")<{
+  url: string;
+  status: number;
+  problem: string;
+  bodyExcerpt: string;
+}> {}
+
+/**
+ * GET `path` through the Router and assert what came back — status, markers
+ * that must be present, and markers that must NOT be (the negative half is
+ * what pins longest-prefix routing: a body is only proof if it could have
+ * come from the *wrong* origin and didn't).
+ */
+const expectRouterBody = Effect.fn("expectRouterBody")(function* (
+  routerUrl: string,
+  path: string,
+  options: {
+    readonly includes?: ReadonlyArray<string>;
+    readonly excludes?: ReadonlyArray<string>;
+    readonly status?: number;
+  },
+) {
+  const client = yield* HttpClient.HttpClient;
+  const url = `${routerUrl}${path}`;
+  const status = options.status ?? 200;
+  return yield* Effect.gen(function* () {
+    const response = yield* client.get(url);
+    const body = yield* response.text;
+    const missing = (options.includes ?? []).filter((m) => !body.includes(m));
+    const present = (options.excludes ?? []).filter((m) => body.includes(m));
+    if (
+      response.status !== status ||
+      missing.length > 0 ||
+      present.length > 0
+    ) {
+      return yield* Effect.fail(
+        new RouterBodyMismatch({
+          url,
+          status: response.status,
+          problem: [
+            response.status !== status
+              ? `expected status ${status}`
+              : undefined,
+            missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+            present.length > 0
+              ? `unexpectedly present ${present.join(", ")}`
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join("; "),
+          bodyExcerpt: body.slice(0, 240),
+        }),
+      );
+    }
+    return body;
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.exponential("400 millis", 1.4),
+      times: 8,
+    }),
+    Effect.tapError((error) =>
+      Effect.logError(`expectRouterBody(${path}) failed`, error),
+    ),
+  );
+});
+
+/**
+ * Clone the plain-Vite fixture and stamp per-site markers into it, so a body
+ * served through the Router identifies WHICH dev server produced it.
+ *
+ * Returns the paths of the two files the live-edit assertions rewrite.
+ */
+const makeViteFixture = Effect.fn("makeViteFixture")(function* (
+  slug: string,
+  marker: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const cwd = yield* cloneFixture(viteFixtureDir, {
+    prefix: `alchemy-aws-router-vite-${slug}-`,
+    tempRoot,
+    entries: [".gitignore", "package.json", "index.html", "src", "public"],
+  });
+  const indexPath = path.join(cwd, "index.html");
+  const mainPath = path.join(cwd, "src", "main.ts");
+  const index = yield* fs.readFileString(indexPath);
+  yield* fs.writeFileString(
+    indexPath,
+    index.replaceAll("VITE_AWS_PAGE_MARKER", `${marker}_PAGE`),
+  );
+  const main = yield* fs.readFileString(mainPath);
+  yield* fs.writeFileString(
+    mainPath,
+    main.replaceAll("VITE_AWS_MODULE_MARKER", `${marker}_MODULE`),
+  );
+  return { cwd, indexPath, mainPath };
 });
 
 describe("AWS.Website.Router local", () => {
@@ -140,6 +253,11 @@ describe("AWS.Website.Router local", () => {
         expect(b.status).toBe(200);
         expect(yield* b.text).toContain("router-dev-site-b");
 
+        // A mount is a path SEGMENT prefix, not a string prefix: `/site-a-x`
+        // shares seven characters with `/site-a` and must not be routed to it.
+        const neighbour = yield* fetchRouter(routerUrl, "/site-a-x");
+        expect(yield* neighbour.text).not.toContain("router-dev-site-a");
+
         // ── The origin received the request CloudFront would have sent ─────
         const echo = yield* fetchRouter(routerUrl, "/site-a/__echo");
         expect(echo.status).toBe(200);
@@ -171,6 +289,139 @@ describe("AWS.Website.Router local", () => {
         yield* stack.destroy();
       }),
     { timeout: 300_000 },
+  );
+
+  /**
+   * The framework path — the one a real `alchemy dev` user is on.
+   *
+   * A framework dev server is not a hand-written fixture: it binds where the
+   * framework decides (Vite picks `[::1]`), serves modules the HTML it
+   * generated points at, and rewrites those URLs by `base`. The emulated edge
+   * runs in a container and reaches the host through its gateway, so a
+   * loopback-only listener answers nothing and every request through the
+   * Router 502s.
+   *
+   * So this case is deliberately end-to-end through `router.url` only: the
+   * HTML shell, the module URLs that HTML actually references, and a live
+   * edit landing on a later request. Nothing here inspects the bind address
+   * (not portable) — the route working IS the proof.
+   */
+  test.provider(
+    "a Vite dev server serves its whole mount through the Router",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        yield* stack.destroy();
+
+        const root = yield* makeViteFixture("root", "ROUTER_VITE_ROOT");
+        const app = yield* makeViteFixture("app", "ROUTER_VITE_APP");
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const router = yield* AWS.Website.Router("ViteRouter", {});
+            const rootSite = yield* AWS.Website.Vite("RootSite", {
+              rootDir: root.cwd,
+              domain: { router },
+            });
+            const appSite = yield* AWS.Website.Vite("AppSite", {
+              rootDir: app.cwd,
+              // The Router forwards the FULL uri to the origin — it never
+              // strips the mount prefix — so the dev server has to serve at
+              // the prefix. `base` is what makes Vite do that, for both the
+              // module URLs it writes into the HTML and the requests it then
+              // has to answer.
+              vite: { base: "/app/" },
+              domain: { router, path: "/app" },
+            });
+            return {
+              routerUrl: router.url,
+              rootUrl: rootSite.url,
+              appUrl: appSite.url,
+            };
+          }),
+        );
+
+        const routerUrl = deployed.routerUrl as string;
+        expect(routerUrl).toMatch(/^http:\/\/localhost:\d+$/);
+        // Each site's own `url` is still its dev server (HMR is the point).
+        expect(deployed.rootUrl).toMatch(/^http:\/\/localhost:\d+/);
+        expect(deployed.appUrl).toMatch(/^http:\/\/localhost:\d+/);
+        expect(deployed.appUrl).not.toBe(deployed.rootUrl);
+
+        // ── The HTML shell at each mount, from its own dev server ──────────
+        const rootHtml = yield* expectRouterBody(routerUrl, "/", {
+          includes: ["ROUTER_VITE_ROOT_PAGE"],
+          excludes: ["ROUTER_VITE_APP_PAGE"],
+        });
+        const appHtml = yield* expectRouterBody(routerUrl, "/app/", {
+          includes: ["ROUTER_VITE_APP_PAGE"],
+          excludes: ["ROUTER_VITE_ROOT_PAGE"],
+        });
+
+        // Vite rewrote the asset URLs by `base`, so the browser's next hops
+        // are the prefixed ones. Assert that BEFORE fetching them — otherwise
+        // the fetches below could pass against URLs no real browser requests.
+        expect(appHtml).toContain('src="/app/src/main.ts"');
+        expect(appHtml).toContain("/app/@vite/client");
+        expect(rootHtml).toContain('src="/src/main.ts"');
+        expect(rootHtml).toContain("/@vite/client");
+
+        // ── The assets that HTML points at, through the Router ─────────────
+        // A mount only works if its sub-resources resolve; an index page that
+        // renders while its modules 404 is a broken site.
+        yield* expectRouterBody(routerUrl, "/app/src/main.ts", {
+          includes: ["ROUTER_VITE_APP_MODULE"],
+          excludes: ["ROUTER_VITE_ROOT_MODULE"],
+        });
+        yield* expectRouterBody(routerUrl, "/app/@vite/client", {
+          includes: ["export"],
+        });
+        yield* expectRouterBody(routerUrl, "/src/main.ts", {
+          includes: ["ROUTER_VITE_ROOT_MODULE"],
+          excludes: ["ROUTER_VITE_APP_MODULE"],
+        });
+        yield* expectRouterBody(routerUrl, "/@vite/client", {
+          includes: ["export"],
+        });
+
+        // ── Longest-prefix routing: neither mount answers the other's ──────
+        // The root site matches `/` and would happily serve `/app/...` if the
+        // longer prefix didn't win; the app site must not leak out of `/app`.
+        yield* expectRouterBody(routerUrl, "/app/src/main.ts", {
+          excludes: ["ROUTER_VITE_ROOT_MODULE"],
+        });
+        // `/app-other` shares a string prefix with `/app` but is NOT under the
+        // mount — it belongs to the root site (whose SPA fallback answers it).
+        yield* expectRouterBody(routerUrl, "/app-other", {
+          includes: ["ROUTER_VITE_ROOT_PAGE"],
+          excludes: ["ROUTER_VITE_APP_PAGE"],
+        });
+
+        // ── Live edit: the origin is a RUNNING dev server, not a copy ──────
+        // Nothing is re-applied; the next request through the edge has to
+        // show the new bytes. `?v=2` also defeats any cache in between.
+        const editedMain = (yield* fs.readFileString(app.mainPath)).replace(
+          "ROUTER_VITE_APP_MODULE",
+          "ROUTER_VITE_APP_MODULE_V2",
+        );
+        yield* fs.writeFileString(app.mainPath, editedMain);
+        yield* expectRouterBody(routerUrl, "/app/src/main.ts?v=2", {
+          includes: ["ROUTER_VITE_APP_MODULE_V2"],
+        });
+
+        const editedIndex = (yield* fs.readFileString(root.indexPath)).replace(
+          "ROUTER_VITE_ROOT_PAGE",
+          "ROUTER_VITE_ROOT_PAGE_V2",
+        );
+        yield* fs.writeFileString(root.indexPath, editedIndex);
+        yield* expectRouterBody(routerUrl, "/?v=2", {
+          includes: ["ROUTER_VITE_ROOT_PAGE_V2"],
+        });
+
+        yield* stack.destroy();
+      }),
+    { timeout: 120_000 },
   );
 
   /**
