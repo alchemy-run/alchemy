@@ -142,8 +142,10 @@ export default class Api extends Fly.Service<Api>()(
 +  { app: Site, main: import.meta.url, region: "iad" },
 ```
 
-Changing `region` later **replaces** the Service (a new Machine in
-the new region).
+:::caution[Changing `region` replaces the Service]
+A new Machine is created in the new region. The old one is
+deleted. [Regions](/fly/compute/regions) lists the codes.
+:::
 
 ## Set the port
 
