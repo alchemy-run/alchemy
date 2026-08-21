@@ -59,6 +59,9 @@
       "path": "../../distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/prisma-postgres/tsconfig.json"
+    },
+    {
       "path": "../cloudflare-runtime/tsconfig.json"
     }
   ]

@@ -387,6 +387,7 @@
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@distilled.cloud/prisma-postgres": "workspace:*",
     "@effect/sql-d1": "catalog:effect",
     "@effect/sql-sqlite-do": "catalog:effect",
     "@effect/vitest": "catalog:effect",
