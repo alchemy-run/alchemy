@@ -368,6 +368,11 @@ export const ImageProvider = () =>
             dockerfile,
             platform: news.platform ?? "linux/amd64",
             buildArgs: news.buildArgs,
+            // Engines using the containerd image store attach provenance
+            // attestations by default, turning the pushed tag into an OCI
+            // image index — which Lambda (a valid consumer of these images)
+            // rejects. Disable: single-manifest pushes work everywhere.
+            args: ["--provenance=false"],
           });
 
           const pushed = yield* describeImage(repositoryName, imageTag);
