@@ -54,7 +54,10 @@ faster than any maintainer could reasonably review. Flooding the
 floci team with that maintenance burden isn't fair to them. It's
 easier to let alchemy's flywheel drive the fork directly.
 
-The test harness has one switch:
+## The flywheel
+
+What drives the fork is the test suite. The harness has one
+switch that points it at the emulator instead of live AWS:
 
 ```sh
 pnpm test:aws:floci
@@ -64,12 +67,12 @@ It runs the same test suite that normally runs against live AWS,
 except every call goes to floci instead. Nothing is mocked: each
 Lambda still cold-starts in its own Docker container.
 
-## One rule
-
-Every test must pass unchanged against both real AWS and floci.
-When a test goes red against the emulator, we never loosen the
-test or special-case alchemy. The fix goes in the fork, with a
-conformance test in the emulator's own suite.
+Agents run the suite and fix every red test. The fix always goes
+in the fork, never in alchemy: we don't loosen a test or
+special-case lifecycle code to tolerate the emulator, so the
+suite stays a single source of truth that both AWS and floci
+have to satisfy. Each fix lands with a conformance test in the
+emulator's own suite.
 
 For example: a live test asserts that a streaming Function URL
 delivers its first bytes before the handler finishes. floci
