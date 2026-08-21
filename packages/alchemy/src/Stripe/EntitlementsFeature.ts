@@ -85,7 +85,9 @@ export type EntitlementsFeature = Resource<
  * metadata update in place.
  *
  * Stripe does not hard-delete features; destroying this resource
- * deactivates it (`active: false`). An archived lookup key can be reused.
+ * deactivates it (`active: false`). Archived features cannot be edited
+ * or unarchived. An archived lookup key can be reused — a later create
+ * with the same key provisions a new feature.
  *
  * @see https://docs.stripe.com/api/entitlements/feature
  *
@@ -200,38 +202,19 @@ const listByArchived = Effect.fn(function* (archived: boolean) {
   return features;
 });
 
-const listAllFeatures = Effect.fn(function* () {
-  const [active, archived] = yield* Effect.all(
-    [listByArchived(false), listByArchived(true)],
-    { concurrency: 2 },
-  );
-  const seen = new Set<string>();
-  const features: StripeEntitlementsFeature[] = [];
-  for (const feature of [...active, ...archived]) {
-    if (seen.has(feature.id)) continue;
-    seen.add(feature.id);
-    features.push(feature);
-  }
-  return features;
-});
-
 const findByLookupKey = Effect.fn(function* (lookupKey: string) {
+  // Archived features cannot be updated or unarchived. Their lookup keys
+  // are reusable, so observation must ignore them and let ensure create.
   const active = yield* GetEntitlementsFeatures({
     lookup_key: lookupKey,
     archived: false,
     limit: LIST_PAGE_SIZE,
   });
-  if (active.data[0] !== undefined) return active.data[0];
-  const archived = yield* GetEntitlementsFeatures({
-    lookup_key: lookupKey,
-    archived: true,
-    limit: LIST_PAGE_SIZE,
-  });
-  return archived.data[0];
+  return active.data[0];
 });
 
 const findByAlchemyId = Effect.fn(function* (id: string) {
-  const features = yield* listAllFeatures();
+  const features = yield* listByArchived(false);
   const matches: StripeEntitlementsFeature[] = [];
   for (const feature of features) {
     if (yield* hasAlchemyMetadata(id, tagRecord(feature.metadata))) {
@@ -338,6 +321,15 @@ export const EntitlementsFeatureProvider = () =>
         lookupKey,
       });
       if (current !== undefined && shouldReplace(news, toAttrs(current))) {
+        current = undefined;
+      }
+      // Stripe rejects updates to archived features and cannot unarchive
+      // them. Treat inactive rows as missing so ensure creates a new one
+      // (lookup keys become reusable once archived).
+      if (current !== undefined && current.active === false) {
+        if (desiredActive === false) {
+          return toAttrs(current);
+        }
         current = undefined;
       }
 
