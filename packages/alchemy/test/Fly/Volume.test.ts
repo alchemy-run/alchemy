@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
   machines
-    .volumesGetById({
+    .getVolumeById({
       app_name: appName,
       volume_id: volumeId,
     })
@@ -39,7 +39,7 @@ const waitUntilVolumeGone = (appName: string, volumeId: string) =>
 
 const waitUntilMachineGone = (appName: string, machineId: string) =>
   machines
-    .machinesShow({
+    .getMachine({
       app_name: appName,
       machine_id: machineId,
     })
@@ -80,7 +80,7 @@ test.provider(
       expect(created.mounts[0]?.sizeGb).toEqual(1);
       expect(created.mounts[0]?.name).toMatch(/^[a-z][a-z0-9_]*$/);
 
-      const fetched = yield* machines.volumesGetById({
+      const fetched = yield* machines.getVolumeById({
         app_name: created.appName,
         volume_id: created.mounts[0]!.volumeId,
       });
@@ -116,7 +116,7 @@ test.provider(
       expect(updated.mounts[0]?.volumeId).toEqual(created.mounts[0]?.volumeId);
       expect(updated.mounts[0]?.sizeGb).toEqual(2);
 
-      const refetched = yield* machines.volumesGetById({
+      const refetched = yield* machines.getVolumeById({
         app_name: updated.appName,
         volume_id: updated.mounts[0]!.volumeId,
       });
@@ -181,7 +181,7 @@ test.provider(
       expect(replaced.mounts[0]?.volumeId).not.toEqual(oldVolumeId);
       expect(replaced.mounts[0]?.sizeGb).toEqual(1);
 
-      const fetched = yield* machines.volumesGetById({
+      const fetched = yield* machines.getVolumeById({
         app_name: replaced.appName,
         volume_id: replaced.mounts[0]!.volumeId,
       });
@@ -239,11 +239,11 @@ test.provider(
         created.replicas[1]?.mounts[0]?.name,
       );
 
-      const left = yield* machines.volumesGetById({
+      const left = yield* machines.getVolumeById({
         app_name: created.appName,
         volume_id: created.replicas[0]!.mounts[0]!.volumeId,
       });
-      const right = yield* machines.volumesGetById({
+      const right = yield* machines.getVolumeById({
         app_name: created.appName,
         volume_id: created.replicas[1]!.mounts[0]!.volumeId,
       });

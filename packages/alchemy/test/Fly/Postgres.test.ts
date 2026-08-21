@@ -44,7 +44,7 @@ const waitUntilReady = (clusterId: string) =>
   );
 
 const waitUntilAppGone = (appName: string) =>
-  machines.appsShow({ app_name: appName }).pipe(
+  machines.getApp({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -56,7 +56,7 @@ const waitUntilAppGone = (appName: string) =>
 
 const secretNames = (appName: string) =>
   machines
-    .secretsList({
+    .listSecrets({
       app_name: appName,
       show_secrets: false,
     })

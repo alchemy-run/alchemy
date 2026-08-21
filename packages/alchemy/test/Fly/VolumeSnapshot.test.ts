@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
   machines
-    .volumesGetById({
+    .getVolumeById({
       app_name: appName,
       volume_id: volumeId,
     })
@@ -38,7 +38,7 @@ const waitUntilVolumeGone = (appName: string, volumeId: string) =>
     );
 
 const waitUntilAppGone = (appName: string) =>
-  machines.appsShow({ app_name: appName }).pipe(
+  machines.getApp({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -50,7 +50,7 @@ const waitUntilAppGone = (appName: string) =>
 
 const listedHas = (appName: string, volumeId: string, snapshotId: string) =>
   machines
-    .volumesListSnapshots({
+    .listVolumeSnapshots({
       app_name: appName,
       volume_id: volumeId,
     })

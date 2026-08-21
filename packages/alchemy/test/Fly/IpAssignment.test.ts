@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilAppGone = (appName: string) =>
-  machines.appsShow({ app_name: appName }).pipe(
+  machines.getApp({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -27,7 +27,7 @@ const waitUntilAppGone = (appName: string) =>
   );
 
 const waitUntilIpGone = (appName: string, ip: string) =>
-  machines.appIPAssignmentsList({ app_name: appName }).pipe(
+  machines.listAppIPAssignments({ app_name: appName }).pipe(
     Effect.map((res) =>
       (res.ips ?? []).some((item) => item.ip === ip) ? "found" : "gone",
     ),
@@ -41,7 +41,7 @@ const waitUntilIpGone = (appName: string, ip: string) =>
 
 const listedHas = (appName: string, ip: string) =>
   machines
-    .appIPAssignmentsList({ app_name: appName })
+    .listAppIPAssignments({ app_name: appName })
     .pipe(Effect.map((res) => (res.ips ?? []).find((item) => item.ip === ip)));
 
 test.provider(
@@ -208,7 +208,7 @@ test.provider(
       );
 
       const result = yield* Effect.result(
-        machines.appIPAssignmentsCreate({
+        machines.createAppIPAssignment({
           app_name: app.appName,
           type: "v4",
         }),
@@ -220,7 +220,7 @@ test.provider(
         const ip = result.success.ip;
         if (ip !== undefined && ip.length > 0) {
           yield* machines
-            .appIPAssignmentsDelete({
+            .deleteAppIPAssignment({
               app_name: app.appName,
               ip,
             })

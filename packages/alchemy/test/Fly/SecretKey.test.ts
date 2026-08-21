@@ -27,7 +27,7 @@ const HMAC_B: ReadonlyArray<number> = Array.from(
 
 const waitUntilGone = (appName: string, secretName: string) =>
   machines
-    .secretkeyGet({
+    .getSecretKey({
       app_name: appName,
       secret_name: secretName,
     })
@@ -42,7 +42,7 @@ const waitUntilGone = (appName: string, secretName: string) =>
     );
 
 const waitAppGone = (appName: string) =>
-  machines.appsShow({ app_name: appName }).pipe(
+  machines.getApp({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -53,16 +53,16 @@ const waitAppGone = (appName: string) =>
   );
 
 /**
- * Ungated probe: hit secretkeysList without KMS entitlement so the
+ * Ungated probe: hit listSecretKeys without KMS entitlement so the
  * distilled tag stays pinned. A missing app is `NotFound` when the token
  * can use KMS; otherwise the typed entitlement tag is asserted.
  */
 test.provider(
-  "secretkeysList probe asserts a typed tag",
+  "listSecretKeys probe asserts a typed tag",
   () =>
     Effect.gen(function* () {
       const result = yield* Effect.result(
-        machines.secretkeysList({
+        machines.listSecretKeys({
           app_name: "alchemy-kms-probe-missing",
         }),
       );
@@ -97,7 +97,7 @@ test.provider(
       expect(created.key.name.length).toBeGreaterThan(0);
       expect(created.key.type).toEqual("hs256");
 
-      const fetched = yield* machines.secretkeyGet({
+      const fetched = yield* machines.getSecretKey({
         app_name: created.key.appName,
         secret_name: created.key.name,
       });
@@ -120,7 +120,7 @@ test.provider(
       expect(updated.key.name).toEqual(created.key.name);
       expect(updated.key.type).toEqual("hs256");
 
-      const refetched = yield* machines.secretkeyGet({
+      const refetched = yield* machines.getSecretKey({
         app_name: updated.key.appName,
         secret_name: updated.key.name,
       });
@@ -159,7 +159,7 @@ test.provider(
       expect(created.key.type).toEqual("nacl_sign");
       expect(created.key.publicKey).toEqual(expect.any(String));
 
-      const fetched = yield* machines.secretkeyGet({
+      const fetched = yield* machines.getSecretKey({
         app_name: created.key.appName,
         secret_name: created.key.name,
       });
@@ -211,7 +211,7 @@ test.provider(
       expect(replaced.key.name).not.toEqual(created.key.name);
       expect(replaced.key.appName).toEqual(created.key.appName);
 
-      const fetched = yield* machines.secretkeyGet({
+      const fetched = yield* machines.getSecretKey({
         app_name: replaced.key.appName,
         secret_name: replaced.key.name,
       });

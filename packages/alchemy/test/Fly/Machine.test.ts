@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 
 const waitUntilGone = (appName: string, machineId: string) =>
   machines
-    .machinesShow({
+    .getMachine({
       app_name: appName,
       machine_id: machineId,
     })
@@ -63,7 +63,7 @@ test.provider(
       expect(created.guest?.memoryMb).toEqual(256);
       expect(created.url).toBeUndefined();
 
-      const fetched = yield* machines.machinesShow({
+      const fetched = yield* machines.getMachine({
         app_name: created.appName,
         machine_id: created.machineId,
       });
@@ -109,7 +109,7 @@ test.provider(
       expect(updated.state).toEqual("started");
       expect(updated.url).toEqual(`https://${created.appName}.fly.dev`);
 
-      const refetched = yield* machines.machinesShow({
+      const refetched = yield* machines.getMachine({
         app_name: updated.appName,
         machine_id: updated.machineId,
       });
@@ -174,7 +174,7 @@ test.provider(
       expect(replaced.region).toEqual("iad");
       expect(replaced.state).toEqual("started");
 
-      const fetched = yield* machines.machinesShow({
+      const fetched = yield* machines.getMachine({
         app_name: replaced.appName,
         machine_id: replaced.machineId,
       });

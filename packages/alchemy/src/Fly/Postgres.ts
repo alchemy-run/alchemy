@@ -508,7 +508,7 @@ export const directUri = (
 
 const putSecret = (appName: string, name: string, value: string) =>
   machines
-    .secretCreate({
+    .createSecret({
       app_name: appName,
       secret_name: name,
       value,
@@ -517,7 +517,7 @@ const putSecret = (appName: string, name: string, value: string) =>
       Effect.asVoid,
       Effect.catchTag("Conflict", () =>
         machines
-          .secretsUpdate({
+          .updateSecrets({
             app_name: appName,
             values: { [name]: value },
           })
@@ -784,13 +784,13 @@ export const PostgresProvider = () =>
               .deleteAttachment({ id: clusterId, app_name: appName })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
             yield* machines
-              .secretDelete({
+              .deleteSecret({
                 app_name: appName,
                 secret_name: DATABASE_URL_SECRET,
               })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
             yield* machines
-              .secretDelete({
+              .deleteSecret({
                 app_name: appName,
                 secret_name: DIRECT_DATABASE_URL_SECRET,
               })

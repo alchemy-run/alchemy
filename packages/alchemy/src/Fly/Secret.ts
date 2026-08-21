@@ -33,7 +33,7 @@ export interface SecretProps {
   name?: string;
   /**
    * Secret value. Wrap with `Redacted.make(...)` so it is never logged.
-   * Updated in place via `secretsUpdate`. Never persisted in attributes.
+   * Updated in place via `updateSecrets`. Never persisted in attributes.
    */
   value: Redacted.Redacted<string> | string;
 }
@@ -144,7 +144,7 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * :::
  *
  * @section Rotate the value
- * Updating `value` is in place via `secretsUpdate`.
+ * Updating `value` is in place via `updateSecrets`.
  *
  * @example New value
  * ```typescript
@@ -250,7 +250,7 @@ const toAttrs = (
 
 const getByName = (appName: string, secretName: string) =>
   machines
-    .secretGet({
+    .getSecret({
       app_name: appName,
       secret_name: secretName,
       show_secrets: false,
@@ -259,7 +259,7 @@ const getByName = (appName: string, secretName: string) =>
 
 const listSecrets = (appName: string) =>
   machines
-    .secretsList({
+    .listSecrets({
       app_name: appName,
       show_secrets: false,
     })
@@ -359,7 +359,7 @@ export const SecretProvider = () =>
       let createdThisRun = false;
       if (current === undefined) {
         yield* machines
-          .secretCreate({
+          .createSecret({
             app_name: appName,
             secret_name: name,
             value: desiredPlain,
@@ -386,7 +386,7 @@ export const SecretProvider = () =>
           previousPlain === undefined || previousPlain !== desiredPlain;
         if (!digestMatches && valueChanged) {
           yield* machines
-            .secretsUpdate({
+            .updateSecrets({
               app_name: appName,
               values: { [name]: desiredPlain },
             })
@@ -401,7 +401,7 @@ export const SecretProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.appName.length === 0 || output.name.length === 0) return;
       yield* machines
-        .secretDelete({
+        .deleteSecret({
           app_name: output.appName,
           secret_name: output.name,
         })

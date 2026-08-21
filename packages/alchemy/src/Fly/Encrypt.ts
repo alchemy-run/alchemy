@@ -1,4 +1,4 @@
-import type { SecretkeyEncryptError } from "@distilled.cloud/fly-io/machines";
+import type { EncryptSecretKeyError } from "@distilled.cloud/fly-io/machines";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -53,7 +53,7 @@ export interface Encrypt extends Binding.Service<
   ) => Effect.Effect<
     (
       request: EncryptRequest,
-    ) => Effect.Effect<EncryptResult, SecretkeyEncryptError, RuntimeContext>
+    ) => Effect.Effect<EncryptResult, EncryptSecretKeyError, RuntimeContext>
   >
 > {}
 

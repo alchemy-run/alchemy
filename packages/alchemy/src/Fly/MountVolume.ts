@@ -15,7 +15,7 @@ export interface DiskSpec {
   path: string;
   /**
    * Size in GB. Fly minimum is 1. Increasing size updates in place
-   * via `volumesExtend`. Fly cannot shrink a Volume.
+   * via `extendVolume`. Fly cannot shrink a Volume.
    */
   sizeGb: number;
   /**
@@ -33,7 +33,7 @@ export interface DiskSpec {
    */
   autoBackupEnabled?: boolean;
   /**
-   * Snapshot retention in days. Updated in place via `volumesUpdate`.
+   * Snapshot retention in days. Updated in place via `updateVolume`.
    */
   snapshotRetention?: number;
   /**
@@ -148,7 +148,7 @@ export interface ServiceBinding {
  * ```
  *
  * @section Grow a disk
- * `sizeGb` can grow in place via `volumesExtend`. Fly cannot shrink a
+ * `sizeGb` can grow in place via `extendVolume`. Fly cannot shrink a
  * Volume. Minimum size is 1 GB.
  *
  * @example 10 GB

@@ -79,13 +79,13 @@ export const gone = (machine: FlyMachine | undefined) =>
   machine === undefined || machine.state === "destroyed";
 
 export const getMachineById = (appName: string, machineId: string) =>
-  machines.machinesShow({ app_name: appName, machine_id: machineId }).pipe(
+  machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 export const listMachinesByApp = (appName: string) =>
-  machines.machinesList({ app_name: appName }).pipe(
+  machines.listMachines({ app_name: appName }).pipe(
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
   );
@@ -176,7 +176,7 @@ export const hasPublishedService = (
 
 export const waitStarted = (appName: string, machineId: string) =>
   machines
-    .machinesWait({
+    .waitMachine({
       app_name: appName,
       machine_id: machineId,
       state: "started",
@@ -192,7 +192,7 @@ export const waitStarted = (appName: string, machineId: string) =>
 
 export const waitDestroyed = (appName: string, machineId: string) =>
   machines
-    .machinesWait({
+    .waitMachine({
       app_name: appName,
       machine_id: machineId,
       state: "destroyed",
@@ -218,7 +218,7 @@ export const ensureStarted = Effect.fn(function* (
   const state = machine.state;
   if (state !== "started" && state !== "starting") {
     yield* machines
-      .machinesStart({
+      .startMachine({
         app_name: appName,
         machine_id: machineId,
       })
@@ -234,7 +234,7 @@ export const deleteMachine = Effect.fn(function* (
 ) {
   if (appName.length === 0 || machineId.length === 0) return;
   yield* machines
-    .machinesDelete({
+    .deleteMachine({
       app_name: appName,
       machine_id: machineId,
       force: true,
@@ -487,7 +487,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
     let current = byIndex.get(index);
     if (current === undefined) {
       const created = yield* machines
-        .machinesCreate({
+        .createMachine({
           app_name: input.appName,
           name,
           region: input.region,
@@ -516,7 +516,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
       })
     ) {
       const updated = yield* machines
-        .machinesUpdate({
+        .updateMachine({
           app_name: input.appName,
           machine_id: current.id ?? "",
           config,

@@ -1,4 +1,4 @@
-import type { SecretkeySignError } from "@distilled.cloud/fly-io/machines";
+import type { SignSecretKeyError } from "@distilled.cloud/fly-io/machines";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -39,7 +39,7 @@ export interface Sign extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SignRequest,
-    ) => Effect.Effect<SignResult, SecretkeySignError, RuntimeContext>
+    ) => Effect.Effect<SignResult, SignSecretKeyError, RuntimeContext>
   >
 > {}
 

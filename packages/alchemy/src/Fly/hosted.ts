@@ -436,7 +436,7 @@ export const createFlyHostedSupport = ({
       yield* note(`Built ${imageRef}`);
     }
 
-    const minted = yield* machines.appCreateDeployToken({
+    const minted = yield* machines.createAppDeployToken({
       app_name: input.appName,
     });
     const token = minted.token;

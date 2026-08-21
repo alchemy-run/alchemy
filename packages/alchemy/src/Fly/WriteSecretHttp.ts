@@ -46,7 +46,7 @@ export const secretWriteClient = (
   return {
     create: Effect.fn("Fly.Secret.create")(function* (name, value) {
       return yield* authorize(
-        machines.secretCreate({
+        machines.createSecret({
           app_name: yield* appName,
           secret_name: name,
           value: unwrapSecretValue(value),
@@ -55,7 +55,7 @@ export const secretWriteClient = (
     }),
     update: Effect.fn("Fly.Secret.update")(function* (name, value) {
       return yield* authorize(
-        machines.secretsUpdate({
+        machines.updateSecrets({
           app_name: yield* appName,
           values: { [name]: unwrapSecretValue(value) },
         }),
@@ -63,7 +63,7 @@ export const secretWriteClient = (
     }),
     delete: Effect.fn("Fly.Secret.delete")(function* (name) {
       return yield* authorize(
-        machines.secretDelete({
+        machines.deleteSecret({
           app_name: yield* appName,
           secret_name: name,
         }),

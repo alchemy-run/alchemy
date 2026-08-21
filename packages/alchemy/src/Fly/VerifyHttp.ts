@@ -46,7 +46,7 @@ export const VerifyHttp = Layer.effect(
             return { valid: res.valid === true || res.valid === undefined };
           }
           yield* auth.authorize(
-            machines.secretkeyVerify({
+            machines.verifySecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
               plaintext: toByteList(request.plaintext),

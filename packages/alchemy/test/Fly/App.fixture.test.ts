@@ -98,7 +98,7 @@ test(
     expect(out.apiUrl).toEqual(`https://${out.appName}.fly.dev`);
 
     const liveApp = yield* distilled(
-      machines.appsShow({
+      machines.getApp({
         app_name: out.appName,
       }),
     );
@@ -106,7 +106,7 @@ test(
     expect(liveApp.id).toEqual(out.appId);
 
     const liveApi = yield* distilled(
-      machines.machinesShow({
+      machines.getMachine({
         app_name: out.appName,
         machine_id: out.apiMachineId,
       }),
@@ -118,7 +118,7 @@ test(
     expect(liveApi.config?.guest?.memory_mb).toEqual(256);
 
     const liveWorker = yield* distilled(
-      machines.machinesShow({
+      machines.getMachine({
         app_name: out.appName,
         machine_id: out.workerMachineId,
       }),
@@ -134,7 +134,7 @@ test(
     );
 
     const liveVolume = yield* distilled(
-      machines.volumesGetById({
+      machines.getVolumeById({
         app_name: out.appName,
         volume_id: out.workerMounts[0]!.volumeId,
       }),
@@ -143,7 +143,7 @@ test(
     expect(liveVolume.attached_machine_id).toEqual(out.workerMachineId);
 
     const liveSecret = yield* distilled(
-      machines.secretGet({
+      machines.getSecret({
         app_name: out.appName,
         secret_name: out.secretName,
         show_secrets: false,

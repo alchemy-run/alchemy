@@ -42,7 +42,7 @@ At deploy time the binding writes `{ path, sizeGb }` into the
 Service. Reconcile creates one Volume per replica and writes
 `config.mounts`. At runtime you get `disk.path`.
 
-`sizeGb` can **grow in place** via `volumesExtend` — shrinking is
+`sizeGb` can **grow in place** via `extendVolume` — shrinking is
 not supported (Fly cannot shrink a Volume). Encryption and
 filesystem type are create-only.
 

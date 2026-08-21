@@ -60,7 +60,7 @@ export interface BucketProps {
   name?: string;
   /**
    * Organization slug. Defaults to the current token's org
-   * (`currentTokenShow`). Changing it replaces the Bucket.
+   * (`getCurrentToken`). Changing it replaces the Bucket.
    */
   orgSlug?: string;
   /**
@@ -769,7 +769,7 @@ const putSecretValues = (appName: string, values: Record<string, string>) =>
   Effect.gen(function* () {
     if (Object.keys(values).length === 0) return;
     const updated = yield* Effect.result(
-      machines.secretsUpdate({
+      machines.updateSecrets({
         app_name: appName,
         values,
       }),
@@ -777,7 +777,7 @@ const putSecretValues = (appName: string, values: Record<string, string>) =>
     if (Result.isSuccess(updated)) return;
     for (const [secretName, value] of Object.entries(values)) {
       yield* machines
-        .secretCreate({
+        .createSecret({
           app_name: appName,
           secret_name: secretName,
           value,

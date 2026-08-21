@@ -15,7 +15,7 @@ export class FlyOrgNotFound extends Data.TaggedError("Fly.OrgNotFound")<{
  * Fully-resolved Fly.io environment for a stack.
  *
  * `{ apiKey, apiBaseUrl }` comes from distilled `Credentials`. `orgSlug` is
- * the current token's organization (`currentTokenShow` → `tokens[0].org_slug`),
+ * the current token's organization (`getCurrentToken` → `tokens[0].org_slug`),
  * cached for the process. Resolve it inside lifecycle operations with
  * `FlyEnvironment.current`.
  */
@@ -32,11 +32,11 @@ export class FlyEnvironment extends Context.Service<
 }
 
 /**
- * Discover the current token's organization slug via `currentTokenShow`.
+ * Discover the current token's organization slug via `getCurrentToken`.
  * Used by {@link fromCredentials} and by {@link Catalog.currentOrgSlug}.
  */
 export const resolveOrgSlug = Effect.fn(function* () {
-  const info = yield* machines.currentTokenShow({});
+  const info = yield* machines.getCurrentToken({});
   const orgSlug = info.tokens?.[0]?.org_slug;
   if (orgSlug === undefined || orgSlug.length === 0) {
     return yield* new FlyOrgNotFound({
@@ -50,7 +50,7 @@ export const resolveOrgSlug = Effect.fn(function* () {
  * Build a `FlyEnvironment` layer from the distilled `Credentials`
  * service. Provide this after `Credentials.fromAuthProvider()`.
  *
- * `orgSlug` is resolved from `currentTokenShow` and cached so App.list /
+ * `orgSlug` is resolved from `getCurrentToken` and cached so App.list /
  * Catalog do not re-hit `/tokens/current` on every call.
  */
 export const fromCredentials = () =>

@@ -591,14 +591,14 @@ export const attachRedisSecrets = Effect.fn(function* (
     }
     if (url === undefined || url.length === 0) continue;
     const updated = yield* Effect.result(
-      machines.secretsUpdate({
+      machines.updateSecrets({
         app_name: appName,
         values: { [REDIS_URL_ENV]: url },
       }),
     );
     if (Result.isFailure(updated)) {
       yield* machines
-        .secretCreate({
+        .createSecret({
           app_name: appName,
           secret_name: REDIS_URL_ENV,
           value: url,

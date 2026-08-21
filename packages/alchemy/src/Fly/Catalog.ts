@@ -15,16 +15,16 @@ const notFound = (kind: CatalogKind, ref: string) =>
   new CatalogNotFound({ kind, ref });
 
 /**
- * Current token organization slug (`currentTokenShow` → `tokens[0].org_slug`).
- * Feeds `appsList({ org_slug })`. Not a resource.
+ * Current token organization slug (`getCurrentToken` → `tokens[0].org_slug`).
+ * Feeds `listApps({ org_slug })`. Not a resource.
  */
 export const currentOrgSlug = resolveOrgSlug;
 
 /**
- * List Fly platform regions via `platformRegionsGet`.
+ * List Fly platform regions via `getRegions`.
  */
 export const listRegions = Effect.fn(function* () {
-  const { regions } = yield* machines.platformRegionsGet({});
+  const { regions } = yield* machines.getRegions({});
   return regions ?? [];
 });
 

@@ -58,7 +58,7 @@ export const DecryptHttp = Layer.effect(
             };
           }
           const res = yield* auth.authorize(
-            machines.secretkeyDecrypt({
+            machines.decryptSecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
               ciphertext: toByteList(request.ciphertext),

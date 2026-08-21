@@ -55,8 +55,8 @@ export interface CertificateProps {
   hostname: string;
   /**
    * How the Certificate is issued. `"acme"` requests a Let's Encrypt
-   * certificate (`appCertificatesAcmeCreate`). `"custom"` uploads a PEM
-   * (`appCertificatesCustomCreate`). Changing kind replaces.
+   * certificate (`createAppAcmeCertificate`). `"custom"` uploads a PEM
+   * (`createAppCustomCertificate`). Changing kind replaces.
    *
    * @default "acme"
    */
@@ -135,7 +135,7 @@ export type Certificate = Resource<
  * @section DNS
  * Point an A record at a `shared_v4` {@link IpAssignment} and an AAAA
  * at `v6`. Plus whatever `dnsRequirements` lists for the ACME
- * challenge. Alchemy re-checks via `appCertificatesCheck` while
+ * challenge. Alchemy re-checks via `checkAppCertificate` while
  * `configured` is false.
  *
  * Observed attrs include `status`, `configured`, `acmeRequested`,
@@ -316,7 +316,7 @@ const toAttrsFromSummary = (
 
 const getByHostname = (appName: string, hostname: string) =>
   machines
-    .appCertificatesShow({ app_name: appName, hostname })
+    .getAppCertificate({ app_name: appName, hostname })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAppCertificates = (appName: string) =>
@@ -325,7 +325,7 @@ const listAppCertificates = (appName: string) =>
     let cursor: string | undefined;
     for (let i = 0; i < 8; i++) {
       const page = yield* machines
-        .appCertificatesList({
+        .listAppCertificates({
           app_name: appName,
           cursor,
           limit: 100,
@@ -371,7 +371,7 @@ const requireCustomMaterial = (
 
 const createAcme = (appName: string, hostname: string) =>
   machines
-    .appCertificatesAcmeCreate({
+    .createAppAcmeCertificate({
       app_name: appName,
       hostname,
     })
@@ -384,7 +384,7 @@ const createCustom = (
   privateKey: string,
 ) =>
   machines
-    .appCertificatesCustomCreate({
+    .createAppCustomCertificate({
       app_name: appName,
       hostname,
       fullchain,
@@ -400,12 +400,12 @@ const replaceCustom = (
 ) =>
   Effect.gen(function* () {
     yield* machines
-      .appCertificatesCustomDelete({
+      .deleteAppCustomCertificate({
         app_name: appName,
         hostname,
       })
       .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    yield* machines.appCertificatesCustomCreate({
+    yield* machines.createAppCustomCertificate({
       app_name: appName,
       hostname,
       fullchain,
@@ -551,7 +551,7 @@ export const CertificateProvider = () =>
         }
       } else if (current.configured !== true) {
         const checked = yield* machines
-          .appCertificatesCheck({
+          .checkAppCertificate({
             app_name: appName,
             hostname,
           })
@@ -573,7 +573,7 @@ export const CertificateProvider = () =>
       const hostname = output.hostname;
       if (appName.length === 0 || hostname.length === 0) return;
       yield* machines
-        .appCertificatesDelete({
+        .deleteAppCertificate({
           app_name: appName,
           hostname,
         })

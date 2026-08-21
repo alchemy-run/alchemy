@@ -34,7 +34,7 @@ const waitUntilRedisGone = (redisId: string, name: string) =>
   );
 
 const waitUntilAppGone = (appName: string) =>
-  machines.appsShow({ app_name: appName }).pipe(
+  machines.getApp({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -229,7 +229,7 @@ test.provider(
         `https://${deployed.app.appName}.fly.dev`,
       );
 
-      const secrets = yield* machines.secretsList({
+      const secrets = yield* machines.listSecrets({
         app_name: deployed.app.appName,
         show_secrets: false,
       });

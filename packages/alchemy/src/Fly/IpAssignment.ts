@@ -308,7 +308,7 @@ const matchesDesired = (
 };
 
 const listAssignments = (appName: string) =>
-  machines.appIPAssignmentsList({ app_name: appName }).pipe(
+  machines.listAppIPAssignments({ app_name: appName }).pipe(
     Effect.map((res) => res.ips ?? []),
     Effect.catchTag(["NotFound", "Forbidden"], () =>
       Effect.succeed([] as FlyIPAssignment[]),
@@ -420,7 +420,7 @@ export const IpAssignmentProvider = () =>
 
       if (current === undefined) {
         const created = yield* machines
-          .appIPAssignmentsCreate({
+          .createAppIPAssignment({
             app_name: appName,
             type: props.type,
             region: props.region,
@@ -451,7 +451,7 @@ export const IpAssignmentProvider = () =>
       const ip = output.ip;
       if (appName.length === 0 || ip.length === 0) return;
       yield* machines
-        .appIPAssignmentsDelete({
+        .deleteAppIPAssignment({
           app_name: appName,
           ip,
         })

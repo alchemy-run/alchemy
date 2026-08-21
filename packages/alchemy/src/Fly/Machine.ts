@@ -152,7 +152,7 @@ export interface MachineProps {
    */
   count?: number;
   /**
-   * Docker image reference. Updated in place via `machinesUpdate`.
+   * Docker image reference. Updated in place via `updateMachine`.
    */
   image: string;
   /**

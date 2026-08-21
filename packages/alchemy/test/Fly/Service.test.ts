@@ -19,7 +19,7 @@ const logLevel = Effect.provideService(
 
 const waitUntilGone = (appName: string, machineId: string) =>
   machines
-    .machinesShow({
+    .getMachine({
       app_name: appName,
       machine_id: machineId,
     })
@@ -47,7 +47,7 @@ test.provider(
         }),
       );
 
-      const minted = yield* machines.appCreateDeployToken({
+      const minted = yield* machines.createAppDeployToken({
         app_name: app.appName,
       });
       expect(minted.token).toEqual(expect.any(String));
@@ -92,7 +92,7 @@ test.provider(
       expect(deployed.api.mounts[0]?.path).toEqual(VOLUME_PATH);
       expect(deployed.api.mounts[0]?.volumeId).toEqual(expect.any(String));
 
-      const fetched = yield* machines.machinesShow({
+      const fetched = yield* machines.getMachine({
         app_name: deployed.api.appName,
         machine_id: deployed.api.machineId,
       });
@@ -118,7 +118,7 @@ test.provider(
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
 
-      const liveVolume = yield* machines.volumesGetById({
+      const liveVolume = yield* machines.getVolumeById({
         app_name: deployed.api.appName,
         volume_id: deployed.api.mounts[0]!.volumeId,
       });

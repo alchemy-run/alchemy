@@ -49,7 +49,7 @@ export const SignHttp = Layer.effect(
             };
           }
           const res = yield* auth.authorize(
-            machines.secretkeySign({
+            machines.signSecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
               plaintext: toByteList(request.plaintext),

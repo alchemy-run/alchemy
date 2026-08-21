@@ -27,7 +27,7 @@ export interface VolumeSnapshotProps {
   /**
    * Fly Volume id to snapshot (`vol_…`). Changing it replaces the
    * snapshot. Identity is the snapshot `id` returned by a subsequent
-   * `volumesListSnapshots`.
+   * `listVolumeSnapshots`.
    */
   volumeId: string;
 }
@@ -185,7 +185,7 @@ const toAttrs = (
 
 const listSnapshots = (appName: string, volumeId: string) =>
   machines
-    .volumesListSnapshots({
+    .listVolumeSnapshots({
       app_name: appName,
       volume_id: volumeId,
     })

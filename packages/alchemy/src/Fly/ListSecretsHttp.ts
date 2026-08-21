@@ -29,7 +29,7 @@ export const ListSecretsHttp = Layer.effect(
       makeClient: (auth, appName) =>
         Effect.fn("Fly.ListSecrets")(function* () {
           return yield* auth.authorize(
-            machines.secretsList({
+            machines.listSecrets({
               app_name: yield* appName,
               // Names are enough for the binding; plaintext is env-injected.
               show_secrets: false,

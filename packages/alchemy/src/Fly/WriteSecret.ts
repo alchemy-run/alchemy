@@ -1,9 +1,9 @@
 import type {
   AppSecretsUpdateResp,
   DeleteAppSecretResponse,
-  SecretCreateError,
-  SecretDeleteError,
-  SecretsUpdateError,
+  CreateSecretError,
+  DeleteSecretError,
+  UpdateSecretsError,
   SetAppSecretResponse,
 } from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
@@ -73,14 +73,14 @@ export interface WriteSecretClient {
   create(
     name: string,
     value: Redacted.Redacted<string> | string,
-  ): Effect.Effect<SetAppSecretResponse, SecretCreateError, RuntimeContext>;
+  ): Effect.Effect<SetAppSecretResponse, CreateSecretError, RuntimeContext>;
   /** Update secrets by name (batch of one). */
   update(
     name: string,
     value: Redacted.Redacted<string> | string,
-  ): Effect.Effect<AppSecretsUpdateResp, SecretsUpdateError, RuntimeContext>;
+  ): Effect.Effect<AppSecretsUpdateResp, UpdateSecretsError, RuntimeContext>;
   /** Delete a secret by name. */
   delete(
     name: string,
-  ): Effect.Effect<DeleteAppSecretResponse, SecretDeleteError, RuntimeContext>;
+  ): Effect.Effect<DeleteAppSecretResponse, DeleteSecretError, RuntimeContext>;
 }

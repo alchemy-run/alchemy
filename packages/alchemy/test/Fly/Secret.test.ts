@@ -20,7 +20,7 @@ const VALUE_B = Redacted.make("alchemy-secret-b");
 
 const waitUntilGone = (appName: string, secretName: string) =>
   machines
-    .secretGet({
+    .getSecret({
       app_name: appName,
       secret_name: secretName,
       show_secrets: false,
@@ -36,7 +36,7 @@ const waitUntilGone = (appName: string, secretName: string) =>
     );
 
 const waitAppGone = (appName: string) =>
-  machines.appsShow({ app_name: appName }).pipe(
+  machines.getApp({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -68,7 +68,7 @@ test.provider(
       expect(created.secret.name.length).toBeGreaterThan(0);
       expect(created.secret.digest).toEqual(expect.any(String));
 
-      const fetched = yield* machines.secretGet({
+      const fetched = yield* machines.getSecret({
         app_name: created.secret.appName,
         secret_name: created.secret.name,
         show_secrets: false,
@@ -93,7 +93,7 @@ test.provider(
       expect(updated.secret.digest).toEqual(expect.any(String));
       expect(updated.secret.digest).not.toEqual(created.secret.digest);
 
-      const refetched = yield* machines.secretGet({
+      const refetched = yield* machines.getSecret({
         app_name: updated.secret.appName,
         secret_name: updated.secret.name,
         show_secrets: false,
@@ -153,7 +153,7 @@ test.provider(
       expect(replaced.secret.name).not.toEqual(created.secret.name);
       expect(replaced.secret.appName).toEqual(created.secret.appName);
 
-      const fetched = yield* machines.secretGet({
+      const fetched = yield* machines.getSecret({
         app_name: replaced.secret.appName,
         secret_name: replaced.secret.name,
         show_secrets: false,

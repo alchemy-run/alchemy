@@ -137,7 +137,7 @@ path is part of the binding graph.
 
 ## Lifecycle
 
-Reconcile waits until the Machine is `started` (`machinesWait`,
+Reconcile waits until the Machine is `started` (`waitMachine`,
 bounded). `skipLaunch: true` creates or updates the config without
 starting it. Delete force-destroys and waits until gone. `Conflict`
 on create/update/delete is treated as a race and retried.

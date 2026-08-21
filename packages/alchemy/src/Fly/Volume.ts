@@ -39,13 +39,13 @@ const transientState = (state: string | undefined) =>
   state === "creating" || state === "pending" || state === "extending";
 
 export const getVolumeById = (appName: string, volumeId: string) =>
-  machines.volumesGetById({ app_name: appName, volume_id: volumeId }).pipe(
+  machines.getVolumeById({ app_name: appName, volume_id: volumeId }).pipe(
     Effect.map((volume) => (destroying(volume.state) ? undefined : volume)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 export const listVolumesByApp = (appName: string) =>
-  machines.volumesList({ app_name: appName }).pipe(
+  machines.listVolumes({ app_name: appName }).pipe(
     Effect.map((volumes) =>
       volumes.filter((volume) => !destroying(volume.state)),
     ),
@@ -131,7 +131,7 @@ export const createVolume = Effect.fn(function* (input: {
 }) {
   const sizeGb = Math.max(input.disk.sizeGb, MIN_SIZE_GB);
   const created = yield* machines
-    .volumesCreate({
+    .createVolume({
       app_name: input.appName,
       name: input.name,
       region: input.region,
@@ -170,7 +170,7 @@ export const syncVolume = Effect.fn(function* (
   const sizeGb = Math.max(disk.sizeGb, MIN_SIZE_GB);
   const observedSize = current.size_gb ?? 0;
   if (sizeGb > observedSize) {
-    const extended = yield* machines.volumesExtend({
+    const extended = yield* machines.extendVolume({
       app_name: appName,
       volume_id: volumeId,
       size_gb: sizeGb,
@@ -188,7 +188,7 @@ export const syncVolume = Effect.fn(function* (
     disk.snapshotRetention !== undefined &&
     disk.snapshotRetention !== current.snapshot_retention;
   if (backupChanged || retentionChanged) {
-    current = yield* machines.volumesUpdate({
+    current = yield* machines.updateVolume({
       app_name: appName,
       volume_id: volumeId,
       auto_backup_enabled: disk.autoBackupEnabled,
@@ -261,7 +261,7 @@ export const deleteVolume = Effect.fn(function* (
 ) {
   if (appName.length === 0 || volumeId.length === 0) return;
   yield* machines
-    .volumeDelete({
+    .deleteVolume({
       app_name: appName,
       volume_id: volumeId,
     })

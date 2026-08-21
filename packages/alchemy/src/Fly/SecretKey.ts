@@ -40,8 +40,8 @@ export interface SecretKeyProps {
   type?: string;
   /**
    * Raw key material. If omitted, Fly generates a key via
-   * `secretkeyGenerate`. If set, the key is created or updated with
-   * `secretkeySet`. Never persisted in state.
+   * `generateSecretKey`. If set, the key is created or updated with
+   * `setSecretKey`. Never persisted in state.
    */
   value?: ReadonlyArray<number>;
 }
@@ -79,7 +79,7 @@ export type SecretKey = Resource<
  * @see https://docs.machines.dev/secrets/Secretkeys_list
  *
  * @section Generate a key
- * Omit `value` and Fly generates a key via `secretkeyGenerate`. `type`
+ * Omit `value` and Fly generates a key via `generateSecretKey`. `type`
  * is Fly's key type (`nacl_sign`, `nacl_box`, `nacl_secretbox`,
  * `hs256`, `hs384`, `hs512`, `xaes256gcm`, `nacl_auth`, `es256`, …).
  *
@@ -98,7 +98,7 @@ export type SecretKey = Resource<
  *
  * @section Set raw material
  * Pass `value` as bytes. The key is created or updated with
- * `secretkeySet`. Never persisted in state.
+ * `setSecretKey`. Never persisted in state.
  *
  * @example HS256
  * ```typescript
@@ -225,14 +225,14 @@ const toAttrs = (
 
 const getByName = (appName: string, secretName: string) =>
   machines
-    .secretkeyGet({
+    .getSecretKey({
       app_name: appName,
       secret_name: secretName,
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listKeys = (appName: string) =>
-  machines.secretkeysList({ app_name: appName }).pipe(
+  machines.listSecretKeys({ app_name: appName }).pipe(
     Effect.map((res) => res.secret_keys ?? []),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
   );
@@ -244,14 +244,14 @@ const putKey = (input: {
   value: ReadonlyArray<number> | undefined;
 }) => {
   if (input.value !== undefined) {
-    return machines.secretkeySet({
+    return machines.setSecretKey({
       app_name: input.appName,
       secret_name: input.secretName,
       type: input.type,
       value: [...input.value],
     });
   }
-  return machines.secretkeyGenerate({
+  return machines.generateSecretKey({
     app_name: input.appName,
     secret_name: input.secretName,
     type: input.type,
@@ -391,7 +391,7 @@ export const SecretKeyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.appName.length === 0 || output.name.length === 0) return;
       yield* machines
-        .secretkeyDelete({
+        .deleteSecretKey({
           app_name: output.appName,
           secret_name: output.name,
         })
