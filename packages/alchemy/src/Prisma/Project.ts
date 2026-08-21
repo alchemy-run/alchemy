@@ -19,7 +19,7 @@ import * as Provider from "../Provider.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
-import { PrismaClient, extractConnectionSecrets } from "./Client.ts";
+import { extractConnectionSecrets } from "./Client.ts";
 import { destroyProjectApps } from "./ComputeLifecycle.ts";
 import {
   hasCanonicalConnectionSecrets,
@@ -363,9 +363,6 @@ const ProviderLive = () =>
   Provider.effect(
     Project,
     Effect.gen(function* () {
-      // Only the delete path still needs the hand-rolled client: it delegates
-      // to destroyProjectApps, which D3 migrates along with ComputeLifecycle.
-      const client = yield* PrismaClient;
       return {
         stables: ["projectId"],
         list: Effect.fn(function* () {
@@ -721,7 +718,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.projectId)) return;
-          yield* destroyProjectApps(client, output.projectId);
+          yield* destroyProjectApps(output.projectId);
         }),
       };
     }),

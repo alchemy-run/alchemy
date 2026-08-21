@@ -608,6 +608,32 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       }
     }
 
+    if (head === "deployments" && id !== undefined) {
+      if (tail === "start") return call(client.startDeployment, [id]);
+      if (tail === "stop") {
+        return voidResponse(runHandler(client.stopDeployment(id)));
+      }
+      if (request.method === "GET") return call(client.getDeployment, [id]);
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteDeployment(id)));
+      }
+    }
+
+    if (head === "apps" && id !== undefined && tail === "promote") {
+      return call(client.promoteApp, [id, body]);
+    }
+    if (head === "apps" && id !== undefined && tail === "rollback") {
+      return call(client.rollbackApp, [id, body]);
+    }
+    if (
+      head === "apps" &&
+      id !== undefined &&
+      tail === undefined &&
+      request.method === "DELETE"
+    ) {
+      return voidResponse(runHandler(client.deleteApp(id)));
+    }
+
     if (head === "branches" && id !== undefined) {
       if (request.method === "GET") return call(client.getBranch, [id]);
       if (request.method === "PATCH")
@@ -1955,6 +1981,8 @@ describe("Prisma resource providers", () => {
         "GET /v1/projects/project-1/branches",
         "GET /v1/apps",
         "GET /v1/projects/project-1/branches",
+        "GET /v1/deployments/version-1",
+        "GET /v1/apps/service-1/deployments",
         "GET /v1/environment-variables",
         "GET /v1/source-repositories",
       ]);
@@ -2107,7 +2135,8 @@ describe("Prisma resource providers", () => {
       );
 
       expect(calls).toEqual([
-        ["listApps", { projectId: "project-1", limit: 100 }],
+        // Over the wire, query params arrive as strings.
+        ["listApps", { limit: "100", projectId: "project-1" }],
         ["deleteProject", "project-1"],
         ["getDatabase", "database-1"],
         ["getConnection", "connection-1"],
@@ -2281,6 +2310,7 @@ describe("Prisma resource providers", () => {
           "POST /v1/apps",
           "GET /v1/projects/project-1/branches",
           "POST /v1/apps/service-1/deployments",
+          "GET /v1/deployments/version-1",
           "POST /v1/environment-variables",
           "GET /v1/apps",
           "GET /v1/projects/project-1/databases",
@@ -4770,7 +4800,8 @@ describe("Prisma resource providers", () => {
 
       expect(calls).toEqual([
         ["getDeployment", "version-1"],
-        ["listAppDeployments", { appId: "service-1", query: undefined }],
+        // Over the wire, an empty query arrives as an empty object.
+        ["listAppDeployments", { appId: "service-1", query: {} }],
         ["getDeployment", "version-1"],
         ["stopDeployment", "version-1"],
         ["getDeployment", "version-1"],
@@ -4789,7 +4820,8 @@ describe("Prisma resource providers", () => {
         ["deleteConnection", "connection-1"],
         ["getDatabase", "database-1"],
         ["deleteDatabase", "database-1"],
-        ["listApps", { projectId: "project-1", limit: 100 }],
+        // Over the wire, query params arrive as strings.
+        ["listApps", { limit: "100", projectId: "project-1" }],
         ["deleteProject", "project-1"],
       ]);
     }).pipe(

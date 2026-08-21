@@ -1,6 +1,7 @@
-import type { PrismaManagementClient } from "../Client.ts";
+import * as Effect from "effect/Effect";
+import { getV1DeploymentsByDeploymentId } from "@distilled.cloud/prisma-postgres/management";
 
-export const observeDeployment = (
-  client: PrismaManagementClient,
-  deploymentId: string,
-) => client.getDeployment(deploymentId);
+export const observeDeployment = (deploymentId: string) =>
+  getV1DeploymentsByDeploymentId({ deploymentId }).pipe(
+    Effect.map((response) => response.data),
+  );

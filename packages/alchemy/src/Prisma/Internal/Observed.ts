@@ -93,6 +93,14 @@ export interface ObservedApp {
   readonly createdAt: string;
 }
 
+export interface ObservedDeployment {
+  readonly id: string;
+  readonly foundryVersionId: string;
+  readonly status: string;
+  readonly previewDomain: string | null;
+  readonly createdAt?: string;
+}
+
 export interface ObservedBranch {
   readonly id: string;
   readonly gitName: string;

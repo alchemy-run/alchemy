@@ -36,6 +36,7 @@ import {
   data,
   failure,
   makeFakeManagementApi,
+  noContent,
   notFound,
   page,
   unhandled,
@@ -115,10 +116,33 @@ const clientBackedApi = (client: any) =>
         : unhandled(request);
     const list = (value: unknown) => page(value as unknown[]);
 
-    if (head === "apps" && tail === "deployments") {
-      return request.method === "GET"
-        ? call(client.listAppDeployments, [id, query], list)
-        : call(client.createAppDeployment, [id, body]);
+    if (head === "apps" && id !== undefined) {
+      if (tail === "deployments") {
+        return request.method === "GET"
+          ? call(client.listAppDeployments, [id, query], list)
+          : call(client.createAppDeployment, [id, body]);
+      }
+      if (tail === "promote") return call(client.promoteApp, [id, body]);
+      if (tail === "rollback") return call(client.rollbackApp, [id, body]);
+      if (tail === undefined && request.method === "GET") {
+        return call(client.getApp, [id]);
+      }
+    }
+    if (head === "deployments" && id !== undefined) {
+      if (tail === "start") return call(client.startDeployment, [id]);
+      if (tail === "stop") {
+        const outcome = runHandler(client.stopDeployment(id));
+        return Result.isFailure(outcome)
+          ? asResponse(outcome, (value) => data(value))
+          : noContent();
+      }
+      if (request.method === "GET") return call(client.getDeployment, [id]);
+      if (request.method === "DELETE") {
+        const outcome = runHandler(client.deleteDeployment(id));
+        return Result.isFailure(outcome)
+          ? asResponse(outcome, (value) => data(value))
+          : noContent();
+      }
     }
     return unhandled(request);
   });
@@ -151,9 +175,7 @@ describe("Prisma Deployment", () => {
         8,
       ).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain(
-        "exceeds the 8 byte upload safety limit",
-      );
+      expect(error.message).toContain("exceeds the 8 byte upload safety limit");
     }),
   );
 
@@ -164,7 +186,7 @@ describe("Prisma Deployment", () => {
         MAX_DEPLOYMENT_ARTIFACT_BYTES + 1,
       ).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain("hard limit");
+      expect(error.message).toContain("hard limit");
     }),
   );
 
@@ -334,9 +356,7 @@ describe("Prisma Deployment", () => {
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "did not return an upload URL",
-        );
+        expect(error.message).toContain("did not return an upload URL");
         expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
         Effect.provide(deploymentProviderLive()),
@@ -405,12 +425,10 @@ describe("Prisma Deployment", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain("artifact upload failed");
-      expect((error as Error).message).toContain("HTTP 500");
-      expect((error as Error).message).toContain("29 bytes");
-      expect((error as Error).message).not.toContain(
-        "SIGNED_UPLOAD_SECRET_SENTINEL",
-      );
+      expect(error.message).toContain("artifact upload failed");
+      expect(error.message).toContain("HTTP 500");
+      expect(error.message).toContain("29 bytes");
+      expect(error.message).not.toContain("SIGNED_UPLOAD_SECRET_SENTINEL");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
       Effect.provide(deploymentProviderLive()),
@@ -427,13 +445,13 @@ describe("Prisma Deployment", () => {
       const startError = new PrismaApiError({
         method: "POST",
         path: "/v1/deployments/version-1/start",
-        status: 500,
+        status: 400,
         message: "start failed",
       });
       const deleteError = new PrismaApiError({
         method: "DELETE",
         path: "/v1/deployments/version-1",
-        status: 500,
+        status: 400,
         message: "cleanup failed",
       });
       const client = {
@@ -484,7 +502,10 @@ describe("Prisma Deployment", () => {
           "DELETE /v1/deployments/version-1",
         );
         expect((error as AggregateError).errors).toHaveLength(2);
-        expect((error as AggregateError).errors[0]).toBe(startError);
+        // Over the wire the injected failures decode into the typed errors.
+        expect(
+          ((error as AggregateError).errors[0] as Error).message,
+        ).toContain("start failed");
         expect(
           ((error as AggregateError).errors[1] as Error).message,
         ).toContain("cleanup failed");
@@ -528,7 +549,7 @@ describe("Prisma Deployment", () => {
           new PrismaApiError({
             method: "POST",
             path: `/v1/deployments/${id}/start`,
-            status: 500,
+            status: 400,
             message: "start failed",
           }),
         );
@@ -558,8 +579,9 @@ describe("Prisma Deployment", () => {
         })
         .pipe(Effect.flip);
 
-      expect(error).toBeInstanceOf(PrismaApiError);
-      expect((error as PrismaApiError).message).toBe("start failed");
+      // Over the wire the injected failure decodes into the typed error.
+      expect(error._tag).toBe("BadRequest");
+      expect(error.message).toBe("start failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
       Effect.provide(deploymentProviderLive()),
@@ -637,7 +659,7 @@ describe("Prisma Deployment", () => {
             new PrismaApiError({
               method: "POST",
               path: `/v1/apps/${appId}/promote`,
-              status: 500,
+              status: 400,
               message: "promote failed",
             }),
           );
@@ -647,7 +669,7 @@ describe("Prisma Deployment", () => {
             new PrismaApiError({
               method: "POST",
               path: "/v1/apps/service-1/rollback",
-              status: 500,
+              status: 400,
               message: "promotion recovery failed",
             }),
           ),
@@ -854,7 +876,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -883,7 +905,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -950,7 +972,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1087,7 +1109,7 @@ describe("Prisma Deployment", () => {
         },
       }).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain("ambiguous recovery match");
+      expect(error.message).toContain("ambiguous recovery match");
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
@@ -1139,7 +1161,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1187,7 +1209,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1234,7 +1256,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -1281,7 +1303,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1625,13 +1647,13 @@ describe("Prisma Deployment", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "promote cannot be combined with start: false",
       );
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1658,14 +1680,14 @@ describe("Prisma Deployment", () => {
             bindings: [],
           })
           .pipe(Effect.flip);
-        expect((error as Error).message).toContain(
+        expect(error.message).toContain(
           "portMapping.http must be an integer between 1 and 65535",
         );
       }
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1768,7 +1790,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1791,13 +1813,13 @@ describe("Prisma Deployment", () => {
         })
         .pipe(Effect.flip);
 
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "requires artifactPath or skipCodeUpload: true",
       );
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -2043,7 +2065,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -2073,7 +2095,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -2116,7 +2138,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });

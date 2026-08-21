@@ -7,6 +7,22 @@ import {
 } from "@/Prisma/ComputeLifecycle";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Retry, fromApiToken } from "@distilled.cloud/prisma-postgres";
+import {
+  type Captured,
+  FAKE_API_BASE_URL,
+  data,
+  failure,
+  makeFakeManagementApi,
+  noContent,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
+import { PrismaPaginationError } from "@/Prisma/Internal/Pagination";
 
 const apiError = (
   method: "GET" | "POST" | "DELETE",
@@ -24,6 +40,101 @@ const deployment = (id: string, status: string) => ({
   createdAt: "2026-01-01T00:00:00Z",
 });
 
+const appItem = (id: string) => ({
+  id,
+  type: "app" as const,
+  url: `https://api.prisma.test/v1/apps/${id}`,
+  name: id,
+  region: { id: "us-east-1", name: "US East" },
+  projectId: "project-1",
+  branchId: null,
+  latestDeploymentId: null,
+  appEndpointDomain: `${id}.prisma.build`,
+  createdAt: "2026-01-01T00:00:00Z",
+});
+
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers
+ * these tests declare, for the lifecycle routes now reached through distilled
+ * operations. An injected `PrismaApiError` becomes its real status,
+ * `undefined` becomes a 404, everything else a `{ data }` (or
+ * `{ data, pagination }`) envelope.
+ */
+const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    // Never 5xx from generic throws: a transient status would be replayed by
+    // the retry policy. Injected `PrismaApiError`s keep their real status.
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return outcome.success === undefined
+    ? notFound("not found")
+    : wrap(outcome.success);
+};
+
+const voidResponse = (outcome: ReturnType<typeof runHandler>): Response =>
+  Result.isFailure(outcome)
+    ? asResponse(outcome, (value) => data(value))
+    : noContent();
+
+const clientBackedApi = (client: any) =>
+  makeFakeManagementApi((request: Captured) => {
+    // segments[0] is the "v1" prefix.
+    const [head, id, tail] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const query = Object.fromEntries(new URLSearchParams(request.search));
+    const call = (
+      handler: unknown,
+      args: unknown[],
+      wrap: (value: unknown) => Response = (value) => data(value),
+    ) =>
+      typeof handler === "function"
+        ? asResponse(runHandler((handler as any)(...args)), wrap)
+        : unhandled(request);
+    const list = (value: unknown) => page(value as unknown[]);
+
+    if (head === "deployments" && id !== undefined) {
+      if (tail === "stop")
+        return voidResponse(runHandler(client.stopDeployment(id)));
+      if (request.method === "GET") return call(client.getDeployment, [id]);
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteDeployment(id)));
+      }
+    }
+    if (head === "apps") {
+      if (id === undefined && request.method === "GET") {
+        return call(client.listApps, [query], list);
+      }
+      if (id !== undefined && tail === "deployments") {
+        return call(client.listAppDeployments, [id, query], list);
+      }
+      if (id !== undefined && request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteApp(id)));
+      }
+    }
+    if (
+      head === "projects" &&
+      id !== undefined &&
+      request.method === "DELETE"
+    ) {
+      return voidResponse(runHandler(client.deleteProject(id)));
+    }
+    return unhandled(request);
+  });
+
+const provide = (client: unknown) =>
+  Effect.provide(clientBackedApi(client).layer);
+
 describe("Prisma canonical Compute lifecycle", () => {
   it.live("waits for a deployment to reach its target status", () => {
     let observed = 0;
@@ -35,15 +146,13 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* waitForDeploymentStatus(
-        client,
-        "deployment-1",
-        "running",
-        { pollIntervalMs: 1, timeoutSeconds: 1 },
-      );
+      const result = yield* waitForDeploymentStatus("deployment-1", "running", {
+        pollIntervalMs: 1,
+        timeoutSeconds: 1,
+      });
       expect(result.status).toBe("running");
       expect(observed).toBe(2);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("fails immediately for a failed deployment", () => {
@@ -53,13 +162,12 @@ describe("Prisma canonical Compute lifecycle", () => {
 
     return Effect.gen(function* () {
       const error = yield* waitForDeploymentStatus(
-        client,
         "deployment-1",
         "running",
       ).pipe(Effect.flip);
-      expect((error as Error).message).toContain("deployment-1");
-      expect((error as Error).message).toContain("failed");
-    });
+      expect(error.message).toContain("deployment-1");
+      expect(error.message).toContain("failed");
+    }).pipe(provide(client));
   });
 
   it.live("times out with the last observed deployment status", () => {
@@ -69,36 +177,42 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const error = yield* waitForDeploymentStatus(
-        client,
-        "deployment-1",
-        "running",
-        { timeoutSeconds: 0.01, pollIntervalMs: 1 },
-      ).pipe(Effect.flip);
-      expect((error as Error).message).toContain("Timed out");
-      expect((error as Error).message).toContain("provisioning");
-    });
+      const error = yield* waitForDeploymentStatus("deployment-1", "running", {
+        timeoutSeconds: 0.01,
+        pollIntervalMs: 1,
+      }).pipe(Effect.flip);
+      expect(error.message).toContain("Timed out");
+      expect(error.message).toContain("provisioning");
+    }).pipe(provide(client));
   });
 
   it.live("caps a hung deployment observation at the polling deadline", () => {
-    const client = {
-      getDeployment: () => Effect.never,
-    } as unknown as PrismaManagementClient;
+    // A handler cannot hang inside the synchronous dispatch fake, so the hang
+    // is modeled at the transport: an HTTP client that never answers.
+    const hungTransport = Layer.mergeAll(
+      Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.never),
+      ),
+      fromApiToken({
+        apiToken: "fake-service-token",
+        apiBaseUrl: FAKE_API_BASE_URL,
+      }),
+    );
 
     return Effect.gen(function* () {
       const startedAt = Date.now();
       const error = yield* waitForDeploymentStatus(
-        client,
         "deployment-hung",
         "running",
         { timeoutSeconds: 0.05, pollIntervalMs: 1 },
       ).pipe(Effect.flip);
       const elapsed = Date.now() - startedAt;
 
-      expect((error as Error).message).toContain("Timed out");
-      expect((error as Error).message).toContain("last status: 'unknown'");
+      expect(error.message).toContain("Timed out");
+      expect(error.message).toContain("last status: 'unknown'");
       expect(elapsed).toBeLessThan(500);
-    });
+    }).pipe(Effect.provide(hungTransport));
   });
 
   it.effect("rejects invalid deployment polling timings", () => {
@@ -108,37 +222,36 @@ describe("Prisma canonical Compute lifecycle", () => {
 
     return Effect.gen(function* () {
       const timeoutError = yield* waitForDeploymentStatus(
-        client,
         "deployment-1",
         "running",
         { timeoutSeconds: 0 },
       ).pipe(Effect.flip);
       const intervalError = yield* waitForDeploymentStatus(
-        client,
         "deployment-1",
         "running",
         { pollIntervalMs: Number.NaN },
       ).pipe(Effect.flip);
 
-      expect((timeoutError as Error).message).toContain("timeoutSeconds");
-      expect((intervalError as Error).message).toContain("pollIntervalMs");
-    });
+      expect(timeoutError.message).toContain("timeoutSeconds");
+      expect(intervalError.message).toContain("pollIntervalMs");
+    }).pipe(provide(client));
   });
 
   it.effect("preserves a not-found observation while waiting", () => {
-    const notFound = apiError("GET", "/v1/deployments/deployment-1", 404);
     const client = {
-      getDeployment: () => Effect.fail(notFound),
+      getDeployment: () =>
+        Effect.fail(apiError("GET", "/v1/deployments/deployment-1", 404)),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
       const error = yield* waitForDeploymentStatus(
-        client,
         "deployment-1",
         "running",
       ).pipe(Effect.flip);
-      expect(error).toBe(notFound);
-    });
+      // Over the wire the injected 404 decodes into the typed error.
+      expect(error._tag).toBe("NotFound");
+      expect(error.message).toBe("HTTP 404");
+    }).pipe(provide(client));
   });
 
   it.effect("treats an already deleted deployment as deleted", () => {
@@ -148,14 +261,14 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyDeployment(client, "deployment-missing");
+      const result = yield* destroyDeployment("deployment-missing");
       expect(result).toEqual({
         deploymentId: "deployment-missing",
         previousStatus: undefined,
         stopped: false,
         deleted: true,
       });
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("stops a running deployment before deleting it", () => {
@@ -179,7 +292,7 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyDeployment(client, "deployment-1");
+      const result = yield* destroyDeployment("deployment-1");
       expect(result).toMatchObject({
         deploymentId: "deployment-1",
         previousStatus: "running",
@@ -192,7 +305,7 @@ describe("Prisma canonical Compute lifecycle", () => {
         "get:deployment-1",
         "delete:deployment-1",
       ]);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("reports only the canonical deployment cleanup route", () => {
@@ -200,18 +313,43 @@ describe("Prisma canonical Compute lifecycle", () => {
       getDeployment: () =>
         Effect.succeed(deployment("deployment-1", "stopped")),
       deleteDeployment: (id: string) =>
-        Effect.fail(apiError("DELETE", `/v1/deployments/${id}`, 500)),
+        Effect.fail(apiError("DELETE", `/v1/deployments/${id}`, 400)),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const error = yield* destroyDeployment(client, "deployment-1").pipe(
-        Effect.flip,
-      );
-      expect((error as Error).message).toContain(
-        "DELETE /v1/deployments/deployment-1",
-      );
-    });
+      const error = yield* destroyDeployment("deployment-1").pipe(Effect.flip);
+      expect(error.message).toContain("DELETE /v1/deployments/deployment-1");
+    }).pipe(provide(client));
   });
+
+  it.effect(
+    "explains a stopped deployment whose delete fails with a server error",
+    () => {
+      const client = {
+        getDeployment: () =>
+          Effect.succeed(deployment("deployment-1", "stopped")),
+        deleteDeployment: (id: string) =>
+          // An unmapped status decodes into the catch-all error, which
+          // carries the ServerError category the diagnostic branch reads.
+          Effect.fail(apiError("DELETE", `/v1/deployments/${id}`, 507)),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const error = yield* destroyDeployment("deployment-1").pipe(
+          Effect.flip,
+        );
+        expect(error.message).toContain(
+          "Stopped Prisma deployments are expected to be deletable",
+        );
+        expect(error.message).toContain("DELETE /v1/deployments/deployment-1");
+      }).pipe(
+        provide(client),
+        // Server-category errors are replayed by the default policy; this
+        // test examines the terminal diagnostic, so retries are disabled.
+        Effect.provide(Layer.succeed(Retry.Retry, { while: () => false })),
+      );
+    },
+  );
 
   it.effect(
     "uses the App delete cascade without enumerating deployments",
@@ -226,10 +364,10 @@ describe("Prisma canonical Compute lifecycle", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyApp(client, "app-1");
+        const result = yield* destroyApp("app-1");
         expect(result).toEqual({ appId: "app-1", appDeleted: true });
         expect(calls).toEqual(["delete-app:app-1"]);
-      });
+      }).pipe(provide(client));
     },
   );
 
@@ -246,10 +384,10 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyApp(client, "app-1");
+      const result = yield* destroyApp("app-1");
       expect(result.appDeleted).toBe(true);
       expect(attempts).toBe(3);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("treats an already deleted App as deleted", () => {
@@ -259,11 +397,11 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      expect(yield* destroyApp(client, "app-missing")).toEqual({
+      expect(yield* destroyApp("app-missing")).toEqual({
         appId: "app-missing",
         appDeleted: true,
       });
-    });
+    }).pipe(provide(client));
   });
 
   it.live("surfaces the final App deletion conflict", () => {
@@ -277,10 +415,12 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const error = yield* destroyApp(client, "app-1").pipe(Effect.flip);
-      expect(error).toBe(conflict);
+      const error = yield* destroyApp("app-1").pipe(Effect.flip);
+      // Over the wire the injected 409 decodes into the typed error.
+      expect(error._tag).toBe("Conflict");
+      expect(error.message).toBe("HTTP 409");
       expect(attempts).toBe(5);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("deletes project Apps before deleting the project", () => {
@@ -289,7 +429,7 @@ describe("Prisma canonical Compute lifecycle", () => {
       listApps: (query: unknown) =>
         Effect.sync(() => {
           calls.push(`list:${JSON.stringify(query)}`);
-          return [{ id: "app-1" }, { id: "app-2" }];
+          return [appItem("app-1"), appItem("app-2")];
         }),
       deleteApp: (id: string) =>
         Effect.sync(() => {
@@ -302,19 +442,20 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyProjectApps(client, "project-1");
+      const result = yield* destroyProjectApps("project-1");
       expect(result).toEqual({
         projectId: "project-1",
         deletedAppIds: ["app-1", "app-2"],
         projectDeleted: true,
       });
       expect(calls).toEqual([
-        'list:{"projectId":"project-1","limit":100}',
+        // Over the wire, query params arrive as strings.
+        'list:{"limit":"100","projectId":"project-1"}',
         "delete-app:app-1",
         "delete-app:app-2",
         "delete-project:project-1",
       ]);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("treats an already deleted project as deleted", () => {
@@ -326,12 +467,12 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      expect(yield* destroyProjectApps(client, "project-1")).toEqual({
+      expect(yield* destroyProjectApps("project-1")).toEqual({
         projectId: "project-1",
         deletedAppIds: [],
         projectDeleted: true,
       });
-    });
+    }).pipe(provide(client));
   });
 
   it.live("re-cleans Apps after a blocked project deletion", () => {
@@ -343,7 +484,7 @@ describe("Prisma canonical Compute lifecycle", () => {
         Effect.sync(() => {
           lists += 1;
           calls.push(`list:${lists}`);
-          return lists === 1 ? [{ id: "app-1" }] : [];
+          return lists === 1 ? [appItem("app-1")] : [];
         }),
       deleteApp: (id: string) =>
         Effect.sync(() => calls.push(`delete-app:${id}`)),
@@ -358,7 +499,7 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyProjectApps(client, "project-1");
+      const result = yield* destroyProjectApps("project-1");
       expect(result).toEqual({
         projectId: "project-1",
         deletedAppIds: ["app-1"],
@@ -371,35 +512,36 @@ describe("Prisma canonical Compute lifecycle", () => {
         "list:2",
         "delete-project:project-1:2",
       ]);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("supports keeping the project after deleting its Apps", () => {
     const calls: string[] = [];
     const client = {
-      listApps: () => Effect.succeed([{ id: "app-1" }]),
+      listApps: () => Effect.succeed([appItem("app-1")]),
       deleteApp: (id: string) =>
         Effect.sync(() => calls.push(`delete-app:${id}`)),
       deleteProject: () => Effect.die("must not delete project"),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyProjectApps(client, "project-1", {
+      const result = yield* destroyProjectApps("project-1", {
         keepProject: true,
       });
       expect(result.projectDeleted).toBe(false);
       expect(result.deletedAppIds).toEqual(["app-1"]);
       expect(calls).toEqual(["delete-app:app-1"]);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("cleans every App returned across canonical pagination", () => {
-    const apps = Array.from({ length: 101 }, (_, index) => ({
-      id: `app-${index}`,
-    }));
+    const apps = Array.from({ length: 101 }, (_, index) =>
+      appItem(`app-${index}`),
+    );
     const deleted: string[] = [];
     const client = {
-      // PrismaManagementClient.listApps follows every cursor before returning.
+      // The fake serves the full set in one page; the inline walk stops when
+      // the pagination envelope reports no more pages.
       listApps: () => Effect.succeed(apps),
       deleteApp: (id: string) =>
         Effect.sync(() => {
@@ -408,23 +550,23 @@ describe("Prisma canonical Compute lifecycle", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyProjectApps(client, "project-1", {
+      const result = yield* destroyProjectApps("project-1", {
         keepProject: true,
       });
       expect(result.deletedAppIds).toHaveLength(101);
       expect(deleted).toHaveLength(101);
-    });
+    }).pipe(provide(client));
   });
 
   it.effect("supports keeping Apps during project-scoped inspection", () => {
     const client = {
-      listApps: () => Effect.succeed([{ id: "app-1" }]),
+      listApps: () => Effect.succeed([appItem("app-1")]),
       deleteApp: () => Effect.die("must not delete App"),
       deleteProject: () => Effect.die("must not delete project"),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* destroyProjectApps(client, "project-1", {
+      const result = yield* destroyProjectApps("project-1", {
         keepApp: true,
         keepProject: true,
       });
@@ -433,6 +575,28 @@ describe("Prisma canonical Compute lifecycle", () => {
         deletedAppIds: [],
         projectDeleted: false,
       });
-    });
+    }).pipe(provide(client));
   });
+
+  it.effect(
+    "refuses a truncated App listing that promises another page",
+    () => {
+      // `hasMore: true` with no cursor is a malformed page. Reading it as the
+      // end of the list would let the cleanup miss live Apps, so the walk fails
+      // loudly instead.
+      const fake = makeFakeManagementApi((request: Captured) =>
+        request.pathname === "/v1/apps" && request.method === "GET"
+          ? page([appItem("app-1")], true, null)
+          : unhandled(request),
+      );
+
+      return Effect.gen(function* () {
+        const error = yield* destroyProjectApps("project-1").pipe(Effect.flip);
+        expect(error).toBeInstanceOf(PrismaPaginationError);
+        expect(error.message).toContain(
+          "hasMore was true without a non-empty nextCursor",
+        );
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 });

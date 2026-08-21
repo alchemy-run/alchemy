@@ -13,6 +13,7 @@ import {
   data,
   failure,
   makeFakeManagementApi,
+  noContent,
   notFound,
   page,
   unhandled,
@@ -108,6 +109,12 @@ const clientBackedApi = (client: any) =>
       }
       if (request.method === "GET") return call(client.getApp, [id]);
       if (request.method === "PATCH") return call(client.updateApp, [id, body]);
+      if (request.method === "DELETE") {
+        const outcome = runHandler(client.deleteApp(id));
+        return Result.isFailure(outcome)
+          ? asResponse(outcome, (value) => data(value))
+          : noContent();
+      }
     }
     if (
       head === "projects" &&

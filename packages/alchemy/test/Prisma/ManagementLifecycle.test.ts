@@ -594,6 +594,14 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
   const fake = makeFakeManagementApi((request) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
 
+    if (request.pathname === "/v1/apps" && request.method === "GET") {
+      calls.push([
+        "listApps",
+        Object.fromEntries(new URLSearchParams(request.search)),
+      ]);
+      return page([]);
+    }
+
     if (request.pathname === "/v1/projects" && request.method === "GET") {
       calls.push(["listProjects"]);
       return page(

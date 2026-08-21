@@ -21,7 +21,6 @@ import {
   postV1Apps,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
-import { PrismaClient } from "./Client.ts";
 import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import type { Project } from "./Project.ts";
@@ -296,9 +295,6 @@ const ProviderLive = () =>
   Provider.effect(
     App,
     Effect.gen(function* () {
-      // Only the delete path still needs the hand-rolled client: it delegates
-      // to destroyApp, which D3 migrates along with ComputeLifecycle.
-      const client = yield* PrismaClient;
       return {
         stables: ["appId"],
         list: () => listApps().pipe(Effect.map((apps) => apps.map(attrsFrom))),
@@ -484,7 +480,7 @@ const ProviderLive = () =>
               ),
             );
           }
-          yield* destroyApp(client, output.appId);
+          yield* destroyApp(output.appId);
         }),
       };
     }),

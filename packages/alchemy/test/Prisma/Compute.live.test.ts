@@ -61,18 +61,17 @@ test.provider.skipIf(!runCleanup)(
   "live cleans up an existing Prisma Compute project/App from configured credentials",
   () =>
     Effect.gen(function* () {
-      const client = yield* Prisma.PrismaClient;
       const projectId = process.env.PRISMA_CLEANUP_PROJECT_ID!.trim();
       const appId = process.env.PRISMA_CLEANUP_APP_ID?.trim() || undefined;
       const deploymentId =
         process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
 
       if (deploymentId) {
-        yield* Prisma.destroyDeployment(client, deploymentId, {
+        yield* Prisma.destroyDeployment(deploymentId, {
           timeoutSeconds: 240,
         });
       }
-      yield* Prisma.destroyProjectApps(client, projectId, {
+      yield* Prisma.destroyProjectApps(projectId, {
         timeoutSeconds: 240,
       });
 

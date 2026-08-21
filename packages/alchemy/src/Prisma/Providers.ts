@@ -99,6 +99,35 @@ const standaloneManagementApiLayer = () =>
  * `Retry.makeDefault` (8 retries, 250ms base, honors `Retry-After`) replaced
  * the client's 4×100ms idempotent-only policy, and creates opt out with
  * `Retry.none`.
+ *
+ * The hand-rolled client's client-side guards did not survive the migration:
+ * its 10s request deadline, its 2-minute provisioning deadline on creates
+ * and deletes, and its pagination-walk caps (deadline, page/item/byte caps,
+ * repeated-cursor detection) have no distilled equivalent, so a stalled call
+ * or a server that repeats a cursor is now bounded only by the transport and
+ * the retry policy. Accepted for parity with the Neon provider; revisit if a
+ * live run hangs here. (The one cap that did survive is the malformed-page
+ * check: every walk still fails loudly on `hasMore: true` without a cursor.)
+ *
+ * Two more inherited deltas, both properties of distilled's shared REST
+ * protocol rather than of this provider:
+ *
+ * - **Server error text is no longer sanitized.** The old client reduced an
+ *   API error message to `HTTP {status}` or a regex-validated error code and
+ *   kept the raw body `Redacted`. Distilled puts the server's `error.message`
+ *   — or the raw body text — verbatim into the typed error's message, and
+ *   `UnknownPrismaPostgresError` carries the whole body un-redacted, so those
+ *   strings reach user-visible logs. If the API ever echoes submitted secret
+ *   material back in a 4xx, it is now readable there. Re-wrapping every
+ *   operation would undo the point of the migration, so the question of
+ *   whether sanitization belongs in `protocol-rest` is left to distilled.
+ * - **2xx bodies are no longer schema-validated.** The old client failed with
+ *   a labeled `PrismaApiDecodeError` when a 2xx lacked the `{ data }`
+ *   envelope; `protocol-rest` only key-maps the body, so a malformed 200
+ *   yields `undefined` that either crashes later or persists into resource
+ *   attributes. The dropped `Accept: application/json` and `User-Agent`
+ *   request headers go with it. Per-call-site validation in alchemy is the
+ *   wrong layer; this is also a distilled-side question.
  */
 const stackManagementApiLayer = () =>
   Layer.effect(
@@ -157,6 +186,20 @@ const stackManagementApiLayer = () =>
  * ```typescript
  * const projects = yield* Prisma.listProjects().pipe(
  *   Effect.provide(Prisma.managementApi()),
+ * );
+ * ```
+ *
+ * This layer covers the operation helpers. The lifecycle helpers
+ * (`destroyApp`, `destroyDeployment`, `destroyProjectApps`,
+ * `waitForDeploymentStatus`, `syncComputeEnvironment`) also need an
+ * `HttpClient` from the caller, because the Prisma-scoped node transport is
+ * `Layer.provide`d privately here — see the comment on the private provide
+ * above for why it must not reach the surrounding stack. Add one, e.g.:
+ *
+ * ```typescript
+ * yield* Prisma.destroyApp(appId).pipe(
+ *   Effect.provide(Prisma.managementApi()),
+ *   Effect.provide(FetchHttpClient.layer),
  * );
  * ```
  */

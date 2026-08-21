@@ -22,6 +22,8 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -31,6 +33,17 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
+import { fromApiToken } from "@distilled.cloud/prisma-postgres";
+import {
+  type Captured,
+  FAKE_API_BASE_URL,
+  data,
+  failure,
+  noContent,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
 
 const testBranch = (
   id: string,
@@ -185,7 +198,9 @@ const makeHealthLifecycleFixture = (options?: {
           new PrismaApiError({
             method: "GET",
             path: `/v1/apps/${id}`,
-            status: 503,
+            // Non-transient on purpose: a 5xx would be replayed by the
+            // retry policy.
+            status: 400,
             message: "app observation unavailable",
           }),
         );
@@ -242,7 +257,7 @@ const makeHealthLifecycleFixture = (options?: {
         if (options?.promoteUpdatesLatest !== false) {
           latestDeploymentId = target.deploymentId;
         }
-        return { appEndpointDomain: "api.prisma.build" };
+        return { appEndpointDomain: "api.prisma.build", reassignedDomains: 0 };
       }),
     rollbackApp: (appId: string, target: { deploymentId: string }) =>
       Effect.gen(function* () {
@@ -253,7 +268,7 @@ const makeHealthLifecycleFixture = (options?: {
             new PrismaApiError({
               method: "POST",
               path: `/v1/apps/${appId}/rollback`,
-              status: 503,
+              status: 400,
               message: "rollback unavailable",
             }),
           );
@@ -261,7 +276,7 @@ const makeHealthLifecycleFixture = (options?: {
         if (options?.rollbackUpdatesLatest !== false) {
           latestDeploymentId = target.deploymentId;
         }
-        return { appEndpointDomain: "api.prisma.build" };
+        return { appEndpointDomain: "api.prisma.build", reassignedDomains: 0 };
       }),
     stopDeployment: (id: string) =>
       Effect.sync(() => {
@@ -325,6 +340,179 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 
 const computeProviderLive = () =>
   ComputeProvider().pipe(Layer.provide(liveProviderContext));
+
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers this
+ * suite declares, for the routes Compute now reaches through distilled
+ * operations. The handlers are synchronous, so the fake runs them directly:
+ * an injected `PrismaApiError` becomes its real status, `undefined` becomes a
+ * 404, everything else a `{ data }` (or `{ data, pagination }`) envelope. The
+ * log tail still resolves the hand-rolled client, so the `PrismaClient` layer
+ * stays provided alongside.
+ */
+const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    // Never 5xx: a transient status would be replayed by the retry policy.
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return outcome.success === undefined
+    ? notFound("not found")
+    : wrap(outcome.success);
+};
+
+const voidResponse = (outcome: ReturnType<typeof runHandler>): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return noContent();
+};
+
+const dispatchManagement = (client: any, request: Captured): Response => {
+  const [head, id, tail] = request.pathname
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .slice(1);
+  const body = request.bodyJson as any;
+  const query = Object.fromEntries(new URLSearchParams(request.search));
+  const call = (
+    handler: unknown,
+    args: unknown[],
+    wrap: (value: unknown) => Response = (value) => data(value),
+  ) =>
+    typeof handler === "function"
+      ? asResponse(runHandler((handler as any)(...args)), wrap)
+      : unhandled(request);
+  const list = (value: unknown) => page(value as unknown[]);
+
+  if (head === "apps") {
+    if (id === undefined) {
+      return request.method === "GET"
+        ? call(client.listApps, [query], list)
+        : call(client.createApp, [body]);
+    }
+    if (tail === "deployments") {
+      return request.method === "GET"
+        ? call(client.listAppDeployments, [id, query], list)
+        : call(client.createAppDeployment, [id, body]);
+    }
+    if (tail === "promote") return call(client.promoteApp, [id, body]);
+    if (tail === "rollback") return call(client.rollbackApp, [id, body]);
+    if (tail === undefined) {
+      if (request.method === "GET") return call(client.getApp, [id]);
+      if (request.method === "PATCH") return call(client.updateApp, [id, body]);
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteApp(id)));
+      }
+    }
+  }
+  if (head === "branches" && id !== undefined && request.method === "GET") {
+    return call(client.getBranch, [id]);
+  }
+  if (head === "projects" && id !== undefined) {
+    if (tail === "branches" && request.method === "GET") {
+      return call(client.listBranches, [id, query], list);
+    }
+    if (tail === undefined && request.method === "DELETE") {
+      return voidResponse(runHandler(client.deleteProject(id)));
+    }
+  }
+  if (head === "deployments" && id !== undefined) {
+    if (tail === "start") return call(client.startDeployment, [id]);
+    if (tail === "stop") {
+      return voidResponse(runHandler(client.stopDeployment(id)));
+    }
+    if (request.method === "GET") return call(client.getDeployment, [id]);
+    if (request.method === "DELETE") {
+      return voidResponse(runHandler(client.deleteDeployment(id)));
+    }
+  }
+  if (head === "environment-variables") {
+    if (id === undefined) {
+      return request.method === "GET"
+        ? call(client.listEnvironmentVariables, [query], list)
+        : call(client.createEnvironmentVariable, [body]);
+    }
+    if (request.method === "GET") {
+      return call(client.getEnvironmentVariable, [id]);
+    }
+    if (request.method === "PATCH") {
+      return call(client.updateEnvironmentVariable, [id, body]);
+    }
+    if (request.method === "DELETE") {
+      return voidResponse(runHandler(client.deleteEnvironmentVariable(id)));
+    }
+  }
+  return unhandled(request);
+};
+
+/**
+ * Ambient HTTP for a Compute test: Management API requests dispatch to the
+ * client-shaped handlers; anything else (uploads, health probes) falls back
+ * to the HttpClient provided beneath this layer, when there is one.
+ */
+const apiRoutedHttp = (client: any) =>
+  Layer.mergeAll(
+    Layer.effect(
+      HttpClient.HttpClient,
+      Effect.gen(function* () {
+        const fallback = yield* Effect.serviceOption(HttpClient.HttpClient);
+        return HttpClient.make((request) => {
+          if (!request.url.startsWith(FAKE_API_BASE_URL)) {
+            return Option.isSome(fallback)
+              ? fallback.value.execute(request)
+              : Effect.sync(() =>
+                  HttpClientResponse.fromWeb(
+                    request,
+                    unhandled({
+                      url: request.url,
+                      method: request.method,
+                      pathname: new URL(request.url).pathname,
+                      search: "",
+                      authorization: undefined,
+                      bodyJson: undefined,
+                    }),
+                  ),
+                );
+          }
+          return Effect.sync(() => {
+            const url = new URL(request.url);
+            const body = request.body as HttpBody.HttpBody;
+            const bodyText =
+              body._tag === "Uint8Array"
+                ? new TextDecoder().decode(body.body)
+                : "";
+            return HttpClientResponse.fromWeb(
+              request,
+              dispatchManagement(client, {
+                url: request.url,
+                method: request.method,
+                pathname: url.pathname,
+                search: url.search,
+                authorization: request.headers.authorization,
+                bodyJson: bodyText ? JSON.parse(bodyText) : undefined,
+              }),
+            );
+          });
+        });
+      }),
+    ),
+    fromApiToken({
+      apiToken: "fake-service-token",
+      apiBaseUrl: FAKE_API_BASE_URL,
+    }),
+  );
 
 describe("Prisma Compute", () => {
   it.live("accepts a streaming 200 response without consuming its body", () => {
@@ -398,10 +586,8 @@ describe("Prisma Compute", () => {
         },
       ).pipe(Effect.flip);
 
-      expect((pathError as Error).message).toContain("healthCheck.path");
-      expect((statusError as Error).message).toContain(
-        "healthCheck.statusCodes",
-      );
+      expect(pathError.message).toContain("healthCheck.path");
+      expect(statusError.message).toContain("healthCheck.statusCodes");
     }),
   );
 
@@ -428,12 +614,10 @@ describe("Prisma Compute", () => {
         props,
       ).pipe(Effect.flip);
 
-      expect((missingUrl as Error).message).toContain("did not return");
-      expect((missingRoutingUrl as Error).message).toContain(
-        "readiness verification",
-      );
-      expect((disabled as Error).message).toContain("verifyUrl: false");
-      expect((missingClient as Error).message).toContain("HTTP client");
+      expect(missingUrl.message).toContain("did not return");
+      expect(missingRoutingUrl.message).toContain("readiness verification");
+      expect(disabled.message).toContain("verifyUrl: false");
+      expect(missingClient.message).toContain("HTTP client");
     }),
   );
 
@@ -473,7 +657,7 @@ describe("Prisma Compute", () => {
 
       expect(redirects.length).toBeGreaterThanOrEqual(2);
       expect(redirects.every((redirect) => redirect === "manual")).toBe(true);
-      expect((defaultStatusError as Error).message).toContain("HTTP 302");
+      expect(defaultStatusError.message).toContain("HTTP 302");
     }).pipe(
       Effect.provide(FetchHttpClient.layer),
       Effect.provideService(FetchHttpClient.Fetch, fetch),
@@ -520,8 +704,8 @@ describe("Prisma Compute", () => {
         Effect.flip,
       );
 
-      expect((requestError as Error).message).toContain("Timed out");
-      expect((bodyError as Error).message).toContain("Timed out");
+      expect(requestError.message).toContain("Timed out");
+      expect(bodyError.message).toContain("Timed out");
     });
   });
 
@@ -556,9 +740,7 @@ describe("Prisma Compute", () => {
         Effect.flip,
       );
 
-      expect((error as Error).message).toContain(
-        "There is no service on this URL",
-      );
+      expect(error.message).toContain("There is no service on this URL");
       expect(requests).toBeGreaterThanOrEqual(1);
     });
   });
@@ -580,7 +762,7 @@ describe("Prisma Compute", () => {
           Effect.flip,
         );
 
-        expect((error as Error).message).toContain("pollIntervalMs");
+        expect(error.message).toContain("pollIntervalMs");
       });
     },
   );
@@ -608,12 +790,13 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "destroyOldDeployment cannot be combined with skipPromote",
       );
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -641,10 +824,11 @@ describe("Prisma Compute", () => {
         })
         .pipe(Effect.flip);
 
-      expect((error as Error).message).toContain("healthCheck requires start");
+      expect(error.message).toContain("healthCheck requires start");
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(apiRoutedHttp(client)),
       Effect.provide(PlatformServices),
     );
   });
@@ -672,12 +856,13 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "start: false requires skipPromote: true",
       );
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -705,12 +890,13 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "branchId and branchGitName are mutually exclusive",
       );
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -741,13 +927,14 @@ describe("Prisma Compute", () => {
             bindings: [],
           })
           .pipe(Effect.flip);
-        expect((error as Error).message).toContain(
+        expect(error.message).toContain(
           "must be an integer between 1 and 65535",
         );
       }
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -775,13 +962,12 @@ describe("Prisma Compute", () => {
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "requires an attached branch",
-        );
+        expect(error.message).toContain("requires an attached branch");
       }
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -843,13 +1029,14 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "skipCodeUpload requires an existing Prisma deployment",
       );
       expect(calls).toEqual([["getApp", "service-1"]]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -876,12 +1063,13 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "Effect-native Prisma Compute apps require `main`",
       );
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -912,12 +1100,13 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "Effect-native Prisma Compute apps cannot use build",
       );
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
     );
   });
 
@@ -947,12 +1136,13 @@ describe("Prisma Compute", () => {
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
+        expect(error.message).toContain(
           "handler must be `default` or a valid JavaScript export identifier",
         );
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       );
     },
   );
@@ -1002,6 +1192,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       );
     },
   );
@@ -1051,6 +1242,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       );
     },
   );
@@ -1104,6 +1296,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       );
     },
   );
@@ -1133,7 +1326,7 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "destroyOldDeployment cannot be combined with skipPromote",
       );
     }).pipe(
@@ -1233,12 +1426,13 @@ describe("Prisma Compute", () => {
         expect(output?.promoted).toBe(true);
         expect(Unowned.is(output!)).toBe(true);
         expect(calls).toEqual([
-          ["listApps", { projectId: "project-1", query: { limit: 100 } }],
+          ["listApps", { projectId: "project-1", query: { limit: "100" } }],
           ["getDeployment", "version-live"],
         ]);
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -1298,12 +1492,13 @@ describe("Prisma Compute", () => {
         "https://version-live.preview.prisma.build",
       );
       expect(calls).toEqual([
-        ["listApps", { projectId: "project-1", query: { limit: 100 } }],
+        ["listApps", { projectId: "project-1", query: { limit: "100" } }],
         ["getDeployment", "version-live"],
       ]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -1394,6 +1589,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -1507,6 +1703,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -1631,6 +1828,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -1761,6 +1959,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       );
     },
   );
@@ -1821,6 +2020,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(PlatformServices),
       );
     },
@@ -1856,7 +2056,7 @@ describe("Prisma Compute", () => {
         })
         .pipe(Effect.flip);
 
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "Build stdout exceeded the 8 byte output safety limit",
       );
     }).pipe(
@@ -1956,13 +2156,12 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
-        "did not return an upload URL",
-      );
+      expect(error.message).toContain("did not return an upload URL");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(PlatformServices),
     );
   });
@@ -2029,12 +2228,13 @@ describe("Prisma Compute", () => {
           })
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("project-other");
-        expect((error as Error).message).toContain("Refusing to patch");
+        expect(error.message).toContain("project-other");
+        expect(error.message).toContain("Refusing to patch");
         expect(calls).toEqual(["getApp"]);
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -2125,14 +2325,13 @@ describe("Prisma Compute", () => {
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "did not return an upload URL",
-        );
+        expect(error.message).toContain("did not return an upload URL");
         expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
         expect(calls).toContainEqual(["deleteApp", "service-1"]);
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(PlatformServices),
       );
     },
@@ -2229,11 +2428,12 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain("artifact upload failed");
+      expect(error.message).toContain("artifact upload failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -2285,7 +2485,7 @@ describe("Prisma Compute", () => {
           new PrismaApiError({
             method: "POST",
             path: `/v1/deployments/${id}/start`,
-            status: 500,
+            status: 400,
             message: "start failed",
           }),
         );
@@ -2336,12 +2536,14 @@ describe("Prisma Compute", () => {
         })
         .pipe(Effect.flip);
 
-      expect(error).toBeInstanceOf(PrismaApiError);
-      expect((error as PrismaApiError).message).toBe("start failed");
+      // Over the wire the injected failure decodes into the typed error.
+      expect(error._tag).toBe("BadRequest");
+      expect(error.message).toBe("start failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -2396,10 +2598,10 @@ describe("Prisma Compute", () => {
           })
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain(
+        expect(error.message).toContain(
           "https://version-new.preview.prisma.build/health",
         );
-        expect((error as Error).message).toContain("HTTP 503");
+        expect(error.message).toContain("HTTP 503");
         expect(
           fixture.calls.filter(([operation]) => operation === "promoteApp"),
         ).toEqual([]);
@@ -2416,6 +2618,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -2474,10 +2677,8 @@ describe("Prisma Compute", () => {
           })
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain(
-          "https://api.prisma.build/health",
-        );
-        expect((error as Error).message).toContain("HTTP 503");
+        expect(error.message).toContain("https://api.prisma.build/health");
+        expect(error.message).toContain("HTTP 503");
         expect(fixture.calls).toContainEqual([
           "promoteApp",
           { appId: "service-1", deploymentId: "version-new" },
@@ -2509,6 +2710,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -2592,6 +2794,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -2668,6 +2871,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -2768,6 +2972,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -2853,6 +3058,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -2965,6 +3171,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -3083,6 +3290,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -3227,6 +3435,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -3301,6 +3510,7 @@ describe("Prisma Compute", () => {
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(fixture.client))),
         Effect.provideService(HttpClient.HttpClient, fixture.http),
         Effect.provide(PlatformServices),
       );
@@ -3409,6 +3619,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -3564,6 +3775,7 @@ describe("Prisma Compute", () => {
         }),
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -3676,6 +3888,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -3760,7 +3973,6 @@ describe("Prisma Compute", () => {
 
     return Effect.gen(function* () {
       const result = yield* syncComputeEnvironment(
-        client,
         "project-1",
         "production",
         {
@@ -3791,7 +4003,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "API_URL",
-            limit: 100,
+            limit: "100",
           },
         ],
         [
@@ -3800,7 +4012,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "TOKEN",
-            limit: 100,
+            limit: "100",
           },
         ],
         [
@@ -3809,7 +4021,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "REMOVE_ME",
-            limit: 100,
+            limit: "100",
           },
         ],
         [
@@ -3824,7 +4036,7 @@ describe("Prisma Compute", () => {
         ["update", { id: "env-token", input: { value: "secret" } }],
         ["delete", "env-remove"],
       ]);
-    });
+    }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
   it.effect(
@@ -3840,7 +4052,19 @@ describe("Prisma Compute", () => {
         createEnvironmentVariable: (input: { key: string }) => {
           calls.push(["create", input]);
           return input.key === "A"
-            ? Effect.succeed({ id: "env-a" })
+            ? Effect.succeed({
+                id: "env-a",
+                type: "environment-variable" as const,
+                url: "https://api.prisma.test/v1/environment-variables/env-a",
+                projectId: "project-1",
+                branchId: null,
+                class: "production" as const,
+                key: "A",
+                valueKid: "kid-a",
+                isManagedBySystem: false,
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-01T00:00:00Z",
+              })
             : Effect.fail(createError);
         },
         deleteEnvironmentVariable: (id: string) => {
@@ -3850,14 +4074,12 @@ describe("Prisma Compute", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const error = yield* syncComputeEnvironment(
-          client,
-          "project-1",
-          "production",
-          { A: "one", B: "two" },
-        ).pipe(Effect.flip);
+        const error = yield* syncComputeEnvironment("project-1", "production", {
+          A: "one",
+          B: "two",
+        }).pipe(Effect.flip);
 
-        expect(error).toBe(createError);
+        expect((error as Error).message).toContain("second create failed");
         expect(calls.map(([name]) => name)).toEqual([
           "list",
           "list",
@@ -3866,7 +4088,7 @@ describe("Prisma Compute", () => {
           "delete",
         ]);
         expect(calls).toContainEqual(["delete", "env-a"]);
-      });
+      }).pipe(Effect.provide(apiRoutedHttp(client)));
     },
   );
 
@@ -3877,37 +4099,56 @@ describe("Prisma Compute", () => {
       listEnvironmentVariables: () => Effect.succeed([]),
       createEnvironmentVariable: (input: { key: string }) =>
         input.key === "A"
-          ? Effect.succeed({ id: "env-a" })
+          ? Effect.succeed({
+              id: "env-a",
+              type: "environment-variable" as const,
+              url: "https://api.prisma.test/v1/environment-variables/env-a",
+              projectId: "project-1",
+              branchId: null,
+              class: "production" as const,
+              key: "A",
+              valueKid: "kid-a",
+              isManagedBySystem: false,
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-01T00:00:00Z",
+            })
           : Effect.fail(createError),
       deleteEnvironmentVariable: () => Effect.fail(cleanupError),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const error = yield* syncComputeEnvironment(
-        client,
-        "project-1",
-        "production",
-        { A: "one", B: "two" },
-      ).pipe(Effect.flip);
+      const error = yield* syncComputeEnvironment("project-1", "production", {
+        A: "one",
+        B: "two",
+      }).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(AggregateError);
-      expect((error as AggregateError).errors).toEqual([
-        createError,
-        cleanupError,
-      ]);
+      expect(((error as AggregateError).errors[0] as Error).message).toContain(
+        "second create failed",
+      );
+      expect(((error as AggregateError).errors[1] as Error).message).toContain(
+        "rollback delete failed",
+      );
       expect((error as AggregateError).message).toContain(
         "DELETE /v1/environment-variables/env-a",
       );
-    });
+    }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
   it.effect("preflights foreign env ownership before any write", () => {
     const calls: string[] = [];
     const foreign = {
       id: "env-foreign",
-      key: "B",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-foreign",
+      projectId: "project-1",
       branchId: null,
+      class: "production" as const,
+      key: "B",
+      valueKid: "kid-foreign",
       isManagedBySystem: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
     };
     const client = {
       listEnvironmentVariables: (query: { key: string }) => {
@@ -3921,16 +4162,14 @@ describe("Prisma Compute", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const error = yield* syncComputeEnvironment(
-        client,
-        "project-1",
-        "production",
-        { A: "one", B: "two" },
-      ).pipe(Effect.flip);
+      const error = yield* syncComputeEnvironment("project-1", "production", {
+        A: "one",
+        B: "two",
+      }).pipe(Effect.flip);
 
       expect((error as Error).message).toContain("is not owned");
       expect(calls).toEqual(["list:A", "list:B"]);
-    });
+    }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
   it.effect(
@@ -4033,7 +4272,7 @@ describe("Prisma Compute", () => {
           })
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("is not owned");
+        expect(error.message).toContain("is not owned");
         expect(calls).toEqual([
           [
             "listEnvironmentVariables",
@@ -4041,13 +4280,14 @@ describe("Prisma Compute", () => {
               projectId: "project-1",
               class: "production",
               key: "FOREIGN",
-              limit: 100,
+              limit: "100",
             },
           ],
         ]);
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -4081,14 +4321,9 @@ describe("Prisma Compute", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const error = yield* syncComputeEnvironment(
-        client,
-        "project-1",
-        "production",
-        {
-          PRISMA_INTERNAL_URL: "secret",
-        },
-      ).pipe(Effect.flip);
+      const error = yield* syncComputeEnvironment("project-1", "production", {
+        PRISMA_INTERNAL_URL: "secret",
+      }).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
@@ -4101,11 +4336,11 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "PRISMA_INTERNAL_URL",
-            limit: 100,
+            limit: "100",
           },
         ],
       ]);
-    });
+    }).pipe(Effect.provide(apiRoutedHttp(client)));
   });
 
   it.effect("validates Compute env vars before remote writes", () => {
@@ -4152,13 +4387,12 @@ describe("Prisma Compute", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
-        "must match POSIX env-var key shape",
-      );
+      expect(error.message).toContain("must match POSIX env-var key shape");
       expect(calls).toEqual([]);
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(PlatformServices),
     );
   });
@@ -4299,6 +4533,7 @@ describe("Prisma Compute", () => {
       Effect.provide(
         Layer.succeed(PrismaClient, withDefaultBranch(client, "preview")),
       ),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client, "preview"))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -4474,6 +4709,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -4622,6 +4858,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -4710,7 +4947,7 @@ describe("Prisma Compute", () => {
               projectId: "project-1",
               class: "production",
               key: "STALE_FLAG",
-              limit: 100,
+              limit: "100",
             },
           ],
           ["deleteEnvironmentVariable", "env-stale-flag"],
@@ -4719,6 +4956,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       );
     },
   );
@@ -4838,6 +5076,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -4926,7 +5165,10 @@ describe("Prisma Compute", () => {
       ) => {
         calls.push(["promoteApp", { appId, deploymentId }]);
         latestDeploymentId = deploymentId;
-        return Effect.succeed({ appEndpointDomain: "api.prisma.build" });
+        return Effect.succeed({
+          appEndpointDomain: "api.prisma.build",
+          reassignedDomains: 0,
+        });
       },
     } as unknown as PrismaManagementClient;
     const http = HttpClient.make((request) =>
@@ -5003,6 +5245,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -5125,6 +5368,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -5237,6 +5481,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -5354,13 +5599,14 @@ describe("Prisma Compute", () => {
           })
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("is not owned");
+        expect(error.message).toContain("is not owned");
         expect(calls.some(([name]) => name === "createAppDeployment")).toBe(
           false,
         );
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -5472,7 +5718,10 @@ describe("Prisma Compute", () => {
         Effect.sync(() => {
           calls.push(["promoteApp", { appId, deploymentId }]);
           latestDeploymentId = deploymentId;
-          return { appEndpointDomain: "api.prisma.build" };
+          return {
+            appEndpointDomain: "api.prisma.build",
+            reassignedDomains: 0,
+          };
         }),
       stopDeployment: (id: string) =>
         Effect.gen(function* () {
@@ -5617,7 +5866,7 @@ describe("Prisma Compute", () => {
       expect(second.previousDeploymentAction).toBe("destroyed");
       expect(versions.size).toBe(0);
       expect(calls).toEqual([
-        ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
+        ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
         [
           "createApp",
           {
@@ -5646,7 +5895,7 @@ describe("Prisma Compute", () => {
         ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
         ["getApp", "service-1"],
         ["getApp", "service-1"],
-        ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
+        ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
         ["getDeployment", "version-1"],
         [
           "createAppDeployment",
@@ -5673,6 +5922,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -5804,7 +6054,7 @@ describe("Prisma Compute", () => {
               projectId: "project-1",
               class: "production",
               key: "FEATURE",
-              limit: 100,
+              limit: "100",
             },
           ],
           [
@@ -5823,6 +6073,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -5890,7 +6141,10 @@ describe("Prisma Compute", () => {
           Effect.sync(() => {
             calls.push(["promoteApp", { appId, deploymentId }]);
             latestDeploymentId = deploymentId;
-            return { appEndpointDomain: "api.prisma.build" };
+            return {
+              appEndpointDomain: "api.prisma.build",
+              reassignedDomains: 0,
+            };
           }),
       } as unknown as PrismaManagementClient;
       const http = HttpClient.make((request) =>
@@ -5942,6 +6196,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -6022,7 +6277,10 @@ describe("Prisma Compute", () => {
           Effect.sync(() => {
             calls.push(["promoteApp", { appId, deploymentId }]);
             latestDeploymentId = deploymentId;
-            return { appEndpointDomain: "api.prisma.build" };
+            return {
+              appEndpointDomain: "api.prisma.build",
+              reassignedDomains: 0,
+            };
           }),
         stopDeployment: (id: string) =>
           Effect.sync(() => {
@@ -6035,7 +6293,7 @@ describe("Prisma Compute", () => {
               new PrismaApiError({
                 method: "DELETE",
                 path: `/v1/deployments/${id}`,
-                status: 500,
+                status: 400,
                 message: "Internal Server Error",
               }),
             );
@@ -6095,6 +6353,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provideService(HttpClient.HttpClient, http),
         Effect.provide(PlatformServices),
       );
@@ -6160,7 +6419,7 @@ describe("Prisma Compute", () => {
               new PrismaApiError({
                 method: "POST",
                 path: `/v1/apps/${appId}/promote`,
-                status: 500,
+                status: 400,
                 message: "promote failed",
               }),
             );
@@ -6170,7 +6429,7 @@ describe("Prisma Compute", () => {
             new PrismaApiError({
               method: "POST",
               path: "/v1/apps/service-1/rollback",
-              status: 500,
+              status: 400,
               message: "promotion recovery failed",
             }),
           ),
@@ -6250,6 +6509,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -6430,7 +6690,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "KEEP",
-            limit: 100,
+            limit: "100",
           },
         ],
         [
@@ -6439,7 +6699,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "NEW",
-            limit: 100,
+            limit: "100",
           },
         ],
         [
@@ -6461,7 +6721,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "TOKEN",
-            limit: 100,
+            limit: "100",
           },
         ],
         ["deleteEnvironmentVariable", "env-token"],
@@ -6480,6 +6740,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -6522,6 +6783,7 @@ describe("Prisma Compute", () => {
       Effect.provide(
         Layer.succeed(PrismaClient, {} as unknown as PrismaManagementClient),
       ),
+      Effect.provide(apiRoutedHttp({} as unknown as PrismaManagementClient)),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     ),
@@ -6605,7 +6867,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "TOKEN",
-            limit: 100,
+            limit: "100",
           },
         ],
         ["deleteEnvironmentVariable", "env-token"],
@@ -6614,6 +6876,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -6721,7 +6984,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "TOKEN",
-            limit: 100,
+            limit: "100",
           },
         ],
         ["deleteEnvironmentVariable", "env-token"],
@@ -6731,7 +6994,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "production",
             key: "PRISMA_INTERNAL_URL",
-            limit: 100,
+            limit: "100",
           },
         ],
         ["deleteApp", "service-1"],
@@ -6739,6 +7002,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -6820,7 +7084,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             class: "preview",
             key: "TOKEN",
-            limit: 100,
+            limit: "100",
           },
         ],
         ["deleteEnvironmentVariable", "env-token"],
@@ -6829,6 +7093,7 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+      Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -6902,7 +7167,7 @@ describe("Prisma Compute", () => {
               projectId: "project-1",
               class: "production",
               key: "TOKEN",
-              limit: 100,
+              limit: "100",
             },
           ],
           ["deleteApp", "service-1"],
@@ -6910,6 +7175,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+        Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -6963,6 +7229,7 @@ describe("Prisma Compute", () => {
           Effect.provide(
             Layer.succeed(PrismaClient, withDefaultBranch(client)),
           ),
+          Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         );
         const lines = yield* provider.tail!({
           id: "App",

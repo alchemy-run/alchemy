@@ -19,7 +19,7 @@ import {
   postV1AppsByAppIdDeployments,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
-import { PrismaClient, isNotFound } from "./Client.ts";
+import { PrismaClient } from "./Client.ts";
 import {
   destroyDeployment,
   waitForDeploymentStatus,
@@ -45,11 +45,7 @@ import {
   resolveAppId,
   unresolvedAppIdOf,
 } from "./Refs.ts";
-import type { Deployment as ApiDeployment } from "./Types.ts";
-
-type ObservedDeployment = Omit<ApiDeployment, "createdAt"> & {
-  createdAt?: string;
-};
+import type { ObservedDeployment } from "./Internal/Observed.ts";
 
 export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 256 * 1024 * 1024;
 
@@ -560,8 +556,8 @@ const ProviderLive = () =>
               ? output.appId
               : yield* resolveAppId(olds.app);
           const savedDeployment = output?.deploymentId
-            ? yield* observeDeployment(client, output.deploymentId).pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+            ? yield* observeDeployment(output.deploymentId).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
             : undefined;
           const listed = savedDeployment
@@ -569,9 +565,9 @@ const ProviderLive = () =>
             : yield* findDeployment(appId, output?.foundryVersionId);
           const deployment =
             savedDeployment ??
-            (listed ? yield* observeDeployment(client, listed.id) : undefined);
+            (listed ? yield* observeDeployment(listed.id) : undefined);
           if (savedDeployment) {
-            yield* ensureDeploymentMembership(client, appId, savedDeployment);
+            yield* ensureDeploymentMembership(appId, savedDeployment);
           }
           return deployment ? attrsFrom(deployment, appId, output) : undefined;
         }),
@@ -633,12 +629,12 @@ const ProviderLive = () =>
             ? undefined
             : output?.deploymentId;
           let deployment: ObservedDeployment | undefined = deploymentId
-            ? yield* observeDeployment(client, deploymentId).pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+            ? yield* observeDeployment(deploymentId).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
             : undefined;
           if (deployment) {
-            yield* ensureDeploymentMembership(client, appId, deployment);
+            yield* ensureDeploymentMembership(appId, deployment);
             if (deployment.status === "failed") {
               return yield* Effect.fail(
                 new Error(
@@ -653,7 +649,7 @@ const ProviderLive = () =>
             error: unknown,
           ) =>
             createdDeploymentId === failedDeploymentId
-              ? destroyDeployment(client, failedDeploymentId).pipe(
+              ? destroyDeployment(failedDeploymentId).pipe(
                   Effect.catch((cleanupError) =>
                     Effect.fail(
                       aggregateCleanupFailure(
@@ -704,12 +700,10 @@ const ProviderLive = () =>
                 ),
               );
             }
-            deployment = yield* observeDeployment(client, created.id).pipe(
-              Effect.catchIf(isNotFound, () =>
+            deployment = yield* observeDeployment(created.id).pipe(
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed({
                   id: created.id,
-                  type: "deployment" as const,
-                  url: created.url,
                   foundryVersionId: created.foundryVersionId,
                   status: "new",
                   previewDomain: null,
@@ -740,12 +734,10 @@ const ProviderLive = () =>
                 currentDeployment.status !== "provisioning"
               ) {
                 const started = yield* startDeploymentIdempotent(
-                  client,
                   currentDeployment.id,
                 );
                 if (started) {
                   return yield* waitForDeploymentStatus(
-                    client,
                     currentDeployment.id,
                     "running",
                   ).pipe(
@@ -757,7 +749,6 @@ const ProviderLive = () =>
                 }
               }
               return yield* waitForDeploymentStatus(
-                client,
                 currentDeployment.id,
                 "running",
               );
@@ -772,11 +763,7 @@ const ProviderLive = () =>
               // Promotion is deliberately replayed even when the control-plane
               // record already names this deployment. The endpoint operation also
               // repairs provider routing and custom-domain assignment drift.
-              const promoted = yield* promoteAppObserved(
-                client,
-                appId,
-                deployment.id,
-              );
+              const promoted = yield* promoteAppObserved(appId, deployment.id);
               return promoted.appEndpointDomain;
             });
           }
@@ -789,13 +776,12 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.deploymentId)) return;
-          const deployment = yield* observeDeployment(
-            client,
-            output.deploymentId,
-          ).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const deployment = yield* observeDeployment(output.deploymentId).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           if (!deployment) return;
-          yield* ensureDeploymentMembership(client, output.appId, deployment);
-          yield* destroyDeployment(client, output.deploymentId);
+          yield* ensureDeploymentMembership(output.appId, deployment);
+          yield* destroyDeployment(output.deploymentId);
         }),
         tail: ({ output }) =>
           output.deploymentId
