@@ -80,14 +80,13 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * time, yield `Config.redacted` instead. Do not pass `env: { ... }` on
  * a Service.
  *
- * @resource
  * @see https://fly.io/docs/apps/secrets/
  *
- * @section Config.redacted on a Service
+ * ### Config.redacted on a Service
  * Most secrets in a Service come from your `.env`. Yield
  * `Config.redacted` in init. Alchemy binds the value onto the Machine.
  *
- * @example Bind from .env
+ * **Example:** Bind from .env
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as Redacted from "effect/Redacted";
@@ -108,12 +107,12 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * ) {}
  * ```
  *
- * @section Create a Secret
+ * ### Create a Secret
  * Wrap the value with `Redacted.make` so it is never logged. The
  * plaintext is never stored in attributes. Omit `name` and Alchemy
  * generates an ownership-stamped name.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const dbUrl = yield* Fly.Secret("DatabaseUrl", {
  *   app: Site,
@@ -125,11 +124,11 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * The value is created on the new App. The old name is deleted.
  * :::
  *
- * @section Env-var name
+ * ### Env-var name
  * `name` is the env-var Machines see. It is stored as-is
  * (case-sensitive).
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * export const ApiToken = Fly.Secret("ApiToken", {
  *   app: Site,
@@ -143,10 +142,10 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * deletes the old one.
  * :::
  *
- * @section Rotate the value
+ * ### Rotate the value
  * Updating `value` is in place via `updateSecrets`.
  *
- * @example New value
+ * **Example:** New value
  * ```typescript
  * export const ApiToken = Fly.Secret("ApiToken", {
  *   app: Site,
@@ -155,35 +154,35 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * });
  * ```
  *
- * @section Get a secret at runtime
+ * ### Get a secret at runtime
  * {@link GetSecret} is bound to one Secret. Provide
  * {@link GetSecretHttp}. Fly only returns plaintext from a Machine in
  * the same App. From a deploy-time Action you get metadata (name,
  * digest, timestamps).
  *
- * @example GetSecret
+ * **Example:** GetSecret
  * ```typescript
  * const get = yield* Fly.GetSecret(ApiToken);
  * const got = yield* get();
  * ```
  *
- * @section List secrets
+ * ### List secrets
  * {@link ListSecrets} is bound to an {@link App}. From an Action, the
  * org token can list any App in the org. From a Machine, deploy tokens
  * are per-App. Mixing Apps on one Machine shares one `FLY_API_TOKEN`
  * and is not supported.
  *
- * @example ListSecrets
+ * **Example:** ListSecrets
  * ```typescript
  * const list = yield* Fly.ListSecrets(Site);
  * const { secrets } = yield* list();
  * ```
  *
- * @section Write secrets
+ * ### Write secrets
  * {@link WriteSecret} creates, updates, and deletes by name. Provide
  * {@link WriteSecretHttp} on the Action or Service Effect.
  *
- * @example Rotate from an Action
+ * **Example:** Rotate from an Action
  * ```typescript
  * const Seed = Alchemy.Action(
  *   "Seed",
@@ -196,6 +195,8 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  *   }).pipe(Effect.provide(Fly.WriteSecretHttp)),
  * );
  * ```
+ *
+ * @resource
  */
 export const Secret: typeof SecretResource = Object.assign(
   (

@@ -1,6 +1,7 @@
 import * as Fly from "@/Fly";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -46,7 +47,21 @@ export default class PostgresApi extends Fly.Service<PostgresApi>()(
         if (path === "/ping") {
           return yield* HttpServerResponse.json({ ok: true });
         }
-        const rows = yield* db.execute("select 1 as ok");
+        const result = yield* Effect.result(db.execute("select 1 as ok"));
+        if (Result.isFailure(result)) {
+          const error = result.failure;
+          return yield* HttpServerResponse.json(
+            {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? `${error.name}: ${error.message}`
+                  : String(error),
+            },
+            { status: 500 },
+          );
+        }
+        const rows = result.success;
         if (path === "/health" || path === "/") {
           return yield* HttpServerResponse.json({ rows });
         }

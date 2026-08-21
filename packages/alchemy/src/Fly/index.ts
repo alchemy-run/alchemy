@@ -13,6 +13,7 @@ export * from "./DecryptHttp.ts";
 export * from "./Encrypt.ts";
 export * from "./EncryptHttp.ts";
 export * from "./Environment.ts";
+export * from "./Errors.ts";
 export * from "./Exec.ts";
 export * from "./ExecHttp.ts";
 export * from "./GetObject.ts";

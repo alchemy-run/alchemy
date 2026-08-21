@@ -72,16 +72,15 @@ export type App = Resource<
  * A Fly.App is a global namespace in your account. It contains Machines,
  * Services, Secrets, IPs, and certificates.
  *
- * @resource
  * @see https://fly.io/docs/machines/api/apps-resource/
  *
- * @section Create an App
+ * ### Create an App
  * Alchemy generates a unique name unless you pass one. `url` is
  * `https://{appName}.fly.dev`. Nothing answers there until a
  * {@link Service} or {@link Machine} publishes a proxy service and the App
  * has an {@link IpAssignment}.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Fly.App("Site");
  * ```
@@ -91,10 +90,10 @@ export type App = Resource<
  * reclaimable.
  * :::
  *
- * @section A stable hostname
+ * ### A stable hostname
  * Pass `name` when you need a stable `fly.dev` hostname.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const site = yield* Fly.App("Site", {
  *   name: "my-site",
@@ -106,10 +105,10 @@ export type App = Resource<
  * old App first, then creates the new one.
  * :::
  *
- * @section Organization
+ * ### Organization
  * Org defaults to the current token. Pass `orgSlug` to pin it.
  *
- * @example Pin an org
+ * **Example:** Pin an org
  * ```typescript
  * const site = yield* Fly.App("Site", {
  *   name: "my-site",
@@ -121,10 +120,10 @@ export type App = Resource<
  * The App is created in the new org. The old App is deleted.
  * :::
  *
- * @section Subdomains
+ * ### Subdomains
  * `enableSubdomains: true` turns on `*.{appName}.fly.dev`.
  *
- * @example Enable subdomains
+ * **Example:** Enable subdomains
  * ```typescript
  * const site = yield* Fly.App("Site", {
  *   name: "my-site",
@@ -136,10 +135,10 @@ export type App = Resource<
  * Flipping `enableSubdomains` later is ignored.
  * :::
  *
- * @section Isolated network
+ * ### Isolated network
  * `network` is an optional 6PN name.
  *
- * @example Custom network
+ * **Example:** Custom network
  * ```typescript
  * const site = yield* Fly.App("Site", {
  *   name: "my-site",
@@ -151,18 +150,20 @@ export type App = Resource<
  * The App is recreated on the new network.
  * :::
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the App once. Pass it into every child. Resource-valued props
  * accept the resource or an Effect producing it. Do not unwrap it just
  * to pass it along.
  *
- * @example Module-scope App
+ * **Example:** Module-scope App
  * ```typescript
  * // src/app.ts
  * import * as Fly from "alchemy/Fly";
  *
  * export const Site = Fly.App("Site");
  * ```
+ *
+ * @resource
  */
 export const App = Resource<App>("Fly.App");
 

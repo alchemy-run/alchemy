@@ -119,9 +119,8 @@ export interface ServiceBinding {
  * There is no standalone Volume resource. From a {@link Machine}, pass
  * `mounts: [{ path, sizeGb }]` instead.
  *
- * @binding
  *
- * @section Mount into a Service
+ * ### Mount into a Service
  * Yield `MountVolume` inside init. App and region come from the
  * parent Service. Provide {@link MountVolumeLive}. At runtime you get
  * `disk.path`.
@@ -129,7 +128,7 @@ export interface ServiceBinding {
  * A Volume attaches to one Machine. `count: 3` creates three Volumes
  * in one name-group, one per replica.
  *
- * @example Bind a path
+ * **Example:** Bind a path
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -147,19 +146,19 @@ export interface ServiceBinding {
  * ) {}
  * ```
  *
- * @section Grow a disk
+ * ### Grow a disk
  * `sizeGb` can grow in place via `extendVolume`. Fly cannot shrink a
  * Volume. Minimum size is 1 GB.
  *
- * @example 10 GB
+ * **Example:** 10 GB
  * ```typescript
  * const disk = yield* Fly.MountVolume({ path: "/data", sizeGb: 10 });
  * ```
  *
- * @section Encryption
+ * ### Encryption
  * `encrypted` encrypts the Volume at rest.
  *
- * @example Encrypted
+ * **Example:** Encrypted
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -172,10 +171,10 @@ export interface ServiceBinding {
  * Flipping `encrypted` later is ignored.
  * :::
  *
- * @section Filesystem
+ * ### Filesystem
  * `fstype` is the filesystem (`ext4`, …).
  *
- * @example ext4
+ * **Example:** ext4
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -188,12 +187,12 @@ export interface ServiceBinding {
  * Flipping `fstype` later is ignored.
  * :::
  *
- * @section Scheduled snapshots
+ * ### Scheduled snapshots
  * Scheduled snapshots default on (`autoBackupEnabled`).
  * `snapshotRetention` is days and updates in place. An on-demand
  * snapshot is {@link VolumeSnapshot}.
  *
- * @example Retention
+ * **Example:** Retention
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -203,10 +202,10 @@ export interface ServiceBinding {
  * });
  * ```
  *
- * @section Restore from a snapshot
+ * ### Restore from a snapshot
  * `snapshotId` restores into a new disk.
  *
- * @example snapshotId
+ * **Example:** snapshotId
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -219,10 +218,10 @@ export interface ServiceBinding {
  * Changing `snapshotId` later is ignored.
  * :::
  *
- * @section Fork a volume
+ * ### Fork a volume
  * `sourceVolumeId` forks from an existing Volume.
  *
- * @example sourceVolumeId
+ * **Example:** sourceVolumeId
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -235,10 +234,10 @@ export interface ServiceBinding {
  * Changing `sourceVolumeId` later is ignored.
  * :::
  *
- * @section Unique zone
+ * ### Unique zone
  * `requireUniqueZone` asks Fly to land the Volume in a unique zone.
  *
- * @example Unique zone
+ * **Example:** Unique zone
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -251,11 +250,11 @@ export interface ServiceBinding {
  * Flipping `requireUniqueZone` later is ignored.
  * :::
  *
- * @section Volume name
+ * ### Volume name
  * `name` is the Fly volume-group name. If omitted, a unique name is
  * generated from the host's logical ID and `path`.
  *
- * @example Named group
+ * **Example:** Named group
  * ```typescript
  * const disk = yield* Fly.MountVolume({
  *   path: "/data",
@@ -263,6 +262,8 @@ export interface ServiceBinding {
  *   name: "api_data",
  * });
  * ```
+ *
+ * @binding
  */
 export interface MountVolume extends Binding.Service<
   MountVolume,

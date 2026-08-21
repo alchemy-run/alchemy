@@ -11,6 +11,9 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 import type { User } from "../src/schema.ts";
 
+/** A `User` row as it arrives over JSON — `createdAt` is an ISO string. */
+type SerializedUser = Omit<User, "createdAt"> & { createdAt: string };
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Fly.providers(), Drizzle.providers()),
   state: Alchemy.localState(),
@@ -57,7 +60,7 @@ test(
       HttpClientRequest.post(`${out.apiUrl}/users`),
     );
     expect(created.status).toBe(200);
-    const createdBody = (yield* created.json) as { user: User[] };
+    const createdBody = (yield* created.json) as { user: SerializedUser[] };
     expect(createdBody.user).toHaveLength(1);
     expect(createdBody.user[0]?.id).toBeNumber();
   }),

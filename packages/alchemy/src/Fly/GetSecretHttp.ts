@@ -12,17 +12,18 @@ import { makeHttpSecretBinding } from "./SecretHttp.ts";
  * HTTP implementation of {@link GetSecret}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.GetSecret
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const get = yield* Fly.GetSecret(ApiToken);
  *   // ...
  * }).pipe(Effect.provide(Fly.GetSecretHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.GetSecret
  */
 export const GetSecretHttp = Layer.effect(
   GetSecret,

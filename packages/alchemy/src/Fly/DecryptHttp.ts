@@ -9,26 +9,25 @@ import {
   base64ToBytes,
   bytesToBase64,
   flyKmsPost,
-  fromByteList,
   makeHttpSecretKeyBinding,
-  toByteList,
 } from "./SecretKeyHttp.ts";
 
 /**
  * HTTP implementation of {@link Decrypt}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Decrypt
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const decrypt = yield* Fly.Decrypt(Box);
  *   // ...
  * }).pipe(Effect.provide(Fly.DecryptHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Decrypt
  */
 export const DecryptHttp = Layer.effect(
   Decrypt,
@@ -61,15 +60,15 @@ export const DecryptHttp = Layer.effect(
             machines.decryptSecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
-              ciphertext: toByteList(request.ciphertext),
+              ciphertext: bytesToBase64(request.ciphertext),
               associated_data:
                 request.associatedData === undefined
                   ? undefined
-                  : toByteList(request.associatedData),
+                  : bytesToBase64(request.associatedData),
             }),
           );
           return {
-            plaintext: Redacted.make(fromByteList(res.plaintext)),
+            plaintext: Redacted.make(base64ToBytes(res.plaintext)),
           };
         }),
     }),

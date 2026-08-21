@@ -239,7 +239,7 @@ test.provider(
       expect(redisUrl).toBeDefined();
       expect(redisUrl?.digest).toEqual(expect.any(String));
 
-      const untilOk = <A, E>(effect: Effect.Effect<A, E>) =>
+      const untilOk = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.retry({
             schedule: Schedule.spaced("4 seconds"),

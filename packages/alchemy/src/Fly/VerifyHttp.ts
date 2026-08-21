@@ -7,7 +7,6 @@ import {
   bytesToBase64,
   flyKmsPost,
   makeHttpSecretKeyBinding,
-  toByteList,
 } from "./SecretKeyHttp.ts";
 import { Verify, type VerifyRequest } from "./Verify.ts";
 
@@ -15,17 +14,18 @@ import { Verify, type VerifyRequest } from "./Verify.ts";
  * HTTP implementation of {@link Verify}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Verify
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const verify = yield* Fly.Verify(Signing);
  *   // ...
  * }).pipe(Effect.provide(Fly.VerifyHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Verify
  */
 export const VerifyHttp = Layer.effect(
   Verify,
@@ -34,23 +34,20 @@ export const VerifyHttp = Layer.effect(
       makeClient: (auth, appName, secretName) =>
         Effect.fn("Fly.Verify")(function* (request: VerifyRequest) {
           if (globalThis.__ALCHEMY_RUNTIME__) {
-            const res = yield* flyKmsPost(
-              yield* appName,
-              yield* secretName,
-              "verify",
-              {
-                plaintext: bytesToBase64(request.plaintext),
-                signature: bytesToBase64(request.signature),
-              },
-            );
-            return { valid: res.valid === true || res.valid === undefined };
+            yield* flyKmsPost(yield* appName, yield* secretName, "verify", {
+              plaintext: bytesToBase64(request.plaintext),
+              signature: bytesToBase64(request.signature),
+            });
+            // Fly answers 200 only when the signature checks out;
+            // `flyKmsPost` already failed on any non-2xx status.
+            return { valid: true as const };
           }
           yield* auth.authorize(
             machines.verifySecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
-              plaintext: toByteList(request.plaintext),
-              signature: toByteList(request.signature),
+              plaintext: bytesToBase64(request.plaintext),
+              signature: bytesToBase64(request.signature),
             }),
           );
           return { valid: true as const };

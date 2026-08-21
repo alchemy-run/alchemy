@@ -264,7 +264,12 @@ test.provider(
               });
               const body = (await res.json().catch(() => ({
                 status: res.status,
-              }))) as { ok?: boolean; error?: unknown; status?: number };
+              }))) as {
+                ok?: boolean;
+                error?: unknown;
+                status?: number;
+                rows?: unknown;
+              };
               return { status: res.status, body };
             } finally {
               clearTimeout(timer);

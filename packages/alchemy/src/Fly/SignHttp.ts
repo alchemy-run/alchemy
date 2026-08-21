@@ -7,9 +7,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   flyKmsPost,
-  fromByteList,
   makeHttpSecretKeyBinding,
-  toByteList,
 } from "./SecretKeyHttp.ts";
 import { Sign, type SignRequest } from "./Sign.ts";
 
@@ -17,17 +15,18 @@ import { Sign, type SignRequest } from "./Sign.ts";
  * HTTP implementation of {@link Sign}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Sign
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const sign = yield* Fly.Sign(Signing);
  *   // ...
  * }).pipe(Effect.provide(Fly.SignHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Sign
  */
 export const SignHttp = Layer.effect(
   Sign,
@@ -52,10 +51,10 @@ export const SignHttp = Layer.effect(
             machines.signSecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
-              plaintext: toByteList(request.plaintext),
+              plaintext: bytesToBase64(request.plaintext),
             }),
           );
-          return { signature: fromByteList(res.signature) };
+          return { signature: base64ToBytes(res.signature) };
         }),
     }),
   ),

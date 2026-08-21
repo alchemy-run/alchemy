@@ -11,9 +11,8 @@ import type { App } from "./App.ts";
  * List Fly.io App secrets. Scoped to an {@link App}. Fly's list API
  * is `GET /apps/{app}/secrets`, not a single Secret.
  *
- * @binding
  *
- * @section List this App
+ * ### List this App
  * The App is fixed by `ListSecrets(app)`. Calls take no `app_name`.
  * Provide {@link ListSecretsHttp}.
  *
@@ -21,20 +20,20 @@ import type { App } from "./App.ts";
  * From a deploy-time Action you get metadata (name, digest,
  * timestamps).
  *
- * @example ListSecrets
+ * **Example:** ListSecrets
  * ```typescript
  * const list = yield* Fly.ListSecrets(Site);
  * const { secrets } = yield* list();
  * ```
  *
- * @section List another App
+ * ### List another App
  * From an Action, the org `FLY_API_TOKEN` can list any App in the
  * org. `ListSecrets(other)` is how you reach across Apps.
  *
  * From a Machine, deploy tokens are per-App. Mixing Apps on one host
  * shares one `FLY_API_TOKEN` and is not supported.
  *
- * @example Cross-app from an Action
+ * **Example:** Cross-app from an Action
  * ```typescript
  * const Seed = Alchemy.Action(
  *   "Seed",
@@ -48,6 +47,8 @@ import type { App } from "./App.ts";
  *   }).pipe(Effect.provide(Fly.ListSecretsHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface ListSecrets extends Binding.Service<
   ListSecrets,

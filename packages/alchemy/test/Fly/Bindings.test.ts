@@ -8,6 +8,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import BindingsApi from "./fixtures/bindings-api.ts";
 import {
   BoxKey,
@@ -80,6 +81,19 @@ const retryTransient = {
   times: 20,
 } as const;
 
+/** Decode the body, turning any non-200 (or undecodable body) into `NotReady`. */
+const readJson = (
+  res: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<unknown, NotReady> =>
+  res.json.pipe(
+    Effect.catch(() => Effect.fail(new NotReady({ status: res.status }))),
+    Effect.flatMap((body) =>
+      res.status === 200
+        ? Effect.succeed(body)
+        : Effect.fail(new NotReady({ status: res.status, body })),
+    ),
+  );
+
 const getJson = (path: string) =>
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -89,18 +103,7 @@ const getJson = (path: string) =>
         duration: "8 seconds",
         orElse: () => Effect.fail(new NotReady({ status: 0 })),
       }),
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? res.json
-          : res.json.pipe(
-              Effect.catch(() =>
-                Effect.succeed({ status: res.status } as unknown),
-              ),
-              Effect.flatMap((body) =>
-                Effect.fail(new NotReady({ status: res.status, body })),
-              ),
-            ),
-      ),
+      Effect.flatMap(readJson),
       Effect.retry(retryTransient),
     );
   });
@@ -117,18 +120,7 @@ const postJson = (path: string, body: unknown) =>
         duration: "8 seconds",
         orElse: () => Effect.fail(new NotReady({ status: 0 })),
       }),
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? res.json
-          : res.json.pipe(
-              Effect.catch(() =>
-                Effect.succeed({ status: res.status } as unknown),
-              ),
-              Effect.flatMap((body) =>
-                Effect.fail(new NotReady({ status: res.status, body })),
-              ),
-            ),
-      ),
+      Effect.flatMap(readJson),
       Effect.retry(retryTransient),
     );
   });

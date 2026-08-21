@@ -15,17 +15,18 @@ import { WriteSecret, type WriteSecretClient } from "./WriteSecret.ts";
  * HTTP implementation of {@link WriteSecret}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.WriteSecret
  *
- * @section Provide the layer
- * @example On an Action
+ * ### Provide the layer
+ * **Example:** On an Action
  * ```typescript
  * Effect.gen(function* () {
  *   const secrets = yield* Fly.WriteSecret(ApiToken);
  *   // ...
  * }).pipe(Effect.provide(Fly.WriteSecretHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.WriteSecret
  */
 export const WriteSecretHttp = Layer.effect(
   WriteSecret,

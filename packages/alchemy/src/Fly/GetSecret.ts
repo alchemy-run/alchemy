@@ -11,16 +11,15 @@ import type { Secret } from "./Secret.ts";
  * Fetch one Fly.io App secret. The App and name are fixed by
  * `GetSecret(secret)`. Calls take no `app_name`.
  *
- * @binding
  *
- * @section Read a secret
+ * ### Read a secret
  * Bind the client in init. Call it from `fetch` or an Action body.
  * Provide {@link GetSecretHttp}.
  *
  * Fly only returns plaintext from a Machine in the same App. From a
  * deploy-time Action you get metadata (name, digest, timestamps).
  *
- * @example GetSecret
+ * **Example:** GetSecret
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -37,6 +36,8 @@ import type { Secret } from "./Secret.ts";
  *   }).pipe(Effect.provide(Fly.GetSecretHttp)),
  * ) {}
  * ```
+ *
+ * @binding
  */
 export interface GetSecret extends Binding.Service<
   GetSecret,

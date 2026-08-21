@@ -142,10 +142,9 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * on demand. There is no parent {@link App}. Unlike a {@link Service},
  * Alchemy does not build a Docker image.
  *
- * @resource
  * @see https://sprites.dev/api/sprites
  *
- * @section Declare a Sprite
+ * ### Declare a Sprite
  * A Sprite is a class. Props describe the sandbox. The Effect is the
  * program that runs on it. There is no parent App.
  *
@@ -153,7 +152,7 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * this file with Rolldown, writes it onto the Sprite, and runs it as
  * a Sprite service on {@link port}. Auth is `FLY_API_TOKEN`.
  *
- * @example Class + main
+ * **Example:** Class + main
  * ```typescript
  * export default class Box extends Fly.Sprite<Box>()(
  *   "Box",
@@ -164,11 +163,11 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Serve HTTP with fetch
+ * ### Serve HTTP with fetch
  * Return `fetch` from the init Effect to boot an HTTP server. The
  * Sprite URL proxies to {@link port}.
  *
- * @example Hello
+ * **Example:** Hello
  * ```typescript
  * export default class Box extends Fly.Sprite<Box>()(
  *   "Box",
@@ -181,11 +180,11 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section The public URL
+ * ### The public URL
  * Yield the Sprite in the Stack. `box.url` is
  * `https://{name}-….sprites.app`.
  *
- * @example Stack output
+ * **Example:** Stack output
  * ```typescript
  * export default Alchemy.Stack(
  *   "MyApp",
@@ -197,11 +196,11 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * );
  * ```
  *
- * @section URL auth
+ * ### URL auth
  * `urlAuth` is `public` or `sprite`. Default is `public` so `url`
  * answers without a Sprites token.
  *
- * @example Sprite-auth URL
+ * **Example:** Sprite-auth URL
  * ```typescript
  * export default class Box extends Fly.Sprite<Box>()(
  *   "Box",
@@ -219,14 +218,14 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * `fetch` handler is reachable.
  * :::
  *
- * @section Config
+ * ### Config
  * Yield `Config` in init. Alchemy reads the value from the env of
  * whoever deploys and writes it onto the Sprite. Do not pass
  * `env: { ... }` on a Sprite.
  *
  * Yield `FileSystem.FileSystem` in init, never inside `fetch`.
  *
- * @example Config.redacted
+ * **Example:** Config.redacted
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as FileSystem from "effect/FileSystem";
@@ -250,20 +249,20 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Exec
+ * ### Exec
  * {@link Exec} runs a command on the Sprite. Provide {@link ExecHttp}.
  *
- * @example ls
+ * **Example:** ls
  * ```typescript
  * const exec = yield* Fly.Exec(Box);
  * const result = yield* exec({ cmd: ["ls", "-la"] });
  * ```
  *
- * @section Checkpoint
+ * ### Checkpoint
  * {@link Checkpoint} snapshots and restores the Sprite disk. Provide
  * {@link CheckpointHttp}.
  *
- * @example Create and restore
+ * **Example:** Create and restore
  * ```typescript
  * const checkpoint = yield* Fly.Checkpoint(Box);
  * yield* checkpoint.create({ comment: "before" });
@@ -274,11 +273,11 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * The disk rewinds. Later writes are gone.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Omit `name` and Alchemy generates one from the stack, stage, and
  * logical ID.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * export default class Box extends Fly.Sprite<Box>()(
  *   "Box",
@@ -296,11 +295,11 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * deletes the old one.
  * :::
  *
- * @section Named export
+ * ### Named export
  * `handler` is the named export to load from `main`. Default is
  * `"default"`.
  *
- * @example Custom handler
+ * **Example:** Custom handler
  * ```typescript
  * export default class Box extends Fly.Sprite<Box>()(
  *   "Box",
@@ -312,6 +311,8 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  *   }),
  * ) {}
  * ```
+ *
+ * @resource
  */
 export const Sprite: Platform<
   Sprite,
@@ -669,15 +670,18 @@ export const SpriteProvider = () =>
           if (current === undefined) {
             return yield* new SpriteNotCreated({ name });
           }
+          // Narrowed once so the `NotFound` fallbacks below keep the
+          // non-optional type instead of widening back to `| undefined`.
+          let sprite = current;
 
-          const observedAuth = toUrlAuth(current.url_settings?.auth);
+          const observedAuth = toUrlAuth(sprite.url_settings?.auth);
           if (observedAuth !== urlAuth) {
-            current = yield* sprites
+            sprite = yield* sprites
               .updateSprite({
                 name,
                 url_settings: { auth: urlAuth },
               })
-              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(current)));
+              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(sprite)));
           }
 
           const codeHash = yield* hosted.hash(props);
@@ -690,10 +694,10 @@ export const SpriteProvider = () =>
               port,
               session,
             });
-            current = (yield* getByName(name)) ?? current;
+            sprite = (yield* getByName(name)) ?? sprite;
           }
 
-          return toAttrs(current, name, codeHash);
+          return toAttrs(sprite, name, codeHash);
         }),
 
         delete: Effect.fn(function* ({ output }) {

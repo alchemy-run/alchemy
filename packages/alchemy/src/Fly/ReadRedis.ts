@@ -9,14 +9,15 @@ import type { Redis, RedisCommandError, RedisUrlMissing } from "./Redis.ts";
  * `ReadRedis` is the Context tag, the type, and the callable —
  * `yield* Fly.ReadRedis(Cache)`. Provide {@link ReadRedisHttp}.
  *
- * @binding
  *
- * @section Read
- * @example Get a key
+ * ### Read
+ * **Example:** Get a key
  * ```typescript
  * const cache = yield* Fly.ReadRedis(Cache);
  * const value = yield* cache.get("marker");
  * ```
+ *
+ * @binding
  */
 export interface ReadRedis extends Binding.Service<
   ReadRedis,

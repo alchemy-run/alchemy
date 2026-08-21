@@ -25,8 +25,8 @@ export default class Box extends Fly.Sprite<Box>()(
       Config.withDefault(Redacted.make("unused")),
     );
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.makeDirectory("/tmp", { recursive: true });
-    yield* fs.writeFileString("/tmp/marker.txt", marker);
+    yield* fs.makeDirectory("/tmp", { recursive: true }).pipe(Effect.orDie);
+    yield* fs.writeFileString("/tmp/marker.txt", marker).pipe(Effect.orDie);
 
     return {
       fetch: Effect.gen(function* () {

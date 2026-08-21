@@ -1,4 +1,5 @@
 import type { DecryptSecretKeyError } from "@distilled.cloud/fly-io/machines";
+import type { FlyKmsError } from "./Errors.ts";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
@@ -21,13 +22,12 @@ export interface DecryptResult {
  * Decrypt with a Fly {@link SecretKey}. The App and key name are fixed
  * by `Decrypt(key)`.
  *
- * @binding
  *
- * @section Decrypt a payload
+ * ### Decrypt a payload
  * Provide {@link DecryptHttp}. Plaintext comes back `Redacted`. Unwrap
  * with `Redacted.value` only where you need the raw bytes.
  *
- * @example Decrypt
+ * **Example:** Decrypt
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
@@ -36,16 +36,18 @@ export interface DecryptResult {
  * const bytes = Redacted.value(plaintext);
  * ```
  *
- * @section Associated data
+ * ### Associated data
  * `associatedData` must match the bytes passed to {@link Encrypt}.
  *
- * @example AEAD
+ * **Example:** AEAD
  * ```typescript
  * const { plaintext } = yield* decrypt({
  *   ciphertext,
  *   associatedData: nonce,
  * });
  * ```
+ *
+ * @binding
  */
 export interface Decrypt extends Binding.Service<
   Decrypt,
@@ -55,7 +57,11 @@ export interface Decrypt extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DecryptRequest,
-    ) => Effect.Effect<DecryptResult, DecryptSecretKeyError, RuntimeContext>
+    ) => Effect.Effect<
+      DecryptResult,
+      DecryptSecretKeyError | FlyKmsError,
+      RuntimeContext
+    >
   >
 > {}
 

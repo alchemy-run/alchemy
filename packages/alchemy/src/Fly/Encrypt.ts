@@ -1,4 +1,5 @@
 import type { EncryptSecretKeyError } from "@distilled.cloud/fly-io/machines";
+import type { FlyKmsError } from "./Errors.ts";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -19,13 +20,12 @@ export interface EncryptResult {
  * Encrypt with a Fly {@link SecretKey} (`nacl_box`, `nacl_secretbox`,
  * `xaes256gcm`, …). The App and key name are fixed by `Encrypt(key)`.
  *
- * @binding
  *
- * @section Encrypt a payload
+ * ### Encrypt a payload
  * Provide {@link EncryptHttp} on the Action or Service Effect. Fly
  * crypto ops need a KMS token. Org API tokens are typed `Forbidden`.
  *
- * @example Encrypt
+ * **Example:** Encrypt
  * ```typescript
  * const encrypt = yield* Fly.Encrypt(Box);
  * const { ciphertext } = yield* encrypt({
@@ -33,17 +33,19 @@ export interface EncryptResult {
  * });
  * ```
  *
- * @section Associated data
+ * ### Associated data
  * `associatedData` is optional AEAD associated data. {@link Decrypt}
  * must pass the same bytes.
  *
- * @example AEAD
+ * **Example:** AEAD
  * ```typescript
  * const { ciphertext } = yield* encrypt({
  *   plaintext: bytes,
  *   associatedData: nonce,
  * });
  * ```
+ *
+ * @binding
  */
 export interface Encrypt extends Binding.Service<
   Encrypt,
@@ -53,7 +55,11 @@ export interface Encrypt extends Binding.Service<
   ) => Effect.Effect<
     (
       request: EncryptRequest,
-    ) => Effect.Effect<EncryptResult, EncryptSecretKeyError, RuntimeContext>
+    ) => Effect.Effect<
+      EncryptResult,
+      EncryptSecretKeyError | FlyKmsError,
+      RuntimeContext
+    >
   >
 > {}
 
