@@ -64,61 +64,31 @@ supports — **219 resources across ~39 services** today. In the
 next release we'll push for 100% local emulation of every AWS
 service alchemy supports.
 
-## The rule, inverted
+## One rule
 
-The SDK loop ran on one rule: agents never handle an unknown
-error in their own code — an unmatched error becomes an SDK
-patch. The emulator loop runs on the same rule pointed the other
-way: **never patch the consumer to tolerate the emulator.** A
-test that goes red under `ALCHEMY_TEST_DEV=1` is never fixed by
-loosening the test or special-casing alchemy's lifecycle code.
-The only permitted fix is in the fork.
+Every test must pass unchanged against both real AWS and floci.
+When a test goes red against the emulator, we never loosen the
+test or special-case alchemy — the fix goes in the fork, with a
+conformance test in the emulator's own suite.
 
-The invariant that keeps this honest: every test must pass
-unchanged against both real AWS and floci. The real cloud pins
-the tests, so the emulator can't drift toward them. The tests
-pin the emulator, so it can't drift from the cloud. When an
-agent fixes a fidelity bug, it also lands a conformance test
-inside the emulator's own suite — the fork's log is full of
-commits like `test(compat): align SES and ECS suite with AWS` —
-so the fix is pinned twice, once on each side of the boundary.
+For example: a live test asserts that a streaming Function URL
+delivers its first bytes before the handler finishes. floci
+buffered the stream, the test went red, the fix landed in the
+fork — and streaming now behaves the same locally as in
+`us-east-1`.
 
-One turn of the loop, concretely. Alchemy's Lambda suite
-asserts that a streaming Function URL delivers its first bytes
-before the invocation completes — a behavior a live test
-verified against AWS before floci was involved. Against the
-emulator, the response arrived only after the
-handler finished: floci's runtime API buffered the streaming
-POST to completion. The fix
-(`fix(lambda): resume streaming runtime POSTs so invokes
-complete at headers`) landed in the fork with a compat test, the
-alchemy suite reran, and streaming responses now behave
-identically on your laptop and in `us-east-1`.
+## Results
 
-## Convergence
+The first convergence run took the 13-service suite from **253
+failures to 33**, with **396 tests green** against the emulator.
+DynamoDB (105 tests), S3 (51), Step Functions (31), Cognito
+(19), and others are fully green.
 
-The first full convergence run took the combined 13-service
-suite from **253 failures to 33**, with **396 tests green**
-against the emulator. Running in isolation, entire services are
-fully green: DynamoDB (105 tests), S3 (51), Step Functions (31),
-Cognito (19), Glue (15), Secrets Manager (14), ACM (14),
-Application Auto Scaling (10), and more. Each remaining failure
-is either the next emulator fix or a documented platform gap.
-
-The result for users is
-[`alchemy dev` for AWS](/aws/local-development): Lambda
-executing in Docker containers behind working Function URLs, ECS
-tasks as real containers, SQS→Lambda event source mappings
-pumping messages, S3 notifications firing, EventBridge routing —
-with ~100–500ms hot reload and no credentials.
-
-A conformant emulator also makes the loop that built it cheaper:
-future generation waves can run their first iterations against
-floci — no rate limits,
-no eventual-consistency stalls measured in minutes, no leaked
-cloud resources to nuke between rounds — and graduate to the
-real cloud only to certify. The emulator, once produced by the
-tests, lowers the cost of producing everything else.
+The result is [`alchemy dev` for AWS](/aws/local-development) —
+and a cheaper factory: generation waves can now iterate against
+floci with no rate limits, no eventual-consistency stalls, and
+no leaked cloud resources, touching the real cloud only to
+certify.
 
 ## Three artifacts per cloud
 
