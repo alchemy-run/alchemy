@@ -62,6 +62,9 @@
       "path": "../../distilled/packages/fly-io/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/railway/tsconfig.json"
+    },
+    {
       "path": "../cloudflare-runtime/tsconfig.json"
     }
   ]

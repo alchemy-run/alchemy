@@ -179,10 +179,16 @@
       "path": "./examples/fly-app/tsconfig.json"
     },
     {
+      "path": "./examples/railway-project/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-app/tsconfig.json"
     },
     {
       "path": "./examples/fly-service/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-service/tsconfig.json"
     },
     {
       "path": "./examples/fly-sprite/tsconfig.json"

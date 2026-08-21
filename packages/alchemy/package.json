@@ -239,6 +239,18 @@
       "worker": "./src/Fly/*.ts",
       "import": "./lib/Fly/*.js"
     },
+    "./Railway": {
+      "types": "./lib/Railway/index.d.ts",
+      "bun": "./src/Railway/index.ts",
+      "worker": "./src/Railway/index.ts",
+      "import": "./lib/Railway/index.js"
+    },
+    "./Railway/*": {
+      "types": "./lib/Railway/*.d.ts",
+      "bun": "./src/Railway/*.ts",
+      "worker": "./src/Railway/*.ts",
+      "import": "./lib/Railway/*.js"
+    },
     "./Prisma": {
       "types": "./lib/Prisma/index.d.ts",
       "bun": "./src/Prisma/index.ts",
@@ -400,6 +412,7 @@
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@distilled.cloud/railway": "workspace:*",
     "@effect/sql-d1": "catalog:effect",
     "@effect/sql-sqlite-do": "catalog:effect",
     "@effect/vitest": "catalog:effect",

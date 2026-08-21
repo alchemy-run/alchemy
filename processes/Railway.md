@@ -1,0 +1,296 @@
+# Railway provider — 0 → 100
+
+This is the durable process for bringing Railway from zero to
+Fly/Hetzner-comparable DX. It is also the post-mortem of Fly, so
+we do not repeat those mistakes.
+
+Do **not** invent a `processes/Railway/catalog.md` that goes stale.
+The catalog lives in this file. Status updates happen here.
+
+---
+
+## What Fly 0 → 100 actually required
+
+Fly was not "write resources then tests." The working order, which
+this Railway bring-up must follow, is:
+
+1. **Distilled SDK DX first.** One package (`@distilled.cloud/fly-io`).
+   Callers `import * as Machines from "@distilled.cloud/fly-io/machines"`
+   (and `mpg` / `addons` / `sprites`). Package root re-exports
+   `export * from "./services/index.ts"` — **never**
+   `export * as Services`. Operation names stay the vendor's unless
+   they are broken (Fly Machines `Apps_list` → `listApps` via OpenAPI
+   `operationId` patches). Add-ons are spec JSON + Smithy patches, not
+   hand-written TS introspection.
+2. **Error tags in distilled, never in alchemy.** Every
+   `UnknownCloudflareError` / `UnknownFlyError` / `UnknownRailwayError`
+   the tests hit becomes a typed tag (JSON Patch on the spec, then
+   regenerate that service only). Alchemy `catchTag`s the tag. No
+   `as { _tag }`, no status-code duck typing.
+3. **Alchemy AuthProvider.** Token from env (`FLY_API_TOKEN`) or
+   stored credentials. `fromAuthProvider` maps onto distilled
+   `Credentials`. Profile `testing` method `env`. **No `skipIf` for
+   missing creds** — the token is in Doppler `alchemy-v2` (dev).
+4. **Environment + Catalog.** Resolve org/workspace once, cache it.
+   Catalog helpers (`currentOrgSlug`, `findRegion`) are not resources.
+5. **Resources, reconcilers, `list()` for nuke.** Observe-ensure-sync.
+   No `if (output === undefined) create else update`. Physical names
+   from `createPhysicalName` (never `Date.now()`). Ownership via
+   metadata/labels **or** alchemy physical-name shape when the API
+   has no labels. `list()` is filtered to owned rows so nuke does
+   not enumerate the whole account.
+6. **Bindings.** `Binding.Service` + HTTP layer. Runtime methods
+   require `Alchemy.RuntimeContext`. Deploy-time
+   ``host.bind`${resource}`(data)`` is a no-op under
+   `__ALCHEMY_RUNTIME__`. Access-split Read / Write / ReadWrite when
+   the API distinguishes. Shared `{Cap}Binding.ts` / `{Cap}Http.ts`
+   stay **un-exported**.
+7. **Hosted Effect programs.** `Fly.Service({ main })` bundles with
+   rolldown, `build.install: ["pg"]` for CJS natives (Rolldown's
+   `pg.Client` interop is `The superclass is not a constructor`),
+   Docker image, push, Machine. Bootstrap sets
+   `globalThis.__ALCHEMY_RUNTIME__ = true` **then** `await import`.
+   `BunHttpServer({ hostname: "0.0.0.0" })`.
+8. **Test fixtures.** File-based `main`, never inline `script`.
+   `Test.make({ providers })`. `test.provider`. Start **and** end
+   with `stack.destroy()`. `afterAll.skipIf(!!process.env.NO_DESTROY)`
+   is allowed. Out-of-band verify via distilled. Typed wait-until-gone.
+   ConnectPostgres: `yield* Fly.ConnectPostgres(Db)` then
+   `Drizzle.Postgres(conn.connectionString)` then `db.execute` —
+   **not** `withPgClient`, **not** `Effect.tryPromise`, **not**
+   `Effect.orDie` on SQL.
+9. **Examples** (`examples/fly-*`) that a human can `alchemy deploy`.
+10. **Docs hub + tutorial + JSDoc → `pnpm docs:gen`.** Never edit
+    `website/src/content/docs/providers/{Cloud}/*.md` by hand.
+    Tutorial is one concept per `##` heading, `diff lang="typescript"`.
+11. **Dual PRs.** Distilled PR (DX + error-tag patches + regenerate).
+    Alchemy PR with a DX-centric description (one `###` heading +
+    snippet per export, **no `#`/`##`**, `--body-file`) that **links
+    the distilled PR**.
+
+Green bar: suite green **and** `pnpm nuke --include 'Fly.*' --dry-run`
+is empty. That is 100%.
+
+---
+
+## DX that shipped (copy this)
+
+```ts
+import * as Alchemy from "alchemy";
+import * as Fly from "alchemy/Fly";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+
+const Site = Fly.App("Site");
+const Db = Fly.Postgres("Db", { region: "iad" });
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  {
+    app: Site,
+    main: import.meta.url,
+    region: "iad",
+    build: { install: ["pg"] },
+  },
+  Effect.gen(function* () {
+    const conn = yield* Fly.ConnectPostgres(Db);
+    const db = yield* Drizzle.Postgres(conn.connectionString);
+    return {
+      fetch: Effect.gen(function* () {
+        const rows = yield* db.execute("select 1 as ok");
+        return HttpServerResponse.json({ rows });
+      }),
+    };
+  }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
+) {}
+```
+
+Flat `Fly.*` namespace. Resource-valued props accept the resource or
+an Effect producing it (module-scope `const Site = Fly.App("Site")`).
+No `Input<T>` in Props. No `export * as Services`. No Attach API.
+No `Config.redacted` as the postgres binding.
+
+Distilled:
+
+```ts
+import * as Machines from "@distilled.cloud/fly-io/machines";
+yield* Machines.listApps({ org_slug });
+```
+
+---
+
+## File layout (Fly / Hetzner / Railway)
+
+```
+distilled/packages/{cloud}/
+  src/index.ts              # export * from credentials, errors, services
+  src/services/index.ts     # generated barrel (export * as railway from …)
+  src/services/{svc}.ts     # generated — NEVER edit
+  patches/{svc}/*.json      # RFC 6902 against Smithy (or OpenAPI pre-convert)
+  scripts/convert.ts        # spec → Smithy + apply patches
+  scripts/generate.ts       # Smithy → SDK
+
+packages/alchemy/src/{Cloud}/
+  AuthProvider.ts
+  Credentials.ts
+  Environment.ts
+  Catalog.ts
+  Metadata.ts | Labels.ts   # ownership stamps
+  Providers.ts              # providers() layer — minimal insertions
+  index.ts                  # barrel — minimal insertions
+  {Resource}.ts             # contract + provider, co-located
+  {Capability}.ts           # Binding.Service
+  {Capability}Http.ts       # Layer
+  {Capability}Binding.ts    # shared scaffolding, NOT exported
+  hosted.ts                 # Effect-native Service runtime (unexported helpers ok)
+
+packages/alchemy/test/{Cloud}/
+  {Resource}.test.ts
+  fixtures/{worker}.ts
+
+examples/{cloud}-*
+website/src/content/docs/{cloud}/   # hub, setup, tutorial, compute, data
+website/src/content/docs/providers/{Cloud}/  # generated, do not edit
+```
+
+---
+
+## Mistakes we will not repeat
+
+| Mistake | Do this instead |
+| --- | --- |
+| `export * as Services from "./services"` | `export * from "./services/index.ts"` |
+| Invent verb-first GraphQL names (`createProject`) | Keep wire names (`projectCreate`). Only patch when the generated name is broken (`Apps_list`) |
+| `skipIf` for missing `FLY_API_TOKEN` / `RAILWAY_API_TOKEN` | Token is in Doppler. Fail loud |
+| `Input<T>` on Props | Plain types. Engine wraps |
+| `if (output === undefined) { create } else { update }` | One observe-ensure-sync reconciler |
+| `Date.now()` in names | `createPhysicalName` or a constant |
+| `withPgClient` / `Effect.tryPromise` / `Effect.orDie` on SQL | `ConnectPostgres` + `Drizzle.Postgres` + `db.execute` |
+| Bundle `pg` into the image | `build.install: ["pg"]` so `bun install` puts the CJS constructor on disk |
+| Static drizzle import at module top in the worker | Fine **after** `pg` is installed; the crash was CJS interop, not drizzle |
+| Catch `UnknownRailwayError` / HTTP status | Patch distilled, then `catchTag` |
+| Edit generated provider markdown | JSDoc + `pnpm docs:gen` |
+| PR body with `#` / `##`, or inline `--body "$(cat <<'EOF')"` | One `###` per export, `--body-file` |
+| Recreate `processes/Fly/catalog.md` | Catalog stays in this file |
+| Agents run `tsc` / `pnpm build` | Coordinator owns typecheck |
+| Unbounded `Effect.retry` | `times ≤ 8–10`, per-test timeout ≤ 120s |
+| `export` of `{Cap}Binding.ts` / `{Cap}Http.ts` scaffolding | Keep internal |
+
+---
+
+## Railway catalog
+
+Auth: account/team token (`RAILWAY_API_TOKEN` or `RAILWAY_TOKEN`) as
+`Authorization: Bearer`. Project tokens (`RAILWAY_PROJECT_TOKEN`) as
+`Project-Access-Token` — Alchemy AuthProvider uses **account** tokens
+(`RAILWAY_API_TOKEN`) so every operation is reachable. Distilled
+already prefers account over project when both are set.
+
+Workspace is **not** a resource. `me.workspace ?? me.workspaces[0]`
+is the default, overridable with `workspaceId` on Project.
+
+API: GraphQL v2 `POST https://backboard.railway.com/graphql/v2`.
+SDK: `import * as railway from "@distilled.cloud/railway/railway"`.
+
+### In scope (wave 1 — comparable to Fly/Hetzner)
+
+| Resource | Distilled ops | Notes |
+| --- | --- | --- |
+| `Railway.Project` | `projectCreate`, `project`, `projectUpdate`, `projectDelete`, `projects` | Fly.App analogue. Owns environments + services. Name unique per workspace. `primaryEnvironmentId` / `baseEnvironmentId` captured. Changing `name` updates in place. Changing `workspaceId` replaces. |
+| `Railway.Environment` | `environmentCreate`, `environment`, `environmentRename`, `environmentDelete`, `environments` | Fly has no equivalent. Production env is created with the Project — do **not** duplicate it. Extra envs (staging) are this resource. `sourceEnvironmentId` forks. |
+| `Railway.Service` | `serviceCreate`, `service`, `serviceUpdate`, `serviceDelete`, `serviceInstanceUpdate`, `serviceInstanceDeployV2`, `serviceDomainCreate` | Image **or** Effect-native (`main`). `source: { image }` or `{ repo }`. Hosted path: bundle + Docker + push to `registry` (user GHCR/Docker Hub) then `source.image`. Public `*.up.railway.app` via `serviceDomainCreate`. |
+| `Railway.Variable` | `variableUpsert`, `variableDelete`, `variables` | Fly.Secret analogue. Project- or service-scoped. Value is Redacted, never in attributes. |
+| `Railway.Volume` | `volumeCreate`, `volumeUpdate`, `volumeDelete`, `volumeInstance`, `volumeInstanceUpdate` | Block disk. Attach via `serviceId` or `MountVolume`. |
+| `Railway.CustomDomain` | `customDomainCreate`, `customDomain`, `customDomainDelete`, `customDomainUpdate` | User hostname on a Service. |
+| `Railway.TcpProxy` | `tcpProxyCreate` (deprecated, **keep**), `tcpProxies`, `tcpProxyDelete` | Public TCP for Postgres/Redis. Convert skips deprecated fields — convert.ts re-includes `tcpProxyCreate`. |
+| `Railway.Postgres` | `serviceCreate` + volume + variables + optional TcpProxy | Official image `ghcr.io/railwayapp-templates/postgres-ssl:16`. Sets `POSTGRES_*` + `DATABASE_URL`. Private URL `{name}.railway.internal`. |
+| `Railway.Redis` | `serviceCreate` + variables | Image `bitnami/redis` or `redis:7`. `REDIS_URL`. |
+| `Railway.Bucket` | `bucketCreate`, `bucketUpdate`, `bucketS3Credentials` | S3-compatible. Bindings reuse `@distilled.cloud/aws/s3` like Tigris. |
+
+### Bindings
+
+| Binding | Host | Runtime |
+| --- | --- | --- |
+| `ConnectPostgres` | Service | `connectionString` from `DATABASE_URL` / `RAILWAY_POSTGRES_*`. Deploy-time `variableUpsert` of Railway reference `${{Postgres.DATABASE_URL}}` plus packed URI. |
+| `ReadRedis` / `WriteRedis` / `ReadWriteRedis` | Service | RESP over `REDIS_URL`, same shape as Fly. |
+| `PutObject` / `GetObject` / `DeleteObject` / `HeadObject` / `ListObjectsV2` | Service | S3 against bucket credentials. |
+| `MountVolume` | Service | `{ path, volumeId }` into `ServiceBinding.mounts`; reconcile attaches via `volumeCreate`/`volumeInstanceUpdate`. |
+| `GetVariable` (optional) | Service | Read a Variable by name from env. Prefer `Config.redacted` for `.env`. |
+
+### Out of scope (document, do not implement)
+
+Billing, OAuth/login sessions, audit logs, cloud agents / sandboxes,
+marketplace templates as resources, WAF/CDN as resources, workspace
+as a resource, project invitations/members, 2FA, notifications,
+observability dashboards, GitHub repo linking as a resource (Service
+`source.repo` is enough), `templateDeployV2` as a user resource.
+
+---
+
+## Distilled Railway rules
+
+- Package stays `@distilled.cloud/railway`.
+- `src/index.ts`: `export * from "./services/index.ts"` (not Services).
+- Callers: `import * as railway from "@distilled.cloud/railway/railway"`
+  then `railway.projectCreate({ input })`. GraphQL field names are the
+  spec. **Do not** patch them to verb-first.
+- `convert.ts` applies `patches/railway/*.json` to the **Smithy**
+  model after GraphQL→Smithy (same as Fly addons). Keep
+  `tcpProxyCreate` even though it is deprecated.
+- Errors are client-wide (`RAILWAY_ERROR_CODE_MAP` in `errors.ts`)
+  because GraphQL has no per-field error contract. New
+  `extensions.code` values go in that map. Message-only failures
+  that tests hit get a matcher in `protocol.ts` **or** a dedicated
+  class + map entry. Then regenerate. Alchemy never catches
+  `UnknownRailwayError`.
+- Agents regenerate **only** railway:
+  `cd distilled/packages/railway && bun scripts/convert.ts && bun scripts/generate.ts && pnpm exec oxfmt src/services/railway.ts`.
+  Never `tsc` / `pnpm build`.
+
+---
+
+## Alchemy Railway rules
+
+- Flat `Railway.*`. `import * as Railway from "alchemy/Railway"`.
+- `providers()` registers every resource + Auth + Credentials +
+  Environment + binding HTTP layers + FetchHttpClient, `Layer.orDie`.
+- Reconciler doctrine (observe → ensure → sync → return). Catch
+  `RailwayNotFound` as missing. Catch already-exists races and
+  continue.
+- `list()` on Project (and children via project) so nuke is scoped.
+- Tests: `timeout 240 pnpm test test/Railway --profile testing`.
+  Per-test timeout ≤ 120s. `stack.destroy()` at start and end.
+  Out-of-band via distilled `railway.project({ id })` etc.
+- Postgres/Redis from the test process may use the public TcpProxy
+  URL. In-Service bindings use the private `*.railway.internal` URL
+  packed into env.
+- Effect-native Service: same `build.install` footgun as Fly. Copy
+  Fly `hosted.ts` bootstrap (runtime flag **before** import, bind
+  `0.0.0.0`, `build.install` for `pg`).
+- Image-based Service (`image: "hashicorp/http-echo"`) is the
+  lifecycle test that does not need a push registry. `main` is the
+  Fly-comparable path and needs a registry Railway can pull
+  (`registry` prop → GHCR / Docker Hub). Tests must not `skipIf` the
+  image path.
+
+---
+
+## Workflow (coordinator)
+
+1. Distilled DX + patches hook + `tcpProxyCreate` keep + regenerate.
+2. Auth → Credentials → Environment → Catalog → Metadata.
+3. Project (with `list`) → Environment resource → Variable.
+4. Service (image + hosted) → ServiceDomain → Volume → MountVolume
+   → TcpProxy → CustomDomain.
+5. Postgres → Redis → Bucket + bindings + fixtures.
+6. Live tests, patch error tags as they surface, regenerate, retest.
+   Three-iteration budget per resource, then skipIf-gate **platform**
+   entitlement only (never creds).
+7. Examples + hub + tutorial + `pnpm docs:gen`.
+8. Dual PRs. Alchemy body links distilled PR. DX-centric, snippets.
+9. Coordinator `pnpm exec tsc -b`. Agents never typecheck.
+
+Shared files (`Providers.ts`, `index.ts`, `package.json`,
+`astro.config.mjs`, `docs-tabs.ts`, `stacks/nuke.ts`): coordinator
+edits, or agents make **one minimal insertion** and retry on
+conflict.
