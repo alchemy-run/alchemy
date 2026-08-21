@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./BucketTypes.ts";
 
 export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
 
@@ -36,7 +37,11 @@ export interface PutObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutObjectRequest,
-    ) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError, RuntimeContext>
+    ) => Effect.Effect<
+      S3.PutObjectOutput,
+      S3.PutObjectError | TigrisCredentialsMissing,
+      RuntimeContext
+    >
   >
 > {}
 

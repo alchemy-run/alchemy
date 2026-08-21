@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./BucketTypes.ts";
 
 export interface HeadObjectRequest extends Omit<
   S3.HeadObjectRequest,
@@ -33,7 +34,11 @@ export interface HeadObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: HeadObjectRequest,
-    ) => Effect.Effect<S3.HeadObjectOutput, S3.HeadObjectError, RuntimeContext>
+    ) => Effect.Effect<
+      S3.HeadObjectOutput,
+      S3.HeadObjectError | TigrisCredentialsMissing,
+      RuntimeContext
+    >
   >
 > {}
 

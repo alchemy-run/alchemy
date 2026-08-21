@@ -489,25 +489,34 @@ const pendingStatus = (status: string | undefined) =>
 
 const waitUntilReady = (name: string, addOnId: string) =>
   findById(addOnId).pipe(
-    Effect.flatMap((addOn) => {
-      if (addOn === undefined) {
-        return Effect.fail(new BucketPending({ name, status: "missing" }));
-      }
-      const status = addOn.status ?? undefined;
-      if (failedStatus(status)) {
-        return new BucketProvisionFailed({
-          name,
-          status,
-          errorMessage: addOn.errorMessage ?? undefined,
-        });
-      }
-      if (pendingStatus(status)) {
-        return Effect.fail(
-          new BucketPending({ name, status: status ?? "creating" }),
-        );
-      }
-      return Effect.succeed(addOn);
-    }),
+    Effect.flatMap(
+      (
+        addOn,
+      ): Effect.Effect<
+        AddOnsResponseEdgesItemNode,
+        BucketPending | BucketProvisionFailed
+      > => {
+        if (addOn === undefined) {
+          return Effect.fail(new BucketPending({ name, status: "missing" }));
+        }
+        const status = addOn.status ?? undefined;
+        if (failedStatus(status)) {
+          return Effect.fail(
+            new BucketProvisionFailed({
+              name,
+              status,
+              errorMessage: addOn.errorMessage ?? undefined,
+            }),
+          );
+        }
+        if (pendingStatus(status)) {
+          return Effect.fail(
+            new BucketPending({ name, status: status ?? "creating" }),
+          );
+        }
+        return Effect.succeed(addOn);
+      },
+    ),
     Effect.retry({
       while: (e) => e._tag === "Fly.BucketPending",
       times: 8,

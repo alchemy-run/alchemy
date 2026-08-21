@@ -418,28 +418,35 @@ const findByName = (orgSlug: string, name: string) =>
 
 const waitUntilReady = (clusterId: string) =>
   getLiveCluster(clusterId).pipe(
-    Effect.flatMap((cluster) => {
-      if (cluster === undefined) {
+    Effect.flatMap(
+      (
+        cluster,
+      ): Effect.Effect<
+        ManagedCluster,
+        PostgresPending | PostgresCreateFailed
+      > => {
+        if (cluster === undefined) {
+          return Effect.fail(
+            new PostgresPending({ clusterId, status: "missing" }),
+          );
+        }
+        if (cluster.status === "ready") return Effect.succeed(cluster);
+        if (cluster.status === "error") {
+          return Effect.fail(
+            new PostgresCreateFailed({
+              clusterId,
+              status: cluster.status,
+            }),
+          );
+        }
         return Effect.fail(
-          new PostgresPending({ clusterId, status: "missing" }),
-        );
-      }
-      if (cluster.status === "ready") return Effect.succeed(cluster);
-      if (cluster.status === "error") {
-        return Effect.fail(
-          new PostgresCreateFailed({
+          new PostgresPending({
             clusterId,
-            status: cluster.status,
+            status: cluster.status ?? "creating",
           }),
         );
-      }
-      return Effect.fail(
-        new PostgresPending({
-          clusterId,
-          status: cluster.status ?? "creating",
-        }),
-      );
-    }),
+      },
+    ),
     Effect.retry({
       while: (e) => e._tag === "Fly.PostgresPending",
       times: 10,
@@ -735,22 +742,24 @@ export const PostgresProvider = () =>
       if (current === undefined || current.id === undefined) {
         return yield* new PostgresNotCreated({ name, orgSlug });
       }
+      // `current` is reassigned below; the id is stable across the waits.
+      const clusterId = current.id;
 
       if (current.status !== "ready") {
         current =
-          (yield* waitUntilReady(current.id)) ??
-          (yield* getLiveCluster(current.id)) ??
+          (yield* waitUntilReady(clusterId)) ??
+          (yield* getLiveCluster(clusterId)) ??
           current;
       }
 
       if (current.status === "error") {
         return yield* new PostgresCreateFailed({
-          clusterId: current.id ?? "",
+          clusterId,
           status: current.status,
         });
       }
 
-      const observed = yield* waitForCredentials(current.id);
+      const observed = yield* waitForCredentials(clusterId);
       const cluster = observed?.data ?? current;
       const credentials = observed?.credentials;
       const migrationUri =
@@ -761,9 +770,7 @@ export const PostgresProvider = () =>
         migrationsInput &&
         (migrationUri === undefined || migrationUri.length === 0)
       ) {
-        return yield* new PostgresCredentialsMissing({
-          clusterId: current.id,
-        });
+        return yield* new PostgresCredentialsMissing({ clusterId });
       }
       const connectionUri =
         migrationUri !== undefined ? Redacted.make(migrationUri) : undefined;

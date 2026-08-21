@@ -1,6 +1,7 @@
 export * from "./App.ts";
 export * from "./AuthProvider.ts";
 export * from "./Bucket.ts";
+export * from "./BucketTypes.ts";
 export * from "./Catalog.ts";
 export * from "./DeleteObject.ts";
 export * from "./DeleteObjectHttp.ts";
@@ -22,6 +23,7 @@ export * from "./GetSecretHttp.ts";
 export * from "./HeadObject.ts";
 export * from "./HeadObjectHttp.ts";
 export * from "./IpAssignment.ts";
+export * from "./KmsError.ts";
 export * from "./ListObjectsV2.ts";
 export * from "./ListObjectsV2Http.ts";
 export * from "./ListSecrets.ts";

@@ -7,9 +7,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   flyKmsPost,
-  fromByteList,
   makeHttpSecretKeyBinding,
-  toByteList,
 } from "./SecretKeyHttp.ts";
 import { Sign, type SignRequest } from "./Sign.ts";
 
@@ -53,10 +51,10 @@ export const SignHttp = Layer.effect(
             machines.signSecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
-              plaintext: toByteList(request.plaintext),
+              plaintext: bytesToBase64(request.plaintext),
             }),
           );
-          return { signature: fromByteList(res.signature) };
+          return { signature: base64ToBytes(res.signature) };
         }),
     }),
   ),

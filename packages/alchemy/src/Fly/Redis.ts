@@ -488,30 +488,37 @@ const ensureTos = (orgSlug: string, organizationId: string) =>
 
 const waitUntilReady = (id: string, name: string) =>
   findRedisAddOn({ id, name }).pipe(
-    Effect.flatMap((row) => {
-      if (row === undefined) {
-        return Effect.fail(
-          new RedisPending({ redisId: id, status: "missing" }),
-        );
-      }
-      if (failedStatus(row.status)) {
-        return Effect.fail(
-          new RedisNotCreated({
-            name: row.name ?? name,
-            errorMessage: row.errorMessage ?? row.status ?? undefined,
-          }),
-        );
-      }
-      if (pendingStatus(row.status)) {
-        return Effect.fail(
-          new RedisPending({
-            redisId: id,
-            status: row.status ?? "provisioning",
-          }),
-        );
-      }
-      return Effect.succeed(row);
-    }),
+    Effect.flatMap(
+      (
+        row,
+      ): Effect.Effect<
+        AddOnsResponseEdgesItemNode,
+        RedisPending | RedisNotCreated
+      > => {
+        if (row === undefined) {
+          return Effect.fail(
+            new RedisPending({ redisId: id, status: "missing" }),
+          );
+        }
+        if (failedStatus(row.status)) {
+          return Effect.fail(
+            new RedisNotCreated({
+              name: row.name ?? name,
+              errorMessage: row.errorMessage ?? row.status ?? undefined,
+            }),
+          );
+        }
+        if (pendingStatus(row.status)) {
+          return Effect.fail(
+            new RedisPending({
+              redisId: id,
+              status: row.status ?? "provisioning",
+            }),
+          );
+        }
+        return Effect.succeed(row);
+      },
+    ),
     Effect.retry({
       while: (error) => error._tag === "Fly.RedisPending",
       times: 10,
@@ -674,7 +681,7 @@ export const RedisProvider = () =>
         return yield* new RedisOrgMissing({ orgSlug });
       }
 
-      let current =
+      let current: ObservedRedis | undefined =
         output?.redisId !== undefined
           ? yield* findRedisAddOn({
               id: output.redisId,

@@ -670,15 +670,18 @@ export const SpriteProvider = () =>
           if (current === undefined) {
             return yield* new SpriteNotCreated({ name });
           }
+          // Narrowed once so the `NotFound` fallbacks below keep the
+          // non-optional type instead of widening back to `| undefined`.
+          let sprite = current;
 
-          const observedAuth = toUrlAuth(current.url_settings?.auth);
+          const observedAuth = toUrlAuth(sprite.url_settings?.auth);
           if (observedAuth !== urlAuth) {
-            current = yield* sprites
+            sprite = yield* sprites
               .updateSprite({
                 name,
                 url_settings: { auth: urlAuth },
               })
-              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(current)));
+              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(sprite)));
           }
 
           const codeHash = yield* hosted.hash(props);
@@ -691,10 +694,10 @@ export const SpriteProvider = () =>
               port,
               session,
             });
-            current = (yield* getByName(name)) ?? current;
+            sprite = (yield* getByName(name)) ?? sprite;
           }
 
-          return toAttrs(current, name, codeHash);
+          return toAttrs(sprite, name, codeHash);
         }),
 
         delete: Effect.fn(function* ({ output }) {

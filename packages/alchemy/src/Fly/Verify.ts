@@ -1,4 +1,5 @@
 import type { VerifySecretKeyError } from "@distilled.cloud/fly-io/machines";
+import type { FlyKmsError } from "./KmsError.ts";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -41,7 +42,11 @@ export interface Verify extends Binding.Service<
   ) => Effect.Effect<
     (
       request: VerifyRequest,
-    ) => Effect.Effect<VerifyResult, VerifySecretKeyError, RuntimeContext>
+    ) => Effect.Effect<
+      VerifyResult,
+      VerifySecretKeyError | FlyKmsError,
+      RuntimeContext
+    >
   >
 > {}
 

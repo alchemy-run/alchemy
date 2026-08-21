@@ -8,9 +8,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   flyKmsPost,
-  fromByteList,
   makeHttpSecretKeyBinding,
-  toByteList,
 } from "./SecretKeyHttp.ts";
 
 /**
@@ -59,14 +57,14 @@ export const EncryptHttp = Layer.effect(
             machines.encryptSecretKey({
               app_name: yield* appName,
               secret_name: yield* secretName,
-              plaintext: toByteList(request.plaintext),
+              plaintext: bytesToBase64(request.plaintext),
               associated_data:
                 request.associatedData === undefined
                   ? undefined
-                  : toByteList(request.associatedData),
+                  : bytesToBase64(request.associatedData),
             }),
           );
-          return { ciphertext: fromByteList(res.ciphertext) };
+          return { ciphertext: base64ToBytes(res.ciphertext) };
         }),
     }),
   ),

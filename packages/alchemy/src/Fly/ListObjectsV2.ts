@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./BucketTypes.ts";
 
 export interface ListObjectsV2Request extends Omit<
   S3.ListObjectsV2Request,
@@ -35,7 +36,7 @@ export interface ListObjectsV2 extends Binding.Service<
       request?: ListObjectsV2Request,
     ) => Effect.Effect<
       S3.ListObjectsV2Output,
-      S3.ListObjectsV2Error,
+      S3.ListObjectsV2Error | TigrisCredentialsMissing,
       RuntimeContext
     >
   >

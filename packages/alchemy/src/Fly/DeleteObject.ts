@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./BucketTypes.ts";
 
 export interface DeleteObjectRequest extends Omit<
   S3.DeleteObjectRequest,
@@ -35,7 +36,7 @@ export interface DeleteObject extends Binding.Service<
       request: DeleteObjectRequest,
     ) => Effect.Effect<
       S3.DeleteObjectOutput,
-      S3.DeleteObjectError,
+      S3.DeleteObjectError | TigrisCredentialsMissing,
       RuntimeContext
     >
   >

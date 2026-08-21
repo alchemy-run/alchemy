@@ -1,4 +1,5 @@
 import type { DecryptSecretKeyError } from "@distilled.cloud/fly-io/machines";
+import type { FlyKmsError } from "./KmsError.ts";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
@@ -56,7 +57,11 @@ export interface Decrypt extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DecryptRequest,
-    ) => Effect.Effect<DecryptResult, DecryptSecretKeyError, RuntimeContext>
+    ) => Effect.Effect<
+      DecryptResult,
+      DecryptSecretKeyError | FlyKmsError,
+      RuntimeContext
+    >
   >
 > {}
 
