@@ -34,21 +34,25 @@ credentials. It shipped in
 ## We forked floci
 
 We [forked](https://github.com/alchemy-run/floci)
-[floci](https://floci.io), an MIT-licensed, LocalStack-style AWS
-emulator on the JVM, because the factory is a fully automated
-fan-out, with fleets of agents producing fixes faster than any
-maintainer could reasonably review. We'd like to contribute
-upstream, but flooding the floci team with that maintenance
-burden isn't fair to them. It's easier to let alchemy's flywheel
-drive the emulator's development directly, and that requires a
-fork.
+[floci](https://floci.io)'s AWS implementation because they've
+already laid a great foundation for local development but don't
+have full coverage. They're adding more every day, but we want
+to automate the emulator's development and push quickly for
+100%. In this version we focused on patching services floci
+already supported — **219 resources across ~39 services** — and
+added MicroVMs, a new service that is very important to alchemy.
 
-In this release our patches span about 30 services: Lambda's
-streaming Function URLs, ELBv2's ALB data plane, AppSync's
-Velocity template directives, EC2, IAM, SES, Cognito, Athena,
-event-source mappings. Every one of them exists because an
-alchemy test failed against the emulator after passing against
-AWS.
+The patches span about 30 services: Lambda's streaming Function
+URLs, ELBv2's ALB data plane, AppSync's Velocity template
+directives, EC2, IAM, SES, Cognito, Athena, event-source
+mappings. Every one of them exists because an alchemy test
+failed against the emulator after passing against AWS.
+
+We'd like to contribute these upstream, but the factory is a
+fully automated fan-out, with fleets of agents producing fixes
+faster than any maintainer could reasonably review. Flooding the
+floci team with that maintenance burden isn't fair to them. It's
+easier to let alchemy's flywheel drive the fork directly.
 
 The test harness has one switch:
 
@@ -59,11 +63,6 @@ pnpm test:aws:floci
 It runs the same test suite that normally runs against live AWS,
 except every call goes to floci instead. Nothing is mocked: each
 Lambda still cold-starts in its own Docker container.
-
-In beta.73 we focused on patching the services floci already
-supports: **219 resources across ~39 services** today. In the
-next release we'll push for 100% local emulation of every AWS
-service alchemy supports.
 
 ## One rule
 
