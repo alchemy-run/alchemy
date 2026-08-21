@@ -1,7 +1,7 @@
 ---
 title: Looping the Generation of Local Emulators
 date: 2026-08-20T16:00:00Z
-excerpt: The live test suite that generates our IaC and SDKs is also an executable spec of the cloud. Point it at an emulator and every red test is a fidelity bug with a repro. One convergence run took AWS emulation from 253 failures to 396 green tests, and alchemy dev now runs your AWS stack with no AWS account.
+excerpt: The live test suite that generates our IaC and SDKs is also an executable spec of the cloud. Point it at an emulator and every red test is a fidelity bug with a repro. alchemy dev now emulates 219 resources across ~39 AWS services on your machine, with no AWS account.
 ---
 
 In [Looping the Generation of IaC and SDKs](/blog/2026-07-02-cloudflare-resource-factory)
@@ -38,9 +38,9 @@ We [forked](https://github.com/alchemy-run/floci)
 already laid a great foundation for local development but don't
 have full coverage. They're adding more every day, but we want
 to automate the emulator's development and will push for 100%
-next release. In this version we focused on patching services floci
-already supported — **219 resources across ~39 services** — and
-added MicroVMs, a new service that is very important to alchemy.
+next release. In this version we focused on patching services
+floci already supported, and added MicroVMs, a new service that
+is very important to alchemy.
 
 The patches span about 30 services: Lambda's streaming Function
 URLs, ELBv2's ALB data plane, AppSync's Velocity template
@@ -86,12 +86,11 @@ patch floci to support the operation. We're strict about this.
 
 ## Results
 
-When we first pointed the 13-service suite at floci, **253
-tests failed**. Agents patched the fork until **396 were
-green**. Several services now pass completely: DynamoDB (105
-tests), S3 (51), Step Functions (31), Cognito (19), and others.
-The 33 failures still open are the backlog for the 100% push
-next release.
+`alchemy dev` now emulates **219 resources across ~39 AWS
+services** locally, with **396 tests green** against the
+emulator. Several services pass their full live suite: DynamoDB
+(105 tests), S3 (51), Step Functions (31), Cognito (19), and
+others.
 
 The result is [`alchemy dev` for AWS](/aws/local-development).
 It also makes the factory cheaper: generation waves can now
