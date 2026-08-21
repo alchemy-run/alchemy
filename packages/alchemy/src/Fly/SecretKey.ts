@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { SecretKey as FlySecretKey } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -224,7 +224,7 @@ const toAttrs = (
 });
 
 const getByName = (appName: string, secretName: string) =>
-  Services.machines
+  machines
     .secretkeyGet({
       app_name: appName,
       secret_name: secretName,
@@ -232,7 +232,7 @@ const getByName = (appName: string, secretName: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listKeys = (appName: string) =>
-  Services.machines.secretkeysList({ app_name: appName }).pipe(
+  machines.secretkeysList({ app_name: appName }).pipe(
     Effect.map((res) => res.secret_keys ?? []),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
   );
@@ -244,14 +244,14 @@ const putKey = (input: {
   value: ReadonlyArray<number> | undefined;
 }) => {
   if (input.value !== undefined) {
-    return Services.machines.secretkeySet({
+    return machines.secretkeySet({
       app_name: input.appName,
       secret_name: input.secretName,
       type: input.type,
       value: [...input.value],
     });
   }
-  return Services.machines.secretkeyGenerate({
+  return machines.secretkeyGenerate({
     app_name: input.appName,
     secret_name: input.secretName,
     type: input.type,
@@ -390,7 +390,7 @@ export const SecretKeyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (output.appName.length === 0 || output.name.length === 0) return;
-      yield* Services.machines
+      yield* machines
         .secretkeyDelete({
           app_name: output.appName,
           secret_name: output.name,

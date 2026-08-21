@@ -1,4 +1,3 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type {
   CertificateCheckResponse,
   CertificateDetail,
@@ -6,6 +5,7 @@ import type {
   CertificateValidation as FlyCertificateValidation,
   DNSRequirements,
 } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -315,7 +315,7 @@ const toAttrsFromSummary = (
 };
 
 const getByHostname = (appName: string, hostname: string) =>
-  Services.machines
+  machines
     .appCertificatesShow({ app_name: appName, hostname })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
@@ -324,7 +324,7 @@ const listAppCertificates = (appName: string) =>
     const all: CertificateSummary[] = [];
     let cursor: string | undefined;
     for (let i = 0; i < 8; i++) {
-      const page = yield* Services.machines
+      const page = yield* machines
         .appCertificatesList({
           app_name: appName,
           cursor,
@@ -370,7 +370,7 @@ const requireCustomMaterial = (
     : undefined;
 
 const createAcme = (appName: string, hostname: string) =>
-  Services.machines
+  machines
     .appCertificatesAcmeCreate({
       app_name: appName,
       hostname,
@@ -383,7 +383,7 @@ const createCustom = (
   fullchain: string,
   privateKey: string,
 ) =>
-  Services.machines
+  machines
     .appCertificatesCustomCreate({
       app_name: appName,
       hostname,
@@ -399,13 +399,13 @@ const replaceCustom = (
   privateKey: string,
 ) =>
   Effect.gen(function* () {
-    yield* Services.machines
+    yield* machines
       .appCertificatesCustomDelete({
         app_name: appName,
         hostname,
       })
       .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    yield* Services.machines.appCertificatesCustomCreate({
+    yield* machines.appCertificatesCustomCreate({
       app_name: appName,
       hostname,
       fullchain,
@@ -550,7 +550,7 @@ export const CertificateProvider = () =>
             upserted ?? (yield* getByHostname(appName, hostname)) ?? current;
         }
       } else if (current.configured !== true) {
-        const checked = yield* Services.machines
+        const checked = yield* machines
           .appCertificatesCheck({
             app_name: appName,
             hostname,
@@ -572,7 +572,7 @@ export const CertificateProvider = () =>
       const appName = output.appName;
       const hostname = output.hostname;
       if (appName.length === 0 || hostname.length === 0) return;
-      yield* Services.machines
+      yield* machines
         .appCertificatesDelete({
           app_name: appName,
           hostname,

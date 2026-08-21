@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { VolumeSnapshot as FlyVolumeSnapshot } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -184,7 +184,7 @@ const toAttrs = (
 });
 
 const listSnapshots = (appName: string, volumeId: string) =>
-  Services.machines
+  machines
     .volumesListSnapshots({
       app_name: appName,
       volume_id: volumeId,
@@ -316,7 +316,7 @@ export const VolumeSnapshotProvider = () =>
               : [],
           ),
         );
-        yield* Services.machines
+        yield* machines
           .createVolumeSnapshot({
             app_name: appName,
             volume_id: volumeId,

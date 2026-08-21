@@ -1,4 +1,3 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type {
   FlyMachineConfig,
   FlyMachineMount,
@@ -7,6 +6,7 @@ import type {
   Machine as FlyMachine,
   Volume as FlyVolume,
 } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -79,15 +79,13 @@ export const gone = (machine: FlyMachine | undefined) =>
   machine === undefined || machine.state === "destroyed";
 
 export const getMachineById = (appName: string, machineId: string) =>
-  Services.machines
-    .machinesShow({ app_name: appName, machine_id: machineId })
-    .pipe(
-      Effect.map((machine) => (gone(machine) ? undefined : machine)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  machines.machinesShow({ app_name: appName, machine_id: machineId }).pipe(
+    Effect.map((machine) => (gone(machine) ? undefined : machine)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const listMachinesByApp = (appName: string) =>
-  Services.machines.machinesList({ app_name: appName }).pipe(
+  machines.machinesList({ app_name: appName }).pipe(
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
   );
@@ -177,7 +175,7 @@ export const hasPublishedService = (
   );
 
 export const waitStarted = (appName: string, machineId: string) =>
-  Services.machines
+  machines
     .machinesWait({
       app_name: appName,
       machine_id: machineId,
@@ -193,7 +191,7 @@ export const waitStarted = (appName: string, machineId: string) =>
     );
 
 export const waitDestroyed = (appName: string, machineId: string) =>
-  Services.machines
+  machines
     .machinesWait({
       app_name: appName,
       machine_id: machineId,
@@ -219,7 +217,7 @@ export const ensureStarted = Effect.fn(function* (
   if (machineId === undefined || skipLaunch) return machine;
   const state = machine.state;
   if (state !== "started" && state !== "starting") {
-    yield* Services.machines
+    yield* machines
       .machinesStart({
         app_name: appName,
         machine_id: machineId,
@@ -235,7 +233,7 @@ export const deleteMachine = Effect.fn(function* (
   machineId: string,
 ) {
   if (appName.length === 0 || machineId.length === 0) return;
-  yield* Services.machines
+  yield* machines
     .machinesDelete({
       app_name: appName,
       machine_id: machineId,
@@ -488,7 +486,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
     const config = input.buildConfig({ index, mounts, metadata });
     let current = byIndex.get(index);
     if (current === undefined) {
-      const created = yield* Services.machines
+      const created = yield* machines
         .machinesCreate({
           app_name: input.appName,
           name,
@@ -517,7 +515,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
         metadata,
       })
     ) {
-      const updated = yield* Services.machines
+      const updated = yield* machines
         .machinesUpdate({
           app_name: input.appName,
           machine_id: current.id ?? "",

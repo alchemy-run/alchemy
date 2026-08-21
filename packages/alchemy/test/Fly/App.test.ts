@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -15,7 +15,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -47,7 +47,7 @@ test.provider(
       expect(created.url).toEqual(`https://${created.appName}.fly.dev`);
       expect(created.orgSlug).toEqual(expect.any(String));
 
-      const fetched = yield* Services.machines.appsShow({
+      const fetched = yield* machines.appsShow({
         app_name: created.appName,
       });
       expect(fetched.name).toEqual(created.appName);
@@ -101,7 +101,7 @@ test.provider(
       expect(replaced.appName).not.toEqual(created.appName);
       expect(replaced.url).toEqual(`https://${nextName}.fly.dev`);
 
-      const fetched = yield* Services.machines.appsShow({
+      const fetched = yield* machines.appsShow({
         app_name: replaced.appName,
       });
       expect(fetched.name).toEqual(replaced.appName);

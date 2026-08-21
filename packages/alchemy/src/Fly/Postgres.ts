@@ -1,9 +1,10 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type {
   ClusterCredentials,
   GetClusterResponse,
   ManagedCluster,
 } from "@distilled.cloud/fly-io/mpg";
+import * as machines from "@distilled.cloud/fly-io/machines";
+import * as mpg from "@distilled.cloud/fly-io/mpg";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -142,7 +143,7 @@ export type Postgres = Resource<
      * Action; from a {@link Service} prefer {@link ConnectPostgres}.
      */
     connectionUri: string;
-    /** Pooled PgBouncer URI. This is `DATABASE_URL` on an attached App. */
+    /** Pooled PgBouncer URI. Prefer {@link ConnectPostgres} from a Service. */
     pooledConnectionUri: string;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
@@ -379,13 +380,13 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 export const getLiveCluster = (clusterId: string) =>
-  Services.mpg.getClusterById({ id: clusterId }).pipe(
+  mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res) => (isLiveCluster(res.data) ? res.data : undefined)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 export const getClusterResponse = (clusterId: string) =>
-  Services.mpg.getClusterById({ id: clusterId }).pipe(
+  mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res): GetClusterResponse | undefined =>
       isLiveCluster(res.data) ? res : undefined,
     ),
@@ -393,7 +394,7 @@ export const getClusterResponse = (clusterId: string) =>
   );
 
 const listOrgClusters = (orgSlug: string) =>
-  Services.mpg.listClusters({ org_slug: orgSlug }).pipe(
+  mpg.listClusters({ org_slug: orgSlug }).pipe(
     Effect.map((res) => (res.data ?? []).filter((row) => isLiveCluster(row))),
     Effect.catchTag(["NotFound", "Forbidden"], () =>
       Effect.succeed([] as ManagedCluster[]),
@@ -457,7 +458,7 @@ const waitForCredentials = (clusterId: string) =>
   );
 
 const waitUntilGone = (clusterId: string) =>
-  Services.mpg.getClusterById({ id: clusterId }).pipe(
+  mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map(
       (res) => res.data === undefined || res.data.status === "deleted",
     ),
@@ -506,7 +507,7 @@ export const directUri = (
 };
 
 const putSecret = (appName: string, name: string, value: string) =>
-  Services.machines
+  machines
     .secretCreate({
       app_name: appName,
       secret_name: name,
@@ -515,7 +516,7 @@ const putSecret = (appName: string, name: string, value: string) =>
     .pipe(
       Effect.asVoid,
       Effect.catchTag("Conflict", () =>
-        Services.machines
+        machines
           .secretsUpdate({
             app_name: appName,
             values: { [name]: value },
@@ -568,7 +569,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
   if (creds.direct !== undefined) {
     yield* putSecret(appName, DIRECT_DATABASE_URL_SECRET, creds.direct);
   }
-  yield* Services.mpg
+  yield* mpg
     .createAttachment({
       id: clusterId,
       app_name: appName,
@@ -682,7 +683,7 @@ export const PostgresProvider = () =>
         if (region === undefined || region.length === 0) {
           return yield* new PostgresNotCreated({ name, orgSlug });
         }
-        const created = yield* Services.mpg
+        const created = yield* mpg
           .createCluster({
             org_slug: orgSlug,
             name,
@@ -779,16 +780,16 @@ export const PostgresProvider = () =>
             return Effect.void;
           }
           return Effect.gen(function* () {
-            yield* Services.mpg
+            yield* mpg
               .deleteAttachment({ id: clusterId, app_name: appName })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
-            yield* Services.machines
+            yield* machines
               .secretDelete({
                 app_name: appName,
                 secret_name: DATABASE_URL_SECRET,
               })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
-            yield* Services.machines
+            yield* machines
               .secretDelete({
                 app_name: appName,
                 secret_name: DIRECT_DATABASE_URL_SECRET,
@@ -798,7 +799,7 @@ export const PostgresProvider = () =>
         },
         { concurrency: 4 },
       );
-      yield* Services.mpg
+      yield* mpg
         .destroyCluster({ org_slug: orgSlug, id: clusterId })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(clusterId);

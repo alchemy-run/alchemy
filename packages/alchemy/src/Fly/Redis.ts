@@ -1,9 +1,10 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type {
   AddOnPlansResponseEdgesItemNode,
   AddOnsResponseEdgesItemNode,
   CreateAddOnResponseAddOn,
 } from "@distilled.cloud/fly-io/addons";
+import * as addons from "@distilled.cloud/fly-io/addons";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -368,7 +369,7 @@ export const listRedisAddOns = Effect.fn(function* () {
   const rows: AddOnsResponseEdgesItemNode[] = [];
   let after: string | undefined;
   for (let i = 0; i < 8; i++) {
-    const page = yield* Services.addons.addOns({
+    const page = yield* addons.addOns({
       type: REDIS_ADDON_TYPE,
       first: 50,
       after,
@@ -387,7 +388,7 @@ export const listRedisPlans = Effect.fn(function* () {
   const rows: RedisPlan[] = [];
   let after: string | undefined;
   for (let i = 0; i < 4; i++) {
-    const page = yield* Services.addons.addOnPlans({
+    const page = yield* addons.addOnPlans({
       type: REDIS_ADDON_TYPE,
       first: 50,
       after,
@@ -461,13 +462,13 @@ const resolvePlan = (
   });
 
 const resolveOrganization = (orgSlug: string) =>
-  Services.addons
+  addons
     .organization({ slug: orgSlug })
     .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
-    const agreed = yield* Services.addons.agreedToProviderTos({
+    const agreed = yield* addons.agreedToProviderTos({
       slug: orgSlug,
       providerName: REDIS_PROVIDER,
     });
@@ -475,7 +476,7 @@ const ensureTos = (orgSlug: string, organizationId: string) =>
     // Tokens without org-admin cannot write the ToS row. Create still
     // succeeds when the org already agreed via flyctl.
     yield* Effect.result(
-      Services.addons.createExtensionTosAgreement({
+      addons.createExtensionTosAgreement({
         input: {
           addOnProviderName: REDIS_PROVIDER,
           organizationId,
@@ -581,7 +582,7 @@ export const attachRedisSecrets = Effect.fn(function* (
     if (row === undefined) continue;
     let url = unwrapSensitive(row.publicUrl);
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
-      const detail = yield* Services.addons
+      const detail = yield* addons
         .addOn({ id: row.id })
         .pipe(
           Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
@@ -590,13 +591,13 @@ export const attachRedisSecrets = Effect.fn(function* (
     }
     if (url === undefined || url.length === 0) continue;
     const updated = yield* Effect.result(
-      Services.machines.secretsUpdate({
+      machines.secretsUpdate({
         app_name: appName,
         values: { [REDIS_URL_ENV]: url },
       }),
     );
     if (Result.isFailure(updated)) {
-      yield* Services.machines
+      yield* machines
         .secretCreate({
           app_name: appName,
           secret_name: REDIS_URL_ENV,
@@ -696,7 +697,7 @@ export const RedisProvider = () =>
       if (current === undefined) {
         yield* ensureTos(orgSlug, org.id);
         const created = yield* Effect.result(
-          Services.addons.createAddOn({
+          addons.createAddOn({
             input: {
               type: REDIS_ADDON_TYPE,
               name,
@@ -747,7 +748,7 @@ export const RedisProvider = () =>
 
       if (planChanged || regionsChanged || optionsChanged || prodPackChanged) {
         const updated = yield* Effect.result(
-          Services.addons.updateAddOn({
+          addons.updateAddOn({
             input: {
               addOnId: current.id,
               planId: plan.id,
@@ -788,7 +789,7 @@ export const RedisProvider = () =>
         return;
       }
       const deleted = yield* Effect.result(
-        Services.addons.deleteAddOn({
+        addons.deleteAddOn({
           input:
             redisId.length > 0
               ? { addOnId: redisId }

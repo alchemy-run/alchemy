@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import { Services } from "@distilled.cloud/fly-io";
 import type { AppSecret } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
+import { createHash } from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -249,7 +249,7 @@ const toAttrs = (
 });
 
 const getByName = (appName: string, secretName: string) =>
-  Services.machines
+  machines
     .secretGet({
       app_name: appName,
       secret_name: secretName,
@@ -258,7 +258,7 @@ const getByName = (appName: string, secretName: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listSecrets = (appName: string) =>
-  Services.machines
+  machines
     .secretsList({
       app_name: appName,
       show_secrets: false,
@@ -358,7 +358,7 @@ export const SecretProvider = () =>
 
       let createdThisRun = false;
       if (current === undefined) {
-        yield* Services.machines
+        yield* machines
           .secretCreate({
             app_name: appName,
             secret_name: name,
@@ -385,7 +385,7 @@ export const SecretProvider = () =>
         const valueChanged =
           previousPlain === undefined || previousPlain !== desiredPlain;
         if (!digestMatches && valueChanged) {
-          yield* Services.machines
+          yield* machines
             .secretsUpdate({
               app_name: appName,
               values: { [name]: desiredPlain },
@@ -400,7 +400,7 @@ export const SecretProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (output.appName.length === 0 || output.name.length === 0) return;
-      yield* Services.machines
+      yield* machines
         .secretDelete({
           app_name: output.appName,
           secret_name: output.name,

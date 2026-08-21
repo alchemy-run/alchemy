@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -26,7 +26,7 @@ const HMAC_B: ReadonlyArray<number> = Array.from(
 );
 
 const waitUntilGone = (appName: string, secretName: string) =>
-  Services.machines
+  machines
     .secretkeyGet({
       app_name: appName,
       secret_name: secretName,
@@ -42,7 +42,7 @@ const waitUntilGone = (appName: string, secretName: string) =>
     );
 
 const waitAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -62,7 +62,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const result = yield* Effect.result(
-        Services.machines.secretkeysList({
+        machines.secretkeysList({
           app_name: "alchemy-kms-probe-missing",
         }),
       );
@@ -97,7 +97,7 @@ test.provider(
       expect(created.key.name.length).toBeGreaterThan(0);
       expect(created.key.type).toEqual("hs256");
 
-      const fetched = yield* Services.machines.secretkeyGet({
+      const fetched = yield* machines.secretkeyGet({
         app_name: created.key.appName,
         secret_name: created.key.name,
       });
@@ -120,7 +120,7 @@ test.provider(
       expect(updated.key.name).toEqual(created.key.name);
       expect(updated.key.type).toEqual("hs256");
 
-      const refetched = yield* Services.machines.secretkeyGet({
+      const refetched = yield* machines.secretkeyGet({
         app_name: updated.key.appName,
         secret_name: updated.key.name,
       });
@@ -159,7 +159,7 @@ test.provider(
       expect(created.key.type).toEqual("nacl_sign");
       expect(created.key.publicKey).toEqual(expect.any(String));
 
-      const fetched = yield* Services.machines.secretkeyGet({
+      const fetched = yield* machines.secretkeyGet({
         app_name: created.key.appName,
         secret_name: created.key.name,
       });
@@ -211,7 +211,7 @@ test.provider(
       expect(replaced.key.name).not.toEqual(created.key.name);
       expect(replaced.key.appName).toEqual(created.key.appName);
 
-      const fetched = yield* Services.machines.secretkeyGet({
+      const fetched = yield* machines.secretkeyGet({
         app_name: replaced.key.appName,
         secret_name: replaced.key.name,
       });

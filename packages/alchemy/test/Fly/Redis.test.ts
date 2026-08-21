@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -34,7 +34,7 @@ const waitUntilRedisGone = (redisId: string, name: string) =>
   );
 
 const waitUntilAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -229,7 +229,7 @@ test.provider(
         `https://${deployed.app.appName}.fly.dev`,
       );
 
-      const secrets = yield* Services.machines.secretsList({
+      const secrets = yield* machines.secretsList({
         app_name: deployed.app.appName,
         show_secrets: false,
       });

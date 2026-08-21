@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { FlyMachineService } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -436,7 +436,7 @@ export const createFlyHostedSupport = ({
       yield* note(`Built ${imageRef}`);
     }
 
-    const minted = yield* Services.machines.appCreateDeployToken({
+    const minted = yield* machines.appCreateDeployToken({
       app_name: input.appName,
     });
     const token = minted.token;

@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -19,7 +19,7 @@ const VALUE_A = Redacted.make("alchemy-secret-a");
 const VALUE_B = Redacted.make("alchemy-secret-b");
 
 const waitUntilGone = (appName: string, secretName: string) =>
-  Services.machines
+  machines
     .secretGet({
       app_name: appName,
       secret_name: secretName,
@@ -36,7 +36,7 @@ const waitUntilGone = (appName: string, secretName: string) =>
     );
 
 const waitAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -68,7 +68,7 @@ test.provider(
       expect(created.secret.name.length).toBeGreaterThan(0);
       expect(created.secret.digest).toEqual(expect.any(String));
 
-      const fetched = yield* Services.machines.secretGet({
+      const fetched = yield* machines.secretGet({
         app_name: created.secret.appName,
         secret_name: created.secret.name,
         show_secrets: false,
@@ -93,7 +93,7 @@ test.provider(
       expect(updated.secret.digest).toEqual(expect.any(String));
       expect(updated.secret.digest).not.toEqual(created.secret.digest);
 
-      const refetched = yield* Services.machines.secretGet({
+      const refetched = yield* machines.secretGet({
         app_name: updated.secret.appName,
         secret_name: updated.secret.name,
         show_secrets: false,
@@ -153,7 +153,7 @@ test.provider(
       expect(replaced.secret.name).not.toEqual(created.secret.name);
       expect(replaced.secret.appName).toEqual(created.secret.appName);
 
-      const fetched = yield* Services.machines.secretGet({
+      const fetched = yield* machines.secretGet({
         app_name: replaced.secret.appName,
         secret_name: replaced.secret.name,
         show_secrets: false,

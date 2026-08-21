@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -15,7 +15,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (appName: string, machineId: string) =>
-  Services.machines
+  machines
     .machinesShow({
       app_name: appName,
       machine_id: machineId,
@@ -63,7 +63,7 @@ test.provider(
       expect(created.guest?.memoryMb).toEqual(256);
       expect(created.url).toBeUndefined();
 
-      const fetched = yield* Services.machines.machinesShow({
+      const fetched = yield* machines.machinesShow({
         app_name: created.appName,
         machine_id: created.machineId,
       });
@@ -109,7 +109,7 @@ test.provider(
       expect(updated.state).toEqual("started");
       expect(updated.url).toEqual(`https://${created.appName}.fly.dev`);
 
-      const refetched = yield* Services.machines.machinesShow({
+      const refetched = yield* machines.machinesShow({
         app_name: updated.appName,
         machine_id: updated.machineId,
       });
@@ -174,7 +174,7 @@ test.provider(
       expect(replaced.region).toEqual("iad");
       expect(replaced.state).toEqual("started");
 
-      const fetched = yield* Services.machines.machinesShow({
+      const fetched = yield* machines.machinesShow({
         app_name: replaced.appName,
         machine_id: replaced.machineId,
       });

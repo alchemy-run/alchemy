@@ -1,7 +1,8 @@
+import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { CredentialsFromEnv, Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -97,7 +98,7 @@ test(
     expect(out.apiUrl).toEqual(`https://${out.appName}.fly.dev`);
 
     const liveApp = yield* distilled(
-      Services.machines.appsShow({
+      machines.appsShow({
         app_name: out.appName,
       }),
     );
@@ -105,7 +106,7 @@ test(
     expect(liveApp.id).toEqual(out.appId);
 
     const liveApi = yield* distilled(
-      Services.machines.machinesShow({
+      machines.machinesShow({
         app_name: out.appName,
         machine_id: out.apiMachineId,
       }),
@@ -117,7 +118,7 @@ test(
     expect(liveApi.config?.guest?.memory_mb).toEqual(256);
 
     const liveWorker = yield* distilled(
-      Services.machines.machinesShow({
+      machines.machinesShow({
         app_name: out.appName,
         machine_id: out.workerMachineId,
       }),
@@ -133,7 +134,7 @@ test(
     );
 
     const liveVolume = yield* distilled(
-      Services.machines.volumesGetById({
+      machines.volumesGetById({
         app_name: out.appName,
         volume_id: out.workerMounts[0]!.volumeId,
       }),
@@ -142,7 +143,7 @@ test(
     expect(liveVolume.attached_machine_id).toEqual(out.workerMachineId);
 
     const liveSecret = yield* distilled(
-      Services.machines.secretGet({
+      machines.secretGet({
         app_name: out.appName,
         secret_name: out.secretName,
         show_secrets: false,

@@ -1,5 +1,6 @@
 import type { Config } from "@distilled.cloud/fly-io";
-import { Credentials, Services } from "@distilled.cloud/fly-io";
+import { Credentials } from "@distilled.cloud/fly-io";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -35,7 +36,7 @@ export class FlyEnvironment extends Context.Service<
  * Used by {@link fromCredentials} and by {@link Catalog.currentOrgSlug}.
  */
 export const resolveOrgSlug = Effect.fn(function* () {
-  const info = yield* Services.machines.currentTokenShow({});
+  const info = yield* machines.currentTokenShow({});
   const orgSlug = info.tokens?.[0]?.org_slug;
   if (orgSlug === undefined || orgSlug.length === 0) {
     return yield* new FlyOrgNotFound({

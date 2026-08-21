@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -15,7 +15,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
-  Services.machines
+  machines
     .volumesGetById({
       app_name: appName,
       volume_id: volumeId,
@@ -38,7 +38,7 @@ const waitUntilVolumeGone = (appName: string, volumeId: string) =>
     );
 
 const waitUntilMachineGone = (appName: string, machineId: string) =>
-  Services.machines
+  machines
     .machinesShow({
       app_name: appName,
       machine_id: machineId,
@@ -80,7 +80,7 @@ test.provider(
       expect(created.mounts[0]?.sizeGb).toEqual(1);
       expect(created.mounts[0]?.name).toMatch(/^[a-z][a-z0-9_]*$/);
 
-      const fetched = yield* Services.machines.volumesGetById({
+      const fetched = yield* machines.volumesGetById({
         app_name: created.appName,
         volume_id: created.mounts[0]!.volumeId,
       });
@@ -116,7 +116,7 @@ test.provider(
       expect(updated.mounts[0]?.volumeId).toEqual(created.mounts[0]?.volumeId);
       expect(updated.mounts[0]?.sizeGb).toEqual(2);
 
-      const refetched = yield* Services.machines.volumesGetById({
+      const refetched = yield* machines.volumesGetById({
         app_name: updated.appName,
         volume_id: updated.mounts[0]!.volumeId,
       });
@@ -181,7 +181,7 @@ test.provider(
       expect(replaced.mounts[0]?.volumeId).not.toEqual(oldVolumeId);
       expect(replaced.mounts[0]?.sizeGb).toEqual(1);
 
-      const fetched = yield* Services.machines.volumesGetById({
+      const fetched = yield* machines.volumesGetById({
         app_name: replaced.appName,
         volume_id: replaced.mounts[0]!.volumeId,
       });
@@ -239,11 +239,11 @@ test.provider(
         created.replicas[1]?.mounts[0]?.name,
       );
 
-      const left = yield* Services.machines.volumesGetById({
+      const left = yield* machines.volumesGetById({
         app_name: created.appName,
         volume_id: created.replicas[0]!.mounts[0]!.volumeId,
       });
-      const right = yield* Services.machines.volumesGetById({
+      const right = yield* machines.volumesGetById({
         app_name: created.appName,
         volume_id: created.replicas[1]!.mounts[0]!.volumeId,
       });

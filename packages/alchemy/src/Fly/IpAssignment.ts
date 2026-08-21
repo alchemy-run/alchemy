@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { IPAssignment as FlyIPAssignment } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -308,7 +308,7 @@ const matchesDesired = (
 };
 
 const listAssignments = (appName: string) =>
-  Services.machines.appIPAssignmentsList({ app_name: appName }).pipe(
+  machines.appIPAssignmentsList({ app_name: appName }).pipe(
     Effect.map((res) => res.ips ?? []),
     Effect.catchTag(["NotFound", "Forbidden"], () =>
       Effect.succeed([] as FlyIPAssignment[]),
@@ -419,7 +419,7 @@ export const IpAssignmentProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* Services.machines
+        const created = yield* machines
           .appIPAssignmentsCreate({
             app_name: appName,
             type: props.type,
@@ -450,7 +450,7 @@ export const IpAssignmentProvider = () =>
       const appName = output.appName;
       const ip = output.ip;
       if (appName.length === 0 || ip.length === 0) return;
-      yield* Services.machines
+      yield* machines
         .appIPAssignmentsDelete({
           app_name: appName,
           ip,

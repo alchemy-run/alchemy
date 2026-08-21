@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -15,7 +15,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
-  Services.machines
+  machines
     .volumesGetById({
       app_name: appName,
       volume_id: volumeId,
@@ -38,7 +38,7 @@ const waitUntilVolumeGone = (appName: string, volumeId: string) =>
     );
 
 const waitUntilAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -49,7 +49,7 @@ const waitUntilAppGone = (appName: string) =>
   );
 
 const listedHas = (appName: string, volumeId: string, snapshotId: string) =>
-  Services.machines
+  machines
     .volumesListSnapshots({
       app_name: appName,
       volume_id: volumeId,

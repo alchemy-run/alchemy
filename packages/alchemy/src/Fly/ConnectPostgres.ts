@@ -39,6 +39,14 @@ export const ConnectPostgres = Binding.Service<ConnectPostgres>(
   "Fly.ConnectPostgres",
 );
 
+export const connectEnvKeys = (postgres: Pick<Postgres, "LogicalId">) => {
+  const id = postgres.LogicalId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
+  return {
+    pooled: `FLY_POSTGRES_${id}_POOLED`,
+    direct: `FLY_POSTGRES_${id}_DIRECT`,
+  };
+};
+
 export class PostgresUrlMissing extends Data.TaggedError(
   "Fly.PostgresUrlMissing",
 )<{

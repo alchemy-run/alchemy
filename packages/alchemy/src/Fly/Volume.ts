@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { Volume as FlyVolume } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -39,15 +39,13 @@ const transientState = (state: string | undefined) =>
   state === "creating" || state === "pending" || state === "extending";
 
 export const getVolumeById = (appName: string, volumeId: string) =>
-  Services.machines
-    .volumesGetById({ app_name: appName, volume_id: volumeId })
-    .pipe(
-      Effect.map((volume) => (destroying(volume.state) ? undefined : volume)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  machines.volumesGetById({ app_name: appName, volume_id: volumeId }).pipe(
+    Effect.map((volume) => (destroying(volume.state) ? undefined : volume)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const listVolumesByApp = (appName: string) =>
-  Services.machines.volumesList({ app_name: appName }).pipe(
+  machines.volumesList({ app_name: appName }).pipe(
     Effect.map((volumes) =>
       volumes.filter((volume) => !destroying(volume.state)),
     ),
@@ -132,7 +130,7 @@ export const createVolume = Effect.fn(function* (input: {
   disk: DiskSpec;
 }) {
   const sizeGb = Math.max(input.disk.sizeGb, MIN_SIZE_GB);
-  const created = yield* Services.machines
+  const created = yield* machines
     .volumesCreate({
       app_name: input.appName,
       name: input.name,
@@ -172,7 +170,7 @@ export const syncVolume = Effect.fn(function* (
   const sizeGb = Math.max(disk.sizeGb, MIN_SIZE_GB);
   const observedSize = current.size_gb ?? 0;
   if (sizeGb > observedSize) {
-    const extended = yield* Services.machines.volumesExtend({
+    const extended = yield* machines.volumesExtend({
       app_name: appName,
       volume_id: volumeId,
       size_gb: sizeGb,
@@ -190,7 +188,7 @@ export const syncVolume = Effect.fn(function* (
     disk.snapshotRetention !== undefined &&
     disk.snapshotRetention !== current.snapshot_retention;
   if (backupChanged || retentionChanged) {
-    current = yield* Services.machines.volumesUpdate({
+    current = yield* machines.volumesUpdate({
       app_name: appName,
       volume_id: volumeId,
       auto_backup_enabled: disk.autoBackupEnabled,
@@ -262,7 +260,7 @@ export const deleteVolume = Effect.fn(function* (
   volumeId: string,
 ) {
   if (appName.length === 0 || volumeId.length === 0) return;
-  yield* Services.machines
+  yield* machines
     .volumeDelete({
       app_name: appName,
       volume_id: volumeId,

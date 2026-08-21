@@ -1,8 +1,8 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type {
   Sprite as FlySprite,
   UrlAuth as FlyUrlAuth,
 } from "@distilled.cloud/fly-io/sprites";
+import * as sprites from "@distilled.cloud/fly-io/sprites";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -387,7 +387,7 @@ const ownershipLabels = (id: string) =>
   });
 
 const getByName = (name: string) =>
-  Services.sprites
+  sprites
     .getSprite({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
@@ -468,7 +468,7 @@ const writeRemoteFile = (input: {
   body: Uint8Array;
 }) =>
   retryTransient(
-    Services.sprites.writeFile({
+    sprites.writeFile({
       name: input.name,
       path: input.path,
       workingDir: "/",
@@ -480,7 +480,7 @@ const writeRemoteFile = (input: {
 const runExec = (input: { name: string; cmd: string[]; env?: string[] }) =>
   Effect.gen(function* () {
     const result = yield* retryTransient(
-      Services.sprites.execCommand({
+      sprites.execCommand({
         name: input.name,
         cmd: input.cmd,
         env: input.env,
@@ -518,7 +518,7 @@ const ensureBun = (name: string) =>
 
 const putAlchemyService = (input: { name: string; port: number }) =>
   retryTransient(
-    Services.sprites.putService({
+    sprites.putService({
       name: input.name,
       service_name: SERVICE_NAME,
       cmd: "bash",
@@ -618,7 +618,7 @@ export const SpriteProvider = () =>
         }),
 
         list: Effect.fn(function* () {
-          const items = yield* Services.sprites.listSprites
+          const items = yield* sprites.listSprites
             .items({ max_results: 50 })
             .pipe(
               Stream.runCollect,
@@ -654,7 +654,7 @@ export const SpriteProvider = () =>
           }
 
           if (current === undefined) {
-            yield* Services.sprites
+            yield* sprites
               .createSprite({
                 name,
                 url_settings: { auth: urlAuth },
@@ -672,7 +672,7 @@ export const SpriteProvider = () =>
 
           const observedAuth = toUrlAuth(current.url_settings?.auth);
           if (observedAuth !== urlAuth) {
-            current = yield* Services.sprites
+            current = yield* sprites
               .updateSprite({
                 name,
                 url_settings: { auth: urlAuth },
@@ -698,7 +698,7 @@ export const SpriteProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           if (output.name.length === 0) return;
-          yield* Services.sprites
+          yield* sprites
             .deleteSprite({ name: output.name })
             .pipe(
               Effect.catchTag(

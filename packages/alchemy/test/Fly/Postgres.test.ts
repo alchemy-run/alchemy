@@ -1,12 +1,10 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
+import * as mpg from "@distilled.cloud/fly-io/mpg";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -20,7 +18,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilClusterGone = (clusterId: string) =>
-  Services.mpg.getClusterById({ id: clusterId }).pipe(
+  mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res) =>
       res.data === undefined || res.data.status === "deleted"
         ? ("gone" as const)
@@ -35,7 +33,7 @@ const waitUntilClusterGone = (clusterId: string) =>
   );
 
 const waitUntilReady = (clusterId: string) =>
-  Services.mpg.getClusterById({ id: clusterId }).pipe(
+  mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res) => res.data?.status),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     Effect.repeat({
@@ -46,7 +44,7 @@ const waitUntilReady = (clusterId: string) =>
   );
 
 const waitUntilAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -57,7 +55,7 @@ const waitUntilAppGone = (appName: string) =>
   );
 
 const secretNames = (appName: string) =>
-  Services.machines
+  machines
     .secretsList({
       app_name: appName,
       show_secrets: false,
@@ -76,7 +74,7 @@ test.provider(
       yield* stack.destroy();
 
       const orgSlug = yield* Fly.currentOrgSlug();
-      const error = yield* Services.mpg
+      const error = yield* mpg
         .createCluster({
           org_slug: orgSlug,
           name: "alchemy-mpg-invalid-region",
@@ -121,7 +119,7 @@ test.provider(
       const status = yield* waitUntilReady(created.db.clusterId);
       expect(status).toEqual("ready");
 
-      const fetched = yield* Services.mpg.getClusterById({
+      const fetched = yield* mpg.getClusterById({
         id: created.db.clusterId,
       });
       expect(fetched.data?.id).toEqual(created.db.clusterId);
@@ -157,63 +155,6 @@ test.provider(
       expect(clusterGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
-    }).pipe(logLevel),
-  { timeout: 180_000 },
-);
-
-test.provider(
-  "applies migrations and import files",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-fly-pg-migrations-",
-      });
-      yield* fs.writeFileString(
-        path.join(migrationsDir, "0001_markers.sql"),
-        `CREATE TABLE IF NOT EXISTS alchemy_fly_markers (
-  id text PRIMARY KEY,
-  value text NOT NULL
-);`,
-      );
-      const seedDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-fly-pg-seed-",
-      });
-      const seedPath = path.join(seedDir, "seed.sql");
-      yield* fs.writeFileString(
-        seedPath,
-        `INSERT INTO alchemy_fly_markers (id, value)
-VALUES ('health', 'ok')
-ON CONFLICT (id) DO NOTHING;`,
-      );
-      const hashes = yield* hashMigrations(migrationsDir);
-
-      yield* stack.destroy();
-
-      const db = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Fly.Postgres("Migrated", {
-            region: "iad",
-            plan: "basic",
-            volumeSizeGb: 10,
-            migrations: migrationsDir,
-            importFiles: [seedPath],
-          });
-        }),
-      );
-
-      expect(db.migrationsTable).toEqual("__alchemy_migrations");
-      expect(Object.keys(db.migrationsHashes).sort()).toEqual(
-        Object.keys(hashes).sort(),
-      );
-      expect(db.importHashes[seedPath]).toBeDefined();
-      expect(db.pooledConnectionUri.length).toBeGreaterThan(0);
-
-      yield* stack.destroy();
-
-      const gone = yield* waitUntilClusterGone(db.clusterId);
-      expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

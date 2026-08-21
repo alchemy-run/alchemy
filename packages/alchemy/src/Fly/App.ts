@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { App as FlyApp } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -197,12 +197,12 @@ const resolveAppName = (
   });
 
 const getByName = (appName: string) =>
-  Services.machines
+  machines
     .appsShow({ app_name: appName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const hasAlchemyMachines = (appName: string) =>
-  Services.machines.machinesList({ app_name: appName }).pipe(
+  machines.machinesList({ app_name: appName }).pipe(
     Effect.map((machines) =>
       machines.some((machine) =>
         isAlchemyOwnedMetadata(machine.config?.metadata),
@@ -215,7 +215,7 @@ const hasAlchemyNamed = (names: Array<string | undefined>) =>
   names.some((name) => matchesAlchemyPhysicalName(name));
 
 const hasAlchemyVolumes = (appName: string) =>
-  Services.machines.volumesList({ app_name: appName }).pipe(
+  machines.volumesList({ app_name: appName }).pipe(
     Effect.map((volumes) =>
       hasAlchemyNamed(volumes.map((volume) => volume.name)),
     ),
@@ -223,7 +223,7 @@ const hasAlchemyVolumes = (appName: string) =>
   );
 
 const hasAlchemySecrets = (appName: string) =>
-  Services.machines.secretsList({ app_name: appName }).pipe(
+  machines.secretsList({ app_name: appName }).pipe(
     Effect.map((res) =>
       hasAlchemyNamed((res.secrets ?? []).map((secret) => secret.name)),
     ),
@@ -231,7 +231,7 @@ const hasAlchemySecrets = (appName: string) =>
   );
 
 const hasAlchemySecretKeys = (appName: string) =>
-  Services.machines.secretkeysList({ app_name: appName }).pipe(
+  machines.secretkeysList({ app_name: appName }).pipe(
     Effect.map((res) =>
       hasAlchemyNamed((res.secret_keys ?? []).map((key) => key.name)),
     ),
@@ -262,7 +262,7 @@ const isOwnedApp = (app: FlyApp) =>
  */
 export const listOwnedApps = Effect.fn(function* () {
   const orgSlug = yield* resolveOrgSlug();
-  const { apps } = yield* Services.machines.appsList({
+  const { apps } = yield* machines.appsList({
     org_slug: orgSlug,
   });
   const flagged = yield* Effect.forEach(
@@ -331,7 +331,7 @@ export const AppProvider = () =>
       }
 
       if (current === undefined) {
-        yield* Services.machines
+        yield* machines
           .appsCreate({
             name,
             org_slug: orgSlug,
@@ -358,7 +358,7 @@ export const AppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const appName = output.appName;
       if (appName.length === 0) return;
-      const volumes = yield* Services.machines
+      const volumes = yield* machines
         .volumesList({ app_name: appName })
         .pipe(
           Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
@@ -374,7 +374,7 @@ export const AppProvider = () =>
           ) {
             return Effect.void;
           }
-          return Services.machines
+          return machines
             .volumeDelete({ app_name: appName, volume_id: volumeId })
             .pipe(
               Effect.asVoid,
@@ -383,7 +383,7 @@ export const AppProvider = () =>
         },
         { concurrency: 4 },
       );
-      yield* Services.machines
+      yield* machines
         .appsDelete({ app_name: appName })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* getByName(appName).pipe(

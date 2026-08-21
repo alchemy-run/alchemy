@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -27,7 +27,7 @@ const waitUntilAppGone = (appName: string) =>
   );
 
 const waitUntilIpGone = (appName: string, ip: string) =>
-  Services.machines.appIPAssignmentsList({ app_name: appName }).pipe(
+  machines.appIPAssignmentsList({ app_name: appName }).pipe(
     Effect.map((res) =>
       (res.ips ?? []).some((item) => item.ip === ip) ? "found" : "gone",
     ),
@@ -40,7 +40,7 @@ const waitUntilIpGone = (appName: string, ip: string) =>
   );
 
 const listedHas = (appName: string, ip: string) =>
-  Services.machines
+  machines
     .appIPAssignmentsList({ app_name: appName })
     .pipe(Effect.map((res) => (res.ips ?? []).find((item) => item.ip === ip)));
 
@@ -208,7 +208,7 @@ test.provider(
       );
 
       const result = yield* Effect.result(
-        Services.machines.appIPAssignmentsCreate({
+        machines.appIPAssignmentsCreate({
           app_name: app.appName,
           type: "v4",
         }),
@@ -219,7 +219,7 @@ test.provider(
       } else {
         const ip = result.success.ip;
         if (ip !== undefined && ip.length > 0) {
-          yield* Services.machines
+          yield* machines
             .appIPAssignmentsDelete({
               app_name: app.appName,
               ip,

@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (appName: string, machineId: string) =>
-  Services.machines
+  machines
     .machinesShow({
       app_name: appName,
       machine_id: machineId,
@@ -47,7 +47,7 @@ test.provider(
         }),
       );
 
-      const minted = yield* Services.machines.appCreateDeployToken({
+      const minted = yield* machines.appCreateDeployToken({
         app_name: app.appName,
       });
       expect(minted.token).toEqual(expect.any(String));
@@ -92,7 +92,7 @@ test.provider(
       expect(deployed.api.mounts[0]?.path).toEqual(VOLUME_PATH);
       expect(deployed.api.mounts[0]?.volumeId).toEqual(expect.any(String));
 
-      const fetched = yield* Services.machines.machinesShow({
+      const fetched = yield* machines.machinesShow({
         app_name: deployed.api.appName,
         machine_id: deployed.api.machineId,
       });
@@ -118,7 +118,7 @@ test.provider(
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
 
-      const liveVolume = yield* Services.machines.volumesGetById({
+      const liveVolume = yield* machines.volumesGetById({
         app_name: deployed.api.appName,
         volume_id: deployed.api.mounts[0]!.volumeId,
       });

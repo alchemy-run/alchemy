@@ -1,5 +1,5 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { MainRegionRow } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { resolveOrgSlug } from "./Environment.ts";
@@ -24,7 +24,7 @@ export const currentOrgSlug = resolveOrgSlug;
  * List Fly platform regions via `platformRegionsGet`.
  */
 export const listRegions = Effect.fn(function* () {
-  const { regions } = yield* Services.machines.platformRegionsGet({});
+  const { regions } = yield* machines.platformRegionsGet({});
   return regions ?? [];
 });
 

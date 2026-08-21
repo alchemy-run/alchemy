@@ -1,5 +1,6 @@
-import { Services } from "@distilled.cloud/fly-io";
 import type { AddOnsResponseEdgesItemNode } from "@distilled.cloud/fly-io/addons";
+import * as addons from "@distilled.cloud/fly-io/addons";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -451,7 +452,7 @@ export const listTigrisAddOns = Effect.fn(function* () {
   const rows: AddOnsResponseEdgesItemNode[] = [];
   let after: string | undefined;
   for (let i = 0; i < 8; i++) {
-    const page = yield* Services.addons.addOns({
+    const page = yield* addons.addOns({
       type: TIGRIS,
       first: 50,
       after,
@@ -530,19 +531,19 @@ const waitUntilGone = (addOnId: string, name: string) =>
   );
 
 const resolveOrganization = (orgSlug: string) =>
-  Services.addons
+  addons
     .organization({ slug: orgSlug })
     .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
-    const agreed = yield* Services.addons.agreedToProviderTos({
+    const agreed = yield* addons.agreedToProviderTos({
       slug: orgSlug,
       providerName: TIGRIS,
     });
     if (agreed === true) return;
     const tos = yield* Effect.result(
-      Services.addons.createExtensionTosAgreement({
+      addons.createExtensionTosAgreement({
         input: {
           addOnProviderName: TIGRIS,
           organizationId,
@@ -641,7 +642,7 @@ export const BucketProvider = () =>
       if (current === undefined) {
         yield* ensureTos(orgSlug, org.id);
         const created = yield* Effect.result(
-          Services.addons.createAddOn({
+          addons.createAddOn({
             input: {
               type: TIGRIS,
               name,
@@ -693,7 +694,7 @@ export const BucketProvider = () =>
           ...desired,
         };
         const updated = yield* Effect.result(
-          Services.addons.updateAddOn({
+          addons.updateAddOn({
             input: {
               addOnId: current.id,
               options: optionsChanged ? nextOptions : undefined,
@@ -745,7 +746,7 @@ export const BucketProvider = () =>
       const name = output.name;
       if (addOnId.length === 0 && name.length === 0) return;
       const deleted = yield* Effect.result(
-        Services.addons.deleteAddOn({
+        addons.deleteAddOn({
           input: addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS },
         }),
       );
@@ -768,14 +769,14 @@ const putSecretValues = (appName: string, values: Record<string, string>) =>
   Effect.gen(function* () {
     if (Object.keys(values).length === 0) return;
     const updated = yield* Effect.result(
-      Services.machines.secretsUpdate({
+      machines.secretsUpdate({
         app_name: appName,
         values,
       }),
     );
     if (Result.isSuccess(updated)) return;
     for (const [secretName, value] of Object.entries(values)) {
-      yield* Services.machines
+      yield* machines
         .secretCreate({
           app_name: appName,
           secret_name: secretName,
@@ -819,7 +820,7 @@ const findAttachedBucket = (input: { id?: string; name: string }) =>
         status: "missing",
       });
     }
-    const detail = yield* Services.addons
+    const detail = yield* addons
       .addOn({
         id: listed.id,
         name: listed.name ?? input.name,

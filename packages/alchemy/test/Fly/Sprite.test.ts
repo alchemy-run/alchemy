@@ -1,7 +1,7 @@
+import * as sprites from "@distilled.cloud/fly-io/sprites";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (name: string) =>
-  Services.sprites.getSprite({ name }).pipe(
+  sprites.getSprite({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag(["NotFound", "SpritesNotEnabled"], () =>
       Effect.succeed("gone" as const),
@@ -49,7 +49,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const listed = yield* Services.sprites.listSprites({});
+      const listed = yield* sprites.listSprites({});
       expect(Array.isArray(listed.sprites)).toBe(true);
 
       yield* stack.destroy();
@@ -95,7 +95,7 @@ test.provider(
       expect(deployed.code.hash).toEqual(expect.any(String));
       expect(deployed.code.hash.length).toBeGreaterThan(0);
 
-      const fetched = yield* Services.sprites.getSprite({
+      const fetched = yield* sprites.getSprite({
         name: deployed.name,
       });
       expect(fetched.name).toEqual(deployed.name);
@@ -110,14 +110,14 @@ test.provider(
       const body = yield* fetchSpriteJson(deployed.url);
       expect(body.ok).toEqual(true);
 
-      const echoed = yield* Services.sprites.execCommand({
+      const echoed = yield* sprites.execCommand({
         name: deployed.name,
         cmd: ["echo", "sprite-exec"],
       });
       expect(echoed.exit_code ?? 0).toEqual(0);
       expect(echoed.stdout ?? "").toContain("sprite-exec");
 
-      const events = yield* Services.sprites.createCheckpoint({
+      const events = yield* sprites.createCheckpoint({
         name: deployed.name,
         comment: "alchemy-test",
       });

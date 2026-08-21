@@ -1,7 +1,7 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -185,7 +185,7 @@ onolH/5YrvTrrhSOZeUzS72j
 `;
 
 const waitUntilAppGone = (appName: string) =>
-  Services.machines.appsShow({ app_name: appName }).pipe(
+  machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -196,7 +196,7 @@ const waitUntilAppGone = (appName: string) =>
   );
 
 const waitUntilCertGone = (appName: string, hostname: string) =>
-  Services.machines.appCertificatesShow({ app_name: appName, hostname }).pipe(
+  machines.appCertificatesShow({ app_name: appName, hostname }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -207,7 +207,7 @@ const waitUntilCertGone = (appName: string, hostname: string) =>
   );
 
 const deleteIfPresent = (appName: string, hostname: string) =>
-  Services.machines
+  machines
     .appCertificatesDelete({ app_name: appName, hostname })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
@@ -236,7 +236,7 @@ test.provider(
       expect(created.cert.source).toEqual("custom");
       expect(created.cert.status).toEqual(expect.any(String));
 
-      const fetched = yield* Services.machines.appCertificatesShow({
+      const fetched = yield* machines.appCertificatesShow({
         app_name: created.app.appName,
         hostname: CUSTOM_HOSTNAME,
       });
@@ -264,7 +264,7 @@ test.provider(
       expect(updated.cert.appName).toEqual(created.app.appName);
       expect(updated.app.appId).toEqual(created.app.appId);
 
-      const refetched = yield* Services.machines.appCertificatesShow({
+      const refetched = yield* machines.appCertificatesShow({
         app_name: updated.app.appName,
         hostname: CUSTOM_HOSTNAME,
       });
@@ -327,7 +327,7 @@ test.provider(
       expect(replaced.cert.source).toEqual("custom");
       expect(replaced.cert.appName).toEqual(created.app.appName);
 
-      const fetched = yield* Services.machines.appCertificatesShow({
+      const fetched = yield* machines.appCertificatesShow({
         app_name: replaced.app.appName,
         hostname: REPLACE_HOSTNAME,
       });
@@ -408,7 +408,7 @@ test.provider(
       );
 
       const result = yield* Effect.result(
-        Services.machines.appCertificatesAcmeCreate({
+        machines.appCertificatesAcmeCreate({
           app_name: app.appName,
         }),
       );
