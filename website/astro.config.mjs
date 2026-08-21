@@ -616,6 +616,10 @@ export default defineConfig({
             { label: "Overview", link: "/cloudflare" },
             { label: "Setup", link: "/cloudflare/setup" },
             {
+              label: "Local development",
+              link: "/cloudflare/local-development",
+            },
+            {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
@@ -826,6 +830,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/aws" },
             { label: "Setup", link: "/aws/setup" },
+            { label: "Local development", link: "/aws/local-development" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "aws/tutorial" } }],
