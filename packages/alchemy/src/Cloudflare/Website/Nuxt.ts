@@ -298,6 +298,7 @@ export const Nuxt: {
             source: {
               provider: NUXT_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 main: props?.main,

@@ -333,6 +333,10 @@ export const StreamProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          // DeleteStream is accepted immediately; the name stays reserved
+          // until the stream is fully purged. Wait it out so destroy (and
+          // the suite's out-of-band list) don't race a still-ACTIVE row.
+          yield* waitForStreamGone(output.streamName);
         }),
       });
     }),

@@ -267,6 +267,7 @@ export const Waku: {
             source: {
               provider: WAKU_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 // Custom worker entry (wraps waku's handler via

@@ -302,6 +302,7 @@ export const Astro: {
             source: {
               provider: "@alchemy.run/frontend-frameworks/astro/source",
               devMode: "server",
+              rootDir: props.rootDir,
               options: {
                 rootDir: props.rootDir,
                 memo: props.memo,

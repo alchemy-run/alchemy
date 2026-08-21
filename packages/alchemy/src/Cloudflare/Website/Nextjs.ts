@@ -349,6 +349,10 @@ export const Nextjs: {
             source: {
               provider: NEXTJS_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
+              // `next dev` (Turbopack) cold-starts broken under bun (every
+              // route 404s until `.next` is warm) — pin the dev child to node.
+              runtime: "node",
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,

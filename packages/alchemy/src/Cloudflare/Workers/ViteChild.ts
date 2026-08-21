@@ -53,9 +53,22 @@ export const startViteChild = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runner = resolveRunner("ViteChildRunner");
     const isBun = typeof globalThis.Bun !== "undefined";
+    // A source provider can pin the dev child to node (e.g. `next dev`
+    // cold-starts broken under bun). Honored only when node is installed;
+    // otherwise fall back to the engine's own runtime.
+    const nodeExecPath =
+      isBun && config.source?.descriptor.runtime === "node"
+        ? (globalThis.Bun.which("node") ?? undefined)
+        : undefined;
     // Redacted values can't cross the process boundary — the config is
-    // plain data once unwrapped.
-    const serializedConfig = NodeV8.serialize(unwrapRedacted(config));
+    // plain data once unwrapped. bun's `v8.serialize` output is not
+    // readable by real V8 (and vice versa), so a cross-runtime spawn
+    // sends JSON instead; the runner sniffs the encoding (V8 payloads
+    // start with 0xFF, JSON with `{`).
+    const serializedConfig =
+      nodeExecPath !== undefined
+        ? Buffer.from(JSON.stringify(unwrapRedacted(config)))
+        : NodeV8.serialize(unwrapRedacted(config));
     // The Vite child boots the legacy single-stack environment
     // (RpcServerEnvironment.fromEnv). The sidecar's own process env no
     // longer carries a stack (one sidecar serves many stacks; sessions
@@ -85,8 +98,8 @@ export const startViteChild = (
     };
     const child = yield* spawner.spawn(
       ChildProcess.make(
-        process.execPath,
-        isBun
+        nodeExecPath ?? process.execPath,
+        isBun && nodeExecPath === undefined
           ? ["run", runner]
           : [...(runner.endsWith(".ts") ? transformTypesFlags() : []), runner],
         {

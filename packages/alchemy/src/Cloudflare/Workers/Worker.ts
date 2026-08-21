@@ -1062,6 +1062,23 @@ export interface WorkerSourceDescriptor {
    */
   readonly devMode: "server" | "bundle";
   /**
+   * The framework project root. Server-mode dev children are spawned with
+   * this directory as their working directory — some framework dev servers
+   * (e.g. `next dev`, which 404s every route when `process.cwd()` differs
+   * from its `dir`) require cwd to be the project root. Relative paths
+   * resolve against the engine's working directory. Defaults to the
+   * engine's working directory.
+   */
+  readonly rootDir?: string;
+  /**
+   * The JS runtime the server-mode dev child must run under. Some framework
+   * dev servers are runtime-sensitive — `next dev` (Turbopack) silently 404s
+   * every route when cold-started under bun — so the provider can pin the
+   * child to `"node"`. When the requested runtime is not installed, the
+   * engine falls back to its own runtime. Defaults to the engine's runtime.
+   */
+  readonly runtime?: "node";
+  /**
    * Provider-specific options (rootDir, memo, framework config, ...).
    * Must be JSON-serializable AND JSON-stable: the descriptor persists
    * in state and participates in the metadata hash, so non-deterministic

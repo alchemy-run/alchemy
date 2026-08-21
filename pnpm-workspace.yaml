@@ -115,6 +115,7 @@ catalogs:
     "@tailwindcss/vite": ^4.1.13
     "@tanstack/react-router": ^1.167.4
     "@tanstack/react-start": ^1.166.15
+    "@types/react": ^19.2.17
     "@vitejs/plugin-react": ^6.0.2
     "@vitejs/plugin-rsc": ^0.5.27
     astro: 7.2.0
@@ -125,6 +126,7 @@ catalogs:
     nuxt: 4.5.1
     octane: 0.1.22
     postcss: ^8.4.49
+    react: ^19.2.7
     react-dom: ^19.2.7
     react-router: 7.16.0
     react-server-dom-webpack: ~19.2.6
@@ -132,6 +134,9 @@ catalogs:
     solid-devtools: ^0.34.3
     svelte: ^5.56.6
     tailwindcss: ^4.1.13
+    # Next.js requires the JS compiler API (typescript/lib/typescript.js);
+    # catalog:build tracks tsgo (typescript 7), which no longer ships it.
+    typescript: ^5.9.3
     vocs: 2.8.2
     waku: 1.0.0-beta.7
   shared:

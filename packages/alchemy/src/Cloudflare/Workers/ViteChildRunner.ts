@@ -26,7 +26,17 @@ import {
 const readConfig = Effect.gen(function* () {
   const stdio = yield* Stdio.Stdio;
   const chunks = yield* Stream.runCollect(stdio.stdin);
-  return NodeV8.deserialize(Buffer.concat(chunks)) as ViteChildConfig;
+  const bytes = Buffer.concat(chunks);
+  // A cross-runtime spawn (bun engine → node child) sends JSON because
+  // bun's `v8.serialize` output is unreadable by real V8. Sniff the
+  // encoding by the JSON marker: only JSON starts with `{` — node's V8
+  // payloads start with 0xFF and bun's JSC serialization with its own
+  // binary header, so same-runtime spawns fall through to deserialize.
+  return (
+    bytes[0] === 0x7b // "{"
+      ? JSON.parse(bytes.toString("utf8"))
+      : NodeV8.deserialize(bytes)
+  ) as ViteChildConfig;
 });
 
 const program = Effect.scoped(

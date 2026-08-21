@@ -240,6 +240,7 @@ export const SvelteKit: {
             source: {
               provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,
