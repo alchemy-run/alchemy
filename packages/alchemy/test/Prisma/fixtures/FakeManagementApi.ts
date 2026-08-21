@@ -1,6 +1,8 @@
+import { PrismaApiError } from "@/Prisma/Client";
 import { Credentials, fromApiToken } from "@distilled.cloud/prisma-postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -147,6 +149,80 @@ export const unhandled = (request: Captured) =>
 /** `METHOD /path` for every request served, for call-order assertions. */
 export const routesOf = (captured: ReadonlyArray<Captured>) =>
   captured.map((request) => `${request.method} ${request.pathname}`);
+
+/**
+ * Adapter plumbing for suites whose route table is still expressed as
+ * client-shaped handlers.
+ *
+ * Those suites declare a plain object of synchronous `Effect` handlers and
+ * map them onto the wire. Every suite used to carry its own copy of this
+ * dispatch code, which drifted; it lives here instead, so all of them agree
+ * on how a handler's result becomes a response and on what a missing handler
+ * does.
+ */
+
+/** Run a synchronous fixture handler and capture its success or failure. */
+export const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+/**
+ * Injected `PrismaApiError`s keep their real status; anything else becomes a
+ * 400 — never a 5xx, whose transient category the retry policy would replay.
+ */
+const errorResponse = (error: unknown): Response =>
+  error instanceof PrismaApiError
+    ? failure(error.status, "error", error.message)
+    : failure(400, "error", String(error));
+
+/** A handler's result on the wire; `undefined` reads as a 404. */
+export const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response =>
+  Result.isFailure(outcome)
+    ? errorResponse(outcome.failure)
+    : outcome.success === undefined
+      ? notFound("not found")
+      : wrap(outcome.success);
+
+/** A delete handler's result on the wire: `204`, or the injected failure. */
+export const voidResponse = (
+  outcome: ReturnType<typeof runHandler>,
+): Response =>
+  Result.isFailure(outcome) ? errorResponse(outcome.failure) : noContent();
+
+export interface HandlerDispatch {
+  /** Call a handler and envelope its value; a missing handler is `unhandled`. */
+  readonly call: (
+    handler: unknown,
+    args: ReadonlyArray<unknown>,
+    wrap?: (value: unknown) => Response,
+  ) => Response;
+  /** Same, for the delete routes that answer `204`. */
+  readonly callVoid: (
+    handler: unknown,
+    args: ReadonlyArray<unknown>,
+  ) => Response;
+  /** The `{ data, pagination }` wrap for list routes. */
+  readonly list: (value: unknown) => Response;
+}
+
+/**
+ * Bind the dispatch helpers to one captured request. Every verb — DELETE
+ * included — routes through here, so a route whose handler the suite never
+ * stubbed returns the diagnosable `unhandled` 400 instead of throwing.
+ */
+export const dispatchTo = (request: Captured): HandlerDispatch => ({
+  call: (handler, args, wrap = (value) => data(value)) =>
+    typeof handler === "function"
+      ? asResponse(runHandler((handler as any)(...args)), wrap)
+      : unhandled(request),
+  callVoid: (handler, args) =>
+    typeof handler === "function"
+      ? voidResponse(runHandler((handler as any)(...args)))
+      : unhandled(request),
+  list: (value) => page(value as unknown[]),
+});
 
 /**
  * Wire-shaped payload builders.

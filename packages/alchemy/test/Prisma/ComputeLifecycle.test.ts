@@ -8,17 +8,14 @@ import {
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Retry, fromApiToken } from "@distilled.cloud/prisma-postgres";
 import {
   type Captured,
-  FAKE_API_BASE_URL,
   data,
-  failure,
+  dispatchTo,
+  FAKE_API_BASE_URL,
   makeFakeManagementApi,
-  noContent,
-  notFound,
   page,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
@@ -56,35 +53,9 @@ const appItem = (id: string) => ({
 /**
  * Serve the Management API from the same hermetic client-shaped handlers
  * these tests declare, for the lifecycle routes now reached through distilled
- * operations. An injected `PrismaApiError` becomes its real status,
- * `undefined` becomes a 404, everything else a `{ data }` (or
- * `{ data, pagination }`) envelope.
+ * operations. `dispatchTo` maps each handler's result onto the wire (see the
+ * fixture).
  */
-const runHandler = (effect: Effect.Effect<any, any>) =>
-  Effect.runSync(Effect.result(effect));
-
-const asResponse = (
-  outcome: ReturnType<typeof runHandler>,
-  wrap: (value: unknown) => Response,
-): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    // Never 5xx from generic throws: a transient status would be replayed by
-    // the retry policy. Injected `PrismaApiError`s keep their real status.
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return outcome.success === undefined
-    ? notFound("not found")
-    : wrap(outcome.success);
-};
-
-const voidResponse = (outcome: ReturnType<typeof runHandler>): Response =>
-  Result.isFailure(outcome)
-    ? asResponse(outcome, (value) => data(value))
-    : noContent();
-
 const clientBackedApi = (client: any) =>
   makeFakeManagementApi((request: Captured) => {
     // segments[0] is the "v1" prefix.
@@ -93,22 +64,13 @@ const clientBackedApi = (client: any) =>
       .filter((segment) => segment.length > 0)
       .slice(1);
     const query = Object.fromEntries(new URLSearchParams(request.search));
-    const call = (
-      handler: unknown,
-      args: unknown[],
-      wrap: (value: unknown) => Response = (value) => data(value),
-    ) =>
-      typeof handler === "function"
-        ? asResponse(runHandler((handler as any)(...args)), wrap)
-        : unhandled(request);
-    const list = (value: unknown) => page(value as unknown[]);
+    const { call, callVoid, list } = dispatchTo(request);
 
     if (head === "deployments" && id !== undefined) {
-      if (tail === "stop")
-        return voidResponse(runHandler(client.stopDeployment(id)));
+      if (tail === "stop") return callVoid(client.stopDeployment, [id]);
       if (request.method === "GET") return call(client.getDeployment, [id]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteDeployment(id)));
+        return callVoid(client.deleteDeployment, [id]);
       }
     }
     if (head === "apps") {
@@ -119,7 +81,7 @@ const clientBackedApi = (client: any) =>
         return call(client.listAppDeployments, [id, query], list);
       }
       if (id !== undefined && request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteApp(id)));
+        return callVoid(client.deleteApp, [id]);
       }
     }
     if (
@@ -127,7 +89,7 @@ const clientBackedApi = (client: any) =>
       id !== undefined &&
       request.method === "DELETE"
     ) {
-      return voidResponse(runHandler(client.deleteProject(id)));
+      return callVoid(client.deleteProject, [id]);
     }
     return unhandled(request);
   });

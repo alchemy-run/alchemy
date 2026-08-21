@@ -48,11 +48,11 @@ import {
   type Captured,
   conflict,
   data as envelope,
+  dispatchTo,
   failure,
   json,
-  noContent,
-  notFound,
   makeFakeManagementApi,
+  notFound,
   page,
   routesOf,
   unhandled,
@@ -421,43 +421,14 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 /**
  * Serve the Management API from the same hermetic client-shaped handlers
  * these suites already declare, for the resources that now call distilled
- * operations. The handlers are synchronous, so the fake runs them directly
- * and maps their results onto the wire: an injected `PrismaApiError` becomes
- * its real status, `undefined` becomes a 404, everything else a `{ data }`
- * (or `{ data, pagination }`) envelope.
+ * operations. `dispatchTo` maps each handler's result onto the wire (see the
+ * fixture).
  */
-const runHandler = (effect: Effect.Effect<any, any>) =>
-  Effect.runSync(Effect.result(effect));
-
-const asResponse = (
-  outcome: ReturnType<typeof runHandler>,
-  wrap: (value: unknown) => Response,
-): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    // Never 5xx: a transient status would be replayed by the retry policy.
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return outcome.success === undefined
-    ? notFound("not found")
-    : wrap(outcome.success);
-};
-
 const dispatchManagement = (client: any, request: Captured): Response => {
   {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
     const body = request.bodyJson as any;
-    const call = (
-      handler: unknown,
-      args: unknown[],
-      wrap: (value: unknown) => Response = (value) => envelope(value),
-    ) =>
-      typeof handler === "function"
-        ? asResponse(runHandler((handler as any)(...args)), wrap)
-        : unhandled(request);
-    const list = (value: unknown) => page(value as unknown[]);
+    const { call, callVoid, list } = dispatchTo(request);
 
     // segments[0] is the "v1" prefix.
     const [head, id, tail] = segments.slice(1) as [
@@ -490,7 +461,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "PATCH")
         return call(client.updateProject, [id, body]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteProject(id)));
+        return callVoid(client.deleteProject, [id]);
       }
     }
 
@@ -509,7 +480,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "PATCH")
         return call(client.updateDatabase, [id, body]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteDatabase(id)));
+        return callVoid(client.deleteDatabase, [id]);
       }
     }
 
@@ -522,7 +493,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (tail === "rotate") return call(client.rotateConnection, [id]);
       if (request.method === "GET") return call(client.getConnection, [id]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteConnection(id)));
+        return callVoid(client.deleteConnection, [id]);
       }
     }
 
@@ -543,7 +514,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
         return call(client.updateEnvironmentVariable, [id, body]);
       }
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteEnvironmentVariable(id)));
+        return callVoid(client.deleteEnvironmentVariable, [id]);
       }
     }
 
@@ -561,7 +532,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
         return call(client.getSourceRepository, [id]);
       }
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteSourceRepository(id)));
+        return callVoid(client.deleteSourceRepository, [id]);
       }
     }
 
@@ -578,7 +549,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       }
       if (request.method === "GET") return call(client.getBucket, [id]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteBucket(id)));
+        return callVoid(client.deleteBucket, [id]);
       }
     }
 
@@ -611,11 +582,11 @@ const dispatchManagement = (client: any, request: Captured): Response => {
     if (head === "deployments" && id !== undefined) {
       if (tail === "start") return call(client.startDeployment, [id]);
       if (tail === "stop") {
-        return voidResponse(runHandler(client.stopDeployment(id)));
+        return callVoid(client.stopDeployment, [id]);
       }
       if (request.method === "GET") return call(client.getDeployment, [id]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteDeployment(id)));
+        return callVoid(client.deleteDeployment, [id]);
       }
     }
 
@@ -631,7 +602,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       tail === undefined &&
       request.method === "DELETE"
     ) {
-      return voidResponse(runHandler(client.deleteApp(id)));
+      return callVoid(client.deleteApp, [id]);
     }
 
     if (head === "branches" && id !== undefined) {
@@ -639,22 +610,12 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "PATCH")
         return call(client.updateBranch, [id, body]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteBranch(id)));
+        return callVoid(client.deleteBranch, [id]);
       }
     }
 
     return unhandled(request);
   }
-};
-
-const voidResponse = (outcome: ReturnType<typeof runHandler>): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return noContent();
 };
 
 const managementApi = (client: any) =>

@@ -23,7 +23,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -37,12 +36,10 @@ import { fromApiToken } from "@distilled.cloud/prisma-postgres";
 import { Credentials } from "@/Prisma/Credentials";
 import {
   type Captured,
-  FAKE_API_BASE_URL,
   data,
+  dispatchTo,
   failure,
-  noContent,
-  notFound,
-  page,
+  FAKE_API_BASE_URL,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
 
@@ -345,41 +342,10 @@ const computeProviderLive = () =>
 /**
  * Serve the Management API from the same hermetic client-shaped handlers this
  * suite declares, for the routes Compute now reaches through distilled
- * operations. The handlers are synchronous, so the fake runs them directly:
- * an injected `PrismaApiError` becomes its real status, `undefined` becomes a
- * 404, everything else a `{ data }` (or `{ data, pagination }`) envelope. The
- * log tail still resolves the hand-rolled client, so the `PrismaClient` layer
- * stays provided alongside.
+ * operations. `dispatchTo` maps each handler's result onto the wire (see the
+ * fixture). The log tail still resolves the hand-rolled client, so the
+ * `PrismaClient` layer stays provided alongside.
  */
-const runHandler = (effect: Effect.Effect<any, any>) =>
-  Effect.runSync(Effect.result(effect));
-
-const asResponse = (
-  outcome: ReturnType<typeof runHandler>,
-  wrap: (value: unknown) => Response,
-): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    // Never 5xx: a transient status would be replayed by the retry policy.
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return outcome.success === undefined
-    ? notFound("not found")
-    : wrap(outcome.success);
-};
-
-const voidResponse = (outcome: ReturnType<typeof runHandler>): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return noContent();
-};
-
 const dispatchManagement = (client: any, request: Captured): Response => {
   const [head, id, tail] = request.pathname
     .split("/")
@@ -387,15 +353,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
     .slice(1);
   const body = request.bodyJson as any;
   const query = Object.fromEntries(new URLSearchParams(request.search));
-  const call = (
-    handler: unknown,
-    args: unknown[],
-    wrap: (value: unknown) => Response = (value) => data(value),
-  ) =>
-    typeof handler === "function"
-      ? asResponse(runHandler((handler as any)(...args)), wrap)
-      : unhandled(request);
-  const list = (value: unknown) => page(value as unknown[]);
+  const { call, callVoid, list } = dispatchTo(request);
 
   if (head === "apps") {
     if (id === undefined) {
@@ -414,7 +372,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "GET") return call(client.getApp, [id]);
       if (request.method === "PATCH") return call(client.updateApp, [id, body]);
       if (request.method === "DELETE") {
-        return voidResponse(runHandler(client.deleteApp(id)));
+        return callVoid(client.deleteApp, [id]);
       }
     }
   }
@@ -426,17 +384,17 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       return call(client.listBranches, [id, query], list);
     }
     if (tail === undefined && request.method === "DELETE") {
-      return voidResponse(runHandler(client.deleteProject(id)));
+      return callVoid(client.deleteProject, [id]);
     }
   }
   if (head === "deployments" && id !== undefined) {
     if (tail === "start") return call(client.startDeployment, [id]);
     if (tail === "stop") {
-      return voidResponse(runHandler(client.stopDeployment(id)));
+      return callVoid(client.stopDeployment, [id]);
     }
     if (request.method === "GET") return call(client.getDeployment, [id]);
     if (request.method === "DELETE") {
-      return voidResponse(runHandler(client.deleteDeployment(id)));
+      return callVoid(client.deleteDeployment, [id]);
     }
   }
   if (head === "environment-variables") {
@@ -452,7 +410,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       return call(client.updateEnvironmentVariable, [id, body]);
     }
     if (request.method === "DELETE") {
-      return voidResponse(runHandler(client.deleteEnvironmentVariable(id)));
+      return callVoid(client.deleteEnvironmentVariable, [id]);
     }
   }
   return unhandled(request);

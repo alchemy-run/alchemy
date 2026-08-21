@@ -31,14 +31,11 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import * as Result from "effect/Result";
 import {
-  data,
+  dispatchTo,
   failure,
   makeFakeManagementApi,
-  noContent,
   notFound,
-  page,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
 import {
@@ -79,25 +76,6 @@ const deploymentProviderLive = () =>
  * alongside; tests that stub uploads provide `PrismaUploadClient` because
  * the ambient `HttpClient` is now this management fake.
  */
-const runHandler = (effect: Effect.Effect<any, any>) =>
-  Effect.runSync(Effect.result(effect));
-
-const asResponse = (
-  outcome: ReturnType<typeof runHandler>,
-  wrap: (value: unknown) => Response,
-): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    // Never 5xx: a transient status would be replayed by the retry policy.
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return outcome.success === undefined
-    ? notFound("not found")
-    : wrap(outcome.success);
-};
-
 const clientBackedApi = (client: any) =>
   makeFakeManagementApi((request) => {
     // segments[0] is the "v1" prefix.
@@ -107,15 +85,7 @@ const clientBackedApi = (client: any) =>
       .slice(1);
     const body = request.bodyJson as any;
     const query = Object.fromEntries(new URLSearchParams(request.search));
-    const call = (
-      handler: unknown,
-      args: unknown[],
-      wrap: (value: unknown) => Response = (value) => data(value),
-    ) =>
-      typeof handler === "function"
-        ? asResponse(runHandler((handler as any)(...args)), wrap)
-        : unhandled(request);
-    const list = (value: unknown) => page(value as unknown[]);
+    const { call, callVoid, list } = dispatchTo(request);
 
     if (head === "apps" && id !== undefined) {
       if (tail === "deployments") {
@@ -131,18 +101,10 @@ const clientBackedApi = (client: any) =>
     }
     if (head === "deployments" && id !== undefined) {
       if (tail === "start") return call(client.startDeployment, [id]);
-      if (tail === "stop") {
-        const outcome = runHandler(client.stopDeployment(id));
-        return Result.isFailure(outcome)
-          ? asResponse(outcome, (value) => data(value))
-          : noContent();
-      }
+      if (tail === "stop") return callVoid(client.stopDeployment, [id]);
       if (request.method === "GET") return call(client.getDeployment, [id]);
       if (request.method === "DELETE") {
-        const outcome = runHandler(client.deleteDeployment(id));
-        return Result.isFailure(outcome)
-          ? asResponse(outcome, (value) => data(value))
-          : noContent();
+        return callVoid(client.deleteDeployment, [id]);
       }
     }
     return unhandled(request);

@@ -1,21 +1,12 @@
 import { App as PrismaApp, AppProvider } from "@/Prisma/App";
-import {
-  PrismaApiError,
-  PrismaClient,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
+import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import { AlchemyContext } from "@/AlchemyContext";
 import {
-  data,
-  failure,
+  dispatchTo,
   makeFakeManagementApi,
-  noContent,
-  notFound,
-  page,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
 
@@ -57,31 +48,10 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 /**
  * Serve the Management API from the same hermetic client-shaped handlers this
  * suite declares, for the routes App now reaches through distilled
- * operations. The handlers are synchronous, so the fake runs them directly:
- * an injected `PrismaApiError` becomes its real status, `undefined` becomes a
- * 404, everything else a `{ data }` (or `{ data, pagination }`) envelope. The
- * delete path still resolves the hand-rolled client (destroyApp is D3), so
- * the `PrismaClient` layer stays provided alongside.
+ * operations. `dispatchTo` maps each handler's result onto the wire (see the
+ * fixture). The delete path still resolves the hand-rolled client (destroyApp
+ * is D3), so the `PrismaClient` layer stays provided alongside.
  */
-const runHandler = (effect: Effect.Effect<any, any>) =>
-  Effect.runSync(Effect.result(effect));
-
-const asResponse = (
-  outcome: ReturnType<typeof runHandler>,
-  wrap: (value: unknown) => Response,
-): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    // Never 5xx: a transient status would be replayed by the retry policy.
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return outcome.success === undefined
-    ? notFound("not found")
-    : wrap(outcome.success);
-};
-
 const clientBackedApi = (client: any) =>
   makeFakeManagementApi((request) => {
     // segments[0] is the "v1" prefix.
@@ -91,15 +61,7 @@ const clientBackedApi = (client: any) =>
       .slice(1);
     const body = request.bodyJson as any;
     const query = Object.fromEntries(new URLSearchParams(request.search));
-    const call = (
-      handler: unknown,
-      args: unknown[],
-      wrap: (value: unknown) => Response = (value) => data(value),
-    ) =>
-      typeof handler === "function"
-        ? asResponse(runHandler((handler as any)(...args)), wrap)
-        : unhandled(request);
-    const list = (value: unknown) => page(value as unknown[]);
+    const { call, callVoid, list } = dispatchTo(request);
 
     if (head === "apps") {
       if (id === undefined) {
@@ -109,12 +71,7 @@ const clientBackedApi = (client: any) =>
       }
       if (request.method === "GET") return call(client.getApp, [id]);
       if (request.method === "PATCH") return call(client.updateApp, [id, body]);
-      if (request.method === "DELETE") {
-        const outcome = runHandler(client.deleteApp(id));
-        return Result.isFailure(outcome)
-          ? asResponse(outcome, (value) => data(value))
-          : noContent();
-      }
+      if (request.method === "DELETE") return callVoid(client.deleteApp, [id]);
     }
     if (
       head === "projects" &&

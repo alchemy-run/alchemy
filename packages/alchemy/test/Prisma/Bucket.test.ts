@@ -15,14 +15,9 @@ import type {
   BucketKeyWithSecret,
 } from "@/Prisma/Types";
 import { describe, expect, it } from "alchemy-test";
-import * as Result from "effect/Result";
 import {
-  data as envelope,
-  failure,
-  noContent,
+  dispatchTo,
   makeFakeManagementApi,
-  notFound,
-  page,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
 import * as Effect from "effect/Effect";
@@ -100,41 +95,9 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 
 /**
  * Serve the Management API's bucket routes from the same hermetic
- * client-shaped handlers this suite already declares. The handlers are
- * synchronous, so the fake runs them directly and maps their results onto the
- * wire: an injected `PrismaApiError` becomes its real status, `undefined`
- * becomes a 404, everything else a `{ data }` / `{ data, pagination }`
- * envelope.
+ * client-shaped handlers this suite already declares. `dispatchTo` maps each
+ * handler's result onto the wire (see the fixture).
  */
-const runHandler = (effect: Effect.Effect<any, any>) =>
-  Effect.runSync(Effect.result(effect));
-
-const asResponse = (
-  outcome: ReturnType<typeof runHandler>,
-  wrap: (value: unknown) => Response,
-): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    // Never 5xx: a transient status would be replayed by the retry policy.
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return outcome.success === undefined
-    ? notFound("not found")
-    : wrap(outcome.success);
-};
-
-const voidResponse = (outcome: ReturnType<typeof runHandler>): Response => {
-  if (Result.isFailure(outcome)) {
-    const error = outcome.failure;
-    return error instanceof PrismaApiError
-      ? failure(error.status, "error", error.message)
-      : failure(400, "error", String(error));
-  }
-  return noContent();
-};
-
 const bucketApi = (client: any) =>
   makeFakeManagementApi((request) => {
     // segments[0] is the "v1" prefix.
@@ -143,15 +106,7 @@ const bucketApi = (client: any) =>
       .filter((segment) => segment.length > 0)
       .slice(1);
     const body = request.bodyJson as any;
-    const call = (
-      handler: unknown,
-      args: unknown[],
-      wrap: (value: unknown) => Response = (value) => envelope(value),
-    ) =>
-      typeof handler === "function"
-        ? asResponse(runHandler((handler as any)(...args)), wrap)
-        : unhandled(request);
-    const list = (value: unknown) => page(value as unknown[]);
+    const { call, callVoid, list } = dispatchTo(request);
 
     if (head !== "buckets") return unhandled(request);
     if (bucketId === undefined) {
@@ -161,9 +116,7 @@ const bucketApi = (client: any) =>
     }
     if (tail === "keys") {
       if (keyId !== undefined) {
-        return voidResponse(
-          runHandler(client.deleteBucketKey(bucketId, keyId)),
-        );
+        return callVoid(client.deleteBucketKey, [bucketId, keyId]);
       }
       return request.method === "GET"
         ? call(client.listBucketKeys, [bucketId, { limit: 100 }], list)
@@ -171,7 +124,7 @@ const bucketApi = (client: any) =>
     }
     if (request.method === "GET") return call(client.getBucket, [bucketId]);
     if (request.method === "DELETE") {
-      return voidResponse(runHandler(client.deleteBucket(bucketId)));
+      return callVoid(client.deleteBucket, [bucketId]);
     }
     return unhandled(request);
   });
