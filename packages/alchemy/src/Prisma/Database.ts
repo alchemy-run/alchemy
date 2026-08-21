@@ -16,12 +16,19 @@ import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  PrismaClient,
-  extractConnectionSecrets,
-  isConflict,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
+  type GetV1DatabasesResponse,
+  type GetV1ProjectsByProjectIdBranchesResponse,
+  type GetV1ProjectsByProjectIdDatabasesResponse,
+  deleteV1DatabasesByDatabaseId,
+  getV1Databases,
+  getV1DatabasesByDatabaseId,
+  getV1ProjectsByProjectIdBranches,
+  getV1ProjectsByProjectIdDatabases,
+  patchV1DatabasesByDatabaseId,
+  postV1Databases,
+} from "@distilled.cloud/prisma-postgres/management";
+import { Retry } from "@distilled.cloud/prisma-postgres";
+import { extractConnectionSecrets } from "./Client.ts";
 import type { Project } from "./Project.ts";
 import {
   hasCanonicalConnectionSecrets,
@@ -36,13 +43,18 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
+import {
+  type ObservedProjectDatabase,
+  type ObservedSource,
+  narrowDatabaseSource,
+} from "./Internal/Observed.ts";
 import type {
-  Database as ApiDatabase,
   DatabaseSourceInput,
   PrismaDatabaseRegionId,
   PrismaRegionId,
   PrismaSecretConnection,
 } from "./Types.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface DatabaseDev {
   /**
@@ -270,16 +282,63 @@ export const Database = Resource<Database>("Prisma.Database");
 const createName = (id: string, name: string | undefined) =>
   name === undefined ? createPhysicalName({ id }) : Effect.succeed(name);
 
-const findDatabaseByName = (
-  client: PrismaManagementClient,
-  projectId: string,
-  name: string,
-) =>
-  client.listProjectDatabases(projectId, { limit: 100 }).pipe(
-    Effect.flatMap((databases) => {
-      const matches = databases.filter(
-        (database: ApiDatabase) => database.name === name,
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listProjectDatabases = (projectId: string) =>
+  Effect.gen(function* () {
+    const databases: GetV1ProjectsByProjectIdDatabasesResponse["data"][number][] =
+      [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getV1ProjectsByProjectIdDatabases(
+        cursor === undefined
+          ? { projectId, limit: 100 }
+          : { projectId, limit: 100, cursor },
       );
+      databases.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdDatabases: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return databases;
+  });
+
+const listAllDatabases = () =>
+  Effect.gen(function* () {
+    const databases: GetV1DatabasesResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getV1Databases(
+        cursor === undefined ? {} : { cursor },
+      );
+      databases.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getV1Databases: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return databases;
+  });
+
+const findDatabaseByName = (projectId: string, name: string) =>
+  listProjectDatabases(projectId).pipe(
+    Effect.flatMap((databases) => {
+      const matches = databases.filter((database) => database.name === name);
       return matches.length > 1
         ? Effect.fail(
             new Error(
@@ -298,11 +357,10 @@ const generatedDatabaseRecoverySchedule = Schedule.max([
 ]);
 
 const recoverGeneratedDatabaseAfterConflict = (
-  client: PrismaManagementClient,
   projectId: string,
   name: string,
 ) =>
-  findDatabaseByName(client, projectId, name).pipe(
+  findDatabaseByName(projectId, name).pipe(
     Effect.flatMap((database) =>
       database
         ? Effect.succeed(database)
@@ -318,15 +376,10 @@ const recoverGeneratedDatabaseAfterConflict = (
     }),
   );
 
-const findDefaultDatabase = (
-  client: PrismaManagementClient,
-  projectId: string,
-) =>
-  client.listProjectDatabases(projectId, { limit: 100 }).pipe(
+const findDefaultDatabase = (projectId: string) =>
+  listProjectDatabases(projectId).pipe(
     Effect.flatMap((databases) => {
-      const matches = databases.filter(
-        (database: ApiDatabase) => database.isDefault,
-      );
+      const matches = databases.filter((database) => database.isDefault);
       return matches.length > 1
         ? Effect.fail(
             new Error(
@@ -338,14 +391,13 @@ const findDefaultDatabase = (
   );
 
 const resolveDatabaseRegion = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   region: PrismaDatabaseRegionId | undefined,
 ) {
   if (region !== "inherit") {
     return (region ?? "us-east-1") as PrismaRegionId;
   }
-  const database = yield* findDefaultDatabase(client, projectId);
+  const database = yield* findDefaultDatabase(projectId);
   const inherited = database?.region?.id;
   if (inherited === undefined) {
     return yield* Effect.fail(
@@ -361,11 +413,12 @@ const stripDatabaseIdPrefix = (databaseId: string) =>
   databaseId.startsWith("db_") ? databaseId.slice(3) : databaseId;
 
 const normalizeDatabaseSource = (
-  source: ApiDatabase["source"] | DatabaseSourceInput | undefined,
+  source: DatabaseSourceInput | { readonly type: "unknown" } | undefined,
 ) => {
-  if (source === undefined || source === null || source.type === "empty") {
+  if (source === undefined || source.type === "empty") {
     return { type: "empty" as const };
   }
+  if (source.type === "unknown") return { type: "unknown" as const };
   return source.type === "database"
     ? {
         type: "database" as const,
@@ -379,11 +432,11 @@ const normalizeDatabaseSource = (
 };
 
 const sourceMatches = (
-  observed: ApiDatabase["source"],
+  observed: ObservedSource | null,
   desired: DatabaseSourceInput | undefined,
 ) =>
   deepEqual(
-    normalizeDatabaseSource(observed),
+    normalizeDatabaseSource(narrowDatabaseSource(observed)),
     normalizeDatabaseSource(desired),
   );
 
@@ -392,27 +445,24 @@ const desiredSourcesMatch = (
   right: DatabaseSourceInput | undefined,
 ) => deepEqual(normalizeDatabaseSource(left), normalizeDatabaseSource(right));
 
-const branchIdForGitName = (
-  client: PrismaManagementClient,
-  projectId: string,
-  gitName: string,
-) =>
-  client
-    .listBranches(projectId, { gitName, limit: 2 })
-    .pipe(
-      Effect.flatMap((branches) =>
-        branches.length > 1
-          ? Effect.fail(
-              new Error(
-                `Prisma project '${projectId}' has multiple branches named '${gitName}'; refusing to select one arbitrarily.`,
-              ),
-            )
-          : Effect.succeed(branches[0]?.id),
-      ),
-    );
+const branchIdForGitName = (projectId: string, gitName: string) =>
+  getV1ProjectsByProjectIdBranches({ projectId, gitName, limit: 2 }).pipe(
+    Effect.map(
+      (response: GetV1ProjectsByProjectIdBranchesResponse) => response.data,
+    ),
+    Effect.flatMap((branches) =>
+      branches.length > 1
+        ? Effect.fail(
+            new Error(
+              `Prisma project '${projectId}' has multiple branches named '${gitName}'; refusing to select one arbitrarily.`,
+            ),
+          )
+        : Effect.succeed(branches[0]?.id),
+    ),
+  );
 
 const attrsFrom = (
-  database: ApiDatabase,
+  database: ObservedProjectDatabase,
   secrets: PrismaSecretConnection,
 ): Database["Attributes"] => ({
   databaseId: database.id,
@@ -433,9 +483,8 @@ const attrsFrom = (
 });
 
 const branchNeedsSync = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
-  database: ApiDatabase,
+  database: ObservedProjectDatabase,
   props: DatabaseProps,
 ) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
@@ -447,11 +496,7 @@ const branchNeedsSync = Effect.fn(function* (
   if (props.branchGitName === null) {
     return database.branchId !== null;
   }
-  const branchId = yield* branchIdForGitName(
-    client,
-    projectId,
-    props.branchGitName,
-  );
+  const branchId = yield* branchIdForGitName(projectId, props.branchGitName);
   return branchId === undefined || branchId !== database.branchId;
 });
 
@@ -491,11 +536,10 @@ const ProviderLive = () =>
   Provider.effect(
     Database,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["databaseId"],
         list: () =>
-          client.listDatabases().pipe(
+          listAllDatabases().pipe(
             Effect.map((databases) =>
               // Default databases are project-owned and the API rejects
               // direct deletion. Project.list/delete owns their teardown;
@@ -537,7 +581,6 @@ const ProviderLive = () =>
             desiredRegionInput === "inherit"
               ? regionProjectId
                 ? yield* resolveDatabaseRegion(
-                    client,
                     regionProjectId,
                     desiredRegionInput,
                   )
@@ -597,7 +640,6 @@ const ProviderLive = () =>
                 (output?.branchId ?? olds.branchId ?? null) !== null;
             } else if (output && newProjectId !== undefined) {
               const desiredBranchId = yield* branchIdForGitName(
-                client,
                 newProjectId,
                 news.branchGitName,
               );
@@ -625,17 +667,16 @@ const ProviderLive = () =>
             : output?.databaseId;
           let generatedIdentityMatch = false;
           let database = databaseId
-            ? yield* client
-                .getDatabase(databaseId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* getV1DatabasesByDatabaseId({ databaseId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : undefined;
           if (!database && databaseId === undefined) {
             const projectId = unresolvedProjectIdOf(olds.project);
             if (projectId) {
               const name = yield* createName(id, olds.name);
-              database = yield* findDatabaseByName(client, projectId, name);
+              database = yield* findDatabaseByName(projectId, name);
               generatedIdentityMatch =
                 database !== undefined && olds.name === undefined;
               if (
@@ -643,7 +684,7 @@ const ProviderLive = () =>
                 olds.name === undefined &&
                 (olds.isDefault ?? false)
               ) {
-                database = yield* findDefaultDatabase(client, projectId);
+                database = yield* findDefaultDatabase(projectId);
               }
             }
           }
@@ -676,24 +717,19 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output }) {
           yield* validateDatabaseProps(news);
           const projectId = yield* resolveProjectId(news.project);
-          const region = yield* resolveDatabaseRegion(
-            client,
-            projectId,
-            news.region,
-          );
+          const region = yield* resolveDatabaseRegion(projectId, news.region);
           const name = yield* createName(id, news.name);
           const databaseId = isPrismaDevId(output?.databaseId)
             ? undefined
             : output?.databaseId;
-          let database = databaseId
-            ? yield* client
-                .getDatabase(databaseId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+          let database: ObservedProjectDatabase | undefined = databaseId
+            ? yield* getV1DatabasesByDatabaseId({ databaseId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : undefined;
           if (!database && news.name === undefined) {
-            database = yield* findDatabaseByName(client, projectId, name);
+            database = yield* findDatabaseByName(projectId, name);
           }
 
           let secrets: PrismaSecretConnection = {};
@@ -710,46 +746,43 @@ const ProviderLive = () =>
                 ),
               );
             }
-            const result = yield* client
-              .createDatabase({
-                projectId,
-                name,
-                region,
-                isDefault: news.isDefault ?? false,
-                source: news.source,
-                branchId: attach.branchId,
-                branchGitName: attach.branchGitName,
-              })
-              .pipe(
-                Effect.map((database) => ({
-                  database,
-                  secrets: extractConnectionSecrets(database.connections[0]),
-                  recoverSecrets: true,
-                })),
-                Effect.catchIf(isConflict, () =>
-                  news.name === undefined
-                    ? recoverGeneratedDatabaseAfterConflict(
-                        client,
-                        projectId,
-                        name,
-                      ).pipe(
-                        Effect.map((database) => ({
-                          database,
-                          secrets: {},
-                          // The generated physical name is owned by this
-                          // resource instance. A conflict after the POST can
-                          // be a lost successful response, so recover the
-                          // write-only default credentials below.
-                          recoverSecrets: true,
-                        })),
-                      )
-                    : Effect.fail(
-                        new Error(
-                          `A Prisma database named '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended database.`,
-                        ),
+            const result = yield* postV1Databases({
+              projectId,
+              name,
+              region,
+              isDefault: news.isDefault ?? false,
+              ...(news.source === undefined ? {} : { source: news.source }),
+              branchId: attach.branchId,
+              branchGitName: attach.branchGitName,
+            }).pipe(
+              // A replayed create would make a second database; the retry
+              // policy cannot see the request, so opt out explicitly.
+              Retry.none,
+              Effect.map((response) => ({
+                database: response.data,
+                secrets: extractConnectionSecrets(response.data.connections[0]),
+                recoverSecrets: true,
+              })),
+              Effect.catchTag("Conflict", () =>
+                news.name === undefined
+                  ? recoverGeneratedDatabaseAfterConflict(projectId, name).pipe(
+                      Effect.map((database) => ({
+                        database,
+                        secrets: {},
+                        // The generated physical name is owned by this
+                        // resource instance. A conflict after the POST can
+                        // be a lost successful response, so recover the
+                        // write-only default credentials below.
+                        recoverSecrets: true,
+                      })),
+                    )
+                  : Effect.fail(
+                      new Error(
+                        `A Prisma database named '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended database.`,
                       ),
-                ),
-              );
+                    ),
+              ),
+            );
             database = result.database;
             secrets = result.secrets;
             recoverCreateSecrets = result.recoverSecrets;
@@ -795,18 +828,19 @@ const ProviderLive = () =>
           const desired = { ...news, name };
           const needsPatch =
             database.name !== name ||
-            (yield* branchNeedsSync(client, projectId, database, desired));
+            (yield* branchNeedsSync(projectId, database, desired));
           if (needsPatch) {
             const updateAttachment =
               attach.branchId === undefined &&
               attach.branchGitName === undefined
                 ? { branchId: null, branchGitName: undefined }
                 : attach;
-            database = yield* client.updateDatabase(database.id, {
+            database = (yield* patchV1DatabasesByDatabaseId({
+              databaseId: database.id,
               name,
               branchId: updateAttachment.branchId,
               branchGitName: updateAttachment.branchGitName,
-            });
+            })).data;
           }
 
           const persistedSecrets =
@@ -828,7 +862,6 @@ const ProviderLive = () =>
             news.rotateCredentialsOnAdopt === true
           ) {
             const recovered = yield* recoverDatabaseConnectionSecrets(
-              client,
               database,
               knownSecrets,
             );
@@ -839,9 +872,12 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.databaseId)) return;
-          const database = yield* client
-            .getDatabase(output.databaseId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const database = yield* getV1DatabasesByDatabaseId({
+            databaseId: output.databaseId,
+          }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           if (!database) return;
           if (database.isDefault) {
             return yield* Effect.fail(
@@ -850,9 +886,9 @@ const ProviderLive = () =>
               ),
             );
           }
-          yield* client
-            .deleteDatabase(output.databaseId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+          yield* deleteV1DatabasesByDatabaseId({
+            databaseId: output.databaseId,
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
       };
     }),

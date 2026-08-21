@@ -123,7 +123,13 @@ export const makeFakeManagementApi = (
   };
 };
 
-/** The catch-all arm of a suite's `fixtureResponse`, as in `Client.test.ts`. */
+/**
+ * The catch-all arm of a suite's `fixtureResponse`, as in `Client.test.ts`.
+ *
+ * Deliberately a 400: an unregistered route is a harness bug and must fail
+ * the test immediately. A 5xx would be a transient category, so the retry
+ * policy would replay it eight times before surfacing anything.
+ */
 export const unhandled = (request: Captured) =>
   json(
     {
@@ -132,7 +138,7 @@ export const unhandled = (request: Captured) =>
         message: `Unhandled fixture request ${request.method} ${request.pathname}${request.search}`,
       },
     },
-    { status: 500 },
+    { status: 400 },
   );
 
 /** `METHOD /path` for every request served, for call-order assertions. */

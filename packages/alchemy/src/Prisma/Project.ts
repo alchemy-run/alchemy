@@ -710,7 +710,6 @@ const ProviderLive = () =>
               news.rotateCredentialsOnAdopt === true)
           ) {
             const recovered = yield* recoverDatabaseConnectionSecrets(
-              client,
               database,
               knownSecrets,
             );

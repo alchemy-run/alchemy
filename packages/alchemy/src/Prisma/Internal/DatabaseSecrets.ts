@@ -2,12 +2,14 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
-  extractConnectionSecrets,
-  isNotFound,
-  type PrismaManagementClient,
-} from "../Client.ts";
+  type GetV1DatabasesByDatabaseIdResponse,
+  getV1DatabasesByDatabaseId,
+  postV1ConnectionsByIdRotate,
+} from "@distilled.cloud/prisma-postgres/management";
+import { Retry } from "@distilled.cloud/prisma-postgres";
+import { extractConnectionSecrets } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
-import type { Database, PrismaSecretConnection } from "../Types.ts";
+import type { PrismaSecretConnection } from "../Types.ts";
 import type { ObservedDatabase } from "./Observed.ts";
 
 export const hasCanonicalConnectionSecrets = (
@@ -66,12 +68,10 @@ const databaseCredentialsSchedule = Schedule.max([
   Schedule.recurs(6),
 ]);
 
-const waitForRotatableDatabase = (
-  client: PrismaManagementClient,
-  database: ObservedDatabase,
-) =>
-  client.getDatabase(database.id).pipe(
-    Effect.catchIf(isNotFound, () =>
+const waitForRotatableDatabase = (database: ObservedDatabase) =>
+  getV1DatabasesByDatabaseId({ databaseId: database.id }).pipe(
+    Effect.map((response) => response.data),
+    Effect.catchTag("NotFound", () =>
       Effect.fail(
         new DatabaseCredentialsNotReady(
           `Prisma database '${database.name}' (${database.id}) is not visible yet while waiting to recover its credentials.`,
@@ -104,19 +104,9 @@ const waitForRotatableDatabase = (
  * persistence. Prisma's ordinary database reads omit those values, so rotate
  * the observed default connection once when no canonical URL is available.
  */
-export const recoverDatabaseConnectionSecrets: <D extends ObservedDatabase>(
-  client: PrismaManagementClient,
-  initialDatabase: D,
-  known: PrismaSecretConnection,
-) => Effect.Effect<
-  { database: D | Database; secrets: PrismaSecretConnection },
-  Error,
-  never
-> = Effect.fn(function* <D extends ObservedDatabase>(
-  client: PrismaManagementClient,
-  initialDatabase: D,
-  known: PrismaSecretConnection,
-) {
+export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
+  D extends ObservedDatabase,
+>(initialDatabase: D, known: PrismaSecretConnection) {
   if (initialDatabase.status === "failure") {
     return yield* Effect.fail(
       new Error(
@@ -124,7 +114,8 @@ export const recoverDatabaseConnectionSecrets: <D extends ObservedDatabase>(
       ),
     );
   }
-  let database: D | Database = initialDatabase;
+  let database: D | GetV1DatabasesByDatabaseIdResponse["data"] =
+    initialDatabase;
   const observedConnection =
     database.connections.find(
       (connection) => connection.id === database.defaultConnectionId,
@@ -138,7 +129,7 @@ export const recoverDatabaseConnectionSecrets: <D extends ObservedDatabase>(
   }
 
   if (database.status !== "ready" || database.defaultConnectionId === null) {
-    database = yield* waitForRotatableDatabase(client, database);
+    database = yield* waitForRotatableDatabase(database);
   }
 
   const refreshedConnection =
@@ -161,7 +152,12 @@ export const recoverDatabaseConnectionSecrets: <D extends ObservedDatabase>(
       ),
     );
   }
-  const rotated = yield* client.rotateConnection(connectionId);
+  const rotated = yield* postV1ConnectionsByIdRotate({ id: connectionId }).pipe(
+    // Rotation mints new credentials; a replay would revoke the ones we
+    // just persisted, so opt out of the retry policy.
+    Retry.none,
+    Effect.map((response) => response.data),
+  );
   if (rotated.id !== connectionId || rotated.database.id !== database.id) {
     return yield* Effect.fail(
       new Error(

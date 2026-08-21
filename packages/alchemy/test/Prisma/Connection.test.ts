@@ -11,6 +11,15 @@ import type {
   DatabaseConnectionWithSecrets,
 } from "@/Prisma/Types";
 import { describe, expect, it } from "alchemy-test";
+import {
+  conflict,
+  data,
+  json,
+  makeFakeManagementApi,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -67,6 +76,71 @@ const providerLayer = (client: PrismaManagementClient) =>
     Layer.provide(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
   );
+
+/**
+ * Serve the Management API's connection routes from the same hermetic
+ * handlers these suites already declare. The handlers are synchronous, so the
+ * fake runs them directly and maps their results onto the wire: a handler
+ * returning `undefined` is a 404, everything else a `{ data }` envelope.
+ */
+interface ConnectionHandlers {
+  listDatabaseConnections?: (
+    databaseId: string,
+    query?: any,
+  ) => Effect.Effect<any, any>;
+  getConnection?: (id: string) => Effect.Effect<any, any>;
+  createConnection?: (input: any) => Effect.Effect<any, any>;
+  rotateConnection?: (id: string) => Effect.Effect<any, any>;
+  deleteConnection?: (id: string) => Effect.Effect<any, any>;
+}
+
+const connectionApi = (handlers: ConnectionHandlers) =>
+  makeFakeManagementApi((request) => {
+    const segments = request.pathname.split("/").filter((s) => s.length > 0);
+    const respond = (value: unknown) =>
+      value === undefined ? notFound("not found") : data(value);
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "databases" &&
+      segments[3] === "connections" &&
+      request.method === "GET"
+    ) {
+      return page(
+        Effect.runSync(handlers.listDatabaseConnections!(segments[2]!)),
+      );
+    }
+    if (request.pathname === "/v1/connections" && request.method === "POST") {
+      const created = Effect.runSync(
+        handlers.createConnection!(request.bodyJson),
+      );
+      // A handler may answer with a Response directly to inject a status.
+      return created instanceof Response
+        ? created
+        : data(created, { status: 201 });
+    }
+    if (
+      segments.length === 4 &&
+      segments[1] === "connections" &&
+      segments[3] === "rotate" &&
+      request.method === "POST"
+    ) {
+      return respond(Effect.runSync(handlers.rotateConnection!(segments[2]!)));
+    }
+    if (segments.length === 3 && segments[1] === "connections") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
+        return respond(Effect.runSync(handlers.getConnection!(id)));
+      }
+      if (request.method === "DELETE") {
+        if (handlers.deleteConnection) {
+          Effect.runSync(handlers.deleteConnection(id));
+        }
+        return json(null, { status: 204 });
+      }
+    }
+    return unhandled(request);
+  });
 
 const connectionProps = { database: "database-1", name: "api" };
 
@@ -145,7 +219,10 @@ describe("Prisma Connection provider", () => {
         expect(Redacted.value(recovered.directConnectionString!)).toBe(
           "postgres://direct-rotated",
         );
-      }).pipe(Effect.provide(providerLayer(client)));
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(connectionApi(client).layer),
+      );
     },
   );
 
@@ -157,18 +234,13 @@ describe("Prisma Connection provider", () => {
       let rotations = 0;
       const client = {
         listDatabaseConnections: () => Effect.succeed(connections),
+        // Served as a real 409 below; distilled's status matcher is what
+        // turns it into the `Conflict` tag the recovery path catches.
         createConnection: (input: { name: string }) =>
-          Effect.gen(function* () {
+          Effect.sync(() => {
             creates += 1;
             connections.push(connection("connection-1", input.name));
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "POST",
-                path: "/v1/connections",
-                status: 409,
-                message: "already exists",
-              }),
-            );
+            return conflict("already exists");
           }),
         rotateConnection: (id: string) =>
           Effect.sync(() => {
@@ -190,7 +262,10 @@ describe("Prisma Connection provider", () => {
         expect(Redacted.value(recovered.directConnectionString!)).toBe(
           "postgres://direct-recovered",
         );
-      }).pipe(Effect.provide(providerLayer(client)));
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(connectionApi(client).layer),
+      );
     },
   );
 
@@ -251,7 +326,10 @@ describe("Prisma Connection provider", () => {
         expect(Redacted.value(optedIn.directConnectionString!)).toBe(
           "postgres://direct-adopted",
         );
-      }).pipe(Effect.provide(providerLayer(client)));
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(connectionApi(client).layer),
+      );
     },
   );
 
@@ -278,7 +356,10 @@ describe("Prisma Connection provider", () => {
         "must contain at least one non-space character",
       );
       expect(listed).toBe(false);
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect("does not rotate again when the rotate flag is reset", () => {
@@ -321,7 +402,10 @@ describe("Prisma Connection provider", () => {
       expect(Redacted.value(recovered.directConnectionString!)).toBe(
         "postgres://direct-current",
       );
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect("rejects a persisted connection with mismatched identity", () => {
@@ -378,7 +462,10 @@ describe("Prisma Connection provider", () => {
         .pipe(Effect.flip);
       expect(String(error)).toContain("mismatched identity");
       expect(rotations).toBe(0);
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect("recovers its deterministic key as owned while creating", () => {
@@ -397,7 +484,10 @@ describe("Prisma Connection provider", () => {
 
       expect(output?.connectionId).toBe("connection-1");
       expect(Unowned.is(output)).toBe(false);
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect(
@@ -414,7 +504,10 @@ describe("Prisma Connection provider", () => {
 
         expect(output?.connectionId).toBe("connection-1");
         expect(Unowned.is(output)).toBe(true);
-      }).pipe(Effect.provide(providerLayer(client)));
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(connectionApi(client).layer),
+      );
     },
   );
 
@@ -484,7 +577,10 @@ describe("Prisma Connection provider", () => {
         expect(Redacted.value(refreshed!.directConnectionString!)).toBe(
           "postgres://direct-adopted-old-generated",
         );
-      }).pipe(Effect.provide(providerLayer(client)));
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(connectionApi(client).layer),
+      );
     },
   );
 
@@ -527,7 +623,10 @@ describe("Prisma Connection provider", () => {
       expect(Redacted.value(rotated.directConnectionString!)).toBe(
         "postgres://direct-adopted-natural",
       );
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect("rejects drift from an adopted physical connection name", () => {
@@ -561,7 +660,10 @@ describe("Prisma Connection provider", () => {
 
       expect(String(error)).toContain("no longer matches persisted");
       expect(String(error)).toContain("name 'api'");
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect("fails ambiguous generated-name recovery", () => {
@@ -581,7 +683,10 @@ describe("Prisma Connection provider", () => {
 
       expect(String(error)).toContain("has 2 connections named");
       expect(String(error)).toContain("<instance-id>");
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it("does not collide binding keys after lossy normalization", () => {
@@ -623,7 +728,10 @@ describe("Prisma Connection provider", () => {
       });
       // name omitted -> logical ID prefix + instance identity suffix
       expect(createdName).toBe("Connection-aaaaaaaaaaaa");
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 
   it.effect("materializes databaseUrl and parsed origins on reconcile", () => {
@@ -647,6 +755,9 @@ describe("Prisma Connection provider", () => {
       expect(attrs.origin?.host).toBe("direct-new");
       expect(attrs.origin?.scheme).toBe("postgres");
       expect(attrs.pooledOrigin?.host).toBe("pooled-new");
-    }).pipe(Effect.provide(providerLayer(client)));
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(connectionApi(client).layer),
+    );
   });
 });

@@ -95,18 +95,23 @@ const toWireCreatedDatabase = (database: ApiDatabase) => ({
   },
 });
 
-const branchLayer = (client: PrismaManagementClient) =>
+const branchLayer = (client: PrismaManagementClient, fake: FakeManagementApi) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaBranch])).pipe(
     Layer.provideMerge(BranchProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(fake.layer),
   );
 
-const databaseLayer = (client: PrismaManagementClient) =>
+const databaseLayer = (
+  client: PrismaManagementClient,
+  fake: FakeManagementApi,
+) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaDatabase])).pipe(
     Layer.provideMerge(DatabaseProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(fake.layer),
   );
 
 const environmentVariableLayer = (client: PrismaManagementClient) =>
@@ -205,19 +210,19 @@ it.effect(
     };
     let reads = 0;
     let rotations = 0;
-    const client = {
-      getDatabase: () =>
-        Effect.sync(() => (reads++ === 0 ? provisioning : ready)),
-      rotateConnection: () =>
-        Effect.sync(() => {
-          rotations += 1;
-          return apiConnection(ready.id, ready.defaultConnectionId!);
-        }),
-    } as unknown as PrismaManagementClient;
+    const fake = makeFakeManagementApi((request) => {
+      if (request.pathname.startsWith("/v1/databases/")) {
+        return data(toWireDatabase(reads++ === 0 ? provisioning : ready));
+      }
+      if (request.pathname.endsWith("/rotate")) {
+        rotations += 1;
+        return data(apiConnection(ready.id, ready.defaultConnectionId!));
+      }
+      return unhandled(request);
+    });
 
     return Effect.gen(function* () {
       const fiber = yield* recoverDatabaseConnectionSecrets(
-        client,
         provisioning,
         {},
       ).pipe(Effect.forkChild({ startImmediately: true }));
@@ -232,7 +237,7 @@ it.effect(
         Redacted.value(recovered.secrets.directConnectionString!),
       ).toContain(ready.id);
       expect(rotations).toBe(1);
-    }).pipe(Effect.provide(TestClock.layer()));
+    }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
   },
 );
 
@@ -248,14 +253,18 @@ it.effect(
       defaultConnectionId: null,
       connections: [],
     };
-    const client = {
-      getDatabase: () => Effect.succeed(provisioning),
-      rotateConnection: () => Effect.die("must not rotate while provisioning"),
-    } as unknown as PrismaManagementClient;
+    const fake = makeFakeManagementApi((request) => {
+      if (request.pathname.startsWith("/v1/databases/")) {
+        return data(toWireDatabase(provisioning));
+      }
+      if (request.pathname.endsWith("/rotate")) {
+        throw new Error("must not rotate while provisioning");
+      }
+      return unhandled(request);
+    });
 
     return Effect.gen(function* () {
       const fiber = yield* recoverDatabaseConnectionSecrets(
-        client,
         provisioning,
         {},
       ).pipe(Effect.result, Effect.forkChild({ startImmediately: true }));
@@ -268,7 +277,7 @@ it.effect(
         expect(String(result.failure)).toContain("provisioning");
         expect(String(result.failure)).toContain("defaultConnectionId 'null'");
       }
-    }).pipe(Effect.provide(TestClock.layer()));
+    }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
   },
 );
 
@@ -602,6 +611,36 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
         }
         return data(toWireCreatedDatabase(created), { status: 201 });
       }
+    }
+
+    if (segments.length === 3 && segments[1] === "databases") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
+        calls.push(["getDatabase", id]);
+        const database = databases.get(id);
+        return database === undefined
+          ? notFound("not found")
+          : data(toWireDatabase(database));
+      }
+      if (request.method === "DELETE") {
+        calls.push(["deleteDatabase", id]);
+        databases.delete(id);
+        return json(null, { status: 204 });
+      }
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "connections" &&
+      segments[3] === "rotate" &&
+      request.method === "POST"
+    ) {
+      const id = segments[2]!;
+      calls.push(["rotateConnection", id]);
+      const database = Array.from(databases.values()).find(
+        (candidate) => candidate.defaultConnectionId === id,
+      )!;
+      return data(apiConnection(database.id, id));
     }
 
     return unhandled(request);
@@ -1132,12 +1171,99 @@ const makeDatabaseCloud = () => {
         databases.delete(id);
       }),
   } as unknown as PrismaManagementClient;
-  return { client, calls, databases };
+
+  // The same in-memory cloud, served over the wire for the Database resource.
+  const fake = makeFakeManagementApi((request) => {
+    const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+    if (request.pathname === "/v1/databases" && request.method === "GET") {
+      return page(Array.from(databases.values()).map(toWireDatabase));
+    }
+    if (request.pathname === "/v1/databases" && request.method === "POST") {
+      const input = request.bodyJson as {
+        projectId: string;
+        name?: string;
+        region?: string;
+        isDefault?: boolean;
+        source?: ApiDatabase["source"];
+      };
+      calls.push(["createDatabase", input]);
+      if (input.isDefault) {
+        for (const [id, database] of databases) {
+          if (database.project.id === input.projectId && database.isDefault) {
+            databases.set(id, { ...database, isDefault: false });
+          }
+        }
+      }
+      const id = `database-${nextId++}`;
+      const database = apiDatabase(id, input);
+      databases.set(id, database);
+      return data(toWireCreatedDatabase(database), { status: 201 });
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "projects" &&
+      segments[3] === "databases" &&
+      request.method === "GET"
+    ) {
+      const projectId = segments[2]!;
+      return page(
+        Array.from(databases.values())
+          .filter((database) => database.project.id === projectId)
+          .map(toWireDatabase),
+      );
+    }
+
+    if (segments.length === 3 && segments[1] === "databases") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
+        calls.push(["getDatabase", id]);
+        const database = databases.get(id);
+        return database === undefined
+          ? notFound("not found")
+          : data(toWireDatabase(database));
+      }
+      if (request.method === "PATCH") {
+        const input = request.bodyJson as { name?: string };
+        const database = databases.get(id)!;
+        const updated = { ...database, name: input.name ?? database.name };
+        databases.set(id, updated);
+        return data(toWireDatabase(updated));
+      }
+      if (request.method === "DELETE") {
+        calls.push(["deleteDatabase", id]);
+        databases.delete(id);
+        return json(null, { status: 204 });
+      }
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "connections" &&
+      segments[3] === "rotate" &&
+      request.method === "POST"
+    ) {
+      const id = segments[2]!;
+      calls.push(["rotateConnection", id]);
+      const database = Array.from(databases.values()).find(
+        (candidate) => candidate.defaultConnectionId === id,
+      )!;
+      return data(apiConnection(database.id, id));
+    }
+
+    return unhandled(request);
+  });
+
+  return { client, fake, calls, databases };
 };
 
 const generatedDatabaseRecoveryCloud = makeDatabaseCloud();
 const generatedDatabaseRecovery = Test.make({
-  providers: databaseLayer(generatedDatabaseRecoveryCloud.client),
+  providers: databaseLayer(
+    generatedDatabaseRecoveryCloud.client,
+    generatedDatabaseRecoveryCloud.fake,
+  ),
 });
 
 generatedDatabaseRecovery.test.provider(
@@ -1371,7 +1497,10 @@ it.effect("refuses an undeletable standalone default database", () => {
 
 const inheritedRegionCloud = makeDatabaseCloud();
 const inheritedRegion = Test.make({
-  providers: databaseLayer(inheritedRegionCloud.client),
+  providers: databaseLayer(
+    inheritedRegionCloud.client,
+    inheritedRegionCloud.fake,
+  ),
 });
 
 inheritedRegion.test.provider(
@@ -1976,7 +2105,95 @@ const branchClient = {
       branchCloud.delete(id);
     }),
 } as unknown as PrismaManagementClient;
-const branches = Test.make({ providers: branchLayer(branchClient) });
+
+// The same in-memory branch cloud, served over the wire.
+const branchFake = makeFakeManagementApi((request) => {
+  const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+  if (request.pathname === "/v1/projects" && request.method === "GET") {
+    return page([toWireProject(apiProject("project-1", "app"))]);
+  }
+
+  if (
+    segments.length === 4 &&
+    segments[1] === "projects" &&
+    segments[3] === "branches"
+  ) {
+    const projectId = segments[2]!;
+    if (request.method === "GET") {
+      const gitName = request.search.includes("gitName=")
+        ? new URLSearchParams(request.search).get("gitName")
+        : null;
+      return page(
+        Array.from(branchCloud.values()).filter(
+          (branch) => gitName === null || branch.gitName === gitName,
+        ),
+      );
+    }
+    if (request.method === "POST") {
+      const input = request.bodyJson as {
+        gitName: string;
+        isDefault?: boolean;
+      };
+      branchCalls.push(["createBranch", { projectId, input }]);
+      const first = branchCloud.size === 0;
+      const makeDefault = first || input.isDefault === true;
+      if (makeDefault) {
+        for (const [id, branch] of branchCloud) {
+          branchCloud.set(id, { ...branch, isDefault: false });
+        }
+      }
+      const id = `branch-${nextBranchId++}`;
+      const branch = {
+        id,
+        type: "branch" as const,
+        url: `https://api.prisma.test/v1/branches/${id}`,
+        gitName: input.gitName,
+        isDefault: makeDefault,
+        role: first ? ("production" as const) : ("preview" as const),
+        createdAt,
+        updatedAt: createdAt,
+        project: {
+          id: projectId,
+          url: `https://api.prisma.test/v1/projects/${projectId}`,
+          name: "app",
+        },
+      };
+      branchCloud.set(id, branch);
+      return data(branch, { status: 201 });
+    }
+  }
+
+  if (segments.length === 3 && segments[1] === "branches") {
+    const id = segments[2]!;
+    if (request.method === "GET") {
+      const branch = branchCloud.get(id);
+      return branch === undefined ? notFound("not found") : data(branch);
+    }
+    if (request.method === "PATCH") {
+      const input = request.bodyJson as { isDefault?: boolean | null };
+      branchCalls.push(["updateBranch", { id, input }]);
+      if (input.isDefault !== true) {
+        throw new Error("the Management API rejects default demotion");
+      }
+      for (const [branchId, branch] of branchCloud) {
+        branchCloud.set(branchId, { ...branch, isDefault: branchId === id });
+      }
+      return data(branchCloud.get(id)!);
+    }
+    if (request.method === "DELETE") {
+      branchCalls.push(["deleteBranch", id]);
+      branchCloud.delete(id);
+      return json(null, { status: 204 });
+    }
+  }
+
+  return unhandled(request);
+});
+
+const branches = Test.make({
+  providers: branchLayer(branchClient, branchFake),
+});
 
 branches.test.provider(
   "branch promotion persists and restores the displaced default on destroy",
