@@ -410,9 +410,9 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
  *   Effect.gen(function* () {
  *     const disk = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
+ *     const fs = yield* FileSystem.FileSystem;
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const fs = yield* FileSystem.FileSystem;
  *         const text = yield* fs.readFileString(`${disk.path}/hello.txt`);
  *         return HttpServerResponse.text(text);
  *       }),

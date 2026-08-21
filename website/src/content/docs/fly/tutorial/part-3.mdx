@@ -66,22 +66,36 @@ Bindings declare a capability; layers implement it. Provide
 ) {}
 ```
 
-## Write files with `PUT /:name`
+## Resolve FileSystem in init
 
-Now use the mount from the handler. The runtime provides Effect's
-`FileSystem` service, so the Volume is just a directory:
+Yield `FileSystem` in the outer Effect. Close over it in `fetch`.
+Do not yield it per request.
 
 ```diff lang="typescript"
 // src/api.ts
 +import * as FileSystem from "effect/FileSystem";
 // ...
+  Effect.gen(function* () {
+    const mount = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
++    const fs = yield* FileSystem.FileSystem;
+
+    return {
+      fetch: /* ... */,
+    };
+  }).pipe(Effect.provide(Fly.MountVolumeLive)),
+```
+
+## Write files with `PUT /:name`
+
+The Volume is a directory. Use `fs` from init:
+
+```diff lang="typescript"
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://service");
         if (url.pathname === "/health") {
           return HttpServerResponse.json({ ok: true });
         }
-+        const fs = yield* FileSystem.FileSystem;
 +        const file = `${mount.path}${url.pathname}`;
 +
 +        if (request.method === "PUT") {

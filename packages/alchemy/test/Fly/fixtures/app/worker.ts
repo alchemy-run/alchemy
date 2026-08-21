@@ -20,10 +20,10 @@ export default class Worker extends Fly.Service<Worker>()(
   Effect.gen(function* () {
     const mount = yield* Fly.MountVolume({ path: VOLUME_PATH, sizeGb: 1 });
     const host = yield* ServerHost;
+    const fs = yield* FileSystem.FileSystem;
 
     yield* host.run(
       Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
         yield* fs.makeDirectory(mount.path, { recursive: true });
         yield* fs.writeFileString(MARKER_FILE, MARKER);
         return yield* Effect.never;

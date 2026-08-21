@@ -51,6 +51,7 @@ directly, no yielding required:
 
   Effect.gen(function* () {
     const mount = yield* Fly.MountVolume({ path: "/data", sizeGb: 1 });
+    const fs = yield* FileSystem.FileSystem;
 +    const get = yield* Fly.GetSecret(ApiToken);
 
     return {
@@ -89,7 +90,6 @@ if (url.pathname === "/secret") {
   const got = yield* get().pipe(Effect.orDie);
   return HttpServerResponse.json({ name: got.name });
 }
-const fs = yield* FileSystem.FileSystem;
 const file = `${mount.path}${url.pathname}`;
 ```
 

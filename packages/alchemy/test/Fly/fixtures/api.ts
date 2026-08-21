@@ -19,6 +19,7 @@ export default class Api extends Fly.Service<Api>()(
   },
   Effect.gen(function* () {
     const mount = yield* Fly.MountVolume({ path: VOLUME_PATH, sizeGb: 1 });
+    const fs = yield* FileSystem.FileSystem;
 
     return {
       fetch: Effect.gen(function* () {
@@ -30,7 +31,6 @@ export default class Api extends Fly.Service<Api>()(
             path: mount.path,
           });
         }
-        const fs = yield* FileSystem.FileSystem;
         yield* fs
           .makeDirectory(mount.path, { recursive: true })
           .pipe(Effect.orDie);
