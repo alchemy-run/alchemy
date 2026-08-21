@@ -3,7 +3,12 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { makeHttpSecretKeyBinding, toByteList } from "./SecretKeyHttp.ts";
+import {
+  bytesToBase64,
+  flyKmsPost,
+  makeHttpSecretKeyBinding,
+  toByteList,
+} from "./SecretKeyHttp.ts";
 import { Verify, type VerifyRequest } from "./Verify.ts";
 
 /**
@@ -28,6 +33,18 @@ export const VerifyHttp = Layer.effect(
     makeHttpSecretKeyBinding({
       makeClient: (auth, appName, secretName) =>
         Effect.fn("Fly.Verify")(function* (request: VerifyRequest) {
+          if (globalThis.__ALCHEMY_RUNTIME__) {
+            const res = yield* flyKmsPost(
+              yield* appName,
+              yield* secretName,
+              "verify",
+              {
+                plaintext: bytesToBase64(request.plaintext),
+                signature: bytesToBase64(request.signature),
+              },
+            );
+            return { valid: res.valid === true || res.valid === undefined };
+          }
           yield* auth.authorize(
             machines.secretkeyVerify({
               app_name: yield* appName,

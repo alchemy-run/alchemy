@@ -1,6 +1,10 @@
-import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
-import * as machines from "@distilled.cloud/fly-io/machines";
+import {
+  Credentials,
+  CredentialsFromEnv,
+  credentials,
+} from "@distilled.cloud/fly-io";
 import type * as Context from "effect/Context";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -17,11 +21,11 @@ import type { SecretKey } from "./SecretKey.ts";
  * Shared scaffolding for the HTTP-backed Fly Secret bindings.
  *
  * Fly has no native Worker-style binding. This layer captures the ambient
- * `FLY_API_TOKEN` available during stack-eval (so Actions work in-process)
- * and, when the host is a {@link Machine} or {@link Service}, mints an
- * app-scoped deploy token and injects `FLY_API_TOKEN` + `FLY_APP_NAME`
- * into the host env. Runtime calls inside a deployed host read those env
- * vars via {@link CredentialsFromEnv}.
+ * org `FLY_API_TOKEN` during stack-eval (so Actions work in-process) and,
+ * when the host is a {@link Machine} or {@link Service}, injects
+ * `FLY_API_TOKEN`, `FLY_APP_NAME`, and `FLY_SECRET_${LogicalId}` into the
+ * host env as Outputs. Runtime calls inside a deployed host read those
+ * env vars via {@link CredentialsFromEnv}.
  *
  * NOT exported from `index.ts`.
  */
@@ -36,41 +40,52 @@ export const makeHttpSecretBinding = <
     appName: Effect.Effect<string>,
     secretName: Effect.Effect<string>,
   ) => Client;
+  /**
+   * PetSem encrypt/sign/decrypt/verify only work from a Machine over
+   * `/.fly/api` (implicit machine identity). Org tokens return Forbidden.
+   */
+  kms?: boolean;
 }) =>
   Effect.gen(function* () {
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
+    const auth =
+      options.kms === true ? makeKmsAuth(context) : makeSecretAuth(context);
 
     return Effect.fn(function* (resource: Target) {
-      // One yield registers the Action → resource dependency. Do not
-      // keep yielding until a string appears — that deadlocks stack
-      // evaluation. If the yield is still an Effect, pass it through.
-      const appName =
-        yield* resource.appName as unknown as Effect.Effect<unknown>;
-      const secretName =
-        yield* resource.name as unknown as Effect.Effect<unknown>;
-      const appNameEff = toNameEffect(appName);
-      const secretNameEff = toNameEffect(secretName);
+      const secretNameKey = `FLY_SECRET_${resource.LogicalId}`;
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return options.makeClient(
+          auth,
+          Config.string("FLY_APP_NAME"),
+          Config.string(secretNameKey),
+        );
+      }
 
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isFlyHost(host)) {
-          const resolvedAppName = yield* appNameEff;
-          const token = yield* mintDeployToken(resolvedAppName, context);
-          yield* host.bind`${resource}`({
-            env: {
-              FLY_API_TOKEN: token,
-              FLY_APP_NAME: resolvedAppName,
-            },
-          });
-        }
+      const host = yield* Binding.Host;
+      if (isFlyHost(host)) {
+        // Pass Outputs through bind data so apply waits for the Secret
+        // and evaluates the name after it exists. Resolving the name
+        // here reads process.env on the laptop and drops the env var.
+        // Use the org token, not an app deploy token — deploy tokens
+        // cannot GetSecret / Encrypt (PetSem).
+        const token = yield* orgToken(context);
+        yield* host.bind`${resource}`({
+          env: {
+            FLY_API_TOKEN: token,
+            FLY_APP_NAME: resource.appName,
+            [secretNameKey]: resource.name,
+          },
+        });
       }
 
       return options.makeClient(
-        makeSecretAuth(context),
-        appNameEff,
-        secretNameEff,
+        auth,
+        toNameEffect(
+          yield* resource.appName as unknown as Effect.Effect<unknown>,
+        ),
+        toNameEffect(yield* resource.name as unknown as Effect.Effect<unknown>),
       );
     });
   });
@@ -88,24 +103,28 @@ export const makeHttpAppBinding = <Client>(options: {
     >();
 
     return Effect.fn(function* (app: App) {
-      const appName = yield* app.appName as unknown as Effect.Effect<unknown>;
-      const appNameEff = toNameEffect(appName);
-
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isFlyHost(host)) {
-          const resolvedAppName = yield* appNameEff;
-          const token = yield* mintDeployToken(resolvedAppName, context);
-          yield* host.bind`${app}`({
-            env: {
-              FLY_API_TOKEN: token,
-              FLY_APP_NAME: resolvedAppName,
-            },
-          });
-        }
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return options.makeClient(
+          makeSecretAuth(context),
+          Config.string("FLY_APP_NAME"),
+        );
       }
 
-      return options.makeClient(makeSecretAuth(context), appNameEff);
+      const host = yield* Binding.Host;
+      if (isFlyHost(host)) {
+        const token = yield* orgToken(context);
+        yield* host.bind`${app}`({
+          env: {
+            FLY_API_TOKEN: token,
+            FLY_APP_NAME: app.appName,
+          },
+        });
+      }
+
+      return options.makeClient(
+        makeSecretAuth(context),
+        toNameEffect(yield* app.appName as unknown as Effect.Effect<unknown>),
+      );
     });
   });
 
@@ -128,7 +147,56 @@ export const makeSecretAuth = (
       return eff.pipe(
         Effect.provide(CredentialsFromEnv),
         Effect.provide(FetchHttpClient.layer),
-      );
+        Effect.timeout("8 seconds"),
+      ) as Effect.Effect<A, E, RuntimeContext>;
+    }
+    return eff.pipe(Effect.provideContext(ambient));
+  },
+});
+
+const FLY_MACHINE_API_SOCKET = "/.fly/api";
+
+const flyMachineFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const raw =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+  const url = raw.replace(
+    /^https:\/\/api\.machines\.dev\/v1/,
+    "http://localhost/v1",
+  );
+  const headers = new Headers(init?.headers);
+  headers.delete("authorization");
+  headers.delete("Authorization");
+  return fetch(url, {
+    ...init,
+    headers,
+    unix: FLY_MACHINE_API_SOCKET,
+  } as RequestInit);
+}) as typeof fetch;
+
+/**
+ * PetSem encrypt/sign/decrypt/verify from a Machine. Org API tokens are
+ * Forbidden; the machine identity is the unix socket at `/.fly/api`.
+ */
+export const makeKmsAuth = (
+  ambient: Context.Context<Credentials | HttpClient.HttpClient>,
+): SecretAuth => ({
+  authorize: (eff) => {
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return eff.pipe(
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.Fetch, flyMachineFetch),
+        Effect.provide(
+          credentials({
+            apiKey: "machine",
+            apiBaseUrl: "http://localhost/v1",
+          }),
+        ),
+        Effect.timeout("8 seconds"),
+      ) as Effect.Effect<A, E, RuntimeContext>;
     }
     return eff.pipe(Effect.provideContext(ambient));
   },
@@ -156,22 +224,11 @@ const isFlyHost = (
   ((value as { Type?: string }).Type === "Fly.Service" ||
     (value as { Type?: string }).Type === "Fly.Machine");
 
-const mintDeployToken = (
-  appName: string,
+const orgToken = (
   ambient: Context.Context<Credentials | HttpClient.HttpClient>,
 ) =>
-  machines.appCreateDeployToken({ app_name: appName }).pipe(
+  Credentials.pipe(
     Effect.provideContext(ambient),
-    Effect.map((res) => res.token),
-    Effect.catch(() => Effect.succeed(undefined as string | undefined)),
-    Effect.flatMap((token) => {
-      if (token !== undefined && token.length > 0) {
-        return Effect.succeed(token);
-      }
-      return Credentials.pipe(
-        Effect.provideContext(ambient),
-        Effect.flatMap((resolve) => resolve),
-        Effect.map((cfg) => Redacted.value(cfg.apiKey)),
-      );
-    }),
+    Effect.flatMap((resolve) => resolve),
+    Effect.map((cfg) => Redacted.value(cfg.apiKey)),
   );

@@ -115,7 +115,8 @@ export type SecretKey = Resource<
  * data.
  *
  * Fly crypto ops need a KMS token. Org API tokens are typed
- * `Forbidden`. A full round-trip is behind `FLY_TEST_KMS=1`.
+ * `Forbidden`. Encrypt and sign from a {@link Service}, not a laptop
+ * Action.
  *
  * @example Encrypt a payload
  * ```typescript
@@ -159,7 +160,27 @@ export type SecretKey = Resource<
  * const { valid } = yield* verify({ plaintext, signature });
  * ```
  */
-export const SecretKey = Resource<SecretKey>("Fly.SecretKey");
+const resolveSecretKeyProps = (
+  props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>,
+): Effect.Effect<SecretKeyProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const app = Effect.isEffect(resolved.app)
+      ? yield* resolved.app as Effect.Effect<App, never, Providers>
+      : resolved.app;
+    return { ...resolved, app };
+  });
+
+const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
+
+export const SecretKey: typeof SecretKeyResource = Object.assign(
+  (
+    id: string,
+    props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>,
+  ) => SecretKeyResource(id, resolveSecretKeyProps(props)),
+  SecretKeyResource,
+);
 
 export class SecretKeyNotCreated extends Data.TaggedError(
   "Fly.SecretKeyNotCreated",

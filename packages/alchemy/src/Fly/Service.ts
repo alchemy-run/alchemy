@@ -36,6 +36,7 @@ import {
   createFlyHostRuntimeContext,
   defaultHttpServices,
   DEFAULT_PORT,
+  toEnvRecord,
   type FlyHostRuntimeContext,
 } from "./hosted.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
@@ -645,12 +646,7 @@ const compactRecord = (
     ),
   );
 
-const toEnv = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([key, value]) =>
-      value === undefined || value === null ? [] : [[key, String(value)]],
-    ),
-  );
+const toEnv = toEnvRecord;
 
 const resolveMachineName = (
   id: string,
@@ -910,7 +906,10 @@ export const ServiceProvider = () =>
           const port = props.port ?? DEFAULT_PORT;
           const bound = collectBindingState(bindings ?? []);
           yield* attachRedisSecrets(appName, bound.redis);
-          yield* attachBucketSecrets(appName, bound.buckets);
+          yield* attachBucketSecrets(appName, bound.buckets, {
+            ...bound.env,
+            ...toEnv(props.env),
+          });
           for (const pg of bound.postgres) {
             yield* attachPostgresSecrets(
               appName,

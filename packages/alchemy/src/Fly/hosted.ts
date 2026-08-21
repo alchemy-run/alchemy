@@ -114,6 +114,59 @@ await Effect.runPromise(program).catch((err) => {
 });
 `;
 
+/** Flatten a binding/env leaf into a machine env string. Unwraps Redacted. */
+export const plainEnvValue = (value: unknown): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (Redacted.isRedacted(value)) return plainEnvValue(Redacted.value(value));
+  if (typeof value === "string") {
+    if (value.startsWith("{")) {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          (parsed as { _tag?: unknown })._tag === "Redacted" &&
+          typeof (parsed as { value?: unknown }).value === "string"
+        ) {
+          const inner = (parsed as { value: string }).value;
+          return inner.length > 0 ? inner : undefined;
+        }
+      } catch {
+        // plain string that happens to start with `{`
+      }
+    }
+    return value.length > 0 ? value : undefined;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return undefined;
+};
+
+export const toEnvRecord = (
+  env: Record<string, any> | undefined,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env ?? {}).flatMap(([key, value]) => {
+      const raw = plainEnvValue(value);
+      return raw === undefined ? [] : [[key, raw]];
+    }),
+  );
+
+const coerceBindingName = (value: unknown): string | undefined => {
+  const direct = plainEnvValue(value);
+  if (direct !== undefined) return direct;
+  if (value != null && typeof value === "object") {
+    const record = value as { name?: unknown; id?: unknown; addOnId?: unknown };
+    return (
+      coerceBindingName(record.name) ??
+      coerceBindingName(record.id) ??
+      coerceBindingName(record.addOnId)
+    );
+  }
+  return undefined;
+};
+
 export const collectBindingState = (
   bindings: readonly ResourceBinding<ServiceBinding>[],
 ) => {
@@ -121,13 +174,15 @@ export const collectBindingState = (
     (binding: ResourceBinding<ServiceBinding> & { action?: string }) =>
       binding.action !== "delete",
   );
-  const env = active
-    .map((binding) => binding?.data?.env)
-    .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
+  const env = toEnvRecord(
+    active
+      .map((binding) => binding?.data?.env)
+      .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {}),
+  );
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
-  const redis: { name: string }[] = [];
-  const buckets: { name: string }[] = [];
+  const redis: { name: string; id?: string }[] = [];
+  const buckets: { name: string; id?: string }[] = [];
   const postgres: { clusterId: string; variableName?: string }[] = [];
   for (const binding of active) {
     for (const mount of binding?.data?.mounts ?? []) {
@@ -136,16 +191,58 @@ export const collectBindingState = (
       mounts.push(mount);
     }
     const attached = binding?.data?.redis;
-    if (attached?.name !== undefined && attached.name.length > 0) {
-      redis.push(attached);
+    const redisName = coerceBindingName(attached?.name);
+    const redisId = coerceBindingName(attached?.id);
+    if (redisName !== undefined || redisId !== undefined) {
+      redis.push({
+        name: redisName ?? "",
+        id: redisId,
+      });
     }
-    const bucket = binding?.data?.bucket;
-    if (bucket?.name !== undefined && bucket.name.length > 0) {
-      buckets.push(bucket);
+    const bucket = binding?.data?.bucket as
+      | {
+          name?: unknown;
+          id?: unknown;
+          addOnId?: unknown;
+          accessKeyId?: unknown;
+          secretAccessKey?: unknown;
+          endpoint?: unknown;
+          region?: unknown;
+          bucketName?: unknown;
+        }
+      | undefined;
+    const bucketName = coerceBindingName(bucket?.name);
+    const bucketId =
+      coerceBindingName(bucket?.id) ?? coerceBindingName(bucket?.addOnId);
+    if (bucketName !== undefined || bucketId !== undefined) {
+      buckets.push({
+        name: bucketName ?? "",
+        id: bucketId,
+      });
+    }
+    if (bucket !== undefined) {
+      Object.assign(
+        env,
+        toEnvRecord({
+          AWS_ACCESS_KEY_ID: bucket.accessKeyId,
+          AWS_SECRET_ACCESS_KEY: bucket.secretAccessKey,
+          AWS_ENDPOINT_URL_S3: bucket.endpoint,
+          AWS_ENDPOINT_URL: bucket.endpoint,
+          AWS_REGION: bucket.region,
+          BUCKET_NAME: bucket.bucketName ?? bucket.name,
+        }),
+      );
     }
     const pg = binding?.data?.postgres;
-    if (pg?.clusterId !== undefined && pg.clusterId.length > 0) {
-      postgres.push(pg);
+    const clusterId = coerceBindingName(pg?.clusterId);
+    if (clusterId !== undefined) {
+      postgres.push({
+        clusterId,
+        variableName:
+          typeof pg?.variableName === "string" && pg.variableName.length > 0
+            ? pg.variableName
+            : undefined,
+      });
     }
   }
   return { env, mounts, redis, buckets, postgres };

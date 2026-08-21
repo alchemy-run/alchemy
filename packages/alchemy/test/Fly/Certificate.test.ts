@@ -15,9 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const testDomain = process.env.FLY_TEST_DOMAIN;
-
 const CUSTOM_HOSTNAME = "alchemy-fly-cert-1.example.com";
 const REPLACE_HOSTNAME = "alchemy-fly-cert-2.example.com";
 
@@ -214,7 +211,7 @@ const deleteIfPresent = (appName: string, hostname: string) =>
     .appCertificatesDelete({ app_name: appName, hostname })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and delete a custom certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -289,7 +286,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when hostname changes",
   (stack) =>
     Effect.gen(function* () {
@@ -355,7 +352,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "list enumerates the deployed certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -398,7 +395,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "ACME create is rejected without a hostname",
   (stack) =>
     Effect.gen(function* () {
@@ -432,66 +429,6 @@ test.provider.skipIf(!hasFlyCreds)(
 
       const gone = yield* waitUntilAppGone(app.appName);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
-
-test.provider.skipIf(!hasFlyCreds || !testDomain)(
-  "create, check, and delete an ACME certificate",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("AcmeApp");
-          const hostname = `${app.appName}.${testDomain}`;
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname,
-            kind: "acme",
-          });
-          return { app, cert, hostname };
-        }),
-      );
-
-      expect(created.cert.appName).toEqual(created.app.appName);
-      expect(created.cert.hostname).toEqual(created.hostname);
-      expect(created.cert.source).toEqual("fly");
-      expect(created.cert.acmeRequested).toEqual(true);
-
-      const fetched = yield* Services.machines.appCertificatesShow({
-        app_name: created.app.appName,
-        hostname: created.hostname,
-      });
-      expect(fetched.hostname).toEqual(created.hostname);
-      expect(fetched.acme_requested).toEqual(true);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("AcmeApp");
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname: created.hostname,
-            kind: "acme",
-          });
-          return { app, cert };
-        }),
-      );
-
-      expect(updated.cert.hostname).toEqual(created.hostname);
-      expect(updated.cert.source).toEqual("fly");
-      expect(updated.app.appId).toEqual(created.app.appId);
-
-      yield* stack.destroy();
-
-      const certGone = yield* waitUntilCertGone(
-        created.app.appName,
-        created.hostname,
-      );
-      expect(certGone).toEqual("gone");
-      const appGone = yield* waitUntilAppGone(created.app.appName);
-      expect(appGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

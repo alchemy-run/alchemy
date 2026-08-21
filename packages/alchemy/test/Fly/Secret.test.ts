@@ -15,8 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const VALUE_A = Redacted.make("alchemy-secret-a");
 const VALUE_B = Redacted.make("alchemy-secret-b");
 
@@ -48,7 +46,7 @@ const waitAppGone = (appName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and delete a secret",
   (stack) =>
     Effect.gen(function* () {
@@ -118,7 +116,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when name changes",
   (stack) =>
     Effect.gen(function* () {
@@ -180,7 +178,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "list enumerates the deployed secret",
   (stack) =>
     Effect.gen(function* () {

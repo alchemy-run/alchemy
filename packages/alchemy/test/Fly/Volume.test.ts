@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
   Services.machines
     .volumesGetById({
@@ -57,7 +55,7 @@ const waitUntilMachineGone = (appName: string, machineId: string) =>
       }),
     );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, extend, and delete a mounted disk",
   (stack) =>
     Effect.gen(function* () {
@@ -143,7 +141,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace disks when the machine region changes",
   (stack) =>
     Effect.gen(function* () {
@@ -204,7 +202,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "count creates one volume per replica",
   (stack) =>
     Effect.gen(function* () {

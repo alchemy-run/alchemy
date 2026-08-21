@@ -1,14 +1,13 @@
 import * as Fly from "alchemy/Fly";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { API_PORT, Data, Site } from "./shared.ts";
 
 /**
- * HTTP Service that attaches a Tigris bucket and serves the bucket
- * name (never the access key).
+ * HTTP Service that puts and gets an object on a Tigris bucket via
+ * the S3 API.
  */
 export default class Api extends Fly.Service<Api>()(
   "Api",
@@ -20,26 +19,33 @@ export default class Api extends Fly.Service<Api>()(
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
   },
   Effect.gen(function* () {
-    yield* Fly.AttachBucket(Data);
+    const putObject = yield* Fly.PutObject(Data);
+    const getObject = yield* Fly.GetObject(Data);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://service").pathname;
-        const bucket = yield* Config.redacted("BUCKET_NAME").pipe(
-          Effect.orElseSucceed(() => Redacted.make("")),
-        );
-        const name = Redacted.value(bucket);
         if (path === "/health") {
-          return yield* HttpServerResponse.json({
-            ok: name.length > 0,
-          });
+          return yield* HttpServerResponse.json({ ok: true });
         }
+        yield* putObject({
+          Key: "hello.txt",
+          Body: "hello-from-tigris",
+          ContentType: "text/plain",
+        }).pipe(Effect.orDie);
+        const obj = yield* getObject({ Key: "hello.txt" }).pipe(Effect.orDie);
+        const text =
+          obj.Body === undefined
+            ? ""
+            : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(
+                Effect.orDie,
+              );
         return yield* HttpServerResponse.json({
-          ok: name.length > 0,
-          bucket: name,
+          ok: text === "hello-from-tigris",
+          text,
         });
       }),
     };
-  }).pipe(Effect.provide(Fly.AttachBucketLive)),
+  }).pipe(Effect.provide([Fly.PutObjectHttp, Fly.GetObjectHttp])),
 ) {}

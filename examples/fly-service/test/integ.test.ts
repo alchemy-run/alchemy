@@ -14,8 +14,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const fetchOk = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
@@ -32,18 +30,16 @@ const fetchOk = (url: string) =>
     );
   });
 
-const stack = hasFlyCreds
-  ? beforeAll(deploy(Stack), { timeout: 300_000 })
-  : null;
+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
 
-afterAll.skipIf(!hasFlyCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 180_000,
 });
 
-test.skipIf(!hasFlyCreds)(
+test(
   "deploys Api + Worker and serves /health over fly.dev",
   Effect.gen(function* () {
-    const out = yield* stack!;
+    const out = yield* stack;
     expect(out.appName).toBeString();
     expect(out.apiUrl).toBe(`https://${out.appName}.fly.dev`);
     expect(out.ip).toBeString();
@@ -60,10 +56,10 @@ test.skipIf(!hasFlyCreds)(
   { timeout: 180_000 },
 );
 
-test.skipIf(!hasFlyCreds)(
+test(
   "Fly.Secret is injected as env and present on /secret",
   Effect.gen(function* () {
-    const out = yield* stack!;
+    const out = yield* stack;
     const response = yield* fetchOk(`${out.apiUrl}/secret`);
     expect(response.status).toBe(200);
     const body = (yield* response.json) as { ok: boolean; name: string };

@@ -274,8 +274,8 @@ The [tutorial](/fly/tutorial/part-2) builds a Service step by step.
 hibernate — no parent App, no Docker image.
 [Regions](/fly/compute/regions) lists codes and how Volumes follow.
 [Volumes](/fly/data/volumes) covers `MountVolume`.
-[Postgres](/fly/data/postgres) attaches as `DATABASE_URL`.
-[Redis](/fly/data/redis) attaches as `REDIS_URL`.
-[Tigris](/fly/data/tigris) attaches as `AWS_*` / `BUCKET_NAME`.
+[Postgres](/fly/data/postgres) binds with `ConnectPostgres`.
+[Redis](/fly/data/redis) binds with `ReadWriteRedis`.
+[Tigris](/fly/data/tigris) binds with `PutObject` / `GetObject`.
 [Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.

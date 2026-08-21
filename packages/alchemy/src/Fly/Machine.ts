@@ -13,6 +13,7 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
+import { toEnvRecord } from "./hosted.ts";
 import {
   createFlyResourceName,
   diffMachineMetadata,
@@ -634,12 +635,7 @@ const compactRecord = (
     ),
   );
 
-const toEnv = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([key, value]) =>
-      value === undefined || value === null ? [] : [[key, String(value)]],
-    ),
-  );
+const toEnv = toEnvRecord;
 
 const resolveMachineName = (
   id: string,

@@ -13,8 +13,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const fetchOk = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
@@ -31,18 +29,16 @@ const fetchOk = (url: string) =>
     );
   });
 
-const stack = hasFlyCreds
-  ? beforeAll(deploy(Stack), { timeout: 300_000 })
-  : null;
+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
 
-afterAll.skipIf(!hasFlyCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 180_000,
 });
 
-test.skipIf(!hasFlyCreds)(
-  "attaches a Tigris bucket and serves its name",
+test(
+  "puts and gets an object on Tigris over HTTP",
   Effect.gen(function* () {
-    const out = yield* stack!;
+    const out = yield* stack;
     expect(out.addOnId).toBeString();
     expect(out.bucketName).toBeString();
     expect(out.apiUrl).toBe(`https://${out.appName}.fly.dev`);
@@ -52,9 +48,9 @@ test.skipIf(!hasFlyCreds)(
 
     const response = yield* fetchOk(`${out.apiUrl}/`);
     expect(response.status).toBe(200);
-    const body = (yield* response.json) as { ok: boolean; bucket: string };
+    const body = (yield* response.json) as { ok: boolean; text: string };
     expect(body.ok).toBe(true);
-    expect(body.bucket).toBe(out.bucketName);
+    expect(body.text).toBe("hello-from-tigris");
   }),
   { timeout: 180_000 },
 );

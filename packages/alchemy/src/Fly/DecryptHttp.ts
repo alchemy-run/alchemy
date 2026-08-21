@@ -6,6 +6,9 @@ import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { Decrypt, type DecryptRequest } from "./Decrypt.ts";
 import {
+  base64ToBytes,
+  bytesToBase64,
+  flyKmsPost,
   fromByteList,
   makeHttpSecretKeyBinding,
   toByteList,
@@ -33,6 +36,27 @@ export const DecryptHttp = Layer.effect(
     makeHttpSecretKeyBinding({
       makeClient: (auth, appName, secretName) =>
         Effect.fn("Fly.Decrypt")(function* (request: DecryptRequest) {
+          if (globalThis.__ALCHEMY_RUNTIME__) {
+            const res = yield* flyKmsPost(
+              yield* appName,
+              yield* secretName,
+              "decrypt",
+              {
+                ciphertext: bytesToBase64(request.ciphertext),
+                associated_data:
+                  request.associatedData === undefined
+                    ? undefined
+                    : bytesToBase64(request.associatedData),
+              },
+            );
+            return {
+              plaintext: Redacted.make(
+                base64ToBytes(
+                  typeof res.plaintext === "string" ? res.plaintext : undefined,
+                ),
+              ),
+            };
+          }
           const res = yield* auth.authorize(
             machines.secretkeyDecrypt({
               app_name: yield* appName,

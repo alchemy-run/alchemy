@@ -1,11 +1,16 @@
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
 import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -13,8 +18,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
 
 const waitUntilClusterGone = (clusterId: string) =>
   Services.mpg.getClusterById({ id: clusterId }).pipe(
@@ -66,7 +69,7 @@ const secretNames = (appName: string) =>
       ),
     );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "createCluster with an invalid region is a typed BadRequest",
   (stack) =>
     Effect.gen(function* () {
@@ -91,7 +94,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, attach, list, and destroy a managed postgres cluster",
   (stack) =>
     Effect.gen(function* () {
@@ -139,14 +142,7 @@ test.provider.skipIf(!hasFlyCreds)(
       );
       expect(updated.db.clusterId).toEqual(created.db.clusterId);
       expect(updated.db.name).toEqual(created.db.name);
-
-      yield* Fly.attachPostgresSecrets(
-        created.app.appName,
-        created.db.clusterId,
-      );
-
-      const names = yield* secretNames(created.app.appName);
-      expect(names).toContain("DATABASE_URL");
+      expect(created.db.pooledConnectionUri.length).toBeGreaterThan(0);
 
       const provider = yield* Provider.findProvider(Fly.Postgres);
       const all = yield* provider.list();
@@ -160,6 +156,117 @@ test.provider.skipIf(!hasFlyCreds)(
       const clusterGone = yield* waitUntilClusterGone(created.db.clusterId);
       expect(clusterGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(created.app.appName);
+      expect(appGone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "applies migrations and import files",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-fly-pg-migrations-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_markers.sql"),
+        `CREATE TABLE IF NOT EXISTS alchemy_fly_markers (
+  id text PRIMARY KEY,
+  value text NOT NULL
+);`,
+      );
+      const seedDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-fly-pg-seed-",
+      });
+      const seedPath = path.join(seedDir, "seed.sql");
+      yield* fs.writeFileString(
+        seedPath,
+        `INSERT INTO alchemy_fly_markers (id, value)
+VALUES ('health', 'ok')
+ON CONFLICT (id) DO NOTHING;`,
+      );
+      const hashes = yield* hashMigrations(migrationsDir);
+
+      yield* stack.destroy();
+
+      const db = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Fly.Postgres("Migrated", {
+            region: "iad",
+            plan: "basic",
+            volumeSizeGb: 10,
+            migrations: migrationsDir,
+            importFiles: [seedPath],
+          });
+        }),
+      );
+
+      expect(db.migrationsTable).toEqual("__alchemy_migrations");
+      expect(Object.keys(db.migrationsHashes).sort()).toEqual(
+        Object.keys(hashes).sort(),
+      );
+      expect(db.importHashes[seedPath]).toBeDefined();
+      expect(db.pooledConnectionUri.length).toBeGreaterThan(0);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilClusterGone(db.clusterId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "a Service connects and SELECTs through ConnectPostgres",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* MpgSite;
+          const db = yield* Db;
+          const ip = yield* MpgIp;
+          const api = yield* PostgresApi;
+          return { app, db, ip, api };
+        }),
+      );
+
+      expect(deployed.db.clusterId).toEqual(expect.any(String));
+      expect(deployed.api.url).toEqual(
+        `https://${deployed.app.appName}.fly.dev`,
+      );
+
+      const names = yield* secretNames(deployed.app.appName);
+      expect(names).toContain("DATABASE_URL");
+
+      const untilOk = <A, E>(effect: Effect.Effect<A, E>) =>
+        effect.pipe(
+          Effect.retry({
+            schedule: Schedule.spaced("4 seconds"),
+            times: 10,
+          }),
+        );
+
+      const health = yield* untilOk(
+        HttpClient.get(`${deployed.api.url}/health`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(new Error(`api returned ${res.status}`)),
+          ),
+          Effect.map((value) => value as { ok: boolean }),
+        ),
+      );
+      expect(health.ok).toEqual(true);
+
+      yield* stack.destroy();
+
+      const clusterGone = yield* waitUntilClusterGone(deployed.db.clusterId);
+      expect(clusterGone).toEqual("gone");
+      const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },

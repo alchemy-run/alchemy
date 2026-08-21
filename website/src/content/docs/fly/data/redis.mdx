@@ -1,13 +1,13 @@
 ---
 title: Redis
-description: Managed Upstash Redis. Attach it to a Service as REDIS_URL.
+description: Managed Upstash Redis. Bind Fly.ReadRedis / WriteRedis / ReadWriteRedis on a Service.
 ---
 
 [`Fly.Redis`](/providers/fly/redis) is managed Upstash Redis in a
-Fly org. Create the database, then `Attach` it on a
-[Service](/fly/compute/services) so Fly writes `REDIS_URL` as an
-App secret. Redis is not reachable from CI — ping it from the
-Service.
+Fly org. Bind [`ReadWriteRedis`](/providers/fly/readwriteredis) on a
+[Service](/fly/compute/services). Alchemy writes `REDIS_URL` as an
+App secret and the runtime client uses it internally. Redis is not
+reachable from CI — drive it over HTTP.
 
 ## Create Redis
 
@@ -45,15 +45,12 @@ The primary region is immutable. The old database is deleted first
 because the name cannot exist twice.
 :::
 
-## Attach to a Service
+## Bind from a Service
 
-Yield `Fly.Attach` in Service init. Provide `AttachLive`. Alchemy
-writes `REDIS_URL` as an App secret. Read it at runtime with
-`Config.redacted("REDIS_URL")`.
+Yield `Fly.ReadWriteRedis` (or `ReadRedis` / `WriteRedis`) in
+Service init. Provide the matching `*Http` layer.
 
 ```typescript
-import * as Config from "effect/Config";
-import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const Cache = Fly.Redis("Cache");
@@ -62,22 +59,17 @@ export default class Api extends Fly.Service<Api>()(
   "Api",
   { app: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    yield* Fly.Attach(Cache);
+    const cache = yield* Fly.ReadWriteRedis(Cache);
     return {
       fetch: Effect.gen(function* () {
-        const redisUrl = yield* Config.redacted("REDIS_URL");
-        return HttpServerResponse.text(
-          Redacted.value(redisUrl) ? "ok" : "missing",
-        );
+        yield* cache.set("marker", "hello");
+        const value = yield* cache.get("marker");
+        return HttpServerResponse.json({ value });
       }),
     };
-  }).pipe(Effect.provide(Fly.AttachLive)),
+  }).pipe(Effect.provide(Fly.ReadWriteRedisHttp)),
 ) {}
 ```
-
-`Config.redacted("REDIS_URL")` in init reads the deployer's `.env`.
-For a Fly-owned vault value, Attach the database and read
-`REDIS_URL` from `fetch`.
 
 ## Eviction
 
@@ -113,14 +105,14 @@ const cache = yield* Fly.Redis("Cache", {
 ```
 
 :::caution[Fixed plans are billed]
-Gate live tests of fixed plans with `FLY_TEST_REDIS_FIXED=1`.
+Fixed plans are billed monthly. Prefer omitting `plan` unless you
+need a specific size.
 :::
 
 ## Where next
 
 [Regions](/fly/compute/regions) lists codes. Default primary is
 `iad`.
-[Services](/fly/compute/services) is the Machine that reads
-`REDIS_URL`.
-[Secrets](/fly/data/secrets) covers `Config.redacted`.
+[Services](/fly/compute/services) is the Machine that binds
+`ReadWriteRedis`.
 The [`Redis` reference](/providers/fly/redis) lists every prop.

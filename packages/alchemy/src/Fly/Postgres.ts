@@ -13,12 +13,22 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "../SQL/Migrations/index.ts";
+import { hashImports } from "../SQL/SqlFile.ts";
+import { recordsEqual } from "../Util/equal.ts";
 import { resolveOrgSlug } from "./Environment.ts";
 import {
   createFlyAppName,
   matchesAlchemyPhysicalName,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
+import { runImports, runPgMigrations } from "./PostgresMigrations.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DEFAULT_POSTGRES_PLAN = "basic";
@@ -76,6 +86,28 @@ export interface PostgresProps {
    * @default 16
    */
   pgMajorVersion?: number | string;
+  /**
+   * SQL migrations to apply against the cluster. Accepts a directory
+   * path, a `Drizzle.Schema` resource, or `{ dir, table? }`.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy: the old tool's applied history is
+   * copied into Alchemy's table and the old table is left frozen. No
+   * baselining required.
+   *
+   * Applied over the **direct** (non-PgBouncer) URI. Fly Managed Postgres
+   * is reachable on the org private network; deploy-time apply needs a
+   * route to that network (a WireGuard peer, `fly mpg proxy`, or a
+   * machine already on 6PN).
+   */
+  migrations?: MigrationsInput;
+  /**
+   * Paths to additional `.sql` files to apply after migrations. Each file
+   * is hashed; only files whose contents change are re-applied on
+   * subsequent deploys.
+   */
+  importFiles?: string[];
 }
 
 export type Postgres = Resource<
@@ -104,6 +136,18 @@ export type Postgres = Resource<
     replicas: number | undefined;
     /** Internal MPG cluster hash id, if the API returned one. */
     mpgdClusterId: string | undefined;
+    /**
+     * Direct (non-PgBouncer) Postgres URI. Use this for migrations and
+     * session-scoped features. Pass to `Drizzle.Postgres` from a laptop
+     * Action; from a {@link Service} prefer {@link ConnectPostgres}.
+     */
+    connectionUri: string;
+    /** Pooled PgBouncer URI. This is `DATABASE_URL` on an attached App. */
+    pooledConnectionUri: string;
+    migrationsDir: string | undefined;
+    migrationsTable: string | undefined;
+    migrationsHashes: Record<string, string>;
+    importHashes: Record<string, string>;
   },
   never,
   Providers
@@ -193,30 +237,55 @@ export type Postgres = Resource<
  * Flipping `postgis` later is ignored.
  * :::
  *
- * @section Attach
- * {@link AttachPostgres} writes `DATABASE_URL` (and
- * `DIRECT_DATABASE_URL` if present) as App secrets. A {@link Service}
- * reads them with `Config.redacted("DATABASE_URL")`. Do not pass
- * `env: {}`.
+ * @section Connect from a Service
+ * Yield `ConnectPostgres` inside init. Provide
+ * {@link ConnectPostgresHttp}. Pass `conn.connectionString` to
+ * `Drizzle.Postgres` or `SQL.Postgres`.
  *
- * @example Attach from a Service
+ * @example Bind and query
  * ```typescript
- * import * as Config from "effect/Config";
+ * import * as Drizzle from "alchemy/Drizzle/Postgres";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     yield* Fly.AttachPostgres(Db);
+ *     const conn = yield* Fly.ConnectPostgres(Db);
+ *     const db = yield* Drizzle.Postgres(conn.connectionString);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const databaseUrl = yield* Config.redacted("DATABASE_URL");
- *         return HttpServerResponse.text("ok");
+ *         const rows = yield* db.execute("select 1 as ok");
+ *         return HttpServerResponse.json({ rows });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Fly.AttachPostgresLive)),
+ *   }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
  * ) {}
+ * ```
+ *
+ * @section Migrations
+ * Pass a directory, `{ dir, table? }`, or a `Drizzle.Schema` resource.
+ * Alchemy applies pending files on deploy over the direct URI.
+ *
+ * @example Directory
+ * ```typescript
+ * const db = yield* Fly.Postgres("Db", {
+ *   region: "iad",
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
+ * @example Drizzle.Schema
+ * ```typescript
+ * const schema = yield* Drizzle.Schema("app-schema", {
+ *   schema: "./src/schema.ts",
+ *   out: "./migrations",
+ * });
+ *
+ * const db = yield* Fly.Postgres("Db", {
+ *   region: "iad",
+ *   migrations: schema,
+ * });
  * ```
  */
 export const Postgres = Resource<Postgres>("Fly.Postgres");
@@ -265,9 +334,21 @@ export const unwrapSensitive = (
   return Redacted.isRedacted(value) ? Redacted.value(value) : value;
 };
 
+type AttrFallback = {
+  name?: string;
+  orgSlug?: string;
+  connectionUri?: string;
+  pooledConnectionUri?: string;
+  migrationsDir?: string | undefined;
+  migrationsTable?: string | undefined;
+  migrationsHashes?: Record<string, string>;
+  importHashes?: Record<string, string>;
+};
+
 const toAttrs = (
   cluster: ManagedCluster,
-  fallback?: { name?: string; orgSlug?: string },
+  fallback?: AttrFallback,
+  credentials?: ClusterCredentials,
 ): Postgres["Attributes"] => ({
   clusterId: cluster.id ?? "",
   name: cluster.name ?? fallback?.name ?? "",
@@ -280,6 +361,14 @@ const toAttrs = (
   engine: cluster.engine,
   replicas: cluster.replicas,
   mpgdClusterId: cluster.mpgd_cluster_id,
+  connectionUri:
+    directUri(cluster, credentials) ?? fallback?.connectionUri ?? "",
+  pooledConnectionUri:
+    credentialsUri(credentials) ?? fallback?.pooledConnectionUri ?? "",
+  migrationsDir: fallback?.migrationsDir,
+  migrationsTable: fallback?.migrationsTable,
+  migrationsHashes: fallback?.migrationsHashes ?? {},
+  importHashes: fallback?.importHashes ?? {},
 });
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
@@ -346,6 +435,25 @@ const waitUntilReady = (clusterId: string) =>
       schedule: backoff,
     }),
     Effect.catchTag("Fly.PostgresPending", () => getLiveCluster(clusterId)),
+  );
+
+const waitForCredentials = (clusterId: string) =>
+  getClusterResponse(clusterId).pipe(
+    Effect.flatMap((res) => {
+      const uri = credentialsUri(res?.credentials);
+      if (uri !== undefined && uri.length > 0) {
+        return Effect.succeed(res);
+      }
+      return Effect.fail(new PostgresCredentialsPending({ clusterId }));
+    }),
+    Effect.retry({
+      while: (e) => e._tag === "Fly.PostgresCredentialsPending",
+      times: 16,
+      schedule: backoff,
+    }),
+    Effect.catchTag("Fly.PostgresCredentialsPending", () =>
+      getClusterResponse(clusterId),
+    ),
   );
 
 const waitUntilGone = (clusterId: string) =>
@@ -424,8 +532,8 @@ class PostgresCredentialsPending extends Data.TaggedError(
 
 /**
  * Write `DATABASE_URL` (and `DIRECT_DATABASE_URL` if present) onto an
- * App and record the MPG attachment. Called from {@link AttachPostgres}
- * and from tests after deploy.
+ * App and record the MPG attachment. Called from {@link Service}
+ * reconcile when {@link ConnectPostgres} binds a cluster.
  */
 export const attachPostgresSecrets = Effect.fn(function* (
   appName: string,
@@ -477,6 +585,8 @@ export const attachPostgresSecrets = Effect.fn(function* (
     );
 });
 
+const rootDir = Effect.sync(() => process.cwd());
+
 export const PostgresProvider = () =>
   Provider.succeed(Postgres, {
     stables: ["clusterId", "name", "region", "orgSlug"],
@@ -494,21 +604,40 @@ export const PostgresProvider = () =>
       if (nameChanged || regionChanged || orgChanged) {
         return { action: "replace" as const };
       }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update" as const };
+      }
+      if (news.importFiles?.length) {
+        const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
+        if (!recordsEqual(newHashes, output.importHashes ?? {})) {
+          return { action: "update" as const };
+        }
+      }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const found =
         output?.clusterId !== undefined && output.clusterId.length > 0
-          ? yield* getLiveCluster(output.clusterId)
+          ? yield* getClusterResponse(output.clusterId)
           : undefined;
-      if (found !== undefined) return toAttrs(found, output);
+      if (found?.data !== undefined) {
+        return toAttrs(found.data, output, found.credentials);
+      }
       const name = yield* resolveName(id, olds?.name, output?.name);
       const orgSlug =
         olds?.orgSlug ?? output?.orgSlug ?? (yield* resolveOrgSlug());
       const byName = yield* findByName(orgSlug, name);
       if (byName === undefined) return undefined;
-      const attrs = toAttrs(byName, { name, orgSlug });
+      const hydrated =
+        byName.id !== undefined
+          ? yield* getClusterResponse(byName.id)
+          : undefined;
+      const attrs = toAttrs(
+        hydrated?.data ?? byName,
+        { ...output, name, orgSlug },
+        hydrated?.credentials,
+      );
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(name) ? attrs : Unowned(attrs);
     }),
@@ -518,7 +647,15 @@ export const PostgresProvider = () =>
       const rows = yield* listOrgClusters(orgSlug);
       return rows.flatMap((cluster) => {
         if (!matchesAlchemyPhysicalName(cluster.name)) return [];
-        return [toAttrs(cluster, { orgSlug })];
+        return [
+          toAttrs(cluster, {
+            orgSlug,
+            migrationsDir: undefined,
+            migrationsTable: undefined,
+            migrationsHashes: {},
+            importHashes: {},
+          }),
+        ];
       });
     }),
 
@@ -582,7 +719,50 @@ export const PostgresProvider = () =>
         });
       }
 
-      return toAttrs(current, { name, orgSlug });
+      const observed = yield* waitForCredentials(current.id);
+      const cluster = observed?.data ?? current;
+      const credentials = observed?.credentials;
+      const migrationUri =
+        directUri(cluster, credentials) ?? credentialsUri(credentials);
+
+      const migrationsInput = migrationsInputOf(props);
+      if (
+        migrationsInput &&
+        (migrationUri === undefined || migrationUri.length === 0)
+      ) {
+        return yield* new PostgresCredentialsMissing({
+          clusterId: current.id,
+        });
+      }
+      const connectionUri =
+        migrationUri !== undefined ? Redacted.make(migrationUri) : undefined;
+      const migrations =
+        migrationsInput && connectionUri !== undefined
+          ? yield* runPgMigrations({
+              connectionUri,
+              input: migrationsInput,
+              stamped: stampedOf(output),
+            })
+          : undefined;
+      const importHashes =
+        props.importFiles?.length && connectionUri !== undefined
+          ? yield* runImports(
+              connectionUri,
+              props.importFiles,
+              yield* rootDir,
+              output?.importHashes ?? {},
+            )
+          : (output?.importHashes ?? {});
+
+      return {
+        ...toAttrs(cluster, { name, orgSlug, ...output }, credentials),
+        ...migrationsAttrs({
+          input: migrationsInput,
+          run: migrations,
+          output,
+        }),
+        importHashes,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {

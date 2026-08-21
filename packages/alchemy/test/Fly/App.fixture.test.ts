@@ -28,8 +28,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(CredentialsFromEnv),
@@ -71,18 +69,16 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = hasFlyCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000 })
-  : null;
+const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 
-afterAll.skipIf(!hasFlyCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
 });
 
-test.skipIf(!hasFlyCreds)(
+test(
   "deploys an effectful app and serves over HTTP",
   Effect.gen(function* () {
-    const out = yield* stack!;
+    const out = yield* stack;
 
     expect(out.appName).toEqual(expect.any(String));
     expect(out.appName).toMatch(/^[a-z][a-z0-9-]*$/);

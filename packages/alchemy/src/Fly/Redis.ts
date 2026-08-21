@@ -7,12 +7,10 @@ import type {
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
-import * as Binding from "../Binding.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -22,13 +20,23 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DEFAULT_REDIS_REGION = "iad";
 export const REDIS_ADDON_TYPE = "upstash_redis";
 export const REDIS_PROVIDER = "upstash_redis";
 export const REDIS_URL_ENV = "REDIS_URL";
+
+export class RedisUrlMissing extends Data.TaggedError("Fly.RedisUrlMissing")<{
+  name: string;
+}> {}
+
+export class RedisCommandError extends Data.TaggedError(
+  "Fly.RedisCommandError",
+)<{
+  command: string;
+  cause: unknown;
+}> {}
 
 export interface RedisProps {
   /**
@@ -52,7 +60,7 @@ export interface RedisProps {
   /**
    * Add-on plan id, name, or display name from `addOnPlans`. Default is
    * the cheapest listed plan (free or pay-as-you-go). Fixed plans are
-   * billed — gate those tests with `FLY_TEST_REDIS_FIXED=1`.
+   * billed. Default tests use the cheapest listed plan.
    */
   plan?: string;
   /**
@@ -105,9 +113,11 @@ export type Redis = Resource<
 >;
 
 /**
- * Managed Upstash Redis in a Fly org. Create the database, then
- * {@link Attach} it on a {@link Service} so Fly writes `REDIS_URL` as an
- * App secret. Redis is not reachable from CI — ping it from the Service.
+ * Managed Upstash Redis in a Fly org. Bind {@link ReadRedis},
+ * {@link WriteRedis}, or {@link ReadWriteRedis} on a {@link Service}.
+ * Alchemy writes `REDIS_URL` as an App secret and the runtime client
+ * uses it internally. Redis is not reachable from CI — drive it over
+ * HTTP.
  *
  * @resource
  * @see https://fly.io/docs/upstash/redis/
@@ -148,15 +158,12 @@ export type Redis = Resource<
  * because the name cannot exist twice.
  * :::
  *
- * @section Attach to a Service
- * Yield {@link Attach} in Service init. Provide {@link AttachLive}.
- * Alchemy writes `REDIS_URL` as an App secret. Read it at runtime with
- * `Config.redacted("REDIS_URL")`.
+ * @section Bind from a Service
+ * Yield {@link ReadWriteRedis} (or {@link ReadRedis} / {@link WriteRedis})
+ * in Service init. Provide the matching `*Http` layer.
  *
- * @example Attach
+ * @example Read and write
  * ```typescript
- * import * as Config from "effect/Config";
- * import * as Redacted from "effect/Redacted";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * const Cache = Fly.Redis("Cache");
@@ -165,24 +172,17 @@ export type Redis = Resource<
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     yield* Fly.Attach(Cache);
+ *     const cache = yield* Fly.ReadWriteRedis(Cache);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const redisUrl = yield* Config.redacted("REDIS_URL");
- *         return HttpServerResponse.text(
- *           Redacted.value(redisUrl) ? "ok" : "missing",
- *         );
+ *         yield* cache.set("marker", "hello");
+ *         const value = yield* cache.get("marker");
+ *         return HttpServerResponse.json({ value });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Fly.AttachLive)),
+ *   }).pipe(Effect.provide(Fly.ReadWriteRedisHttp)),
  * ) {}
  * ```
- *
- * :::note
- * `Config.redacted("REDIS_URL")` in init reads the deployer's `.env`.
- * For a Fly-owned vault value, Attach the database and read
- * `REDIS_URL` from `fetch`.
- * :::
  *
  * @section Eviction
  * Enable eviction for cache workloads. Updated in place.
@@ -217,7 +217,8 @@ export type Redis = Resource<
  * ```
  *
  * :::caution[Fixed plans are billed]
- * Gate live tests of fixed plans with `FLY_TEST_REDIS_FIXED=1`.
+ * Fixed plans are billed monthly. Prefer omitting `plan` unless you
+ * need a specific size.
  * :::
  */
 export const Redis = Resource<Redis>("Fly.Redis");
@@ -552,15 +553,34 @@ const desiredOptions = (
  */
 export const attachRedisSecrets = Effect.fn(function* (
   appName: string,
-  attached: readonly { name: string }[],
+  attached: readonly { name: string; id?: string }[],
 ) {
   if (appName.length === 0 || attached.length === 0) return;
   for (const item of attached) {
     const name = item.name;
-    if (name.length === 0) continue;
-    const row = yield* findRedisAddOn({ name });
-    let url = unwrapSensitive(row?.publicUrl);
-    if ((url === undefined || url.length === 0) && row?.id !== undefined) {
+    const id = item.id;
+    if (name.length === 0 && (id === undefined || id.length === 0)) continue;
+    const row = yield* findRedisAddOn({ id, name }).pipe(
+      Effect.flatMap((found) =>
+        found === undefined
+          ? Effect.fail(
+              new RedisPending({
+                redisId: id ?? "",
+                status: "missing",
+              }),
+            )
+          : Effect.succeed(found),
+      ),
+      Effect.retry({
+        while: (error) => error._tag === "Fly.RedisPending",
+        times: 8,
+        schedule: backoff,
+      }),
+      Effect.catchTag("Fly.RedisPending", () => findRedisAddOn({ id, name })),
+    );
+    if (row === undefined) continue;
+    let url = unwrapSensitive(row.publicUrl);
+    if ((url === undefined || url.length === 0) && row.id !== undefined) {
       const detail = yield* Services.addons
         .addOn({ id: row.id })
         .pipe(
@@ -586,84 +606,6 @@ export const attachRedisSecrets = Effect.fn(function* (
     }
   }
 });
-
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
-  typeof value === "object" &&
-  value !== null &&
-  ((value as { Type?: string }).Type === "Fly.Service" ||
-    (value as { Type?: string }).Type === "Fly.Machine");
-
-/**
- * Runtime view of an attached Redis database: the env-var Fly injects.
- */
-export interface AttachedRedis {
-  /** Env-var name. Read with `Config.redacted("REDIS_URL")`. */
-  env: typeof REDIS_URL_ENV;
-}
-
-/**
- * Attach Upstash Redis to a {@link Service}. Writes `REDIS_URL` as an
- * App secret. Provide {@link AttachLive}.
- *
- * @binding
- *
- * @section Attach Redis
- * Yield `Attach` in init. Read `REDIS_URL` from `fetch`. Redis is not
- * reachable from CI.
- *
- * @example Bind REDIS_URL
- * ```typescript
- * import * as Config from "effect/Config";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
- *
- * export default class Api extends Fly.Service<Api>()(
- *   "Api",
- *   { app: Site, main: import.meta.url, port: 3000 },
- *   Effect.gen(function* () {
- *     yield* Fly.Attach(Cache);
- *     return {
- *       fetch: Effect.gen(function* () {
- *         const redisUrl = yield* Config.redacted("REDIS_URL");
- *         return HttpServerResponse.text("ok");
- *       }),
- *     };
- *   }).pipe(Effect.provide(Fly.AttachLive)),
- * ) {}
- * ```
- */
-export interface Attach extends Binding.Service<
-  Attach,
-  "Fly.Redis.Attach",
-  (redis: Redis) => Effect.Effect<AttachedRedis>
-> {}
-
-export const Attach = Binding.Service<Attach>("Fly.Redis.Attach");
-
-/**
- * Implementation layer for {@link Attach}. Provide it on the Service
- * Effect.
- *
- * @layer
- * @provides Fly.Redis.Attach
- */
-export const AttachLive = Layer.effect(
-  Attach,
-  Effect.succeed(
-    Effect.fn(function* (redis: Redis) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isFlyHost(host)) {
-          yield* host.bind`${redis}`({
-            redis: { name: redis.name },
-          });
-        }
-      }
-      return { env: REDIS_URL_ENV };
-    }),
-  ),
-);
 
 export const RedisProvider = () =>
   Provider.succeed(Redis, {

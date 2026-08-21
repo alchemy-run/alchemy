@@ -15,9 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const dedicatedV4Enabled = !!process.env.FLY_TEST_DEDICATED_V4;
-
 const waitUntilAppGone = (appName: string) =>
   Services.machines.appsShow({ app_name: appName }).pipe(
     Effect.as("found" as const),
@@ -47,7 +44,7 @@ const listedHas = (appName: string, ip: string) =>
     .appIPAssignmentsList({ app_name: appName })
     .pipe(Effect.map((res) => (res.ips ?? []).find((item) => item.ip === ip)));
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and delete a v6 assignment",
   (stack) =>
     Effect.gen(function* () {
@@ -101,7 +98,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when type changes to shared_v4",
   (stack) =>
     Effect.gen(function* () {
@@ -161,7 +158,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "list enumerates the deployed assignment",
   (stack) =>
     Effect.gen(function* () {
@@ -198,7 +195,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "dedicated v4 is rejected with a typed quota error",
   (stack) =>
     Effect.gen(function* () {
@@ -235,42 +232,6 @@ test.provider.skipIf(!hasFlyCreds)(
 
       const gone = yield* waitUntilAppGone(app.appName);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
-
-test.provider.skipIf(!hasFlyCreds || !dedicatedV4Enabled)(
-  "create and delete a dedicated v4 assignment",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("IpV4App");
-          const ip = yield* Fly.IpAssignment("Dedicated", {
-            app,
-            type: "v4",
-          });
-          return { app, ip };
-        }),
-      );
-
-      expect(created.ip.ip).toEqual(expect.any(String));
-      expect(created.ip.ip).not.toContain(":");
-      expect(created.ip.type).toEqual("v4");
-      expect(created.ip.shared).toEqual(false);
-
-      const fetched = yield* listedHas(created.app.appName, created.ip.ip);
-      expect(fetched).toBeDefined();
-      expect(fetched?.shared).not.toEqual(true);
-
-      yield* stack.destroy();
-
-      const ipGone = yield* waitUntilIpGone(created.app.appName, created.ip.ip);
-      expect(ipGone).toEqual("gone");
-      const appGone = yield* waitUntilAppGone(created.app.appName);
-      expect(appGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

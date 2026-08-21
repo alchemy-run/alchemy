@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const waitUntilGone = (appName: string, machineId: string) =>
   Services.machines
     .machinesShow({
@@ -34,7 +32,7 @@ const waitUntilGone = (appName: string, machineId: string) =>
       }),
     );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and delete a machine",
   (stack) =>
     Effect.gen(function* () {
@@ -134,7 +132,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when name changes",
   (stack) =>
     Effect.gen(function* () {
@@ -194,7 +192,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "list enumerates the deployed machine",
   (stack) =>
     Effect.gen(function* () {

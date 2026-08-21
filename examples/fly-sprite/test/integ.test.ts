@@ -13,8 +13,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const fetchOk = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
@@ -31,18 +29,16 @@ const fetchOk = (url: string) =>
     );
   });
 
-const stack = hasFlyCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000 })
-  : null;
+const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 
-afterAll.skipIf(!hasFlyCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
 });
 
-test.skipIf(!hasFlyCreds)(
+test(
   "deploys an effectful Sprite and serves HTTP",
   Effect.gen(function* () {
-    const out = yield* stack!;
+    const out = yield* stack;
     expect(out.spriteId).toBeString();
     expect(out.name).toBeString();
     expect(out.url).toBeString();

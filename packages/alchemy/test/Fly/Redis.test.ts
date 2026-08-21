@@ -7,7 +7,12 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import RedisApi, { Cache, RedisSite } from "./fixtures/redis-api.ts";
+import RedisApi, {
+  Cache,
+  REDIS_VALUE,
+  RedisIp,
+  RedisSite,
+} from "./fixtures/redis-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -15,8 +20,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
 
 const waitUntilRedisGone = (redisId: string, name: string) =>
   Fly.findRedisAddOn({ id: redisId, name }).pipe(
@@ -41,7 +44,7 @@ const waitUntilAppGone = (appName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "lists cheapest redis plan",
   (stack) =>
     Effect.gen(function* () {
@@ -60,7 +63,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update eviction, and delete redis",
   (stack) =>
     Effect.gen(function* () {
@@ -121,7 +124,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when name changes",
   (stack) =>
     Effect.gen(function* () {
@@ -164,7 +167,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when primaryRegion changes",
   (stack) =>
     Effect.gen(function* () {
@@ -205,8 +208,8 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
-  "attach writes REDIS_URL and a Service can ping redis",
+test.provider(
+  "a Service pings Redis and round-trips a key",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -215,10 +218,7 @@ test.provider.skipIf(!hasFlyCreds)(
         Effect.gen(function* () {
           const app = yield* RedisSite;
           const cache = yield* Cache;
-          const ip = yield* Fly.IpAssignment("Shared", {
-            app,
-            type: "shared_v4",
-          });
+          const ip = yield* RedisIp;
           const api = yield* RedisApi;
           return { app, cache, ip, api };
         }),
@@ -239,19 +239,50 @@ test.provider.skipIf(!hasFlyCreds)(
       expect(redisUrl).toBeDefined();
       expect(redisUrl?.digest).toEqual(expect.any(String));
 
-      const body = yield* HttpClient.get(`${deployed.api.url}/`).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+      const untilOk = <A, E>(effect: Effect.Effect<A, E>) =>
+        effect.pipe(
+          Effect.retry({
+            schedule: Schedule.spaced("4 seconds"),
+            times: 10,
+          }),
+        );
+
+      const ping = yield* untilOk(
+        HttpClient.get(`${deployed.api.url}/`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(new Error(`api returned ${res.status}`)),
+          ),
+          Effect.map((value) => value as { pong: boolean }),
         ),
-        Effect.retry({
-          schedule: Schedule.spaced("4 seconds"),
-          times: 10,
-        }),
-        Effect.map((value) => value as { pong: boolean }),
       );
-      expect(body.pong).toEqual(true);
+      expect(ping.pong).toEqual(true);
+
+      const written = yield* untilOk(
+        HttpClient.get(`${deployed.api.url}/set`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(new Error(`api returned ${res.status}`)),
+          ),
+          Effect.map((value) => value as { ok: boolean }),
+        ),
+      );
+      expect(written.ok).toEqual(true);
+
+      const read = yield* untilOk(
+        HttpClient.get(`${deployed.api.url}/get`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(new Error(`api returned ${res.status}`)),
+          ),
+          Effect.map((value) => value as { ok: boolean; value: string }),
+        ),
+      );
+      expect(read.ok).toEqual(true);
+      expect(read.value).toEqual(REDIS_VALUE);
 
       yield* stack.destroy();
 
@@ -263,10 +294,10 @@ test.provider.skipIf(!hasFlyCreds)(
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create redis on a fixed plan",
   (stack) =>
     Effect.gen(function* () {

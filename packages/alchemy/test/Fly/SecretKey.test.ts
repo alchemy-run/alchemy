@@ -15,8 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 // Deterministic HMAC material. Never logged.
 const HMAC_A: ReadonlyArray<number> = Array.from(
   { length: 32 },
@@ -59,7 +57,7 @@ const waitAppGone = (appName: string) =>
  * distilled tag stays pinned. A missing app is `NotFound` when the token
  * can use KMS; otherwise the typed entitlement tag is asserted.
  */
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "secretkeysList probe asserts a typed tag",
   () =>
     Effect.gen(function* () {
@@ -76,7 +74,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and delete a secret key",
   (stack) =>
     Effect.gen(function* () {
@@ -141,7 +139,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "generate a nacl_sign key",
   (stack) =>
     Effect.gen(function* () {
@@ -176,7 +174,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when name changes",
   (stack) =>
     Effect.gen(function* () {
@@ -236,7 +234,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "list enumerates the deployed secret key",
   (stack) =>
     Effect.gen(function* () {

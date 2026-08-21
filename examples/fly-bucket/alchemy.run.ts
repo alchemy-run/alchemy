@@ -1,8 +1,8 @@
 /**
  * Fly.io Tigris bucket attached to an HTTP Service.
  *
- * Attach writes AWS_* / BUCKET_NAME App secrets. The Service reads
- * them with Config.redacted — never env: {}.
+ * The Service binds Fly.PutObject / Fly.GetObject and talks to Tigris
+ * over the S3 API.
  */
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";

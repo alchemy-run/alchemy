@@ -5,7 +5,6 @@ import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Box from "./fixtures/sprite.ts";
@@ -16,8 +15,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
 
 const waitUntilGone = (name: string) =>
   Services.sprites.getSprite({ name }).pipe(
@@ -46,28 +43,21 @@ const fetchSpriteJson = (url: string) =>
     Effect.map((value) => value as { ok: boolean; text?: string }),
   );
 
-test.provider.skipIf(!hasFlyCreds)(
-  "listSprites succeeds or returns typed SpritesNotEnabled",
+test.provider(
+  "listSprites returns sprites",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const listed = yield* Effect.result(Services.sprites.listSprites({}));
-      if (Result.isFailure(listed)) {
-        expect(listed.failure._tag).toEqual("SpritesNotEnabled");
-        expect(`${listed.failure.message ?? ""}`).toEqual(
-          expect.stringMatching(/sprites not enabled/i),
-        );
-      } else {
-        expect(Array.isArray(listed.success.sprites)).toBe(true);
-      }
+      const listed = yield* Services.sprites.listSprites({});
+      expect(Array.isArray(listed.sprites)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "list enumerates alchemy-owned sprites",
   (stack) =>
     Effect.gen(function* () {
@@ -82,20 +72,11 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, serve, exec, checkpoint, and delete a sprite",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const listed = yield* Effect.result(Services.sprites.listSprites({}));
-      if (
-        Result.isFailure(listed) &&
-        listed.failure._tag === "SpritesNotEnabled"
-      ) {
-        yield* stack.destroy();
-        return;
-      }
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {

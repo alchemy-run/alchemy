@@ -41,12 +41,12 @@ the same TypeScript program.
   pass `mounts` on a Machine. A Volume attaches to **one** Machine;
   `count: N` creates N disks, not one shared disk.
 - **[Postgres](/fly/data/postgres)** — billed Managed Postgres.
-  Attach it to a Service; Fly writes `DATABASE_URL`.
-- **[Redis](/fly/data/redis)** — Upstash Redis. Attach it to a
-  Service; Fly writes `REDIS_URL`.
+  Bind `ConnectPostgres` on a Service; pass the connection string
+  to Drizzle or SQL. `migrations` is the same surface as Neon.
+- **[Redis](/fly/data/redis)** — Upstash Redis. Bind
+  `ReadWriteRedis` on a Service.
 - **[Tigris](/fly/data/tigris)** — S3-compatible object storage
-  (`Fly.Bucket`). Attach it to a Service; Fly writes `AWS_*` and
-  `BUCKET_NAME`.
+  (`Fly.Bucket`). Bind `PutObject` / `GetObject` on a Service.
 
 ## Secrets
 
@@ -70,9 +70,9 @@ the same TypeScript program.
 | A raw container              | [Machine](/fly/compute/machines) with an `image`                          |
 | A background worker          | [Service](/fly/compute/services) with `ServerHost.run`                    |
 | Persistent disk              | [MountVolume](/fly/data/volumes) or Machine `mounts`                      |
-| Managed Postgres             | [Postgres](/fly/data/postgres) + `AttachPostgres`                         |
-| Upstash Redis                | [Redis](/fly/data/redis) + `Attach`                                       |
-| Object storage               | [Tigris](/fly/data/tigris) (`Fly.Bucket`) + `AttachBucket`                |
+| Managed Postgres             | [Postgres](/fly/data/postgres) + `ConnectPostgres`                        |
+| Upstash Redis                | [Redis](/fly/data/redis) + `ReadRedis` / `WriteRedis` / `ReadWriteRedis`  |
+| Object storage               | [Tigris](/fly/data/tigris) + `PutObject` / `GetObject`                     |
 | N replicas behind fly.dev    | Service `count`, or more [Machine](/fly/compute/machines) resources       |
 | Restore a disk               | [VolumeSnapshot](/fly/data/volumes#snapshots) + mount `snapshotId`        |
 | Config / API tokens          | [`Config.redacted`](/fly/data/secrets). [`Fly.Secret`](/fly/data/secrets) when Fly should own it |

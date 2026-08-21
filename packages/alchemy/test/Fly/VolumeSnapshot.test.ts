@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
   Services.machines
     .volumesGetById({
@@ -72,7 +70,7 @@ const box = (id: string, app: Fly.App, name: string) =>
     mounts: [{ path: "/data", sizeGb: 1, autoBackupEnabled: false }],
   });
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and destroy a volume snapshot",
   (stack) =>
     Effect.gen(function* () {
@@ -153,7 +151,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 180_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when the volume changes",
   (stack) =>
     Effect.gen(function* () {

@@ -31,7 +31,8 @@ export const ListSecretsHttp = Layer.effect(
           return yield* auth.authorize(
             machines.secretsList({
               app_name: yield* appName,
-              show_secrets: globalThis.__ALCHEMY_RUNTIME__ === true,
+              // Names are enough for the binding; plaintext is env-injected.
+              show_secrets: false,
             }),
           );
         }),

@@ -3,23 +3,19 @@ import type { AddOnsResponseEdgesItemNode } from "@distilled.cloud/fly-io/addons
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
-import * as Binding from "../Binding.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags } from "../Tags.ts";
-import type { App } from "./App.ts";
 import { resolveOrgSlug } from "./Environment.ts";
 import { createFlyAppName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 
-/** Env-var names Fly.Attach writes onto an App (same as `fly storage create`). */
+/** Env-var names Tigris HTTP bindings write onto an App (same as `fly storage create`). */
 export const BUCKET_SECRET_NAMES = [
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
@@ -205,41 +201,35 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Attach to an App
- * {@link AttachBucket} writes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
- * `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, and `BUCKET_NAME` onto the
- * {@link App} as {@link Secret}s. A {@link Service} reads them with
- * `Config.redacted`. Do not pass `env: { ... }`.
+ * @section Put and get objects
+ * Tigris speaks the S3 API. Bind {@link PutObject} / {@link GetObject}
+ * (and the other S3 object ops) in Service init. Alchemy injects the
+ * Tigris endpoint and credentials; you never read `AWS_*` yourself.
  *
- * @example Attach from a Service
+ * @example Put an object from a Service
  * ```typescript
- * import * as Config from "effect/Config";
- * import * as Redacted from "effect/Redacted";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     yield* Fly.AttachBucket(Data);
+ *     const putObject = yield* Fly.PutObject(Data);
+ *     const getObject = yield* Fly.GetObject(Data);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const bucket = yield* Config.redacted("BUCKET_NAME");
- *         return HttpServerResponse.text(Redacted.value(bucket));
+ *         yield* putObject({
+ *           Key: "hello.txt",
+ *           Body: "hello",
+ *           ContentType: "text/plain",
+ *         });
+ *         const obj = yield* getObject({ Key: "hello.txt" });
+ *         return HttpServerResponse.json({ ok: obj.ETag !== undefined });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Fly.AttachBucketLive)),
+ *   }).pipe(Effect.provide([Fly.PutObjectHttp, Fly.GetObjectHttp])),
  * ) {}
- * ```
- *
- * @section Attach from a stack
- * Pass the App as the second argument when you are not inside a
- * Service.
- *
- * @example Attach to an App
- * ```typescript
- * yield* Fly.AttachBucket(Data, Site);
  * ```
  *
  * @section Fly.Secret
@@ -270,18 +260,6 @@ export class BucketProvisionFailed extends Data.TaggedError(
   name: string;
   status: string | undefined;
   errorMessage: string | undefined;
-}> {}
-
-export class BucketAttachAppMissing extends Data.TaggedError(
-  "Fly.BucketAttachAppMissing",
-)<{
-  message: string;
-}> {}
-
-export class BucketCredentialsMissing extends Data.TaggedError(
-  "Fly.BucketCredentialsMissing",
-)<{
-  name: string;
 }> {}
 
 class BucketPending extends Data.TaggedError("Fly.BucketPending")<{
@@ -644,6 +622,7 @@ export const BucketProvider = () =>
       const name = yield* resolveBucketName(id, props.name, output?.name);
       const orgSlug =
         props.orgSlug ?? output?.orgSlug ?? (yield* resolveOrgSlug());
+      let previous = output;
 
       // Observe by cached id, then the desired name.
       let current: ObservedAddOn | undefined =
@@ -679,9 +658,13 @@ export const BucketProvider = () =>
             return yield* Effect.fail(created.failure);
           }
         }
+        const createdSecrets = current;
         if (current.id.length > 0) {
           current = (yield* waitUntilReady(name, current.id)) ?? current;
         }
+        // List/get omit `environment` after create. Keep the create
+        // payload as the secrets source for keepSecret below.
+        previous = toAttrs(createdSecrets, previous, { name, orgSlug });
       }
 
       if (current === undefined || current.id.length === 0) {
@@ -729,7 +712,16 @@ export const BucketProvider = () =>
       }
 
       const latest = (yield* findById(current.id)) ?? current;
-      const attrs = toAttrs(latest, output, { name, orgSlug });
+      // GraphQL list/get omit `environment` after create. Keep credentials
+      // from the create payload (or last persisted attrs) via keepSecret.
+      const attrs = toAttrs(
+        latest,
+        toAttrs(current, previous, { name, orgSlug }),
+        {
+          name,
+          orgSlug,
+        },
+      );
       const observedPublic = asRecord(latest.options).public;
       return {
         ...attrs,
@@ -772,64 +764,6 @@ export const BucketProvider = () =>
     }),
   });
 
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
-  typeof value === "object" &&
-  value !== null &&
-  ((value as { Type?: string }).Type === "Fly.Service" ||
-    (value as { Type?: string }).Type === "Fly.Machine");
-
-const toName = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 ? value : undefined;
-
-const readAttr = (value: unknown): Effect.Effect<unknown> =>
-  Effect.gen(function* () {
-    if (
-      value == null ||
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean" ||
-      Redacted.isRedacted(value)
-    ) {
-      return value;
-    }
-    return yield* value as Effect.Effect<unknown>;
-  });
-
-const secretValueOf = (value: unknown): string | undefined => {
-  if (typeof value === "string") {
-    return value.length > 0 ? value : undefined;
-  }
-  if (Redacted.isRedacted(value)) {
-    return secretValueOf(Redacted.value(value));
-  }
-  return undefined;
-};
-
-const resolveAttachAppName = (app: App | undefined) =>
-  Effect.gen(function* () {
-    if (app !== undefined) {
-      const name = toName(yield* readAttr(app.appName));
-      if (name !== undefined) return name;
-      const nested = toName(
-        yield* readAttr((app as { appName?: unknown }).appName),
-      );
-      if (nested !== undefined) return nested;
-    }
-    const host = yield* Binding.Host;
-    if (isFlyHost(host)) {
-      const name = toName(
-        yield* readAttr((host as { appName: unknown }).appName),
-      );
-      if (name !== undefined) return name;
-    }
-    return yield* new BucketAttachAppMissing({
-      message:
-        "Fly.AttachBucket requires a Fly.App (pass it as the second argument) or a Fly.Service / Fly.Machine host.",
-    });
-  });
-
 const putSecretValues = (appName: string, values: Record<string, string>) =>
   Effect.gen(function* () {
     if (Object.keys(values).length === 0) return;
@@ -861,148 +795,104 @@ const envValuesOf = (addOn: ObservedAddOn): Record<string, string> => {
   if (values.BUCKET_NAME === undefined && addOn.name != null) {
     values.BUCKET_NAME = addOn.name;
   }
+  if (
+    values.AWS_ENDPOINT_URL === undefined &&
+    values.AWS_ENDPOINT_URL_S3 !== undefined
+  ) {
+    values.AWS_ENDPOINT_URL = values.AWS_ENDPOINT_URL_S3;
+  }
+  return values;
+};
+
+const findAttachedBucket = (input: { id?: string; name: string }) =>
+  Effect.gen(function* () {
+    const listed =
+      input.id !== undefined && input.id.length > 0
+        ? ((yield* findById(input.id)) ??
+          (input.name.length > 0 ? yield* findByName(input.name) : undefined))
+        : input.name.length > 0
+          ? yield* findByName(input.name)
+          : undefined;
+    if (listed === undefined) {
+      return yield* new BucketPending({
+        name: input.name || input.id || "",
+        status: "missing",
+      });
+    }
+    const detail = yield* Services.addons
+      .addOn({
+        id: listed.id,
+        name: listed.name ?? input.name,
+        provider: TIGRIS,
+      })
+      .pipe(
+        Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
+      );
+    return detail ?? listed;
+  });
+
+const secretsFromBoundEnv = (
+  env: Record<string, string>,
+): Record<string, string> => {
+  const values: Record<string, string> = {};
+  for (const key of BUCKET_SECRET_NAMES) {
+    const value = env[key];
+    if (value !== undefined && value.length > 0) values[key] = value;
+  }
+  if (
+    values.AWS_ENDPOINT_URL === undefined &&
+    values.AWS_ENDPOINT_URL_S3 !== undefined
+  ) {
+    values.AWS_ENDPOINT_URL = values.AWS_ENDPOINT_URL_S3;
+  }
   return values;
 };
 
 /**
  * Write Tigris `AWS_*` / `BUCKET_NAME` secrets onto an App. Called from
  * {@link Service} reconcile so the secrets exist before Machines boot.
+ *
+ * Looks up the add-on by id/name (retrying while Tigris is still
+ * provisioning) and also copies any already-evaluated `AWS_*` /
+ * `BUCKET_NAME` values from binding env — GraphQL `environment` is often
+ * empty after create.
  */
 export const attachBucketSecrets = Effect.fn(function* (
   appName: string,
-  attached: readonly { name: string }[],
+  attached: readonly { name: string; id?: string }[],
+  boundEnv: Record<string, string> = {},
 ) {
-  if (appName.length === 0 || attached.length === 0) return;
+  if (appName.length === 0) return;
+  const fromEnv = secretsFromBoundEnv(boundEnv);
+  if (attached.length === 0) {
+    if (Object.keys(fromEnv).length > 0) {
+      yield* putSecretValues(appName, fromEnv);
+    }
+    return;
+  }
   for (const item of attached) {
     const name = item.name;
-    if (name.length === 0) continue;
-    const listed = yield* findByName(name);
-    const detail =
-      listed !== undefined
-        ? yield* Services.addons
-            .addOn({
-              id: listed.id,
-              name,
-              provider: TIGRIS,
-            })
-            .pipe(
-              Effect.catchTag("FlyIoParseError", () =>
-                Effect.succeed(undefined),
-              ),
-            )
-        : undefined;
-    const row = detail ?? listed;
-    if (row === undefined) continue;
-    yield* putSecretValues(appName, envValuesOf(row));
-  }
-});
-
-const writeBucketSecrets = (appName: string, bucket: Bucket) =>
-  Effect.gen(function* () {
-    const accessKeyId = secretValueOf(yield* readAttr(bucket.accessKeyId));
-    const secretAccessKey = secretValueOf(
-      yield* readAttr(bucket.secretAccessKey),
+    const id = item.id;
+    if (name.length === 0 && (id === undefined || id.length === 0)) continue;
+    const row = yield* findAttachedBucket({ id, name }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "Fly.BucketPending",
+        times: 8,
+        schedule: backoff,
+      }),
+      Effect.catchTag("Fly.BucketPending", () =>
+        findAttachedBucket({ id, name }).pipe(
+          Effect.catchTag("Fly.BucketPending", () => Effect.succeed(undefined)),
+        ),
+      ),
     );
-    const endpoint = secretValueOf(yield* readAttr(bucket.endpoint));
-    const region = secretValueOf(yield* readAttr(bucket.region));
-    const bucketName =
-      secretValueOf(yield* readAttr(bucket.bucketName)) ??
-      toName(yield* readAttr(bucket.name));
-    const values: Record<string, string> = {};
-    if (accessKeyId !== undefined) values.AWS_ACCESS_KEY_ID = accessKeyId;
-    if (secretAccessKey !== undefined) {
-      values.AWS_SECRET_ACCESS_KEY = secretAccessKey;
-    }
-    if (endpoint !== undefined) values.AWS_ENDPOINT_URL_S3 = endpoint;
-    if (region !== undefined) values.AWS_REGION = region;
-    if (bucketName !== undefined) values.BUCKET_NAME = bucketName;
-    if (Object.keys(values).length === 0) {
-      const name = toName(yield* readAttr(bucket.name)) ?? "";
-      return yield* new BucketCredentialsMissing({ name });
+    const values = {
+      ...fromEnv,
+      ...(row === undefined ? {} : envValuesOf(row)),
+    };
+    if (values.BUCKET_NAME === undefined && name.length > 0) {
+      values.BUCKET_NAME = name;
     }
     yield* putSecretValues(appName, values);
-  });
-
-/**
- * Writes Tigris credentials onto a Fly.App as App secrets.
- *
- * The Service reads them with `Config.redacted`. Do not pass
- * `env: { ... }` on the Service.
- *
- * @binding
- *
- * @section Attach from a Service
- * Yield `AttachBucket` in init. Provide {@link AttachBucketLive}. Fly
- * injects the secrets as environment variables on every Machine.
- *
- * @example On a Service
- * ```typescript
- * import * as Config from "effect/Config";
- * import * as Redacted from "effect/Redacted";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
- *
- * export default class Api extends Fly.Service<Api>()(
- *   "Api",
- *   { app: Site, main: import.meta.url, port: 3000 },
- *   Effect.gen(function* () {
- *     yield* Fly.AttachBucket(Data);
- *     return {
- *       fetch: Effect.gen(function* () {
- *         const bucket = yield* Config.redacted("BUCKET_NAME");
- *         return HttpServerResponse.text(Redacted.value(bucket));
- *       }),
- *     };
- *   }).pipe(Effect.provide(Fly.AttachBucketLive)),
- * ) {}
- * ```
- *
- * @section Attach to an App
- * Pass the App when you are not inside a Service.
- *
- * @example On a stack
- * ```typescript
- * yield* Fly.AttachBucket(Data, Site);
- * ```
- */
-export interface AttachBucket extends Binding.Service<
-  AttachBucket,
-  "Fly.Bucket.Attach",
-  (bucket: Bucket, app?: App) => Effect.Effect<void>
-> {}
-
-export const AttachBucket = Binding.Service<AttachBucket>("Fly.Bucket.Attach");
-
-/**
- * Deploy-time implementation of {@link AttachBucket}. Provide it on the
- * {@link Service} Effect, or rely on {@link providers}.
- *
- * @layer
- * @provides Fly.Bucket.Attach
- *
- * @section Provide the layer
- * @example On a Service
- * ```typescript
- * Effect.gen(function* () {
- *   yield* Fly.AttachBucket(Data);
- * }).pipe(Effect.provide(Fly.AttachBucketLive))
- * ```
- */
-export const AttachBucketLive = Layer.effect(
-  AttachBucket,
-  Effect.succeed(
-    Effect.fn(function* (bucket: Bucket, app?: App) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isFlyHost(host)) {
-          yield* host.bind`${bucket}`({
-            bucket: { name: bucket.name },
-          });
-        }
-        if (app !== undefined) {
-          const appName = yield* resolveAttachAppName(app);
-          yield* writeBucketSecrets(appName, bucket);
-        }
-      }
-    }),
-  ),
-);
+  }
+});

@@ -5,16 +5,24 @@ import { ProfileLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { App, AppProvider } from "./App.ts";
 import { FlyAuth } from "./AuthProvider.ts";
-import { AttachBucketLive, Bucket, BucketProvider } from "./Bucket.ts";
+import { Bucket, BucketProvider } from "./Bucket.ts";
+import { DeleteObjectHttp } from "./DeleteObjectHttp.ts";
+import { GetObjectHttp } from "./GetObjectHttp.ts";
+import { HeadObjectHttp } from "./HeadObjectHttp.ts";
+import { ListObjectsV2Http } from "./ListObjectsV2Http.ts";
+import { PutObjectHttp } from "./PutObjectHttp.ts";
+import { ReadRedisHttp } from "./ReadRedisHttp.ts";
+import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
+import { WriteRedisHttp } from "./WriteRedisHttp.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import { CheckpointHttp } from "./CheckpointHttp.ts";
 import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
 import { Machine, MachineProvider } from "./Machine.ts";
+import { ConnectPostgresHttp } from "./ConnectPostgresHttp.ts";
 import { Postgres, PostgresProvider } from "./Postgres.ts";
-import { AttachPostgresLive } from "./PostgresAttach.ts";
-import { AttachLive, Redis, RedisProvider } from "./Redis.ts";
+import { Redis, RedisProvider } from "./Redis.ts";
 import { DecryptHttp } from "./DecryptHttp.ts";
 import { EncryptHttp } from "./EncryptHttp.ts";
 import { ExecHttp } from "./ExecHttp.ts";
@@ -98,9 +106,15 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(MountVolumeLive),
-    Layer.provideMerge(AttachBucketLive),
-    Layer.provideMerge(AttachPostgresLive),
-    Layer.provideMerge(AttachLive),
+    Layer.provideMerge(ConnectPostgresHttp),
+    Layer.provideMerge(PutObjectHttp),
+    Layer.provideMerge(GetObjectHttp),
+    Layer.provideMerge(DeleteObjectHttp),
+    Layer.provideMerge(HeadObjectHttp),
+    Layer.provideMerge(ListObjectsV2Http),
+    Layer.provideMerge(ReadRedisHttp),
+    Layer.provideMerge(WriteRedisHttp),
+    Layer.provideMerge(ReadWriteRedisHttp),
     Layer.provideMerge(CheckpointHttp),
     Layer.provideMerge(ExecHttp),
     Layer.provideMerge(GetSecretHttp),

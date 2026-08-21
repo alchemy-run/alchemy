@@ -17,8 +17,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-
 const waitUntilGone = (appName: string, machineId: string) =>
   Services.machines
     .machinesShow({
@@ -37,7 +35,7 @@ const waitUntilGone = (appName: string, machineId: string) =>
       }),
     );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "deploy token probe is typed",
   (stack) =>
     Effect.gen(function* () {
@@ -60,7 +58,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, serve, mount, and delete a service",
   (stack) =>
     Effect.gen(function* () {

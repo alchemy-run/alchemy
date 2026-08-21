@@ -4,9 +4,15 @@ import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/fly-io";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import BucketApi, {
+  BucketIp,
+  BucketSite,
+  Data,
+  OBJECT_BODY,
+} from "./fixtures/bucket-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -14,8 +20,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasFlyCreds = !!process.env.FLY_API_TOKEN;
 
 const listTigris = () =>
   Effect.gen(function* () {
@@ -83,7 +87,7 @@ const listedSecrets = (appName: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed(new Set<string>())),
     );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "create, update, and destroy a tigris bucket",
   (stack) =>
     Effect.gen(function* () {
@@ -135,7 +139,7 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
+test.provider(
   "replace when the name changes",
   (stack) =>
     Effect.gen(function* () {
@@ -173,52 +177,86 @@ test.provider.skipIf(!hasFlyCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasFlyCreds)(
-  "attach writes tigris secrets onto an app",
+test.provider(
+  "a Service puts and gets an object on Tigris",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const out = yield* stack.deploy(
+      // Create the bucket first so Tigris credentials are persisted on
+      // attributes. Same-plan Service reconcile otherwise runs before
+      // Data is ready and GraphQL list omits `environment`.
+      yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Fly.App("Site");
-          const bucket = yield* Fly.Bucket("Data");
-          return { app, bucket };
+          const app = yield* BucketSite;
+          const bucket = yield* Data;
+          const ip = yield* BucketIp;
+          return { app, bucket, ip };
         }),
       );
 
-      const plain = (value: Redacted.Redacted<string> | undefined) =>
-        value !== undefined ? Redacted.value(value) : undefined;
-      const values: Record<string, string> = {
-        BUCKET_NAME: out.bucket.name,
-      };
-      const accessKeyId = plain(out.bucket.accessKeyId);
-      const secretAccessKey = plain(out.bucket.secretAccessKey);
-      const endpoint = plain(out.bucket.endpoint);
-      const region = plain(out.bucket.region);
-      if (accessKeyId !== undefined) values.AWS_ACCESS_KEY_ID = accessKeyId;
-      if (secretAccessKey !== undefined) {
-        values.AWS_SECRET_ACCESS_KEY = secretAccessKey;
-      }
-      if (endpoint !== undefined) values.AWS_ENDPOINT_URL_S3 = endpoint;
-      if (region !== undefined) values.AWS_REGION = region;
-      if (accessKeyId === undefined) {
-        yield* Fly.attachBucketSecrets(out.app.appName, [
-          { name: out.bucket.name },
-        ]);
-      } else {
-        yield* Services.machines.secretsUpdate({
-          app_name: out.app.appName,
-          values,
-        });
-      }
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* BucketSite;
+          const bucket = yield* Data;
+          const ip = yield* BucketIp;
+          const api = yield* BucketApi;
+          return { app, bucket, ip, api };
+        }),
+      );
 
-      const names = yield* listedSecrets(out.app.appName);
+      expect(out.api.url).toEqual(`https://${out.app.appName}.fly.dev`);
+
+      const names = yield* listedSecrets(out.app.appName).pipe(
+        Effect.flatMap((set) =>
+          set.has("BUCKET_NAME") && set.has("AWS_ACCESS_KEY_ID")
+            ? Effect.succeed(set)
+            : Effect.fail(
+                new Error(
+                  `missing Tigris secrets: ${[...set].join(",") || "(none)"}`,
+                ),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 8,
+        }),
+      );
       expect(names.has("BUCKET_NAME")).toEqual(true);
-      if (accessKeyId !== undefined) {
-        expect(names.has("AWS_ACCESS_KEY_ID")).toEqual(true);
-        expect(names.has("AWS_SECRET_ACCESS_KEY")).toEqual(true);
-      }
+      expect(names.has("AWS_ACCESS_KEY_ID")).toEqual(true);
+
+      const untilOk = <A, E>(effect: Effect.Effect<A, E>) =>
+        effect.pipe(
+          Effect.retry({
+            schedule: Schedule.spaced("4 seconds"),
+            times: 10,
+          }),
+        );
+
+      const put = yield* untilOk(
+        HttpClient.get(`${out.api.url}/put`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(new Error(`api returned ${res.status}`)),
+          ),
+          Effect.map((value) => value as { ok: boolean }),
+        ),
+      );
+      expect(put.ok).toEqual(true);
+
+      const got = yield* untilOk(
+        HttpClient.get(`${out.api.url}/get`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(new Error(`api returned ${res.status}`)),
+          ),
+          Effect.map((value) => value as { ok: boolean; text: string }),
+        ),
+      );
+      expect(got.ok).toEqual(true);
+      expect(got.text).toEqual(OBJECT_BODY);
 
       yield* stack.destroy();
 

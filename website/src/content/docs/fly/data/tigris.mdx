@@ -1,17 +1,16 @@
 ---
 title: Tigris
-description: S3-compatible object storage billed through Fly. The resource is Fly.Bucket.
+description: S3-compatible object storage billed through Fly. Bind Fly.PutObject / Fly.GetObject.
 ---
 
 A [`Fly.Bucket`](/providers/fly/bucket) is Tigris S3-compatible
 object storage, billed through Fly. It is org-scoped. There is no
 parent [App](/fly/compute/apps).
 
-[`AttachBucket`](/providers/fly/bucket) writes `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, and
-`BUCKET_NAME` onto the App as secrets. A
-[Service](/fly/compute/services) reads them with `Config.redacted`.
-Do not pass `env: { ... }`.
+Tigris speaks the S3 API. Bind [`PutObject`](/providers/fly/putobject)
+/ [`GetObject`](/providers/fly/getobject) in a
+[Service](/fly/compute/services). Alchemy injects the Tigris
+endpoint and credentials. You never read `AWS_*` yourself.
 
 ## Create a Bucket
 
@@ -36,39 +35,34 @@ Tigris cannot rename a bucket. Alchemy creates the new name, then
 deletes the old one.
 :::
 
-## Attach to a Service
+## Put and get objects
 
-Yield `AttachBucket` in Service init. Provide `AttachBucketLive`.
-Fly injects the secrets as environment variables on every Machine.
+Bind `PutObject` / `GetObject` in Service init. Provide the matching
+`*Http` layers.
 
 ```typescript
-import * as Config from "effect/Config";
-import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
   { app: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    yield* Fly.AttachBucket(Data);
+    const putObject = yield* Fly.PutObject(Data);
+    const getObject = yield* Fly.GetObject(Data);
 
     return {
       fetch: Effect.gen(function* () {
-        const bucket = yield* Config.redacted("BUCKET_NAME");
-        return HttpServerResponse.text(Redacted.value(bucket));
+        yield* putObject({
+          Key: "hello.txt",
+          Body: "hello",
+          ContentType: "text/plain",
+        });
+        const obj = yield* getObject({ Key: "hello.txt" });
+        return HttpServerResponse.json({ ok: obj.ETag !== undefined });
       }),
     };
-  }).pipe(Effect.provide(Fly.AttachBucketLive)),
+  }).pipe(Effect.provide([Fly.PutObjectHttp, Fly.GetObjectHttp])),
 ) {}
-```
-
-## Attach from the stack
-
-Pass the App as the second argument when you are not inside a
-Service.
-
-```typescript
-yield* Fly.AttachBucket(Data, Site);
 ```
 
 ## Public access
@@ -110,8 +104,6 @@ The bucket is created in the new org. The old bucket is deleted.
 
 ## Where next
 
-[Services](/fly/compute/services) is the Machine that reads the
-Tigris secrets.
-[Secrets](/fly/data/secrets) covers `Config.redacted` and
-`Fly.Secret`.
+[Services](/fly/compute/services) is the Machine that binds
+`PutObject` / `GetObject`.
 The [`Bucket` reference](/providers/fly/bucket) lists every prop.

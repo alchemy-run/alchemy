@@ -96,17 +96,17 @@ export interface ServiceBinding {
   env?: Record<string, any>;
   mounts?: DiskSpec[];
   /**
-   * Upstash Redis add-on to attach. `Fly.Attach` writes `REDIS_URL`
-   * as an App secret during Service reconcile.
+   * Upstash Redis add-on to attach. Redis HTTP bindings write
+   * `REDIS_URL` as an App secret during Service reconcile.
    */
-  redis?: { name: string };
+  redis?: { name: string; id?: string };
   /**
-   * Tigris bucket to attach. `Fly.AttachBucket` writes `AWS_*` /
+   * Tigris bucket to attach. Object HTTP bindings write `AWS_*` /
    * `BUCKET_NAME` as App secrets during Service reconcile.
    */
-  bucket?: { name: string };
+  bucket?: { name: string; id?: string };
   /**
-   * Managed Postgres cluster to attach. `Fly.AttachPostgres` writes
+   * Managed Postgres cluster to attach. `Fly.ConnectPostgres` writes
    * `DATABASE_URL` as an App secret during Service reconcile.
    */
   postgres?: { clusterId: string; variableName?: string };
