@@ -39,20 +39,38 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
+  BranchMissing,
   Forbidden,
+  MergeConflict,
+  NoMergeBase,
+  NothingToMerge,
   ObjectNotFound,
+  PullExists,
+  PullNotFound,
+  PullStateConflict,
   ReadOnlyRepo,
   RefConflict,
   RefNotFound,
   RepoNotFound,
   TokenNotFound,
   Unauthorized,
+  ValidationError,
   WrongObjectType,
   type Oid as ApiOid,
   type RepoStatus,
   type TokenScope,
 } from "./Api.ts";
-import { hashToken, mintToken, parseBasicOrBearer } from "./Auth.ts";
+import {
+  Auth,
+  hashToken,
+  mintToken,
+  parseBasicOrBearer,
+  requiredScope,
+  SCOPE_RANK,
+  type Actor,
+  type GitAction,
+  type RepoContext,
+} from "./Auth.ts";
 import { applyDelta } from "./git/Delta.ts";
 import * as PackParser from "./git/PackParser.ts";
 import { bufferRandomAccess, type RandomAccess } from "./git/PackParser.ts";
@@ -61,6 +79,7 @@ import {
   concatBytes,
   decodeOfsDeltaOffset,
   decodeTypeSize,
+  encodeCommit,
   encodeTypeSize,
   hashObject,
   isDeltaType,
@@ -96,14 +115,21 @@ import {
   type ManifestEntry,
   type ObjectSource,
 } from "./git/Store.ts";
+import {
+  applyTreeChanges,
+  conflictingPaths,
+  diffTrees,
+  type DiffEntryData,
+} from "./git/TreeDiff.ts";
 import * as Zlib from "./git/Zlib.ts";
 import { runImport, type ImportSource } from "./jobs/Import.ts";
 import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
 import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
 import { runCompactJob, shouldCompact } from "./jobs/Compact.ts";
 import { incomingKey } from "./store/Keys.ts";
-import { r2RandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
+import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
 import { receiveWireBody } from "./store/IncomingBody.ts";
+import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { Registry, REGISTRY_DO_NAME, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./store/Closure.ts";
@@ -113,10 +139,12 @@ import {
   type ObjectStore,
   type StagedObject,
 } from "./store/ObjectStore.ts";
+import type * as cf from "@cloudflare/workers-types";
 import {
   initRepoSchema,
   makeSqlClient,
   type JobRow,
+  type PullRow,
   type RefRow,
   type TokenRow,
 } from "./store/Sql.ts";
@@ -147,6 +175,31 @@ export const STAGE_BATCH_OBJECTS = 256;
 
 /** Byte budget per staging batch, so a batch of large blobs stays bounded. */
 export const STAGE_BATCH_BYTES = 8 * 1024 * 1024;
+
+// The tree-diff caps (`MAX_DIFF_FILES`, `MAX_DIFF_TREE_READS`) live with
+// the pure walk in `git/TreeDiff.ts`; re-exported here alongside the other
+// serving-plane bounds.
+export { MAX_DIFF_FILES, MAX_DIFF_TREE_READS } from "./git/TreeDiff.ts";
+
+/** Max commits popped by the merge-base paint walk. */
+export const MAX_COMPARE_WALK = 10_000;
+
+/** Max commits returned in a Comparison's `commits` array. */
+export const MAX_COMPARE_COMMITS = 250;
+
+/**
+ * Max commits popped by the PR live-field walk (`getPull`). Saturation
+ * makes the numeric detail fields `null` (reason `"unknown"`); merge still
+ * works because {@link MAX_PULL_MERGE_WALK} gives the merge path a deeper
+ * budget.
+ */
+export const MAX_PULL_WALK = 5_000;
+
+/** Deeper walk budget for `mergePull` (needs only reachability + one base). */
+export const MAX_PULL_MERGE_WALK = 50_000;
+
+/** Conflicting paths reported on a `MergeConflict` (the set may be larger). */
+export const MAX_CONFLICT_PATHS = 20;
 
 /** Agent string advertised on the wire. */
 export const GIT_AGENT = "git-service/1";
@@ -208,18 +261,14 @@ export class WireProtocolError extends Schema.TaggedError<WireProtocolError>()(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Who is calling: the deployer admin key (verified by the Worker) or a
- * per-repo token (verified here, in the DO that owns the tokens table).
+ * Who is calling — the `Actor` produced by the Auth block's
+ * `authenticate` at the Worker and forwarded here over the trusted
+ * internal channel. Token actors arrive unverified (the secret rides
+ * along); this DO enriches them from its tokens table before asking the
+ * Auth block to authorize. Kept under its historical name on the RPC
+ * surface.
  */
-export type CallerAuth =
-  | { readonly kind: "admin" }
-  | { readonly kind: "token"; readonly token: string }
-  /**
-   * No credential presented. Allowed exactly one thing: `read` on a repo
-   * whose `public` flag is set — the GitHub public-repo model. Everything
-   * else fails `Unauthorized` in {@link authorize}/`wireAuth`.
-   */
-  | { readonly kind: "anonymous" };
+export type CallerAuth = Actor;
 
 /** Repo metadata as stored in the `config` table. */
 export interface RepoMetaData {
@@ -383,6 +432,38 @@ export interface CommitLogPage {
   readonly hasMore: boolean;
 }
 
+// `DiffEntryData` (one changed file) is defined next to the pure walk in
+// `git/TreeDiff.ts`; re-exported here with the other RPC data shapes.
+export type { DiffEntryData } from "./git/TreeDiff.ts";
+
+/** Result of {@link GitRepoShape.readCommitDiff}. */
+export interface CommitDiffData {
+  readonly oid: string;
+  readonly parent: string | null;
+  readonly files: ReadonlyArray<DiffEntryData>;
+  readonly truncated: boolean;
+}
+
+/** Input of {@link GitRepoShape.compareCommits}. */
+export interface CompareInput {
+  /** Refname or 40-hex oid. */
+  readonly base: string;
+  readonly head: string;
+}
+
+/** Result of {@link GitRepoShape.compareCommits}. */
+export interface CompareData {
+  readonly base: string;
+  readonly head: string;
+  readonly mergeBase: string;
+  readonly aheadBy: number;
+  readonly behindBy: number;
+  readonly commits: ReadonlyArray<CommitData>;
+  readonly commitsTruncated: boolean;
+  readonly files: ReadonlyArray<DiffEntryData>;
+  readonly filesTruncated: boolean;
+}
+
 /** Input of {@link GitRepoShape.readFileAtPath}. */
 export interface ReadFileInput {
   /** Refname or 40-hex oid; default = HEAD. */
@@ -398,6 +479,91 @@ export interface FileData {
   readonly mode: string;
   readonly size: number;
   readonly content: Uint8Array;
+}
+
+/** One pull-request row (see the REST `Pull` schema). */
+export interface PullData {
+  readonly number: number;
+  readonly title: string;
+  readonly body: string | null;
+  /** Full base ref name, e.g. `refs/heads/main`. */
+  readonly baseRef: string;
+  /** Full head ref name, e.g. `refs/heads/feature`. */
+  readonly headRef: string;
+  readonly state: "open" | "closed" | "merged";
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly mergedAt: number | null;
+  /** FF: the head tip; the merge commit otherwise. Set iff state=merged. */
+  readonly mergeCommit: string | null;
+}
+
+/** Detail = row + live compare fields (`null` = uncomputable, see REST docs). */
+export interface PullDetailData extends PullData {
+  readonly baseOid: string | null;
+  readonly headOid: string | null;
+  readonly mergeBase: string | null;
+  readonly aheadBy: number | null;
+  readonly behindBy: number | null;
+  readonly mergeable: boolean | null;
+  readonly mergeableReason:
+    | "ff"
+    | "merge-commit"
+    | "conflict"
+    | "up-to-date"
+    | "unknown"
+    | null;
+}
+
+/** Input of {@link GitRepoShape.createPull}. */
+export interface CreatePullInput {
+  readonly title: string;
+  readonly body?: string | undefined;
+  /** Short or full branch name; normalized to `refs/heads/…` here. */
+  readonly base: string;
+  readonly head: string;
+}
+
+/** Input of {@link GitRepoShape.listPulls}. */
+export interface ListPullsInput {
+  readonly state?: "open" | "closed" | "merged" | "all" | undefined;
+  /** Last-seen PR number as a string (keyset pagination, newest first). */
+  readonly cursor?: string | undefined;
+  /** Default 20, max 100. */
+  readonly limit?: number | undefined;
+}
+
+/** One page of {@link GitRepoShape.listPulls}. */
+export interface PullsPage {
+  readonly items: ReadonlyArray<PullData>;
+  readonly nextCursor: string | null;
+  readonly hasMore: boolean;
+}
+
+/** Input of {@link GitRepoShape.updatePull}. */
+export interface UpdatePullInput {
+  readonly number: number;
+  readonly title?: string | undefined;
+  /** `null` clears the body. */
+  readonly body?: string | null | undefined;
+  readonly state?: "open" | "closed" | undefined;
+}
+
+/** Input of {@link GitRepoShape.mergePull}. */
+export interface MergePullInput {
+  readonly number: number;
+  /** Merge-commit message; ignored on fast-forward. */
+  readonly message?: string | undefined;
+  /** Race guard: fail RefConflict when the head tip moved since inspection. */
+  readonly expectedHeadOid?: string | undefined;
+}
+
+/** Result of {@link GitRepoShape.mergePull}. */
+export interface MergePullResult {
+  readonly method: "ff" | "merge-commit";
+  /** The oid the base ref now points at. */
+  readonly oid: string;
+  readonly pull: PullData;
 }
 
 /** Input of {@link GitRepoShape.startImport}. */
@@ -522,12 +688,94 @@ export interface GitRepoShape {
     RepoAuthError | RefNotFound,
     RuntimeContext
   >;
+  /**
+   * The changed-file list of a commit vs its FIRST parent (empty tree for
+   * a root commit) — see the REST `diff` endpoint.
+   */
+  readonly readCommitDiff: (
+    auth: CallerAuth,
+    input: { readonly oid: string },
+  ) => Effect.Effect<
+    CommitDiffData,
+    RepoAuthError | ObjectNotFound | WrongObjectType,
+    RuntimeContext
+  >;
+  /**
+   * Three-dot comparison of two revisions: merge base, ahead/behind
+   * counts, head-side commits, and the mergeBase..head file diff — see
+   * the REST `compare` endpoint.
+   */
+  readonly compareCommits: (
+    auth: CallerAuth,
+    input: CompareInput,
+  ) => Effect.Effect<
+    CompareData,
+    | RepoAuthError
+    | RefNotFound
+    | ObjectNotFound
+    | WrongObjectType
+    | NoMergeBase,
+    RuntimeContext
+  >;
   readonly readFileAtPath: (
     auth: CallerAuth,
     input: ReadFileInput,
   ) => Effect.Effect<
     FileData,
     RepoAuthError | RefNotFound | ObjectNotFound,
+    RuntimeContext
+  >;
+  /** Opens a pull request (same-repo branches, `write` scope). */
+  readonly createPull: (
+    auth: CallerAuth,
+    input: CreatePullInput,
+  ) => Effect.Effect<
+    PullData,
+    RepoAuthError | BranchMissing | PullExists | ValidationError,
+    RuntimeContext
+  >;
+  /** Lists PRs newest-first with keyset pagination (`read` scope). */
+  readonly listPulls: (
+    auth: CallerAuth,
+    input: ListPullsInput,
+  ) => Effect.Effect<PullsPage, RepoAuthError, RuntimeContext>;
+  /** Reads one PR with live compare fields recomputed from current tips. */
+  readonly getPull: (
+    auth: CallerAuth,
+    number: number,
+  ) => Effect.Effect<
+    PullDetailData,
+    RepoAuthError | PullNotFound,
+    RuntimeContext
+  >;
+  /** Patches title/body, or closes/reopens via `state` (`write` scope). */
+  readonly updatePull: (
+    auth: CallerAuth,
+    input: UpdatePullInput,
+  ) => Effect.Effect<
+    PullData,
+    RepoAuthError | PullNotFound | PullStateConflict,
+    RuntimeContext
+  >;
+  /**
+   * Merges an open PR: fast-forward when possible, else a two-parent merge
+   * commit iff the three-way tree merge is trivial (no path changed on both
+   * sides vs the merge base). Conflicts are a typed 409 — the server never
+   * writes conflict markers.
+   */
+  readonly mergePull: (
+    auth: CallerAuth,
+    input: MergePullInput,
+  ) => Effect.Effect<
+    MergePullResult,
+    | RepoAuthError
+    | PullNotFound
+    | PullStateConflict
+    | BranchMissing
+    | NothingToMerge
+    | MergeConflict
+    | RefConflict
+    | ReadOnlyRepo,
     RuntimeContext
   >;
   /**
@@ -1451,7 +1699,59 @@ export const ingestPack = (
 
 const asOid = (s: string): ApiOid => s as ApiOid;
 
-const SCOPE_RANK: Record<TokenScope, number> = { read: 0, write: 1, admin: 2 };
+/** A node of the merge-base paint walk's max-heap (gen desc, time desc). */
+export interface WalkHeapNode {
+  readonly oid: string;
+  readonly gen: number;
+  readonly time: number;
+}
+
+const heapBefore = (a: WalkHeapNode, b: WalkHeapNode): boolean =>
+  a.gen !== b.gen ? a.gen > b.gen : a.time > b.time;
+
+/** Pushes onto a binary max-heap keyed `(gen desc, commit_time desc)`. */
+export const heapPush = (
+  heap: Array<WalkHeapNode>,
+  node: WalkHeapNode,
+): void => {
+  heap.push(node);
+  let i = heap.length - 1;
+  while (i > 0) {
+    const parent = (i - 1) >> 1;
+    if (!heapBefore(heap[i]!, heap[parent]!)) break;
+    const tmp = heap[parent]!;
+    heap[parent] = heap[i]!;
+    heap[i] = tmp;
+    i = parent;
+  }
+};
+
+/** Pops the max node. Callers must check `heap.length > 0` first. */
+export const heapPop = (heap: Array<WalkHeapNode>): WalkHeapNode => {
+  const top = heap[0]!;
+  const last = heap.pop()!;
+  if (heap.length > 0) {
+    heap[0] = last;
+    let i = 0;
+    for (;;) {
+      const left = 2 * i + 1;
+      const right = left + 1;
+      let max = i;
+      if (left < heap.length && heapBefore(heap[left]!, heap[max]!)) {
+        max = left;
+      }
+      if (right < heap.length && heapBefore(heap[right]!, heap[max]!)) {
+        max = right;
+      }
+      if (max === i) break;
+      const tmp = heap[max]!;
+      heap[max] = heap[i]!;
+      heap[i] = tmp;
+      i = max;
+    }
+  }
+  return top;
+};
 
 const isTokenScope = (s: string): s is TokenScope =>
   s === "read" || s === "write" || s === "admin";
@@ -1511,7 +1811,15 @@ export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
       RefConflict,
       ObjectNotFound,
       WrongObjectType,
+      NoMergeBase,
       TokenNotFound,
+      PullNotFound,
+      PullExists,
+      PullStateConflict,
+      BranchMissing,
+      NothingToMerge,
+      MergeConflict,
+      ValidationError,
       StoreError,
       PackIngestError,
       WireProtocolError,
@@ -1519,28 +1827,27 @@ export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
   },
 ) {}
 
-/**
- * The shared R2 bucket resource holding oversize loose objects and (v1.1)
- * compacted packs, keyed `{repoId}/...` (DESIGN.md §3.2).
- */
-export const GitObjectsBucket = Cloudflare.R2.Bucket("GitObjects");
-
 /** The stub type of a sibling repo (used by the fork job). */
 type RepoStub = ReturnType<
   Cloudflare.Workers.DurableObject<GitRepoShape>["getByName"]
 >;
 
 /**
- * The Repo DO implementation Layer. Requires the shared R2 bucket binding
- * (`Cloudflare.R2.BucketReadWrite`, provided as
- * `Cloudflare.R2.ReadWriteBucketBinding` on the Worker) and the
- * {@link Registry} namespace.
+ * The Repo DO implementation Layer. Requires the {@link BlobStore}
+ * service (provide `Git.BlobStoreR2(yourBucket)` — or any other
+ * implementation — in the same layer graph) and the {@link Registry}
+ * namespace.
  */
 export const GitRepoLive = GitRepo.make(
   Effect.gen(function* () {
     // ── Outer init: resolve bindings + namespaces (runs at plan time too) ──
     const state = yield* Cloudflare.DurableObjectState;
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(GitObjectsBucket);
+    // The building-blocks seam: bulk bytes live behind whatever BlobStore
+    // the user's layer graph provides (R2 by default, S3, ...).
+    const blobs: BlobStoreShape = yield* BlobStore;
+    // The swappable auth block — same layer graph as the Worker (§3.2):
+    // authorization runs here, where the actions' facts are parsed.
+    const authService = yield* Auth;
     const registry = yield* Registry;
     const selfNamespace = yield* Cloudflare.DurableObjectScope;
 
@@ -1621,13 +1928,17 @@ export const GitRepoLive = GitRepo.make(
 
       /** The object store, keyed by the current repoId. */
       const storeFor = (repoId: string): ObjectStore =>
-        makeObjectStore({ sql, bucket, repoId });
+        makeObjectStore({ sql, blobs, repoId });
 
       // ── auth ─────────────────────────────────────────────────────────────
-      const verifyTokenHash = Effect.fn(function* (
-        tokenHash: string,
-        required: TokenScope,
-      ) {
+      /**
+       * Resolves a token by hash: unknown/expired ⇒ `Unauthorized`,
+       * corrupt scope ⇒ `StoreError`. Bumps `last_used_at` at hourly
+       * granularity. Rank enforcement is deliberately NOT here — the
+       * scope's meaning belongs to the Auth block (`AuthTokens`), not
+       * the engine.
+       */
+      const lookupToken = Effect.fn(function* (tokenHash: string) {
         const row = yield* sql.first<TokenRow>(
           `SELECT * FROM tokens WHERE token_hash = ?`,
           tokenHash,
@@ -1643,9 +1954,6 @@ export const GitRepoLive = GitRepo.make(
           return yield* new StoreError({
             reason: `corrupt token scope '${row.scope}'`,
           });
-        }
-        if (SCOPE_RANK[row.scope] < SCOPE_RANK[required]) {
-          return yield* new Forbidden({ required });
         }
         // last_used_at, throttled to once per hour
         if (row.last_used_at === null || now - row.last_used_at > 3_600_000) {
@@ -1665,21 +1973,57 @@ export const GitRepoLive = GitRepo.make(
         } satisfies TokenData;
       });
 
-      /** Enforces the auth matrix for one RPC (admin key passes everything). */
-      const authorize = Effect.fn(function* (
-        auth: CallerAuth,
+      /** The rank-checking verify — the legacy `verifyToken` RPC surface. */
+      const verifyTokenHash = Effect.fn(function* (
+        tokenHash: string,
         required: TokenScope,
       ) {
-        if (auth.kind === "admin") return;
-        if (auth.kind === "anonymous") {
-          // Tokenless callers get read (and nothing else) on public repos.
-          if (required === "read" && (yield* getConfig("public")) === "1") {
-            return;
-          }
-          return yield* new Unauthorized();
+        const token = yield* lookupToken(tokenHash);
+        if (SCOPE_RANK[token.scope] < SCOPE_RANK[required]) {
+          return yield* new Forbidden({ required });
         }
-        const hash = yield* hashToken(auth.token);
-        yield* verifyTokenHash(hash, required);
+        return token;
+      });
+
+      /** The policy view of this repo, as the Auth block sees it. */
+      const repoContextOf = (meta: RepoMetaData): RepoContext => ({
+        repoId: meta.repoId,
+        owner: meta.owner,
+        name: meta.name,
+        public: meta.public,
+        defaultBranch: meta.defaultBranch,
+        readOnly: meta.readOnly,
+      });
+
+      /**
+       * Enforces auth for one RPC: enriches token actors from the tokens
+       * table (identity is the engine's job), then asks the Auth block
+       * for the decision (policy is the block's). Denials: anonymous ⇒
+       * 401 (WWW-Authenticate prompts for credentials); identified
+       * callers ⇒ 403, labeled with the conventional scope name.
+       */
+      const authorize = Effect.fn(function* (
+        auth: CallerAuth,
+        action: GitAction,
+      ) {
+        const meta = yield* requireMeta;
+        const actor: Actor =
+          auth.kind === "token"
+            ? {
+                ...auth,
+                scope: (yield* lookupToken(yield* hashToken(auth.token))).scope,
+              }
+            : auth;
+        const allowed = yield* authService.authorize({
+          actor,
+          repo: repoContextOf(meta),
+          action,
+        });
+        if (!allowed) {
+          return yield* actor.kind === "anonymous"
+            ? new Unauthorized()
+            : new Forbidden({ required: requiredScope(action) });
+        }
       });
 
       const mintRepoToken = Effect.fn(function* (input: {
@@ -1742,6 +2086,66 @@ export const GitRepoLive = GitRepo.make(
           return current;
         });
 
+      /**
+       * Resolves a refname (short or full) or 40-hex oid to an object oid.
+       * Candidates for short names: `refs/heads/<name>`, `refs/tags/<name>`.
+       * `undefined` means HEAD (the default branch).
+       */
+      const resolveRevision = Effect.fn(function* (
+        defaultBranch: string,
+        rev: string | undefined,
+      ) {
+        const refName = rev === undefined ? `refs/heads/${defaultBranch}` : rev;
+        if (isOid(refName)) return refName;
+        const candidates = refName.startsWith("refs/")
+          ? [refName]
+          : [`refs/heads/${refName}`, `refs/tags/${refName}`];
+        for (const candidate of candidates) {
+          const row = yield* sql.first<RefRow>(
+            `SELECT name, oid FROM refs WHERE name = ?`,
+            candidate,
+          );
+          if (row !== undefined) return row.oid;
+        }
+        return yield* new RefNotFound({ ref: refName });
+      });
+
+      /** Resolves a revision all the way to a COMMIT oid (peels tags). */
+      const resolveToCommit = Effect.fn(function* (
+        repoId: string,
+        defaultBranch: string,
+        rev: string,
+      ) {
+        const oid = yield* resolveRevision(defaultBranch, rev);
+        const objects = storeFor(repoId);
+        const meta = yield* objects.getMeta(oid);
+        if (meta === undefined) return yield* new ObjectNotFound({ oid });
+        if (meta.type === ObjectType.commit) return oid;
+        if (meta.type === ObjectType.tag) {
+          const peeled = yield* peelOid(repoId, oid);
+          if (peeled === undefined) {
+            return yield* new ObjectNotFound({ oid });
+          }
+          const peeledMeta = yield* objects.getMeta(peeled);
+          if (peeledMeta === undefined) {
+            return yield* new ObjectNotFound({ oid: peeled });
+          }
+          if (peeledMeta.type !== ObjectType.commit) {
+            return yield* new WrongObjectType({
+              oid: peeled,
+              expected: "commit",
+              actual: objectTypeName(peeledMeta.type),
+            });
+          }
+          return peeled;
+        }
+        return yield* new WrongObjectType({
+          oid,
+          expected: "commit",
+          actual: objectTypeName(meta.type),
+        });
+      });
+
       const listAllRefs = (
         repoId: string,
         prefix?: string | undefined,
@@ -1794,6 +2198,13 @@ export const GitRepoLive = GitRepo.make(
           readonly commitTime: number;
           readonly parents: ReadonlyArray<string>;
         }>;
+        /**
+         * Extra statements run inside the transaction body, only when at
+         * least one command succeeded (right after the graph inserts) —
+         * e.g. the PR merge stamps its pulls row atomically with the ref
+         * flip and the staged-object promotion. MUST be fully synchronous.
+         */
+        readonly onCommitted?: ((raw: cf.SqlStorage) => void) | undefined;
       }): Effect.Effect<Array<RefResult>, StoreError> =>
         sql.transactionSync((raw) => {
           const currentOf = (name: string): string => {
@@ -1871,6 +2282,9 @@ export const GitRepoLive = GitRepo.make(
                   ord,
                 );
               });
+            }
+            if (options.onCommitted !== undefined) {
+              options.onCommitted(raw);
             }
             // First-branch-push default branch fixup: if the configured
             // default branch does not exist but a branch was just created,
@@ -1965,6 +2379,164 @@ export const GitRepoLive = GitRepo.make(
             parents: commit.parents,
           }));
         });
+
+      // ── pull requests ────────────────────────────────────────────────────
+
+      /** `main` or `refs/heads/main` → `refs/heads/main`; branches only. */
+      const normalizeBranchRef = Effect.fn(function* (name: string) {
+        const full = name.startsWith("refs/") ? name : `refs/heads/${name}`;
+        if (
+          !full.startsWith("refs/heads/") ||
+          full.length <= "refs/heads/".length ||
+          !REF_NAME_REGEX.test(full)
+        ) {
+          return yield* new ValidationError({
+            message: `not a branch name: ${name} (only refs/heads/* is legal)`,
+          });
+        }
+        return full;
+      });
+
+      const pullStateOf = (state: string): "open" | "closed" | "merged" =>
+        state === "closed" ? "closed" : state === "merged" ? "merged" : "open";
+
+      const rowToPull = (row: PullRow): PullData => ({
+        number: row.number,
+        title: row.title,
+        body: row.body,
+        baseRef: row.base_ref,
+        headRef: row.head_ref,
+        state: pullStateOf(row.state),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        mergedAt: row.merged_at,
+        mergeCommit: row.merge_commit,
+      });
+
+      const loadPull = Effect.fn(function* (number: number) {
+        const row = yield* sql.first<PullRow>(
+          `SELECT * FROM pulls WHERE number = ?`,
+          number,
+        );
+        if (row === undefined) {
+          return yield* new PullNotFound({ number });
+        }
+        return row;
+      });
+
+      /** Result of the bounded two-tip ancestor {@link paintWalk}. */
+      interface PullCompare {
+        /** Best common ancestor; `undefined` = none found (see saturated). */
+        readonly mergeBase: string | undefined;
+        /** Commits reachable from head but not base. */
+        readonly aheadBy: number;
+        /** Commits reachable from base but not head. */
+        readonly behindBy: number;
+        /** The walk hit its pop bound — counts/base are unreliable. */
+        readonly saturated: boolean;
+      }
+
+      /**
+       * The same gen-ordered merge-base paint walk `compareCommits` runs,
+       * reduced to what the PR surface needs: the best common ancestor plus
+       * ahead/behind counts. `mergeBase === head` ⇔ head is reachable from
+       * base (up-to-date); `mergeBase === base` ⇔ base is reachable from
+       * head (fast-forwardable) — the gen ordering guarantees a node's
+       * flags are complete when it pops. A tip missing from the commit
+       * graph reports `saturated` (uncomputable), never an error.
+       */
+      const paintWalk = Effect.fn(function* (
+        baseOid: string,
+        headOid: string,
+        maxPops: number,
+      ) {
+        const BASE = 1;
+        const HEAD = 2;
+        const BOTH = 3;
+        const flags = new Map<string, number>();
+        flags.set(baseOid, BASE);
+        flags.set(headOid, (flags.get(headOid) ?? 0) | HEAD);
+        const heap: Array<WalkHeapNode> = [];
+        const rowOf = (oid: string) =>
+          sql.first<{ gen: number; commit_time: number }>(
+            `SELECT gen, commit_time FROM commits WHERE oid = ?`,
+            oid,
+          );
+        for (const oid of new Set([baseOid, headOid])) {
+          const row = yield* rowOf(oid);
+          if (row === undefined) {
+            return {
+              mergeBase: undefined,
+              aheadBy: 0,
+              behindBy: 0,
+              saturated: true,
+            } satisfies PullCompare;
+          }
+          heapPush(heap, { oid, gen: row.gen, time: row.commit_time });
+        }
+        let mergeBase: string | undefined;
+        let aheadBy = 0;
+        let behindBy = 0;
+        let pops = 0;
+        while (heap.length > 0 && pops < maxPops) {
+          // stop once nothing in the heap can still change the counts
+          if (
+            mergeBase !== undefined &&
+            heap.every((n) => (flags.get(n.oid)! & BOTH) === BOTH)
+          ) {
+            break;
+          }
+          const node = heapPop(heap);
+          pops++;
+          const f = flags.get(node.oid)!;
+          if ((f & BOTH) === BOTH) {
+            if (mergeBase === undefined) mergeBase = node.oid;
+          } else if (f === HEAD) {
+            aheadBy++;
+          } else {
+            behindBy++;
+          }
+          const parents = yield* sql.all<{ parent: string }>(
+            `SELECT parent FROM commit_parents WHERE oid = ? ORDER BY ord`,
+            node.oid,
+          );
+          for (const { parent } of parents) {
+            const prev = flags.get(parent) ?? 0;
+            const next = prev | f;
+            if (next === prev) continue;
+            flags.set(parent, next);
+            if (prev === 0) {
+              const row = yield* rowOf(parent);
+              if (row === undefined) continue; // shallow boundary
+              heapPush(heap, {
+                oid: parent,
+                gen: row.gen,
+                time: row.commit_time,
+              });
+            }
+          }
+        }
+        return {
+          mergeBase,
+          aheadBy,
+          behindBy,
+          saturated: pops >= maxPops && heap.length > 0,
+        } satisfies PullCompare;
+      });
+
+      /** The root tree of a commit, via the commit-graph table. */
+      const treeOfCommit = Effect.fn(function* (oid: string) {
+        const row = yield* sql.first<{ tree: string }>(
+          `SELECT tree FROM commits WHERE oid = ?`,
+          oid,
+        );
+        if (row === undefined) {
+          return yield* new StoreError({
+            reason: `commit ${oid} missing from the commit graph`,
+          });
+        }
+        return row.tree;
+      });
 
       // ── alarm scheduling ─────────────────────────────────────────────────
       const armAlarmAt = (time: number) =>
@@ -2066,28 +2638,39 @@ export const GitRepoLive = GitRepo.make(
         headers: { "retry-after": "10" },
       });
 
-      /** Authenticates a wire request; `undefined` = unauthenticated. */
-      const wireAuth = (
+      /**
+       * Resolves the wire caller. `undefined` means a credential was
+       * presented but does not verify — always a 401, even on public
+       * repos (a bad token is not an anonymous caller). Anonymous and
+       * verified actors go to the Auth block, which decides (public-repo
+       * anonymous reads are `AuthTokens` behavior, not an engine rule).
+       */
+      const wireActor = (
         request: HttpServerRequest.HttpServerRequest,
-        required: TokenScope,
-      ): Effect.Effect<boolean, StoreError> =>
+      ): Effect.Effect<Actor | undefined, StoreError> =>
         Effect.gen(function* () {
-          if (request.headers[ADMIN_HEADER] === "1") return true;
+          if (request.headers[ADMIN_HEADER] === "1") {
+            return { kind: "admin" } as const;
+          }
           const creds = parseBasicOrBearer(request.headers);
           if (creds === undefined) {
-            // Anonymous: read-only wire access (advertisement +
-            // upload-pack) on public repos; a `false` here answers 401 +
-            // WWW-Authenticate so git prompts for credentials.
-            return required === "read" && (yield* getConfig("public")) === "1";
+            return { kind: "anonymous" } as const;
           }
           const hash = yield* hashToken(Redacted.value(creds.token));
-          const result = yield* verifyTokenHash(hash, required).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("Unauthorized", () => Effect.succeed(false)),
-            Effect.catchTag("Forbidden", () => Effect.succeed(false)),
+          const token = yield* lookupToken(hash).pipe(
+            Effect.catchTag("Unauthorized", () => Effect.succeed(undefined)),
           );
-          return result;
+          return token === undefined
+            ? undefined
+            : ({ kind: "token", token: "", scope: token.scope } as const);
         });
+
+      /** One wire authorization: actor × repo × action → allowed? */
+      const wireAllowed = (
+        actor: Actor,
+        meta: RepoMetaData,
+        action: GitAction,
+      ) => authService.authorize({ actor, repo: repoContextOf(meta), action });
 
       /** GET info/refs — the v0 advertisement. */
       const handleInfoRefs = (
@@ -2102,10 +2685,17 @@ export const GitRepoLive = GitRepo.make(
               { status: 400 },
             );
           }
-          const required: TokenScope =
-            service === "git-receive-pack" ? "write" : "read";
-          const authed = yield* wireAuth(request, required);
-          if (!authed) return wire401;
+          const actor = yield* wireActor(request);
+          const action: GitAction =
+            service === "git-receive-pack"
+              ? { _tag: "Push", updates: [] }
+              : { _tag: "Fetch" };
+          if (
+            actor === undefined ||
+            !(yield* wireAllowed(actor, meta, action))
+          ) {
+            return wire401;
+          }
           const refs = yield* listAllRefs(meta.repoId);
           const body = buildAdvertisement({
             service,
@@ -2124,8 +2714,13 @@ export const GitRepoLive = GitRepo.make(
         meta: RepoMetaData,
       ) =>
         Effect.gen(function* () {
-          const authed = yield* wireAuth(request, "read");
-          if (!authed) return wire401;
+          const actor = yield* wireActor(request);
+          if (
+            actor === undefined ||
+            !(yield* wireAllowed(actor, meta, { _tag: "Fetch" }))
+          ) {
+            return wire401;
+          }
           const rawBody = new Uint8Array(yield* request.arrayBuffer);
           const body = yield* gunzipIfNeeded(
             rawBody,
@@ -2196,12 +2791,12 @@ export const GitRepoLive = GitRepo.make(
             // Auth and planning still happen here — where tokens and refs
             // live — but no pack byte transits this object, which is the
             // whole point of splitting the planes.
-            const found = yield* bucket
+            const found = yield* blobs
               .head(bundle.key)
               .pipe(
                 Effect.mapError(
                   (error) =>
-                    new StoreError({ reason: `bundle: ${error.message}` }),
+                    new StoreError({ reason: `bundle: ${error.reason}` }),
                 ),
               );
             if (found !== null) {
@@ -2328,8 +2923,13 @@ export const GitRepoLive = GitRepo.make(
         meta: RepoMetaData,
       ) =>
         Effect.gen(function* () {
-          const authed = yield* wireAuth(request, "write");
-          if (!authed) return wire401;
+          const actor = yield* wireActor(request);
+          if (
+            actor === undefined ||
+            !(yield* wireAllowed(actor, meta, { _tag: "Push", updates: [] }))
+          ) {
+            return wire401;
+          }
           const resultType = "application/x-git-receive-pack-result";
 
           // No size check — and no buffering: `request.arrayBuffer` on a
@@ -2344,7 +2944,7 @@ export const GitRepoLive = GitRepo.make(
           const receiveId = yield* ulid();
           const receivedResult = yield* Effect.result(
             receiveWireBody(request.stream, {
-              bucket,
+              blobs,
               key: incomingKey(meta.repoId, receiveId),
               spillThreshold: MAX_PACK_BYTES,
             }),
@@ -2452,6 +3052,20 @@ export const GitRepoLive = GitRepo.make(
                 reason,
               }));
 
+            // Re-authorize with the PARSED ref updates — this is where
+            // per-branch policies (protected branches, tag rules) get
+            // their say; the entry check above only asked "may this
+            // caller push at all?".
+            if (
+              parsed.commands.length > 0 &&
+              !(yield* wireAllowed(actor, meta, {
+                _tag: "Push",
+                updates: parsed.commands,
+              }))
+            ) {
+              return respond("ok", allNg("not permitted"));
+            }
+
             if (meta.readOnly) {
               return respond("ok", allNg("repository is read-only"));
             }
@@ -2496,8 +3110,8 @@ export const GitRepoLive = GitRepo.make(
                   incoming.parkedKey === undefined
                     ? bufferRandomAccess(body.subarray(parsed.packStart))
                     : sliceRandomAccess(
-                        r2RandomAccess({
-                          bucket,
+                        blobRandomAccess({
+                          blobs,
                           key: incoming.parkedKey,
                           size: incoming.total,
                         }),
@@ -2603,7 +3217,12 @@ export const GitRepoLive = GitRepo.make(
               Effect.suspend(() =>
                 parkedKey === undefined
                   ? Effect.void
-                  : bucket.delete(parkedKey).pipe(Effect.ignore),
+                  : blobs
+                      .delete(parkedKey)
+                      .pipe(
+                        Effect.provide(RuntimeContext.phantom),
+                        Effect.ignore,
+                      ),
               ),
             ),
           );
@@ -2634,7 +3253,7 @@ export const GitRepoLive = GitRepo.make(
         const outcome = yield* runCompactJob({
           repoId: meta.repoId,
           sql,
-          bucket,
+          blobs,
         });
         if (outcome.more) {
           yield* armAlarmAt(Date.now() + 1_000);
@@ -2706,7 +3325,7 @@ export const GitRepoLive = GitRepo.make(
           refs: refRows.map((ref) => ({ name: ref.name, oid: ref.oid })),
           entries: closure.entries,
           packStream: (entries) => packStream(entries, objects),
-          bucket,
+          blobs,
         });
         if (info !== undefined) {
           yield* setConfig("bundle", JSON.stringify(info));
@@ -2872,7 +3491,7 @@ export const GitRepoLive = GitRepo.make(
         const registryStub = registry.getByName(REGISTRY_DO_NAME);
         const outcome = yield* runPurgeJob({
           repoId: meta.repoId,
-          bucket,
+          blobs,
           // RuntimeContext is genuinely satisfied here (we run inside the
           // DO); discharge the coloring so the purge job's deps stay R=never.
           forkCount: registryStub.bumpForkCount(meta.repoId, 0).pipe(
@@ -2925,14 +3544,14 @@ export const GitRepoLive = GitRepo.make(
 
         startCompact: Effect.fn(function* (auth: CallerAuth) {
           yield* requireMeta;
-          yield* authorize(auth, "admin");
+          yield* authorize(auth, { _tag: "Maintain" });
           yield* upsertJob("compact", null);
           yield* armAlarmAt(Date.now());
         }),
 
         startPurge: Effect.fn(function* (auth: CallerAuth) {
           yield* requireMeta;
-          yield* authorize(auth, "admin");
+          yield* authorize(auth, { _tag: "DeleteRepo" });
           yield* setConfig("status", "deleting");
           yield* refreshSummary;
           yield* upsertJob("purge", null);
@@ -2944,7 +3563,7 @@ export const GitRepoLive = GitRepo.make(
 
         getRepoMeta: Effect.fn(function* (auth: CallerAuth) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "read");
+          yield* authorize(auth, { _tag: "ReadRepo" });
           return meta;
         }),
 
@@ -2953,7 +3572,7 @@ export const GitRepoLive = GitRepo.make(
           patch: RepoMetaPatch,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "admin");
+          yield* authorize(auth, { _tag: "UpdateRepo" });
           if (patch.defaultBranch !== undefined) {
             const ref = yield* sql.first<RefRow>(
               `SELECT name, oid FROM refs WHERE name = ?`,
@@ -2995,13 +3614,13 @@ export const GitRepoLive = GitRepo.make(
           },
         ) {
           yield* requireMeta;
-          yield* authorize(auth, "admin");
+          yield* authorize(auth, { _tag: "ManageTokens" });
           return yield* mintRepoToken(input);
         }),
 
         listTokens: Effect.fn(function* (auth: CallerAuth) {
           yield* requireMeta;
-          yield* authorize(auth, "admin");
+          yield* authorize(auth, { _tag: "ManageTokens" });
           const rows = yield* sql.all<TokenRow>(
             `SELECT * FROM tokens ORDER BY created_at`,
           );
@@ -3021,7 +3640,7 @@ export const GitRepoLive = GitRepo.make(
 
         revokeToken: Effect.fn(function* (auth: CallerAuth, id: string) {
           yield* requireMeta;
-          yield* authorize(auth, "admin");
+          yield* authorize(auth, { _tag: "ManageTokens" });
           const row = yield* sql.first<TokenRow>(
             `SELECT * FROM tokens WHERE id = ?`,
             id,
@@ -3037,7 +3656,7 @@ export const GitRepoLive = GitRepo.make(
           prefix?: string | undefined,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "read");
+          yield* authorize(auth, { _tag: "ReadRepo" });
           const refs = yield* listAllRefs(meta.repoId, prefix);
           const headRef = `refs/heads/${meta.defaultBranch}`;
           const headExists = yield* sql.first<RefRow>(
@@ -3052,7 +3671,7 @@ export const GitRepoLive = GitRepo.make(
 
         getRef: Effect.fn(function* (auth: CallerAuth, name: string) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "read");
+          yield* authorize(auth, { _tag: "ReadRepo" });
           const row = yield* sql.first<RefRow>(
             `SELECT name, oid FROM refs WHERE name = ?`,
             name,
@@ -3073,7 +3692,16 @@ export const GitRepoLive = GitRepo.make(
           input: UpdateRefInput,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "write");
+          yield* authorize(auth, {
+            _tag: "Push",
+            updates: [
+              {
+                ref: input.name,
+                oldOid: input.expectedOid ?? ZERO_OID,
+                newOid: input.newOid,
+              },
+            ],
+          });
           if (meta.readOnly) {
             return yield* new ReadOnlyRepo();
           }
@@ -3116,7 +3744,16 @@ export const GitRepoLive = GitRepo.make(
           input: RemoveRefInput,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "write");
+          yield* authorize(auth, {
+            _tag: "Push",
+            updates: [
+              {
+                ref: input.name,
+                oldOid: input.expectedOid ?? ZERO_OID,
+                newOid: ZERO_OID,
+              },
+            ],
+          });
           if (meta.readOnly) {
             return yield* new ReadOnlyRepo();
           }
@@ -3153,7 +3790,7 @@ export const GitRepoLive = GitRepo.make(
           input: ReadObjectInput,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "read");
+          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
           const objectMeta = yield* objects.getMeta(input.oid);
           if (objectMeta === undefined) {
@@ -3181,29 +3818,12 @@ export const GitRepoLive = GitRepo.make(
           input: CommitLogInput,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "read");
+          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
           const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
 
           // Resolve the starting commit.
-          const start = yield* Effect.gen(function* () {
-            const refName =
-              input.ref === undefined
-                ? `refs/heads/${meta.defaultBranch}`
-                : input.ref;
-            if (isOid(refName)) return refName;
-            const candidates = refName.startsWith("refs/")
-              ? [refName]
-              : [`refs/heads/${refName}`, `refs/tags/${refName}`];
-            for (const candidate of candidates) {
-              const row = yield* sql.first<RefRow>(
-                `SELECT name, oid FROM refs WHERE name = ?`,
-                candidate,
-              );
-              if (row !== undefined) return row.oid;
-            }
-            return yield* new RefNotFound({ ref: refName });
-          });
+          const start = yield* resolveRevision(meta.defaultBranch, input.ref);
 
           // Commit-time-ordered walk (v1: recomputed from the start each
           // page; the cursor is the last emitted oid).
@@ -3293,32 +3913,234 @@ export const GitRepoLive = GitRepo.make(
           } satisfies CommitLogPage;
         }),
 
+        readCommitDiff: Effect.fn(function* (
+          auth: CallerAuth,
+          input: { readonly oid: string },
+        ) {
+          const meta = yield* requireMeta;
+          yield* authorize(auth, { _tag: "ReadRepo" });
+          const objects = storeFor(meta.repoId);
+
+          const readCommitOrFail = Effect.fn(function* (oid: string) {
+            const objectMeta = yield* objects.getMeta(oid);
+            if (objectMeta === undefined) {
+              return yield* new ObjectNotFound({ oid });
+            }
+            if (objectMeta.type !== ObjectType.commit) {
+              return yield* new WrongObjectType({
+                oid,
+                expected: "commit",
+                actual: objectTypeName(objectMeta.type),
+              });
+            }
+            const content = yield* objects.readContent(oid);
+            return yield* parseCommit(content).pipe(
+              Effect.mapError(
+                (error) => new StoreError({ reason: error.reason }),
+              ),
+            );
+          });
+
+          const commit = yield* readCommitOrFail(input.oid);
+          // First-parent diff (the GitHub default for merge commits).
+          const parent = commit.parents[0] ?? null;
+          const parentTree =
+            parent === null
+              ? undefined
+              : (yield* readCommitOrFail(parent)).tree;
+
+          const result = yield* diffTrees(objects, parentTree, commit.tree);
+          return {
+            oid: input.oid,
+            parent,
+            files: result.files,
+            truncated: result.truncated,
+          } satisfies CommitDiffData;
+        }),
+
+        compareCommits: Effect.fn(function* (
+          auth: CallerAuth,
+          input: CompareInput,
+        ) {
+          const meta = yield* requireMeta;
+          yield* authorize(auth, { _tag: "ReadRepo" });
+          const objects = storeFor(meta.repoId);
+
+          const baseOid = yield* resolveToCommit(
+            meta.repoId,
+            meta.defaultBranch,
+            input.base,
+          );
+          const headOid = yield* resolveToCommit(
+            meta.repoId,
+            meta.defaultBranch,
+            input.head,
+          );
+
+          // The classic merge-base paint walk over the commit-graph tables,
+          // ordered by the pre-computed generation number (`gen`, maintained
+          // at ingest): a common ancestor's gen is strictly less than any
+          // node on a path to it, so processing gen-descending guarantees
+          // the first both-flagged pop is a best common ancestor. Nodes
+          // carrying both flags propagate both but are counted as neither.
+          const BASE = 1;
+          const HEAD = 2;
+          const BOTH = 3;
+          const flags = new Map<string, number>();
+          flags.set(baseOid, BASE);
+          flags.set(headOid, (flags.get(headOid) ?? 0) | HEAD);
+          const heap: Array<WalkHeapNode> = [];
+          const timeOf = new Map<string, number>();
+
+          const rowOf = (oid: string) =>
+            sql.first<{ gen: number; commit_time: number }>(
+              `SELECT gen, commit_time FROM commits WHERE oid = ?`,
+              oid,
+            );
+
+          // seed (base === head short-circuits: mergeBase = both, 0/0)
+          for (const oid of new Set([baseOid, headOid])) {
+            const row = yield* rowOf(oid);
+            if (row === undefined) {
+              return yield* new ObjectNotFound({ oid });
+            }
+            heapPush(heap, { oid, gen: row.gen, time: row.commit_time });
+            timeOf.set(oid, row.commit_time);
+          }
+
+          let mergeBase: string | undefined;
+          let aheadBy = 0;
+          let behindBy = 0;
+          let pops = 0;
+          const headSide: Array<string> = [];
+
+          while (heap.length > 0 && pops < MAX_COMPARE_WALK) {
+            // stop when nothing in the heap can still change the counts
+            if (
+              mergeBase !== undefined &&
+              heap.every((n) => (flags.get(n.oid)! & BOTH) === BOTH)
+            ) {
+              break;
+            }
+            const node = heapPop(heap);
+            pops++;
+            const f = flags.get(node.oid)!;
+            if ((f & BOTH) === BOTH) {
+              if (mergeBase === undefined) mergeBase = node.oid;
+            } else if (f === HEAD) {
+              aheadBy++;
+              headSide.push(node.oid);
+            } else {
+              behindBy++;
+            }
+            const parents = yield* sql.all<{ parent: string }>(
+              `SELECT parent FROM commit_parents WHERE oid = ? ORDER BY ord`,
+              node.oid,
+            );
+            for (const { parent } of parents) {
+              const prev = flags.get(parent) ?? 0;
+              const next = prev | f;
+              if (next === prev) continue;
+              flags.set(parent, next);
+              if (prev === 0) {
+                const row = yield* rowOf(parent);
+                if (row === undefined) continue; // shallow boundary
+                heapPush(heap, {
+                  oid: parent,
+                  gen: row.gen,
+                  time: row.commit_time,
+                });
+                timeOf.set(parent, row.commit_time);
+              }
+              // already-heaped nodes just get richer flags; no decrease-key
+              // needed (flags only grow; both-flagged pops count as neither)
+            }
+          }
+          if (mergeBase === undefined) {
+            return yield* new NoMergeBase({
+              base: asOid(baseOid),
+              head: asOid(headOid),
+            });
+          }
+
+          // head-side commits, committer-time descending, capped.
+          headSide.sort((a, b) => (timeOf.get(b) ?? 0) - (timeOf.get(a) ?? 0));
+          const commitOids = headSide.slice(0, MAX_COMPARE_COMMITS);
+          const commits: Array<CommitData> = [];
+          for (const oid of commitOids) {
+            const content = yield* objects.readContent(oid);
+            const parsed = yield* parseCommit(content).pipe(
+              Effect.mapError(
+                (error) => new StoreError({ reason: error.reason }),
+              ),
+            );
+            commits.push({
+              oid,
+              tree: parsed.tree,
+              parents: parsed.parents,
+              author: {
+                name: parsed.author.name,
+                email: parsed.author.email,
+                date: parsed.author.when,
+                tz: parsed.author.tz,
+              },
+              committer: {
+                name: parsed.committer.name,
+                email: parsed.committer.email,
+                date: parsed.committer.when,
+                tz: parsed.committer.tz,
+              },
+              message: parsed.message,
+            });
+          }
+
+          // three-dot file diff: mergeBase tree vs head tree
+          const treeOf = Effect.fn(function* (oid: string) {
+            const row = yield* sql.first<{ tree: string }>(
+              `SELECT tree FROM commits WHERE oid = ?`,
+              oid,
+            );
+            if (row === undefined) {
+              return yield* new StoreError({
+                reason: `commit ${oid} missing from the commit graph`,
+              });
+            }
+            return row.tree;
+          });
+          const mergeBaseTree = yield* treeOf(mergeBase);
+          const headTree = yield* treeOf(headOid);
+          const filesResult = yield* diffTrees(
+            objects,
+            mergeBaseTree,
+            headTree,
+          );
+
+          return {
+            base: baseOid,
+            head: headOid,
+            mergeBase,
+            aheadBy,
+            behindBy,
+            commits,
+            commitsTruncated:
+              headSide.length > MAX_COMPARE_COMMITS || pops >= MAX_COMPARE_WALK,
+            files: filesResult.files,
+            filesTruncated: filesResult.truncated,
+          } satisfies CompareData;
+        }),
+
         readFileAtPath: Effect.fn(function* (
           auth: CallerAuth,
           input: ReadFileInput,
         ) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, "read");
+          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
 
-          const startOid = yield* Effect.gen(function* () {
-            const refName =
-              input.ref === undefined
-                ? `refs/heads/${meta.defaultBranch}`
-                : input.ref;
-            if (isOid(refName)) return refName;
-            const candidates = refName.startsWith("refs/")
-              ? [refName]
-              : [`refs/heads/${refName}`, `refs/tags/${refName}`];
-            for (const candidate of candidates) {
-              const row = yield* sql.first<RefRow>(
-                `SELECT name, oid FROM refs WHERE name = ?`,
-                candidate,
-              );
-              if (row !== undefined) return row.oid;
-            }
-            return yield* new RefNotFound({ ref: refName });
-          });
+          const startOid = yield* resolveRevision(
+            meta.defaultBranch,
+            input.ref,
+          );
 
           // Resolve start → commit → root tree (peel tags on the way).
           const rootTree = yield* Effect.gen(function* () {
@@ -3392,6 +4214,512 @@ export const GitRepoLive = GitRepo.make(
           }
           // unreachable — the loop returns or fails
           return yield* new ObjectNotFound({ oid: input.path });
+        }),
+
+        createPull: Effect.fn(function* (
+          auth: CallerAuth,
+          input: CreatePullInput,
+        ) {
+          yield* requireMeta;
+          yield* authorize(auth, {
+            _tag: "CreatePull",
+            base: input.base,
+            head: input.head,
+          });
+          const baseRef = yield* normalizeBranchRef(input.base);
+          const headRef = yield* normalizeBranchRef(input.head);
+          if (baseRef === headRef) {
+            return yield* new ValidationError({
+              message: "base and head must be different branches",
+            });
+          }
+          for (const ref of [baseRef, headRef]) {
+            const row = yield* sql.first<RefRow>(
+              `SELECT name, oid FROM refs WHERE name = ?`,
+              ref,
+            );
+            if (row === undefined) {
+              return yield* new BranchMissing({ ref });
+            }
+          }
+          const duplicate = yield* sql.first<{ number: number }>(
+            `SELECT number FROM pulls WHERE state = 'open' AND base_ref = ? AND head_ref = ?`,
+            baseRef,
+            headRef,
+          );
+          if (duplicate !== undefined) {
+            return yield* new PullExists({ number: duplicate.number });
+          }
+          const now = Date.now();
+          // Allocate the number and insert the row in ONE transaction —
+          // the DO's input/output gates make the counter race-free.
+          const number = yield* sql.transactionSync((raw) => {
+            const seq = raw
+              .exec<{ value: string }>(
+                `SELECT value FROM config WHERE key = 'pull_seq'`,
+              )
+              .toArray()[0];
+            const next = (seq === undefined ? 0 : Number(seq.value)) + 1;
+            raw.exec(
+              `INSERT INTO config (key, value) VALUES ('pull_seq', ?)
+               ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+              String(next),
+            );
+            raw.exec(
+              `INSERT INTO pulls (number, title, body, base_ref, head_ref, state, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`,
+              next,
+              input.title,
+              input.body ?? null,
+              baseRef,
+              headRef,
+              now,
+              now,
+            );
+            return next;
+          });
+          return {
+            number,
+            title: input.title,
+            body: input.body ?? null,
+            baseRef,
+            headRef,
+            state: "open",
+            createdAt: now,
+            updatedAt: now,
+            mergedAt: null,
+            mergeCommit: null,
+          } satisfies PullData;
+        }),
+
+        listPulls: Effect.fn(function* (
+          auth: CallerAuth,
+          input: ListPullsInput,
+        ) {
+          yield* requireMeta;
+          yield* authorize(auth, { _tag: "ReadRepo" });
+          const state = input.state ?? "open";
+          const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
+          const cursor =
+            input.cursor === undefined ? undefined : Number(input.cursor);
+          const where: Array<string> = [];
+          const bindings: Array<string | number> = [];
+          if (state !== "all") {
+            where.push("state = ?");
+            bindings.push(state);
+          }
+          if (cursor !== undefined && Number.isFinite(cursor)) {
+            where.push("number < ?");
+            bindings.push(cursor);
+          }
+          const rows = yield* sql.all<PullRow>(
+            `SELECT * FROM pulls
+             ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
+             ORDER BY number DESC LIMIT ?`,
+            ...bindings,
+            limit + 1,
+          );
+          const items = rows.slice(0, limit).map(rowToPull);
+          const hasMore = rows.length > limit;
+          return {
+            items,
+            nextCursor: hasMore
+              ? String(items[items.length - 1]!.number)
+              : null,
+            hasMore,
+          } satisfies PullsPage;
+        }),
+
+        getPull: Effect.fn(function* (auth: CallerAuth, number: number) {
+          const meta = yield* requireMeta;
+          yield* authorize(auth, { _tag: "ReadRepo" });
+          const row = yield* loadPull(number);
+          const pull = rowToPull(row);
+          const empty = {
+            baseOid: null,
+            headOid: null,
+            mergeBase: null,
+            aheadBy: null,
+            behindBy: null,
+            mergeable: null,
+            mergeableReason: null,
+          } as const;
+          // A merged PR's record is `mergeCommit` — live fields stay null.
+          if (pull.state === "merged") {
+            return { ...pull, ...empty } satisfies PullDetailData;
+          }
+          const baseRow = yield* sql.first<RefRow>(
+            `SELECT name, oid FROM refs WHERE name = ?`,
+            row.base_ref,
+          );
+          const headRow = yield* sql.first<RefRow>(
+            `SELECT name, oid FROM refs WHERE name = ?`,
+            row.head_ref,
+          );
+          if (baseRow === undefined || headRow === undefined) {
+            // A branch is gone: everything downstream is uncomputable.
+            return {
+              ...pull,
+              ...empty,
+              baseOid: baseRow?.oid ?? null,
+              headOid: headRow?.oid ?? null,
+            } satisfies PullDetailData;
+          }
+          const baseTip = baseRow.oid;
+          const headTip = headRow.oid;
+          const cmp = yield* paintWalk(baseTip, headTip, MAX_PULL_WALK);
+          if (cmp.saturated) {
+            return {
+              ...pull,
+              ...empty,
+              baseOid: baseTip,
+              headOid: headTip,
+              mergeableReason: "unknown",
+            } satisfies PullDetailData;
+          }
+          const live = {
+            ...pull,
+            baseOid: baseTip,
+            headOid: headTip,
+            mergeBase: cmp.mergeBase ?? null,
+            aheadBy: cmp.aheadBy,
+            behindBy: cmp.behindBy,
+          };
+          if (cmp.mergeBase === undefined) {
+            // Disjoint histories: our trivial-merge rules can never merge.
+            return {
+              ...live,
+              mergeable: false,
+              mergeableReason: "conflict",
+            } satisfies PullDetailData;
+          }
+          if (cmp.mergeBase === headTip) {
+            return {
+              ...live,
+              mergeable: false,
+              mergeableReason: "up-to-date",
+            } satisfies PullDetailData;
+          }
+          if (cmp.mergeBase === baseTip) {
+            return {
+              ...live,
+              mergeable: true,
+              mergeableReason: "ff",
+            } satisfies PullDetailData;
+          }
+          // Trivial-merge dry run: diff intersection only, no tree building.
+          const objects = storeFor(meta.repoId);
+          const mbTree = yield* treeOfCommit(cmp.mergeBase);
+          const baseChanges = yield* diffTrees(
+            objects,
+            mbTree,
+            yield* treeOfCommit(baseTip),
+          );
+          const headChanges = yield* diffTrees(
+            objects,
+            mbTree,
+            yield* treeOfCommit(headTip),
+          );
+          if (baseChanges.truncated || headChanges.truncated) {
+            // Can't see every change — conservatively not mergeable.
+            return {
+              ...live,
+              mergeable: false,
+              mergeableReason: "conflict",
+            } satisfies PullDetailData;
+          }
+          const conflicts = conflictingPaths(
+            baseChanges.files,
+            headChanges.files,
+          );
+          return {
+            ...live,
+            mergeable: conflicts.length === 0,
+            mergeableReason:
+              conflicts.length === 0 ? "merge-commit" : "conflict",
+          } satisfies PullDetailData;
+        }),
+
+        updatePull: Effect.fn(function* (
+          auth: CallerAuth,
+          input: UpdatePullInput,
+        ) {
+          yield* requireMeta;
+          yield* authorize(auth, { _tag: "UpdatePull", number: input.number });
+          const row = yield* loadPull(input.number);
+          const current = pullStateOf(row.state);
+          if (input.state !== undefined && current === "merged") {
+            return yield* new PullStateConflict({
+              number: input.number,
+              state: "merged",
+            });
+          }
+          const title = input.title ?? row.title;
+          const body = input.body === undefined ? row.body : input.body;
+          const state = input.state ?? current;
+          yield* sql.run(
+            `UPDATE pulls SET title = ?, body = ?, state = ?, updated_at = ? WHERE number = ?`,
+            title,
+            body,
+            state,
+            Date.now(),
+            input.number,
+          );
+          return rowToPull(yield* loadPull(input.number));
+        }),
+
+        mergePull: Effect.fn(function* (
+          auth: CallerAuth,
+          input: MergePullInput,
+        ) {
+          const meta = yield* requireMeta;
+          yield* authorize(auth, { _tag: "MergePull", number: input.number });
+          if (meta.readOnly) {
+            return yield* new ReadOnlyRepo();
+          }
+          const row = yield* loadPull(input.number);
+          const state = pullStateOf(row.state);
+          if (state !== "open") {
+            return yield* new PullStateConflict({
+              number: input.number,
+              state,
+            });
+          }
+          // Both branches must exist — the ref CAS below must NEVER
+          // (re)create a deleted base branch.
+          const baseRow = yield* sql.first<RefRow>(
+            `SELECT name, oid FROM refs WHERE name = ?`,
+            row.base_ref,
+          );
+          if (baseRow === undefined) {
+            return yield* new BranchMissing({ ref: row.base_ref });
+          }
+          const headRow = yield* sql.first<RefRow>(
+            `SELECT name, oid FROM refs WHERE name = ?`,
+            row.head_ref,
+          );
+          if (headRow === undefined) {
+            return yield* new BranchMissing({ ref: row.head_ref });
+          }
+          const baseTip = baseRow.oid;
+          const headTip = headRow.oid;
+          if (
+            input.expectedHeadOid !== undefined &&
+            input.expectedHeadOid !== headTip
+          ) {
+            return yield* new RefConflict({
+              ref: row.head_ref,
+              currentOid: asOid(headTip),
+            });
+          }
+          const cmp = yield* paintWalk(baseTip, headTip, MAX_PULL_MERGE_WALK);
+          if (cmp.mergeBase === headTip) {
+            return yield* new NothingToMerge({ number: input.number });
+          }
+          const now = Date.now();
+
+          // ── fast-forward: base is an ancestor of head ──────────────────
+          if (cmp.mergeBase === baseTip) {
+            // No new objects, no graph rows (all present from the push) —
+            // one transaction re-checks the CAS, flips the ref, and stamps
+            // the pulls row atomically.
+            const pull = yield* sql.transactionSync<PullData, RefConflict>(
+              (raw, rollback) => {
+                const rows = raw
+                  .exec<RefRow>(
+                    `SELECT name, oid FROM refs WHERE name = ?`,
+                    row.base_ref,
+                  )
+                  .toArray();
+                const currentOid = rows.length > 0 ? rows[0]!.oid : null;
+                if (currentOid !== baseTip) {
+                  rollback(
+                    new RefConflict({
+                      ref: row.base_ref,
+                      currentOid:
+                        currentOid === null ? null : asOid(currentOid),
+                    }),
+                  );
+                }
+                raw.exec(
+                  `INSERT INTO refs (name, oid) VALUES (?, ?)
+                   ON CONFLICT (name) DO UPDATE SET oid = excluded.oid`,
+                  row.base_ref,
+                  headTip,
+                );
+                raw.exec(
+                  `UPDATE pulls SET state = 'merged', merged_at = ?, merge_commit = ?, updated_at = ? WHERE number = ?`,
+                  now,
+                  headTip,
+                  now,
+                  input.number,
+                );
+                const updated = raw
+                  .exec<PullRow>(
+                    `SELECT * FROM pulls WHERE number = ?`,
+                    input.number,
+                  )
+                  .toArray()[0]!;
+                return rowToPull(updated);
+              },
+            );
+            return {
+              method: "ff",
+              oid: headTip,
+              pull,
+            } satisfies MergePullResult;
+          }
+
+          // ── trivial three-way merge commit ─────────────────────────────
+          if (cmp.mergeBase === undefined) {
+            // Unrelated histories (or a saturated walk): conservative
+            // conflict — the server never guesses.
+            return yield* new MergeConflict({
+              number: input.number,
+              paths: [],
+            });
+          }
+          const objects = storeFor(meta.repoId);
+          const mbTree = yield* treeOfCommit(cmp.mergeBase);
+          const baseTree = yield* treeOfCommit(baseTip);
+          const baseChanges = yield* diffTrees(objects, mbTree, baseTree);
+          const headChanges = yield* diffTrees(
+            objects,
+            mbTree,
+            yield* treeOfCommit(headTip),
+          );
+          if (baseChanges.truncated || headChanges.truncated) {
+            // A truncated diff hides changes — conflict detection would be
+            // unsound, so refuse conservatively.
+            return yield* new MergeConflict({
+              number: input.number,
+              paths: [],
+            });
+          }
+          const conflicts = conflictingPaths(
+            baseChanges.files,
+            headChanges.files,
+          );
+          if (conflicts.length > 0) {
+            return yield* new MergeConflict({
+              number: input.number,
+              paths: conflicts.slice(0, MAX_CONFLICT_PATHS),
+            });
+          }
+
+          // Build the merged tree: head's mergeBase→head changes applied
+          // onto the CURRENT base tree (disjoint by the check above).
+          const applied = yield* applyTreeChanges(
+            objects,
+            baseTree,
+            headChanges.files,
+          );
+          const shortHead = row.head_ref.startsWith("refs/heads/")
+            ? row.head_ref.slice("refs/heads/".length)
+            : row.head_ref;
+          const message =
+            input.message ??
+            `Merge pull request #${input.number} from ${shortHead}\n`;
+          const when = Math.floor(now / 1000);
+          const identity = {
+            name: "git-service",
+            email: "git-service@localhost",
+            when,
+            tz: "+0000",
+          };
+          const commitContent = yield* encodeCommit({
+            tree: applied.root,
+            parents: [baseTip, headTip],
+            author: identity,
+            committer: identity,
+            message,
+          }).pipe(Effect.mapError((e) => new StoreError({ reason: e.reason })));
+          const mergeOid = yield* hashObject(ObjectType.commit, commitContent);
+
+          // Stage under a synthetic push id WITH a pushes staging row first,
+          // so the staging-GC alarm reaps the objects if we crash (or the
+          // CAS below loses) — the exact crash-safety story of a push.
+          const pushId = `pr-${input.number}-${yield* ulid()}`;
+          yield* sql.run(
+            `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
+            pushId,
+            now,
+          );
+          const zlibToStore = (error: Zlib.ZlibError): StoreError =>
+            new StoreError({ reason: error.reason });
+          const staged: Array<StagedObject> = [];
+          for (const tree of applied.newTrees) {
+            staged.push({
+              oid: tree.oid,
+              type: ObjectType.tree,
+              size: tree.content.length,
+              zdata: yield* Zlib.deflate(tree.content).pipe(
+                Effect.mapError(zlibToStore),
+              ),
+            });
+          }
+          staged.push({
+            oid: mergeOid,
+            type: ObjectType.commit,
+            size: commitContent.length,
+            zdata: yield* Zlib.deflate(commitContent).pipe(
+              Effect.mapError(zlibToStore),
+            ),
+          });
+          yield* objects.insertStagedBatch(pushId, staged);
+          // Crash safety: arm the staging-GC alarm (like the push path) so
+          // a lost CAS below — or a crash before finalize — cannot leak the
+          // staged objects; a committed push's row is ignored by the GC.
+          yield* upsertJob("gc", null);
+          yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
+
+          const graph = yield* computeGraphRows([
+            {
+              oid: mergeOid,
+              tree: applied.root,
+              parents: [baseTip, headTip],
+              commitTime: when,
+            },
+          ]);
+          const results = yield* finalizeRefTxn({
+            commands: [
+              { oldOid: baseTip, newOid: mergeOid, ref: row.base_ref },
+            ],
+            atomic: true,
+            pushId,
+            graph,
+            // Atomic with the ref flip + staged-object promotion.
+            onCommitted: (raw) => {
+              raw.exec(
+                `UPDATE pulls SET state = 'merged', merged_at = ?, merge_commit = ?, updated_at = ? WHERE number = ?`,
+                now,
+                mergeOid,
+                now,
+                input.number,
+              );
+            },
+          });
+          const outcome = results[0];
+          if (outcome === undefined || !outcome.ok) {
+            // Base moved between the pre-check and the transaction. The
+            // staged objects stay parked under `pushId` for the GC alarm.
+            const current = yield* sql.first<RefRow>(
+              `SELECT name, oid FROM refs WHERE name = ?`,
+              row.base_ref,
+            );
+            return yield* new RefConflict({
+              ref: row.base_ref,
+              currentOid: current === undefined ? null : asOid(current.oid),
+            });
+          }
+          // Post-merge compaction check deliberately skipped: the merge
+          // adds at most a handful of small trees + one commit (the push
+          // path's thresholds cover accumulation).
+          return {
+            method: "merge-commit",
+            oid: mergeOid,
+            pull: rowToPull(yield* loadPull(input.number)),
+          } satisfies MergePullResult;
         }),
 
         snapshotRows: () => snapshotStream(sql),

@@ -35,8 +35,16 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi, type Oid } from "../src/Api.ts";
-import { GitService } from "../src/Service.ts";
-import { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import {
+  encodeCommit,
+  hashObject,
+  ObjectType,
+  parseCommit,
+  utf8Decode,
+  utf8Encode,
+} from "../src/git/ObjectCodec.ts";
+import ProtectedGitHost from "./fixtures/protected-stack.ts";
+import TestGitHost, { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -52,16 +60,16 @@ const logLevel = Effect.provideService(
 
 // The local suite must not touch the cloud, so it composes its own Stack over
 // `Alchemy.localState()` — the same user pattern as production, just with a
-// local state store: yield the `GitService()` construct inside your own
-// Stack. Importing `./fixtures/stack.ts` above installed the
-// TEST_ADMIN_TOKEN into the deployer env before this plan resolves
+// local state store: deploy the fixture's building-block assembly worker.
+// Importing `./fixtures/stack.ts` above installed the TEST_ADMIN_TOKEN into
+// the deployer env before this plan resolves
 // `Config.redacted("GIT_SERVICE_ADMIN_TOKEN")`.
 const LocalStack = Alchemy.Stack(
   "GitServiceLocalStack",
   { providers: Cloudflare.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    const git = yield* GitService();
-    return { url: git.url };
+    const host = yield* TestGitHost;
+    return { url: host.url.as<string>() };
   }),
 );
 
@@ -202,6 +210,10 @@ const authRemote = (url: string, token: string, owner: string, repo: string) =>
     const parsed = new URL(url);
     return `${parsed.protocol}//x:${token}@${parsed.host}/${owner}/${repo}.git`;
   });
+
+/** `git rev-parse <rev>` → the 40-hex oid. */
+const revParse = (cwd: string, rev: string) =>
+  Effect.map(mustGit(cwd, "rev-parse", rev), (result) => result.stdout);
 
 const tempDir = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -1242,4 +1254,1087 @@ test(
     expect(Result.isFailure(privateClone)).toBe(true);
   }),
   { timeout: 120_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// (k) diffs & compare — server-side changed-file lists
+// ═══════════════════════════════════════════════════════════════════════════
+
+test(
+  "diff: adds/mods/deletes/mode change across two commits; root commit vs empty tree",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const { client, token } = yield* createRepo(url, "acme", "diffs");
+    const work = yield* tempDir;
+    yield* mustGit(work, "init", "-q", "-b", "main");
+
+    // commit 1: a.txt, dir/b.txt, script.sh (0644)
+    yield* fs.writeFileString(`${work}/a.txt`, "one\n");
+    yield* fs.makeDirectory(`${work}/dir`);
+    yield* fs.writeFileString(`${work}/dir/b.txt`, "bee\n");
+    yield* fs.writeFileString(`${work}/script.sh`, "#!/bin/sh\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "c1");
+    const c1 = yield* revParse(work, "HEAD");
+
+    // commit 2: modify a.txt, delete dir/b.txt, add c.txt, chmod +x script.sh
+    yield* fs.writeFileString(`${work}/a.txt`, "one\ntwo\n");
+    yield* mustGit(work, "rm", "-q", "dir/b.txt");
+    yield* fs.writeFileString(`${work}/c.txt`, "sea\n");
+    yield* mustGit(work, "update-index", "--chmod=+x", "script.sh");
+    yield* mustGit(work, "add", "a.txt", "c.txt");
+    yield* mustGit(work, "commit", "-qm", "c2");
+    const c2 = yield* revParse(work, "HEAD");
+
+    const remote = yield* authRemote(url, token, "acme", "diffs");
+    yield* mustGit(work, "push", "-q", remote, "main");
+
+    // c2 vs c1
+    const d2 = yield* client.objects.diff({
+      params: { owner: "acme", repo: "diffs", oid: asOid(c2) },
+    });
+    expect(d2.parent).toBe(c1);
+    expect(d2.truncated).toBe(false);
+    const byPath = new Map(d2.files.map((f) => [f.path, f]));
+    expect(byPath.get("a.txt")?.status).toBe("modified");
+    expect(byPath.get("a.txt")?.oldOid).not.toBe(byPath.get("a.txt")?.newOid);
+    expect(byPath.get("dir/b.txt")?.status).toBe("removed");
+    expect(byPath.get("dir/b.txt")?.oldOid).toBeDefined();
+    expect(byPath.get("dir/b.txt")?.newOid).toBeUndefined();
+    expect(byPath.get("c.txt")?.status).toBe("added");
+    // mode-only change: same oid, different modes, still "modified"
+    const script = byPath.get("script.sh")!;
+    expect(script.status).toBe("modified");
+    expect(script.oldMode).toBe("100644");
+    expect(script.newMode).toBe("100755");
+    expect(script.oldOid).toBe(script.newOid);
+    expect(d2.files.length).toBe(4);
+    // sizes present for text blobs
+    expect(byPath.get("a.txt")?.newSize).toBe(8);
+
+    // root commit: parent null, everything added
+    const d1 = yield* client.objects.diff({
+      params: { owner: "acme", repo: "diffs", oid: asOid(c1) },
+    });
+    expect(d1.parent).toBeNull();
+    expect(d1.files.every((f) => f.status === "added")).toBe(true);
+    expect(d1.files.map((f) => f.path).sort()).toEqual([
+      "a.txt",
+      "dir/b.txt",
+      "script.sh",
+    ]);
+
+    // wrong object type: a tree oid on the diff endpoint → 422
+    const treeOid = (yield* client.objects.commit({
+      params: { owner: "acme", repo: "diffs", oid: asOid(c2) },
+    })).tree;
+    yield* expectTag(
+      client.objects.diff({
+        params: { owner: "acme", repo: "diffs", oid: treeOid },
+      }),
+      "WrongObjectType",
+    );
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "diff: compare merge base across branches, ahead/behind, three-dot files, ref names",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const { client, token } = yield* createRepo(url, "acme", "compare");
+    const work = yield* tempDir;
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${work}/base.txt`, "base\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "base");
+    const fork = yield* revParse(work, "HEAD");
+
+    // feature: 1 commit touching feature.txt
+    yield* mustGit(work, "checkout", "-qb", "feature");
+    yield* fs.writeFileString(`${work}/feature.txt`, "feat\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "feat 1");
+    const featTip = yield* revParse(work, "HEAD");
+
+    // main: 2 more commits touching main-only files
+    yield* mustGit(work, "checkout", "-q", "main");
+    yield* fs.writeFileString(`${work}/m1.txt`, "m1\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "m1");
+    yield* fs.writeFileString(`${work}/m2.txt`, "m2\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "m2");
+
+    const remote = yield* authRemote(url, token, "acme", "compare");
+    yield* mustGit(work, "push", "-q", remote, "main", "feature");
+
+    const cmp = yield* client.objects.compare({
+      params: { owner: "acme", repo: "compare" },
+      query: { base: "main", head: "feature" }, // short ref names
+    });
+    expect(cmp.mergeBase).toBe(fork);
+    expect(cmp.head).toBe(featTip);
+    expect(cmp.aheadBy).toBe(1);
+    expect(cmp.behindBy).toBe(2);
+    expect(cmp.commits.length).toBe(1);
+    expect(cmp.commits[0]!.message).toContain("feat 1");
+    // three-dot: only the feature-side change, none of main's m1/m2
+    expect(cmp.files.map((f) => f.path)).toEqual(["feature.txt"]);
+    expect(cmp.files[0]!.status).toBe("added");
+    expect(cmp.filesTruncated).toBe(false);
+
+    // reversed: head is behind → empty files, counts swap
+    const rev = yield* client.objects.compare({
+      params: { owner: "acme", repo: "compare" },
+      query: { base: "feature", head: fork }, // oid accepted too
+    });
+    expect(rev.mergeBase).toBe(fork);
+    expect(rev.aheadBy).toBe(0);
+    expect(rev.files.length).toBe(0);
+
+    // unknown ref → RefNotFound (404)
+    yield* expectTag(
+      client.objects.compare({
+        params: { owner: "acme", repo: "compare" },
+        query: { base: "main", head: "no-such-branch" },
+      }),
+      "RefNotFound",
+    );
+
+    // disjoint history → NoMergeBase (422)
+    yield* mustGit(work, "checkout", "-q", "--orphan", "island");
+    yield* mustGit(work, "rm", "-rfq", "--cached", ".");
+    yield* fs.writeFileString(`${work}/island.txt`, "alone\n");
+    yield* mustGit(work, "add", "island.txt");
+    yield* mustGit(work, "commit", "-qm", "island");
+    yield* mustGit(work, "push", "-q", remote, "island");
+    yield* expectTag(
+      client.objects.compare({
+        params: { owner: "acme", repo: "compare" },
+        query: { base: "main", head: "island" },
+      }),
+      "NoMergeBase",
+    );
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "diff: anonymous read on public repos; 401 on private",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const anonymous = yield* makeAnonymousClient(url);
+
+    // private repo → anonymous is 401 on both endpoints
+    const priv = yield* createRepo(url, "acme", "diff-private");
+    const pw = yield* tempDir;
+    yield* mustGit(pw, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${pw}/f.txt`, "x\n");
+    yield* mustGit(pw, "add", ".");
+    yield* mustGit(pw, "commit", "-qm", "c");
+    const privTip = yield* revParse(pw, "HEAD");
+    yield* mustGit(
+      pw,
+      "push",
+      "-q",
+      yield* authRemote(url, priv.token, "acme", "diff-private"),
+      "main",
+    );
+    yield* expectTag(
+      anonymous.objects.diff({
+        params: { owner: "acme", repo: "diff-private", oid: asOid(privTip) },
+      }),
+      "Unauthorized",
+    );
+    yield* expectTag(
+      anonymous.objects.compare({
+        params: { owner: "acme", repo: "diff-private" },
+        query: { base: "main", head: "main" },
+      }),
+      "Unauthorized",
+    );
+
+    // public repo → anonymous reads succeed
+    const pub = yield* createRepo(url, "acme", "diff-public");
+    yield* pub.client.repos.update({
+      params: { owner: "acme", repo: "diff-public" },
+      payload: { public: true },
+    });
+    const ww = yield* tempDir;
+    yield* mustGit(ww, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${ww}/hello.txt`, "hi\n");
+    yield* mustGit(ww, "add", ".");
+    yield* mustGit(ww, "commit", "-qm", "c1");
+    yield* fs.writeFileString(`${ww}/hello.txt`, "hi there\n");
+    yield* mustGit(ww, "add", ".");
+    yield* mustGit(ww, "commit", "-qm", "c2");
+    const pubTip = yield* revParse(ww, "HEAD");
+    yield* mustGit(
+      ww,
+      "push",
+      "-q",
+      yield* authRemote(url, pub.token, "acme", "diff-public"),
+      "main",
+    );
+
+    const d = yield* anonymous.objects.diff({
+      params: { owner: "acme", repo: "diff-public", oid: asOid(pubTip) },
+    });
+    expect(d.files).toEqual([
+      expect.objectContaining({ path: "hello.txt", status: "modified" }),
+    ]);
+    const c = yield* anonymous.objects.compare({
+      params: { owner: "acme", repo: "diff-public" },
+      query: { base: d.parent!, head: "main" },
+    });
+    expect(c.aheadBy).toBe(1);
+    expect(c.behindBy).toBe(0);
+    expect(c.mergeBase).toBe(d.parent);
+  }),
+  { timeout: 120_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// (l) pull requests — lifecycle, live compare fields, merges
+// ═══════════════════════════════════════════════════════════════════════════
+
+test(
+  "pulls: open + numbering, typed create failures, list pagination, live detail, close/reopen/edit",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const { client, token } = yield* createRepo(url, "acme", "pulls-basic");
+    const params = { owner: "acme", repo: "pulls-basic" };
+    const work = yield* tempDir;
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${work}/README.md`, "base\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "base");
+    const mainTip = yield* revParse(work, "HEAD");
+    yield* mustGit(work, "checkout", "-qb", "feature");
+    yield* fs.writeFileString(`${work}/feature.txt`, "feat\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "feat");
+    yield* mustGit(work, "checkout", "-qb", "feature-2", "main");
+    yield* fs.writeFileString(`${work}/f2.txt`, "f2\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "f2");
+    const remote = yield* authRemote(url, token, "acme", "pulls-basic");
+    yield* mustGit(work, "push", "-q", remote, "main", "feature", "feature-2");
+
+    // open #1 (short names normalize to refs/heads/…)
+    const pr1 = yield* client.pulls.create({
+      params,
+      payload: {
+        title: "add feature",
+        body: "the body",
+        base: "main",
+        head: "feature",
+      },
+    });
+    expect(pr1.number).toBe(1);
+    expect(pr1.state).toBe("open");
+    expect(pr1.baseRef).toBe("refs/heads/main");
+    expect(pr1.headRef).toBe("refs/heads/feature");
+    expect(pr1.mergeCommit).toBeNull();
+
+    // typed create failures
+    yield* expectTag(
+      client.pulls.create({
+        params,
+        payload: { title: "same", base: "main", head: "main" },
+      }),
+      "ValidationError",
+    );
+    yield* expectTag(
+      client.pulls.create({
+        params,
+        payload: { title: "missing", base: "main", head: "no-such-branch" },
+      }),
+      "BranchMissing",
+    );
+    yield* expectTag(
+      client.pulls.create({
+        params,
+        payload: {
+          title: "tags are not branches",
+          base: "main",
+          head: "refs/tags/v1",
+        },
+      }),
+      "ValidationError",
+    );
+    const dup = yield* expectTag(
+      client.pulls.create({
+        params,
+        payload: { title: "dup", base: "main", head: "feature" },
+      }),
+      "PullExists",
+    );
+    expect((dup as { number?: number }).number).toBe(1);
+
+    // #2 gets the next dense number
+    const pr2 = yield* client.pulls.create({
+      params,
+      payload: { title: "second", base: "main", head: "feature-2" },
+    });
+    expect(pr2.number).toBe(2);
+
+    // list: newest first, keyset pagination
+    const open = yield* client.pulls.list({ params, query: {} });
+    expect(open.items.map((p) => p.number)).toEqual([2, 1]);
+    expect(open.hasMore).toBe(false);
+    const page1 = yield* client.pulls.list({ params, query: { limit: 1 } });
+    expect(page1.items.map((p) => p.number)).toEqual([2]);
+    expect(page1.hasMore).toBe(true);
+    expect(page1.nextCursor).toBe("2");
+    const page2 = yield* client.pulls.list({
+      params,
+      query: { limit: 1, cursor: page1.nextCursor! },
+    });
+    expect(page2.items.map((p) => p.number)).toEqual([1]);
+    expect(page2.hasMore).toBe(false);
+    const closedList = yield* client.pulls.list({
+      params,
+      query: { state: "closed" },
+    });
+    expect(closedList.items).toEqual([]);
+
+    // live detail: feature is 1 ahead of main and fast-forwardable
+    const detail = yield* client.pulls.get({
+      params: { ...params, number: 1 },
+    });
+    expect(detail.baseOid).toBe(mainTip);
+    expect(detail.mergeBase).toBe(mainTip);
+    expect(detail.aheadBy).toBe(1);
+    expect(detail.behindBy).toBe(0);
+    expect(detail.mergeable).toBe(true);
+    expect(detail.mergeableReason).toBe("ff");
+
+    // unknown number → typed 404
+    yield* expectTag(
+      client.pulls.get({ params: { ...params, number: 999 } }),
+      "PullNotFound",
+    );
+
+    // close → detail still computed (both refs exist) → reopen → edit
+    const closed = yield* client.pulls.update({
+      params: { ...params, number: 1 },
+      payload: { state: "closed" },
+    });
+    expect(closed.state).toBe("closed");
+    const closedDetail = yield* client.pulls.get({
+      params: { ...params, number: 1 },
+    });
+    expect(closedDetail.mergeable).toBe(true);
+    const reopened = yield* client.pulls.update({
+      params: { ...params, number: 1 },
+      payload: { state: "open" },
+    });
+    expect(reopened.state).toBe("open");
+    const edited = yield* client.pulls.update({
+      params: { ...params, number: 1 },
+      payload: { title: "renamed", body: null },
+    });
+    expect(edited.title).toBe("renamed");
+    expect(edited.body).toBeNull();
+    expect(edited.updatedAt).toBeGreaterThanOrEqual(edited.createdAt);
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "pulls: fast-forward merge moves the base ref; merged is terminal; up-to-date is 422; encodeCommit round-trips real git bytes",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const { client, token } = yield* createRepo(url, "acme", "pulls-ff");
+    const params = { owner: "acme", repo: "pulls-ff" };
+    const work = yield* tempDir;
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${work}/README.md`, "hello\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "base");
+    yield* mustGit(work, "checkout", "-qb", "feature");
+    yield* fs.writeFileString(`${work}/feature.txt`, "feat\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "feat");
+    const featureTip = yield* revParse(work, "HEAD");
+    yield* mustGit(work, "checkout", "-q", "main");
+    const remote = yield* authRemote(url, token, "acme", "pulls-ff");
+    yield* mustGit(work, "push", "-q", remote, "main", "feature");
+
+    // pin encodeCommit against real git-produced bytes: `git cat-file
+    // commit` output re-hashed must reproduce the oid (byte-exactness),
+    // and parse→encode must reproduce those bytes.
+    const catFile = (yield* mustGit(work, "cat-file", "commit", featureTip))
+      .stdout;
+    const rawCommit = `${catFile}\n`; // mustGit trims the trailing LF
+    expect(yield* hashObject(ObjectType.commit, utf8Encode(rawCommit))).toBe(
+      featureTip,
+    );
+    const parsed = yield* parseCommit(utf8Encode(rawCommit));
+    const reEncoded = yield* encodeCommit({
+      tree: parsed.tree,
+      parents: parsed.parents,
+      author: parsed.author,
+      committer: parsed.committer,
+      message: parsed.message,
+    });
+    expect(utf8Decode(reEncoded)).toBe(rawCommit);
+    expect(yield* hashObject(ObjectType.commit, reEncoded)).toBe(featureTip);
+
+    // open + FF merge
+    const pr = yield* client.pulls.create({
+      params,
+      payload: { title: "ff me", base: "main", head: "feature" },
+    });
+    const merged = yield* client.pulls.merge({
+      params: { ...params, number: pr.number },
+      payload: {},
+    });
+    expect(merged.method).toBe("ff");
+    expect(merged.oid).toBe(featureTip);
+    expect(merged.pull.state).toBe("merged");
+    expect(merged.pull.mergeCommit).toBe(featureTip);
+    expect(merged.pull.mergedAt).not.toBeNull();
+
+    // the base ref moved to the head tip
+    const mainRef = yield* client.refs.get({
+      params,
+      query: { name: "refs/heads/main" },
+    });
+    expect(mainRef.oid).toBe(featureTip);
+
+    // the clone can FF-pull the merged base
+    yield* mustGit(work, "pull", "-q", remote, "main");
+    expect(yield* revParse(work, "HEAD")).toBe(featureTip);
+
+    // merged is terminal: live fields null, re-merge and reopen are 409s
+    const detail = yield* client.pulls.get({
+      params: { ...params, number: pr.number },
+    });
+    expect(detail.state).toBe("merged");
+    expect(detail.baseOid).toBeNull();
+    expect(detail.headOid).toBeNull();
+    expect(detail.mergeable).toBeNull();
+    yield* expectTag(
+      client.pulls.merge({
+        params: { ...params, number: pr.number },
+        payload: {},
+      }),
+      "PullStateConflict",
+    );
+    yield* expectTag(
+      client.pulls.update({
+        params: { ...params, number: pr.number },
+        payload: { state: "open" },
+      }),
+      "PullStateConflict",
+    );
+    yield* expectTag(
+      client.pulls.merge({ params: { ...params, number: 42 }, payload: {} }),
+      "PullNotFound",
+    );
+
+    // up-to-date: a PR whose head is already reachable from base
+    yield* mustGit(
+      work,
+      "push",
+      "-q",
+      remote,
+      `${featureTip}:refs/heads/already-in`,
+    );
+    const upToDate = yield* client.pulls.create({
+      params,
+      payload: { title: "nothing to do", base: "main", head: "already-in" },
+    });
+    const upToDateDetail = yield* client.pulls.get({
+      params: { ...params, number: upToDate.number },
+    });
+    expect(upToDateDetail.mergeable).toBe(false);
+    expect(upToDateDetail.mergeableReason).toBe("up-to-date");
+    yield* expectTag(
+      client.pulls.merge({
+        params: { ...params, number: upToDate.number },
+        payload: {},
+      }),
+      "NothingToMerge",
+    );
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "pulls: trivial merge commit joins disjoint changes (fsck-clean); conflicts are typed 409; stale expectedHeadOid is RefConflict",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { client, token } = yield* createRepo(url, "acme", "pulls-merge");
+    const params = { owner: "acme", repo: "pulls-merge" };
+    const work = yield* tempDir;
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${work}/README.md`, "base\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "base");
+    const baseCommit = yield* revParse(work, "HEAD");
+    // topic-a: adds feat-a.txt
+    yield* mustGit(work, "checkout", "-qb", "topic-a");
+    yield* fs.writeFileString(`${work}/feat-a.txt`, "a\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "feat a");
+    const topicATip = yield* revParse(work, "HEAD");
+    // main advances with a disjoint file
+    yield* mustGit(work, "checkout", "-q", "main");
+    yield* fs.writeFileString(`${work}/b.txt`, "b\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "main b");
+    const mainTip = yield* revParse(work, "HEAD");
+    const remote = yield* authRemote(url, token, "acme", "pulls-merge");
+    yield* mustGit(work, "push", "-q", remote, "main", "topic-a");
+
+    const pr = yield* client.pulls.create({
+      params,
+      payload: { title: "merge topic-a", base: "main", head: "topic-a" },
+    });
+    const detail = yield* client.pulls.get({
+      params: { ...params, number: pr.number },
+    });
+    expect(detail.mergeBase).toBe(baseCommit);
+    expect(detail.mergeable).toBe(true);
+    expect(detail.mergeableReason).toBe("merge-commit");
+
+    // stale expectedHeadOid (a race guard) → typed 409, PR stays open
+    yield* expectTag(
+      client.pulls.merge({
+        params: { ...params, number: pr.number },
+        payload: { expectedHeadOid: asOid(baseCommit) },
+      }),
+      "RefConflict",
+    );
+
+    const merged = yield* client.pulls.merge({
+      params: { ...params, number: pr.number },
+      payload: { expectedHeadOid: asOid(topicATip) },
+    });
+    expect(merged.method).toBe("merge-commit");
+    expect(merged.pull.state).toBe("merged");
+    expect(merged.pull.mergeCommit).toBe(merged.oid);
+    const mainRef = yield* client.refs.get({
+      params,
+      query: { name: "refs/heads/main" },
+    });
+    expect(mainRef.oid).toBe(merged.oid);
+
+    // clone back: fsck-clean, both sides present, exactly 2 parents in order
+    const tmp = yield* tempDir;
+    yield* mustGit(tmp, "clone", "-q", remote, "fresh");
+    const fresh = path.join(tmp, "fresh");
+    yield* mustGit(fresh, "fsck", "--strict");
+    expect(yield* revParse(fresh, "HEAD")).toBe(merged.oid);
+    expect(yield* fs.readFileString(path.join(fresh, "feat-a.txt"))).toBe(
+      "a\n",
+    );
+    expect(yield* fs.readFileString(path.join(fresh, "b.txt"))).toBe("b\n");
+    expect(yield* fs.readFileString(path.join(fresh, "README.md"))).toBe(
+      "base\n",
+    );
+    const parents = (yield* mustGit(fresh, "log", "--format=%P", "-1")).stdout;
+    expect(parents).toBe(`${mainTip} ${topicATip}`);
+
+    // conflict: both sides edit README.md relative to the merge base
+    yield* mustGit(work, "checkout", "-qb", "topic-b", baseCommit);
+    yield* fs.writeFileString(`${work}/README.md`, "topic-b version\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "topic-b readme");
+    yield* mustGit(work, "checkout", "-q", "main");
+    yield* mustGit(work, "pull", "-q", remote, "main");
+    yield* fs.writeFileString(`${work}/README.md`, "main version\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "main readme");
+    yield* mustGit(work, "push", "-q", remote, "main", "topic-b");
+    const mainBefore = yield* revParse(work, "HEAD");
+
+    const conflictPr = yield* client.pulls.create({
+      params,
+      payload: { title: "conflicting", base: "main", head: "topic-b" },
+    });
+    const conflictDetail = yield* client.pulls.get({
+      params: { ...params, number: conflictPr.number },
+    });
+    expect(conflictDetail.mergeable).toBe(false);
+    expect(conflictDetail.mergeableReason).toBe("conflict");
+    const conflict = yield* expectTag(
+      client.pulls.merge({
+        params: { ...params, number: conflictPr.number },
+        payload: {},
+      }),
+      "MergeConflict",
+    );
+    expect((conflict as { paths?: ReadonlyArray<string> }).paths).toEqual([
+      "README.md",
+    ]);
+    // the PR stays open and the base ref did not move
+    const still = yield* client.pulls.get({
+      params: { ...params, number: conflictPr.number },
+    });
+    expect(still.state).toBe("open");
+    const mainAfter = yield* client.refs.get({
+      params,
+      query: { name: "refs/heads/main" },
+    });
+    expect(mainAfter.oid).toBe(mainBefore);
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "pulls: deleted head branch degrades to nulls and BranchMissing; anonymous reads on public; writes need a write token",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const fs = yield* FileSystem.FileSystem;
+    const anonymous = yield* makeAnonymousClient(url);
+    const { client, token } = yield* createRepo(url, "acme", "pulls-auth");
+    const params = { owner: "acme", repo: "pulls-auth" };
+    const work = yield* tempDir;
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(`${work}/README.md`, "hi\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "base");
+    yield* mustGit(work, "checkout", "-qb", "topic-c");
+    yield* fs.writeFileString(`${work}/c.txt`, "c\n");
+    yield* mustGit(work, "add", ".");
+    yield* mustGit(work, "commit", "-qm", "c");
+    const remote = yield* authRemote(url, token, "acme", "pulls-auth");
+    yield* mustGit(work, "push", "-q", remote, "main", "topic-c");
+
+    const pr = yield* client.pulls.create({
+      params,
+      payload: { title: "from topic-c", base: "main", head: "topic-c" },
+    });
+
+    // delete the head branch: the PR row survives, live fields go null
+    yield* client.refs.remove({
+      params,
+      query: { name: "refs/heads/topic-c" },
+      payload: {},
+    });
+    const detail = yield* client.pulls.get({
+      params: { ...params, number: pr.number },
+    });
+    expect(detail.state).toBe("open");
+    expect(detail.headOid).toBeNull();
+    expect(detail.baseOid).not.toBeNull();
+    expect(detail.mergeBase).toBeNull();
+    expect(detail.aheadBy).toBeNull();
+    expect(detail.mergeable).toBeNull();
+    const missing = yield* expectTag(
+      client.pulls.merge({
+        params: { ...params, number: pr.number },
+        payload: {},
+      }),
+      "BranchMissing",
+    );
+    expect((missing as { ref?: string }).ref).toBe("refs/heads/topic-c");
+
+    // private repo: anonymous reads are 401
+    yield* expectTag(
+      anonymous.pulls.list({ params, query: {} }),
+      "Unauthorized",
+    );
+
+    // public repo: anonymous reads work, writes never do
+    yield* client.repos.update({ params, payload: { public: true } });
+    const publicList = yield* anonymous.pulls.list({ params, query: {} });
+    expect(publicList.items.map((p) => p.number)).toEqual([pr.number]);
+    const publicDetail = yield* anonymous.pulls.get({
+      params: { ...params, number: pr.number },
+    });
+    expect(publicDetail.title).toBe("from topic-c");
+    yield* expectTag(
+      anonymous.pulls.create({
+        params,
+        payload: { title: "nope", base: "main", head: "topic-c" },
+      }),
+      "Unauthorized",
+    );
+    yield* expectTag(
+      anonymous.pulls.merge({
+        params: { ...params, number: pr.number },
+        payload: {},
+      }),
+      "Unauthorized",
+    );
+    yield* expectTag(
+      anonymous.pulls.update({
+        params: { ...params, number: pr.number },
+        payload: { state: "closed" },
+      }),
+      "Unauthorized",
+    );
+
+    // a read-scoped token reads but cannot write → typed 403
+    const readToken = yield* client.tokens.create({
+      params,
+      payload: { name: "ro", scope: "read" },
+    });
+    const reader = yield* makeClient(url, readToken.token);
+    const readerList = yield* reader.pulls.list({ params, query: {} });
+    expect(readerList.items.length).toBe(1);
+    yield* expectTag(
+      reader.pulls.create({
+        params,
+        payload: { title: "nope", base: "main", head: "topic-c" },
+      }),
+      "Forbidden",
+    );
+    yield* expectTag(
+      reader.pulls.merge({
+        params: { ...params, number: pr.number },
+        payload: {},
+      }),
+      "Forbidden",
+    );
+  }),
+  { timeout: 120_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// (k) GitHub REST v3 compatibility facade (/api/v3 — gh api / Octokit)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Raw fetch against the facade with GitHub's `token` auth scheme. */
+const ghFetch = Effect.fn(function* (
+  url: string,
+  path: string,
+  options?: {
+    readonly method?: string;
+    readonly token?: string | undefined;
+    readonly body?: unknown;
+  },
+) {
+  const client = yield* HttpClient.HttpClient;
+  let request = HttpClientRequest.make((options?.method ?? "GET") as "GET")(
+    `${url}/api/v3${path}`,
+  );
+  if (options?.token !== undefined) {
+    request = HttpClientRequest.setHeader(
+      request,
+      "authorization",
+      `token ${options.token}`,
+    );
+  }
+  if (options?.body !== undefined) {
+    request = HttpClientRequest.bodyJsonUnsafe(options.body)(request);
+  }
+  const response = yield* client.execute(request);
+  const text = yield* response.text;
+  return {
+    status: response.status,
+    headers: response.headers,
+    json: text.length === 0 ? undefined : (JSON.parse(text) as any),
+  };
+});
+
+test(
+  "ghapi: /user auth probe, repo + branches + commits + contents in GitHub shapes",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const repo = yield* createRepo(url, "acme", "gh-compat");
+    yield* admin.repos.update({
+      params: { owner: "acme", repo: "gh-compat" },
+      payload: { public: true },
+    });
+
+    // seed two commits on main
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+    const work = path.join(tmp, "ghc");
+    yield* fs.makeDirectory(work, { recursive: true });
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(path.join(work, "hello.txt"), "one\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-qm", "c1");
+    yield* fs.writeFileString(path.join(work, "hello.txt"), "two\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-qm", "c2");
+    yield* mustGit(work, "push", "-q", repo.remote, "main");
+
+    // /user: gh's probe — admin key via the `token` scheme; anonymous 401
+    const user = yield* ghFetch(url, "/user", { token: TEST_ADMIN_TOKEN });
+    expect(user.status).toBe(200);
+    expect(user.json.login).toBe("admin");
+    const anonUser = yield* ghFetch(url, "/user");
+    expect(anonUser.status).toBe(401);
+    expect(anonUser.json.message).toBe("Requires authentication");
+
+    // repo shape (anonymous — the repo is public)
+    const repoJson = yield* ghFetch(url, "/repos/acme/gh-compat");
+    expect(repoJson.status).toBe(200);
+    expect(repoJson.json.full_name).toBe("acme/gh-compat");
+    expect(repoJson.json.private).toBe(false);
+    expect(repoJson.json.default_branch).toBe("main");
+    expect(repoJson.json.clone_url).toContain("/acme/gh-compat.git");
+    expect(typeof repoJson.json.id).toBe("number");
+
+    // branches
+    const branches = yield* ghFetch(url, "/repos/acme/gh-compat/branches");
+    expect(branches.status).toBe(200);
+    expect(branches.json[0].name).toBe("main");
+    expect(branches.json[0].commit.sha).toMatch(/^[0-9a-f]{40}$/);
+
+    // commits list + Link pagination
+    const commits = yield* ghFetch(
+      url,
+      "/repos/acme/gh-compat/commits?per_page=1",
+    );
+    expect(commits.status).toBe(200);
+    expect(commits.json.length).toBe(1);
+    expect(commits.json[0].commit.message).toContain("c2");
+    expect(commits.headers.link).toContain('rel="next"');
+    // follow the Link cursor like gh --paginate does
+    const nextUrl = /<([^>]+)>/.exec(commits.headers.link ?? "")![1]!;
+    const pathPart = nextUrl.slice(nextUrl.indexOf("/api/v3") + 7);
+    const page2 = yield* ghFetch(url, pathPart);
+    expect(page2.json[0].commit.message).toContain("c1");
+
+    // single commit incl. files
+    const head = commits.json[0].sha as string;
+    const one = yield* ghFetch(url, `/repos/acme/gh-compat/commits/${head}`);
+    expect(one.status).toBe(200);
+    expect(one.json.files[0].filename).toBe("hello.txt");
+    expect(one.json.files[0].status).toBe("modified");
+
+    // contents (base64)
+    const contents = yield* ghFetch(
+      url,
+      "/repos/acme/gh-compat/contents/hello.txt",
+    );
+    expect(contents.status).toBe(200);
+    expect(contents.json.encoding).toBe("base64");
+    expect(atob(contents.json.content as string)).toBe("two\n");
+
+    // unknown repo → GitHub-shaped 404
+    const missing = yield* ghFetch(url, "/repos/acme/nope");
+    expect(missing.status).toBe(404);
+    expect(missing.json.message).toBe("Not Found");
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "ghapi: pull lifecycle through the facade — create, list states, merge, files",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const repo = yield* createRepo(url, "acme", "gh-pulls");
+    yield* admin.repos.update({
+      params: { owner: "acme", repo: "gh-pulls" },
+      payload: { public: true },
+    });
+
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+    const work = path.join(tmp, "ghp");
+    yield* fs.makeDirectory(work, { recursive: true });
+    yield* mustGit(work, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(path.join(work, "base.txt"), "base\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-qm", "base");
+    yield* mustGit(work, "checkout", "-qb", "topic");
+    yield* fs.writeFileString(path.join(work, "topic.txt"), "topic\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-qm", "topic work");
+    yield* mustGit(work, "checkout", "-q", "main");
+    yield* mustGit(work, "push", "-q", repo.remote, "main", "topic");
+
+    // POST /pulls with GitHub's field names (head/base short names)
+    const created = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls", {
+      method: "POST",
+      token: TEST_ADMIN_TOKEN,
+      body: {
+        title: "Topic work",
+        head: "topic",
+        base: "main",
+        body: "pr body",
+      },
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.number).toBe(1);
+    expect(created.json.state).toBe("open");
+    expect(created.json.merged).toBe(false);
+    expect(created.json.head.ref).toBe("topic");
+    expect(created.json.base.ref).toBe("main");
+
+    // anonymous write → 401
+    const anonCreate = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls", {
+      method: "POST",
+      body: { title: "x", head: "topic", base: "main" },
+    });
+    expect(anonCreate.status).toBe(401);
+
+    // GET single: mergeable + shas live
+    const single = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1");
+    expect(single.json.mergeable).toBe(true);
+    expect(single.json.head.sha).toMatch(/^[0-9a-f]{40}$/);
+
+    // files (three-dot)
+    const files = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1/files");
+    expect(files.json.map((f: any) => f.filename)).toEqual(["topic.txt"]);
+    expect(files.json[0].status).toBe("added");
+
+    // unsupported merge method → 405
+    const squash = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1/merge", {
+      method: "PUT",
+      token: TEST_ADMIN_TOKEN,
+      body: { merge_method: "squash" },
+    });
+    expect(squash.status).toBe(405);
+
+    // PUT merge (fast-forward)
+    const merged = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1/merge", {
+      method: "PUT",
+      token: TEST_ADMIN_TOKEN,
+      body: {},
+    });
+    expect(merged.status).toBe(200);
+    expect(merged.json.merged).toBe(true);
+    expect(merged.json.sha).toMatch(/^[0-9a-f]{40}$/);
+
+    // GitHub semantics: merged PR is state=closed + merged=true
+    const after = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1");
+    expect(after.json.state).toBe("closed");
+    expect(after.json.merged).toBe(true);
+    expect(after.json.merge_commit_sha).toBe(merged.json.sha);
+
+    // list state filters: open empty; closed includes the merged PR
+    const open = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls?state=open");
+    expect(open.json.length).toBe(0);
+    const closed = yield* ghFetch(
+      url,
+      "/repos/acme/gh-pulls/pulls?state=closed",
+    );
+    expect(closed.json.length).toBe(1);
+    expect(closed.json[0].number).toBe(1);
+
+    // merged PR files fall back to the merge commit's diff
+    const mergedFiles = yield* ghFetch(
+      url,
+      "/repos/acme/gh-pulls/pulls/1/files",
+    );
+    expect(mergedFiles.json.map((f: any) => f.filename)).toEqual(["topic.txt"]);
+
+    // PATCH validation
+    const badState = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1", {
+      method: "PATCH",
+      token: TEST_ADMIN_TOKEN,
+      body: { state: "merged" },
+    });
+    expect(badState.status).toBe(422);
+  }),
+  { timeout: 120_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// (c) the swappable Auth block
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A SECOND assembly, identical except its Auth layer wraps `AuthTokens`
+// with one rule: direct pushes to `refs/heads/main` are admin-only (the
+// fixture's `ProtectedMainAuth` — the RFC §3.2 example, live). Its own
+// entry module: a Worker's generated entry serves its main module's
+// DEFAULT export, so one Worker class per entry module. Deployed inside
+// the test so the shared fixture stays one worker for the e2e suites.
+const ProtectedLocalStack = Alchemy.Stack(
+  "GitServiceProtectedLocalStack",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const host = yield* ProtectedGitHost;
+    return { url: host.url.as<string>() };
+  }),
+);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ProtectedLocalStack));
+
+test(
+  "auth block: custom layer protects main — per-branch policy over parsed Push updates",
+  Effect.gen(function* () {
+    const { url } = yield* deploy(ProtectedLocalStack);
+    expect(url).toMatch(/^http:\/\/localhost:\d+$/);
+    yield* awaitReady(url);
+
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { token, remote } = yield* createRepo(url, "acme", "protected");
+
+    const tmp = yield* tempDir;
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "w");
+    const w = path.join(tmp, "w");
+    yield* fs.writeFileString(path.join(w, "file.txt"), "v1\n");
+    yield* mustGit(w, "add", "-A");
+    yield* mustGit(w, "commit", "-m", "c1");
+
+    // The write token may push any OTHER branch — the policy defers to
+    // the wrapped AuthTokens there...
+    yield* mustGit(w, "push", "origin", "HEAD:refs/heads/feature");
+
+    // ...but a direct push to main is denied PER-REF. This exercises the
+    // post-parse authorize with the real updates: the entry gate ("may
+    // this caller push at all?") passed — the same token just pushed.
+    const denied = yield* mustFailGit(
+      w,
+      "push",
+      "origin",
+      "HEAD:refs/heads/main",
+    );
+    expect(denied.stderr).toContain("not permitted");
+
+    // The admin key passes the same policy.
+    const adminRemote = yield* authRemote(
+      url,
+      TEST_ADMIN_TOKEN,
+      "acme",
+      "protected",
+    );
+    yield* mustGit(w, "push", adminRemote, "HEAD:refs/heads/main");
+
+    // The trust header is Worker-minted only: a client-forged
+    // `x-git-service-admin: 1` must be stripped before the request
+    // reaches the DO — an anonymous forger gets the same 401 as any
+    // anonymous writer.
+    const client = yield* HttpClient.HttpClient;
+    const forged = yield* client.get(
+      `${url}/acme/protected/info/refs?service=git-receive-pack`,
+      { headers: { "x-git-service-admin": "1" } },
+    );
+    expect(forged.status).toBe(401);
+
+    // REST ref writes carry the same Push action: the token 403s on
+    // main but may create a feature branch; scope alone no longer
+    // decides.
+    const head = yield* revParse(w, "HEAD");
+    const tokenClient = yield* makeClient(url, token);
+    yield* expectTag(
+      tokenClient.refs.update({
+        params: { owner: "acme", repo: "protected" },
+        query: { name: "refs/heads/main" },
+        payload: { newOid: asOid(head) },
+      }),
+      "Forbidden",
+    );
+    const moved = yield* tokenClient.refs.update({
+      params: { owner: "acme", repo: "protected" },
+      query: { name: "refs/heads/feature2" },
+      payload: { newOid: asOid(head), expectedOid: null },
+    });
+    expect(moved.oid).toBe(head);
+  }).pipe(logLevel),
+  { timeout: 240_000 },
 );

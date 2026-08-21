@@ -1259,3 +1259,34 @@ over the commit graph replace the visited-set walk.
 
 Expected shape of the win: 13.7k objects at ~1.5 ms serial ≈ 20 s; fanned
 across even 16 shards with parsing overlapped in the Worker ≈ 1–2 s.
+
+
+## 20. GitHub REST v3 compatibility (Tier 1)
+
+`src/GithubCompat.ts` mounts a `/api/v3/**` facade so GitHub-flavored
+tooling talks to the service unmodified:
+
+```sh
+export GH_HOST=git.example.com          # your deployed host (https)
+export GH_ENTERPRISE_TOKEN=gs_...       # admin key or repo token
+gh api repos/alchemy/alchemy            # → GitHub-shaped JSON
+gh api repos/alchemy/alchemy/pulls -f state=open
+gh api -X POST repos/o/r/pulls -f title=T -f head=topic -f base=main
+gh api -X PUT repos/o/r/pulls/1/merge
+```
+
+The facade is a pure translation layer over the same Repo-DO RPCs as
+`/api/v1` (auth enforcement unchanged, anonymous reads on public repos
+included). Covered: `/user`, repo get, branches, commits (list/single with
+files), contents, and the full pulls lifecycle. GitHub-isms handled:
+`Authorization: token` scheme, merged-PR = `closed`+`merged: true`,
+`{ message }` errors, `Link: rel="next"` pagination carrying opaque keyset
+cursors (`gh api --paginate` and Octokit follow them verbatim).
+
+Out of scope, deliberately: GraphQL (so `gh pr ...` porcelain does not
+work — use `gh api` paths), issues/reviews/comments/checks/search, rename
+detection, and additions/deletions counts (always 0; content diffs are
+client-side by design). `gh` requires https for enterprise hosts, so the
+facade is exercised locally by shape tests replaying gh's exact wire
+requests (verified against `GH_DEBUG=api` output) and by `gh` itself only
+against https deployments.

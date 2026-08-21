@@ -32,7 +32,7 @@ import { StoreError } from "../git/Store.ts";
  * Current Repo DO schema version, stored in the `config` table under
  * {@link SCHEMA_VERSION_KEY} for future migrations.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * The `config` key holding {@link SCHEMA_VERSION}.
@@ -105,7 +105,34 @@ export const REPO_DDL: ReadonlyArray<string> = [
   detail     TEXT,
   updated_at INTEGER NOT NULL
 ) WITHOUT ROWID`,
+  // pull requests: base/head are live branch refs — the rows store intent +
+  // lifecycle, never a diff snapshot. Rows are never deleted (close, don't
+  // delete — numbers stay dense and stable); `merge_commit` is set iff
+  // state='merged' (the head tip for a fast-forward, the two-parent merge
+  // commit otherwise).
+  `CREATE TABLE IF NOT EXISTS pulls (
+  number       INTEGER PRIMARY KEY,
+  title        TEXT NOT NULL,
+  body         TEXT,
+  base_ref     TEXT NOT NULL,
+  head_ref     TEXT NOT NULL,
+  state        TEXT NOT NULL DEFAULT 'open',
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  merged_at    INTEGER,
+  merge_commit TEXT
+) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS idx_pulls_state ON pulls(state, number)`,
 ];
+
+/**
+ * Additive column migrations for Repo tables created by an earlier schema
+ * version (mirrors {@link REGISTRY_MIGRATIONS}). `CREATE TABLE IF NOT
+ * EXISTS` leaves an existing table untouched, so any future `pulls` (or
+ * other) column addition goes here — never into the `CREATE TABLE`.
+ * Re-running is safe because "duplicate column name" is swallowed.
+ */
+export const REPO_MIGRATIONS: ReadonlyArray<string> = [];
 
 /**
  * The Registry DO DDL (DESIGN.md §3.1, bottom): the `owner/name → repoId`
@@ -207,6 +234,20 @@ export interface PushRow extends Record<string, SqlStorageValue> {
   readonly push_id: string;
   readonly started_at: number;
   readonly state: string;
+}
+
+/** One `pulls` row (`state` is `'open' | 'closed' | 'merged'`). */
+export interface PullRow extends Record<string, SqlStorageValue> {
+  readonly number: number;
+  readonly title: string;
+  readonly body: string | null;
+  readonly base_ref: string;
+  readonly head_ref: string;
+  readonly state: string;
+  readonly created_at: number;
+  readonly updated_at: number;
+  readonly merged_at: number | null;
+  readonly merge_commit: string | null;
 }
 
 /** One `jobs` row (`kind` is `'import' | 'fork' | 'purge' | 'gc'`). */
@@ -430,6 +471,11 @@ export const makeSqlClient = (
 export const initRepoSchema = Effect.fn(function* (sql: SqlClient) {
   for (const statement of REPO_DDL) {
     yield* sql.run(statement);
+  }
+  for (const statement of REPO_MIGRATIONS) {
+    // Already-applied migrations fail with "duplicate column name" — that
+    // is the success case on every run after the first.
+    yield* sql.run(statement).pipe(Effect.ignore);
   }
   yield* sql.run(
     `INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`,

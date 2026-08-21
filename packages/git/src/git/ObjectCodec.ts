@@ -460,6 +460,92 @@ export const parseCommit = Effect.fn(function* (content: Uint8Array) {
 });
 
 /**
+ * Formats an identity line value: `Name <email> <unix-ts> <±hhmm>`.
+ * Round-trips {@link parseIdentity}.
+ */
+export const formatIdentity = (id: Identity): string =>
+  `${id.name} <${id.email}> ${id.when} ${id.tz}`;
+
+/** Input of {@link encodeCommit}. */
+export interface CommitFields {
+  /** The commit's root tree oid. */
+  readonly tree: Oid;
+  /** Parent commit oids, in order. */
+  readonly parents: ReadonlyArray<Oid>;
+  readonly author: Identity;
+  readonly committer: Identity;
+  /** Message, verbatim — callers include the trailing `\n`. */
+  readonly message: string;
+}
+
+const TZ_REGEX = /^[+-]\d{4}$/;
+
+const validateIdentity = (
+  role: string,
+  id: Identity,
+): ObjectParseError | undefined => {
+  if (/[<>\n]/.test(id.name) || /[<>\n]/.test(id.email)) {
+    return new ObjectParseError({
+      reason: `commit ${role} name/email must not contain '<', '>' or newline`,
+    });
+  }
+  if (!Number.isInteger(id.when) || id.when < 0) {
+    return new ObjectParseError({
+      reason: `commit ${role} timestamp is not a non-negative integer: ${id.when}`,
+    });
+  }
+  if (!TZ_REGEX.test(id.tz)) {
+    return new ObjectParseError({
+      reason: `commit ${role} timezone is not ±hhmm: ${id.tz}`,
+    });
+  }
+  return undefined;
+};
+
+/**
+ * Encodes commit content (without the loose header):
+ * `tree <oid>\n` + `parent <oid>\n`* + `author …\n` + `committer …\n` +
+ * `\n` + message. Byte-exact round trip through {@link parseCommit}.
+ */
+export const encodeCommit = (
+  fields: CommitFields,
+): Effect.Effect<Uint8Array, ObjectParseError> =>
+  Effect.suspend(() => {
+    if (!isOid(fields.tree)) {
+      return Effect.fail(
+        new ObjectParseError({
+          reason: `commit tree is not a valid oid: ${fields.tree}`,
+        }),
+      );
+    }
+    for (const parent of fields.parents) {
+      if (!isOid(parent)) {
+        return Effect.fail(
+          new ObjectParseError({
+            reason: `commit parent is not a valid oid: ${parent}`,
+          }),
+        );
+      }
+    }
+    for (const [role, id] of [
+      ["author", fields.author],
+      ["committer", fields.committer],
+    ] as const) {
+      const invalid = validateIdentity(role, id);
+      if (invalid !== undefined) return Effect.fail(invalid);
+    }
+    const lines = [
+      `tree ${fields.tree}\n`,
+      ...fields.parents.map((parent) => `parent ${parent}\n`),
+      `author ${formatIdentity(fields.author)}\n`,
+      `committer ${formatIdentity(fields.committer)}\n`,
+      `\n`,
+      fields.message,
+    ];
+    return Effect.succeed(utf8Encode(lines.join("")));
+  });
+
+/**
  * Parses an annotated tag object's content (without the loose header).
  * `object`, `type`, and `tag` are required; `tagger` is optional.
  */

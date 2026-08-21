@@ -175,6 +175,17 @@ export class ObjectTooLarge extends Schema.TaggedError<ObjectTooLarge>()(
   { httpApiStatus: 422 },
 ) {}
 
+/**
+ * 422 — the two commits share no common ancestor within the walk bound
+ * (disjoint histories, or divergence beyond the server's 10k-commit cap;
+ * shallow imports can also surface this across the shallow boundary).
+ */
+export class NoMergeBase extends Schema.TaggedError<NoMergeBase>()(
+  "NoMergeBase",
+  { base: Oid, head: Oid },
+  { httpApiStatus: 422 },
+) {}
+
 /** 404 — no token with the given id on this repo. */
 export class TokenNotFound extends Schema.TaggedError<TokenNotFound>()(
   "TokenNotFound",
@@ -194,6 +205,61 @@ export class ValidationError extends Schema.TaggedError<ValidationError>()(
   "ValidationError",
   { message: Schema.String },
   { httpApiStatus: 400 },
+) {}
+
+/** 404 — no pull request with this number. */
+export class PullNotFound extends Schema.TaggedError<PullNotFound>()(
+  "PullNotFound",
+  { number: Schema.Number },
+  { httpApiStatus: 404 },
+) {}
+
+/** 422 — the PR's base or head branch does not exist (deleted after open). */
+export class BranchMissing extends Schema.TaggedError<BranchMissing>()(
+  "BranchMissing",
+  { ref: Schema.String },
+  { httpApiStatus: 422 },
+) {}
+
+/** 409 — an open PR for this base/head pair already exists. */
+export class PullExists extends Schema.TaggedError<PullExists>()(
+  "PullExists",
+  { number: Schema.Number },
+  { httpApiStatus: 409 },
+) {}
+
+/**
+ * 409 — the operation is invalid in the PR's current state (e.g. merge a
+ * merged PR, reopen a merged PR).
+ */
+export class PullStateConflict extends Schema.TaggedError<PullStateConflict>()(
+  "PullStateConflict",
+  {
+    number: Schema.Number,
+    state: Schema.Literals(["open", "closed", "merged"]),
+  },
+  { httpApiStatus: 409 },
+) {}
+
+/** 422 — head is already reachable from base; there is nothing to merge. */
+export class NothingToMerge extends Schema.TaggedError<NothingToMerge>()(
+  "NothingToMerge",
+  { number: Schema.Number },
+  { httpApiStatus: 422 },
+) {}
+
+/**
+ * 409 — the three-way merge is not trivial: these paths changed on both
+ * sides relative to the merge base.
+ */
+export class MergeConflict extends Schema.TaggedError<MergeConflict>()(
+  "MergeConflict",
+  {
+    number: Schema.Number,
+    /** Conflicting paths, capped at 20 (the full set may be larger). */
+    paths: Schema.Array(Schema.String),
+  },
+  { httpApiStatus: 409 },
 ) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -374,6 +440,138 @@ export class TreeEntry extends Schema.Class<TreeEntry>("TreeEntry")({
   oid: Oid,
   /** Entry kind derived from mode. */
   type: Schema.Literals(["blob", "tree", "commit"]),
+}) {}
+
+/**
+ * File-level change status. v1 has no rename detection (see the DESIGN note
+ * on the `diff` endpoint in `Objects.ts`); a v1.1 exact-oid pass would add
+ * `"renamed"` + an `oldPath`.
+ */
+export const FileStatus = Schema.Literals(["added", "removed", "modified"]);
+
+/** The decoded type of {@link FileStatus}. */
+export type FileStatus = typeof FileStatus.Type;
+
+/**
+ * One changed file in a commit diff or comparison. Content is NOT included —
+ * clients fetch old/new blobs by oid (`blobs/:oid`, `blobs/:oid/raw`) and
+ * diff locally. `oldSize`/`newSize` let the client gate binary/oversize
+ * files without a round trip. Gitlinks (mode 160000) appear as entries whose
+ * oids are commit oids; clients render "Subproject commit ..." and must not
+ * fetch them as blobs.
+ */
+export class DiffEntry extends Schema.Class<DiffEntry>("DiffEntry")({
+  /** Full slash-separated path from the repo root. */
+  path: Schema.String,
+  status: FileStatus,
+  /** Blob oid on the old side (absent for `added`). */
+  oldOid: Schema.optional(Oid),
+  /** Blob oid on the new side (absent for `removed`). */
+  newOid: Schema.optional(Oid),
+  /** Octal mode on the old side, e.g. `100644` (absent for `added`). */
+  oldMode: Schema.optional(Schema.String),
+  /** Octal mode on the new side (absent for `removed`). */
+  newMode: Schema.optional(Schema.String),
+  /** Uncompressed byte size of the old blob (absent for `added`/gitlinks). */
+  oldSize: Schema.optional(Schema.Number),
+  /** Uncompressed byte size of the new blob (absent for `removed`/gitlinks). */
+  newSize: Schema.optional(Schema.Number),
+}) {}
+
+/** The changed-file list of one commit vs its first parent. */
+export class CommitDiff extends Schema.Class<CommitDiff>("CommitDiff")({
+  oid: Oid,
+  /** The first parent the diff was computed against; `null` for a root
+   * commit (diffed against the empty tree — every file is `added`). */
+  parent: Schema.NullOr(Oid),
+  files: Schema.Array(DiffEntry),
+  /** `true` when the file list was cut at the server cap (1000 files). */
+  truncated: Schema.Boolean,
+}) {}
+
+/** GitHub-style three-dot comparison of two commits. */
+export class Comparison extends Schema.Class<Comparison>("Comparison")({
+  /** Resolved base commit oid (tags peeled). */
+  base: Oid,
+  /** Resolved head commit oid (tags peeled). */
+  head: Oid,
+  /** Best common ancestor (first both-reachable commit by generation). */
+  mergeBase: Oid,
+  /** Commits reachable from head but not base (`git rev-list --count base..head`). */
+  aheadBy: Schema.Number,
+  /** Commits reachable from base but not head. */
+  behindBy: Schema.Number,
+  /** head-side commits, committer-time descending, capped at 250. */
+  commits: Schema.Array(CommitInfo),
+  commitsTruncated: Schema.Boolean,
+  /** File diff of mergeBase..head (three-dot, like GitHub compare/PR). */
+  files: Schema.Array(DiffEntry),
+  filesTruncated: Schema.Boolean,
+}) {}
+
+/** Lifecycle state of a pull request. `merged` is terminal. */
+export const PullState = Schema.Literals(["open", "closed", "merged"]);
+
+/** The decoded type of {@link PullState}. */
+export type PullState = typeof PullState.Type;
+
+/**
+ * A pull request. PRs track **live** branches by ref name — the row stores
+ * intent + lifecycle, never a diff snapshot. Diff and mergeability are
+ * recomputed from current ref tips on every read (see {@link PullDetail}).
+ */
+export class Pull extends Schema.Class<Pull>("Pull")({
+  /** Per-repo monotonic PR number (1-based, never reused). */
+  number: Schema.Int,
+  title: Schema.String,
+  body: Schema.NullOr(Schema.String),
+  /** Full base ref name, e.g. `refs/heads/main`. */
+  baseRef: RefName,
+  /** Full head ref name, e.g. `refs/heads/feature`. */
+  headRef: RefName,
+  state: PullState,
+  /** Creation time, epoch milliseconds. */
+  createdAt: Schema.Number,
+  /** Last update (title/body/state) time, epoch milliseconds. */
+  updatedAt: Schema.Number,
+  /** Merge time (epoch milliseconds); `null` unless `state` is `merged`. */
+  mergedAt: Schema.NullOr(Schema.Number),
+  /** FF: the head tip; the merge commit otherwise. Set iff state=merged. */
+  mergeCommit: Schema.NullOr(Oid),
+}) {}
+
+/**
+ * PR detail = the row + live computed compare fields. Live fields are
+ * `null` when uncomputable: a missing base/head branch, a saturated
+ * ancestor walk, or a merged PR (its record is `mergeCommit`).
+ */
+export class PullDetail extends Pull.extend<PullDetail>("PullDetail")({
+  /** Current tip of `baseRef`; `null` if the branch is gone. */
+  baseOid: Schema.NullOr(Oid),
+  /** Current tip of `headRef`; `null` if the branch is gone. */
+  headOid: Schema.NullOr(Oid),
+  mergeBase: Schema.NullOr(Oid),
+  /** Commits on head not on base (`null` when the walk saturates). */
+  aheadBy: Schema.NullOr(Schema.Int),
+  /** Commits on base not on head. */
+  behindBy: Schema.NullOr(Schema.Int),
+  /**
+   * `true` = FF-able or trivially merge-able; `false` = conflicting paths
+   * or up-to-date; `null` = uncomputable.
+   */
+  mergeable: Schema.NullOr(Schema.Boolean),
+  /** Why: `"ff" | "merge-commit" | "conflict" | "up-to-date" | "unknown"`. */
+  mergeableReason: Schema.NullOr(Schema.String),
+}) {}
+
+/** Response of a successful PR merge. */
+export class MergeResult extends Schema.Class<MergeResult>("MergeResult")({
+  /** How the merge landed. */
+  method: Schema.Literals(["ff", "merge-commit"]),
+  /** The oid the base ref now points at. */
+  oid: Oid,
+  /** The PR row after the merge (`state: "merged"`). */
+  pull: Pull,
 }) {}
 
 /** Metadata of a per-repo access token (the secret itself is never listed). */

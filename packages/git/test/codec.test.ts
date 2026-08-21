@@ -18,10 +18,12 @@ import {
   decodeOfsDeltaOffset,
   decodeSizeVarint,
   decodeTypeSize,
+  encodeCommit,
   encodeOfsDeltaOffset,
   encodeSizeVarint,
   encodeTree,
   encodeTypeSize,
+  formatIdentity,
   hashObject,
   hexToBytes,
   ObjectType,
@@ -369,6 +371,111 @@ describe("commit parsing", () => {
       const parsed = yield* parseCommit(commit);
       expect(parsed.gpgsig).toContain("line2");
       expect(parsed.gpgsig).toContain("-----END PGP SIGNATURE-----");
+    }),
+  );
+});
+
+describe("commit encoding", () => {
+  // A real git-produced commit (git 2.x, `git commit -m`), checked in as a
+  // fixture: the oid is git's own, so a matching hash proves the bytes are
+  // byte-exact.
+  const FIXTURE_OID = "805ee86374143354d5a6e5e4df894aa1d631fbb1";
+  const FIXTURE_COMMIT =
+    "tree 44caf5de156e5707051d55989b7db370a80af206\n" +
+    "parent a684c642abd0ef33ec672ce701f48f824837cd03\n" +
+    "author A U Thor <author@example.com> 1700000200 +0000\n" +
+    "committer A U Thor <author@example.com> 1700000300 +0000\n" +
+    "\n" +
+    "second commit\n" +
+    "\n" +
+    "with a body line\n";
+
+  it.live("round-trips a real git commit byte-exactly (fixture oid)", () =>
+    Effect.gen(function* () {
+      const bytes = utf8Encode(FIXTURE_COMMIT);
+      // the fixture really is the commit git hashed
+      expect(yield* hashObject(ObjectType.commit, bytes)).toBe(FIXTURE_OID);
+      const parsed = yield* parseCommit(bytes);
+      const encoded = yield* encodeCommit({
+        tree: parsed.tree,
+        parents: parsed.parents,
+        author: parsed.author,
+        committer: parsed.committer,
+        message: parsed.message,
+      });
+      expect(utf8Decode(encoded)).toBe(FIXTURE_COMMIT);
+      expect(yield* hashObject(ObjectType.commit, encoded)).toBe(FIXTURE_OID);
+    }),
+  );
+
+  it.live("encodes multi-parent commits and formats identities", () =>
+    Effect.gen(function* () {
+      const tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+      const p1 = "ce013625030ba8dba906f756967f9e9ca394464a";
+      const p2 = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad";
+      const identity = {
+        name: "git-service",
+        email: "git-service@localhost",
+        when: 1700000000,
+        tz: "+0000",
+      };
+      expect(formatIdentity(identity)).toBe(
+        "git-service <git-service@localhost> 1700000000 +0000",
+      );
+      const encoded = yield* encodeCommit({
+        tree,
+        parents: [p1, p2],
+        author: identity,
+        committer: identity,
+        message: "Merge pull request #1 from feature\n",
+      });
+      const parsed = yield* parseCommit(encoded);
+      expect(parsed.tree).toBe(tree);
+      expect(parsed.parents).toEqual([p1, p2]);
+      expect(parsed.author).toEqual(identity);
+      expect(parsed.message).toBe("Merge pull request #1 from feature\n");
+    }),
+  );
+
+  it.live("rejects malformed oids and identities", () =>
+    Effect.gen(function* () {
+      const tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+      const identity = {
+        name: "ok",
+        email: "ok@example.com",
+        when: 1,
+        tz: "+0000",
+      };
+      const badTree = yield* Effect.result(
+        encodeCommit({
+          tree: "nope",
+          parents: [],
+          author: identity,
+          committer: identity,
+          message: "m\n",
+        }),
+      );
+      expect(Result.isFailure(badTree)).toBe(true);
+      const badName = yield* Effect.result(
+        encodeCommit({
+          tree,
+          parents: [],
+          author: { ...identity, name: "evil <injector>" },
+          committer: identity,
+          message: "m\n",
+        }),
+      );
+      expect(Result.isFailure(badName)).toBe(true);
+      const badTz = yield* Effect.result(
+        encodeCommit({
+          tree,
+          parents: [],
+          author: { ...identity, tz: "UTC" },
+          committer: identity,
+          message: "m\n",
+        }),
+      );
+      expect(Result.isFailure(badTz)).toBe(true);
     }),
   );
 });

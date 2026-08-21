@@ -21,10 +21,10 @@
  * entry is `varint(type,size) + zdata`, and both are known from the object
  * index), so bundling a large repo never buffers the pack in memory.
  */
-import type { R2Error, ReadWriteBucketClient } from "alchemy/Cloudflare/R2";
+import { BlobStoreError, type BlobStoreShape } from "../BlobStore.ts";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
-import type * as Stream from "effect/Stream";
+import * as Stream from "effect/Stream";
 import {
   encodeTypeSize,
   makeSha1,
@@ -109,7 +109,7 @@ export interface BundleJobOptions {
   readonly packStream: (
     entries: ReadonlyArray<ManifestEntry>,
   ) => Stream.Stream<Uint8Array, StoreError>;
-  readonly bucket: ReadWriteBucketClient;
+  readonly blobs: BlobStoreShape;
   readonly maxBytes?: number | undefined;
 }
 
@@ -135,13 +135,22 @@ export const runBundleJob = (
     // The pack streams straight into R2 (its byte length is known up front),
     // so a large bundle is never buffered. StoreError may surface from the
     // stream itself (an object read failing mid-pack); R2Error from the put.
-    yield* options.bucket
-      .put(key, options.packStream(options.entries), { contentLength: size })
+    yield* options.blobs
+      .put(
+        key,
+        options
+          .packStream(options.entries)
+          .pipe(
+            Stream.mapError(
+              (error) => new BlobStoreError({ reason: error.reason }),
+            ),
+          ),
+        { contentLength: size },
+      )
       .pipe(
-        Effect.mapError((error: R2Error | StoreError) =>
-          error._tag === "StoreError"
-            ? error
-            : new StoreError({ reason: `R2 put ${key}: ${error.message}` }),
+        Effect.mapError(
+          (error: BlobStoreError) =>
+            new StoreError({ reason: `blob put ${key}: ${error.reason}` }),
         ),
         Effect.provide(RuntimeContext.phantom),
       );

@@ -14,8 +14,11 @@ import * as Schema from "effect/Schema";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
+  CommitDiff,
   CommitInfo,
+  Comparison,
   GitAuth,
+  NoMergeBase,
   ObjectNotFound,
   ObjectTooLarge,
   Oid,
@@ -86,10 +89,56 @@ export const blob = HttpApiEndpoint.get(
   },
 );
 
+/**
+ * The changed-file list of a commit vs its FIRST parent (empty tree for a
+ * root commit). Merge commits are diffed against parent[0] only — the
+ * GitHub default. No rename detection in v1: a rename appears as
+ * `removed` + `added`; clients may pair entries whose old/new oids match
+ * for a cheap exact-rename display.
+ */
+export const diff = HttpApiEndpoint.get(
+  "diff",
+  "/repos/:owner/:repo/commits/:oid/diff",
+  {
+    params: RepoOidPath,
+    success: CommitDiff,
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
+  },
+);
+
+/**
+ * Three-dot comparison: merge base, ahead/behind counts, head-side
+ * commits, and the file diff of mergeBase..head. `base`/`head` accept a
+ * refname (short or full) or a 40-hex oid; annotated tags are peeled.
+ */
+export const compare = HttpApiEndpoint.get(
+  "compare",
+  "/repos/:owner/:repo/compare",
+  {
+    params: RepoPath,
+    query: Schema.Struct({
+      /** Refname or oid of the base side. */
+      base: Schema.String,
+      /** Refname or oid of the head side. */
+      head: Schema.String,
+    }),
+    success: Comparison,
+    error: [
+      RepoNotFound,
+      RefNotFound,
+      ObjectNotFound,
+      WrongObjectType,
+      NoMergeBase,
+    ],
+  },
+);
+
 /** The assembled `objects` group. */
 export default HttpApiGroup.make("objects")
   .add(commit)
   .add(log)
   .add(tree)
   .add(blob)
+  .add(diff)
+  .add(compare)
   .middleware(GitAuth);

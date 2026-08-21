@@ -16,17 +16,16 @@
  * The command section of a receive-pack request lives in the first bytes,
  * so a spilled body still returns a `head` prefix big enough to parse the
  * ref commands; the pack itself is later read back from R2 through bounded
- * windows (`r2RandomAccess`).
+ * windows (`blobRandomAccess`).
  */
-import type {
-  MultipartUpload,
-  R2Error,
-  ReadWriteBucketClient,
-  UploadedPart,
-} from "alchemy/Cloudflare/R2";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import type {
+  BlobMultipart,
+  BlobStoreError,
+  BlobStoreShape,
+} from "../BlobStore.ts";
 import { StoreError } from "../git/Store.ts";
 
 /** Head prefix retained for command-section parsing on spilled bodies. */
@@ -96,8 +95,8 @@ const makeByteQueue = () => {
 export const receiveWireBody = <E>(
   stream: Stream.Stream<Uint8Array, E>,
   options: {
-    readonly bucket: ReadWriteBucketClient;
-    /** R2 key the body spills to (unused when it fits in memory). */
+    readonly blobs: BlobStoreShape;
+    /** Blob key the body spills to (unused when it fits in memory). */
     readonly key: string;
     readonly spillThreshold: number;
     readonly partBytes?: number | undefined;
@@ -109,11 +108,11 @@ export const receiveWireBody = <E>(
     let total = 0;
     const headChunks: Array<Uint8Array> = [];
     let headLen = 0;
-    let upload: MultipartUpload | undefined;
-    const parts: Array<UploadedPart> = [];
+    let upload: BlobMultipart | undefined;
+    let nextPart = 1;
 
-    const asStoreError = (stage: string) => (error: R2Error) =>
-      new StoreError({ reason: `incoming body ${stage}: ${error.message}` });
+    const asStoreError = (stage: string) => (error: BlobStoreError) =>
+      new StoreError({ reason: `incoming body ${stage}: ${error.reason}` });
 
     return Effect.gen(function* () {
       yield* Stream.runForEach(
@@ -135,18 +134,17 @@ export const receiveWireBody = <E>(
             queue.push(chunk);
             total += chunk.length;
             if (upload === undefined && total > options.spillThreshold) {
-              upload = yield* options.bucket
-                .createMultipartUpload(options.key)
+              upload = yield* options.blobs
+                .multipart(options.key)
                 .pipe(
                   Effect.mapError(asStoreError("create upload")),
                   Effect.provide(RuntimeContext.phantom),
                 );
             }
             while (upload !== undefined && queue.size >= partBytes) {
-              const part = yield* upload
-                .uploadPart(parts.length + 1, queue.pop(partBytes))
+              yield* upload
+                .uploadPart(nextPart++, queue.pop(partBytes))
                 .pipe(Effect.mapError(asStoreError("upload part")));
-              parts.push(part);
             }
           }),
       );
@@ -159,14 +157,11 @@ export const receiveWireBody = <E>(
 
       if (queue.size > 0) {
         // The final part may be any size ≤ partBytes.
-        const part = yield* upload
-          .uploadPart(parts.length + 1, queue.pop(queue.size))
+        yield* upload
+          .uploadPart(nextPart++, queue.pop(queue.size))
           .pipe(Effect.mapError(asStoreError("upload part")));
-        parts.push(part);
       }
-      yield* upload
-        .complete(parts)
-        .pipe(Effect.mapError(asStoreError("complete")));
+      yield* upload.complete.pipe(Effect.mapError(asStoreError("complete")));
 
       const head = new Uint8Array(headLen);
       let at = 0;
@@ -180,7 +175,7 @@ export const receiveWireBody = <E>(
       // R2 bills incomplete uploads until aborted or lifecycle-expired.
       Effect.onError(() =>
         Effect.suspend(() =>
-          upload === undefined ? Effect.void : upload.abort(),
+          upload === undefined ? Effect.void : upload.abort,
         ).pipe(Effect.ignore),
       ),
     );

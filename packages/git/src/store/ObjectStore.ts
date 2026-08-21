@@ -19,7 +19,7 @@
  * (`staged_push IS NULL`); staged rows become visible to fetches only after
  * the final `transactionSync` flips them live.
  */
-import type { R2Error, ReadWriteBucketClient } from "alchemy/Cloudflare/R2";
+import type { BlobBody, BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -162,8 +162,8 @@ export interface ObjectStore extends ObjectSource {
 export interface ObjectStoreOptions {
   /** The repo DO's SQL client (see `makeSqlClient`). */
   readonly sql: SqlClient;
-  /** The R2 bucket client bound on the host Worker. */
-  readonly bucket: ReadWriteBucketClient;
+  /** The swappable bulk-byte store (R2 by default — see `BlobStore.ts`). */
+  readonly blobs: BlobStoreShape;
   /** The repo's ULID — the R2 key prefix (DESIGN.md §3.2). */
   readonly repoId: string;
 }
@@ -234,17 +234,17 @@ interface ZDataRow extends Record<
  * `state`/bucket handles.
  */
 export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
-  const { sql, bucket, repoId } = options;
+  const { sql, blobs, repoId } = options;
 
-  /** Discharges the R2 client's `RuntimeContext` coloring and closes the
+  /** Discharges the blob store's `RuntimeContext` coloring and closes the
    * error union into `StoreError` (we run inside the Repo DO). */
-  const runR2 = <A>(
-    effect: Effect.Effect<A, R2Error, RuntimeContext>,
+  const runBlob = <A>(
+    effect: Effect.Effect<A, BlobStoreError, RuntimeContext>,
     what: string,
   ): Effect.Effect<A, StoreError> =>
     effect.pipe(
       Effect.mapError(
-        (error) => new StoreError({ reason: `${what}: ${error.message}` }),
+        (error) => new StoreError({ reason: `${what}: ${error.reason}` }),
       ),
       Effect.provide(RuntimeContext.phantom),
     );
@@ -278,7 +278,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         }),
       );
     }
-    const body = yield* runR2(bucket.get(r2Key), `R2 get ${r2Key}`);
+    const body = yield* runBlob(blobs.get(r2Key), `blob get ${r2Key}`);
     if (body === null) {
       return yield* Effect.fail(
         new StoreError({ reason: `R2 object missing: ${r2Key}` }),
@@ -314,23 +314,21 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       return hit;
     }
     const start = windowIndex * WINDOW_BYTES;
-    const body = yield* runR2(
-      bucket.get(key, { range: { offset: start, length: WINDOW_BYTES } }),
-      `R2 window get ${key}`,
+    const body = yield* runBlob(
+      blobs.get(key, { offset: start, length: WINDOW_BYTES }),
+      `blob window get ${key}`,
     );
     if (body === null) {
       return yield* Effect.fail(
         new StoreError({ reason: `pack missing: ${key}` }),
       );
     }
-    const bytes = yield* body
-      .bytes()
-      .pipe(
-        Effect.mapError(
-          (error) =>
-            new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
-        ),
-      );
+    const bytes = yield* body.bytes.pipe(
+      Effect.mapError(
+        (error) =>
+          new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
+      ),
+    );
     const slab = { start, bytes };
     windows.set(cacheKey, slab);
     while (windows.size > MAX_CACHED_WINDOWS) {
@@ -369,23 +367,21 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     }
     // The object straddles the window boundary (or the window was short) —
     // fall back to an exact ranged read for this one object.
-    const body = yield* runR2(
-      bucket.get(key, { range: { offset, length: row.zsize } }),
-      `R2 ranged get ${key}`,
+    const body = yield* runBlob(
+      blobs.get(key, { offset, length: row.zsize }),
+      `blob ranged get ${key}`,
     );
     if (body === null) {
       return yield* Effect.fail(
         new StoreError({ reason: `pack missing: ${key}` }),
       );
     }
-    return yield* body
-      .bytes()
-      .pipe(
-        Effect.mapError(
-          (error) =>
-            new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
-        ),
-      );
+    return yield* body.bytes.pipe(
+      Effect.mapError(
+        (error) =>
+          new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
+      ),
+    );
   });
 
   /** Reads the stored compressed bytes fully into memory. */
@@ -404,7 +400,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       }
       case "r2": {
         const body = yield* r2Body(oid, row.r2_key);
-        return yield* body.bytes().pipe(
+        return yield* body.bytes.pipe(
           Effect.mapError(
             (error) =>
               new StoreError({
@@ -468,7 +464,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       // R2 write FIRST, then the metadata row — a crash between the two
       // leaves only a harmless content-addressed R2 orphan.
       const key = objectKey(repoId, object.oid);
-      yield* runR2(bucket.put(key, object.zdata), `R2 put ${key}`);
+      yield* runBlob(blobs.put(key, object.zdata), `blob put ${key}`);
       yield* sql.run(
         `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, r2_key, staged_push)
            VALUES (?, ?, ?, ?, 'r2', NULL, ?, ?)`,
@@ -547,7 +543,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
             }
             case "r2": {
               const body = yield* r2Body(oid, row.r2_key);
-              return body.body.pipe(
+              return body.stream.pipe(
                 Stream.mapError(
                   (error) =>
                     new StoreError({

@@ -1,12 +1,14 @@
 /**
  * Shared test-stack fixture for the git-service suites (DESIGN.md §9).
  *
- * git-service ships no Stack of its own — {@link GitService} is a function
- * returning an Effect that users instantiate inside their own
- * `Alchemy.Stack`, and these suites do exactly that. Every suite deploys
- * under its own stack name so concurrently-running suites never share (or
- * race on) a deployment. The local dev suite composes its own Stack with
- * `Alchemy.localState()` directly in the test file.
+ * git-service ships no Worker of its own — the package exports building
+ * blocks (`Server`, `ServerLive`, `ReposDurableObject`,
+ * `RegistryDurableObject`, …) that users assemble into their own
+ * `Cloudflare.Worker`. This fixture is exactly that assembly: the same
+ * shape the example app and the RFC's headline snippet use.
+ *
+ * Every suite deploys under its own stack name so concurrently-running
+ * suites never share (or race on) a deployment.
  *
  * The Worker resolves its admin secret from the deployer environment via
  * `Config.redacted("GIT_SERVICE_ADMIN_TOKEN")` at deploy time. So that suites
@@ -17,8 +19,17 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import { ADMIN_TOKEN_CONFIG_KEY } from "../../src/GitWorker.ts";
-import { GitService } from "../../src/Service.ts";
+import * as Layer from "effect/Layer";
+import {
+  ADMIN_TOKEN_CONFIG_KEY,
+  AuthTokens,
+  BlobStoreR2,
+  GIT_WORKER_OPTIONS,
+  ReposDurableObject,
+  RegistryDurableObject,
+  Server,
+  ServerLive,
+} from "../../src/index.ts";
 
 /**
  * The admin key every suite authenticates with. Honors a caller-provided
@@ -32,6 +43,31 @@ export const TEST_ADMIN_TOKEN: string =
 // `Config.redacted(ADMIN_TOKEN_CONFIG_KEY)`. `??=` keeps a caller-exported
 // value authoritative.
 process.env[ADMIN_TOKEN_CONFIG_KEY] ??= TEST_ADMIN_TOKEN;
+
+/** The suites' bucket — owned by the assembly, like any user's. */
+const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+
+/** One layer graph, one Effect.provide — the RFC assembly, verbatim. */
+const GitLive = ServerLive.pipe(
+  Layer.provide(ReposDurableObject),
+  Layer.provide(RegistryDurableObject),
+  Layer.provide(BlobStoreR2(GitObjects)),
+  Layer.provide(AuthTokens),
+);
+
+/** The suites' git host: the reference building-block assembly. */
+export default class TestGitHost extends Cloudflare.Worker<TestGitHost>()(
+  "GitWorker",
+  {
+    main: import.meta.url,
+    ...GIT_WORKER_OPTIONS,
+    observability: { enabled: true },
+  },
+  Effect.gen(function* () {
+    const git = yield* Server;
+    return { fetch: git.fetch };
+  }).pipe(Effect.provide(GitLive)),
+) {}
 
 /**
  * Builds the deployable test stack under a suite-specific name.
@@ -48,7 +84,7 @@ export const makeTestStack = (name: string) =>
     name,
     { providers: Cloudflare.providers(), state: Cloudflare.state() },
     Effect.gen(function* () {
-      const git = yield* GitService();
-      return { url: git.url };
+      const host = yield* TestGitHost;
+      return { url: host.url.as<string>() };
     }),
   );

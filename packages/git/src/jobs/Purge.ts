@@ -19,9 +19,10 @@
  * {@link MAX_PAGES_PER_RUN} × 1000 R2 objects and reports `"continue"` so
  * the caller re-arms the alarm instead of blowing the 15-minute budget.
  */
-import type { R2Error, ReadWriteBucketClient } from "alchemy/Cloudflare/R2";
+import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { StoreError } from "../git/Store.ts";
 import { repoPrefix } from "../store/Keys.ts";
 
@@ -48,8 +49,8 @@ export type PurgeOutcome =
 export interface PurgeJobOptions {
   /** The repo's ULID (R2 key prefix). */
   readonly repoId: string;
-  /** The shared R2 bucket client. */
-  readonly bucket: ReadWriteBucketClient;
+  /** The swappable bulk-byte store. */
+  readonly blobs: BlobStoreShape;
   /** Reads the current fork count from the Registry. */
   readonly forkCount: Effect.Effect<number, StoreError>;
   /** Drops the DO's entire SQLite/KV state (`storage.deleteAll`). */
@@ -62,11 +63,11 @@ export interface PurgeJobOptions {
 const r2ToStore =
   (what: string) =>
   <A>(
-    effect: Effect.Effect<A, R2Error, RuntimeContext>,
+    effect: Effect.Effect<A, BlobStoreError, RuntimeContext>,
   ): Effect.Effect<A, StoreError> =>
     effect.pipe(
       Effect.mapError(
-        (error) => new StoreError({ reason: `${what}: ${error.message}` }),
+        (error) => new StoreError({ reason: `${what}: ${error.reason}` }),
       ),
       Effect.provide(RuntimeContext.phantom),
     );
@@ -101,21 +102,24 @@ export const runPurgeJob = (
     }
 
     // 2. Bounded R2 prefix drain.
-    let drained = false;
-    for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
-      const listed = yield* r2ToStore(`R2 list ${prefix}`)(
-        options.bucket.list({ prefix, limit: 1000 }),
+    // Bounded drain: take at most MAX_PAGES_PER_RUN pages worth of keys
+    // from the listing stream, delete in 1000-key batches, and treat a
+    // short take as fully drained.
+    const cap = MAX_PAGES_PER_RUN * 1000;
+    const keys = yield* r2ToStore(`blob list ${prefix}`)(
+      Stream.runCollect(
+        options.blobs.list(prefix).pipe(
+          Stream.take(cap),
+          Stream.map((meta) => meta.key),
+        ),
+      ),
+    );
+    for (let at = 0; at < keys.length; at += 1000) {
+      yield* r2ToStore(`blob delete under ${prefix}`)(
+        options.blobs.delete(keys.slice(at, at + 1000)),
       );
-      if (listed.objects.length > 0) {
-        yield* r2ToStore(`R2 delete under ${prefix}`)(
-          options.bucket.delete(listed.objects.map((object) => object.key)),
-        );
-      }
-      if (!listed.truncated) {
-        drained = true;
-        break;
-      }
     }
+    const drained = keys.length < cap;
     if (!drained) {
       return { _tag: "continue", forkPinned: false } satisfies PurgeOutcome;
     }

@@ -5,8 +5,8 @@
  * Public surface:
  * - The REST contract ({@link GitApi}) with its schemas and tagged errors.
  * - Auth plumbing (credential parsing, token mint/hash helpers).
- * - The deployable pieces: {@link GitWorker}, the {@link GitRepo} /
- *   {@link Registry} Durable Objects, and the {@link GitService} construct
+ * - The deployable pieces: {@link Server} + {@link ServerLive}, the {@link GitRepo} /
+ *   {@link Registry} Durable Objects, and the building-block layers
  *   function (yielded inside your own `Alchemy.Stack`).
  *
  * Internals (wire-protocol codecs under `git/`, storage under `store/`,
@@ -16,17 +16,28 @@
  */
 export * from "./Api.ts";
 export * from "./Auth.ts";
-export { ADMIN_TOKEN_CONFIG_KEY, default as GitWorker } from "./GitWorker.ts";
 export {
-  GitObjectsBucket,
-  GitRepo,
-  GitRepoLive,
-  MAX_PACK_BYTES,
-} from "./RepoObject.ts";
+  ADMIN_TOKEN_CONFIG_KEY,
+  GIT_WORKER_OPTIONS,
+  ReposDurableObject,
+  RegistryDurableObject,
+  Server,
+  ServerLive,
+} from "./Server.ts";
+export {
+  BlobStore,
+  BlobStoreR2,
+  BlobStoreError,
+  type BlobBody,
+  type BlobMeta,
+  type BlobMultipart,
+  type BlobStoreShape,
+} from "./BlobStore.ts";
+export { BlobStoreS3, type BlobStoreS3Options } from "./BlobStoreS3.ts";
+export { GitRepo, GitRepoLive, MAX_PACK_BYTES } from "./RepoObject.ts";
 export {
   Registry,
   RegistryLive,
   REGISTRY_DO_NAME,
   RESERVED_OWNERS,
 } from "./RegistryObject.ts";
-export { GitService, type GitServiceOptions } from "./Service.ts";

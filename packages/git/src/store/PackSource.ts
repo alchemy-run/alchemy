@@ -1,11 +1,11 @@
 /**
- * An R2-backed {@link RandomAccess} for pack ingestion (DESIGN.md §3.6
- * upgrade seam) — this is what removes the push size cap.
+ * A {@link RandomAccess} over a blob-store object, for pack ingestion
+ * (DESIGN.md §3.6 upgrade seam) — this is what removes the push size cap.
  *
  * v1 buffered the whole incoming pack in the isolate, which forced a hard
  * 50 MiB limit: a bigger push could not be held in 128 MB of memory
- * alongside delta bases. Instead the body is streamed straight into R2 and
- * parsed *from there*, so ingest memory is bounded by the read window
+ * alongside delta bases. Instead the body is streamed to the blob store
+ * and parsed *from there*, so ingest memory is bounded by the read window
  * rather than by the pack size. `PackParser` was written against
  * `RandomAccess` from the start precisely so this swap touches one
  * implementation and no protocol code.
@@ -16,9 +16,9 @@
  * and the occasional backwards seek for an OFS_DELTA base usually lands in
  * a retained window too.
  */
-import type { R2Error, ReadWriteBucketClient } from "alchemy/Cloudflare/R2";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import type { BlobStoreShape } from "../BlobStore.ts";
 import type { RandomAccess } from "../git/PackParser.ts";
 import { StoreError } from "../git/Store.ts";
 
@@ -29,11 +29,11 @@ export const PACK_WINDOW_BYTES = 4 * 1024 * 1024;
 export const PACK_MAX_WINDOWS = 4;
 
 /**
- * Opens an R2 object as a {@link RandomAccess}. `size` must be the object's
- * exact byte length (the caller knows it: it just uploaded the object).
+ * Opens a blob-store object as a {@link RandomAccess}. `size` must be the
+ * object's exact byte length (the caller knows it: it just uploaded it).
  */
-export const r2RandomAccess = (options: {
-  readonly bucket: ReadWriteBucketClient;
+export const blobRandomAccess = (options: {
+  readonly blobs: BlobStoreShape;
   readonly key: string;
   readonly size: number;
   readonly windowBytes?: number | undefined;
@@ -52,13 +52,13 @@ export const r2RandomAccess = (options: {
         return hit;
       }
       const start = index * windowBytes;
-      const body = yield* options.bucket
-        .get(options.key, { range: { offset: start, length: windowBytes } })
+      const body = yield* options.blobs
+        .get(options.key, { offset: start, length: windowBytes })
         .pipe(
           Effect.mapError(
-            (error: R2Error) =>
+            (error) =>
               new StoreError({
-                reason: `incoming pack read ${options.key}: ${error.message}`,
+                reason: `incoming pack read ${options.key}: ${error.reason}`,
               }),
           ),
           Effect.provide(RuntimeContext.phantom),
@@ -68,14 +68,13 @@ export const r2RandomAccess = (options: {
           new StoreError({ reason: `incoming pack missing: ${options.key}` }),
         );
       }
-      const bytes = yield* body.bytes().pipe(
+      const bytes = yield* body.bytes.pipe(
         Effect.mapError(
           (error) =>
             new StoreError({
-              reason: `incoming pack read ${options.key}: ${error.message}`,
+              reason: `incoming pack read ${options.key}: ${error.reason}`,
             }),
         ),
-        Effect.provide(RuntimeContext.phantom),
       );
       const slab = { start, bytes };
       windows.set(index, slab);

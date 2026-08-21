@@ -27,7 +27,7 @@
  * {@link MAX_OBJECTS_PER_RUN} objects / {@link MAX_BYTES_PER_RUN} bytes are
  * moved per alarm, and the job reports whether more remain.
  */
-import type { R2Error, ReadWriteBucketClient } from "alchemy/Cloudflare/R2";
+import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import {
@@ -73,7 +73,7 @@ export interface CompactOutcome {
 export interface CompactJobOptions {
   readonly repoId: string;
   readonly sql: SqlClient;
-  readonly bucket: ReadWriteBucketClient;
+  readonly blobs: BlobStoreShape;
   readonly maxObjects?: number | undefined;
   readonly maxBytes?: number | undefined;
 }
@@ -92,11 +92,11 @@ interface LooseRow extends Record<
 const runR2 =
   (what: string) =>
   <A>(
-    effect: Effect.Effect<A, R2Error, RuntimeContext>,
+    effect: Effect.Effect<A, BlobStoreError, RuntimeContext>,
   ): Effect.Effect<A, StoreError> =>
     effect.pipe(
       Effect.mapError(
-        (error) => new StoreError({ reason: `${what}: ${error.message}` }),
+        (error) => new StoreError({ reason: `${what}: ${error.reason}` }),
       ),
       Effect.provide(RuntimeContext.phantom),
     );
@@ -199,8 +199,8 @@ export const runCompactJob = (
     // shift them past the 12-byte header to get absolute file offsets.
     const packId = trailerHex;
     const key = packKey(options.repoId, packId);
-    yield* runR2(`R2 put ${key}`)(
-      options.bucket.put(key, pack, { contentLength: pack.length }),
+    yield* runR2(`blob put ${key}`)(
+      options.blobs.put(key, pack, { contentLength: pack.length }),
     );
 
     yield* options.sql

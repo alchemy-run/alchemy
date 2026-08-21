@@ -1,7 +1,7 @@
 {
   "name": "@alchemy.run/git",
   "version": "2.0.0-beta.70",
-  "description": "Git hosting service on Cloudflare Workers, Durable Objects, and R2 — built with Alchemy Effect-native Workers.",
+  "description": "Git hosting service on Cloudflare Workers, Durable Objects, and R2 \u2014 built with Alchemy Effect-native Workers.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -47,7 +47,8 @@
   "peerDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "@distilled.cloud/aws": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
@@ -58,5 +59,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "peerDependenciesMeta": {
+    "@distilled.cloud/aws": {
+      "optional": true
+    }
   }
 }
