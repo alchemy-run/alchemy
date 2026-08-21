@@ -250,6 +250,7 @@
       "import": "./lib/Prisma/Deployment.js"
     },
     "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/Credentials": null,
     "./Prisma/Internal/*": null,
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,

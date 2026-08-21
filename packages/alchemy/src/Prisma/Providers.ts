@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { AlchemyProfile, ProfileLive } from "../Auth/Profile.ts";
@@ -18,6 +19,8 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
+import { Retry } from "@distilled.cloud/prisma-postgres";
+import * as Credentials from "./Credentials.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
@@ -48,10 +51,18 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 /**
  * Standalone operation helpers own a private auth registry because they run
  * outside a Stack. Credential resolution stays eager here so constructing
- * `managementApi()` preserves its existing fail-fast behavior.
+ * `managementApi()` preserves its existing fail-fast behavior — which also
+ * lets the distilled `Credentials` service read the already-resolved
+ * {@link PrismaEnvironment} rather than building its own.
  */
 const standaloneManagementApiLayer = () =>
   PrismaClientLive.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Credentials.fromEnvironment(),
+        Layer.succeed(Retry.Retry, Retry.makeDefault),
+      ),
+    ),
     Layer.provideMerge(fromProfile()),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
@@ -78,6 +89,16 @@ const standaloneManagementApiLayer = () =>
  * The management client is resolved on its first API operation, after
  * `alchemy login` has had a chance to configure the registered Prisma auth
  * provider. The nested client layer shares the provider layer's lifetime.
+ *
+ * The distilled `Credentials` and `Retry` services are merged in here so the
+ * auth layers below satisfy both them and the management client. The
+ * transport is not: `providers()` supplies it with `Layer.provide` so it can
+ * never override the ambient `HttpClient` other providers in the stack use.
+ *
+ * Note the retry envelope changed with the distilled migration:
+ * `Retry.makeDefault` (8 retries, 250ms base, honors `Retry-After`) replaced
+ * the client's 4×100ms idempotent-only policy, and creates opt out with
+ * `Retry.none`.
  */
 const stackManagementApiLayer = () =>
   Layer.effect(
@@ -106,6 +127,12 @@ const stackManagementApiLayer = () =>
       return proxyChain(cached) as PrismaManagementClient;
     }),
   ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Credentials.fromAuthProvider(),
+        Layer.succeed(Retry.Retry, Retry.makeDefault),
+      ),
+    ),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -134,7 +161,10 @@ const stackManagementApiLayer = () =>
  * ```
  */
 export const managementApi = () =>
-  standaloneManagementApiLayer().pipe(Layer.orDie);
+  standaloneManagementApiLayer().pipe(
+    Layer.provide(FetchHttpClient.layer),
+    Layer.orDie,
+  );
 
 /**
  * Build a layer that registers all Prisma resource providers, the Prisma
@@ -215,5 +245,6 @@ export const providers = () =>
     // auth registers without resolving credentials, so `alchemy dev` never
     // needs a Prisma token.
     Layer.provideMerge(stackManagementApiLayer()),
+    Layer.provide(FetchHttpClient.layer),
     Layer.orDie,
   );

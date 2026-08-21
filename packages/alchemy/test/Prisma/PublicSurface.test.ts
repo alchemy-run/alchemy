@@ -204,13 +204,18 @@ const publicPrismaDeepImports = [
 ] as const;
 
 const internalPrismaDeepImports = [
+  "Credentials",
   "Internal/DeploymentActions",
   "Internal/DeploymentObserve",
   "PrismaDevDatabase",
   "Refs",
 ] as const;
 
-const internalPrismaRootFiles = ["PrismaDevDatabase", "Refs"] as const;
+const internalPrismaRootFiles = [
+  "Credentials",
+  "PrismaDevDatabase",
+  "Refs",
+] as const;
 
 const removedPrismaDeepImports = [
   "ComputeApp",
