@@ -396,9 +396,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * to a managed ECR repository, and deploys, provisioning the instance and
  * ECR access roles automatically. Capability bindings (e.g. DynamoDB
  * `GetItem`) attach IAM policy statements to the managed instance role.
- * @resource
- * @section Creating a Service
- * @example Public ECR Image
+ * ### Creating a Service
+ * **Example:** Public ECR Image
  * ```typescript
  * const service = yield* AppRunner.Service("Hello", {
  *   imageRepository: {
@@ -411,7 +410,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * // service.serviceUrl -> "xxxxxxxx.us-west-2.awsapprunner.com"
  * ```
  *
- * @example Private ECR Image with Access Role
+ * **Example:** Private ECR Image with Access Role
  * ```typescript
  * const service = yield* AppRunner.Service("Api", {
  *   imageRepository: {
@@ -425,8 +424,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Effect-Native Services
- * @example Inline Effect HTTP Program
+ * ### Effect-Native Services
+ * **Example:** Inline Effect HTTP Program
  * ```typescript
  * export default class Api extends AppRunner.Service<Api>()(
  *   "Api",
@@ -446,7 +445,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ) {}
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -454,7 +453,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -477,7 +476,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -485,8 +484,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * @section Scaling and Networking
- * @example Custom Auto Scaling and VPC Egress
+ * ### Scaling and Networking
+ * **Example:** Custom Auto Scaling and VPC Egress
  * ```typescript
  * const service = yield* AppRunner.Service("Api", {
  *   imageRepository: {
@@ -501,6 +500,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Service: Platform<
   Service,

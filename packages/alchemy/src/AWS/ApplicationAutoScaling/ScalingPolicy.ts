@@ -102,9 +102,8 @@ export interface ScalingPolicy extends Resource<
  * the (`serviceNamespace`, `resourceId`, `scalableDimension`) triple, which
  * must be registered (see {@link ScalableTarget}) before the policy is
  * created — pass the target's outputs so deployment orders correctly.
- * @resource
- * @section Target Tracking
- * @example Track ECS Service CPU
+ * ### Target Tracking
+ * **Example:** Track ECS Service CPU
  * ```typescript
  * const target = yield* ScalableTarget("ApiScaling", {
  *   serviceNamespace: "ecs",
@@ -129,7 +128,7 @@ export interface ScalingPolicy extends Resource<
  * });
  * ```
  *
- * @example Track a Customized Metric
+ * **Example:** Track a Customized Metric
  * ```typescript
  * yield* ScalingPolicy("QueueDepthPolicy", {
  *   serviceNamespace: target.serviceNamespace,
@@ -147,8 +146,8 @@ export interface ScalingPolicy extends Resource<
  * });
  * ```
  *
- * @section Step Scaling
- * @example Step Adjustments
+ * ### Step Scaling
+ * **Example:** Step Adjustments
  * ```typescript
  * yield* ScalingPolicy("ApiStepPolicy", {
  *   serviceNamespace: target.serviceNamespace,
@@ -164,6 +163,8 @@ export interface ScalingPolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const ScalingPolicy = Resource<ScalingPolicy>(
   "AWS.ApplicationAutoScaling.ScalingPolicy",

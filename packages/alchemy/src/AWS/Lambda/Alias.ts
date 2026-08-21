@@ -91,8 +91,8 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
 /**
  * A Lambda alias for routing invocations to a stable function version.
  *
- * @section Creating Aliases
- * @example Production Alias
+ * ### Creating Aliases
+ * **Example:** Production Alias
  * ```typescript
  * const version = yield* Version("ProductionVersion", { function: fn });
  * const alias = yield* Alias("ProductionAlias", {
@@ -101,8 +101,8 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
  * });
  * ```
  *
- * @section Weighted Routing
- * @example Shift Traffic to Another Version
+ * ### Weighted Routing
+ * **Example:** Shift Traffic to Another Version
  * ```typescript
  * const version = yield* Version("LiveVersion", { function: fn });
  * const alias = yield* Alias("LiveAlias", {
@@ -116,8 +116,8 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
  * });
  * ```
  *
- * @section Async Invocation
- * @example Alias-Scoped Retry Behavior
+ * ### Async Invocation
+ * **Example:** Alias-Scoped Retry Behavior
  * ```typescript
  * const version = yield* Version("LiveVersion", { function: fn });
  * const alias = yield* Alias("LiveAlias", {

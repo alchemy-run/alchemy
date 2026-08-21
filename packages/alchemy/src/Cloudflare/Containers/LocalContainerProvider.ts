@@ -5,6 +5,7 @@ import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
@@ -167,14 +168,16 @@ export const LocalContainerProvider = () =>
       const makeAttributes = Effect.fn(function* ({
         id,
         news,
+        bindings,
         output,
       }: {
         id: string;
         news: AnyContainerApplicationProps;
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const env = makeContainerEnv(news, accountId);
+        const env = makeContainerEnv(news, accountId, bindings);
         const { dev, hash } = yield* prepareImage(id, news);
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
@@ -215,10 +218,17 @@ export const LocalContainerProvider = () =>
         // worker-hosted Durable Object namespace. Building the image here lets
         // the worker resolve `dev` without waiting on the container's reconcile.
         precreate: Effect.fn(function* ({ id, news }) {
-          return yield* makeAttributes({ id, news, output: undefined });
+          // Bindings are not resolved yet at precreate (that is what breaks
+          // the cycle); binding-injected env lands on the reconcile below.
+          return yield* makeAttributes({
+            id,
+            news,
+            bindings: [],
+            output: undefined,
+          });
         }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          return yield* makeAttributes({ id, news, output });
+        reconcile: Effect.fn(function* ({ id, news, bindings, output }) {
+          return yield* makeAttributes({ id, news, bindings, output });
         }),
         delete: Effect.fn(function* () {
           // Nothing to tear down: the build context lives under `.alchemy/tmp`

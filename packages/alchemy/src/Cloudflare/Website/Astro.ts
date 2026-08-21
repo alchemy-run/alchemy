@@ -51,6 +51,12 @@ export interface AstroProps<
    */
   sessionKVBindingName?: string | false;
   /**
+   * Runtime used to prerender static pages. `"workerd"` renders them in the
+   * production Worker runtime; `"node"` uses Astro's stock Node prerenderer.
+   * @default "workerd"
+   */
+  prerenderEnvironment?: "workerd" | "node";
+  /**
    * Serializable Astro config merged into the in-memory configuration.
    * The project's `astro.config.*` file loads natively; astro merges
    * these options OVER it (scalars override the file). The Cloudflare
@@ -105,23 +111,20 @@ export interface AstroProps<
  * bun add -d @alchemy.run/frontend-frameworks
  * ```
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying an Astro Site
+ * ### Deploying an Astro Site
  * A single call builds the project and deploys the server bundle plus
  * static assets. Pages are server-rendered by default; pages that
  * `export const prerender = true` are served as static assets. Astro's
  * server runtime is built against Node APIs, so `nodejs_compat` is
  * always included in the Worker's compatibility flags.
  *
- * @example Astro site
+ * **Example:** Astro site
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Website");
  * ```
  *
- * @section Static Sites
+ * ### Static Sites
  * With `astro: { output: "static" }` every page is prerendered at build
  * time and the deploy is **assets-only**: no server bundle is uploaded —
  * Cloudflare's asset layer answers every request (including the built
@@ -129,7 +132,7 @@ export interface AstroProps<
  * provisioning is skipped for declared-static sites since no Worker code
  * runs at request time.
  *
- * @example Fully static Astro site
+ * **Example:** Fully static Astro site
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Docs", {
  *   astro: { output: "static" },
@@ -137,12 +140,12 @@ export interface AstroProps<
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Bind resources through `env` like any other Worker. Astro code reads
  * them via `import { env } from "cloudflare:workers"` (or
  * `Astro.locals.runtime.env`).
  *
- * @example Astro site with a KV namespace and an R2 bucket
+ * **Example:** Astro site with a KV namespace and an R2 bucket
  * ```typescript
  * const kv = yield* Cloudflare.KV.Namespace("Cache");
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
@@ -155,14 +158,14 @@ export interface AstroProps<
  * });
  * ```
  *
- * @section Sessions
+ * ### Sessions
  * Astro's session API is backed by a KV namespace. One is provisioned
  * and bound under the session binding name (`SESSION` by default)
  * automatically, so `Astro.session` works with zero configuration.
  * Bind your own namespace under that name to use it instead, or set
  * `sessionKVBindingName: false` to opt out of session provisioning.
  *
- * @example Bringing your own session namespace
+ * **Example:** Bringing your own session namespace
  * ```typescript
  * const sessions = yield* Cloudflare.KV.Namespace("Sessions");
  *
@@ -173,19 +176,19 @@ export interface AstroProps<
  * });
  * ```
  *
- * @example Opting out of session provisioning
+ * **Example:** Opting out of session provisioning
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Website", {
  *   sessionKVBindingName: false,
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project
  * has large directories that don't affect the build output.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Docs", {
  *   memo: {
@@ -194,7 +197,7 @@ export interface AstroProps<
  * });
  * ```
  *
- * @section Astro Configuration
+ * ### Astro Configuration
  * Your `astro.config.*` file loads natively — integrations, Vite
  * plugins, and other non-serializable options work as usual. Common
  * serializable options are exposed under `astro` for deploy-specific
@@ -205,7 +208,7 @@ export interface AstroProps<
  * `output`; opt into a fully prerendered site with
  * `astro: { output: "static" }`.
  *
- * @example Setting the site URL and source directory
+ * **Example:** Setting the site URL and source directory
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Blog", {
  *   astro: {
@@ -215,18 +218,22 @@ export interface AstroProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Astro` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.Astro<Website>()("Website") {}
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Astro: {
   <Self>(): {
@@ -237,10 +244,9 @@ export const Astro: {
         | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -251,10 +257,9 @@ export const Astro: {
       | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers
@@ -297,6 +302,7 @@ export const Astro: {
             source: {
               provider: "@alchemy.run/frontend-frameworks/astro/source",
               devMode: "server",
+              rootDir: props.rootDir,
               options: {
                 rootDir: props.rootDir,
                 memo: props.memo,
@@ -304,6 +310,7 @@ export const Astro: {
                 // source provider can skip its session-driver wiring on
                 // opt-out.
                 sessionKVBindingName: props.sessionKVBindingName,
+                prerenderEnvironment: props.prerenderEnvironment,
                 // Server output is the documented default: astro's own
                 // zero-config default is `"static"`, which would prerender
                 // every page at build time inside workerd — where the

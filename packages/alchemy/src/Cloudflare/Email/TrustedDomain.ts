@@ -81,11 +81,8 @@ export type TrustedDomain = Resource<
  * All fields are mutable in place. Requires the Email Security enterprise
  * add-on; accounts without the entitlement receive the typed
  * `EmailSecurityNotEntitled` error.
- * @resource
- * @product Email Security
- * @category Email
- * @section Trusting Domains
- * @example Trust a partner domain with similar spelling
+ * ### Trusting Domains
+ * **Example:** Trust a partner domain with similar spelling
  * ```typescript
  * yield* Cloudflare.Email.TrustedDomain("PartnerLookalike", {
  *   pattern: "examp1e-partner.com",
@@ -94,7 +91,7 @@ export type TrustedDomain = Resource<
  * });
  * ```
  *
- * @example Trust a recently registered domain
+ * **Example:** Trust a recently registered domain
  * ```typescript
  * yield* Cloudflare.Email.TrustedDomain("NewSubsidiary", {
  *   pattern: "brand-new-subsidiary.example",
@@ -103,6 +100,10 @@ export type TrustedDomain = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
+ *
+ * @resource
+ * @product Email Security
+ * @category Email
  */
 export const TrustedDomain = Resource<TrustedDomain>(
   EmailSecurityTrustedDomainTypeId,

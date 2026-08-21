@@ -3,6 +3,7 @@
   "include": ["package.json", "test"],
   "exclude": [
     "test/Local/fixtures/rpc-server-entry.ts",
+    "test/Local/fixtures/rpc-server-entry-b.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
     "test/Local/fixtures/rpc-spawner-devserver-parent.ts",
     // Nuxt fixtures: server routes use nitro's auto-imported globals

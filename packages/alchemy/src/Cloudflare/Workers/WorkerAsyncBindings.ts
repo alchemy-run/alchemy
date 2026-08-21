@@ -292,7 +292,14 @@ const bindContainerClass = Effect.fn(function* (
   bindingName: string,
   decl: Container.Decl.Any,
 ) {
-  const className = decl["~alchemy/Container/ClassName"] ?? bindingName;
+  // Effect-valued container props (the shape that threads a sibling
+  // resource's outputs into `env`) can only surface `className` here, once
+  // the props Effect runs.
+  const declaredClassName = decl["~alchemy/Container/ClassName"];
+  const className =
+    (Effect.isEffect(declaredClassName)
+      ? yield* declaredClassName
+      : declaredClassName) ?? bindingName;
   // Resolve the ContainerApplication resource declaration carried on the
   // class. An effectful (`main`) container has no application declaration of
   // its own here (it is created by its `.make()` Layer inside a Durable

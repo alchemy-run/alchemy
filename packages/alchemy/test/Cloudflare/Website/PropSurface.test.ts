@@ -59,6 +59,19 @@ describe("Website prop surfaces", () => {
         source: { provider: "x", options: {} },
       }),
     () =>
+      Cloudflare.Website.Astro("A", {
+        prerenderEnvironment: "node",
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        prerenderEnvironment: "workerd",
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        // @ts-expect-error only workerd and node are supported
+        prerenderEnvironment: "bun",
+      }),
+    () =>
       Cloudflare.Website.Nextjs("X", {
         // @ts-expect-error `script` is owned by the source dispatch
         script: "export default {}",

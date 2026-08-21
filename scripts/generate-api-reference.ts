@@ -228,6 +228,43 @@ function parseJSDoc(node: Node): ParsedJSDoc {
       insideFence = !insideFence;
     }
 
+    const proseHeading = insideFence
+      ? null
+      : line.trim().match(/^###\s+(.+?)\s+<!-- api-prose -->$/);
+    if (proseHeading) {
+      if (!sawTag) summaryLines.push(`### ${proseHeading[1]!.trim()}`);
+      continue;
+    }
+
+    const section = insideFence ? null : line.trim().match(/^###\s+(.+)$/);
+    if (section) {
+      sawTag = true;
+      flushExample();
+      flushSectionDesc();
+      currentSection = {
+        title: section[1]!.trim(),
+        description: "",
+        examples: [],
+      };
+      sections.push(currentSection);
+      collectingSectionDesc = true;
+      continue;
+    }
+
+    const example = insideFence
+      ? null
+      : line.trim().match(/^\*\*Example:\*\*\s*(.*)$/);
+    if (example) {
+      sawTag = true;
+      flushSectionDesc();
+      flushExample();
+      currentExample = {
+        title: example[1]!.trim() || "Example",
+        body: "",
+      };
+      continue;
+    }
+
     const tag = insideFence ? null : line.trim().match(/^@(\w+)\s*(.*)$/);
     if (tag) {
       sawTag = true;
@@ -477,10 +514,7 @@ function makeLinkResolverFactory(
   return (fromDir: string) => {
     const fromProvider = fromDir.split("/")[0] ?? "";
 
-    const lookup = (
-      name: string,
-      provider?: string,
-    ): PageEntry | undefined => {
+    const lookup = (name: string, provider?: string): PageEntry | undefined => {
       const scope = (list: PageEntry[] | undefined) =>
         (list ?? []).filter((c) => !provider || c.provider === provider);
       const named = scope(byName.get(name));
@@ -727,6 +761,12 @@ function orderedKeys(keys: string[], order: string[]): string[] {
  * Grouping is by resolved product LABEL (`@product`, falling back to the
  * service dir name), not by directory: two directories declaring the same
  * product merge into one group instead of rendering duplicate siblings.
+ *
+ * A group that would hold exactly one page named the same as the group
+ * (a flat provider dir where the label falls back to the resource name,
+ * e.g. "Certificate > Certificate") carries no information — collapse it
+ * to a plain leaf. Genuine single-page products keep their folder (the
+ * label differs, e.g. Cloudflare's "D1 > Database").
  */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   const byLabelKey = new Map<string, PageEntry[]>();
@@ -737,6 +777,10 @@ function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   }
   const items: SidebarItem[] = [];
   for (const [label, productPages] of byLabelKey) {
+    if (productPages.length === 1 && productPages[0].resource === label) {
+      items.push({ label, link: productPages[0].link });
+      continue;
+    }
     items.push({
       label,
       collapsed: true,

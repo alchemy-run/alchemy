@@ -242,11 +242,8 @@ export type Policy = Resource<
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
  * inline policies attached directly to an `Application` — a reusable
  * policy can be referenced by multiple applications by id.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Policy
- * @example Allow a single email domain
+ * ### Creating a Policy
+ * **Example:** Allow a single email domain
  * ```typescript
  * const policy = yield* Cloudflare.Access.Policy("AllowExampleDomain", {
  *   decision: "allow",
@@ -254,7 +251,7 @@ export type Policy = Resource<
  * });
  * ```
  *
- * @example Allow everyone but require purpose justification
+ * **Example:** Allow everyone but require purpose justification
  * ```typescript
  * const policy = yield* Cloudflare.Access.Policy("OpenWithJustification", {
  *   decision: "allow",
@@ -264,8 +261,8 @@ export type Policy = Resource<
  * });
  * ```
  *
- * @section Combining rule groups
- * @example Include + exclude + require
+ * ### Combining rule groups
+ * **Example:** Include + exclude + require
  * ```typescript
  * const policy = yield* Cloudflare.Access.Policy("EngineersExceptInterns", {
  *   decision: "allow",
@@ -274,6 +271,10 @@ export type Policy = Resource<
  *   require: [{ geo: { countryCode: "US" } }],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Policy = Resource<Policy>("Cloudflare.Access.Policy", {
   aliases: ["Cloudflare.AccessPolicy"],
@@ -320,9 +321,8 @@ export const PolicyProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catch(
-              (): Effect.Effect<ObservedPolicy | undefined> =>
-                Effect.succeed(undefined),
+            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
+              Effect.succeed(undefined),
             ),
           );
       }
@@ -443,9 +443,8 @@ export const PolicyProvider = () =>
             policyId: output.policyId,
           })
           .pipe(
-            Effect.catch(
-              (): Effect.Effect<ObservedPolicy | undefined> =>
-                Effect.succeed(undefined),
+            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
+              Effect.succeed(undefined),
             ),
           );
         if (direct && direct.id) {

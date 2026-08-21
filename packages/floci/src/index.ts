@@ -25,7 +25,10 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { execFile } from "node:child_process";
+import * as fs from "node:fs/promises";
 import * as net from "node:net";
+import * as os from "node:os";
+import * as path from "node:path";
 
 /**
  * The pinned floci release alchemy ships: upstream + the alchemy patch
@@ -33,7 +36,7 @@ import * as net from "node:net";
  * workflow. Bumping this pin (with a new `x.y.z-alchemy.N` tag) is how an
  * emulator change reaches users.
  */
-export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.2";
+export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.4";
 
 /** Default gateway port (LocalStack-compatible). */
 export const DEFAULT_FLOCI_PORT = 4566;
@@ -44,12 +47,54 @@ export const DEFAULT_FLOCI_PORT = 4566;
  * container (see floci's ports doc) — its `*.elb.localhost.floci.io` DNS
  * resolves to 127.0.0.1, so the port must be published for the emulated
  * load balancer to be reachable from the host. Ports already taken on the
- * host are skipped with a warning (the gateway still works without them).
+ * host are skipped (the gateway still works without them). A warning is
+ * emitted only when the caller asked for those ports via
+ * {@link FlociConfig.elbListenerPorts} — the default 80/443 publish is
+ * opportunistic and a taken privileged port is the common case on a
+ * developer machine, not a problem.
  */
 export const DEFAULT_ELB_LISTENER_PORTS = [80, 443];
 
 /** Default name of the managed container. */
 export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
+
+/**
+ * Stable host path of the emulator's self-signed CA bundle, refreshed by
+ * {@link ensureFloci} on every successful health check (the CA is minted
+ * inside the container, so it changes whenever the container is recreated).
+ * Home-anchored (not cwd-relative) so every process in a dev session — test
+ * runner, RPC sidecars, workerd children — resolves the same file; consumers
+ * point TLS trust at it (e.g. `NODE_EXTRA_CA_CERTS`, which the local workerd
+ * runtime folds into its outbound `trustedCertificates`).
+ */
+export const FLOCI_CA_PATH = path.join(os.homedir(), ".floci", "ca.pem");
+
+/**
+ * Best-effort download of the emulator's CA bundle to {@link FLOCI_CA_PATH}.
+ * Never fails the ensure: an emulator predating `/_floci/tls/ca` (or a
+ * filesystem error) just leaves the previous bundle in place.
+ */
+const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const res = await fetch(`${endpoint}/_floci/tls/ca`, { signal });
+      if (!res.ok) return;
+      const pem = await res.text();
+      if (!pem.includes("BEGIN CERTIFICATE")) return;
+      await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
+      await fs.writeFile(FLOCI_CA_PATH, pem);
+      // Point local workerd (and any other child process spawned after this)
+      // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
+      // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
+      // so setting it here (before local workers spawn during the apply) only
+      // affects children, which is exactly the target. Never clobber a value
+      // the caller set deliberately.
+      if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
+        process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
+      }
+    },
+    catch: (cause) => new FlociError({ message: "ca sync failed", cause }),
+  }).pipe(Effect.ignore);
 
 export class FlociError extends Data.TaggedError("FlociError")<{
   readonly message: string;
@@ -94,7 +139,8 @@ export interface FlociConfig {
   /**
    * ELB listener ports to publish on the managed container (floci's ALB
    * data plane serves each listener on the listener's own port). Ports
-   * already taken on the host are skipped with a warning.
+   * already taken on the host are skipped (with a warning only when this
+   * field is set — the default 80/443 publish is opportunistic).
    * @default [80, 443]
    */
   readonly elbListenerPorts?: readonly number[] | undefined;
@@ -179,7 +225,11 @@ export const checkHealth = (
 export const resolveImage = (config?: FlociConfig): Effect.Effect<string> =>
   Effect.sync(
     () =>
-      process.env.ALCHEMY_FLOCI_IMAGE ?? config?.image ?? DEFAULT_FLOCI_IMAGE,
+      // `|| undefined`: an empty env var (`ALCHEMY_FLOCI_IMAGE= cmd`) means
+      // "no override", not "run the image named ''" (an unrunnable docker ref).
+      (process.env.ALCHEMY_FLOCI_IMAGE || undefined) ??
+      config?.image ??
+      DEFAULT_FLOCI_IMAGE,
   );
 
 /** Whether a host TCP port is free (nothing is listening on it). */
@@ -258,11 +308,16 @@ const resolveElbListenerPorts = Effect.fn(function* (
   for (const port of requested) {
     if (published.has(port) || (yield* isHostPortFree(port))) {
       desired.push(port);
-    } else {
+    } else if (config?.elbListenerPorts !== undefined) {
+      // Caller asked for these ports explicitly — warn so they know why
+      // the emulated load balancer is unreachable.
       yield* Effect.logWarning(
         `floci: host port ${port} is taken — emulated load balancer listeners on ${port} will not be reachable from the host`,
       );
     }
+    // Default 80/443 are opportunistic (most stacks have no ELB). A taken
+    // privileged port is the common case on a developer machine, not a
+    // problem — skip silently.
   }
   return desired;
 });
@@ -310,6 +365,7 @@ export const ensureFloci = (
         yield* checkHealth(endpoint).pipe(
           Effect.catch(() => waitForHealth(endpoint, config)),
         );
+        yield* syncCaBundle(endpoint);
         return { endpoint, managed: false };
       }
       // Only recreate when the server IS our managed container (otherwise
@@ -331,6 +387,7 @@ export const ensureFloci = (
       );
       if (started) {
         yield* waitForHealth(endpoint, config);
+        yield* syncCaBundle(endpoint);
         return { endpoint, managed: true, containerName };
       }
     }
@@ -373,6 +430,7 @@ export const ensureFloci = (
     );
 
     yield* waitForHealth(endpoint, config);
+    yield* syncCaBundle(endpoint);
     return { endpoint, managed: true, containerName };
   });
 

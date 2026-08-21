@@ -41,12 +41,9 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * version history. Local workerd start fails closed. `dev: { mode: "external" }`
  * does not start workerd and does not materialize inherit.
  *
- * @binding
- * @product Workers
- * @category Workers & Compute
  *
- * @section Inherit a secret from the latest upload
- * @example Async Worker
+ * ### Inherit a secret from the latest upload
+ * **Example:** Async Worker
  * ```typescript
  * export const Api = Cloudflare.Worker("Api", {
  *   main: "./src/api.ts",
@@ -56,7 +53,7 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * });
  * ```
  *
- * @example Effect-native Worker
+ * **Example:** Effect-native Worker
  * ```typescript
  * Cloudflare.Worker(
  *   "Api",
@@ -74,6 +71,10 @@ export type InheritAccessor = Effect.Effect<unknown, never, RuntimeContext>;
  * ```
  *
  * @see https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#inherit
+ *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
 export interface Inherit extends Binding.Service<
   Inherit,

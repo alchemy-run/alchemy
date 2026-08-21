@@ -93,15 +93,13 @@ export const readFlatRecords = (dir: string) =>
   mapPlatformError(
     listSqlFiles(dir).pipe(
       Effect.map((files) =>
-        files.map(
-          (file): MigrationRecord => ({
-            name: file.id,
-            hash: file.hash,
-            createdAtMillis: timestampPrefixMillis(file.id),
-            sql: file.sql,
-            statements: splitSqlStatements(file.sql),
-          }),
-        ),
+        files.map((file): MigrationRecord => ({
+          name: file.id,
+          hash: file.hash,
+          createdAtMillis: timestampPrefixMillis(file.id),
+          sql: file.sql,
+          statements: splitSqlStatements(file.sql),
+        })),
       ),
     ),
     `Failed to read migrations from ${dir}`,

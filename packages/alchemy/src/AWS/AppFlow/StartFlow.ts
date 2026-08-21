@@ -17,9 +17,8 @@ export interface StartFlowRequest extends Omit<
  * flows it activates the flow. The flow name is injected automatically and
  * `appflow:StartFlow` is granted on the flow. Provide the implementation with
  * `Effect.provide(AWS.AppFlow.StartFlowHttp)`.
- * @binding
- * @section Running Flows
- * @example Start an On-Demand Flow Run from a Handler
+ * ### Running Flows
+ * **Example:** Start an On-Demand Flow Run from a Handler
  * ```typescript
  * export default MyFunction.make(
  *   { main: import.meta.url, functionUrl: true },
@@ -38,6 +37,8 @@ export interface StartFlowRequest extends Omit<
  *   }).pipe(Effect.provide(AWS.AppFlow.StartFlowHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface StartFlow extends Binding.Service<
   StartFlow,

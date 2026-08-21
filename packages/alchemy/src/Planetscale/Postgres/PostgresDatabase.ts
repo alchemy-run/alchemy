@@ -67,16 +67,16 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  * A PostgreSQL PlanetScale database. For MySQL, use {@link MySQLDatabase}
  * instead.
  *
- * @section Creating a PostgreSQL Database
- * @example Basic PostgreSQL database
+ * ### Creating a PostgreSQL Database
+ * **Example:** Basic PostgreSQL database
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", {
  *   clusterSize: "PS_10",
  * });
  * ```
  *
- * @section Migrations and seed data
- * @example Apply migrations and seed files
+ * ### Migrations and seed data
+ * **Example:** Apply migrations and seed files
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", {
  *   clusterSize: "PS_10",
@@ -85,8 +85,8 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
- * @section Adoption
- * @example Adopting an existing database
+ * ### Adoption
+ * **Example:** Adopting an existing database
  * ```typescript
  * import { adopt } from "alchemy/AdoptPolicy";
  *

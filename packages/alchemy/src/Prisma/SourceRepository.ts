@@ -3,6 +3,13 @@ import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -127,15 +134,14 @@ export interface SourceRepository extends Resource<
  * roll back branch and resource attachments. Existing links require explicit
  * adoption.
  *
- * @resource
- * @section Finding the Repository ID
- * @example Read the numeric GitHub repository ID
+ * ### Finding the Repository ID
+ * **Example:** Read the numeric GitHub repository ID
  * ```bash
  * gh api repos/OWNER/REPO --jq '.id'
  * ```
  *
- * @section Linking a Repository
- * @example GitHub repository
+ * ### Linking a Repository
+ * **Example:** GitHub repository
  * ```typescript
  * const repo = yield* Prisma.SourceRepository("repo", {
  *   project: project.projectId,
@@ -147,6 +153,8 @@ export interface SourceRepository extends Resource<
  *   branchGitName: repo.defaultBranch,
  * });
  * ```
+ *
+ * @resource
  */
 export const SourceRepository = Resource<SourceRepository>(
   "Prisma.SourceRepository",
@@ -278,7 +286,7 @@ const verifyRepositoryLink = Effect.fn(function* (
   return observed;
 });
 
-export const SourceRepositoryProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     SourceRepository,
     Effect.gen(function* () {
@@ -453,3 +461,24 @@ export const SourceRepositoryProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(SourceRepository, ["sourceRepositoryId"], ({ id, news }) => ({
+    sourceRepositoryId: devId("source-repository", id),
+    projectId: attrOrString(news.project, "projectId"),
+    repoId: news.providerRepositoryId,
+    provider: news.provider ?? "github",
+    repoFullName: `dev/${id}`,
+    defaultBranch: "main",
+    isPrivate: false,
+    status: "active",
+    installationId: devId("installation", id),
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+export const SourceRepositoryProvider = () =>
+  ProviderLayer.dual(SourceRepository, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

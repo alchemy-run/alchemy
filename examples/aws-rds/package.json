@@ -15,11 +15,11 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
-    "@distilled.cloud/aws": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@types/pg": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@types/pg": "catalog:database",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "pg": "catalog:"
+    "effect": "catalog:effect",
+    "pg": "catalog:database"
   }
 }

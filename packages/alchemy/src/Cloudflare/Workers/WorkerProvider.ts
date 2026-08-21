@@ -2,7 +2,6 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -31,7 +30,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { resolveZoneId } from "../Zone/lookup.ts";
+import {
+  resolveZoneId,
+  type Reference as ZoneReference,
+} from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
   mergeAssetsConfigFiles,
@@ -482,7 +484,49 @@ export interface ResolvedWorkerDomain {
   name: string;
   aliases: string[];
   redirects: string[];
+  /** Pinned zone from props, when the caller set zoneId / zone / zoneName. */
+  zone?: ZoneReference;
 }
+
+const isZoneReference = (value: unknown): value is ZoneReference => {
+  if (typeof value === "string") return true;
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { zoneId?: unknown; name?: unknown };
+  return (
+    typeof candidate.zoneId === "string" &&
+    (candidate.name === undefined || typeof candidate.name === "string")
+  );
+};
+
+/** Collapse Worker.domain zone pin fields to one {@link ZoneReference}. */
+export const resolveWorkerDomainZone = (
+  config:
+    | {
+        readonly zoneId?: unknown;
+        readonly zoneName?: unknown;
+        readonly zone?: unknown;
+      }
+    | undefined,
+): ZoneReference | undefined => {
+  if (config === undefined) return undefined;
+  if (typeof config.zoneId === "string") return config.zoneId;
+  if (isZoneReference(config.zone)) return config.zone;
+  if (typeof config.zoneName === "string") return config.zoneName;
+  return undefined;
+};
+
+/** Whether an existing attachment must move to satisfy an explicit zone pin. */
+export const shouldRecreateWorkerDomainAttachment = (
+  liveZoneId: string,
+  desiredZoneId: string | undefined,
+): boolean => desiredZoneId !== undefined && liveZoneId !== desiredZoneId;
+
+// After deleting a custom-domain attachment, Cloudflare can briefly retain
+// ownership of the hostname and reject the replacement with code 100116.
+const workerDomainConflictSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(8),
+]);
 
 // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
 // Cloudflare API receives the form it stores domains in. `new URL(...)`
@@ -538,7 +582,10 @@ export const resolveWorkerDomain = (
         }),
       );
     }
-    return { name, aliases, redirects };
+    const zone = resolveWorkerDomainZone(config);
+    return zone === undefined
+      ? { name, aliases, redirects }
+      : { name, aliases, redirects, zone };
   });
 
 const isWorkersDevHostname = (hostname: string) =>
@@ -594,12 +641,16 @@ export const stateWorkerDomain = (
           name?: unknown;
           aliases?: unknown[];
           redirects?: unknown[];
+          zone?: ZoneReference;
+          zoneId?: unknown;
+          zoneName?: unknown;
         } | null;
         domains?: unknown[];
       }
     | undefined;
   const domain = state?.domain;
   if (domain && typeof domain.name === "string") {
+    const zone = resolveWorkerDomainZone(domain);
     return {
       name: domain.name,
       aliases: (domain.aliases ?? []).filter(
@@ -608,6 +659,7 @@ export const stateWorkerDomain = (
       redirects: (domain.redirects ?? []).filter(
         (h): h is string => typeof h === "string",
       ),
+      ...(zone === undefined ? {} : { zone }),
     };
   }
   const legacy = stateCustomDomains(state?.domains);
@@ -949,13 +1001,8 @@ type MetadataHashValue =
  * values contribute by value, not by reference identity, so two
  * independently-constructed secrets with the same contents hash identically.
  *
- * Effects are dropped, never executed: resource-typed `env` entries (Worker
- * effect-classes, R2 buckets, Provider/Context tags, ...) are all Effects
- * whose evaluation requires plan-phase context that is not available inside
- * lifecycle operations (running one here fails with `Service not found:
- * Cloudflare.Worker`). Their deploy-time identity is already captured by the
- * resolved `bindings` data hashed alongside `env`, so skipping them loses no
- * change-detection.
+ * Effects are dropped, never executed: evaluating one here may require
+ * plan-phase context that is not available inside lifecycle operations.
  */
 const resolveMetadataHashValue = (
   value: unknown,
@@ -1013,8 +1060,8 @@ const resolveMetadataHashValue = (
 /**
  * The deploy-time metadata surface of a Worker whose changes must trigger an
  * update but that never touch the bundle/vite/asset-content hashes:
- * compatibility, env literals, bindings, asset routing config, cache,
- * limits, logpush, observability, placement, subdomain, and tags. See #745.
+ * compatibility, env/bindings, asset routing config, cache, limits, logpush,
+ * observability, placement, subdomain, and tags. See #745.
  */
 interface WorkerMetadataHashInput {
   readonly props: WorkerProps;
@@ -1065,7 +1112,12 @@ const resolveWorkerMetadataHash = ({
     selfUrl,
     stack: { name: stack.name, stage: stack.stage },
     compatibility: getCompatibility(props),
-    env: props.env,
+    // Every `env` entry is lowered into binding data by
+    // `bindWorkerAsyncBindings`, including literals and VITE_ values. Hash only
+    // that canonical wire representation. Resource-backed env values can be
+    // materialized as different attribute projections between reconcile and a
+    // later plan; hashing props.env as well would turn those irrelevant shape
+    // differences into perpetual updates.
     bindings: bindings.map((binding) => ({
       sid: binding.sid,
       data: binding.data,
@@ -1271,41 +1323,34 @@ export const LiveWorkerProvider = () =>
         });
 
       /**
-       * Infer the Cloudflare Zone ID for a given hostname by listing the
-       * account's zones and matching the hostname against each zone's name —
-       * walking up the DNS label hierarchy until a match is found.
+       * Resolve a hostname to a Cloudflare zone id. An explicit pin
+       * (`zoneId` / zone name / `{ zoneId }`) wins. Otherwise look the
+       * hostname up with {@link resolveZoneId} (`GET /zones?name=` per
+       * parent label) — never by listing the account's first page of zones.
        */
       const inferZoneIdForHostname = (
         hostname: string,
         zoneCache: Map<string, string>,
+        zone?: ZoneReference,
       ) =>
         Effect.gen(function* () {
-          const cached = zoneCache.get(hostname);
+          const cacheKey =
+            zone === undefined
+              ? hostname
+              : `${hostname}:${typeof zone === "string" ? zone : zone.zoneId}`;
+          const cached = zoneCache.get(cacheKey);
           if (cached) return cached;
-
-          const zoneList = yield* zones
-            .listZones({})
-            .pipe(Effect.map((response) => response.result ?? []));
-          for (const zone of zoneList) {
-            zoneCache.set(zone.name, zone.id);
-          }
-
-          const parts = hostname.split(".");
-          for (let i = 0; i < parts.length - 1; i++) {
-            const candidate = parts.slice(i).join(".");
-            const match = zoneList.find((z) => z.name === candidate);
-            if (match) {
-              zoneCache.set(hostname, match.id);
-              return match.id;
-            }
-          }
-          return yield* Effect.die(
-            `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
-              "Ensure the parent zone exists in this account.",
-          );
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const zoneId = yield* resolveZoneId({ accountId, zone, hostname });
+          zoneCache.set(cacheKey, zoneId);
+          return zoneId;
         });
 
-      const reconcileDomains = (scriptName: string, desired: string[]) =>
+      const reconcileDomains = (
+        scriptName: string,
+        desired: string[],
+        zone?: ZoneReference,
+      ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Always query the live state of domains attached to *this*
@@ -1363,12 +1408,28 @@ export const LiveWorkerProvider = () =>
           // clear message rather than silently re-routing traffic.
           const attachDomain = Effect.fn(function* (hostname: string) {
             const live = liveByHostname.get(hostname);
-            if (live) {
+            const desiredZoneId =
+              zone === undefined
+                ? undefined
+                : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
+            if (
+              live &&
+              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
+            ) {
               return {
                 hostname: live.hostname,
                 id: live.id,
                 zoneId: live.zoneId,
               };
+            }
+
+            if (live) {
+              // Cloudflare cannot change the zone of an existing custom
+              // domain in place. Delete only this still-desired attachment,
+              // then recreate it below with the explicitly requested zone.
+              yield* workers
+                .deleteDomain({ accountId, domainId: live.id })
+                .pipe(Effect.catchTag("DomainNotFound", () => Effect.void));
             }
 
             // Not attached to this Worker — but it could still belong
@@ -1397,7 +1458,9 @@ export const LiveWorkerProvider = () =>
               );
             }
 
-            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            const zoneId =
+              desiredZoneId ??
+              (yield* inferZoneIdForHostname(hostname, zoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
@@ -1416,6 +1479,10 @@ export const LiveWorkerProvider = () =>
                     Schedule.exponential(200),
                     Schedule.recurs(15),
                   ]),
+                }),
+                Effect.retry({
+                  while: (error) => error._tag === "HostnameAlreadyInUse",
+                  schedule: workerDomainConflictSchedule,
                 }),
               );
             return {
@@ -2739,7 +2806,6 @@ export const LiveWorkerProvider = () =>
         const forbidden = (
           [
             ["name", news.name],
-            ["assets", news.assets],
             ["namespace", news.namespace],
             ["crons", news.crons],
             ["tailConsumers", news.tailConsumers],
@@ -2854,12 +2920,13 @@ export const LiveWorkerProvider = () =>
         yield* Effect.logInfo(
           `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
         );
-        const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
-          id,
-          parentName,
-          news,
-          { skipAssetsRead: true },
-        );
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, parentName, news, {
+          skipAssetsRead: false,
+        });
         const metadataHash = yield* resolveWorkerMetadataHash({
           props: news,
           bindings,
@@ -2889,6 +2956,25 @@ export const LiveWorkerProvider = () =>
                 : item,
           ),
         );
+        let metadataAssets:
+          | workers.CreateScriptVersionRequest["metadata"]["assets"]
+          | undefined;
+        if (assets) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker version: uploading assets for ${parentName}`,
+          );
+          const { jwt } = yield* uploadAssets(
+            accountId,
+            parentName,
+            assets,
+            session,
+          );
+          metadataAssets = {
+            jwt,
+            config: mergeAssetsConfigFiles(assets.config, assets),
+          };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
         yield* appendAlchemyAndEnvBindings(
           metadataBindings,
           news,
@@ -2906,6 +2992,7 @@ export const LiveWorkerProvider = () =>
             bindingsInherit,
             metadata: {
               mainModule: bundle.main!,
+              assets: metadataAssets,
               bindings: metadataBindings,
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
@@ -3627,13 +3714,6 @@ export const LiveWorkerProvider = () =>
           output?.hash !== undefined &&
           !dispatchNamespace
         ) {
-          if (metadataAssets !== undefined) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `Worker '${name}' has static assets, which the versions API cannot carry — gradual rollouts (version.traffic) are not supported for Workers with assets.`,
-              }),
-            );
-          }
           const migratedClasses = [
             ...migrations.newClasses,
             ...migrations.newSqliteClasses,
@@ -3658,7 +3738,9 @@ export const LiveWorkerProvider = () =>
               bindingsInherit,
               metadata: {
                 mainModule: metadata.mainModule!,
+                assets: metadata.assets,
                 bindings: metadata.bindings,
+                keepAssets: metadata.keepAssets,
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
                 cacheOptions: metadata.cacheOptions,
@@ -3918,7 +4000,11 @@ export const LiveWorkerProvider = () =>
               ),
               Effect.catch(() => Effect.succeed([])),
             );
-          const reconciled = yield* reconcileDomains(name, desiredHostnames);
+          const reconciled = yield* reconcileDomains(
+            name,
+            desiredHostnames,
+            domainConfig?.zone,
+          );
           const zoneIdByHostname = new Map([
             ...liveBeforeReconcile,
             ...reconciled.map((d) => [d.hostname, d.zoneId] as const),
@@ -4365,7 +4451,12 @@ export const LiveWorkerProvider = () =>
           const domainKey = (d: ResolvedWorkerDomain | undefined) =>
             d === undefined
               ? ""
-              : JSON.stringify([d.name, d.aliases, [...d.redirects].sort()]);
+              : JSON.stringify([
+                  d.name,
+                  d.aliases,
+                  [...d.redirects].sort(),
+                  d.zone ?? null,
+                ]);
           // An omitted `domain` unmanages the surface (#942): reconcile
           // carries previously-observed custom domains forward in state, so
           // comparing the empty desired config against those would report a
@@ -4489,42 +4580,39 @@ export const LiveWorkerProvider = () =>
               stables: stables.length > 0 ? stables : undefined,
             };
           }
-          // Machine-local source locations (`main`, `assets.directory`,
-          // `vite.rootDir`) name WHERE the source lives; their deploy-relevant
-          // effect is fully captured by the content hashes `hasChanged` just
-          // compared (bundle, asset content, vite input — all deliberately
-          // path-independent). Left alone, the engine's raw-props fallback
-          // would still flag a relocated checkout (CI runner ↔ laptop, temp
-          // build dirs) as changed forever. When the ONLY residual raw-prop
-          // difference is such a path, suppress the fallback with an explicit
-          // noop; any other residual difference still falls through to the
-          // engine's conservative comparison, so props outside the hashed
-          // metadata surface keep deploying (#745). Guarded on resolved
-          // bindings — without them the metadata hash was skipped above and
-          // the raw-props fallback is the only net for metadata edits.
+          // Machine-local source paths and resource-backed `env` values have
+          // already been compared by their content hashes and canonical
+          // binding data. Ignore those representations in the raw fallback so
+          // checkout paths and resource attribute projections do not force
+          // perpetual updates (#745).
           if (Array.isArray(newBindings)) {
-            const normalizeSourcePaths = (props: WorkerProps) => ({
-              ...props,
-              ...(props.main !== undefined ? { main: "<source>" } : undefined),
-              ...(props.assets
-                ? {
-                    assets: {
-                      ...(typeof props.assets === "string"
-                        ? undefined
-                        : props.assets),
-                      directory: "<source>",
-                    },
-                  }
-                : undefined),
-              ...(props.vite
-                ? { vite: { ...props.vite, rootDir: "<source>" } }
-                : undefined),
-            });
+            const normalizeComparedProps = (props: WorkerProps) => {
+              const { env: _env, ...rest } = props;
+              return {
+                ...rest,
+                ...(props.main !== undefined
+                  ? { main: "<source>" }
+                  : undefined),
+                ...(props.assets
+                  ? {
+                      assets: {
+                        ...(typeof props.assets === "string"
+                          ? undefined
+                          : props.assets),
+                        directory: "<source>",
+                      },
+                    }
+                  : undefined),
+                ...(props.vite
+                  ? { vite: { ...props.vite, rootDir: "<source>" } }
+                  : undefined),
+              };
+            };
             if (
               olds !== undefined &&
               !havePropsChanged(
-                normalizeSourcePaths(olds),
-                normalizeSourcePaths(news),
+                normalizeComparedProps(olds),
+                normalizeComparedProps(news),
               )
             ) {
               return { action: "noop" };
