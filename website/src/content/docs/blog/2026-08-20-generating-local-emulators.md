@@ -90,7 +90,8 @@ patch floci to support the operation. We're strict about this.
 services** locally, with **396 tests green** against the
 emulator. Several services pass their full live suite: DynamoDB
 (105 tests), S3 (51), Step Functions (31), Cognito (19), and
-others.
+others. Next release we'll run the flywheel until the emulator
+conforms to 100% of what alchemy supports.
 
 The result is [`alchemy dev` for AWS](/aws/local-development).
 It also makes the factory cheaper: generation waves can now
