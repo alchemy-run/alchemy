@@ -34,13 +34,19 @@ it shipped in [2.0.0-beta.73](/blog/2026-08-20-beta-73).
 
 The emulator is [our fork](https://github.com/alchemy-run/floci)
 of [floci](https://floci.io), an MIT-licensed, LocalStack-style
-AWS emulator on the JVM. We forked it so the factory can drive
-it: the fork is currently **92 commits ahead of upstream,
-touching about 30 services** — Lambda's streaming Function URLs,
-ELBv2's ALB data plane, AppSync's Velocity template directives,
-EC2, IAM, SES, Cognito, Athena, event-source mappings — and
-every one of those commits exists because an alchemy test failed
-against the emulator after passing against AWS.
+AWS emulator on the JVM. Our patches span about 30 services —
+Lambda's streaming Function URLs, ELBv2's ALB data plane,
+AppSync's Velocity template directives, EC2, IAM, SES, Cognito,
+Athena, event-source mappings — and every one of them exists
+because an alchemy test failed against the emulator after
+passing against AWS.
+
+We'd like to contribute these upstream. But the factory is a
+fully automated fan-out — fleets of agents producing fixes
+faster than any maintainer could reasonably review — and
+flooding the floci team with that maintenance burden isn't fair
+to them. It's easier to let alchemy's flywheel drive the
+emulator's development directly, and that requires a fork.
 
 Alchemy registers a local provider variant for every resource
 floci implements — **219 resources across ~39 services** today.
