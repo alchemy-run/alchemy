@@ -7,6 +7,7 @@ export * from "./DriverCloudflare.ts";
 export * from "./EvalWorkerLoader.ts";
 export * from "./EvalWorkerLoaderEffect.ts";
 export * from "./SandboxContainer.ts";
+export * from "./SessionContainer.ts";
 // The guest .make() rides the barrel because it is pure effect modules
 // (no node SDKs, no top-level process work) — Worker bundles carry only
 // inert weight. Container runtimes with real host dependencies must

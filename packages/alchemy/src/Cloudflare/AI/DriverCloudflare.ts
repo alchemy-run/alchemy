@@ -45,10 +45,11 @@ import { Driver, type Charter, type Interpretable } from "../../AI/Driver.ts";
 import {
   makeSessionEngine,
   reminderInput,
+  stoppedByOperator,
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
-import { SessionIndex } from "../../AI/SessionIndex.ts";
+import { SessionIndex, sessionId } from "../../AI/SessionIndex.ts";
 import {
   handleSessionSocketFrame,
   type SessionSocketClientFrame,
@@ -60,7 +61,9 @@ import { makeThreadStorageMemory } from "../../AI/ThreadStorageMemory.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { MainRpc } from "../../Platform.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import { DurableObject } from "../Workers/DurableObject.ts";
+import { DurableObject, DurableObjectScope } from "../Workers/DurableObject.ts";
+import { ALCHEMY_PHASE } from "../../Phase.ts";
+import { SessionContainerImage } from "./SessionContainer.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
@@ -133,6 +136,8 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly settle: (
     outcome: unknown,
   ) => Effect.Effect<void, unknown, RuntimeContext>;
+  /** Erase this session: settle, detach views, purge storage. */
+  readonly destroy: () => Effect.Effect<void, unknown, RuntimeContext>;
   readonly alarm: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** The live-view seam: WebSocket attach + the session-socket frames. */
   readonly fetch: HttpEffect<DurableObjectState | RuntimeContext>;
@@ -206,6 +211,28 @@ export const DurableObjectHost: Layer.Layer<
         };
 
         const captured = yield* Effect.context<never>();
+        // this namespace's own handle (provided by the DO machinery to
+        // the constructor) — re-provided into each session's context so
+        // call-time capabilities (the attached container) can bind to it
+        const doScope = yield* DurableObject;
+
+        // The OPTIONAL per-session container ({@link SessionContainerImage}):
+        // its attachment to THIS namespace must be registered at PLAN
+        // time, and this constructor is the only plan-evaluated site
+        // that carries the namespace scope. PLAN-ONLY by design: at
+        // runtime the bind belongs to the session's own call-time path
+        // (`SandboxContainerSession`), never the activation constructor
+        // — a constructor-time bind would run inside the worker's first
+        // event, where the loopback machinery it touches can deadlock.
+        const phase = yield* ALCHEMY_PHASE;
+        const sessionContainer = yield* SessionContainerImage;
+        if (phase === "plan" && sessionContainer !== undefined) {
+          yield* (
+            sessionContainer as never as {
+              "~alchemy/Container/Binding": Effect.Effect<unknown>;
+            }
+          )["~alchemy/Container/Binding"];
+        }
         const durability = Option.getOrElse(
           Context.getOption(captured, DriverDurability),
           () => ({}) as (typeof DriverDurability)["Service"],
@@ -298,14 +325,16 @@ export const DurableObjectHost: Layer.Layer<
             term: me.term,
             charter: registration.charter,
             // the charter's captured context PLUS this instance's own
-            // state: per-session capabilities (the attached container —
-            // `SandboxContainerSession` — and anything else keyed to
-            // the DO) resolve it at call time, which is what lets their
-            // Layers build in the shared per-isolate graph
+            // state AND the namespace scope: per-session capabilities
+            // (the attached container — `SandboxContainerSession` —
+            // and anything else keyed to the DO) resolve them at call
+            // time, which is what lets their Layers build in the
+            // shared per-isolate graph. The scope rides the CAPTURED
+            // constructor context (provided by the DO machinery).
             context: Context.add(
-              registration.context,
-              DurableObjectState,
-              state,
+              Context.add(registration.context, DurableObjectState, state),
+              DurableObjectScope,
+              doScope,
             ) as Context.Context<never>,
             storage: singleSessionStorage,
             languageModel,
@@ -400,6 +429,27 @@ export const DurableObjectHost: Layer.Layer<
           ): Effect.Effect<void, never, RuntimeContext> =>
             Effect.gen(function* () {
               yield* (yield* engine).settle(me.key, outcome, { admit: true });
+            }),
+          /**
+           * The ERASER (`Sessions.remove`): settle first (idempotent —
+           * children cascade, attached views see the end), close every
+           * hibernatable socket, then purge THIS instance's rows (the
+           * transcript, inbox, reminders, meta) and its alarm. The
+           * in-RAM engine is dropped too, so the next touch of this
+           * name admits a FRESH session over empty storage instead of
+           * finding a settled tombstone.
+           */
+          destroy: () =>
+            Effect.gen(function* () {
+              yield* (yield* engine).settle(me.key, stoppedByOperator, {
+                admit: true,
+              });
+              for (const socket of yield* state.getWebSockets()) {
+                yield* Effect.ignore(socket.close(1000, "session removed"));
+              }
+              yield* storage.deleteAlarm();
+              yield* storage.deleteAll();
+              engineRef = undefined;
             }),
           /**
            * The single alarm serves BOTH clocks: due reminders become
@@ -514,6 +564,24 @@ export const DurableObjectHost: Layer.Layer<
           Option.match(sessionIndex, {
             onNone: () => Effect.succeed([]),
             onSome: (index) => index.list(),
+          }),
+        // both verbs address the session's own DO — placement
+        // knowledge, exactly like attach
+        stop: (term, key) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .settle(stoppedByOperator)
+            .pipe(Effect.orDie, Effect.asVoid),
+        remove: (term, key) =>
+          Effect.gen(function* () {
+            yield* sessions
+              .getByName(sessionName(term, key))
+              .destroy()
+              .pipe(Effect.orDie);
+            yield* Option.match(sessionIndex, {
+              onNone: () => Effect.void,
+              onSome: (index) => index.remove(sessionId(term, key)),
+            });
           }),
       }),
     );

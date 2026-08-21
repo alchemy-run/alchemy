@@ -8,6 +8,7 @@ import {
   FileText,
   FolderSearch,
   FolderTree,
+  GitPullRequestArrow,
   MessageSquare,
   MessageSquarePlus,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
   Search,
   Sparkles,
   Terminal,
+  Upload,
   type LucideIcon,
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
@@ -545,6 +547,43 @@ const CODER: Renderers<typeof GeneralEngineer> = {
           ))}
         </div>
       ),
+    };
+  },
+
+  pushBranch: (input, output, running) => ({
+    icon: Upload,
+    title: (
+      <>
+        Push branch{" "}
+        <span className="font-mono text-mist">{input.branch}</span>
+      </>
+    ),
+    summary: running || output === undefined ? undefined : lastLine(output),
+    body: output === undefined ? undefined : <Mono>{output}</Mono>,
+  }),
+
+  openPullRequest: (input, output) => {
+    const url = output?.match(/https:\/\/\S+/)?.[0];
+    return {
+      icon: GitPullRequestArrow,
+      title: (
+        <>
+          Open pull request{" "}
+          <span className="font-medium">{clamp(input.title, 80)}</span>
+        </>
+      ),
+      badge: url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => event.stopPropagation()}
+          className="shrink-0 font-mono text-[11px] text-mist underline-offset-2 hover:underline"
+        >
+          {url.replace("https://github.com/", "")}
+        </a>
+      ) : undefined,
+      body: input.body ? <Mono>{input.body}</Mono> : undefined,
     };
   },
 };

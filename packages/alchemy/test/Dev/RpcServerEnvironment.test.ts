@@ -4,7 +4,7 @@ import {
   layer,
   RPC_SERVER_ENVIRONMENT_KEY,
   type RpcServerEnvironment,
-} from "@/Local/RpcServerEnvironment.ts";
+} from "@/Dev/RpcServerEnvironment.ts";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";

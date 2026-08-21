@@ -24,6 +24,8 @@ const _names: Names[] = [
   "glob",
   "grep",
   "listDirectory",
+  "openPullRequest",
+  "pushBranch",
   "readFile",
   "readOutput",
   "writeFile",
@@ -64,6 +66,12 @@ const _complete: Registry<typeof GeneralEngineer> = {
   grep: (input) => (input.pattern satisfies string, 1),
   // optionalKey params surface as OPTIONAL keys (the Tool.ts split)
   listDirectory: (input) => (input.path satisfies string | undefined, 1),
+  openPullRequest: (input) => (
+    input.title satisfies string,
+    input.base satisfies string | undefined,
+    1
+  ),
+  pushBranch: (input) => (input.branch satisfies string, 1),
   readFile: (input) => (input.path satisfies string, 1),
   readOutput: (input) => (input.outputId satisfies string, 1),
   writeFile: (input) => (input.content satisfies string, 1),

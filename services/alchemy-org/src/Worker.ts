@@ -11,14 +11,19 @@ import { GeneralEngineer } from "./Engineer.ts";
 import { SpillingTools } from "./lib/SpillingTools.ts";
 import { ArtifactsSandbox } from "./lib/ArtifactsSandbox.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
-import { orgRoutes } from "./Routes.ts";
+import { routes } from "./Routes.ts";
 import { ApprovalsD1 } from "./services/ApprovalsD1.ts";
 import { DriverCloudflare } from "./services/DriverCloudflare.ts";
 import { GitHubWorker } from "./services/GitHubWorker.ts";
 import { LedgerD1 } from "./services/LedgerD1.ts";
 import { CheckoutsSandbox } from "./services/CheckoutsSandbox.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
-import { ReadDiffLive, ReadIssueLive } from "./tools/index.ts";
+import {
+  OpenPullRequestLive,
+  PushBranchLive,
+  ReadDiffLive,
+  ReadIssueLive,
+} from "./tools/index.ts";
 import { ReadOutputLive } from "./tools/ReadOutput.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
@@ -44,10 +49,14 @@ const Spill = SpillingTools.pipe(
   Layer.provide(SandboxSession),
 );
 
-/** The engineer over the session container. */
+/** The engineer over the session container — plus the PUBLISH pair:
+ *  push rides the sandbox's own git, the PR the GitHub REST API, both
+ *  authenticated by the host's one FQN-memoized token resource. */
 const EngineerWorker = GeneralEngineer.pipe(
+  Layer.provide([PushBranchLive, OpenPullRequestLive]),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
+  Layer.provide(SandboxSession),
 );
 
 /** The review charter: tools + checkout live INSIDE the session's
@@ -115,23 +124,20 @@ const Org = Layer.mergeAll(EngineerWorker, ReviewBotWorker).pipe(
  * `/attach/:term/:key` upgrades a WebSocket into the session's own
  * Durable Object.
  */
-export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
-  "OrgWorker",
+export default class Worker extends Cloudflare.Worker<Worker>()(
+  "Worker",
   {
+    // API + sessions only — the SPA is its own Worker
+    // (`Cloudflare.Website.Vite` in alchemy.run.ts) that forwards
+    // /api and /attach here over a service binding.
     main: import.meta.url,
-    // The same SPA Local.Vite serves locally (vite.config.ts → ui/dist;
-    // run `bun vite build` before deploying). Assets-first with SPA
-    // fallback; API / attach / webhook paths run this Worker first so
-    // the SPA never swallows them.
-    assets: {
-      directory: "./ui/dist",
-      notFoundHandling: "single-page-application",
-      runWorkerFirst: ["/api/*", "/attach/*", "/__alchemy/*"],
-    },
+    // PINNED dev port (the Website pins 1337): stable addresses across
+    // restarts — no more port roulette between the two workers
+    dev: { port: 1340 },
   },
   Effect.gen(function* () {
     const sessions = yield* AI.Sessions;
-    const api = yield* HttpRouter.toHttpEffect(yield* orgRoutes);
+    const api = yield* HttpRouter.toHttpEffect(yield* routes);
 
     return {
       fetch: Effect.gen(function* () {

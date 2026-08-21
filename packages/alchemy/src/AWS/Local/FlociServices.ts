@@ -7,7 +7,7 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
 import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";

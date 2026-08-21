@@ -32,7 +32,7 @@ const parseSessionId = (id: string): { term: string; key: string } => {
  * ReviewBot session per pull request, joined with GitHub's open-PR
  * list.
  */
-export const orgRoutes = Effect.gen(function* () {
+export const routes = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
   // OPTIONAL: the local server reads transcripts straight from the
   // shared storage; on Cloudflare each session's rows live in its own
@@ -169,6 +169,38 @@ export const orgRoutes = Effect.gen(function* () {
     }),
   );
 
+  /** The operator's off switch: settle a session in place. Terminal
+   *  and idempotent; the transcript stays readable. */
+  const stopSession = HttpRouter.add(
+    "POST",
+    "/api/chats/:id/stop",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const { term, key } = parseSessionId(id);
+      yield* sessions
+        .stop(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ stopped: id });
+    }),
+  );
+
+  /** The operator's eraser: stop the session, purge its transcript,
+   *  drop it from the directory. Idempotent. */
+  const removeSession = HttpRouter.add(
+    "DELETE",
+    "/api/chats/:id",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const { term, key } = parseSessionId(id);
+      yield* sessions
+        .remove(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ removed: id });
+    }),
+  );
+
   /**
    * The operator's door: REQUEST a review for a PR with no session on
    * the board — a PR whose events predate this deploy, or one the
@@ -280,6 +312,8 @@ export const orgRoutes = Effect.gen(function* () {
     boardStream,
     sessionMessages,
     sessionLog,
+    stopSession,
+    removeSession,
     requestReview,
     approvalsPending,
     approvalsAnswer,

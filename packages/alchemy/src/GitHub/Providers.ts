@@ -1,11 +1,13 @@
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
+import { LocalWebhookProvider } from "./LocalWebhookProvider.ts";
 import {
   PersonalAccessToken,
   PersonalAccessTokenProvider,
@@ -63,7 +65,12 @@ export const providers = (options?: ProvidersOptions) =>
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),
-        WebhookProvider(),
+        // GitHub refuses localhost delivery URLs, so dev runs emulate
+        // the webhook by polling in the sidecar (LocalWebhookProvider)
+        ProviderLayer.dual(Webhook, {
+          live: WebhookProvider,
+          local: LocalWebhookProvider,
+        }),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),

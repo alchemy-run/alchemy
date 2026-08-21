@@ -1,6 +1,9 @@
+/* The REMOTE import must be first: the tailwind imports are local and
+   postcss inlines them into real statements, and a URL @import after
+   any statement (besides @charset / empty @layer) violates the spec. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 

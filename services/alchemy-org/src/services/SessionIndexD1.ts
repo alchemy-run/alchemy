@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as D1 from "alchemy/Cloudflare/D1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { inWorker, orgDatabase } from "./OrgDatabase.ts";
+import { inWorker, database } from "./Database.ts";
 
 const TABLE = `
 CREATE TABLE IF NOT EXISTS session_index (
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS session_index (
 
 /**
  * `AI.SessionIndex` over D1 — the board's rows in the org database
- * (the mirror of SessionIndexSqlite.ts). Ingest runs wherever the
+ * Ingest runs wherever the
  * driver's `Events` emits — inside session Durable Objects — and
  * the HTTP surface lists from Worker handlers; D1 is the one place
  * they all agree. Summaries ONLY: transcripts live in each session's
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS session_index (
 export const SessionIndexD1 = Layer.effect(
   AI.SessionIndex,
   Effect.gen(function* () {
-    const db = yield* D1.QueryDatabase(orgDatabase);
+    const db = yield* D1.QueryDatabase(database);
 
     const ensured = yield* Effect.cached(
       inWorker(db.exec(TABLE.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid)),
@@ -126,6 +126,16 @@ export const SessionIndexD1 = Layer.effect(
             default:
               return;
           }
+        }),
+      remove: (id) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          yield* inWorker(
+            db
+              .prepare("DELETE FROM session_index WHERE id = ?")
+              .bind(id)
+              .run(),
+          );
         }),
       list: () =>
         Effect.gen(function* () {

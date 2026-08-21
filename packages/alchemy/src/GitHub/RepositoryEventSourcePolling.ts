@@ -86,14 +86,18 @@ export interface RepositoryEventSourcePollingOptions {
 }
 
 /** The event names polling can synthesize (see the module JSDoc). */
-const SUPPORTED = ["issues", "issue_comment", "pull_request"] as const;
-type SupportedEventName = (typeof SUPPORTED)[number];
+export const POLLABLE_EVENTS = [
+  "issues",
+  "issue_comment",
+  "pull_request",
+] as const;
+export type PollableEventName = (typeof POLLABLE_EVENTS)[number];
 
-const isSupported = (name: string): name is SupportedEventName =>
-  (SUPPORTED as readonly string[]).includes(name);
+export const isPollableEvent = (name: string): name is PollableEventName =>
+  (POLLABLE_EVENTS as readonly string[]).includes(name);
 
 /** One synthesized delivery, ordered by the entity timestamp that gated it. */
-interface Synthesized {
+export interface SynthesizedRepositoryEvent {
   readonly at: number;
   readonly event: WebhookEvent;
 }
@@ -117,18 +121,18 @@ export const RepositoryEventSourcePolling = (
       ) =>
         Effect.gen(function* () {
           const requested = props.events ?? ["push"];
-          const names: SupportedEventName[] = requested.includes("*")
-            ? [...SUPPORTED]
-            : [...new Set(requested.filter(isSupported))];
+          const names: PollableEventName[] = requested.includes("*")
+            ? [...POLLABLE_EVENTS]
+            : [...new Set(requested.filter(isPollableEvent))];
           const unsupported = requested.filter(
-            (name) => name !== "*" && !isSupported(name),
+            (name) => name !== "*" && !isPollableEvent(name),
           );
           if (unsupported.length > 0) {
             // once per registration — polling has no REST surface for these
             yield* Effect.logWarning(
               `GitHub.RepositoryEventSourcePolling cannot synthesize [${unsupported.join(
                 ", ",
-              )}] for ${props.owner}/${props.repository} — polling supports only [${SUPPORTED.join(
+              )}] for ${props.owner}/${props.repository} — polling supports only [${POLLABLE_EVENTS.join(
                 ", ",
               )}]; these events will not be delivered (use the webhook Layer for them)`,
             );
@@ -156,7 +160,7 @@ export const RepositoryEventSourcePolling = (
             const since = yield* Ref.get(cursor);
             const lookback = Math.max(since - LOOKBACK_MS, started);
             const batches = yield* Effect.forEach(names, (name) =>
-              pollEvent(octokit, props, name, lookback),
+              pollRepositoryEvent(octokit, props, name, lookback),
             );
             // prune the dedupe memory once entries fall out of the window
             for (const [id, at] of delivered) {
@@ -232,12 +236,17 @@ const deliveryId = (
 ): string =>
   `poll/${props.owner}/${props.repository}/${eventAction}/${entity}/${timestamp}`;
 
-const pollEvent = (
+/**
+ * Synthesize the webhook-shaped deliveries for ONE event name from the
+ * GitHub REST API — the shared core of the polling event source and the
+ * dev-mode webhook emulator (`LocalWebhookProvider`).
+ */
+export const pollRepositoryEvent = (
   octokit: OctokitClient,
   props: RepositoryEventSourceProps,
-  name: SupportedEventName,
+  name: PollableEventName,
   since: number,
-): Effect.Effect<Synthesized[], Error> => {
+): Effect.Effect<SynthesizedRepositoryEvent[], Error> => {
   switch (name) {
     case "issues":
       return pollIssues(octokit, props, since);
@@ -261,10 +270,13 @@ const synthesize = (
   at: number,
   event: {
     id: string;
-    name: SupportedEventName;
+    name: PollableEventName;
     payload: unknown;
   },
-): Synthesized => ({ at, event: event as unknown as WebhookEvent });
+): SynthesizedRepositoryEvent => ({
+  at,
+  event: event as unknown as WebhookEvent,
+});
 
 const repositoryPayload = (props: RepositoryEventSourceProps) => ({
   name: props.repository,
@@ -275,7 +287,7 @@ const pollIssues = (
   octokit: OctokitClient,
   props: RepositoryEventSourceProps,
   since: number,
-): Effect.Effect<Synthesized[], Error> =>
+): Effect.Effect<SynthesizedRepositoryEvent[], Error> =>
   Effect.gen(function* () {
     // one page per poll — bounded by design; deep backlogs surface on
     // subsequent ticks as the cursor advances
@@ -293,7 +305,7 @@ const pollIssues = (
       catch: (cause) => new Error(`issues.listForRepo failed: ${cause}`),
     });
 
-    const deliveries: Synthesized[] = [];
+    const deliveries: SynthesizedRepositoryEvent[] = [];
     for (const issue of response.data) {
       // the `issues` webhook never fires for pull requests; the REST
       // issues list includes them — skip for parity
@@ -354,7 +366,7 @@ const pollIssueComments = (
   octokit: OctokitClient,
   props: RepositoryEventSourceProps,
   since: number,
-): Effect.Effect<Synthesized[], Error> =>
+): Effect.Effect<SynthesizedRepositoryEvent[], Error> =>
   Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: () =>
@@ -370,7 +382,7 @@ const pollIssueComments = (
         new Error(`issues.listCommentsForRepo failed: ${cause}`),
     });
 
-    const deliveries: Synthesized[] = [];
+    const deliveries: SynthesizedRepositoryEvent[] = [];
     for (const comment of response.data) {
       const number = issueNumberFromUrl(comment.issue_url);
       if (number === undefined) continue;
@@ -408,7 +420,7 @@ const pollIssueComments = (
 const pollPullRequests = (
   octokit: OctokitClient,
   props: RepositoryEventSourceProps,
-): Effect.Effect<Synthesized[], Error> =>
+): Effect.Effect<SynthesizedRepositoryEvent[], Error> =>
   Effect.gen(function* () {
     // pulls.list has no `since` — most-recently-updated first, one page,
     // filtered client-side against the cursor by the caller
@@ -425,7 +437,7 @@ const pollPullRequests = (
       catch: (cause) => new Error(`pulls.list failed: ${cause}`),
     });
 
-    const deliveries: Synthesized[] = [];
+    const deliveries: SynthesizedRepositoryEvent[] = [];
     for (const pull of response.data) {
       const base = {
         pull_request: {

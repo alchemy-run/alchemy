@@ -33,13 +33,15 @@ import {
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
-import { useAgent, useChat } from "alchemy/AI/React";
+import { attachUrl, useAgent, useChat } from "alchemy/AI/React";
 import {
   AlarmClock,
   CircleDot,
   GitMerge,
   GitPullRequestArrow,
   MessageSquare,
+  Square,
+  Trash2,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -77,6 +79,10 @@ interface ApprovalRequest {
   action: string;
   at: number;
 }
+
+/** The backend's own origin (inlined at build): session sockets attach
+ *  here directly — see the `useAgent` note in `Chat`. */
+const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN ?? "") as string;
 
 /** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
 const DEFAULT_THREAD = "Engineer:main";
@@ -305,6 +311,32 @@ export const App = () => {
   const newThread = () =>
     open(`Engineer:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
 
+  /** The off switch: settle the session in place — terminal, the
+   *  transcript stays readable. Optimistic; the poll corrects. */
+  const stopThread = (id: string) => {
+    setThreads((current) =>
+      current.map((thread) =>
+        thread.id === id ? { ...thread, status: "settled" } : thread,
+      ),
+    );
+    void fetch(`/api/chats/${encodeURIComponent(id)}/stop`, {
+      method: "POST",
+    }).catch(() => {});
+  };
+
+  /** The eraser: stop + purge the transcript + drop the row. The
+   *  session's name is fresh after — reusable by a new thread. */
+  const deleteThread = (id: string) => {
+    if (!window.confirm("Delete this session and its transcript?")) return;
+    setThreads((current) => current.filter((thread) => thread.id !== id));
+    // unmount its chat view (closes the socket client-side too)
+    setVisited((current) => current.filter((visitedId) => visitedId !== id));
+    if (activeId === id) open(DEFAULT_THREAD);
+    void fetch(`/api/chats/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(() => {});
+  };
+
   // newest first; the active thread is listed even before the board
   // knows it (a just-created thread has no row yet). Review sessions
   // live in the PR section, never here.
@@ -330,9 +362,19 @@ export const App = () => {
       <aside className="flex w-72 shrink-0 flex-col border-r border-border">
         {/* THE PULL REQUESTS — one review session each */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {board.repo || "pull requests"}
+          <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+            pull requests
           </span>
+          {board.repo && (
+            <a
+              href={`https://github.com/${board.repo}`}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {board.repo}
+            </a>
+          )}
         </div>
         <div className="max-h-[45%] shrink-0 overflow-y-auto">
           {board.prs.map((pull) => {
@@ -377,10 +419,10 @@ export const App = () => {
             </div>
           )}
         </div>
-        {/* THE THREADS — the engineer's chats */}
+        {/* THE CODING SESSIONS — the engineer's chats, one sandbox each */}
         <div className="flex items-center justify-between border-b border-t border-border px-3 py-2">
-          <span className="font-mono text-xs text-muted-foreground">
-            threads
+          <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+            coding sessions
           </span>
           <button
             type="button"
@@ -392,17 +434,42 @@ export const App = () => {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {list.map((thread) => (
-            <button
+            <div
               key={thread.id}
-              type="button"
               onClick={() => open(thread.id)}
               className={cn(
-                "flex w-full flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
+                "group flex w-full cursor-pointer flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
                 thread.id === activeId && "bg-accent",
               )}
             >
-              <span className="truncate text-[13px] leading-tight">
-                {threadTitle(thread)}
+              <span className="flex items-center gap-1">
+                <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
+                  {threadTitle(thread)}
+                </span>
+                {(thread.status === "running" || thread.status === "idle") && (
+                  <button
+                    type="button"
+                    title="Stop session (terminal)"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      stopThread(thread.id);
+                    }}
+                    className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
+                  >
+                    <Square className="size-3" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  title="Delete session"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    deleteThread(thread.id);
+                  }}
+                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
+                >
+                  <Trash2 className="size-3" />
+                </button>
               </span>
               <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                 <span
@@ -420,7 +487,7 @@ export const App = () => {
                   </AtTooltip>
                 </span>
               </span>
-            </button>
+            </div>
           ))}
         </div>
       </aside>
@@ -954,8 +1021,15 @@ const Chat = ({
   // "live"` when the transcript hydrated from `initial` (the
   // /messages snapshot — a full replay would render every message
   // twice); `"replay"` when no snapshot exists and the socket owns
-  // the history.
-  const agent = useAgent({ chatId: id, history: hydrated ? "live" : "replay" });
+  // the history. The socket attaches DIRECTLY to the backend origin
+  // (VITE_API_ORIGIN) when configured: same-origin HTTP rides the
+  // service binding, but WS upgrades do not survive the dev chain.
+  const agent = useAgent({
+    ...(API_ORIGIN
+      ? { url: attachUrl(id, new URL(API_ORIGIN)) }
+      : { chatId: id }),
+    history: hydrated ? "live" : "replay",
+  });
   const { messages, sendMessage, status, stop } = useChat({
     agent,
     messages: initial,

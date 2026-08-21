@@ -36,13 +36,9 @@ export type OfferStatus = "accepted" | "duplicate";
  * answers is decided entirely at composition:
  *
  * - `LedgerMemory` (LedgerMemory.ts) — tests.
- * - `LedgerSqlite` (LedgerSqlite.ts) — the laptop: restart-resume (kill
- *   the factory, restart it, re-polled deliveries collapse against the
- *   same file and coordination metadata survives). Its OWN module:
- *   `bun:sqlite` must never enter the Worker bundle.
- * - `LedgerD1` (LedgerD1.ts) — Cloudflare: any number of concurrent
+ * - `LedgerD1` (LedgerD1.ts) — production: any number of concurrent
  *   Worker instances agree through the D1 transaction, never instance
- *   memory. Its own module for the same hygiene, mirrored.
+ *   memory.
  *
  * It is deliberately NOT a task queue: no claim/lease, no visibility
  * timeout, no ordering — ordering and per-key serialization are the

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { Approvals, type ApprovalOutcome } from "./Approvals.ts";
-import { inWorker, orgDatabase } from "./OrgDatabase.ts";
+import { inWorker, database } from "./Database.ts";
 
 const TABLE = `
 CREATE TABLE IF NOT EXISTS approvals (
@@ -21,8 +21,7 @@ const POLL_EVERY = "2 seconds";
 const POLL_TIMES = 150;
 
 /**
- * The approval gate's CLOUDFLARE physics (the durable sibling of
- * `ApprovalsLocal`): pending requests are D1 rows, so the gate
+ * The approval gate's CLOUDFLARE physics: pending requests are D1 rows, so the gate
  * works across a stateless Worker fleet — a tool asking inside one
  * session's Durable Object and the operator answering through any
  * Worker instance agree in the database.
@@ -36,7 +35,7 @@ const POLL_TIMES = 150;
 export const ApprovalsD1 = Layer.effect(
   Approvals,
   Effect.gen(function* () {
-    const db = yield* D1.QueryDatabase(orgDatabase);
+    const db = yield* D1.QueryDatabase(database);
     const mode = yield* Config.string("ORG_APPROVALS").pipe(
       Config.withDefault(""),
     );

@@ -59,6 +59,9 @@ const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
           toolCall("remind", { seconds: Number(argument) || 2 }),
           finish("tool-calls"),
         ];
+      // the container fixture's sandbox probe (DriverContainerWorker)
+      case "probe":
+        return [toolCall("probe", { cmd: argument }), finish("tool-calls")];
       // the driver's own delegation tool — `agent` must name an agent
       // the charter mentions, `session` makes the child resumable
       case "delegate":

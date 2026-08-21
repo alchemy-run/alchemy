@@ -5,10 +5,8 @@ import { Model } from "./Model.ts";
 import { SessionIndexD1 } from "./SessionIndexD1.ts";
 
 /**
- * The org's DRIVER ASSEMBLY on Cloudflare — the mirror of DriverLocal.ts
- * (its own module: the Worker never bundles `bun:sqlite`, the laptop
- * never bundles the DO host). Every seam answered by a Cloudflare
- * primitive:
+ * The org's DRIVER ASSEMBLY on Cloudflare — every seam answered by a
+ * Cloudflare primitive:
  *
  * - the loop     → `DriverCloudflare` (one Durable Object per session:
  *                  thread + inbox + observations in DO storage,
@@ -26,6 +24,16 @@ export const DriverCloudflare = Layer.mergeAll(
     Layer.provide(Model),
     // the driver's `Sessions.list` delegates to the index
     Layer.provide(SessionIndexD1),
+    // every session's own machine: the driver's session DO binds the
+    // sandbox container to its namespace at PLAN time (the attachment
+    // is undiscoverable from call-time layers) — the charters then
+    // reach it through `SandboxContainerSession` at call time
+    Layer.provide(
+      Layer.succeed(
+        Cloudflare.AI.SessionContainerImage,
+        Cloudflare.AI.SandboxContainerImage,
+      ),
+    ),
   ),
   // provideMERGE: the HTTP surface reads the index the stream writes
   AI.SessionIndexStream.pipe(Layer.provideMerge(SessionIndexD1)),

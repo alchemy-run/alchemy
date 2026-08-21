@@ -26,7 +26,7 @@ import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import * as LocalProvider from "../../Local/LocalProvider.ts";
+import * as LocalProvider from "../../Dev/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";

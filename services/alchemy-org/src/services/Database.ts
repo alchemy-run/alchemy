@@ -10,7 +10,7 @@ import { provide } from "effect/Effect";
  * export (memoized by FQN): every Layer that yields this const and
  * the Stack that provisions it resolve the same instance.
  */
-export const orgDatabase = D1.Database("org-db", {});
+export const database = D1.Database("org-db", {});
 
 /**
  * Discharge the D1 client's `RuntimeContext` color. The client's

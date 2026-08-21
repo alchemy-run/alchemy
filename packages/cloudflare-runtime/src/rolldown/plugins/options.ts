@@ -42,6 +42,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>(
   "options",
   (pluginOptions) => {
     let input: Record<string, string> = {};
+    let isPreview = false;
     return {
       shared: {
         api: {
@@ -72,7 +73,21 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>(
         },
       },
       vite: {
-        async config(userConfig) {
+        // Fail FAST on an entry file that does not exist: without this
+        // the bad path is embedded into the `\0distilled:` virtual entry
+        // id and only fails at request time inside the module runner —
+        // where the NUL byte truncates the error in most consoles,
+        // hiding the path entirely. `configResolved` (not `config`) so
+        // config-shape unit tests stay pure; preview is exempt (it
+        // serves the BUILT output, the source entry may be gone).
+        configResolved(config) {
+          if (isPreview) return;
+          for (const [name, id] of Object.entries(input)) {
+            validateInputPath(name, id, config.root);
+          }
+        },
+        async config(userConfig, env) {
+          isPreview = env.isPreview === true;
           const vite = await import("vite");
           const isRolldown = "rolldownVersion" in this.meta;
           const environmentNames = parseViteEnvironments(pluginOptions);
@@ -323,6 +338,24 @@ const resolveInputPaths = (
   Object.fromEntries(
     Object.entries(input).map(([key, id]) => [key, resolveInputPath(id, root)]),
   );
+
+/**
+ * Throw a descriptive error when an entry resolves to a file that does
+ * not exist (see the `configResolved` hook above). Virtual and
+ * scheme-prefixed ids pass untouched — a framework may legitimately
+ * provide them.
+ */
+const validateInputPath = (name: string, id: string, root: string): string => {
+  if (id.includes("\0") || /^[a-z][a-z0-9+.-]*:/i.test(id)) return id;
+  if (!fs.existsSync(id)) {
+    throw new Error(
+      `[cloudflare-vite-plugin] worker entry '${name}' resolves to '${id}', which does not exist. ` +
+        `Relative entries resolve against the vite root ('${root}'); note that a 'root' passed ` +
+        `in inline config overrides one set in the config file.`,
+    );
+  }
+  return id;
+};
 
 const resolveInputPath = (id: string, root: string): string => {
   if (path.isAbsolute(id)) return id;

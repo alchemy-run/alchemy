@@ -12,7 +12,7 @@ import * as Layer from "effect/Layer";
  * `*Http` layers only (each mints/binds a PersonalAccessToken at plan
  * time; at runtime the bound token answers). Named imports (not
  * `import *`) so the Worker bundler can tree-shake Auth/profile/
- * Providers out of `alchemy/GitHub`. The mirror of GitHubLocal.ts.
+ * Providers out of `alchemy/GitHub`.
  */
 export const GitHubWorker = Layer.mergeAll(
   CreateIssueCommentHttp,

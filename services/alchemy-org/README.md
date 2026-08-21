@@ -90,27 +90,28 @@ graph the agent descends as the work demands:
 - `src/lib/` — `Patch.ts` (the apply-patch grammar: types, pure
   parser, guarded apply), `ProcessRunner.ts`, `Artifacts.ts`,
   `Output.ts`.
-- `src/Ledger.ts` — the dedupe/liveness + metadata seam
-  (Memory | Sqlite | D1); PR→issue links live here.
-- `src/Approvals.ts` — the two-key ceremony's ledger: the Reviewer
-  records, the owner's merge ratifies.
-- `src/Board.ts` — the domain projection over `AI.Chats` summaries
-  that the UI renders (issues → owner thread → worker threads).
-- `src/Server.ts` — the entrypoint: kernel + model, GitHub polling,
-  `Git.WorkspacesWorktree` (one blobless clone, one worktree per run
-  key) under `Workspace.perRun`, the skill graph composition per
-  agent, and the HTTP surface (AI SDK UI protocol + the Vite-built
-  SPA in `ui/`).
-- `alchemy.run.ts` — the Stack: provisions the sandbox repository and
-  runs the org server as a `Local.Service`.
+- `src/services/Ledger.ts` — the dedupe/liveness + metadata seam
+  (Memory | D1); PR→issue links live here.
+- `src/services/Approvals.ts` — the human-in-the-loop gate: dangerous
+  tools ask, the operator answers from the UI (D1-backed).
+- `src/lib/Board.ts` — the domain projection over session summaries
+  that the UI renders.
+- `src/Worker.ts` — the backend: sessions as Durable Objects, the
+  board/ledger/approvals on D1, GitHub by webhook + token bindings,
+  each session's tools on its OWN container of the circular org image
+  (`src/Sandbox.ts` — the alchemy repo checked out,
+  installed, and compiled at image build).
+- `alchemy.run.ts` — the Stack: the sandbox repository, the backend
+  Worker, and the SPA (`Cloudflare.Website.Vite`) that forwards
+  `/api` + `/attach` to it over a service binding (`ui/edge.ts`).
 
 ## Running
 
 ```sh
-doppler run -c dev --project alchemy-v2 -- bun alchemy deploy --yes
+bun alchemy deploy
 ```
 
-The deploy output prints the server URL; the UI lists open issues with
-their owner threads, streams transcripts live (thinking traces, tool
-calls, worker cards that link into dispatched threads), and accepts
-messages that land as GitHub comments.
+The deploy output prints the site URL; the UI is a coding-agent chat —
+each new session gets its own container of the org image, streams its
+transcript live over the session socket, and the review pipeline posts
+real GitHub reviews on the sandbox repository.

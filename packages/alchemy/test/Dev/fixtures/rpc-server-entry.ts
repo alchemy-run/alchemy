@@ -5,7 +5,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { launch } from "../../../src/Local/RpcServer.ts";
+import { launch } from "../../../src/Dev/RpcServer.ts";
 
 /**
  * Minimal test fixture for `RpcServer.launch`. Registers a single service

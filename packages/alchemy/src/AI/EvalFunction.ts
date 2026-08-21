@@ -3,6 +3,105 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Eval, TOOLS_RAW_MODULE } from "./Eval.ts";
 
+/**
+ * The IN-PROCESS {@link Eval}: each module of the graph compiles to an
+ * async function (see {@link compileModule}) and the graph links
+ * through a memoized `__require` — relative specifiers resolve to
+ * sibling modules, the reserved `"tools.raw.js"` resolves DIRECTLY to
+ * the granted handlers as closures (a rejected call carries the tool's
+ * failure value, `_tag` intact, so the effect convention's `catchTag`
+ * works), and bare specifiers (`effect/*`) are ordinary dynamic
+ * imports resolved by the host runtime. `console` is a parameter, so
+ * captured logs never touch the global.
+ *
+ * Fine for a local org; NOT an isolation boundary — the program
+ * shares the driver's process. `Cloudflare.AI.EvalWorkerLoader` is
+ * the isolated substrate behind the same contract.
+ */
+export const EvalFunction: Layer.Layer<Eval> = Layer.succeed(Eval, {
+  run: ({ modules, main, tools, timeout }) =>
+    Effect.gen(function* () {
+      const logs: Array<string> = [];
+      const record =
+        (level: string) =>
+        (...args: Array<unknown>) =>
+          logs.push(
+            `${level === "log" ? "" : `[${level}] `}${args.map(format).join(" ")}`,
+          );
+      const capturedConsole = {
+        log: record("log"),
+        info: record("info"),
+        warn: record("warn"),
+        error: record("error"),
+        debug: record("debug"),
+      };
+
+      // the reserved tools module IS the granted handlers, as closures
+      const toolsNamespace: Namespace = Object.fromEntries(
+        tools.map((tool) => [
+          tool.name,
+          (input: unknown) =>
+            Effect.runPromise(tool.call(input) as Effect.Effect<unknown>),
+        ]),
+      );
+
+      const namespaces = new Map<string, Promise<Namespace>>();
+      const require = (specifier: string): Promise<Namespace> => {
+        const key = specifier.startsWith("./") ? specifier.slice(2) : specifier;
+        if (key === TOOLS_RAW_MODULE) return Promise.resolve(toolsNamespace);
+        const name =
+          modules[key] !== undefined
+            ? key
+            : modules[`${key}.js`] !== undefined
+              ? `${key}.js`
+              : undefined;
+        // not in the graph: an ordinary dynamic import (effect/*, …)
+        if (name === undefined) return import(specifier);
+        const linked = namespaces.get(name);
+        if (linked !== undefined) return linked;
+        const instantiated = (async () => {
+          const exports: Namespace = {};
+          await compileModule(modules[name]!)(
+            require,
+            exports,
+            capturedConsole,
+          );
+          return exports;
+        })();
+        namespaces.set(name, instantiated);
+        return instantiated;
+      };
+
+      const output = yield* Effect.tryPromise({
+        try: async () => {
+          const thunk = (await require(main)).default;
+          if (typeof thunk !== "function") {
+            throw new Error(
+              "the program has no default export — `export default` your program",
+            );
+          }
+          return await (thunk as () => Promise<unknown>)();
+        },
+        // a SyntaxError is a broken module, not a failed run
+        catch: (error) =>
+          error instanceof SyntaxError
+            ? `code did not evaluate: ${error}`
+            : `program failed: ${error}`,
+      });
+      return { output, logs };
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: timeout,
+        orElse: () =>
+          Effect.fail(
+            `eval timed out after ${Duration.format(
+              Duration.fromInputUnsafe(timeout),
+            )} — split the work into smaller programs`,
+          ),
+      }),
+    ),
+});
+
 type Namespace = Record<string, unknown>;
 
 const AsyncFunction = async function () {}.constructor as new (
@@ -169,105 +268,6 @@ const compileModule = (source: string) => {
       : `${body}\n${exported.map((name) => `__exports.${name} = ${name};`).join("\n")}`,
   );
 };
-
-/**
- * The IN-PROCESS {@link Eval}: each module of the graph compiles to an
- * async function (see {@link compileModule}) and the graph links
- * through a memoized `__require` — relative specifiers resolve to
- * sibling modules, the reserved `"tools.raw.js"` resolves DIRECTLY to
- * the granted handlers as closures (a rejected call carries the tool's
- * failure value, `_tag` intact, so the effect convention's `catchTag`
- * works), and bare specifiers (`effect/*`) are ordinary dynamic
- * imports resolved by the host runtime. `console` is a parameter, so
- * captured logs never touch the global.
- *
- * Fine for a local org; NOT an isolation boundary — the program
- * shares the driver's process. `Cloudflare.AI.EvalWorkerLoader` is
- * the isolated substrate behind the same contract.
- */
-export const EvalFunction: Layer.Layer<Eval> = Layer.succeed(Eval, {
-  run: ({ modules, main, tools, timeout }) =>
-    Effect.gen(function* () {
-      const logs: Array<string> = [];
-      const record =
-        (level: string) =>
-        (...args: Array<unknown>) =>
-          logs.push(
-            `${level === "log" ? "" : `[${level}] `}${args.map(format).join(" ")}`,
-          );
-      const capturedConsole = {
-        log: record("log"),
-        info: record("info"),
-        warn: record("warn"),
-        error: record("error"),
-        debug: record("debug"),
-      };
-
-      // the reserved tools module IS the granted handlers, as closures
-      const toolsNamespace: Namespace = Object.fromEntries(
-        tools.map((tool) => [
-          tool.name,
-          (input: unknown) =>
-            Effect.runPromise(tool.call(input) as Effect.Effect<unknown>),
-        ]),
-      );
-
-      const namespaces = new Map<string, Promise<Namespace>>();
-      const require = (specifier: string): Promise<Namespace> => {
-        const key = specifier.startsWith("./") ? specifier.slice(2) : specifier;
-        if (key === TOOLS_RAW_MODULE) return Promise.resolve(toolsNamespace);
-        const name =
-          modules[key] !== undefined
-            ? key
-            : modules[`${key}.js`] !== undefined
-              ? `${key}.js`
-              : undefined;
-        // not in the graph: an ordinary dynamic import (effect/*, …)
-        if (name === undefined) return import(specifier);
-        const linked = namespaces.get(name);
-        if (linked !== undefined) return linked;
-        const instantiated = (async () => {
-          const exports: Namespace = {};
-          await compileModule(modules[name]!)(
-            require,
-            exports,
-            capturedConsole,
-          );
-          return exports;
-        })();
-        namespaces.set(name, instantiated);
-        return instantiated;
-      };
-
-      const output = yield* Effect.tryPromise({
-        try: async () => {
-          const thunk = (await require(main)).default;
-          if (typeof thunk !== "function") {
-            throw new Error(
-              "the program has no default export — `export default` your program",
-            );
-          }
-          return await (thunk as () => Promise<unknown>)();
-        },
-        // a SyntaxError is a broken module, not a failed run
-        catch: (error) =>
-          error instanceof SyntaxError
-            ? `code did not evaluate: ${error}`
-            : `program failed: ${error}`,
-      });
-      return { output, logs };
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: timeout,
-        orElse: () =>
-          Effect.fail(
-            `eval timed out after ${Duration.format(
-              Duration.fromInputUnsafe(timeout),
-            )} — split the work into smaller programs`,
-          ),
-      }),
-    ),
-});
 
 const format = (value: unknown): string =>
   typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));

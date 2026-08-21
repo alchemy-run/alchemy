@@ -1,7 +1,7 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import * as Artifacts from "@/Artifacts.ts";
 import { InstanceId } from "@/InstanceId.ts";
-import * as RpcProvider from "@/Local/RpcProvider.ts";
+import * as RpcProvider from "@/Dev/RpcProvider.ts";
 import type { ProviderService } from "@/Provider.ts";
 import { Resource } from "@/Resource.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";

@@ -27,7 +27,7 @@ import {
  * This returns `never` because it is meant to be used with `Layer.launch` (see {@link launch}).
  */
 export class RpcServer extends Context.Service<RpcServer, never>()(
-  "alchemy/Local/RpcServer",
+  "alchemy/Dev/RpcServer",
 ) {}
 
 /**

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
+import { RpcProviderProxy } from "@/Dev/RpcProviderProxy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";

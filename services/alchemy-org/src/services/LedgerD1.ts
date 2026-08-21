@@ -2,12 +2,11 @@ import * as D1 from "alchemy/Cloudflare/D1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
-import { inWorker, orgDatabase } from "./OrgDatabase.ts";
+import { inWorker, database } from "./Database.ts";
 
 /**
- * The Ledger's D1 physics — its own module (the mirror of
- * LedgerSqlite.ts): the local process never bundles Cloudflare's D1
- * client, and the Worker never bundles `bun:sqlite`.
+ * The Ledger's D1 physics — its own module: only the
+ * Worker bundle carries Cloudflare's D1 client.
  *
  * `INSERT OR IGNORE` decides acceptance in the database — never any
  * instance's memory — so a stateless, concurrent Worker fleet and a
@@ -16,7 +15,7 @@ import { inWorker, orgDatabase } from "./OrgDatabase.ts";
 export const LedgerD1 = Layer.effect(
   Ledger,
   Effect.gen(function* () {
-    const db = yield* D1.QueryDatabase(orgDatabase);
+    const db = yield* D1.QueryDatabase(database);
 
     // ensured lazily on first use — DDL from the delivery path; D1
     // `exec` wants single-line statements
