@@ -27,6 +27,9 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  ALCHEMY_REPO: alchemy-run/alchemy
+
 jobs:
   build:
     name: Build and pack
@@ -89,6 +92,7 @@ jobs:
         env:
           VERSION: ${{ steps.release.outputs.version }}
           CHANNEL: ${{ steps.release.outputs.channel }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/release/commit.sh
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -141,7 +145,15 @@ jobs:
       - name: Create GitHub release
         if: needs.build.outputs.channel != 'tag'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
         run: bun scripts/release/github-release.ts "v${VERSION}" "$CHANNEL"
+
+      - name: Notify Discord
+        if: needs.build.outputs.channel != 'tag'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
+        run: bun scripts/release/discord-notify.ts "v${VERSION}" "$CHANNEL"
