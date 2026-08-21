@@ -2,11 +2,13 @@ import { AlchemyContext } from "@/AlchemyContext";
 import { AuthProviders } from "@/Auth/AuthProvider";
 import * as Provider from "@/Provider";
 import * as Prisma from "@/Prisma";
+import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 const devAlchemyContext = Layer.succeed(AlchemyContext, {
   dotAlchemy: ".alchemy-test",
@@ -234,5 +236,50 @@ describe("Prisma providers", () => {
           ),
         ),
       ),
+  );
+
+  it.effect(
+    "tails deployment logs from a providers()-shaped stack context",
+    () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProviderByType(
+          Prisma.Deployment.Type as any,
+        );
+
+        // The tail stream must resolve everything it needs from the context
+        // `providers()` produces. Point it at a closed loopback port so the
+        // WebSocket fails fast: a typed PrismaLogStreamError proves the
+        // context was complete, while a missing service surfaces as a defect.
+        const error = yield* Stream.runDrain(
+          provider.tail!({
+            output: { deploymentId: "deployment-1" },
+          } as never),
+        ).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(PrismaLogStreamError);
+      }).pipe(
+        Effect.provide(
+          Prisma.providers().pipe(
+            Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+          ),
+        ),
+        Effect.provide(
+          Layer.succeed(AlchemyContext, {
+            dotAlchemy: ".alchemy-test",
+            dev: false,
+            adopt: false,
+          }),
+        ),
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              CI: true,
+              PRISMA_SERVICE_TOKEN: "test-token",
+              PRISMA_API_URL: "http://127.0.0.1:1",
+            }),
+          ),
+        ),
+      ),
+    { timeout: 30_000 },
   );
 });

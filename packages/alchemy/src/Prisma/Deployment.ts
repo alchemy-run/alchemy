@@ -19,7 +19,6 @@ import {
   postV1AppsByAppIdDeployments,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
-import { PrismaClient } from "./Client.ts";
 import {
   destroyDeployment,
   waitForDeploymentStatus,
@@ -46,6 +45,7 @@ import {
   unresolvedAppIdOf,
 } from "./Refs.ts";
 import type { ObservedDeployment } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 256 * 1024 * 1024;
 
@@ -232,7 +232,15 @@ const listAppDeployments = (appId: string) =>
       );
       deployments.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
-      if (!page.pagination.hasMore || nextCursor === null) break;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getV1AppsByAppIdDeployments: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
       cursor = nextCursor;
     }
     return deployments;
@@ -460,7 +468,6 @@ const ProviderLive = () =>
   Provider.effect(
     Deployment,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["deploymentId"],
         // App deletion cascades deployments. AppProvider is the single nuke
@@ -785,7 +792,7 @@ const ProviderLive = () =>
         }),
         tail: ({ output }) =>
           output.deploymentId
-            ? tailDeploymentLogs(client, output.deploymentId)
+            ? tailDeploymentLogs(output.deploymentId)
             : Stream.empty,
       };
     }),

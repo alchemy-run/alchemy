@@ -51,7 +51,6 @@ import {
   postV1AppsByAppIdRollback,
   postV1EnvironmentVariables,
 } from "@distilled.cloud/prisma-postgres/management";
-import { PrismaClient } from "./Client.ts";
 import {
   runBuildCommand,
   runComputeAutoBuild,
@@ -2216,10 +2215,6 @@ const ProviderLive = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
-      // Only the log tail still needs the hand-rolled client: it delegates
-      // to tailDeploymentLogs, whose WebSocket transport is carved out of
-      // Client.ts separately.
-      const client = yield* PrismaClient;
       return {
         stables: ["appId"],
         // Compute is a composite over App + Deployment. AppProvider owns nuke
@@ -2916,7 +2911,7 @@ const ProviderLive = () =>
         }),
         tail: ({ output }) =>
           output.deploymentId
-            ? tailDeploymentLogs(client, output.deploymentId)
+            ? tailDeploymentLogs(output.deploymentId)
             : Stream.empty,
       };
     }),

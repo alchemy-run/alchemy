@@ -48,6 +48,7 @@ import {
 } from "node:http";
 import { WebSocketServer } from "ws";
 import { AlchemyContext } from "@/AlchemyContext";
+import { Credentials } from "@/Prisma/Credentials";
 import { encodeState } from "@/State/StateEncoding";
 
 const currentClient = <T extends object>(client: T): PrismaManagementClient => {
@@ -1900,11 +1901,12 @@ describe("Prisma Deployment", () => {
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
-        const calls: Array<[string, unknown]> = [];
         let authorization: string | undefined;
+        let requestUrl: string | undefined;
 
         server.on("connection", (socket, request) => {
           authorization = request.headers.authorization;
+          requestUrl = request.url;
           socket.send(
             JSON.stringify({
               type: "log",
@@ -1925,22 +1927,8 @@ describe("Prisma Deployment", () => {
           );
         });
 
-        const client = {
-          getDeploymentLogsRequest: (deploymentId: string, query: unknown) =>
-            Effect.sync(() => {
-              calls.push(["getDeploymentLogsRequest", { deploymentId, query }]);
-              return {
-                url: `${url}/v1/deployments/${deploymentId}/logs`,
-                headers: {
-                  Authorization: Redacted.make("Bearer version-token"),
-                },
-              };
-            }),
-        } as unknown as PrismaManagementClient;
-
         const provider = yield* PrismaDeployment.Provider.pipe(
           Effect.provide(deploymentProviderLive()),
-          Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
           Effect.provide(PlatformServices),
         );
         const lines = yield* provider.tail!({
@@ -1959,18 +1947,24 @@ describe("Prisma Deployment", () => {
             appEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
-        }).pipe(Stream.runCollect);
+        }).pipe(
+          // The carved-out logs client resolves the distilled Credentials
+          // service directly: the test WebSocket server is the API base.
+          Stream.provideService(
+            Credentials,
+            Effect.succeed({
+              apiToken: Redacted.make("version-token"),
+              apiBaseUrl: url,
+            }),
+          ),
+          Stream.runCollect,
+        );
 
         expect(lines.map((line) => line.message)).toEqual([
           "direct version log",
         ]);
         expect(authorization).toBe("Bearer version-token");
-        expect(calls).toEqual([
-          [
-            "getDeploymentLogsRequest",
-            { deploymentId: "version-1", query: undefined },
-          ],
-        ]);
+        expect(requestUrl).toBe("/v1/deployments/version-1/logs");
       }).pipe(Effect.provide(FetchHttpClient.layer)),
     ),
   );
@@ -2204,7 +2198,7 @@ const listenUrl = (server: WebSocketServer) =>
       cleanup();
       const address = server.address();
       if (address && typeof address === "object") {
-        resume(Effect.succeed(`ws://127.0.0.1:${address.port}`));
+        resume(Effect.succeed(`http://127.0.0.1:${address.port}`));
       } else {
         resume(Effect.fail(new Error("WebSocket server has no TCP address")));
       }

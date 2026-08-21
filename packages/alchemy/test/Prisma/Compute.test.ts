@@ -34,6 +34,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
 import { fromApiToken } from "@distilled.cloud/prisma-postgres";
+import { Credentials } from "@/Prisma/Credentials";
 import {
   type Captured,
   FAKE_API_BASE_URL,
@@ -7186,11 +7187,12 @@ describe("Prisma Compute", () => {
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
-        const calls: Array<[string, unknown]> = [];
         let authorization: string | undefined;
+        let requestUrl: string | undefined;
 
         server.on("connection", (socket, request) => {
           authorization = request.headers.authorization;
+          requestUrl = request.url;
           socket.send(
             JSON.stringify({
               type: "log",
@@ -7211,25 +7213,8 @@ describe("Prisma Compute", () => {
           );
         });
 
-        const client = {
-          getDeploymentLogsRequest: (deploymentId: string, query: unknown) =>
-            Effect.sync(() => {
-              calls.push(["getDeploymentLogsRequest", { deploymentId, query }]);
-              return {
-                url: `${url}/v1/deployments/${deploymentId}/logs`,
-                headers: {
-                  Authorization: Redacted.make("Bearer app-token"),
-                },
-              };
-            }),
-        } as unknown as PrismaManagementClient;
-
         const provider = yield* Compute.Provider.pipe(
           Effect.provide(computeProviderLive()),
-          Effect.provide(
-            Layer.succeed(PrismaClient, withDefaultBranch(client)),
-          ),
-          Effect.provide(apiRoutedHttp(withDefaultBranch(client))),
         );
         const lines = yield* provider.tail!({
           id: "App",
@@ -7255,16 +7240,22 @@ describe("Prisma Compute", () => {
             artifactHash: Redacted.make("hash-1"),
             local: false,
           },
-        }).pipe(Stream.runCollect);
+        }).pipe(
+          // The carved-out logs client resolves the distilled Credentials
+          // service directly: the test WebSocket server is the API base.
+          Stream.provideService(
+            Credentials,
+            Effect.succeed({
+              apiToken: Redacted.make("app-token"),
+              apiBaseUrl: url,
+            }),
+          ),
+          Stream.runCollect,
+        );
 
         expect(lines.map((line) => line.message)).toEqual(["compute app log"]);
         expect(authorization).toBe("Bearer app-token");
-        expect(calls).toEqual([
-          [
-            "getDeploymentLogsRequest",
-            { deploymentId: "version-1", query: undefined },
-          ],
-        ]);
+        expect(requestUrl).toBe("/v1/deployments/version-1/logs");
       }).pipe(
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -7291,7 +7282,7 @@ const listenUrl = (server: WebSocketServer) =>
       cleanup();
       const address = server.address();
       if (address && typeof address === "object") {
-        resume(Effect.succeed(`ws://127.0.0.1:${address.port}`));
+        resume(Effect.succeed(`http://127.0.0.1:${address.port}`));
       } else {
         resume(Effect.fail(new Error("WebSocket server has no TCP address")));
       }
