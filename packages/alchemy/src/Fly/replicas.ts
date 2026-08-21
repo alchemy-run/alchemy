@@ -188,6 +188,7 @@ export const waitStarted = (appName: string, machineId: string) =>
         schedule: waitBackoff,
         while: (e) => e._tag === "GatewayTimeout",
       }),
+      Effect.timeout("50 seconds"),
     );
 
 export const waitDestroyed = (appName: string, machineId: string) =>

@@ -37,6 +37,7 @@ import {
   defaultHttpServices,
   DEFAULT_PORT,
   toEnvRecord,
+  type FlyBuildOptions,
   type FlyHostRuntimeContext,
 } from "./hosted.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
@@ -116,9 +117,10 @@ export interface ServiceProps extends PlatformProps {
   env?: Record<string, any>;
   /**
    * Bundler configuration for `main`: rolldown `input`/`output`
-   * overrides plus pure-annotation options (`pure`).
+   * overrides, pure-annotation options (`pure`), and `install` for
+   * packages that must ship as real `node_modules` (see {@link FlyBuildOptions}).
    */
-  build?: Bundle.BundleConfig;
+  build?: FlyBuildOptions;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must
    * be able to run the bun runtime.
@@ -573,6 +575,32 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
+ * @example Install `pg` unbundled
+ * `pg` is CommonJS. Rolldown's interop turns `Client` into a namespace.
+ * Install it into the image so `@effect/sql-pg` / `Drizzle.Postgres` load
+ * it with Node's CJS semantics — same `build.install` as Lambda.
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     port: 3000,
+ *     build: { install: ["pg"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     const conn = yield* Fly.ConnectPostgres(Db);
+ *     const db = yield* Drizzle.Postgres(conn.connectionString);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const rows = yield* db.execute("select 1 as ok");
+ *         return HttpServerResponse.json({ rows });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
+ * ) {}
+ * ```
+ *
  * @section Multiple Services, one App
  * Each Service has its own Machines, image, and lifecycle. Point
  * several at the same `app`.
@@ -910,12 +938,16 @@ export const ServiceProvider = () =>
             ...bound.env,
             ...toEnv(props.env),
           });
+          let minSecretsVersion: number | undefined;
           for (const pg of bound.postgres) {
-            yield* attachPostgresSecrets(
+            const version = yield* attachPostgresSecrets(
               appName,
               pg.clusterId,
               pg.variableName,
             );
+            if (version !== undefined) {
+              minSecretsVersion = Math.max(minSecretsVersion ?? 0, version);
+            }
           }
           const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
           const guest = toFlyGuest(props.guest);
@@ -940,6 +972,7 @@ export const ServiceProvider = () =>
             region,
             count,
             disks: bound.mounts,
+            minSecretsVersion,
             outputMachineIds: machineIdsOf(output),
             preferVolumeIds: (output?.replicas ?? []).map((replica) =>
               replica.mounts.map((mount) => mount.volumeId),

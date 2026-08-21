@@ -32,6 +32,8 @@ import {
 import { runImports, runPgMigrations } from "./PostgresMigrations.ts";
 import type { Providers } from "./Providers.ts";
 
+export { stripSslQueryParams } from "./PostgresMigrations.ts";
+
 export const DEFAULT_POSTGRES_PLAN = "basic";
 export const DEFAULT_VOLUME_GB = 10;
 export const DATABASE_URL_SECRET = "DATABASE_URL";
@@ -311,6 +313,13 @@ export class PostgresCredentialsMissing extends Data.TaggedError(
   clusterId: string;
 }> {}
 
+export class PostgresAttachmentFailed extends Data.TaggedError(
+  "Fly.PostgresAttachmentFailed",
+)<{
+  clusterId: string;
+  appName: string;
+}> {}
+
 class PostgresPending extends Data.TaggedError("Fly.PostgresPending")<{
   clusterId: string;
   status: string;
@@ -506,6 +515,10 @@ export const directUri = (
   return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@direct.${hash}.flympg.net/${dbname}`;
 };
 
+const secretVersion = (
+  res: { version?: number; Version?: number } | undefined,
+) => res?.version ?? res?.Version;
+
 const putSecret = (appName: string, name: string, value: string) =>
   machines
     .createSecret({
@@ -514,14 +527,14 @@ const putSecret = (appName: string, name: string, value: string) =>
       value,
     })
     .pipe(
-      Effect.asVoid,
+      Effect.map(secretVersion),
       Effect.catchTag("Conflict", () =>
         machines
           .updateSecrets({
             app_name: appName,
             values: { [name]: value },
           })
-          .pipe(Effect.asVoid),
+          .pipe(Effect.map(secretVersion)),
       ),
     );
 
@@ -541,7 +554,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
   clusterId: string,
   variableName: string = DATABASE_URL_SECRET,
 ) {
-  if (appName.length === 0 || clusterId.length === 0) return;
+  if (appName.length === 0 || clusterId.length === 0) return undefined;
   const creds = yield* getClusterResponse(clusterId).pipe(
     Effect.flatMap((res) => {
       const uri = credentialsUri(res?.credentials);
@@ -565,9 +578,16 @@ export const attachPostgresSecrets = Effect.fn(function* (
   if (creds === undefined) {
     return yield* new PostgresCredentialsMissing({ clusterId });
   }
-  yield* putSecret(appName, variableName, creds.uri);
+  const versions: number[] = [];
+  const pooledVersion = yield* putSecret(appName, variableName, creds.uri);
+  if (pooledVersion !== undefined) versions.push(pooledVersion);
   if (creds.direct !== undefined) {
-    yield* putSecret(appName, DIRECT_DATABASE_URL_SECRET, creds.direct);
+    const directVersion = yield* putSecret(
+      appName,
+      DIRECT_DATABASE_URL_SECRET,
+      creds.direct,
+    );
+    if (directVersion !== undefined) versions.push(directVersion);
   }
   yield* mpg
     .createAttachment({
@@ -582,8 +602,17 @@ export const attachPostgresSecrets = Effect.fn(function* (
         times: 8,
         schedule: backoff,
       }),
-      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.timeout("40 seconds"),
+      Effect.catchTag(
+        "NotFound",
+        () =>
+          new PostgresAttachmentFailed({
+            clusterId,
+            appName,
+          }),
+      ),
     );
+  return versions.length > 0 ? Math.max(...versions) : undefined;
 });
 
 const rootDir = Effect.sync(() => process.cwd());

@@ -7,6 +7,12 @@ import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
 import {
+  matchesPackageRoot,
+  normalizeInstallTargets,
+  resolvePackageInstallIdentity,
+  type PackageInstall,
+} from "../Bundle/InstalledPackages.ts";
+import {
   findCwdForBundle,
   getStableContextDir,
   resolveMainPath,
@@ -30,6 +36,21 @@ export const DEFAULT_BASE_IMAGE = "oven/bun:1";
 export const DEFAULT_PORT = 3000;
 export const MACHINE_PLATFORM = "linux/amd64";
 
+export interface FlyBuildOptions extends Bundle.BundleConfig {
+  /**
+   * Native or Node-only packages to install into the Machine image with
+   * `bun install` instead of bundling them. `pg` is CommonJS: Rolldown's
+   * interop turns `Client` into a namespace (`The superclass is not a
+   * constructor`). Same `build.install` shape as Lambda.
+   *
+   * @example
+   * ```typescript
+   * build: { install: ["pg"] }
+   * ```
+   */
+  readonly install?: PackageInstall;
+}
+
 export interface HostedProgramProps {
   main: string;
   handler?: string;
@@ -37,8 +58,24 @@ export interface HostedProgramProps {
   image?: string;
   env?: Record<string, any>;
   isExternal?: boolean;
-  build?: Bundle.BundleConfig;
+  build?: FlyBuildOptions;
 }
+
+const matchesConfiguredExternal = (
+  external: rolldown.InputOptions["external"],
+  moduleId: string,
+  parentId: string | undefined,
+  isResolved: boolean,
+): boolean => {
+  if (external === undefined) return false;
+  if (typeof external === "function") {
+    return external(moduleId, parentId, isResolved) === true;
+  }
+  const matchers = Array.isArray(external) ? external : [external];
+  return matchers.some((matcher) =>
+    typeof matcher === "string" ? matcher === moduleId : matcher.test(moduleId),
+  );
+};
 
 export class DeployTokenMissing extends Data.TaggedError(
   "Fly.DeployTokenMissing",
@@ -62,7 +99,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 
-import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
+globalThis.__ALCHEMY_RUNTIME__ = true;
+const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 
 const tag = Context.Service(${JSON.stringify(Self.key)});
 const layer = makeEntrypointLayer(tag, entrypoint);
@@ -94,7 +132,7 @@ const program = tag.pipe(
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer()),
+      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -273,13 +311,20 @@ const sanitizeImageRepo = (id: string): string => {
   return lowered.length === 0 ? "service" : lowered;
 };
 
-const generateDockerfile = (props: HostedProgramProps, hasChunks: boolean) => {
+const generateDockerfile = (
+  props: HostedProgramProps,
+  hasChunks: boolean,
+  install?: Record<string, string>,
+) => {
   const port = props.port ?? DEFAULT_PORT;
-  const lines = [
-    `FROM ${props.image ?? DEFAULT_BASE_IMAGE}`,
-    `WORKDIR /app`,
-    `COPY index.mjs /app/index.mjs`,
-  ];
+  const lines = [`FROM ${props.image ?? DEFAULT_BASE_IMAGE}`, `WORKDIR /app`];
+  if (install !== undefined && Object.keys(install).length > 0) {
+    lines.push(
+      `COPY package.json /app/package.json`,
+      `RUN bun install --production`,
+    );
+  }
+  lines.push(`COPY index.mjs /app/index.mjs`);
   if (hasChunks) {
     lines.push(`COPY *.js /app/`);
   }
@@ -290,6 +335,13 @@ const generateDockerfile = (props: HostedProgramProps, hasChunks: boolean) => {
   );
   return `${lines.join("\n")}\n`;
 };
+
+const installManifest = (dependencies: Record<string, string>) =>
+  `${JSON.stringify(
+    { private: true, type: "module", dependencies },
+    null,
+    2,
+  )}\n`;
 
 export const createFlyHostedSupport = ({
   stackName,
@@ -317,6 +369,9 @@ export const createFlyHostedSupport = ({
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
     const bootstrap = makeBunBootstrap(handler);
+    const requested = yield* normalizeInstallTargets(props.build?.install);
+    const installRoots = new Set(Object.keys(requested));
+    const configuredExternal = props.build?.input?.external;
 
     const buildBundle = Effect.fn(function* (
       entry: string,
@@ -328,11 +383,18 @@ export const createFlyHostedSupport = ({
           input: entry,
           cwd,
           platform: "node",
-          external: [
-            "bun",
-            "bun:*",
-            ...((props.build?.input?.external as string[] | undefined) ?? []),
-          ],
+          external: (moduleId, parentId, isResolved) => {
+            if (moduleId === "bun" || moduleId.startsWith("bun:")) return true;
+            for (const root of installRoots) {
+              if (matchesPackageRoot(moduleId, root)) return true;
+            }
+            return matchesConfiguredExternal(
+              configuredExternal,
+              moduleId,
+              parentId,
+              isResolved,
+            );
+          },
           resolve: {
             conditionNames: ["bun", "import", "module", "default"],
             ...props.build?.input?.resolve,
@@ -343,8 +405,9 @@ export const createFlyHostedSupport = ({
           ...props.build?.output,
           format: "esm",
           sourcemap: props.build?.output?.sourcemap ?? false,
-          minify: props.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
+          strictExecutionOrder: true,
+          keepNames: true,
         },
         props.build,
       );
@@ -367,12 +430,30 @@ export const createFlyHostedSupport = ({
 
   const computeCodeHash = Effect.fn(function* (props: HostedProgramProps) {
     const bundled = yield* bundleProgram(props);
-    const dockerfile = generateDockerfile(props, bundled.files.length > 1);
+    const realMain = yield* resolveMainPath(props.main);
+    const cwd = yield* findCwdForBundle(realMain);
+    const requested = yield* normalizeInstallTargets(props.build?.install);
+    const identity =
+      Object.keys(requested).length > 0
+        ? yield* resolvePackageInstallIdentity({ cwd, requested })
+        : undefined;
+    const install =
+      identity !== undefined && Object.keys(identity.resolved).length > 0
+        ? identity.resolved
+        : undefined;
+    const packageJson =
+      install === undefined ? undefined : installManifest(install);
+    const dockerfile = generateDockerfile(
+      props,
+      bundled.files.length > 1,
+      install,
+    );
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
+      packageJson,
     })).slice(0, 16);
-    return { bundled, dockerfile, codeHash };
+    return { bundled, dockerfile, codeHash, packageJson };
   });
 
   const imageExists = (imageRef: string) =>
@@ -402,9 +483,8 @@ export const createFlyHostedSupport = ({
   }) {
     const note = input.session?.note ?? ((_message: string) => Effect.void);
     yield* note(`Bundling ${input.id} program...`);
-    const { bundled, dockerfile, codeHash } = yield* computeCodeHash(
-      input.props,
-    );
+    const { bundled, dockerfile, codeHash, packageJson } =
+      yield* computeCodeHash(input.props);
     const repo = sanitizeImageRepo(input.id);
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${repo}-${codeHash}`;
 
@@ -419,13 +499,20 @@ export const createFlyHostedSupport = ({
         dotAlchemy,
         `${input.id}-image`,
       );
+      const files = bundled.files.map((file, index) => ({
+        path: index === 0 ? "index.mjs" : file.path,
+        content: file.content,
+      }));
+      if (packageJson !== undefined) {
+        files.push({
+          path: "package.json",
+          content: new TextEncoder().encode(packageJson),
+        });
+      }
       yield* docker.materialize({
         context: contextDir,
         dockerfile,
-        files: bundled.files.map((file, index) => ({
-          path: index === 0 ? "index.mjs" : file.path,
-          content: file.content,
-        })),
+        files,
       });
       yield* note(`Building container image ${imageRef}...`);
       yield* docker.image.build({

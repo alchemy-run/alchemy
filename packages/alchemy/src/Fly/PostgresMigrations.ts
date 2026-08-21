@@ -23,7 +23,7 @@ export class PostgresMigrationError extends Data.TaggedError(
  * `sslmode=require` as `verify-full`. TLS and certificate verification
  * are set on the client (`ssl.rejectUnauthorized: true`).
  */
-const stripSslQueryParams = (uri: string): string => {
+export const stripSslQueryParams = (uri: string): string => {
   try {
     const url = new URL(uri);
     url.searchParams.delete("sslmode");

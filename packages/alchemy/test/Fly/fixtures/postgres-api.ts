@@ -1,5 +1,5 @@
 import * as Fly from "@/Fly";
-import * as SQL from "@/SQL/Postgres.ts";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -32,29 +32,26 @@ export default class PostgresApi extends Fly.Service<PostgresApi>()(
     main: import.meta.url,
     region: "iad",
     port: POSTGRES_PORT,
-    guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
+    guest: { cpuKind: "shared", cpus: 1, memoryMb: 512 },
+    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Fly.ConnectPostgres(Db);
-    const sql = yield* SQL.Postgres({ url: conn.connectionString });
+    const db = yield* Drizzle.Postgres(conn.connectionString);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://service").pathname;
-        const rows = (yield* sql`SELECT 1 AS ok`) as ReadonlyArray<{
-          ok: number;
-        }>;
-        const ok = rows[0]?.ok === 1;
-        if (path === "/health" || path === "/") {
-          return yield* HttpServerResponse.json({ ok });
+        if (path === "/ping") {
+          return yield* HttpServerResponse.json({ ok: true });
         }
-        return yield* HttpServerResponse.json({ ok }, { status: 404 });
-      }).pipe(
-        Effect.catchCause((cause) =>
-          HttpServerResponse.json({ error: String(cause) }, { status: 500 }),
-        ),
-      ),
+        const rows = yield* db.execute("select 1 as ok");
+        if (path === "/health" || path === "/") {
+          return yield* HttpServerResponse.json({ rows });
+        }
+        return yield* HttpServerResponse.json({ rows }, { status: 404 });
+      }),
     };
   }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
 ) {}
