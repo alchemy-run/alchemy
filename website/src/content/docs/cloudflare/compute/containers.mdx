@@ -319,6 +319,48 @@ A Worker fronting the same database still binds Hyperdrive — see
 Hyperdrive at the *direct* origin (it pools for the Worker) and the
 container at the pooled one.
 
+## Bind a capability into an effectful container
+
+Everything above is manual env plumbing, which is what an arbitrary
+image needs — it knows nothing about alchemy. An **effectful**
+(`main`) container runs your Effect program, so it can resolve
+capabilities the same way a Worker does:
+
+```typescript
+// src/Api.runtime.ts
+export default Api.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const db = yield* Prisma.Connect(Connection);
+    const sql = yield* SQL.Postgres({ url: db.databaseUrl });
+
+    return Api.of({
+      fetch: Effect.gen(function* () {
+        const users = yield* sql`SELECT * FROM users`;
+        return yield* HttpServerResponse.json(users);
+      }),
+    });
+  }).pipe(Effect.provide(Prisma.ConnectBinding)),
+);
+```
+
+The container never sees a binding: it is a process, not a Worker.
+What it gets is environment variables — the capability writes them
+at deploy time and reads them back at runtime, so you never name
+`DATABASE_URL` yourself.
+
+That divides capabilities cleanly in two. A capability whose config
+travels as env vars works in a container: `Prisma.Connect`, and the
+token-scoped HTTP clients for
+[R2](/cloudflare/data/r2), [KV](/cloudflare/data/kv), and
+[Queues](/cloudflare/messaging/queues) —
+`Cloudflare.R2.ReadWriteBucketHttp` and friends, which mint a scoped
+API token instead of using a native binding. A capability that *is*
+a workerd binding cannot: `Cloudflare.Hyperdrive.Connect`,
+`Cloudflare.D1.QueryDatabase`, and every `*Binding` layer resolve
+against the Workers runtime, which no container process has. Use the
+`*Http` layer where one exists, and env vars otherwise.
+
 ## Bind on an async Worker
 
 An async Worker can host a container-backed Durable Object class

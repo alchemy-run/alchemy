@@ -88,6 +88,23 @@ describe.concurrent.each([
       { timeout },
     );
 
+    // A container is a real process — it has no workerd bindings, so a
+    // capability's only channel into it is the binding contract's `env`.
+    // The provider used to declare that contract and silently drop the
+    // values; this pins that a `Binding.Service`'s `host.bind({ env })`
+    // lands in the container's `process.env`, resolved Output and all.
+    // Same mechanism `Prisma.Connect` rides into a container.
+    test(
+      "a Binding.Service's bound env reaches the container",
+      Effect.gen(function* () {
+        const { url, bucketName } = yield* stack;
+
+        const body = yield* fetchReady(new URL("/bound-env", url), bucketName);
+        expect(JSON.parse(body)).toEqual({ value: bucketName });
+      }).pipe(logLevel),
+      { timeout },
+    );
+
     test(
       "RPC: reads an R2 object from inside the container",
       Effect.gen(function* () {

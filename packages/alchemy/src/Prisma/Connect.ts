@@ -78,8 +78,9 @@ export interface ConnectClient {
 }
 
 /**
- * Bind a {@link Connection} to a Prisma Compute app, AWS Lambda Function, or
- * Cloudflare Worker and obtain the typed runtime client.
+ * Bind a {@link Connection} to a Prisma Compute app, AWS Lambda Function,
+ * Cloudflare Worker, or Cloudflare Container and obtain the typed runtime
+ * client.
  *
  * `Connect` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
@@ -107,6 +108,31 @@ export interface ConnectClient {
  *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
  * );
  * ```
+ *
+ * **Example:** Use a connection inside a Cloudflare Container
+ * ```typescript
+ * export default Api.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connect(connection);
+ *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
+ *
+ *     return Api.of({
+ *       fetch: Effect.gen(function* () {
+ *         const users = yield* sql`SELECT * FROM users`;
+ *         return yield* HttpServerResponse.json(users);
+ *       }),
+ *     });
+ *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
+ * );
+ * ```
+ *
+ * A container is a real process with no workerd bindings, so the connection
+ * travels as plain environment variables — the same channel Prisma Compute
+ * and Lambda use. Start the container with
+ * `Cloudflare.Containers.layer(Api, { enableInternet: true })` so it can
+ * reach the database. (Hyperdrive, by contrast, is a workerd binding and is
+ * unavailable inside a container.)
  *
  * @binding
  */
@@ -183,10 +209,18 @@ type ConnectWorkerBindingHost = Resource<
   { bindings?: ConnectWorkerTextBinding[] }
 >;
 
+/**
+ * Hosts whose runtime configuration travels as plain environment variables:
+ * Prisma Compute, an AWS Lambda Function, and a Cloudflare Container. A
+ * container is a real process with no workerd bindings, so `env` is the only
+ * channel it has — the same contract the other two expose.
+ */
 const supportsConnectEnvBinding = (
   host: ResourceLike | undefined,
 ): host is ConnectEnvBindingHost =>
-  host?.Type === "Prisma.Compute" || host?.Type === "AWS.Lambda.Function";
+  host?.Type === "Prisma.Compute" ||
+  host?.Type === "AWS.Lambda.Function" ||
+  host?.Type === "Cloudflare.Container";
 
 const supportsConnectWorkerBinding = (
   host: ResourceLike | undefined,
@@ -376,7 +410,7 @@ export const ConnectBinding = Layer.effect(
         } else {
           return yield* Effect.die(
             new Error(
-              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host?.Type ?? "no host"}'`,
+              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, Cloudflare.Worker, and Cloudflare.Container runtimes, got '${host?.Type ?? "no host"}'`,
             ),
           );
         }
