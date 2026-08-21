@@ -1646,8 +1646,18 @@ const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
     const response = yield* client.get(
       `${endpoint}/_floci/cloudfront-edge/${distribution.Id}`,
     );
-    const edge = (yield* response.json) as { Port?: number };
-    if (typeof edge.Port !== "number") {
+    // A distribution legitimately has no edge port: the emulator binds one
+    // opportunistically and stays Host-addressable when it can't, and the
+    // endpoint 404s (with a JSON error body) for one it doesn't know yet.
+    // `client.get` does not fail on 404, so every shape lands here — `null`,
+    // an error object, or a port-less entry. Anything that isn't a numeric
+    // `Port` means "no local edge", which is the AWS URL.
+    const edge = (yield* response.json) as { Port?: number } | null;
+    if (
+      edge === null ||
+      typeof edge !== "object" ||
+      typeof edge.Port !== "number"
+    ) {
       return awsUrl;
     }
     const host = yield* Effect.sync(() => new URL(endpoint).hostname);
@@ -1655,7 +1665,11 @@ const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
   }).pipe(
     Effect.timeout("10 seconds"),
     Effect.provide(FetchHttpClient.layer),
-    Effect.orElseSucceed(() => awsUrl),
+    // `orElseSucceed` alone only covers the error channel. A malformed body
+    // throws inside the generator, which Effect surfaces as a DEFECT — that
+    // escaped the fallback and killed a reconcile with a raw TypeError.
+    // Resolving a convenience URL must never be able to fail a deploy.
+    Effect.catchCause(() => Effect.succeed(awsUrl)),
   );
 });
 
