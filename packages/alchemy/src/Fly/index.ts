@@ -1,5 +1,6 @@
 export * from "./App.ts";
 export * from "./AuthProvider.ts";
+export * from "./Bucket.ts";
 export * from "./Catalog.ts";
 export * from "./Certificate.ts";
 export * from "./Checkpoint.ts";
@@ -21,6 +22,7 @@ export * from "./Machine.ts";
 export * from "./Metadata.ts";
 export * from "./MountVolume.ts";
 export * from "./Providers.ts";
+export * from "./Redis.ts";
 export * from "./Secret.ts";
 export * from "./SecretKey.ts";
 export * from "./Service.ts";

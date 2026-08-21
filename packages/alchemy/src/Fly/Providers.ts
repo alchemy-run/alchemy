@@ -5,12 +5,14 @@ import { ProfileLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { App, AppProvider } from "./App.ts";
 import { FlyAuth } from "./AuthProvider.ts";
+import { AttachBucketLive, Bucket, BucketProvider } from "./Bucket.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import { CheckpointHttp } from "./CheckpointHttp.ts";
 import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
 import { Machine, MachineProvider } from "./Machine.ts";
+import { AttachLive, Redis, RedisProvider } from "./Redis.ts";
 import { DecryptHttp } from "./DecryptHttp.ts";
 import { EncryptHttp } from "./EncryptHttp.ts";
 import { ExecHttp } from "./ExecHttp.ts";
@@ -64,9 +66,11 @@ export const providers = () =>
     Providers,
     Provider.collection([
       App,
+      Bucket,
       Certificate,
       IpAssignment,
       Machine,
+      Redis,
       Secret,
       SecretKey,
       Service,
@@ -77,9 +81,11 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         AppProvider(),
+        BucketProvider(),
         CertificateProvider(),
         IpAssignmentProvider(),
         MachineProvider(),
+        RedisProvider(),
         SecretProvider(),
         SecretKeyProvider(),
         ServiceProvider(),
@@ -88,6 +94,8 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(MountVolumeLive),
+    Layer.provideMerge(AttachBucketLive),
+    Layer.provideMerge(AttachLive),
     Layer.provideMerge(CheckpointHttp),
     Layer.provideMerge(ExecHttp),
     Layer.provideMerge(GetSecretHttp),

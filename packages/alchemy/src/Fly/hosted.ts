@@ -126,14 +126,24 @@ export const collectBindingState = (
     .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
+  const redis: { name: string }[] = [];
+  const buckets: { name: string }[] = [];
   for (const binding of active) {
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
       seen.add(mount.path);
       mounts.push(mount);
     }
+    const attached = binding?.data?.redis;
+    if (attached?.name !== undefined && attached.name.length > 0) {
+      redis.push(attached);
+    }
+    const bucket = binding?.data?.bucket;
+    if (bucket?.name !== undefined && bucket.name.length > 0) {
+      buckets.push(bucket);
+    }
   }
-  return { env, mounts };
+  return { env, mounts, redis, buckets };
 };
 
 export const defaultHttpServices = (

@@ -38,6 +38,8 @@ import {
   DEFAULT_PORT,
   type FlyHostRuntimeContext,
 } from "./hosted.ts";
+import { attachBucketSecrets } from "./Bucket.ts";
+import { attachRedisSecrets } from "./Redis.ts";
 import {
   deleteReplicaSet,
   listReplicaSets,
@@ -906,6 +908,8 @@ export const ServiceProvider = () =>
           const count = resolveCount(props.count);
           const port = props.port ?? DEFAULT_PORT;
           const bound = collectBindingState(bindings ?? []);
+          yield* attachRedisSecrets(appName, bound.redis);
+          yield* attachBucketSecrets(appName, bound.buckets);
           const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
           const guest = toFlyGuest(props.guest);
           const services =

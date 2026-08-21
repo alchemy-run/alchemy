@@ -95,6 +95,16 @@ const isBindHost = (
 export interface ServiceBinding {
   env?: Record<string, any>;
   mounts?: DiskSpec[];
+  /**
+   * Upstash Redis add-on to attach. `Fly.Attach` writes `REDIS_URL`
+   * as an App secret during Service reconcile.
+   */
+  redis?: { name: string };
+  /**
+   * Tigris bucket to attach. `Fly.AttachBucket` writes `AWS_*` /
+   * `BUCKET_NAME` as App secrets during Service reconcile.
+   */
+  bucket?: { name: string };
 }
 
 /**
