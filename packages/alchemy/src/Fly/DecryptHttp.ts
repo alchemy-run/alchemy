@@ -18,17 +18,18 @@ import {
  * HTTP implementation of {@link Decrypt}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Decrypt
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const decrypt = yield* Fly.Decrypt(Box);
  *   // ...
  * }).pipe(Effect.provide(Fly.DecryptHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Decrypt
  */
 export const DecryptHttp = Layer.effect(
   Decrypt,

@@ -15,14 +15,15 @@ export interface HeadObjectRequest extends Omit<
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link HeadObjectHttp}.
  *
- * @binding
  *
- * @section Inspecting Objects
- * @example Check an Object's Metadata
+ * ### Inspecting Objects
+ * **Example:** Check an Object's Metadata
  * ```typescript
  * const headObject = yield* Fly.HeadObject(Data);
  * const head = yield* headObject({ Key: "hello.txt" });
  * ```
+ *
+ * @binding
  */
 export interface HeadObject extends Binding.Service<
   HeadObject,

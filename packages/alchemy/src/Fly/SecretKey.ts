@@ -67,99 +67,6 @@ export type SecretKey = Resource<
   Providers
 >;
 
-/**
- * A Fly.SecretKey is an App KMS key, not an env secret. Generate a
- * random key or set raw material. Private bytes never appear in
- * attributes.
- *
- * Use it at runtime with {@link Encrypt}, {@link Decrypt}, {@link Sign},
- * and {@link Verify}. Generate, set, and delete stay on this resource.
- *
- * @resource
- * @see https://docs.machines.dev/secrets/Secretkeys_list
- *
- * @section Generate a key
- * Omit `value` and Fly generates a key via `generateSecretKey`. `type`
- * is Fly's key type (`nacl_sign`, `nacl_box`, `nacl_secretbox`,
- * `hs256`, `hs384`, `hs512`, `xaes256gcm`, `nacl_auth`, `es256`, …).
- *
- * @example Signing key
- * ```typescript
- * export const Signing = Fly.SecretKey("Signing", {
- *   app: Site,
- *   type: "nacl_sign",
- * });
- * ```
- *
- * :::caution[Changing `app`, `name`, or `type` replaces the key]
- * The new key is created. The old one is deleted. Ciphertext from the
- * old key will not decrypt.
- * :::
- *
- * @section Set raw material
- * Pass `value` as bytes. The key is created or updated with
- * `setSecretKey`. Never persisted in state.
- *
- * @example HS256
- * ```typescript
- * const hmac = yield* Fly.SecretKey("Hmac", {
- *   app: Site,
- *   type: "hs256",
- *   value: hmacBytes,
- * });
- * ```
- *
- * @section Encrypt
- * Bind {@link Encrypt} to a box/secretbox/AEAD key. Provide
- * {@link EncryptHttp}. Optional `associatedData` is AEAD associated
- * data.
- *
- * Fly crypto ops need a KMS token. Org API tokens are typed
- * `Forbidden`. Encrypt and sign from a {@link Service}, not a laptop
- * Action.
- *
- * @example Encrypt a payload
- * ```typescript
- * const encrypt = yield* Fly.Encrypt(Box);
- * const { ciphertext } = yield* encrypt({
- *   plaintext: new TextEncoder().encode("attack at dawn"),
- * });
- * ```
- *
- * @section Decrypt
- * Bind {@link Decrypt} to the same key. Plaintext comes back
- * `Redacted`. Unwrap with `Redacted.value`. `associatedData` must
- * match encryption. Provide {@link DecryptHttp}.
- *
- * @example Decrypt a payload
- * ```typescript
- * const decrypt = yield* Fly.Decrypt(Box);
- * const { plaintext } = yield* decrypt({ ciphertext });
- * const bytes = Redacted.value(plaintext);
- * ```
- *
- * @section Sign
- * Bind {@link Sign} to a signing key (`nacl_sign`, `hs256`, `es256`,
- * …). The private key never leaves Fly KMS. Provide {@link SignHttp}.
- *
- * @example Sign a payload
- * ```typescript
- * const sign = yield* Fly.Sign(Signing);
- * const { signature } = yield* sign({
- *   plaintext: new TextEncoder().encode("release-manifest-v1"),
- * });
- * ```
- *
- * @section Verify
- * Bind {@link Verify} to the same key. A bad signature is a typed
- * error from the Machines API. Provide {@link VerifyHttp}.
- *
- * @example Verify a signature
- * ```typescript
- * const verify = yield* Fly.Verify(Signing);
- * const { valid } = yield* verify({ plaintext, signature });
- * ```
- */
 const resolveSecretKeyProps = (
   props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>,
 ): Effect.Effect<SecretKeyProps, never, Providers> =>
@@ -174,6 +81,100 @@ const resolveSecretKeyProps = (
 
 const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
 
+/**
+ * A Fly.SecretKey is an App KMS key, not an env secret. Generate a
+ * random key or set raw material. Private bytes never appear in
+ * attributes.
+ *
+ * Use it at runtime with {@link Encrypt}, {@link Decrypt}, {@link Sign},
+ * and {@link Verify}. Generate, set, and delete stay on this resource.
+ *
+ * @see https://docs.machines.dev/secrets/Secretkeys_list
+ *
+ * ### Generate a key
+ * Omit `value` and Fly generates a key via `generateSecretKey`. `type`
+ * is Fly's key type (`nacl_sign`, `nacl_box`, `nacl_secretbox`,
+ * `hs256`, `hs384`, `hs512`, `xaes256gcm`, `nacl_auth`, `es256`, …).
+ *
+ * **Example:** Signing key
+ * ```typescript
+ * export const Signing = Fly.SecretKey("Signing", {
+ *   app: Site,
+ *   type: "nacl_sign",
+ * });
+ * ```
+ *
+ * :::caution[Changing `app`, `name`, or `type` replaces the key]
+ * The new key is created. The old one is deleted. Ciphertext from the
+ * old key will not decrypt.
+ * :::
+ *
+ * ### Set raw material
+ * Pass `value` as bytes. The key is created or updated with
+ * `setSecretKey`. Never persisted in state.
+ *
+ * **Example:** HS256
+ * ```typescript
+ * const hmac = yield* Fly.SecretKey("Hmac", {
+ *   app: Site,
+ *   type: "hs256",
+ *   value: hmacBytes,
+ * });
+ * ```
+ *
+ * ### Encrypt
+ * Bind {@link Encrypt} to a box/secretbox/AEAD key. Provide
+ * {@link EncryptHttp}. Optional `associatedData` is AEAD associated
+ * data.
+ *
+ * Fly crypto ops need a KMS token. Org API tokens are typed
+ * `Forbidden`. Encrypt and sign from a {@link Service}, not a laptop
+ * Action.
+ *
+ * **Example:** Encrypt a payload
+ * ```typescript
+ * const encrypt = yield* Fly.Encrypt(Box);
+ * const { ciphertext } = yield* encrypt({
+ *   plaintext: new TextEncoder().encode("attack at dawn"),
+ * });
+ * ```
+ *
+ * ### Decrypt
+ * Bind {@link Decrypt} to the same key. Plaintext comes back
+ * `Redacted`. Unwrap with `Redacted.value`. `associatedData` must
+ * match encryption. Provide {@link DecryptHttp}.
+ *
+ * **Example:** Decrypt a payload
+ * ```typescript
+ * const decrypt = yield* Fly.Decrypt(Box);
+ * const { plaintext } = yield* decrypt({ ciphertext });
+ * const bytes = Redacted.value(plaintext);
+ * ```
+ *
+ * ### Sign
+ * Bind {@link Sign} to a signing key (`nacl_sign`, `hs256`, `es256`,
+ * …). The private key never leaves Fly KMS. Provide {@link SignHttp}.
+ *
+ * **Example:** Sign a payload
+ * ```typescript
+ * const sign = yield* Fly.Sign(Signing);
+ * const { signature } = yield* sign({
+ *   plaintext: new TextEncoder().encode("release-manifest-v1"),
+ * });
+ * ```
+ *
+ * ### Verify
+ * Bind {@link Verify} to the same key. A bad signature is a typed
+ * error from the Machines API. Provide {@link VerifyHttp}.
+ *
+ * **Example:** Verify a signature
+ * ```typescript
+ * const verify = yield* Fly.Verify(Signing);
+ * const { valid } = yield* verify({ plaintext, signature });
+ * ```
+ *
+ * @resource
+ */
 export const SecretKey: typeof SecretKeyResource = Object.assign(
   (
     id: string,

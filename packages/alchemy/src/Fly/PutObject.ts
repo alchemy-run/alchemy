@@ -13,10 +13,9 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  * bucket name, endpoint, and credentials are injected automatically.
  * Provide {@link PutObjectHttp}.
  *
- * @binding
  *
- * @section Writing Objects
- * @example Put an Object
+ * ### Writing Objects
+ * **Example:** Put an Object
  * ```typescript
  * const putObject = yield* Fly.PutObject(Data);
  *
@@ -26,6 +25,8 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  *   ContentType: "text/plain",
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutObject extends Binding.Service<
   PutObject,

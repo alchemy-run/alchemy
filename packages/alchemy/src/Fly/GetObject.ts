@@ -12,10 +12,9 @@ export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link GetObjectHttp}.
  *
- * @binding
  *
- * @section Reading Objects
- * @example Read an Object and Decode Its Body
+ * ### Reading Objects
+ * **Example:** Read an Object and Decode Its Body
  * ```typescript
  * const getObject = yield* Fly.GetObject(Data);
  *
@@ -25,6 +24,8 @@ export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetObject extends Binding.Service<
   GetObject,

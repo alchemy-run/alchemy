@@ -17,17 +17,18 @@ import { Sign, type SignRequest } from "./Sign.ts";
  * HTTP implementation of {@link Sign}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Sign
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const sign = yield* Fly.Sign(Signing);
  *   // ...
  * }).pipe(Effect.provide(Fly.SignHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Sign
  */
 export const SignHttp = Layer.effect(
   Sign,

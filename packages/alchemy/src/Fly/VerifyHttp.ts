@@ -15,17 +15,18 @@ import { Verify, type VerifyRequest } from "./Verify.ts";
  * HTTP implementation of {@link Verify}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Verify
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const verify = yield* Fly.Verify(Signing);
  *   // ...
  * }).pipe(Effect.provide(Fly.VerifyHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Verify
  */
 export const VerifyHttp = Layer.effect(
   Verify,

@@ -25,17 +25,18 @@ export interface ExecRequest {
 /**
  * Run a command on a {@link Sprite} via `POST /sprites/{name}/exec`.
  *
- * @binding
  *
- * @section Exec a command
+ * ### Exec a command
  * Bind the client in init. Provide {@link ExecHttp}. The Sprite name
  * is fixed by `Exec(box)`.
  *
- * @example List files
+ * **Example:** List files
  * ```typescript
  * const exec = yield* Fly.Exec(Box);
  * const result = yield* exec({ cmd: ["ls", "-la"] });
  * ```
+ *
+ * @binding
  */
 export interface Exec extends Binding.Service<
   Exec,

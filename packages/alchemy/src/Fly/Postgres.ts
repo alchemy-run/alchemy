@@ -160,14 +160,13 @@ export type Postgres = Resource<
  * A Fly.Postgres is a Managed Postgres (MPG) cluster. It is billed.
  * Do not wrap unmanaged `fly postgres`.
  *
- * @resource
  * @see https://fly.io/docs/mpg/create-and-connect/
  *
- * @section Create a cluster
+ * ### Create a cluster
  * `region` is required. Alchemy generates a unique name unless you
  * pass one. Omit `name` in tests and CI.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -178,11 +177,11 @@ export type Postgres = Resource<
  * Managed Postgres is billed. Basic is about $38 per month.
  * :::
  *
- * @section Plan
+ * ### Plan
  * `plan` is the hardware size: `basic`, `starter`, `launch`,
  * `scale`, `performance`. Default is `basic`.
  *
- * @example Starter
+ * **Example:** Starter
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -194,11 +193,11 @@ export type Postgres = Resource<
  * Changing `plan` later is ignored. Fly has no cluster update API.
  * :::
  *
- * @section Region
+ * ### Region
  * The cluster is regional. An {@link App} is global. Pass `region`
  * on the cluster, not on the App.
  *
- * @example Pin a region
+ * **Example:** Pin a region
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "lhr",
@@ -210,10 +209,10 @@ export type Postgres = Resource<
  * deleted. Data is not copied.
  * :::
  *
- * @section Volume size
+ * ### Volume size
  * `volumeSizeGb` is the initial disk. Fly defaults to 10 GB.
  *
- * @example 20 GB
+ * **Example:** 20 GB
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -225,10 +224,10 @@ export type Postgres = Resource<
  * Changing `volumeSizeGb` later is ignored.
  * :::
  *
- * @section PostGIS
+ * ### PostGIS
  * `postgis: true` enables PostGIS at create.
  *
- * @example Enable PostGIS
+ * **Example:** Enable PostGIS
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -240,12 +239,12 @@ export type Postgres = Resource<
  * Flipping `postgis` later is ignored.
  * :::
  *
- * @section Connect from a Service
+ * ### Connect from a Service
  * Yield `ConnectPostgres` inside init. Provide
  * {@link ConnectPostgresHttp}. Pass `conn.connectionString` to
  * `Drizzle.Postgres` or `SQL.Postgres`.
  *
- * @example Bind and query
+ * **Example:** Bind and query
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Postgres";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -266,11 +265,11 @@ export type Postgres = Resource<
  * ) {}
  * ```
  *
- * @section Migrations
+ * ### Migrations
  * Pass a directory, `{ dir, table? }`, or a `Drizzle.Schema` resource.
  * Alchemy applies pending files on deploy over the direct URI.
  *
- * @example Directory
+ * **Example:** Directory
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -278,7 +277,7 @@ export type Postgres = Resource<
  * });
  * ```
  *
- * @example Drizzle.Schema
+ * **Example:** Drizzle.Schema
  * ```typescript
  * const schema = yield* Drizzle.Schema("app-schema", {
  *   schema: "./src/schema.ts",
@@ -290,6 +289,8 @@ export type Postgres = Resource<
  *   migrations: schema,
  * });
  * ```
+ *
+ * @resource
  */
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 

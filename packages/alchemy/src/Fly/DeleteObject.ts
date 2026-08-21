@@ -15,14 +15,15 @@ export interface DeleteObjectRequest extends Omit<
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link DeleteObjectHttp}.
  *
- * @binding
  *
- * @section Deleting Objects
- * @example Delete an Object
+ * ### Deleting Objects
+ * **Example:** Delete an Object
  * ```typescript
  * const deleteObject = yield* Fly.DeleteObject(Data);
  * yield* deleteObject({ Key: "hello.txt" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteObject extends Binding.Service<
   DeleteObject,

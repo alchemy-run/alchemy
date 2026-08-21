@@ -17,17 +17,18 @@ import {
  * HTTP implementation of {@link Encrypt}. Provide it on the
  * {@link Service} or Action Effect.
  *
- * @layer
- * @provides Fly.Encrypt
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const encrypt = yield* Fly.Encrypt(Box);
  *   // ...
  * }).pipe(Effect.provide(Fly.EncryptHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Encrypt
  */
 export const EncryptHttp = Layer.effect(
   Encrypt,

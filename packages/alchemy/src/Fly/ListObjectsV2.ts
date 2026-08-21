@@ -15,14 +15,15 @@ export interface ListObjectsV2Request extends Omit<
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link ListObjectsV2Http}.
  *
- * @binding
  *
- * @section Listing Objects
- * @example List Objects Under a Prefix
+ * ### Listing Objects
+ * **Example:** List Objects Under a Prefix
  * ```typescript
  * const listObjects = yield* Fly.ListObjectsV2(Data);
  * const result = yield* listObjects({ Prefix: "jobs/", MaxKeys: 100 });
  * ```
+ *
+ * @binding
  */
 export interface ListObjectsV2 extends Binding.Service<
   ListObjectsV2,

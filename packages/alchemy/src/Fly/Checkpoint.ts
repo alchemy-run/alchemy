@@ -49,21 +49,20 @@ export interface CheckpointClient {
 /**
  * Checkpoint and restore a {@link Sprite} filesystem.
  *
- * @binding
  *
- * @section Create a checkpoint
+ * ### Create a checkpoint
  * Bind the client in init. Provide {@link CheckpointHttp}.
  *
- * @example Create
+ * **Example:** Create
  * ```typescript
  * const checkpoint = yield* Fly.Checkpoint(Box);
  * yield* checkpoint.create({ comment: "before deploy" });
  * ```
  *
- * @section Restore
+ * ### Restore
  * Restore rewinds the filesystem. Running processes stop.
  *
- * @example Restore v1
+ * **Example:** Restore v1
  * ```typescript
  * yield* checkpoint.restore("v1");
  * ```
@@ -71,6 +70,8 @@ export interface CheckpointClient {
  * :::caution[Restore is destructive]
  * The Sprite disk goes back to that checkpoint. Later writes are gone.
  * :::
+ *
+ * @binding
  */
 export interface Checkpoint extends Binding.Service<
   Checkpoint,

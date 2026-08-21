@@ -10,17 +10,18 @@ import { makeHttpSpriteBinding } from "./SpriteHttp.ts";
  * HTTP implementation of {@link Checkpoint}. Provide it on the
  * {@link Sprite}, {@link Service}, or Action Effect.
  *
- * @layer
- * @provides Fly.Checkpoint
  *
- * @section Provide the layer
- * @example On a Sprite
+ * ### Provide the layer
+ * **Example:** On a Sprite
  * ```typescript
  * Effect.gen(function* () {
  *   const checkpoint = yield* Fly.Checkpoint(Box);
  *   // ...
  * }).pipe(Effect.provide(Fly.CheckpointHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Checkpoint
  */
 export const CheckpointHttp = Layer.effect(
   Checkpoint,

@@ -56,11 +56,11 @@ export const PublicIp = Fly.IpAssignment("Shared", {
 Yield it next to the Service.
 
 ```diff lang="typescript"
-  Effect.gen(function* () {
-    const api = yield* Api;
-+    const ip = yield* PublicIp;
-    return { url: api.url, ip: ip.ip };
-  }),
+Effect.gen(function* () {
+  const api = yield* Api;
++  const ip = yield* PublicIp;
+  return { url: api.url, ip: ip.ip };
+}),
 ```
 
 `v6` is free dedicated IPv6. `v4` is billed dedicated IPv4 and may
