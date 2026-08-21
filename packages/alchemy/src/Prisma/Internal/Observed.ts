@@ -44,6 +44,44 @@ export interface ObservedConnectionRecord extends ObservedConnection {
   readonly database: { readonly id: string };
 }
 
+export interface ObservedSourceRepository {
+  readonly id: string;
+  readonly projectId: string;
+  readonly repoId: number;
+  readonly provider: "github";
+  readonly repoFullName: string;
+  readonly defaultBranch: string;
+  readonly isPrivate: boolean;
+  readonly status: "active" | "archived";
+  readonly installationId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ObservedEnvironmentVariable {
+  readonly id: string;
+  readonly projectId: string;
+  readonly branchId: string | null;
+  readonly class: "production" | "preview";
+  readonly key: string;
+  readonly valueKid: string;
+  readonly isManagedBySystem: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ObservedBucketKey {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface ObservedBucket {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly project: { readonly id: string };
+}
+
 export interface ObservedBranch {
   readonly id: string;
   readonly gitName: string;
@@ -81,6 +119,11 @@ export interface ObservedProject {
   readonly defaultRegion: string | null;
   readonly workspace: { readonly id: string };
 }
+
+/** Read a required possibly-redacted secret as a plain string. */
+export const requiredSecretValue = (
+  value: string | Redacted.Redacted<string>,
+): string => (typeof value === "string" ? value : Redacted.value(value));
 
 /** Read a possibly-redacted secret as a plain string. */
 export const secretValue = (

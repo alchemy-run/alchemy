@@ -50,6 +50,7 @@ import {
   data as envelope,
   failure,
   json,
+  noContent,
   notFound,
   makeFakeManagementApi,
   page,
@@ -434,9 +435,10 @@ const asResponse = (
 ): Response => {
   if (Result.isFailure(outcome)) {
     const error = outcome.failure;
+    // Never 5xx: a transient status would be replayed by the retry policy.
     return error instanceof PrismaApiError
       ? failure(error.status, "error", error.message)
-      : failure(500, "error", String(error));
+      : failure(400, "error", String(error));
   }
   return outcome.success === undefined
     ? notFound("not found")
@@ -488,9 +490,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "PATCH")
         return call(client.updateProject, [id, body]);
       if (request.method === "DELETE") {
-        return asResponse(runHandler(client.deleteProject(id)), () =>
-          json(null, { status: 204 }),
-        );
+        return voidResponse(runHandler(client.deleteProject(id)));
       }
     }
 
@@ -509,9 +509,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "PATCH")
         return call(client.updateDatabase, [id, body]);
       if (request.method === "DELETE") {
-        return asResponse(runHandler(client.deleteDatabase(id)), () =>
-          json(null, { status: 204 }),
-        );
+        return voidResponse(runHandler(client.deleteDatabase(id)));
       }
     }
 
@@ -524,10 +522,75 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (tail === "rotate") return call(client.rotateConnection, [id]);
       if (request.method === "GET") return call(client.getConnection, [id]);
       if (request.method === "DELETE") {
-        return asResponse(runHandler(client.deleteConnection(id)), () =>
-          json(null, { status: 204 }),
-        );
+        return voidResponse(runHandler(client.deleteConnection(id)));
       }
+    }
+
+    if (head === "environment-variables") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(
+              client.listEnvironmentVariables,
+              [Object.fromEntries(new URLSearchParams(request.search))],
+              list,
+            )
+          : call(client.createEnvironmentVariable, [body]);
+      }
+      if (request.method === "GET") {
+        return call(client.getEnvironmentVariable, [id]);
+      }
+      if (request.method === "PATCH") {
+        return call(client.updateEnvironmentVariable, [id, body]);
+      }
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteEnvironmentVariable(id)));
+      }
+    }
+
+    if (head === "source-repositories") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(
+              client.listSourceRepositories,
+              [Object.fromEntries(new URLSearchParams(request.search))],
+              list,
+            )
+          : call(client.createSourceRepository, [body]);
+      }
+      if (request.method === "GET") {
+        return call(client.getSourceRepository, [id]);
+      }
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteSourceRepository(id)));
+      }
+    }
+
+    if (head === "buckets") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(client.listBuckets, [], list)
+          : call(client.createBucket, [body]);
+      }
+      if (tail === "keys") {
+        return request.method === "GET"
+          ? call(client.listBucketKeys, [id, { limit: 100 }], list)
+          : call(client.createBucketKey, [id, body]);
+      }
+      if (request.method === "GET") return call(client.getBucket, [id]);
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteBucket(id)));
+      }
+    }
+
+    if (head === "apps" && id !== undefined && tail === undefined) {
+      if (request.method === "GET") return call(client.getApp, [id]);
+    }
+    if (head === "apps" && id === undefined && request.method === "GET") {
+      return call(
+        client.listApps,
+        [Object.fromEntries(new URLSearchParams(request.search))],
+        list,
+      );
     }
 
     if (head === "branches" && id !== undefined) {
@@ -535,14 +598,22 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       if (request.method === "PATCH")
         return call(client.updateBranch, [id, body]);
       if (request.method === "DELETE") {
-        return asResponse(runHandler(client.deleteBranch(id)), () =>
-          json(null, { status: 204 }),
-        );
+        return voidResponse(runHandler(client.deleteBranch(id)));
       }
     }
 
     return unhandled(request);
   }
+};
+
+const voidResponse = (outcome: ReturnType<typeof runHandler>): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return noContent();
 };
 
 const managementApi = (client: any) =>
@@ -1867,6 +1938,8 @@ describe("Prisma resource providers", () => {
         "GET /v1/databases/database-1/connections",
         "GET /v1/databases/database-1/connections",
         "GET /v1/projects/project-1/branches",
+        "GET /v1/environment-variables",
+        "GET /v1/source-repositories",
       ]);
       expect(calls.map(([operation]) => operation)).toEqual([
         "listDatabaseConnections",
@@ -2187,6 +2260,12 @@ describe("Prisma resource providers", () => {
           "POST /v1/connections",
           "GET /v1/projects/project-1/branches",
           "POST /v1/projects/project-1/branches",
+          "POST /v1/environment-variables",
+          "GET /v1/apps",
+          "GET /v1/projects/project-1/databases",
+          "POST /v1/source-repositories",
+          "GET /v1/source-repositories/repo-1",
+          "GET /v1/projects/project-1/branches",
         ]);
         expect(fake.captured[0]?.bodyJson).toEqual({
           name: "app",
@@ -2254,11 +2333,8 @@ describe("Prisma resource providers", () => {
           ],
           [
             "listApps",
-            {
-              projectId: "project-1",
-              branchId: "unassigned",
-              limit: 100,
-            },
+            // Query parameters arrive as strings over the wire.
+            { limit: "100", projectId: "project-1", branchId: "unassigned" },
           ],
           [
             "listProjectDatabases",
@@ -2266,11 +2342,11 @@ describe("Prisma resource providers", () => {
           ],
           [
             "createSourceRepository",
+            // JSON transport drops `undefined` members.
             {
               projectId: "project-1",
               provider: "github",
               providerRepositoryId: 123,
-              installationId: undefined,
             },
           ],
           ["getSourceRepository", "repo-1"],
@@ -2278,7 +2354,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { limit: "100", gitName: "main" },
             },
           ],
         ]);
@@ -2740,11 +2816,12 @@ describe("Prisma resource providers", () => {
         expect(calls).toEqual([
           [
             "listEnvironmentVariables",
+            // Query parameters arrive as strings over the wire.
             {
+              limit: "100",
               projectId: "project-1",
               class: "production",
               key: "TOKEN",
-              limit: 100,
             },
           ],
           ["getEnvironmentVariable", "env-project"],
@@ -2825,11 +2902,12 @@ describe("Prisma resource providers", () => {
       expect(calls).toEqual([
         [
           "listEnvironmentVariables",
+          // Query parameters arrive as strings over the wire.
           {
+            limit: "100",
             projectId: "project-1",
             class: "production",
             key: "PRISMA_INTERNAL_URL",
-            limit: 100,
           },
         ],
         ["getEnvironmentVariable", "env-system"],
@@ -5381,6 +5459,17 @@ describe("Prisma resource providers", () => {
         { databaseId: "database-1", name: "api-000000000000" },
         undefined,
         { gitName: "preview" },
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "TOKEN",
+          value: "secret",
+        },
+        {
+          projectId: "project-1",
+          provider: "github",
+          providerRepositoryId: 123,
+        },
       ]);
       expect(calls.filter(([name]) => name.startsWith("create"))).toEqual([
         [

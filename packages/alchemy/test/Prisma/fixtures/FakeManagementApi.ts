@@ -53,6 +53,9 @@ export const page = <T>(
   nextCursor: string | null = null,
 ) => json({ data: items, pagination: { hasMore, nextCursor } });
 
+/** `204 No Content` — the Management API's delete responses. */
+export const noContent = () => new Response(null, { status: 204 });
+
 /** `{ error: { code, message } }` with a real status code. */
 export const failure = (
   status: number,

@@ -29,6 +29,8 @@ import { expect, it } from "alchemy-test";
 import {
   conflict,
   data,
+  failure,
+  noContent,
   type FakeManagementApi,
   json,
   makeFakeManagementApi,
@@ -114,6 +116,100 @@ const databaseLayer = (
     Layer.provideMerge(fake.layer),
   );
 
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers this
+ * suite declares, for the resources that now call distilled operations. The
+ * handlers are synchronous, so the fake runs them directly: an injected
+ * `PrismaApiError` becomes its real status, `undefined` becomes a 404, and a
+ * void handler answers 204.
+ */
+const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+const errorResponse = (error: unknown): Response =>
+  // Never 5xx: a transient status would be replayed by the retry policy.
+  error instanceof PrismaApiError
+    ? failure(error.status, "error", error.message)
+    : failure(400, "error", String(error));
+
+const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response =>
+  Result.isFailure(outcome)
+    ? errorResponse(outcome.failure)
+    : outcome.success === undefined
+      ? notFound("not found")
+      : wrap(outcome.success);
+
+const voidResponse = (outcome: ReturnType<typeof runHandler>): Response =>
+  Result.isFailure(outcome) ? errorResponse(outcome.failure) : noContent();
+
+const clientBackedApi = (client: any) =>
+  makeFakeManagementApi((request) => {
+    // segments[0] is the "v1" prefix.
+    const [head, id, tail] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const body = request.bodyJson as any;
+    const query = Object.fromEntries(new URLSearchParams(request.search));
+    const call = (
+      handler: unknown,
+      args: unknown[],
+      wrap: (value: unknown) => Response = (value) => data(value),
+    ) =>
+      typeof handler === "function"
+        ? asResponse(runHandler((handler as any)(...args)), wrap)
+        : unhandled(request);
+    const list = (value: unknown) => page(value as unknown[]);
+
+    if (head === "projects") {
+      if (id === undefined && request.method === "GET") {
+        return call(client.listProjects, [], list);
+      }
+      if (tail === "branches" && request.method === "GET") {
+        return call(client.listBranches, [id, query], list);
+      }
+      if (tail === "databases" && request.method === "GET") {
+        return call(client.listProjectDatabases, [id, query], list);
+      }
+    }
+    if (head === "apps" && id === undefined && request.method === "GET") {
+      return call(client.listApps, [query], list);
+    }
+    if (head === "environment-variables") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(client.listEnvironmentVariables, [query], list)
+          : call(client.createEnvironmentVariable, [body]);
+      }
+      if (request.method === "GET") {
+        return call(client.getEnvironmentVariable, [id]);
+      }
+      if (request.method === "PATCH") {
+        return call(client.updateEnvironmentVariable, [id, body]);
+      }
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteEnvironmentVariable(id)));
+      }
+    }
+    if (head === "source-repositories") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(client.listSourceRepositories, [query], list)
+          : call(client.createSourceRepository, [body]);
+      }
+      if (request.method === "GET") {
+        return call(client.getSourceRepository, [id]);
+      }
+      if (request.method === "DELETE") {
+        return voidResponse(runHandler(client.deleteSourceRepository(id)));
+      }
+    }
+    return unhandled(request);
+  });
+
 const environmentVariableLayer = (client: PrismaManagementClient) =>
   Layer.effect(
     TestPrismaProviders,
@@ -122,6 +218,7 @@ const environmentVariableLayer = (client: PrismaManagementClient) =>
     Layer.provideMerge(EnvironmentVariableProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(clientBackedApi(client).layer),
   );
 
 const customDomainLayer = (client: PrismaManagementClient) =>
@@ -142,6 +239,7 @@ const sourceRepositoryLayer = (client: PrismaManagementClient) =>
     Layer.provideMerge(SourceRepositoryProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(clientBackedApi(client).layer),
   );
 
 const apiProject = (

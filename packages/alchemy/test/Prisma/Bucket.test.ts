@@ -15,6 +15,16 @@ import type {
   BucketKeyWithSecret,
 } from "@/Prisma/Types";
 import { describe, expect, it } from "alchemy-test";
+import * as Result from "effect/Result";
+import {
+  data as envelope,
+  failure,
+  noContent,
+  makeFakeManagementApi,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -74,7 +84,7 @@ const persistedKeyAttrs = (id: string): BucketAccessKey["Attributes"] => ({
   bucketName: "user-bucket-1",
 });
 
-const notFound = (path: string) =>
+const apiNotFound = (path: string) =>
   new PrismaApiError({
     method: "GET",
     path,
@@ -88,16 +98,96 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
   adopt: false,
 });
 
+/**
+ * Serve the Management API's bucket routes from the same hermetic
+ * client-shaped handlers this suite already declares. The handlers are
+ * synchronous, so the fake runs them directly and maps their results onto the
+ * wire: an injected `PrismaApiError` becomes its real status, `undefined`
+ * becomes a 404, everything else a `{ data }` / `{ data, pagination }`
+ * envelope.
+ */
+const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    // Never 5xx: a transient status would be replayed by the retry policy.
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return outcome.success === undefined
+    ? notFound("not found")
+    : wrap(outcome.success);
+};
+
+const voidResponse = (outcome: ReturnType<typeof runHandler>): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return noContent();
+};
+
+const bucketApi = (client: any) =>
+  makeFakeManagementApi((request) => {
+    // segments[0] is the "v1" prefix.
+    const [head, bucketId, tail, keyId] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const body = request.bodyJson as any;
+    const call = (
+      handler: unknown,
+      args: unknown[],
+      wrap: (value: unknown) => Response = (value) => envelope(value),
+    ) =>
+      typeof handler === "function"
+        ? asResponse(runHandler((handler as any)(...args)), wrap)
+        : unhandled(request);
+    const list = (value: unknown) => page(value as unknown[]);
+
+    if (head !== "buckets") return unhandled(request);
+    if (bucketId === undefined) {
+      return request.method === "GET"
+        ? call(client.listBuckets, [], list)
+        : call(client.createBucket, [body]);
+    }
+    if (tail === "keys") {
+      if (keyId !== undefined) {
+        return voidResponse(
+          runHandler(client.deleteBucketKey(bucketId, keyId)),
+        );
+      }
+      return request.method === "GET"
+        ? call(client.listBucketKeys, [bucketId, { limit: 100 }], list)
+        : call(client.createBucketKey, [bucketId, body]);
+    }
+    if (request.method === "GET") return call(client.getBucket, [bucketId]);
+    if (request.method === "DELETE") {
+      return voidResponse(runHandler(client.deleteBucket(bucketId)));
+    }
+    return unhandled(request);
+  });
+
 const bucketLayer = (client: PrismaManagementClient) =>
   BucketProvider().pipe(
     Layer.provide(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(bucketApi(client).layer),
   );
 
 const bucketKeyLayer = (client: PrismaManagementClient) =>
   BucketAccessKeyProvider().pipe(
     Layer.provide(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(bucketApi(client).layer),
   );
 
 const reconcileInput = <Props, Attributes>(
@@ -218,7 +308,7 @@ describe("Prisma Bucket provider", () => {
   it.effect("recreates the bucket when the persisted one is gone", () => {
     let creates = 0;
     const client = {
-      getBucket: (id: string) => Effect.fail(notFound(`/v1/buckets/${id}`)),
+      getBucket: (id: string) => Effect.fail(apiNotFound(`/v1/buckets/${id}`)),
       createBucket: () =>
         Effect.sync(() => {
           creates += 1;
@@ -246,7 +336,7 @@ describe("Prisma Bucket provider", () => {
       getBucket: (id: string) =>
         id === "bucket-1"
           ? Effect.succeed(apiBucket(id, "uploads"))
-          : Effect.fail(notFound(`/v1/buckets/${id}`)),
+          : Effect.fail(apiNotFound(`/v1/buckets/${id}`)),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
@@ -321,11 +411,11 @@ describe("Prisma Bucket provider", () => {
       getBucket: (id: string) =>
         id === "bucket-1"
           ? Effect.succeed(apiBucket(id, "uploads"))
-          : Effect.fail(notFound(`/v1/buckets/${id}`)),
+          : Effect.fail(apiNotFound(`/v1/buckets/${id}`)),
       deleteBucket: (id: string) =>
         Effect.sync(() => {
           deletes += 1;
-        }).pipe(Effect.andThen(Effect.fail(notFound(`/v1/buckets/${id}`)))),
+        }).pipe(Effect.andThen(Effect.fail(apiNotFound(`/v1/buckets/${id}`)))),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
@@ -612,7 +702,7 @@ describe("Prisma BucketAccessKey provider", () => {
           expect(keyId).toBe("key-1");
         }).pipe(
           Effect.andThen(
-            Effect.fail(notFound("/v1/buckets/bucket-1/keys/key-1")),
+            Effect.fail(apiNotFound("/v1/buckets/bucket-1/keys/key-1")),
           ),
         ),
     } as unknown as PrismaManagementClient;
