@@ -3478,16 +3478,11 @@ export const LiveWorkerProvider = () =>
               previousClassName = observed.className;
             }
           }
-          if (!previousClassName) {
-            // A class new to this script is a host move when the declaration
-            // says so: `transferredFrom` lists the former host(s) — moves
-            // are always declared, never inferred, because a class deleted
-            // on one worker and created on another is otherwise ambiguous
-            // between "move the data" and "delete + fresh namespace". The
-            // declared source must be observed to still host the namespace;
-            // otherwise (fresh stage, transfer already completed) fall
-            // through to a plain create.
-            const fromScript = dispatchNamespace
+          // A class new to this script is a host move only when the
+          // declaration names a source that still owns its namespace.
+          // Otherwise it is a plain SQLite-backed create.
+          const fromScript = !previousClassName
+            ? dispatchNamespace
               ? undefined
               : yield* resolveTransferSource({
                   accountId,
@@ -3499,28 +3494,16 @@ export const LiveWorkerProvider = () =>
                     name,
                   ),
                   observedNamespaces,
-                });
-            if (fromScript !== undefined) {
-              // Data-preserving move: ship Cloudflare's
-              // `transferred_classes` migration instead of creating a
-              // fresh class.
-              transferredClasses.push({
-                from: binding.className,
-                fromScript,
-                to: binding.className,
-              });
-              continue;
-            }
-            // Default all new Durable Object classes to SQLite. Cloudflare
-            // recommends SQLite for new namespaces, and container-backed
-            // Durable Objects require it.
-            newSqliteClasses.push(binding.className);
-          } else if (previousClassName !== binding.className) {
-            renamedClasses.push({
-              from: previousClassName,
-              to: binding.className,
-            });
-          }
+                })
+            : undefined;
+          const migration = planDurableObjectClassMigration({
+            previousClassName,
+            className: binding.className,
+            fromScript,
+          });
+          newSqliteClasses.push(...migration.newSqliteClasses);
+          renamedClasses.push(...migration.renamedClasses);
+          transferredClasses.push(...migration.transferredClasses);
         }
 
         yield* Effect.logInfo(
@@ -5628,6 +5611,32 @@ export function selectWorkerMigrationTags(
           : [],
     ),
   );
+}
+
+/** @internal exported for unit testing. */
+export function planDurableObjectClassMigration({
+  previousClassName,
+  className,
+  fromScript,
+}: {
+  previousClassName: string | undefined;
+  className: string;
+  fromScript?: string;
+}) {
+  return {
+    newSqliteClasses:
+      previousClassName === undefined && fromScript === undefined
+        ? [className]
+        : [],
+    renamedClasses:
+      previousClassName !== undefined && previousClassName !== className
+        ? [{ from: previousClassName, to: className }]
+        : [],
+    transferredClasses:
+      previousClassName === undefined && fromScript !== undefined
+        ? [{ from: className, fromScript, to: className }]
+        : [],
+  };
 }
 
 const isDurableObjectTag = (tag: string) =>

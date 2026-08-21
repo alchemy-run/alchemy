@@ -2,6 +2,7 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  planDurableObjectClassMigration,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -19,13 +20,21 @@ import * as Result from "effect/Result";
 
 describe("WorkerProvider", () => {
   describe("selectWorkerMigrationTags", () => {
-    const precreatedTags = ["alchemy:dos:SeatConnector=SeatConnector"];
+    const precreatedTags = [
+      "alchemy:dos:ExampleDurableObject=ExampleDurableObject",
+    ];
 
     test("prevents a duplicate create migration when precreate settings are missing", () => {
       const tags = selectWorkerMigrationTags(undefined, precreatedTags, true);
+      const previousClassNames = getDurableObjectTagMap(tags);
+      const migration = planDurableObjectClassMigration({
+        previousClassName: previousClassNames.ExampleDurableObject,
+        className: "ExampleDurableObject",
+      });
 
-      expect(getDurableObjectTagMap(tags)).toEqual({
-        SeatConnector: "SeatConnector",
+      expect(migration.newSqliteClasses).toEqual([]);
+      expect(previousClassNames).toEqual({
+        ExampleDurableObject: "ExampleDurableObject",
       });
     });
 
@@ -43,6 +52,46 @@ describe("WorkerProvider", () => {
       const tags = selectWorkerMigrationTags(undefined, precreatedTags, false);
 
       expect(tags).toEqual([]);
+    });
+
+    test("classifies new, renamed, and transferred classes", () => {
+      expect(
+        planDurableObjectClassMigration({
+          previousClassName: undefined,
+          className: "NewClass",
+        }),
+      ).toEqual({
+        newSqliteClasses: ["NewClass"],
+        renamedClasses: [],
+        transferredClasses: [],
+      });
+      expect(
+        planDurableObjectClassMigration({
+          previousClassName: "OldClass",
+          className: "RenamedClass",
+        }),
+      ).toEqual({
+        newSqliteClasses: [],
+        renamedClasses: [{ from: "OldClass", to: "RenamedClass" }],
+        transferredClasses: [],
+      });
+      expect(
+        planDurableObjectClassMigration({
+          previousClassName: undefined,
+          className: "MovedClass",
+          fromScript: "former-host",
+        }),
+      ).toEqual({
+        newSqliteClasses: [],
+        renamedClasses: [],
+        transferredClasses: [
+          {
+            from: "MovedClass",
+            fromScript: "former-host",
+            to: "MovedClass",
+          },
+        ],
+      });
     });
   });
 
