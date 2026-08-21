@@ -37,8 +37,8 @@ We [forked](https://github.com/alchemy-run/floci)
 [floci](https://floci.io)'s AWS implementation because they've
 already laid a great foundation for local development but don't
 have full coverage. They're adding more every day, but we want
-to automate the emulator's development and push quickly for
-100%. In this version we focused on patching services floci
+to automate the emulator's development and will push for 100%
+next release. In this version we focused on patching services floci
 already supported — **219 resources across ~39 services** — and
 added MicroVMs, a new service that is very important to alchemy.
 
