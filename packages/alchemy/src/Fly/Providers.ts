@@ -12,6 +12,8 @@ import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
 import { Machine, MachineProvider } from "./Machine.ts";
+import { Postgres, PostgresProvider } from "./Postgres.ts";
+import { AttachPostgresLive } from "./PostgresAttach.ts";
 import { AttachLive, Redis, RedisProvider } from "./Redis.ts";
 import { DecryptHttp } from "./DecryptHttp.ts";
 import { EncryptHttp } from "./EncryptHttp.ts";
@@ -70,6 +72,7 @@ export const providers = () =>
       Certificate,
       IpAssignment,
       Machine,
+      Postgres,
       Redis,
       Secret,
       SecretKey,
@@ -85,6 +88,7 @@ export const providers = () =>
         CertificateProvider(),
         IpAssignmentProvider(),
         MachineProvider(),
+        PostgresProvider(),
         RedisProvider(),
         SecretProvider(),
         SecretKeyProvider(),
@@ -95,6 +99,7 @@ export const providers = () =>
     ),
     Layer.provideMerge(MountVolumeLive),
     Layer.provideMerge(AttachBucketLive),
+    Layer.provideMerge(AttachPostgresLive),
     Layer.provideMerge(AttachLive),
     Layer.provideMerge(CheckpointHttp),
     Layer.provideMerge(ExecHttp),

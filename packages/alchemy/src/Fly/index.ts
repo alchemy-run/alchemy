@@ -21,6 +21,8 @@ export * from "./ListSecretsHttp.ts";
 export * from "./Machine.ts";
 export * from "./Metadata.ts";
 export * from "./MountVolume.ts";
+export * from "./Postgres.ts";
+export * from "./PostgresAttach.ts";
 export * from "./Providers.ts";
 export * from "./Redis.ts";
 export * from "./Secret.ts";
