@@ -1590,8 +1590,16 @@ export const TableProvider = () =>
                   // own, and one can deny the tag read outright (a restrictive
                   // resource policy live; a peer test's table under the local
                   // emulator). A table we cannot read is not ours to return.
+                  // `TableNotFoundException` completes the set: a peer can
+                  // delete a table between `listTables` and our describes, and
+                  // that is what DynamoDB raises for a table that vanished.
                   Effect.catchTag(
-                    ["ValidationException", "AccessDeniedException"],
+                    [
+                      "ValidationException",
+                      "AccessDeniedException",
+                      "TableNotFoundException",
+                      "ResourceNotFoundException",
+                    ],
                     () => Effect.succeed(undefined),
                   ),
                 ),
