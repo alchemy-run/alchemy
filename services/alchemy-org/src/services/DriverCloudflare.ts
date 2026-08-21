@@ -1,7 +1,6 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Layer from "effect/Layer";
-import { SANDBOX } from "../SandboxChoice.ts";
 import { Model } from "./Model.ts";
 import { SessionIndexD1 } from "./SessionIndexD1.ts";
 
@@ -25,19 +24,14 @@ export const DriverCloudflare = Layer.mergeAll(
     Layer.provide(Model),
     // the driver's `Sessions.list` delegates to the index
     Layer.provide(SessionIndexD1),
-    // every session's own machine: in CONTAINER mode the driver's
-    // session DO binds the sandbox container to its namespace at PLAN
-    // time (the attachment is undiscoverable from call-time layers) —
-    // the charters then reach it through `SandboxContainerSession` at
-    // call time. In MICROVM mode no container attaches (the machine is
-    // an AWS MicroVM the charters launch through the image bindings).
+    // every session's own machine — HARDCODED to the AWS MicroVM (see
+    // Worker.ts), so NO container attaches to the session DO. For the
+    // Cloudflare Container machine, the DO must bind the image to its
+    // namespace at PLAN time (the attachment is undiscoverable from
+    // call-time layers) — swap `undefined` for
+    // `Cloudflare.AI.SandboxContainerImage`.
     Layer.provide(
-      Layer.succeed(
-        Cloudflare.AI.SessionContainerImage,
-        SANDBOX === "container"
-          ? Cloudflare.AI.SandboxContainerImage
-          : undefined,
-      ),
+      Layer.succeed(Cloudflare.AI.SessionContainerImage, undefined),
     ),
   ),
   // provideMERGE: the HTTP surface reads the index the stream writes

@@ -24,7 +24,6 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { testAlchemy } from "./src/Repos.ts";
-import { SANDBOX } from "./src/SandboxChoice.ts";
 import Worker from "./src/Worker.ts";
 
 export default Alchemy.Stack(
@@ -39,11 +38,7 @@ export default Alchemy.Stack(
     ),
     state: Cloudflare.state(),
   },
-  program(),
-);
-
-function program() {
-  const stack = Effect.gen(function* () {
+  Effect.gen(function* () {
     const repo = yield* testAlchemy;
     const org = yield* Worker;
 
@@ -83,23 +78,13 @@ function program() {
       /** The backend's own door (the GitHub webhook targets this). */
       api: org.url,
     };
-  });
-
-  // The session sandbox image, per the SANDBOX switch
-  // (src/SandboxChoice.ts) — branched at the PROGRAM level so each arm
-  // provides a single concrete Layer (a ternary inside Effect.provide
-  // makes a union of Layer types, which its overloads reject):
-  //
-  // - container (default): the STOCK slim Cloudflare Container image
-  //   (bun + git + ripgrep; builds in seconds). The CIRCULAR image
-  //   (src/Sandbox.ts — the whole alchemy repo baked in) swaps in
-  //   here once the runtime builds images off the worker's startup
-  //   path: baking it takes many minutes, and today that blocks
-  //   every request.
-  // - microvm: the SAME guest physics as an AWS Lambda MicroVM image
-  //   (Firecracker; built server-side on AWS — the account must be
-  //   onboarded to the MicroVM preview and `alchemy aws bootstrap`ed).
-  return SANDBOX === "microvm"
-    ? stack.pipe(Effect.provide(AWS.AI.SandboxMicrovmRuntime))
-    : stack.pipe(Effect.provide(Cloudflare.AI.SandboxContainerRuntime));
-}
+  }).pipe(
+    // The session sandbox image — HARDCODED to the AWS Lambda MicroVM
+    // (Firecracker; the SAME guest physics as the container image,
+    // built server-side on AWS; locally, floci emulates the MicroVM
+    // API). To go back to the Cloudflare Container machine, swap for
+    // `Cloudflare.AI.SandboxContainerRuntime` (and mirror the swap in
+    // src/Worker.ts + src/services/DriverCloudflare.ts).
+    Effect.provide(AWS.AI.SandboxMicrovmRuntime),
+  ),
+);

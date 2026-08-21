@@ -27,18 +27,27 @@ import {
 } from "./tools/index.ts";
 import { ReadOutputLive } from "./tools/ReadOutput.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
-import { SANDBOX } from "./SandboxChoice.ts";
 
-/** The container machine: a Cloudflare Container attached to the
- *  session's Durable Object. */
-const ContainerSandbox = Cloudflare.AI.SandboxContainerSession({
-  enableInternet: true,
-});
-
-/** The MicroVM machine: an AWS Lambda MicroVM launched from the shared
- *  image, driven cross-cloud from this Worker (the HTTP/token binding
- *  impls mint an IAM user + assume-role for the Worker). */
-const MicrovmSandbox = AWS.AI.SandboxMicrovmSession().pipe(
+/**
+ * Each session's own machine, resolved at CALL time from the session
+ * (the layers build in the shared per-isolate graph). ONE const — the
+ * toolbox, the spill store, and the checkout share the machine.
+ *
+ * HARDCODED to the AWS Lambda MicroVM (Firecracker) launched from the
+ * shared image, driven cross-cloud from this Worker (the HTTP/token
+ * binding impls mint an IAM user + assume-role for the Worker). To go
+ * back to the Cloudflare Container attached to the session DO, swap
+ * this const for:
+ *
+ * ```ts
+ * const SandboxSession = Cloudflare.AI.SandboxContainerSession({
+ *   enableInternet: true,
+ * });
+ * ```
+ *
+ * (and mirror the swap in services/DriverCloudflare.ts + alchemy.run.ts)
+ */
+const SandboxSession = AWS.AI.SandboxMicrovmSession().pipe(
   Layer.provide(
     Layer.mergeAll(
       AWS.Lambda.RunMicrovmHttp,
@@ -47,19 +56,6 @@ const MicrovmSandbox = AWS.AI.SandboxMicrovmSession().pipe(
     ),
   ),
 );
-
-type LayerR<L> = L extends Layer.Layer<any, any, infer R> ? R : never;
-
-/** Each session's own machine, resolved at CALL time from the session
- *  (the layers build in the shared per-isolate graph). ONE const —
- *  the toolbox, the spill store, and the checkout share the machine.
- *  Widened to the union of both machines' requirements so the
- *  ORG_SANDBOX ternary stays a single Layer type. */
-const SandboxSession: Layer.Layer<
-  AI.Sandbox,
-  never,
-  LayerR<typeof ContainerSandbox> | LayerR<typeof MicrovmSandbox>
-> = SANDBOX === "microvm" ? MicrovmSandbox : ContainerSandbox;
 
 /** The artifact store on that same machine (readOutput reads what the
  *  spill net and the bash tool parked). */
