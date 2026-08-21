@@ -83,11 +83,10 @@ export type VolumeAttachment = Resource<
  * `volume`/`server` pair. Changing either replaces the attachment.
  * `automount` updates in place (detach + re-attach).
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#volume-actions-attach-volume-to-a-server
  *
- * @section Attaching a Volume
- * @example Attach a Volume to a Server
+ * ### Attaching a Volume
+ * **Example:** Attach a Volume to a Server
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   serverType: "cx23",
@@ -105,7 +104,7 @@ export type VolumeAttachment = Resource<
  * });
  * ```
  *
- * @example Attach with automount
+ * **Example:** Attach with automount
  * ```typescript
  * const attachment = yield* Hetzner.VolumeAttachment("data-attach", {
  *   volume,
@@ -113,6 +112,8 @@ export type VolumeAttachment = Resource<
  *   automount: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const VolumeAttachment = Resource<VolumeAttachment>(
   "Hetzner.VolumeAttachment",

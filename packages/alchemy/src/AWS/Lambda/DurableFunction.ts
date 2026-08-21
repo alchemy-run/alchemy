@@ -550,9 +550,8 @@ const composeDurableImpl = (
  * between a plain `Function` and a `DurableFunction` replaces the physical
  * function (DurableConfig cannot be flipped in place).
  *
- * @resource
- * @section Defining a Durable Function
- * @example Class form with steps and a durable sleep
+ * ### Defining a Durable Function
+ * **Example:** Class form with steps and a durable sleep
  * ```typescript
  * export class OrderFlow extends AWS.Lambda.DurableFunction<OrderFlow>()(
  *   "OrderFlow",
@@ -578,7 +577,7 @@ const composeDurableImpl = (
  * ) {}
  * ```
  *
- * @example Tag + default export (entrypoint form)
+ * **Example:** Tag + default export (entrypoint form)
  * ```typescript
  * // order-flow.ts — `main` points at this module
  * export class OrderFlow extends AWS.Lambda.DurableFunction<OrderFlow>()(
@@ -595,7 +594,7 @@ const composeDurableImpl = (
  * );
  * ```
  *
- * @example Inline effect form
+ * **Example:** Inline effect form
  * ```typescript
  * const flow = yield* AWS.Lambda.DurableFunction(
  *   "OrderFlow",
@@ -608,8 +607,8 @@ const composeDurableImpl = (
  * );
  * ```
  *
- * @section Starting and Monitoring Executions
- * @example Starting an execution
+ * ### Starting and Monitoring Executions
+ * **Example:** Starting an execution
  * ```typescript
  * const orders = yield* OrderFlow;
  * const ref = yield* orders.start({
@@ -619,7 +618,7 @@ const composeDurableImpl = (
  * });
  * ```
  *
- * @example Publish and promote for production
+ * **Example:** Publish and promote for production
  * ```typescript
  * const orders = yield* OrderFlow;
  * const version = yield* AWS.Lambda.Version("OrderFlowVersion", {
@@ -637,14 +636,14 @@ const composeDurableImpl = (
  * });
  * ```
  *
- * @example Checking status
+ * **Example:** Checking status
  * ```typescript
  * const execution = yield* orders.get(ref.executionArn!);
  * // execution.Status: "RUNNING" | "SUCCEEDED" | "FAILED" | ...
  * ```
  *
- * @section External Callbacks
- * @example Waiting for an approval
+ * ### External Callbacks
+ * **Example:** Waiting for an approval
  * ```typescript
  * const approval = yield* AWS.Lambda.Durable.waitForCallback<{ ok: boolean }>(
  *   "approve",
@@ -652,6 +651,8 @@ const composeDurableImpl = (
  *   { timeout: "1 day" },
  * );
  * ```
+ *
+ * @resource
  */
 export const DurableFunction: DurableFunctionClass = taggedFunction(
   DurableFunctionScope,

@@ -138,8 +138,8 @@ export interface PostgresRoleAttributes {
  *
  * For MySQL databases, use {@link MySQLPassword} instead.
  *
- * @section Creating a Role
- * @example Postgres admin role
+ * ### Creating a Role
+ * **Example:** Postgres admin role
  * ```typescript
  * const admin = yield* Planetscale.PostgresRole("Admin", {
  *   database: "my-db",
@@ -147,7 +147,7 @@ export interface PostgresRoleAttributes {
  * });
  * ```
  *
- * @example Read-only role
+ * **Example:** Read-only role
  * ```typescript
  * const reader = yield* Planetscale.PostgresRole("Reader", {
  *   database: "my-db",
@@ -155,7 +155,7 @@ export interface PostgresRoleAttributes {
  * });
  * ```
  *
- * @example Role with TTL
+ * **Example:** Role with TTL
  * ```typescript
  * const tempReader = yield* Planetscale.PostgresRole("TempReader", {
  *   database: "my-db",

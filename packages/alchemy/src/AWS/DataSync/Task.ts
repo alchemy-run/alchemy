@@ -88,9 +88,8 @@ export interface Task extends Resource<
  * destination locations and the task mode are immutable; everything else
  * (name, options, filters, schedule, log group, tags) is updated in place.
  *
- * @resource
- * @section Creating Tasks
- * @example S3 → S3 transfer
+ * ### Creating Tasks
+ * **Example:** S3 → S3 transfer
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -100,7 +99,7 @@ export interface Task extends Resource<
  * });
  * ```
  *
- * @example With verification and a schedule
+ * **Example:** With verification and a schedule
  * ```typescript
  * const task = yield* AWS.DataSync.Task("Nightly", {
  *   sourceLocationArn: source.locationArn,
@@ -109,6 +108,8 @@ export interface Task extends Resource<
  *   schedule: { ScheduleExpression: "cron(0 2 * * ? *)" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Task = Resource<Task>("AWS.DataSync.Task");
 

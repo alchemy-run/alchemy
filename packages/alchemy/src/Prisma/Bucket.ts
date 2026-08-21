@@ -73,9 +73,8 @@ export interface Bucket extends Resource<
  * deletes the bucket, its objects, and any remaining access keys — the
  * Management API cascades the deletion server-side.
  *
- * @resource
- * @section Creating a Bucket
- * @example Bucket in a project
+ * ### Creating a Bucket
+ * **Example:** Bucket in a project
  * ```typescript
  * const bucket = yield* Prisma.Bucket("uploads", {
  *   project,
@@ -83,14 +82,16 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * @section Accessing a Bucket
- * @example S3 credentials for a bucket
+ * ### Accessing a Bucket
+ * **Example:** S3 credentials for a bucket
  * ```typescript
  * const key = yield* Prisma.BucketAccessKey("uploads-key", {
  *   bucket,
  *   role: "read_write",
  * });
  * ```
+ *
+ * @resource
  */
 export const Bucket = Resource<Bucket>("Prisma.Bucket");
 

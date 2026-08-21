@@ -1,6 +1,5 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
-import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -10,13 +9,11 @@ const aws = AWS.providers();
 const WEBSITE_DOMAIN = Config.string("WEBSITE_DOMAIN").pipe(
   Config.option,
   Config.map(Option.getOrUndefined),
-  (config) => config.asEffect(),
 );
 
 const WEBSITE_ZONE_ID = Config.string("WEBSITE_ZONE_ID").pipe(
   Config.option,
   Config.map(Option.getOrUndefined),
-  (config) => config.asEffect(),
 );
 
 const WEBSITE_ALIASES = Config.string("WEBSITE_ALIASES").pipe(
@@ -28,7 +25,6 @@ const WEBSITE_ALIASES = Config.string("WEBSITE_ALIASES").pipe(
       .map((part) => part.trim())
       .filter(Boolean),
   ),
-  (config) => config.asEffect(),
 );
 
 export default Alchemy.Stack(
@@ -61,42 +57,36 @@ export default Alchemy.Stack(
         paths: "all",
       },
       tags: {
-        Example: "aws-vite",
+        Example: "aws-website-vite",
         Surface: "website",
         Mode: "router",
       },
     });
 
-    const site = yield* AWS.Website.StaticSite("FrontendSite", {
-      path: ".",
-      build: {
-        command: "bun run build",
-        output: "dist",
-      },
-      environment: {
-        VITE_STAGE: "test",
-      },
-      spa: true,
+    // `alchemy deploy` runs `vite build` and serves the output from S3
+    // through the Router; `alchemy dev` runs Vite's own dev server (HMR
+    // included) and the site's url is the local server — no cloud
+    // resources are created.
+    const site = yield* AWS.Website.Vite("FrontendSite", {
       domain: {
         router,
       },
       tags: {
-        Example: "aws-vite",
+        Example: "aws-website-vite",
         Surface: "website",
       },
     });
 
     return {
-      url: router.url,
+      url: site.url,
       cloudFrontDomain: router.distribution.domainName,
       distributionId: router.distribution.distributionId,
-      bucketName: site.bucket.bucketName,
+      bucketName: site.bucket?.bucketName,
       buildHash: site.build?.hash,
-      assetVersion: site.files.version,
+      assetVersion: site.files?.version,
       certificateArn: router.certificate?.certificateArn as any,
       customDomain: websiteDomain?.name,
       aliasRecordNames: router.records.map((record) => record.name),
-      previewHint: Output.interpolate`Run bun run dev:vite for local frontend iteration, then deploy to publish ${router.distribution.domainName}`,
     };
   }),
 );

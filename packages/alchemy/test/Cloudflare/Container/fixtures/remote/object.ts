@@ -1,13 +1,38 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+
+/**
+ * A sibling resource whose output is threaded into the container's `env`,
+ * proving that a pre-built image (no Effect bundling, no `.make()`) receives
+ * environment variables that resolve from other resources in the stack.
+ */
+export const EnvBucket = Cloudflare.R2.Bucket("RemoteContainerEnvBucket", {
+  forceDestroy: true,
+});
+
+/** Plain-text env value the container is expected to echo back verbatim. */
+export const DEMO_PLAIN = "hello-from-env";
+/** `Redacted` env value — encrypted in state, plain inside the container. */
+export const DEMO_SECRET = "sh-hh-its-a-secret";
 
 export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
   "RemoteContainer",
-  {
-    image: "mendhak/http-https-echo:latest",
-    observability: { logs: { enabled: true } },
-  },
+  Effect.gen(function* () {
+    const bucket = yield* EnvBucket;
+    return {
+      image: "mendhak/http-https-echo:latest",
+      observability: { logs: { enabled: true } },
+      env: {
+        // Tells the echo image to include `process.env` in its JSON response.
+        ECHO_INCLUDE_ENV_VARS: "1",
+        DEMO_PLAIN,
+        DEMO_SECRET: Redacted.make(DEMO_SECRET),
+        DEMO_BUCKET: bucket.bucketName,
+      },
+    };
+  }),
 ) {}
 
 /**

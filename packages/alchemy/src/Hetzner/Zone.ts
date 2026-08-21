@@ -120,11 +120,10 @@ export type Zone = Resource<
  * The zone `name` is the identity: changing it replaces the zone. Default
  * TTL, labels, and delete protection update in place. Resource record sets
  * are a separate resource (`RecordSet`).
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#zones
  *
- * @section Creating a Zone
- * @example Primary zone with a default TTL
+ * ### Creating a Zone
+ * **Example:** Primary zone with a default TTL
  * ```typescript
  * const zone = yield* Hetzner.Zone("example", {
  *   name: "example.com",
@@ -132,7 +131,7 @@ export type Zone = Resource<
  * });
  * ```
  *
- * @example Zone with labels and delete protection
+ * **Example:** Zone with labels and delete protection
  * ```typescript
  * const zone = yield* Hetzner.Zone("example", {
  *   name: "example.com",
@@ -140,6 +139,8 @@ export type Zone = Resource<
  *   deleteProtection: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Zone = Resource<Zone>("Hetzner.Zone");
 

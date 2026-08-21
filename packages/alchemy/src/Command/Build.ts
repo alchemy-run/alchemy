@@ -74,9 +74,8 @@ export interface Build extends Resource<
  * Inputs are content-hashed by default so an unchanged project skips the
  * rebuild entirely; set `memo: false` to rebuild on every deploy.
  *
- * @resource
- * @section Building a Vite App
- * @example Basic Vite Build
+ * ### Building a Vite App
+ * **Example:** Basic Vite Build
  * ```typescript
  * const build = yield* Build("vite-build", {
  *   command: "npm run build",
@@ -87,8 +86,8 @@ export interface Build extends Resource<
  * yield* Console.log(build.hash.output); // hash of the output files (when memo is enabled)
  * ```
  *
- * @section Building with Custom Environment
- * @example Build with Environment Variables
+ * ### Building with Custom Environment
+ * **Example:** Build with Environment Variables
  * ```typescript
  * const build = yield* Build("production-build", {
  *   command: "npm run build",
@@ -101,8 +100,8 @@ export interface Build extends Resource<
  * });
  * ```
  *
- * @section Customizing Memoization
- * @example Customize Memoization
+ * ### Customizing Memoization
+ * **Example:** Customize Memoization
  * ```typescript
  * const build = yield* Build("custom-build", {
  *   command: "npm run build",
@@ -111,6 +110,8 @@ export interface Build extends Resource<
  *   memo: { include: ["src/**", "package.json"], exclude: ["node_modules", "dist"] },
  * });
  * ```
+ *
+ * @resource
  */
 export const Build = Resource<Build>("Command.Build");
 

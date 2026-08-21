@@ -13,11 +13,8 @@ import type { Stream } from "./Stream.ts";
  *
  * The Cloudflare Worker `pipelines` binding is producer-only — `send`
  * ingests a batch of JSON records into the stream.
- * @binding
- * @product Pipelines
- * @category Storage & Databases
- * @section Sending Events
- * @example Producer route
+ * ### Sending Events
+ * **Example:** Producer route
  * ```typescript
  * const events = yield* Cloudflare.Pipelines.WriteStream(Stream);
  *
@@ -35,6 +32,10 @@ import type { Stream } from "./Stream.ts";
  * `WriteStream` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
  * `yield* Cloudflare.Pipelines.WriteStream(stream)`.
+ *
+ * @binding
+ * @product Pipelines
+ * @category Storage & Databases
  */
 export interface WriteStream extends Binding.Service<
   WriteStream,

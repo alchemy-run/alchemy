@@ -12,7 +12,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
+import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -26,13 +26,6 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-app");
-
-// Keep the temp clone under the alchemy package (same convention as the
-// Vite tests) so the project root stays representable relative to cwd and
-// module resolution from the clone walks up into the workspace
-// node_modules (next, react, @opennextjs/cloudflare are devDependencies
-// of the alchemy package).
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const nextjsProps = (rootDir: string) => ({
   rootDir,
@@ -87,9 +80,11 @@ describe.concurrent("Nextjs", () => {
 
         yield* stack.destroy();
 
+        // Clone outside the repo so Next does not treat the alchemy
+        // monorepo as the workspace root (that lookup hits typescript 7
+        // / tsgo, which has no `lib/typescript.js`).
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-",
-          tempRoot,
           entries: [
             "package.json",
             "tsconfig.json",
@@ -101,7 +96,7 @@ describe.concurrent("Nextjs", () => {
             "public",
           ],
         });
-        yield* linkJsApiTypeScript(rootDir);
+        yield* prepareNextjsFixture(rootDir);
 
         const bindingMarker = "nextjs-binding-marker";
 

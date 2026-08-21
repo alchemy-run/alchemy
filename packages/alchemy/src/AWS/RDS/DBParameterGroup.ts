@@ -85,9 +85,8 @@ export interface DBParameterGroup extends Resource<
  *
  * Name, family, and description changes force a replacement (RDS has no
  * modify API for these); parameters and tags update in place.
- * @resource
- * @section Creating a Parameter Group
- * @example Parameter Group for Aurora Postgres 16 Instances
+ * ### Creating a Parameter Group
+ * **Example:** Parameter Group for Aurora Postgres 16 Instances
  * ```typescript
  * const instanceParams = yield* DBParameterGroup("InstanceParams", {
  *   family: "aurora-postgresql16",
@@ -95,7 +94,7 @@ export interface DBParameterGroup extends Resource<
  * });
  * ```
  *
- * @example Set Engine Parameters
+ * **Example:** Set Engine Parameters
  * ```typescript
  * const params = yield* DBParameterGroup("MysqlParams", {
  *   family: "mysql8.4",
@@ -109,7 +108,7 @@ export interface DBParameterGroup extends Resource<
  * Cluster-wide settings belong on `DBClusterParameterGroup` instead — Postgres
  * `timezone`, for example, is a cluster parameter on Aurora.
  *
- * @example Attach to an Instance
+ * **Example:** Attach to an Instance
  * ```typescript
  * const writer = yield* DBInstance("Writer", {
  *   dbClusterIdentifier: cluster.dbClusterIdentifier,
@@ -118,6 +117,8 @@ export interface DBParameterGroup extends Resource<
  *   dbParameterGroupName: instanceParams.dbParameterGroupName,
  * });
  * ```
+ *
+ * @resource
  */
 export const DBParameterGroup = Resource<DBParameterGroup>(
   "AWS.RDS.DBParameterGroup",

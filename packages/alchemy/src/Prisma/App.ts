@@ -105,22 +105,23 @@ export interface App extends Resource<
  * build, deployment, health-check, and promotion workflow; use `App` directly
  * when managing standalone `Prisma.Deployment` resources.
  *
- * @resource
- * @section Creating an App
- * @example App on the default branch
+ * ### Creating an App
+ * **Example:** App on the default branch
  * ```typescript
  * const app = yield* Prisma.App("web", {
  *   project,
  * });
  * ```
  *
- * @example App on a preview branch
+ * **Example:** App on a preview branch
  * ```typescript
  * const app = yield* Prisma.App("preview-web", {
  *   project,
  *   branchId: preview.branchId,
  * });
  * ```
+ *
+ * @resource
  */
 export const App = Resource<App>("Prisma.App");
 

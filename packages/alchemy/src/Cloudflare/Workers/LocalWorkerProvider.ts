@@ -1260,7 +1260,7 @@ export const LocalWorkerProvider = () =>
           };
           const serverUrl = yield* config.source
             ? config.source.devMode === "server"
-              ? runVite(worker, undefined, invalidate, {
+              ? runVite(worker, config.source.rootDir, invalidate, {
                   descriptor: config.source,
                   id: worker.id,
                   assets: worker.assets,

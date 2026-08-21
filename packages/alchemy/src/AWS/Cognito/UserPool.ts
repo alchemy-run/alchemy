@@ -277,16 +277,15 @@ export interface UserPool extends Resource<
  * An Amazon Cognito user pool — a managed user directory that handles
  * sign-up, sign-in, and token issuance (OIDC-compliant JWTs) for your
  * application.
- * @resource
- * @section Creating a User Pool
- * @example Basic User Pool
+ * ### Creating a User Pool
+ * **Example:** Basic User Pool
  * ```typescript
  * import * as Cognito from "alchemy/AWS/Cognito";
  *
  * const pool = yield* Cognito.UserPool("Users", {});
  * ```
  *
- * @example Email Sign-In with Password Policy
+ * **Example:** Email Sign-In with Password Policy
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {
  *   usernameAttributes: ["email"],
@@ -298,7 +297,7 @@ export interface UserPool extends Resource<
  * });
  * ```
  *
- * @example Admin-Only User Creation
+ * **Example:** Admin-Only User Creation
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {
  *   adminCreateUserOnly: true,
@@ -306,8 +305,8 @@ export interface UserPool extends Resource<
  * });
  * ```
  *
- * @section Custom Attributes
- * @example Pool with Custom Schema Attributes
+ * ### Custom Attributes
+ * **Example:** Pool with Custom Schema Attributes
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {
  *   schema: [
@@ -317,8 +316,8 @@ export interface UserPool extends Resource<
  * });
  * ```
  *
- * @section App Clients and Auth
- * @example Pool with an App Client
+ * ### App Clients and Auth
+ * **Example:** Pool with an App Client
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {});
  * const client = yield* Cognito.UserPoolClient("Web", {
@@ -326,6 +325,8 @@ export interface UserPool extends Resource<
  *   explicitAuthFlows: ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
  * });
  * ```
+ *
+ * @resource
  */
 export const UserPool = Resource<UserPool>("AWS.Cognito.UserPool");
 

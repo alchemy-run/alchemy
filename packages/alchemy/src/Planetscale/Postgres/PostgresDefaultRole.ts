@@ -77,8 +77,8 @@ export interface PostgresDefaultRoleAttributes {
 /**
  * The default PlanetScale PostgreSQL role for a database branch.
  *
- * @section Creating a Default Role
- * @example Default role on the main branch
+ * ### Creating a Default Role
+ * **Example:** Default role on the main branch
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", {
  *   clusterSize: "PS_10",

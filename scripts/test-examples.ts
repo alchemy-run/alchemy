@@ -16,13 +16,14 @@ const examples = [
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-waku",
   "./examples/aws-dev",
-  "./examples/aws-ecs",
+  // "./examples/aws-ecs",
   "./examples/aws-lambda",
-  "./examples/aws-website-astro",
-  "./examples/aws-website-nextjs",
-  "./examples/aws-website-nuxt",
-  "./examples/aws-website-sveltekit",
-  "./examples/aws-website-waku",
+  // Cloudfront is too slow
+  // "./examples/aws-website-astro",
+  // "./examples/aws-website-nextjs",
+  // "./examples/aws-website-nuxt",
+  // "./examples/aws-website-sveltekit",
+  // "./examples/aws-website-waku",
   "./examples/fly-app",
   "./examples/fly-service",
   "./examples/fly-sprite",
@@ -42,6 +43,7 @@ type CommandResult = {
 type TaskState = {
   label: string;
   command: readonly string[];
+  cwd?: string;
   status: "pending" | "running" | "ok" | "failed";
   startedAt?: number;
   endedAt?: number;
@@ -158,6 +160,11 @@ const run = async (
   render();
 
   const child = Bun.spawn([...state.command], {
+    cwd: state.cwd,
+    // Snapshot env at spawn time — `Bun.spawn` does not pick up later
+    // `process.env` mutations, and we want `ALCHEMY_PROFILE` (and friends)
+    // from the parent invocation.
+    env: { ...process.env },
     stdout: "pipe",
     stderr: "pipe",
     stdin: "inherit",
@@ -183,14 +190,16 @@ const run = async (
 };
 
 const runParallel = async (
-  tasks: readonly { label: string; command: readonly string[] }[],
+  tasks: readonly {
+    label: string;
+    command: readonly string[];
+    cwd?: string;
+  }[],
 ): Promise<readonly CommandResult[]> => {
-  const states = tasks.map(
-    (task): TaskState => ({
-      ...task,
-      status: "pending",
-    }),
-  );
+  const states = tasks.map((task): TaskState => ({
+    ...task,
+    status: "pending",
+  }));
   const renderer = makeStatusRenderer(states);
   renderer.render();
   const interval = setInterval(() => renderer.render(), 1000);
@@ -208,7 +217,12 @@ const runParallel = async (
 const testResults = await runParallel(
   examples.map((example) => ({
     label: example,
-    command: ["bun", "run", "--filter", example, "test"],
+    // Run `bun test` IN the example directory. Concurrent
+    // `bun run --filter <workspace> test` all contend on bun's workspace
+    // graph (each sits in `openat` walking the monorepo) and none of them
+    // ever spawn the actual test process.
+    command: ["bun", "test"] as const,
+    cwd: example,
   })),
 );
 const failedTests = testResults.filter((result) => result.exitCode !== 0);

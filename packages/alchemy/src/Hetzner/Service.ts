@@ -106,11 +106,10 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * at a path — the same `(volume, server, path)` from two Services is one
  * attach and one mount.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#servers
  *
- * @section Hosting a Service
- * @example HTTP server on a Server
+ * ### Hosting a Service
+ * **Example:** HTTP server on a Server
  * ```typescript
  * const server = yield* Hetzner.Server("box", {
  *   serverType: "cpx12",
@@ -129,12 +128,14 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Volumes
- * @example Mount a Volume
+ * ### Volumes
+ * **Example:** Mount a Volume
  * ```typescript
  * const mount = yield* Hetzner.MountVolume(volume, { path: "/data" });
  * // write/read files under mount.path inside the hosted process
  * ```
+ *
+ * @resource
  */
 export const Service: Platform<
   Service,

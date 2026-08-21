@@ -105,9 +105,8 @@ export interface Domain extends Resource<
  * `datazone.amazonaws.com`, with the `AmazonDataZoneDomainExecutionRolePolicy`
  * managed policy) unless an explicit `domainExecutionRole` is supplied.
  *
- * @resource
- * @section Creating Domains
- * @example Minimal Domain
+ * ### Creating Domains
+ * **Example:** Minimal Domain
  * ```typescript
  * import * as DataZone from "alchemy/AWS/DataZone";
  *
@@ -116,7 +115,7 @@ export interface Domain extends Resource<
  * });
  * ```
  *
- * @example Domain with an Explicit Execution Role
+ * **Example:** Domain with an Explicit Execution Role
  * ```typescript
  * const domain = yield* DataZone.Domain("governance", {
  *   name: "acme-governance",
@@ -125,14 +124,16 @@ export interface Domain extends Resource<
  * });
  * ```
  *
- * @section Using the Domain
- * @example Create a Project in the Domain
+ * ### Using the Domain
+ * **Example:** Create a Project in the Domain
  * ```typescript
  * const project = yield* DataZone.Project("analytics", {
  *   domainId: domain.domainId,
  *   description: "Analytics team project",
  * });
  * ```
+ *
+ * @resource
  */
 export const Domain = Resource<Domain>("AWS.DataZone.Domain");
 

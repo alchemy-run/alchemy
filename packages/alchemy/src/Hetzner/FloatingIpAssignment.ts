@@ -81,11 +81,10 @@ export type FloatingIpAssignment = Resource<
  * may hold many Floating IPs. Destroying the assignment unassigns the IP
  * but leaves both the Floating IP and the Server in place.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#floating-ip-actions-assign-a-floating-ip-to-a-server
  *
- * @section Assigning a Floating IP
- * @example Assign an IPv4 to a Server
+ * ### Assigning a Floating IP
+ * **Example:** Assign an IPv4 to a Server
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   image: "ubuntu-24.04",
@@ -102,13 +101,15 @@ export type FloatingIpAssignment = Resource<
  * });
  * ```
  *
- * @example Assign with stub identities
+ * **Example:** Assign with stub identities
  * ```typescript
  * const assignment = yield* Hetzner.FloatingIpAssignment("public-ip-web", {
  *   floatingIp: { id: 123 },
  *   server: { serverId: 42 },
  * });
  * ```
+ *
+ * @resource
  */
 export const FloatingIpAssignment = Resource<FloatingIpAssignment>(
   "Hetzner.FloatingIpAssignment",
