@@ -426,11 +426,11 @@
     "yaml": "catalog:shared"
   },
   "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@cloudflare/containers": "catalog:cloudflare",
     "@cloudflare/puppeteer": "catalog:cloudflare",
     "@cloudflare/workers-types": "catalog:cloudflare-runtime",
-    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/platform-node-shared": "catalog:effect",
@@ -485,6 +485,7 @@
     "ws": "catalog:shared"
   },
   "peerDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
@@ -501,6 +502,9 @@
     "ws": "catalog:shared"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/frontend-frameworks": {
+      "optional": true
+    },
     "@aws/durable-execution-sdk-js": {
       "optional": true
     },
