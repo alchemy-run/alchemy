@@ -2,6 +2,7 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  resolveWorkerReadProps,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -12,11 +13,89 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
+import type { WorkerProps } from "@/Cloudflare/Workers/Worker";
+import { isResolved } from "@/Diff";
+import * as Output from "@/Output";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 
 describe("WorkerProvider", () => {
+  describe("resolveWorkerReadProps", () => {
+    test("keeps an explicit name while stripping an unresolved env binding", () => {
+      const result = resolveWorkerReadProps({
+        name: "existing-worker",
+        env: { DATABASE: Output.literal("database-id") },
+        domain: "app.example.com",
+        routes: [{ pattern: "app.example.com/*" }],
+        crons: ["0 * * * *"],
+      });
+
+      expect(Option.isSome(result)).toBe(true);
+      if (Option.isSome(result)) {
+        expect(isResolved(result.value)).toBe(true);
+        expect(result.value.name).toBe("existing-worker");
+        expect(result.value.env?.DATABASE).toBeUndefined();
+        expect(result.value.domain).toBe("app.example.com");
+        expect(result.value.routes).toEqual([{ pattern: "app.example.com/*" }]);
+        expect(result.value.crons).toEqual(["0 * * * *"]);
+      }
+    });
+
+    test("projects resolved namespace and version parent identities", () => {
+      const namespace = resolveWorkerReadProps({
+        name: "user-worker",
+        namespace: "customer-workers",
+      });
+      const version = resolveWorkerReadProps({
+        version: { parent: "parent-worker" },
+      });
+
+      expect(Option.isSome(namespace)).toBe(true);
+      expect(Option.isSome(version)).toBe(true);
+      if (Option.isSome(namespace)) {
+        expect(namespace.value.namespace).toBe("customer-workers");
+      }
+      if (Option.isSome(version)) {
+        expect(version.value.version).toEqual({ parent: "parent-worker" });
+      }
+    });
+
+    test("returns None when a Worker identity input is unresolved", () => {
+      const unresolved = Output.literal("unresolved");
+      const results = [
+        resolveWorkerReadProps({ name: unresolved }),
+        resolveWorkerReadProps({ namespace: unresolved }),
+        resolveWorkerReadProps({
+          namespace: {
+            name: unresolved,
+          } as unknown as WorkerProps["namespace"],
+        }),
+        resolveWorkerReadProps({ version: { parent: unresolved } }),
+      ];
+
+      expect(results.every(Option.isNone)).toBe(true);
+    });
+
+    test("omits unresolved optional observation surfaces", () => {
+      const unresolved = Output.literal("unresolved");
+      const result = resolveWorkerReadProps({
+        name: "existing-worker",
+        domain: unresolved,
+        routes: [{ pattern: unresolved }],
+        crons: [unresolved],
+      });
+
+      expect(Option.isSome(result)).toBe(true);
+      if (Option.isSome(result)) {
+        expect(result.value.domain).toBeUndefined();
+        expect(result.value.routes).toBeUndefined();
+        expect(result.value.crons).toBeUndefined();
+      }
+    });
+  });
+
   describe("normalizeStateDomains", () => {
     // Worker state has gone through three generations: <= beta.44 stored each
     // custom domain as a `{ id, hostname, zoneId }` object; beta.45 – beta.57

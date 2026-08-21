@@ -2,6 +2,7 @@ import { Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
+import type { Input } from "@/Input.ts";
 import * as ProviderLayer from "@/Local/ProviderLayer.ts";
 import * as Provider from "@/Provider.ts";
 import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
@@ -362,6 +363,9 @@ export class TestResourceHooks extends Context.Service<
     read?: (
       id: string,
     ) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
+    resolveReadProps?: (
+      news: Input<TestResourceProps>,
+    ) => Option.Option<TestResourceProps>;
   }
 >()("TestResourceHooks") {}
 
@@ -371,7 +375,13 @@ export const testResourceProvider = () =>
   Provider.effect(
     TestResource,
     Effect.gen(function* () {
+      const hooks = Option.getOrUndefined(
+        yield* Effect.serviceOption(TestResourceHooks),
+      );
       return {
+        ...(hooks?.resolveReadProps
+          ? { resolveReadProps: hooks.resolveReadProps }
+          : undefined),
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, output }) {
           const hooks = Option.getOrUndefined(

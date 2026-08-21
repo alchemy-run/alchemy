@@ -1165,13 +1165,10 @@ export const make = <A>(
             // update keeps the deploy idempotent: if cloud state already
             // matches news, the provider's update is a no-op write.
             //
-            // Skip the adoption probe entirely when `news` still contains
-            // unresolved upstream Outputs (e.g. a `streamArn` referencing
-            // a stream being created in the same plan). Calling `read` with
-            // an unresolved value would surface as `ParseError` from the
-            // SDK protocol layer. Resources whose props depend on
-            // not-yet-created upstreams cannot themselves be pre-existing
-            // — there's nothing to adopt.
+            // Providers may opt into cold reads with unresolved desired props
+            // by projecting them to a safe shape. The projection owns the
+            // provider-specific distinction between identity and unrelated
+            // inputs. Without one, unresolved props skip the probe as before.
             // A resource declared at a former FQN whose row just migrated
             // away is genuinely NEW by declaration — skip the probe. Its
             // predecessor's physical resource still carries tags branded
@@ -1180,10 +1177,25 @@ export const make = <A>(
             // and silently adopt the very resource that was renamed away.
             const reusesMigratedFqn = migratedRowFqns.has(fqn);
             let forceUpdateAfterAdoption = false;
+            const readProps =
+              oldState === undefined && provider.read && !reusesMigratedFqn
+                ? isResolved(news)
+                  ? Option.some(news)
+                  : (provider.resolveReadProps?.(news) ?? Option.none())
+                : Option.none();
+            if (Option.isSome(readProps) && !isResolved(readProps.value)) {
+              return yield* Effect.die(
+                new Error(
+                  `Provider '${resource.Type}' returned unresolved props from ` +
+                    `resolveReadProps for '${fqn}'. The hook must return fully ` +
+                    "resolved props or None.",
+                ),
+              );
+            }
             if (
               oldState === undefined &&
               provider.read &&
-              isResolved(news) &&
+              Option.isSome(readProps) &&
               !reusesMigratedFqn
             ) {
               const adoptInstanceId = yield* generateInstanceId();
@@ -1192,7 +1204,7 @@ export const make = <A>(
                   id,
                   fqn,
                   instanceId: adoptInstanceId,
-                  olds: news,
+                  olds: readProps.value,
                   output: undefined,
                 })
                 .pipe(providePlanScope(fqn, adoptInstanceId));

@@ -2983,13 +2983,20 @@ describe("engine-level adoption", () => {
       readHook?: (
         id: string,
       ) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
+      resolveReadProps?: (
+        news: Input<TestResourceProps>,
+      ) => Option.Option<TestResourceProps>;
     },
   ): Effect.Effect<Plan.Plan<A>, any, State> =>
     Effect.gen(function* () {
       const { name, stage } = yield* resolveStackId;
-      const hooksLayer = opts.readHook
-        ? Layer.succeed(TestResourceHooks, { read: opts.readHook })
-        : Layer.empty;
+      const hooksLayer =
+        opts.readHook || opts.resolveReadProps
+          ? Layer.succeed(TestResourceHooks, {
+              read: opts.readHook,
+              resolveReadProps: opts.resolveReadProps,
+            })
+          : Layer.empty;
       const adoptLayer =
         opts.adopt === undefined
           ? Layer.empty
@@ -3312,6 +3319,158 @@ describe("engine-level adoption", () => {
         const reason = exit.cause.reasons.find(Cause.isFailReason);
         expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
         expect((reason?.error as any)?.resourceType).toBe("Test.TestResource");
+      }
+    }),
+  );
+
+  test(
+    "providers without a read projection skip unresolved cold reads",
+    Effect.gen(function* () {
+      let read = false;
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          yield* TestResource("Unresolved", { string: upstream.string });
+        }),
+        {
+          readHook: (id) =>
+            Effect.sync(() => {
+              if (id === "Unresolved") read = true;
+              return undefined;
+            }),
+        },
+      );
+
+      expect(read).toBe(false);
+      expect(plan.resources.Unresolved!.action).toBe("create");
+    }),
+  );
+
+  test(
+    "projected read props permit ownership rejection and adoption",
+    Effect.gen(function* () {
+      const program = Effect.gen(function* () {
+        const upstream = yield* TestResource("Upstream", { string: "up" });
+        yield* TestResource("Projected", {
+          replaceString: "existing-worker",
+          string: upstream.string,
+        });
+      });
+      const readHook = (id: string) =>
+        id === "Projected"
+          ? Effect.succeed(Unowned(ownedAttrs))
+          : Effect.succeed(undefined);
+      const resolveReadProps = (news: Input<TestResourceProps>) => {
+        const desired = news as { replaceString?: Input<string> };
+        return desired.replaceString === "existing-worker"
+          ? Option.some({ replaceString: desired.replaceString })
+          : Option.none();
+      };
+
+      const rejected = yield* makeAdoptPlan(program, {
+        adopt: false,
+        readHook,
+        resolveReadProps,
+      }).pipe(Effect.exit);
+      expect(Exit.isFailure(rejected)).toBe(true);
+      if (Exit.isFailure(rejected)) {
+        const reason = rejected.cause.reasons.find(Cause.isFailReason);
+        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+      }
+
+      const plan = yield* makeAdoptPlan(program, {
+        adopt: true,
+        readHook,
+        resolveReadProps,
+      });
+      expect(plan.resources.Projected).toMatchObject({
+        action: "update",
+        adopting: true,
+        state: { status: "created" },
+      });
+      expect(plan.resources.Upstream!.action).toBe("create");
+    }),
+  );
+
+  test(
+    "a read projection returning None skips the cold read",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          yield* TestResource("Fresh", { replaceString: upstream.string });
+        }),
+        {
+          readHook: (id) =>
+            id === "Fresh"
+              ? Effect.die(new Error("read should not run"))
+              : Effect.succeed(undefined),
+          resolveReadProps: () => Option.none(),
+        },
+      );
+
+      expect(plan.resources.Fresh!.action).toBe("create");
+      expect(plan.resources.Fresh!.state).toBeUndefined();
+    }),
+  );
+
+  test(
+    "projected cold-read errors remain fatal",
+    Effect.gen(function* () {
+      const readError = new Error("read failed");
+      const exit = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          yield* TestResource("Broken", { string: upstream.string });
+        }),
+        {
+          readHook: (id) =>
+            id === "Broken"
+              ? Effect.fail(readError)
+              : Effect.succeed(undefined),
+          resolveReadProps: () => Option.some({}),
+        },
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect(reason?.error).toBe(readError);
+      }
+    }),
+  );
+
+  test(
+    "an unresolved Some projection fails closed before read",
+    Effect.gen(function* () {
+      let read = false;
+      const exit = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          yield* TestResource("InvalidProjection", {
+            string: upstream.string,
+          });
+        }),
+        {
+          readHook: (id) =>
+            Effect.sync(() => {
+              if (id === "InvalidProjection") read = true;
+              return undefined;
+            }),
+          resolveReadProps: () =>
+            Option.some({
+              string: Output.literal("still-unresolved"),
+            } as unknown as TestResourceProps),
+        },
+      ).pipe(Effect.exit);
+
+      expect(read).toBe(false);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isDieReason);
+        expect(String(reason?.defect)).toContain(
+          "returned unresolved props from resolveReadProps",
+        );
       }
     }),
   );
