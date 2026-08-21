@@ -7,8 +7,9 @@ import Terminal from "../../../components/Terminal.astro";
 
 `alchemy dev` runs your Cloudflare stack on your machine. Workers
 execute in workerd — the same runtime used in production — with
-local simulators behind their bindings, and code changes hot
-reload in milliseconds.
+local simulators behind their bindings, websites run their
+frameworks' own dev servers with native HMR, containers run in
+Docker, and code changes hot reload in milliseconds.
 
 ```sh
 alchemy dev
@@ -24,15 +25,80 @@ alchemy dev
 ## Workers run in workerd
 
 Your Worker code executes in workerd with bindings wired to the
-local simulators, so binding behavior matches what you deploy.
-Durable Objects run inside the same workerd instance, cron
-triggers fire on their real schedule (and the
-miniflare-compatible `/cdn-cgi/handler/scheduled` route triggers
-them manually), and because everything is a local process you can
-attach a debugger, set breakpoints, and profile.
+local simulators, so binding behavior matches what you deploy:
+
+```typescript
+export const Cache = Cloudflare.KV.Namespace("Cache");
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Cache);
+    return {
+      fetch: Effect.gen(function* () {
+        yield* kv.put("greeting", "hello");
+        const value = yield* kv.get("greeting");
+        return yield* HttpServerResponse.text(value ?? "");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+) {}
+```
+
+In dev, `kv.put` lands in a local KV simulator and the Worker
+serves at `http://localhost:<port>`. Durable Objects run inside
+the same workerd instance, cron triggers fire on their real
+schedule (and the miniflare-compatible
+`/cdn-cgi/handler/scheduled` route triggers them manually), and
+because everything is a local process you can attach a debugger,
+set breakpoints, and profile.
 
 A local resource's id is `dev:`-prefixed, which doubles as proof
 that no cloud call ran.
+
+## Websites run their own dev servers
+
+Every `Cloudflare.Website.*` resource — Vite, Next.js, Astro,
+Nuxt, SvelteKit, Waku, Octane, Foldkit, StaticSite — runs its
+framework's own dev server under `alchemy dev`: native HMR, no
+cloud resources. The site's `url` is the local dev server's
+address:
+
+```typescript
+const site = yield* Cloudflare.Website.Vite("Web");
+// dev:    site.url = http://localhost:5173 — Vite's own dev server, HMR included
+// deploy: site.url = the deployed site
+```
+
+See
+[Frontend frameworks](/cloudflare/frontend/frontends).
+
+## Containers run in Docker
+
+A `Cloudflare.Container` runs as a real Docker container on your
+machine, driven by its Durable Object in the local workerd:
+
+```typescript
+export class Sandbox extends Cloudflare.Container<
+  Sandbox,
+  { ping: () => Effect.Effect<string> }
+>()("Sandbox") {}
+
+export default Sandbox.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Sandbox.of({
+      ping: () => Effect.succeed("pong"),
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    });
+  }),
+);
+```
+
+All three image sources work locally: `main` (a bundled Effect
+program), `context` (your own Dockerfile), and `image` (a
+pre-built remote image).
 
 ## What's emulated
 

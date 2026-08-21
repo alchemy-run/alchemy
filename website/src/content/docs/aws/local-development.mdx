@@ -52,20 +52,39 @@ Each Lambda function executes in a local runtime container behind
 a working Function URL:
 
 ```typescript
-const api = yield* AWS.Lambda.Function("Api", { main: "./src/api.ts" });
-// http://b71ff5c0….lambda-url.us-east-1.localhost:4566/
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const files = yield* AWS.S3.Bucket("Files");
+    const jobs = yield* AWS.SQS.Queue("Jobs");
+
+    const putObject = yield* AWS.S3.PutObject(files);
+    const sendMessage = yield* AWS.SQS.SendMessage(jobs);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putObject({ Key: "hello.txt", Body: "hello" });
+        yield* sendMessage({ MessageBody: "process hello.txt" });
+        return yield* HttpServerResponse.text("ok");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide([AWS.S3.PutObjectHttp, AWS.SQS.SendMessageHttp]),
+  ),
+) {}
 ```
 
-Save `./src/api.ts` and the running function serves the new code
-in **~100–500ms** — no redeploy, no restart. The dev session
-watches your code's module graph, rebuilds, and swaps the code
-under the live Function URL.
+In dev, the function serves at a working local Function URL
+(`http://….lambda-url.us-east-1.localhost:4566/`), `putObject`
+lands in the local bucket, and `sendMessage` lands in the local
+queue. The SDK honors the standard `AWS_ENDPOINT_URL` environment
+override that the emulator injects into every dev container.
 
-Runtime bindings inside the function need zero wiring:
-`S3.putObject(...)` lands in the local bucket, `DynamoDB.getItem`
-reads the local table. The SDK honors the standard
-`AWS_ENDPOINT_URL` environment override that the emulator injects
-into every dev container.
+Save the file and the running function serves the new code in
+**~100–500ms** — no redeploy, no restart. The dev session watches
+your code's module graph, rebuilds, and swaps the code under the
+live Function URL.
 
 ## Websites run their own dev servers
 
@@ -92,15 +111,24 @@ ECS tasks and services run as real Docker containers, built and
 pushed through a local OCI registry:
 
 ```typescript
-const cluster = yield* AWS.ECS.Cluster("Cluster");
-
-// bundled Effect program — built into an image and running
-// as a container seconds later
-const api = yield* AWS.ECS.Task("Api", { main: "./src/api.ts", port: 8080 });
-
-// or your own Dockerfile
-const web = yield* AWS.ECS.Service("Web", { context: "./web", port: 3000 });
+// bundled Effect program — built into an image, pushed through
+// a local registry, running as a real container seconds later
+export default class Web extends AWS.ECS.Task<Web>()(
+  "Web",
+  { main: import.meta.url, port: 8080 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("hello from a local container");
+      }),
+    };
+  }),
+) {}
 ```
+
+Bring-your-own-Dockerfile containers work too:
+`AWS.ECS.Service("Api", { context: "./api", port: 3000 })` builds
+your image and runs it the same way.
 
 The whole live pipeline runs unchanged: image build, `docker
 push`, task definitions, `RunTask`, and services that converge
