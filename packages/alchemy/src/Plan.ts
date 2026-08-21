@@ -47,6 +47,7 @@ import {
 } from "./ProviderMode.ts";
 import {
   isResource,
+  missingImplementation,
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
@@ -298,6 +299,23 @@ export const make = <A>(
 
     const resources = Object.values(stack.resources);
     const actions = Object.values(stack.actions ?? {});
+
+    // A bare platform tag yields a forward reference registered with
+    // `undefined` props (and `RequiresImplementation`); its `.make(props,
+    // impl)` Layer repairs the props when it builds (in either order — the
+    // #874 circular env-tag pattern). Props still `undefined` after the
+    // whole program evaluated means the tag was yielded but its Layer was
+    // never provided — fail fast naming the class and its Layer instead of
+    // letting a provider read `undefined` props (#1054). Plain resources
+    // may legitimately be yielded without props (a reference to
+    // already-deployed state), so the check is scoped to platform tags.
+    for (const resource of resources) {
+      if (resource.RequiresImplementation && resource.Props === undefined) {
+        yield* Effect.die(
+          missingImplementation(resource.Type, resource.LogicalId),
+        );
+      }
+    }
 
     // TODO(sam): rename terminology to Stack
     const stackName = stack.name;
@@ -1828,6 +1846,7 @@ export const make = <A>(
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
                     Adopt: undefined,
+                    RequiresImplementation: undefined,
                     Mode: oldState.providerMode,
                     FormerFqns: undefined,
                     RuntimeContext: undefined!,

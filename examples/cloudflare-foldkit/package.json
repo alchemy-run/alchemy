@@ -8,18 +8,21 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test test/integ.test.ts"
   },
   "dependencies": {
-    "effect": "catalog:",
-    "foldkit": "^0.137.0"
+    "effect": "catalog:effect",
+    "foldkit": "catalog:frontend"
   },
   "devDependencies": {
-    "@foldkit/vite-plugin": "^0.11.3",
+    "@foldkit/vite-plugin": "catalog:frontend",
+    "@tailwindcss/vite": "catalog:frontend",
     "@types/node": "^24.12.0",
     "alchemy": "workspace:*",
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:build",
+    "vite": "catalog:build"
   },
   "repository": {
     "type": "git",

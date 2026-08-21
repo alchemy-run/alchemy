@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -461,7 +463,17 @@ async function runInfo(transformer: Sharp): Promise<Response> {
     case "gif":
       mime = "image/gif";
       break;
-    case "avif":
+    // libvips reports both AVIF and HEIC as `heif`, distinguished by the
+    // compression codec. AVIF (av1) is the only variant Cloudflare Images
+    // accepts, and the only one the bundled libvips can decode.
+    case "heif":
+      if (metadata.compression !== "av1") {
+        return errorResponse(
+          415,
+          9520,
+          `ERROR: Unsupported image type ${metadata.format}, expected one of: JPEG, SVG, PNG, WebP, GIF or AVIF`,
+        );
+      }
       mime = "image/avif";
       break;
     default:

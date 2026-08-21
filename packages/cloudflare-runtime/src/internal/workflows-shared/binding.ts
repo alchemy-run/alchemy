@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { InstanceEvent, instanceStatusName } from "./instance.ts";
 import {
@@ -233,6 +235,33 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     );
   }
 
+  public async deleteBatch(
+    instanceIds: string[],
+  ): Promise<WorkflowBatchDeleteResult> {
+    if (instanceIds.length > 100) {
+      throw new WorkflowError(
+        "deleteBatch is limited to 100 instances at a time",
+      );
+    }
+    const deleted: { id: string }[] = [];
+    const errors: { id: string; code: number; message: string }[] = [];
+    for (const id of new Set(instanceIds)) {
+      try {
+        const handle = (await this.get(id)) as WorkflowHandle;
+        await handle.delete();
+        deleted.push({ id });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        errors.push({
+          id,
+          code: message.startsWith("instance.not_found") ? 404 : 400,
+          message,
+        });
+      }
+    }
+    return { deleted, errors };
+  }
+
   public async unsafeGetBindingName(): Promise<string> {
     // async because of rpc
     return this.env.BINDING_NAME;
@@ -451,5 +480,26 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
       type: args.type,
       timestamp: new Date(),
     });
+  }
+
+  public async delete(): Promise<void> {
+    const { status } = await this.status();
+    if (
+      status !== "complete" &&
+      status !== "errored" &&
+      status !== "terminated"
+    ) {
+      throw new Error(
+        "instance.not_terminal: only instances in a terminal state (complete, errored, terminated) can be deleted",
+      );
+    }
+    try {
+      // Wiping the engine DO's storage makes a subsequent `get(id)` report
+      // instance.not_found — the local equivalent of deleting the record.
+      await this.stub.unsafeAbort("instance.deleted");
+    } catch {
+      // unsafeAbort aborts the DO out from under its own RPC channel, which
+      // may reject the call after the storage wipe already happened.
+    }
   }
 }

@@ -94,7 +94,10 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
   const markdown = (options: unknown) =>
     run(browser.createMarkdown(req(options))).pipe(
       Effect.map(
-        (result): BrowserMarkdownResult => ({ success: true, result }),
+        (result): BrowserMarkdownResult => ({
+          success: true,
+          result,
+        }),
       ),
     );
 

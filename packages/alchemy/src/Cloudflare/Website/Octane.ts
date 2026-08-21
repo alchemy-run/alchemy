@@ -17,8 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const OCTANE_SOURCE_PROVIDER =
-  "@alchemy.run/cloudflare-frameworks/octane/source";
+const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
 
 export interface OctaneProps<
   Bindings extends WorkerBindingProps = {},
@@ -66,7 +65,7 @@ export interface OctaneProps<
  * `dist/client` deploys as static assets — no Wrangler configuration and
  * no build command required.
  *
- * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
  * your project; the integration is loaded from its `/octane` export. The
  * project also needs `octane`, `@octanejs/vite-plugin`, and
  * `@octanejs/adapter-cloudflare`. Input files are content-hashed
@@ -82,16 +81,13 @@ export interface OctaneProps<
  * where the `octane()` compiler plugin composes with the injected
  * Cloudflare Vite plugin.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying an Octane App
+ * ### Deploying an Octane App
  * A single call builds and deploys the app — server-rendered routes,
  * server (API) routes, and client assets included. The app's own
  * `octane.config.ts` must select the Cloudflare adapter:
  *
- * @example octane.config.ts
+ * **Example:** octane.config.ts
  * ```typescript
  * import { cloudflare } from "@octanejs/adapter-cloudflare";
  * import { defineConfig, RenderRoute } from "@octanejs/vite-plugin";
@@ -104,25 +100,25 @@ export interface OctaneProps<
  * });
  * ```
  *
- * @example alchemy.run.ts
+ * **Example:** alchemy.run.ts
  * ```typescript
  * const site = yield* Cloudflare.Website.Octane("Website");
  * ```
  *
- * @example Octane project in a subdirectory
+ * **Example:** Octane project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Octane("Website", {
  *   rootDir: "apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Values passed via `env` reach Octane middleware and `ServerRoute`
  * handlers through the adapter's runtime contract: `context.platform` is
  * the Cloudflare `{ env, ctx }` pair, so `platform.env.MY_KV` is the live
  * binding and `platform.ctx.waitUntil` schedules background work.
  *
- * @example Reading a binding from a ServerRoute
+ * **Example:** Reading a binding from a ServerRoute
  * ```typescript
  * // octane.config.ts route
  * // new ServerRoute({
@@ -141,7 +137,7 @@ export interface OctaneProps<
  * });
  * ```
  *
- * @example Binding a KV namespace
+ * **Example:** Binding a KV namespace
  * ```typescript
  * const cache = yield* Cloudflare.KV.Namespace("Cache");
  *
@@ -152,7 +148,7 @@ export interface OctaneProps<
  * });
  * ```
  *
- * @section Dev
+ * ### Dev
  * `alchemy dev` runs Octane's own Vite dev server (the plugin's in-process
  * SSR middleware — rendering, server routes, and RPC with full HMR).
  * NOTE: Octane's dev middleware does not supply request-scoped platform
@@ -160,12 +156,12 @@ export interface OctaneProps<
  * limitation), so code touching `platform.env` must tolerate `undefined`
  * during dev; bindings are live in deployed Workers.
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when the project
  * lives in a large repository.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Octane("Website", {
  *   memo: {
@@ -174,13 +170,13 @@ export interface OctaneProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Octane` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.Octane<Website>()(
  *   "Website",
@@ -188,6 +184,10 @@ export interface OctaneProps<
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Octane: {
   <Self>(): {
@@ -236,6 +236,7 @@ export const Octane: {
             source: {
               provider: OCTANE_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,

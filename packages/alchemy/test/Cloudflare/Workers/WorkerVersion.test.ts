@@ -7,6 +7,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -150,6 +151,48 @@ describe.concurrent("Cloudflare.Worker version", () => {
         yield* waitForWorkerToBeDeleted(v3.parent.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 300_000 },
+  );
+
+  test.provider(
+    "preview version carries its own static assets",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const { parent, preview } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("AssetsVersionParent", {
+              script: script("assets-parent-marker"),
+            });
+            const preview = yield* Cloudflare.Worker("AssetsVersionPreview", {
+              script:
+                "export default { fetch(request, env) { return env.ASSETS.fetch(request); } };",
+              assets: {
+                directory: pathe.resolve(import.meta.dirname, "assets"),
+                runWorkerFirst: true,
+              },
+              version: { parent },
+            });
+            return { parent, preview };
+          }),
+        );
+
+        expect(preview.versionOf).toEqual(parent.workerName);
+        expect(preview.hash?.assets).toBeDefined();
+        yield* expectUrlContains(
+          new URL("/test.txt", preview.url!).toString(),
+          "This is a test file from assets.",
+          { label: "preview URL serves the version's static assets" },
+        );
+        yield* expectUrlContains(parent.url!, "assets-parent-marker", {
+          label: "preview assets leave the parent deployment untouched",
+        });
+
+        yield* stack.destroy();
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* waitForWorkerToBeDeleted(parent.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 240_000 },
   );
 
   test.provider(

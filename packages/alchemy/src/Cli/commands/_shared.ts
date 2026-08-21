@@ -27,6 +27,7 @@ import { AwsAuth } from "../../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
 import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
+import { HetznerAuth } from "../../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../../Prisma/AuthProvider.ts";
@@ -42,7 +43,7 @@ export const USER = Config.string("USER").pipe(
   Config.withDefault("unknown"),
 );
 
-export const STAGE = Config.string("stage").pipe(
+export const STAGE = Config.string("STAGE").pipe(
   Config.option,
   (a) => a,
   Effect.map(Option.getOrUndefined),
@@ -459,6 +460,7 @@ export const builtinAuth = Layer.mergeAll(
   AxiomAuth,
   CloudflareAuth,
   GitHubAuth,
+  HetznerAuth,
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,

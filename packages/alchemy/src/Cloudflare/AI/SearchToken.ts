@@ -107,11 +107,8 @@ export type SearchToken = Resource<
  * `Cloudflare.ApiToken.AccountApiToken` to mint the underlying API token in the
  * same stack, then reference the service token's `id` from an AI Search
  * instance's `tokenId` prop.
- * @resource
- * @product AI Search
- * @category AI
- * @section Creating a Token
- * @example Minting the underlying API token in the same stack
+ * ### Creating a Token
+ * **Example:** Minting the underlying API token in the same stack
  * ```typescript
  * const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("SearchTokenSource", {
  *   policies: [
@@ -128,8 +125,8 @@ export type SearchToken = Resource<
  * });
  * ```
  *
- * @section Using the Token from a SearchInstance
- * @example Wiring the token into an AI Search instance
+ * ### Using the Token from a SearchInstance
+ * **Example:** Wiring the token into an AI Search instance
  * ```typescript
  * const search = yield* Cloudflare.AI.Search("Search", {
  *   source: bucket,
@@ -138,6 +135,10 @@ export type SearchToken = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ai-search/
+ *
+ * @resource
+ * @product AI Search
+ * @category AI
  */
 export const SearchToken = Resource<SearchToken>(TypeId, {
   aliases: ["Cloudflare.AiSearch.Token"],

@@ -215,6 +215,30 @@ export const makeLocalState = () =>
                 }
               }),
             ),
+            // Deleting the last stage leaves an empty `{stack}/` husk that
+            // `listStacks` would keep reporting forever (and durable
+            // per-test scratch stacks would accumulate one per test). Prune
+            // it when no stages remain. The read-then-remove is not racy:
+            // nothing recreates a stage dir concurrently with the session
+            // that is deleting it (same invariant as recoverMissingDir).
+            Effect.tap(() => {
+              if (stage === undefined) return Effect.void;
+              const stackDir = path.join(stateDir, stack);
+              return fs.readDirectory(stackDir).pipe(
+                Effect.flatMap((entries) =>
+                  entries.length === 0
+                    ? fs
+                        .remove(stackDir, { recursive: true })
+                        .pipe(
+                          Effect.tap(() =>
+                            Effect.sync(() => created.delete(stackDir)),
+                          ),
+                        )
+                    : Effect.void,
+                ),
+                Effect.ignore,
+              );
+            }),
           );
         }),
       list: (request) =>

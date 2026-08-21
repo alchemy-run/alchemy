@@ -25,9 +25,11 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "Cloudflare", link: "/cloudflare" },
+      { label: "Hetzner", link: "/hetzner" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
+      { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
@@ -614,6 +616,10 @@ export default defineConfig({
             { label: "Overview", link: "/cloudflare" },
             { label: "Setup", link: "/cloudflare/setup" },
             {
+              label: "Local development",
+              link: "/cloudflare/local-development",
+            },
+            {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
@@ -669,37 +675,37 @@ export default defineConfig({
                   label: "Overview",
                   link: "/cloudflare/frontend/frontends",
                 },
-                { label: "Vite", link: "/cloudflare/frontend/vite" },
-                {
-                  label: "Static sites",
-                  link: "/cloudflare/frontend/static-site",
-                },
-                { label: "React SPA", link: "/cloudflare/frontend/vite-spa" },
-                {
-                  label: "TanStack Start",
-                  link: "/cloudflare/frontend/tanstack-start",
-                },
+                { label: "Astro", link: "/cloudflare/frontend/astro" },
+                { label: "Foldkit", link: "/cloudflare/frontend/foldkit" },
                 {
                   label: "Full-stack RPC + Drizzle",
                   link: "/cloudflare/frontend/full-stack-tanstack-rpc-drizzle",
                 },
+                { label: "Next.js", link: "/cloudflare/frontend/nextjs" },
+                { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
                 {
                   label: "React Router",
                   link: "/cloudflare/frontend/react-router",
                 },
-                { label: "Vue", link: "/cloudflare/frontend/vue" },
-                { label: "Foldkit", link: "/cloudflare/frontend/foldkit" },
+                { label: "React SPA", link: "/cloudflare/frontend/vite-spa" },
                 {
                   label: "SolidStart",
                   link: "/cloudflare/frontend/solidstart",
                 },
-                { label: "Astro", link: "/cloudflare/frontend/astro" },
-                { label: "Next.js", link: "/cloudflare/frontend/nextjs" },
-                { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
+                {
+                  label: "Static sites",
+                  link: "/cloudflare/frontend/static-site",
+                },
                 {
                   label: "SvelteKit",
                   link: "/cloudflare/frontend/sveltekit",
                 },
+                {
+                  label: "TanStack Start",
+                  link: "/cloudflare/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/cloudflare/frontend/vite" },
+                { label: "Vue", link: "/cloudflare/frontend/vue" },
                 { label: "Waku", link: "/cloudflare/frontend/waku" },
               ],
             },
@@ -824,6 +830,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/aws" },
             { label: "Setup", link: "/aws/setup" },
+            { label: "Local development", link: "/aws/local-development" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "aws/tutorial" } }],
@@ -846,8 +853,22 @@ export default defineConfig({
             {
               label: "Frontend",
               items: [
-                { label: "Websites", link: "/aws/frontend/websites" },
-                { label: "Static site", link: "/aws/frontend/static-site" },
+                {
+                  label: "Overview",
+                  link: "/aws/frontend/websites",
+                },
+                { label: "Astro", link: "/aws/frontend/astro" },
+                { label: "Next.js", link: "/aws/frontend/nextjs" },
+                { label: "Nuxt", link: "/aws/frontend/nuxt" },
+                {
+                  label: "Static sites",
+                  link: "/aws/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/aws/frontend/sveltekit",
+                },
+                { label: "Waku", link: "/aws/frontend/waku" },
               ],
             },
             {
@@ -935,6 +956,36 @@ export default defineConfig({
           ],
         },
         {
+          label: "Hetzner",
+          items: [
+            { label: "Overview", link: "/hetzner" },
+            { label: "Setup", link: "/hetzner/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "hetzner/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Servers", link: "/hetzner/compute/servers" },
+                { label: "Services", link: "/hetzner/compute/services" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [{ label: "Volumes", link: "/hetzner/data/volumes" }],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Networking", link: "/hetzner/networking" },
+                { label: "DNS", link: "/hetzner/networking/dns" },
+              ],
+            },
+            providerResourcesEntry("Hetzner"),
+          ],
+        },
+        {
           label: "PlanetScale",
           items: [
             { label: "Overview", link: "/planetscale" },
@@ -1002,6 +1053,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/prisma/data/postgres" },
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
+                { label: "Buckets", link: "/prisma/data/buckets" },
               ],
             },
             {
@@ -1021,6 +1073,15 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Better Auth",
+          items: [
+            { label: "Overview", link: "/better-auth" },
+            { label: "Database layers", link: "/better-auth/database-layers" },
+            { label: "Migrations", link: "/better-auth/migrations" },
+            providerResourcesEntry("BetterAuth"),
           ],
         },
         {

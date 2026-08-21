@@ -86,6 +86,7 @@ export const makeWorkerBridge = (
       build: WorkerBuild,
     ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
     ctx: cf.ExecutionContext,
+    env: Record<string, unknown> | undefined,
     onExit: (
       exit: Exit.Exit<any, any>,
       scope: Scope.Closeable,
@@ -108,7 +109,7 @@ export const makeWorkerBridge = (
               Layer.mergeAll(
                 Layer.succeed(
                   WorkerExecutionContext,
-                  fromExecutionContext(ctx),
+                  fromExecutionContext(ctx, env),
                 ),
                 Layer.succeed(Scope.Scope, scope),
                 // The configured telemetry exporters. Constructed as part
@@ -165,6 +166,7 @@ export const makeWorkerBridge = (
                 Context.Context<never>,
               ],
             this.ctx,
+            this.env,
             (exit) =>
               exit._tag === "Success"
                 ? Promise.resolve(exit.value)
@@ -208,6 +210,7 @@ export const makeWorkerBridge = (
                 ] as const;
               },
               this.ctx,
+              this.env,
               handleRpcExit,
             );
         },

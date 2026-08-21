@@ -172,6 +172,23 @@ export type BucketProps = {
    * configuration.
    */
   cors?: BucketCorsRule[];
+  /**
+   * Allow alchemy to delete every object in the bucket when the bucket
+   * itself is deleted.
+   *
+   * R2 refuses to delete a bucket that still has objects in it — that
+   * refusal is the last line of defense for your data, so alchemy does not
+   * bypass it by default: destroying a non-empty bucket fails with
+   * `BucketNotEmpty` and both the bucket and its objects survive. Set this
+   * to `true` for buckets whose contents are disposable (caches, previews,
+   * test fixtures).
+   *
+   * `alchemy unsafe nuke` empties buckets regardless, since it is an
+   * explicitly operator-confirmed account teardown.
+   *
+   * @default false
+   */
+  forceDestroy?: boolean;
 };
 
 export type Bucket = Resource<
@@ -196,24 +213,21 @@ export type Bucket = Resource<
  *
  * R2 provides zero-egress-fee object storage. Create a bucket as a resource,
  * then bind it to a Worker to read and write objects at runtime.
- * @resource
- * @product R2
- * @category Storage & Databases
- * @section Creating a Bucket
- * @example Basic R2 bucket
+ * ### Creating a Bucket
+ * **Example:** Basic R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket");
  * ```
  *
- * @example Bucket with location hint
+ * **Example:** Bucket with location hint
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   locationHint: "wnam",
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Reading and writing objects
+ * ### Binding to a Worker
+ * **Example:** Reading and writing objects
  * ```typescript
  * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
@@ -227,7 +241,7 @@ export type Bucket = Resource<
  * }
  * ```
  *
- * @example Streaming upload with content length
+ * **Example:** Streaming upload with content length
  * ```typescript
  * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
@@ -236,7 +250,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Custom Domains
+ * ### Custom Domains
  *
  * Attach one or more custom domains to serve bucket objects from a hostname
  * you control. The domain's zone must already exist in your Cloudflare
@@ -244,14 +258,14 @@ export type Bucket = Resource<
  * pass a `Cloudflare.Zone.Zone` resource, a zone ID, or any hostname inside the
  * zone via the `zone` field.
  *
- * @example Single custom domain
+ * **Example:** Single custom domain
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com" }],
  * });
  * ```
  *
- * @example Multiple custom domains
+ * **Example:** Multiple custom domains
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [
@@ -261,14 +275,14 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Disable a custom domain without removing it
+ * **Example:** Disable a custom domain without removing it
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com", enabled: false }],
  * });
  * ```
  *
- * @example Custom domain with explicit zone and TLS settings
+ * **Example:** Custom domain with explicit zone and TLS settings
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("ExampleZone", {
  *   name: "example.com",
@@ -285,7 +299,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Object Lifecycle Rules
+ * ### Object Lifecycle Rules
  *
  * Configure lifecycle rules to automatically delete objects, abort
  * incomplete multipart uploads, or transition objects to InfrequentAccess
@@ -293,7 +307,7 @@ export type Bucket = Resource<
  * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
  * for details and limits (max 1000 rules per bucket).
  *
- * @example Delete objects 30 days after upload
+ * **Example:** Delete objects 30 days after upload
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
@@ -307,7 +321,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Transition to InfrequentAccess after 60 days, delete after 365
+ * **Example:** Transition to InfrequentAccess after 60 days, delete after 365
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
@@ -328,7 +342,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Abort incomplete multipart uploads after 7 days
+ * **Example:** Abort incomplete multipart uploads after 7 days
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
@@ -342,7 +356,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section CORS
+ * ### CORS
  *
  * Configure CORS rules so browsers can make cross-origin requests against
  * the bucket's public (custom domain / r2.dev) or S3 API endpoints. Pass an
@@ -350,7 +364,7 @@ export type Bucket = Resource<
  * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/cors/)
  * for details.
  *
- * @example Allow cross-origin reads from any origin
+ * **Example:** Allow cross-origin reads from any origin
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   cors: [
@@ -362,7 +376,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Browser range reads (e.g. PMTiles map tiles)
+ * **Example:** Browser range reads (e.g. PMTiles map tiles)
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "tiles.example.com" }],
@@ -378,7 +392,7 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @example Allow uploads from a web app
+ * **Example:** Allow uploads from a web app
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   cors: [
@@ -391,6 +405,34 @@ export type Bucket = Resource<
  *   ],
  * });
  * ```
+ *
+ * ### Deleting a Bucket
+ *
+ * R2 refuses to delete a bucket that still has objects in it, and alchemy
+ * does not bypass that refusal: destroying a non-empty bucket fails with
+ * `BucketNotEmpty` and both the bucket and its objects survive. Opt into
+ * emptying the bucket first with `forceDestroy` for buckets whose contents
+ * are disposable.
+ *
+ * **Example:** Empty the bucket on destroy
+ * ```typescript
+ * const cache = yield* Cloudflare.R2.Bucket("Cache", {
+ *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * **Example:** Keep the bucket even when the stack goes away
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const uploads = yield* Cloudflare.R2.Bucket("Uploads").pipe(
+ *   RemovalPolicy.retain(),
+ * );
+ * ```
+ *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  */
 export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
   aliases: ["Cloudflare.R2Bucket"],
@@ -1039,17 +1081,21 @@ export const ProviderLive = () =>
               );
           }
 
-          // Sync — storage class is the only mutable property; location
-          // and jurisdiction are immutable (the diff function flags those
-          // as `replace`). Only patch when the desired class drifts from
-          // observed to avoid unnecessary API calls.
+          // Sync — storage class is the only mutable bucket property
+          // (location and jurisdiction are immutable; the diff flags those
+          // as `replace`). PATCH carries the class in the
+          // `cf-r2-storage-class` header. Address the bucket by the
+          // RESOLVED name, never `observed.name` — a response missing the
+          // name would collapse the URI to the collection path, which the
+          // control plane rejects with `PATCH not supported for requested
+          // URI`. Only patch when the desired class drifts from observed.
           const desiredStorageClass = news.storageClass ?? "Standard";
           const observedStorageClass = observed.storageClass ?? "Standard";
           if (observedStorageClass !== desiredStorageClass) {
             observed = yield* r2
               .patchBucket({
                 accountId: acct,
-                bucketName: observed.name!,
+                bucketName: name,
                 storageClass: desiredStorageClass,
                 jurisdiction: observed.jurisdiction ?? jurisdiction,
               })
@@ -1064,7 +1110,7 @@ export const ProviderLive = () =>
           }
 
           const attrs = {
-            bucketName: observed.name!,
+            bucketName: observed.name ?? name,
             // Distilled widened generated string enums to open unions.
             storageClass: (observed.storageClass ??
               "Standard") as Bucket.StorageClass,
@@ -1100,7 +1146,7 @@ export const ProviderLive = () =>
             cors,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds = {}, output, force }) {
           yield* Effect.all(
             (output.domains ?? []).map((domain) =>
               r2
@@ -1120,7 +1166,21 @@ export const ProviderLive = () =>
             { concurrency: "unbounded" },
           );
 
-          yield* emptyBucket(output.bucketName, output.jurisdiction);
+          // Whether we may destroy the bucket's CONTENTS.
+          // - `olds.forceDestroy` — the user opted in on the resource props.
+          // - `force` — set only by `alchemy unsafe nuke`, an explicitly
+          //   operator-confirmed account teardown. Nuke enumerates buckets
+          //   straight from the cloud (its `olds` is Attributes, not Props),
+          //   so `forceDestroy` is never present there.
+          //
+          // Without either, the objects are left alone and R2's own refusal
+          // to delete a non-empty bucket (`BucketNotEmpty`) stands — that
+          // refusal is the data protection users rely on, and emptying the
+          // bucket to get past it is how a stack teardown turns into
+          // irreversible data loss (#1248).
+          if (olds.forceDestroy === true || force === true) {
+            yield* emptyBucket(output.bucketName, output.jurisdiction);
+          }
           yield* r2
             .deleteBucket({
               accountId: output.accountId,

@@ -7,19 +7,20 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@alchemy.run/cloudflare-frameworks";
+export const devDeps = "@alchemy.run/frontend-frameworks";
 
 `Cloudflare.Website.Waku` deploys a [Waku](https://waku.gg) app as a
 Cloudflare Worker. It builds the project programmatically: the React
 Server Components server bundle deploys as the Worker script, and the
 client output — including SSG-prerendered pages — deploys as static
-assets. There is no `waku.config.ts` to edit, no Wrangler file, and
-no build command to run.
+assets. No `waku.config.ts` edits are required — if you have one it
+loads natively — and there is no Wrangler file and no build command
+to run.
 
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/cloudflare-frameworks`; the resource loads its `/waku`
+`@alchemy.run/frontend-frameworks`; the resource loads its `/waku`
 export from your project at deploy time. It is only used at build time,
 so a dev dependency is enough:
 
@@ -40,9 +41,33 @@ so a dev dependency is enough:
 
 ## Configure Waku
 
-There is no framework config to write: the resource builds the
-project programmatically, so a fresh Waku project deploys as-is —
-your `waku.config.ts` stays untouched.
+No framework config is required — a fresh Waku project deploys
+as-is. If your project has a `waku.config.ts`, Alchemy loads it
+natively (exactly as Waku's own CLI does) and uses it as the base
+config — including Vite plugins under its `vite` field:
+
+```typescript
+// waku.config.ts
+import { defineConfig } from "waku/config";
+import tsconfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+  basePath: "/",
+  vite: {
+    plugins: [tsconfigPaths()],
+  },
+});
+```
+
+Options set on the resource (`srcDir`, `distDir`, `basePath`) merge
+over the file, per key. The one key Alchemy owns is
+`unstable_adapter` — setting it fails the build with an actionable
+error.
+
+:::note
+Vite configuration must live in `waku.config.ts`'s `vite` field —
+a standalone `vite.config.ts` is not loaded, same as Waku's own CLI.
+:::
 
 ## Declare the Website
 

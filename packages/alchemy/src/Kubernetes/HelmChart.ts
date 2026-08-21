@@ -128,9 +128,8 @@ export interface HelmChart extends Resource<
  * Helm install/upgrade hooks are not executed (objects are applied, not
  * `helm install`ed); charts that depend on hooks for correctness should be
  * installed with Helm directly.
- * @resource
- * @section Installing a Chart
- * @example Chart from a repository
+ * ### Installing a Chart
+ * **Example:** Chart from a repository
  * ```typescript
  * const ingress = yield* Kubernetes.HelmChart("IngressNginx", {
  *   cluster,
@@ -145,7 +144,7 @@ export interface HelmChart extends Resource<
  * });
  * ```
  *
- * @example OCI chart
+ * **Example:** OCI chart
  * ```typescript
  * const karpenter = yield* Kubernetes.HelmChart("Karpenter", {
  *   cluster,
@@ -155,7 +154,7 @@ export interface HelmChart extends Resource<
  * });
  * ```
  *
- * @example Local chart directory
+ * **Example:** Local chart directory
  * ```typescript
  * const app = yield* Kubernetes.HelmChart("App", {
  *   cluster,
@@ -163,6 +162,8 @@ export interface HelmChart extends Resource<
  *   values: { image: { tag: "v1.2.3" } },
  * });
  * ```
+ *
+ * @resource
  */
 export const HelmChart = Resource<HelmChart>("Kubernetes.HelmChart", {
   aliases: ["AWS.EKS.HelmChart"],

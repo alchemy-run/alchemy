@@ -112,7 +112,10 @@ export const watchBundleDirectory = <R>(options: {
       const main = yield* resolveMainPath(options.main);
       const read = options.read.pipe(
         Effect.map(
-          (output): Bundle.BundleWatchEvent => ({ _tag: "Success", output }),
+          (output): Bundle.BundleWatchEvent => ({
+            _tag: "Success",
+            output,
+          }),
         ),
         Effect.catch((error) =>
           Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error }),

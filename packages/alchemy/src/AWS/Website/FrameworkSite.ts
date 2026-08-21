@@ -1,0 +1,255 @@
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import type { MemoOptions } from "../../Command/Memo.ts";
+import type { Input } from "../../Input.ts";
+import * as Output from "../../Output.ts";
+import { ProviderModePolicy } from "../../ProviderMode.ts";
+import {
+  Function as LambdaFunction,
+  type FunctionProps,
+} from "../Lambda/Function.ts";
+import { Server, type ServerDevProps } from "./Server.ts";
+import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
+import type {
+  WebsiteAssetsConfig,
+  WebsiteDomainProps,
+  WebsiteEdgeProps,
+  WebsiteInvalidationProps,
+} from "./shared.ts";
+
+/**
+ * SSR server (Lambda) configuration shared by the framework website
+ * composites.
+ */
+export interface FrameworkServerProps {
+  /**
+   * Memory allocated to the server function, in MB.
+   * @default 1024
+   */
+  memorySize?: number;
+  /**
+   * Maximum request duration.
+   * @default 30 seconds
+   */
+  timeout?: Duration.Duration;
+  /**
+   * Environment variables for the server function.
+   */
+  environment?: Record<string, any>;
+  /**
+   * Instruction set architecture.
+   * @default "x86_64"
+   */
+  architecture?: "x86_64" | "arm64";
+  /**
+   * Lambda runtime for the server function.
+   * @default "nodejs24.x"
+   */
+  runtime?: FunctionProps["runtime"];
+}
+
+/**
+ * Props shared by every framework website composite (SvelteKit, Nuxt,
+ * Waku, Octane, Astro). Each composite extends this with its
+ * framework-specific configuration field.
+ */
+export interface FrameworkSiteProps {
+  /**
+   * Project root directory (the directory containing `package.json`).
+   * @default "."
+   */
+  rootDir?: string;
+  /**
+   * Controls which files are hashed to decide whether the build re-runs.
+   * @default true
+   */
+  memo?: MemoOptions | boolean;
+  /**
+   * SSR server (Lambda) configuration.
+   */
+  server?: FrameworkServerProps;
+  /**
+   * Static asset upload configuration.
+   */
+  assets?: WebsiteAssetsConfig;
+  /**
+   * Options for the local dev server that runs this site under
+   * `alchemy dev`.
+   */
+  dev?: ServerDevProps;
+  /**
+   * Optional custom domain. A string is shorthand for `{ name }`; `null`
+   * explicitly clears a previously set domain. Set `domain.router` to
+   * serve the site through an existing `AWS.Website.Router` instead of a
+   * standalone CloudFront distribution.
+   */
+  domain?: string | WebsiteDomainProps | null;
+  /**
+   * Serve the site at its CloudFront default domain
+   * (`https://dxxxx.cloudfront.net`). `false` 301s default-domain requests
+   * to `https://<domain.name>` at the edge and excludes the default domain
+   * from the `urls` output. Requires `domain`; not applicable when
+   * `domain.router` is set.
+   * @default true
+   */
+  cloudfrontUrl?: boolean;
+  /**
+   * Additional CloudFront Function customizations.
+   */
+  edge?: WebsiteEdgeProps;
+  /**
+   * Optional deterministic S3 bucket name for the asset bucket.
+   */
+  bucketName?: string;
+  /**
+   * Whether to delete uploaded objects when the bucket is destroyed.
+   * @default false
+   */
+  forceDestroy?: boolean;
+  /**
+   * CloudFront invalidation behavior.
+   * @default { paths: "all", wait: false }
+   */
+  invalidation?: false | WebsiteInvalidationProps;
+  /**
+   * User-defined tags applied to created resources.
+   */
+  tags?: Record<string, string>;
+}
+
+/** Per-framework wiring for {@link makeFrameworkSite}. */
+export interface FrameworkSiteConfig {
+  /** Display name used in error messages (e.g. `"SvelteKit"`). */
+  name: string;
+  /** Framework-integration module specifier. */
+  framework: string;
+  /** AWS deploy-target module specifier. */
+  target: string;
+  /**
+   * Framework-specific build options forwarded to the integration (e.g.
+   * `{ kit }`, `{ nuxt }`, `{ astro }`). Must be JSON-serializable.
+   */
+  options?: Record<string, unknown> | undefined;
+  /**
+   * Assets-only mode: every page was prerendered at build time, so no
+   * server function is created and misses resolve to the error page (or
+   * the index page for SPAs). Set by composites whose framework supports
+   * a fully static output (Astro's `output: "static"`).
+   */
+  static?: { spa?: boolean; errorPage?: string } | undefined;
+}
+
+/**
+ * The shared implementation behind the framework website composites:
+ * build the framework through its AWS deploy target, then deploy the
+ * server output on a streaming Lambda Function URL with static assets in
+ * S3 behind a CloudFront distribution (or attach to a shared Router).
+ *
+ * During `alchemy dev` the site is the framework's own dev server (native
+ * HMR) and no cloud resources are declared; `Alchemy.remote()` opts back
+ * into the full live deployment.
+ *
+ * Callers pipe `Namespace.push(id)` themselves (the composites do), so
+ * resource FQNs are identical to the previous per-framework
+ * implementations.
+ */
+export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(
+  function* (
+    id: string,
+    props: FrameworkSiteProps,
+    config: FrameworkSiteConfig,
+  ) {
+    const ctx = yield* AlchemyContext;
+    const remoted = yield* ProviderModePolicy;
+    const isLocal = ctx.dev && remoted !== true;
+
+    const build = yield* Server("Build", {
+      framework: config.framework,
+      target: config.target,
+      root: props.rootDir,
+      env: props.server?.environment,
+      options: config.options,
+      memo: props.memo,
+      dev: props.dev,
+    });
+
+    if (isLocal) {
+      return {
+        bucket: undefined,
+        build,
+        files: undefined,
+        distribution: undefined,
+        invalidation: undefined,
+        kvNamespace: undefined,
+        server: undefined,
+        serverUrl: undefined,
+        url: build.url,
+        urls: [build.url],
+      };
+    }
+
+    const siteProps: StaticSiteProps = {
+      path: build.clientDir as unknown as string,
+      assets: props.assets,
+      domain: props.domain,
+      cloudfrontUrl: props.cloudfrontUrl,
+      edge: props.edge,
+      bucketName: props.bucketName,
+      forceDestroy: props.forceDestroy,
+      invalidation: props.invalidation,
+      tags: props.tags,
+    };
+
+    if (config.static) {
+      const site = yield* makeKvSite(id, {
+        ...siteProps,
+        errorPage: config.static.errorPage,
+        spa: config.static.spa,
+      });
+      return {
+        ...site,
+        build,
+        server: undefined,
+        serverUrl: undefined,
+      };
+    }
+
+    const server = yield* LambdaFunction("Server", {
+      main: build.serverEntry as unknown as string,
+      handler: "handler",
+      isExternal: true,
+      // The AWS deploy target's finishing pass writes the server directory
+      // as a complete Node deployment unit (entry + chunks) — ship it
+      // as-is.
+      bundle: false,
+      runtime: props.server?.runtime ?? "nodejs24.x",
+      architecture: props.server?.architecture,
+      memorySize: props.server?.memorySize ?? 1024,
+      timeout: props.server?.timeout ?? Duration.seconds(30),
+      env: props.server?.environment,
+      functionUrl: {
+        authType: "NONE",
+        invokeMode: "RESPONSE_STREAM",
+      },
+    });
+
+    const serverHost = Output.map((url: string | undefined) => {
+      if (!url) {
+        throw new Error(
+          `The ${config.name} server function did not produce a Function URL.`,
+        );
+      }
+      return new URL(url).hostname;
+    })(server.functionUrl as any) as Input<string>;
+
+    const site = yield* makeKvSite(id, siteProps, { serverHost });
+
+    return {
+      ...site,
+      build,
+      server,
+      serverUrl: server.functionUrl,
+    };
+  },
+);

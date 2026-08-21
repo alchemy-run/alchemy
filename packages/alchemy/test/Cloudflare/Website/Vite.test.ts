@@ -42,6 +42,10 @@ const containerFixtureDir = pathe.resolve(
   import.meta.dirname,
   "vite-container-fixture",
 );
+const workerFirstFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "worker-first-fixture",
+);
 const reactRouterRscFixtureDir = pathe.resolve(
   import.meta.dirname,
   "react-router-rsc-fixture",
@@ -724,7 +728,11 @@ if (el) {
                 date: "2026-03-17",
                 flags: ["nodejs_compat"],
               },
+              // The documented SPA + Worker-API pattern (vite.mdx): the SPA
+              // fallback owns unmatched paths while the glob pins the API
+              // namespace to the Worker regardless of request mode.
               assets: {
+                notFoundHandling: "single-page-application",
                 runWorkerFirst: ["/api/*"],
               },
               env: {
@@ -741,6 +749,14 @@ if (el) {
         yield* expectUrlContains(`${site.url!}/`, "Vite DO fixture", {
           timeout: "120 seconds",
           label: "vite do fixture assets",
+        });
+
+        // A deep link matches no asset: the SPA fallback serves the shell
+        // (static routing applies it to every request mode, so a plain GET
+        // with no Sec-Fetch-Mode header gets the shell too).
+        yield* expectUrlContains(`${site.url!}/deep/link`, "Vite DO fixture", {
+          timeout: "60 seconds",
+          label: "vite do spa deep link",
         });
 
         const reset = yield* fetchJsonReady<{ ok: boolean }>(
@@ -831,6 +847,83 @@ if (el) {
     // Container image pull + push + rollout comfortably exceeds the plain
     // Vite deploy budget (mirrors AsyncContainer.test.ts).
     { timeout: 600_000 },
+  );
+
+  // The documented interception pattern (solidstart.mdx hand-rolled SSR /
+  // static-site.mdx docs-site worker): the client build emits an index.html
+  // that would shadow `/` under assets-first routing, so the worker runs
+  // first, renders every page, and delegates real static files to the
+  // ASSETS binding itself.
+  test.provider(
+    "Vite: runWorkerFirst true intercepts asset paths and delegates to ASSETS",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(workerFirstFixtureDir, {
+          prefix: "alchemy-vite-worker-first-",
+          tempRoot,
+          entries: [
+            "index.html",
+            "package.json",
+            "public",
+            "src",
+            "vite.config.ts",
+            "worker.ts",
+          ],
+        });
+        const memoInclude = [
+          "index.html",
+          "public/**",
+          "src/**",
+          "package.json",
+          "vite.config.ts",
+          "worker.ts",
+        ];
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.Vite("ViteWorkerFirst", {
+              ...viteProps(rootDir, memoInclude),
+              main: "worker.ts",
+              assets: { runWorkerFirst: true },
+            });
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // `/` matches the built index.html asset, but the worker runs first
+        // and renders — the raw template must never serve.
+        yield* expectUrlContains(`${site.url!}/`, "worker-first-rendered:/", {
+          timeout: "120 seconds",
+          label: "worker-first render at /",
+        });
+        const home = yield* fetchTextReady(`${site.url!}/`);
+        expect(home).not.toContain("worker-first-raw-template");
+
+        // Any other route renders too — the worker sees every request.
+        yield* expectUrlContains(
+          `${site.url!}/some/page`,
+          "worker-first-rendered:/some/page",
+          { timeout: "60 seconds", label: "worker-first render deep" },
+        );
+
+        // Real static files still serve, through the worker's own ASSETS
+        // delegation.
+        yield* expectUrlContains(
+          `${site.url!}/robots.txt`,
+          "worker-first-static-asset",
+          { timeout: "60 seconds", label: "worker-first ASSETS delegation" },
+        );
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
   );
 
   test.provider(
@@ -942,16 +1035,17 @@ if (el) {
           date: "2026-03-10",
           flags: ["nodejs_compat"],
         };
-        const assets = {
-          runWorkerFirst: true,
-        };
         const viteEnvironments = { entry: "rsc", children: ["ssr"] };
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.Website.Vite("ReactRouterRsc", {
               ...viteProps(rootDir, memoInclude),
-              assets,
+              // No `assets` config: the RSC build emits no index.html (HTML
+              // is server-rendered), so SSR routes fall through to the RSC
+              // handler while hydration assets serve from the asset layer.
+              // `runWorkerFirst: true` would route `/assets/*` into the RSC
+              // handler, which cannot serve them.
               compatibility,
               viteEnvironments,
             });
@@ -968,6 +1062,16 @@ if (el) {
           timeout: "60 seconds",
           label: "react router rsc client route",
         });
+
+        // The hydration bundle the SSR HTML references must serve from the
+        // asset layer — the routing gap that let `runWorkerFirst: true`
+        // masquerade as live-tested (the old test never fetched an asset).
+        const home = yield* fetchTextReady(`${site.url!}/`);
+        const assetPath = home.match(/\/assets\/[^"']+\.js/)?.[0];
+        expect(assetPath).toBeDefined();
+        const bundle = yield* fetchTextReady(`${site.url!}${assetPath}`);
+        expect(bundle.length).toBeGreaterThan(0);
+        expect(bundle).not.toContain("<html");
 
         const render = yield* fetchJsonReady<{ ok: boolean; html: string }>(
           `${site.url!}/worker-render`,
@@ -1175,7 +1279,9 @@ if (el) {
           const deploy = (bucketId: string, marker: string) =>
             stack.deploy(
               Effect.gen(function* () {
-                const bucket = yield* Cloudflare.R2.Bucket(bucketId);
+                const bucket = yield* Cloudflare.R2.Bucket(bucketId, {
+                  forceDestroy: true,
+                });
                 const worker = yield* Cloudflare.Website.Vite(
                   "TanStackDevBindings",
                   {
@@ -1298,6 +1404,27 @@ const freshConn = HttpClient.mapRequest(
 // won't match.
 const joinUrl = (base: string, path: string) =>
   `${base.replace(/\/+$/, "")}${path}`;
+
+const fetchTextReady = (url: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? res.text
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        // Capped interval, ~90s total budget (workers.dev propagation).
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 45,
+      }),
+      Effect.orDie,
+    );
+  });
 
 const fetchJsonReady = <T>(url: string) =>
   Effect.gen(function* () {

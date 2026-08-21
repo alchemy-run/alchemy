@@ -5,11 +5,12 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { Connection } from "mysql2/promise";
 import {
-  listSqlFiles,
-  readSqlFile,
-  splitSqlStatements,
-  type SqlFile,
-} from "../../SQL/SqlFile.ts";
+  makeMySQLMigrationExecutor,
+  runMigrations,
+  type NormalizedMigrationsInput,
+  type StampedMigrationsState,
+} from "../../SQL/Migrations/index.ts";
+import { readSqlFile, splitSqlStatements } from "../../SQL/SqlFile.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
 
@@ -36,23 +37,22 @@ export interface MySQLMigrationTarget {
   branch: string;
 }
 
+/**
+ * PlanetScale MySQL's migration adaptation is exactly this: the shared
+ * pipeline with a temp-password-scoped mysql2 connection as its executor.
+ */
 export const runMySQLMigrations = (
   target: MySQLMigrationTarget,
-  migrationsDir: string,
-  migrationsTable: string,
+  input: NormalizedMigrationsInput,
+  stamped: StampedMigrationsState,
 ) =>
-  Effect.gen(function* () {
-    const files = yield* listSqlFiles(migrationsDir);
-    if (files.length > 0) {
-      yield* applyMySQLMigrations({
-        target,
-        migrationsTable,
-        migrationsFiles: files,
-      });
-    }
-    const hashes: Record<string, string> = {};
-    for (const file of files) hashes[file.id] = file.hash;
-    return hashes;
+  runMigrations({
+    input,
+    stamped,
+    withExecutor: (apply) =>
+      withMySQLConnection(target, (connection) =>
+        apply(makeMySQLMigrationExecutor(connection)),
+      ),
   });
 
 export const runMySQLImports = (
@@ -79,77 +79,12 @@ export const runMySQLImports = (
     return hashes;
   });
 
-interface ApplyMigrationsOptions {
-  target: MySQLMigrationTarget;
-  migrationsTable: string;
-  migrationsFiles: ReadonlyArray<SqlFile>;
-}
-
-const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
-  withMySQLConnection(options.target, (connection) =>
-    Effect.gen(function* () {
-      const table = quoteMySQLIdentifier(options.migrationsTable);
-      yield* mysqlQuery(
-        connection,
-        `CREATE TABLE IF NOT EXISTS ${table} (
-           id varchar(255) NOT NULL PRIMARY KEY,
-           name varchar(1024) NOT NULL,
-           applied_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
-         );`,
-      );
-
-      const applied = yield* mysqlQueryRows<{ name: string }>(
-        connection,
-        `SELECT name FROM ${table};`,
-      ).pipe(Effect.map((rows) => new Set(rows.map((row) => row.name))));
-      let nextSeq = yield* getNextMySQLSeq(connection, table);
-
-      for (const file of options.migrationsFiles) {
-        if (applied.has(file.id)) continue;
-        const migrationId = nextSeq.toString().padStart(5, "0");
-        nextSeq += 1;
-        yield* Effect.gen(function* () {
-          yield* mysqlQuery(connection, "START TRANSACTION");
-          for (const statement of splitSqlStatements(file.sql)) {
-            yield* mysqlQuery(connection, statement);
-          }
-          yield* mysqlExecute(
-            connection,
-            `INSERT INTO ${table} (id, name) VALUES (?, ?);`,
-            [migrationId, file.id],
-          );
-          yield* mysqlQuery(connection, "COMMIT");
-        }).pipe(
-          Effect.catch((error) =>
-            mysqlQuery(connection, "ROLLBACK").pipe(
-              Effect.catch(() => Effect.void),
-              Effect.andThen(Effect.fail(error)),
-            ),
-          ),
-        );
-      }
-    }),
-  );
-
 const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
   withMySQLConnection(target, (connection) =>
     Effect.gen(function* () {
       for (const statement of splitSqlStatements(sql)) {
         yield* mysqlQuery(connection, statement);
       }
-    }),
-  );
-
-const getNextMySQLSeq = (connection: Connection, table: string) =>
-  mysqlQueryRows<{ id: string }>(connection, `SELECT id FROM ${table};`).pipe(
-    Effect.map((rows) => {
-      let max = 0;
-      for (const { id } of rows) {
-        if (/^\d+$/.test(String(id))) {
-          max = Math.max(max, Number.parseInt(String(id), 10));
-        }
-      }
-      return max + 1;
     }),
   );
 
@@ -247,30 +182,8 @@ const mysqlQuery = (connection: Connection, sql: string) =>
     catch: toMigrationError,
   });
 
-const mysqlExecute = (
-  connection: Connection,
-  sql: string,
-  values?: ReadonlyArray<string>,
-) =>
-  Effect.tryPromise({
-    try: () =>
-      connection
-        .execute(sql, values ? [...values] : undefined)
-        .then(() => undefined),
-    catch: toMigrationError,
-  });
-
-const mysqlQueryRows = <A>(connection: Connection, sql: string) =>
-  Effect.tryPromise({
-    try: () => connection.query(sql).then(([rows]) => rows as A[]),
-    catch: toMigrationError,
-  });
-
 const toMigrationError = (cause: unknown) =>
   new MySQLMigrationError({
     message: cause instanceof Error ? cause.message : String(cause),
     cause,
   });
-
-const quoteMySQLIdentifier = (identifier: string) =>
-  `\`${identifier.replaceAll("`", "``")}\``;

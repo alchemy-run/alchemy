@@ -8,6 +8,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import ExternalStack from "./fixtures/external/stack.ts";
+import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import RemoteStack from "./fixtures/remote/stack.ts";
 
 describe.concurrent.each([
@@ -83,6 +84,23 @@ describe.concurrent.each([
           "effectful container",
         );
         expect(hello).toContain("effectful container");
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    // A container is a real process — it has no workerd bindings, so a
+    // capability's only channel into it is the binding contract's `env`.
+    // The provider used to declare that contract and silently drop the
+    // values; this pins that a `Binding.Service`'s `host.bind({ env })`
+    // lands in the container's `process.env`, resolved Output and all.
+    // Same mechanism `Prisma.Connect` rides into a container.
+    test(
+      "a Binding.Service's bound env reaches the container",
+      Effect.gen(function* () {
+        const { url, bucketName } = yield* stack;
+
+        const body = yield* fetchReady(new URL("/bound-env", url), bucketName);
+        expect(JSON.parse(body)).toEqual({ value: bucketName });
       }).pipe(logLevel),
       { timeout },
     );
@@ -164,6 +182,27 @@ describe.concurrent.each([
 
         const hello = yield* fetchReady(new URL("/hello", url), "method");
         expect(hello).toContain("method");
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    // A pre-built image has no Effect runtime to inject config into, so `env`
+    // is the only channel: it lands as the ContainerApplication's
+    // `environmentVariables` and shows up as plain `process.env` entries
+    // inside the image. Covers all three value shapes — a literal, a
+    // `Redacted` (encrypted in state, plain in the container), and an Output
+    // resolved from a sibling resource (the canonical shape of a database
+    // connection string).
+    test(
+      "passes env — literal, Redacted, and sibling-resource Output — into the image",
+      Effect.gen(function* () {
+        const { url, bucketName } = yield* stack;
+        const body = yield* fetchReady(new URL("/hello", url), "DEMO_PLAIN");
+        const echoed = JSON.parse(body) as { env: Record<string, string> };
+
+        expect(echoed.env.DEMO_PLAIN).toBe(DEMO_PLAIN);
+        expect(echoed.env.DEMO_SECRET).toBe(DEMO_SECRET);
+        expect(echoed.env.DEMO_BUCKET).toBe(bucketName);
       }).pipe(logLevel),
       { timeout },
     );

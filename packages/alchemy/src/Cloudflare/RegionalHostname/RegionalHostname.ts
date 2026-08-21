@@ -71,11 +71,8 @@ export type RegionalHostname = Resource<
  *
  * Requires the Data Localization Suite (or Enterprise) entitlement on the
  * zone.
- * @resource
- * @product Regional Hostnames
- * @category Domains & DNS
- * @section Regionalizing a Hostname
- * @example Pin a hostname to the EU
+ * ### Regionalizing a Hostname
+ * **Example:** Pin a hostname to the EU
  * ```typescript
  * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
@@ -84,7 +81,7 @@ export type RegionalHostname = Resource<
  * });
  * ```
  *
- * @example Move it to the US in place
+ * **Example:** Move it to the US in place
  * ```typescript
  * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
@@ -94,6 +91,10 @@ export type RegionalHostname = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/data-localization/regional-services/
+ *
+ * @resource
+ * @product Regional Hostnames
+ * @category Domains & DNS
  */
 export const RegionalHostname = Resource<RegionalHostname>(TypeId, {
   aliases: ["Cloudflare.RegionalHostname"],

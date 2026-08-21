@@ -33,12 +33,15 @@ export interface SvelteKitProps<
    */
   memo?: MemoOptions;
   /**
-   * SvelteKit configuration passed to the `sveltekit(config)` Vite plugin.
-   * Since kit v3 the configuration lives in memory (a `svelte.config.js` on
-   * disk is an upstream error), so this is the place for `alias`, `paths`,
-   * `prerender`, and the rest of the kit config surface. The `adapter`
-   * field is injected by Alchemy's wrangler-free Cloudflare adapter — do
-   * not set it here. Must be JSON-serializable (it persists in state).
+   * SvelteKit configuration overrides. A project-owned `vite.config.*`
+   * loads natively — its `sveltekit(...)` call is the primary config
+   * source — and these options are merged OVER it (the override wins).
+   * Without a config file, this is the whole kit config. Construction-time
+   * options (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`)
+   * only apply in the no-config-file case — put them in your own
+   * `sveltekit(...)` call otherwise. The `adapter` field is injected by
+   * Alchemy's wrangler-free Cloudflare adapter — do not set it here. Must
+   * be JSON-serializable (it persists in state).
    */
   kit?: Record<string, unknown>;
   /**
@@ -77,12 +80,14 @@ export interface SvelteKitProps<
  *
  * `SvelteKit` builds the app with SvelteKit's own Vite pipeline and a
  * wrangler-free in-memory Cloudflare adapter, then re-bundles the
- * Node-flavored server output for workerd — no `svelte.config.js`, no
+ * Node-flavored server output for workerd. A project-owned
+ * `vite.config.*` loads natively (its `sveltekit(...)` options apply) —
+ * no `svelte.config.js` (kit v3 dropped it), no
  * `@sveltejs/adapter-cloudflare`, no Wrangler configuration required.
  * Client assets and prerendered pages are deployed as Worker static
  * assets; dynamic routes are served by the generated Worker.
  *
- * The `@alchemy.run/cloudflare-frameworks` package must be installed in your
+ * The `@alchemy.run/frontend-frameworks` package must be installed in your
  * project — its `/sveltekit` export is loaded dynamically at deploy time.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
@@ -98,24 +103,21 @@ export interface SvelteKitProps<
  * platform proxy, with literal `env` values (strings and secrets)
  * overlaid.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a SvelteKit App
+ * ### Deploying a SvelteKit App
  * A single call builds and deploys the app — server-rendered routes,
  * prerendered pages, and client assets included.
  *
- * @example Basic SvelteKit site
+ * **Example:** Basic SvelteKit site
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website");
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Values passed via `env` are exposed to server routes through
  * SvelteKit's `platform.env`.
  *
- * @example Reading env from a server route
+ * **Example:** Reading env from a server route
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
  *   env: {
@@ -129,11 +131,13 @@ export interface SvelteKitProps<
  * // });
  * ```
  *
- * @section Kit and Adapter Options
- * The kit config surface is passed in-memory via `kit`; the generated
+ * ### Kit and Adapter Options
+ * Kit options normally live in the `sveltekit(...)` call in your
+ * `vite.config.ts`, which loads natively; `kit` is a deploy-time
+ * override layer merged over them (the override wins). The generated
  * Cloudflare adapter is configured via `adapter`.
  *
- * @example SPA-style 404 fallback
+ * **Example:** SPA-style 404 fallback
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
  *   adapter: {
@@ -143,12 +147,12 @@ export interface SvelteKitProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when the project
  * lives in a large repository.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
  *   memo: {
@@ -157,13 +161,13 @@ export interface SvelteKitProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `SvelteKit` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.SvelteKit<Website>()(
  *   "Website",
@@ -171,6 +175,10 @@ export interface SvelteKitProps<
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const SvelteKit: {
   <Self>(): {
@@ -232,8 +240,9 @@ export const SvelteKit: {
                   }
                 : props?.assets,
             source: {
-              provider: "@alchemy.run/cloudflare-frameworks/sveltekit/source",
+              provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,

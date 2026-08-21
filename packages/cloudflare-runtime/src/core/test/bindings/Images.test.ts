@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Adapted from Miniflare's images plugin tests
  * (`workers-sdk/packages/miniflare/test/plugins/images/index.spec.ts`).
@@ -406,6 +408,39 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
         }>("/info", { method: "POST", body: SVG_FIXTURE });
         expect(body.ok).toBe(true);
         expect(body.info).toEqual({ format: "image/svg+xml" });
+      }),
+    );
+
+    it.effect("info() reports image/avif for AVIF input", () =>
+      Effect.gen(function* () {
+        const worker = yield* startImagesTestWorker("images-info-avif");
+        // libvips has no AVIF fixture format of its own here — transcode one
+        // first, then feed it back through info().
+        const avifRes = yield* postBytes(
+          worker,
+          "/transform?format=image/avif",
+          decodeBase64(JPEG_GREEN_8X4),
+        );
+        expect(avifRes.status).toBe(200);
+        const avif = new Uint8Array(
+          yield* Effect.promise(() => avifRes.arrayBuffer()),
+        );
+
+        const body = yield* worker.fetchJson<{
+          ok: boolean;
+          info: {
+            format: string;
+            fileSize: number;
+            width: number;
+            height: number;
+          };
+        }>("/info", { method: "POST", body: avif });
+        expect(body.ok).toBe(true);
+        // sharp reports AVIF as `heif` + compression `av1`.
+        expect(body.info.format).toBe("image/avif");
+        expect(body.info.width).toBe(8);
+        expect(body.info.height).toBe(4);
+        expect(body.info.fileSize).toBeGreaterThan(0);
       }),
     );
 

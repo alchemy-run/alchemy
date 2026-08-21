@@ -123,7 +123,9 @@ export function yantraSvg(opts: YantraOptions = {}): string {
 
   const strokeColor = useCurrentColor ? "currentColor" : stroke;
   // The bg rect stays at the full 24×24 so it still covers a cropped viewBox.
-  const bgRect = bg ? `<rect width="24" height="24" fill="${bg}"/>` : "";
+  const bgRect = bg
+    ? `<rect width="24" height="24" fill="${bg}" stroke="none"/>`
+    : "";
   const viewBox =
     inset === 0
       ? YANTRA_VIEWBOX

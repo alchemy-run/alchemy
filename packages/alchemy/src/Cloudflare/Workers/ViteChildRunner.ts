@@ -13,7 +13,6 @@ import {
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as Credentials from "../Credentials.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
-import { findAvailablePort } from "../../Util/Node.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError } from "./Source.ts";
@@ -27,7 +26,17 @@ import {
 const readConfig = Effect.gen(function* () {
   const stdio = yield* Stdio.Stdio;
   const chunks = yield* Stream.runCollect(stdio.stdin);
-  return NodeV8.deserialize(Buffer.concat(chunks)) as ViteChildConfig;
+  const bytes = Buffer.concat(chunks);
+  // A cross-runtime spawn (bun engine → node child) sends JSON because
+  // bun's `v8.serialize` output is unreadable by real V8. Sniff the
+  // encoding by the JSON marker: only JSON starts with `{` — node's V8
+  // payloads start with 0xFF and bun's JSC serialization with its own
+  // binary header, so same-runtime spawns fall through to deserialize.
+  return (
+    bytes[0] === 0x7b // "{"
+      ? JSON.parse(bytes.toString("utf8"))
+      : NodeV8.deserialize(bytes)
+  ) as ViteChildConfig;
 });
 
 const program = Effect.scoped(
@@ -53,6 +62,7 @@ const program = Effect.scoped(
       hasAssets,
       bindingDescriptors,
       devRemote,
+      devAccess,
       ...runtimeWorker
     } = config.worker;
     const bindings = yield* materializeRuntimeBindings(
@@ -62,6 +72,7 @@ const program = Effect.scoped(
         hasAssets,
         bindingDescriptors,
         devRemote,
+        devAccess,
       },
       {
         accountId: config.accountId,
@@ -71,14 +82,10 @@ const program = Effect.scoped(
     );
     const source = config.source;
     const viteHost = "127.0.0.1";
-    // TODO(BlankParticle): replace this probe with `port: 0` once the Vite fix
-    // is released: https://github.com/vitejs/vite/pull/23158
-    // Vite currently treats `port: 0` as an absent value and falls back to
-    // its default port. Probe an ephemeral port ourselves until the fixed
-    // Vite release is available.
-    // `strictPort: false` still handles the small race between releasing the
-    // probe socket and Vite binding the selected port.
-    const vitePort = source ? undefined : yield* findAvailablePort(viteHost);
+    // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
+    // random port on Vite >= 8.2.1 (vitejs/vite#23158), a probed ephemeral
+    // port on older Vite.
+    const vitePort = source ? undefined : 0;
     const url = source
       ? yield* loadSource(source.descriptor).pipe(
           // `loadSource` is typed against the full `SourceServices` union
@@ -152,7 +159,8 @@ const program = Effect.scoped(
 
 runMain(
   program.pipe(
-    Effect.provide(RpcServerEnvironment.fromEnv()),
-    Effect.provide(PlatformServices),
+    Effect.provide(
+      RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices)),
+    ),
   ),
 );

@@ -517,11 +517,18 @@ export const LocalWorkerProvider = () =>
         selfUrl: string | undefined,
       ) {
         const { accountId } = yield* cloudflareEnv;
-        return yield* materializeRuntimeBindings(config, {
-          accountId,
-          selfUrl,
-          stack: { name: stack.name, stage: stack.stage },
-        });
+        return yield* materializeRuntimeBindings(
+          {
+            ...config,
+            devAccess:
+              config.dev.mode === "external" ? undefined : config.dev.access,
+          },
+          {
+            accountId,
+            selfUrl,
+            stack: { name: stack.name, stage: stack.stage },
+          },
+        );
       });
 
       // Latest successful serve per worker id, so runtime wiring changes
@@ -995,6 +1002,7 @@ export const LocalWorkerProvider = () =>
                         hasAssets: worker.hasAssets,
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
+                        devAccess: worker.dev.access,
                         durableObjectNamespaces: worker.durableObjectNamespaces,
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
@@ -1163,7 +1171,10 @@ export const LocalWorkerProvider = () =>
                   port: news.dev?.port ?? DEFAULT_DEV_PORT,
                 }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
-            workerId: name,
+            // No cloud script exists in dev — fabricate a `dev:`-marked
+            // identity (the shared local-provider convention, and the
+            // legacy-row mode marker; see LOCAL_ID_PREFIX).
+            workerId: `dev:${name}`,
             workerName: name,
             namespace: undefined,
             logpush: undefined,
@@ -1196,7 +1207,7 @@ export const LocalWorkerProvider = () =>
             yield* closeWorkerd(id);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
-              workerId: config.name,
+              workerId: `dev:${config.name}`,
               workerName: config.name,
               namespace: undefined,
               logpush: undefined,
@@ -1249,7 +1260,7 @@ export const LocalWorkerProvider = () =>
           };
           const serverUrl = yield* config.source
             ? config.source.devMode === "server"
-              ? runVite(worker, undefined, invalidate, {
+              ? runVite(worker, config.source.rootDir, invalidate, {
                   descriptor: config.source,
                   id: worker.id,
                   assets: worker.assets,
@@ -1265,7 +1276,7 @@ export const LocalWorkerProvider = () =>
           // are not served by this session, so they don't appear.
           const urls = yield* resolveLocalUrls(serverUrl);
           return {
-            workerId: config.name,
+            workerId: `dev:${config.name}`,
             workerName: config.name,
             namespace: undefined,
             logpush: undefined,
@@ -1344,19 +1355,8 @@ const toRuntimeAssets = Effect.fn(function* (
     directory: assets.directory,
     headers: assets.headers ?? files._headers,
     redirects: assets.redirects ?? files._redirects,
-    // Distilled widened generated string enums to open unions (`string & {}`);
-    // the API only ever returns the known variants here.
-    htmlHandling: assets.htmlHandling as
-      | "none"
-      | "auto-trailing-slash"
-      | "force-trailing-slash"
-      | "drop-trailing-slash"
-      | undefined,
-    notFoundHandling: assets.notFoundHandling as
-      | "none"
-      | "404-page"
-      | "single-page-application"
-      | undefined,
+    htmlHandling: assets.htmlHandling,
+    notFoundHandling: assets.notFoundHandling,
     // The deployed default is assets-first (`run_worker_first` omitted =
     // false on the cloud API), but the runtime's router inverts it — it
     // treats anything `!== false` (including `undefined`) as worker-first.

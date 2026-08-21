@@ -43,6 +43,12 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Hetzner",
+    href: "/hetzner",
+    prefixes: ["/hetzner", "/providers/hetzner"],
+    slot: "primary",
+  },
+  {
     label: "PlanetScale",
     href: "/planetscale",
     prefixes: ["/planetscale", "/providers/planetscale"],
@@ -59,6 +65,14 @@ export const DOCS_TABS: DocsTab[] = [
     href: "/prisma",
     prefixes: ["/prisma", "/providers/prisma"],
     slot: "primary",
+  },
+  {
+    label: "Better Auth",
+    href: "/better-auth",
+    prefixes: ["/better-auth", "/providers/betterauth"],
+    slot: "more",
+    category: "Auth",
+    hint: "sessions · plugins · database layers",
   },
   {
     label: "Axiom",

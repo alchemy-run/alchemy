@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Local KV namespace simulator, adapted from Miniflare's KV plugin workers
  * (`workers-sdk/packages/miniflare/src/workers/kv/*`), collapsed into a

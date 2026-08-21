@@ -95,18 +95,16 @@ export const Website = Cloudflare.Website.Vite("Website", {
     BUCKET: Bucket,
     BACKEND: Backend,
   },
-  assets: {
-    runWorkerFirst: true,
-  },
 });
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
 
 Each `env` entry becomes a native Worker binding (`BUCKET` an
-R2 bucket, `BACKEND` a service binding to another Worker), and
-`runWorkerFirst` routes requests to the SSR Worker before static-asset
-matching, so server routes win over files. `WebsiteEnv` is the typed
+R2 bucket, `BACKEND` a service binding to another Worker). Requests
+matching a built client asset are served directly from the asset layer;
+everything else (SSR routes, server routes) falls through to the
+TanStack server handler. `WebsiteEnv` is the typed
 shape of those bindings, derived from the declaration. The SSR server
 bundle's Node APIs are covered by the `nodejs_compat` compatibility
 flag, which is enabled by default for every Worker.

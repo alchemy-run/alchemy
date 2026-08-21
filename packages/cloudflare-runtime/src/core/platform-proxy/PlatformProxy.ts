@@ -154,7 +154,11 @@ const makeModules = Effect.fnUntraced(function* (
   const modules: Array<Module> = [
     { name: "__platform_proxy_entry__.mjs", type: "ESModule", content: entry },
     ...Object.entries(proxyWorker.modules).map(
-      ([name, content]): Module => ({ name, type: "ESModule", content }),
+      ([name, content]): Module => ({
+        name,
+        type: "ESModule",
+        content,
+      }),
     ),
     ...userModules,
   ];

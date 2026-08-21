@@ -37,7 +37,7 @@ export default class ChatFunction extends AWS.Lambda.Function<ChatFunction>()(
   "ChatFunction",
   {
     main: import.meta.url,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {

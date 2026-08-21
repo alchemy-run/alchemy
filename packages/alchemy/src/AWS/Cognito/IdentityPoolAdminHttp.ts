@@ -73,7 +73,9 @@ export const IdentityPoolAdminHttp = Layer.effect(
       const withPool = methods.injecting(
         Effect.map(
           IdentityPoolId,
-          (id): IdentityPoolIdField => ({ IdentityPoolId: id }),
+          (id): IdentityPoolIdField => ({
+            IdentityPoolId: id,
+          }),
         ),
       );
       const adminClient: IdentityPoolAdminClient = {

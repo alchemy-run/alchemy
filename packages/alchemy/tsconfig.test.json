@@ -3,17 +3,20 @@
   "include": ["package.json", "test"],
   "exclude": [
     "test/Local/fixtures/rpc-server-entry.ts",
+    "test/Local/fixtures/rpc-server-entry-b.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
     "test/Local/fixtures/rpc-spawner-devserver-parent.ts",
-    // Nuxt fixture: server routes use nitro's auto-imported globals
+    // Nuxt fixtures: server routes use nitro's auto-imported globals
     // (`defineEventHandler`), which only type-check against the `.nuxt/`
     // types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",
+    "test/AWS/Website/fixtures/nuxt-app",
     "test/Cloudflare/Website/fixtures/nuxt-spa-app",
     // Octane fixture: `.tsx` components use octane's JSX runtime, which
     // conflicts with this package's default `@opentui/solid` jsxImportSource.
     "test/Cloudflare/Website/fixtures/octane-app",
-    "test/Cloudflare/Website/fixtures/octane-spa-app"
+    "test/Cloudflare/Website/fixtures/octane-spa-app",
+    "test/AWS/Website/fixtures/octane-app"
   ],
   "compilerOptions": {
     "composite": true,

@@ -17,9 +17,11 @@ const greeting = useState("greeting", () => {
 </script>
 
 <template>
-  <main>
-    <h1>Nuxt on Cloudflare Workers</h1>
-    <p>{{ greeting }}</p>
-    <NuxtLink to="/about">about (prerendered)</NuxtLink>
+  <main class="mx-auto max-w-2xl p-8">
+    <h1 class="text-3xl font-bold">Nuxt on Cloudflare Workers</h1>
+    <p class="mt-4 text-lg">{{ greeting }}</p>
+    <NuxtLink class="mt-4 inline-block underline" to="/about"
+      >about (prerendered)</NuxtLink
+    >
   </main>
 </template>

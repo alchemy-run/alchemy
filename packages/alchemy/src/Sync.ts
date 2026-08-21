@@ -474,6 +474,7 @@ export const plan = (stack: {
           Provider: Provider(persisted.resourceType),
           RemovalPolicy: persisted.removalPolicy,
           Adopt: undefined,
+          RequiresImplementation: undefined,
           FormerFqns: undefined,
           Mode: persisted.providerMode,
           RuntimeContext: undefined!,

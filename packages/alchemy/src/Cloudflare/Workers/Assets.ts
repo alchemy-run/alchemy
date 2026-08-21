@@ -1,4 +1,3 @@
-import createIgnore from "@alchemy.run/node-utils/ignore";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,6 +8,7 @@ import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import createIgnore from "@alchemy.run/node-utils/ignore";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -20,10 +20,65 @@ export interface Assets {
 export const isAssets = (value: any): value is Assets =>
   value?.kind === "Cloudflare.Workers.Assets";
 
-export interface AssetsConfig extends Exclude<
-  Exclude<workers.PutScriptRequest["metadata"]["assets"], undefined>["config"],
-  undefined
-> {}
+/**
+ * Routing configuration for a Worker's static assets — sent to Cloudflare
+ * as `metadata.assets.config` on script upload. Declared explicitly (not
+ * derived from the distilled API schema) so alchemy owns and documents its
+ * public surface.
+ */
+export interface AssetsConfig {
+  /**
+   * Determines the redirects and rewrites of requests for HTML content:
+   * whether `/page` serves `page.html`, and whether trailing slashes are
+   * added or dropped.
+   *
+   * @default "auto-trailing-slash"
+   */
+  htmlHandling?:
+    | "auto-trailing-slash"
+    | "force-trailing-slash"
+    | "drop-trailing-slash"
+    | "none";
+  /**
+   * Determines the response when a request does not match a static asset:
+   * `"404-page"` serves the nearest `404.html`, and
+   * `"single-page-application"` serves `index.html` for client-side
+   * routing. When the Worker has a script, an unmatched request falls
+   * through to the Worker instead.
+   *
+   * @default "none"
+   */
+  notFoundHandling?: "none" | "404-page" | "single-page-application";
+  /**
+   * Routes requests through the Worker *before* static-asset matching.
+   *
+   * Assets-first by default: a request matching a file is served directly
+   * and never invokes the Worker. `true` routes every request through the
+   * Worker ahead of the asset layer — serve files yourself via the
+   * `ASSETS` binding. A path-rule array routes only matching paths
+   * worker-first (e.g. `["/api/*"]`): glob (`*`) and negative (`!`) rules
+   * are supported, rules must start with `/` or `!/`, and negative rules
+   * take precedence. The same routing applies under `alchemy dev`.
+   *
+   * @default false
+   */
+  runWorkerFirst?: boolean | string[];
+  /**
+   * Legacy routing flag predating `runWorkerFirst`.
+   */
+  serveDirectly?: boolean;
+  /**
+   * Raw contents of a `_headers` file — header rules applied by the asset
+   * layer. Overrides a `_headers` file read from the assets directory.
+   */
+  headers?: string;
+  /**
+   * Raw contents of a `_redirects` file — redirect rules applied by the
+   * asset layer. Overrides a `_redirects` file read from the assets
+   * directory.
+   */
+  redirects?: string;
+}
 
 export interface AssetReadResult {
   directory: string;

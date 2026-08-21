@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const WAKU_SOURCE_PROVIDER = "@alchemy.run/cloudflare-frameworks/waku/source";
+const WAKU_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
 export interface WakuProps<
   Bindings extends WorkerBindingProps = {},
@@ -51,20 +51,25 @@ export interface WakuProps<
    */
   rootDir?: string;
   /**
-   * Waku source directory, relative to {@link rootDir}.
-   * @default "src"
+   * Waku source directory, relative to {@link rootDir}. Setting this
+   * overrides a `srcDir` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"src"`)
    */
   srcDir?: string;
   /**
    * Waku build output directory, relative to {@link rootDir}. The server
    * bundle is read from `<distDir>/server` and the client assets from
-   * `<distDir>/public`.
-   * @default "dist"
+   * `<distDir>/public`. Setting this overrides a `distDir` in the
+   * project's `waku.config.*` — if your config file customizes `distDir`,
+   * mirror it here (or exclude it via `memo`) so the build output doesn't
+   * pollute the rebuild hash.
+   * @default the project's `waku.config.*` value, or waku's own default (`"dist"`)
    */
   distDir?: string;
   /**
-   * Base path the app is served under.
-   * @default "/"
+   * Base path the app is served under. Setting this overrides a
+   * `basePath` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"/"`)
    */
   basePath?: string;
   /**
@@ -92,11 +97,16 @@ export interface WakuProps<
  * A Cloudflare Worker deployed from a [Waku](https://waku.gg) project.
  *
  * `Waku` builds the project programmatically — no `waku.config.ts` edits,
- * no Wrangler configuration, and no build command required. The RSC server
+ * no Wrangler configuration, and no build command required. A project's
+ * `waku.config.*` loads natively (same as waku's CLI) as the base config,
+ * with `srcDir`/`distDir`/`basePath` from this resource winning per key;
+ * `unstable_adapter` is owned by Alchemy and must not be set. Note that a
+ * standalone `vite.config.ts` is NOT loaded (same as waku's CLI) — Vite
+ * config belongs in `waku.config.*`'s `vite` field. The RSC server
  * bundle deploys as the Worker script and the client output (including
  * SSG-prerendered pages) deploys as static assets.
  *
- * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
  * your project; the integration is loaded from its `/waku` export. Input files
  * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the
@@ -108,34 +118,31 @@ export interface WakuProps<
  * served at their extensionless URLs (`/about`) via the default
  * `drop-trailing-slash` asset handling.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Waku Site
+ * ### Deploying a Waku Site
  * A single call builds the project and deploys the RSC server bundle plus
  * the client assets — no configuration required.
  *
- * @example Waku site
+ * **Example:** Waku site
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site");
  * ```
  *
- * @example Waku project in a subdirectory
+ * **Example:** Waku project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
  *   rootDir: "apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Pass resources through `env` like any other Worker. Server components
  * and API routes read them from the `cloudflare:workers` env at request
  * time. Prefer a guarded dynamic import in page modules — Waku's SSG step
  * renders static pages in Node, where a top-level
  * `import { env } from "cloudflare:workers"` cannot resolve.
  *
- * @example Binding an R2 bucket
+ * **Example:** Binding an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
@@ -146,14 +153,14 @@ export interface WakuProps<
  * });
  * ```
  *
- * @section Custom Worker Entry
+ * ### Custom Worker Entry
  * By default the deployed Worker entry is Waku's own RSC server entry.
  * When the Worker must export more than Waku's fetch handler — Durable
  * Object classes, additional handlers — point `main` at your own module
  * that wraps Waku's handler (imported from `virtual:waku/server-entry`)
  * and re-exports the extras.
  *
- * @example Custom entry hosting a Durable Object
+ * **Example:** Custom entry hosting a Durable Object
  * ```typescript
  * // src/worker-entry.ts
  * // import wakuHandler from "virtual:waku/server-entry";
@@ -170,12 +177,12 @@ export interface WakuProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project has
  * large directories that don't affect the build output.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
  *   memo: {
@@ -184,18 +191,22 @@ export interface WakuProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Waku` with no arguments returns a constructor you can `extend`
  * to declare the Worker as a named class. The class is both an `Effect`
  * you can `yield*` to deploy and a type you can reference elsewhere —
  * useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Waku Worker class
+ * **Example:** Declaring a Waku Worker class
  * ```typescript
  * class Site extends Cloudflare.Website.Waku<Site>()("Site") {}
  *
  * const site = yield* Site;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Waku: {
   <Self>(): {
@@ -258,6 +269,7 @@ export const Waku: {
             source: {
               provider: WAKU_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 // Custom worker entry (wraps waku's handler via

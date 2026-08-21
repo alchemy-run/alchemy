@@ -10,18 +10,20 @@
     "test": "bun test"
   },
   "dependencies": {
-    "next": "catalog:frameworks",
+    "next": "catalog:frontend",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@opennextjs/cloudflare": "catalog:frameworks",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@opennextjs/cloudflare": "catalog:frontend",
+    "@tailwindcss/postcss": "catalog:frontend",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "typescript": "^6.0.3"
+    "effect": "catalog:effect",
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:frontend"
   },
   "engines": {
     "node": ">=22"

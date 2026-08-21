@@ -140,7 +140,7 @@ export const NeonDatabase = Effect.gen(function* () {
 
   const branch = yield* Neon.Branch("Branch", {
     project,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   return { project, branch, schema };
@@ -290,7 +290,6 @@ import { Hyperdrive, NeonDatabase } from "./src/backend/database.ts";
 export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
   compatibility: { flags: ["enable_request_signal"] },
   env: { BACKEND: Backend },
-  assets: { runWorkerFirst: true },
 }) {}
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
