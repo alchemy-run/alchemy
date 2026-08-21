@@ -989,13 +989,8 @@ type MetadataHashValue =
  * values contribute by value, not by reference identity, so two
  * independently-constructed secrets with the same contents hash identically.
  *
- * Effects are dropped, never executed: resource-typed `env` entries (Worker
- * effect-classes, R2 buckets, Provider/Context tags, ...) are all Effects
- * whose evaluation requires plan-phase context that is not available inside
- * lifecycle operations (running one here fails with `Service not found:
- * Cloudflare.Worker`). Their deploy-time identity is already captured by the
- * resolved `bindings` data hashed alongside `env`, so skipping them loses no
- * change-detection.
+ * Effects are dropped, never executed: evaluating one here may require
+ * plan-phase context that is not available inside lifecycle operations.
  */
 const resolveMetadataHashValue = (
   value: unknown,
@@ -1053,8 +1048,8 @@ const resolveMetadataHashValue = (
 /**
  * The deploy-time metadata surface of a Worker whose changes must trigger an
  * update but that never touch the bundle/vite/asset-content hashes:
- * compatibility, env literals, bindings, asset routing config, cache,
- * limits, logpush, observability, placement, subdomain, and tags. See #745.
+ * compatibility, env/bindings, asset routing config, cache, limits, logpush,
+ * observability, placement, subdomain, and tags. See #745.
  */
 interface WorkerMetadataHashInput {
   readonly props: WorkerProps;
@@ -1105,7 +1100,12 @@ const resolveWorkerMetadataHash = ({
     selfUrl,
     stack: { name: stack.name, stage: stack.stage },
     compatibility: getCompatibility(props),
-    env: props.env,
+    // Every `env` entry is lowered into binding data by
+    // `bindWorkerAsyncBindings`, including literals and VITE_ values. Hash only
+    // that canonical wire representation. Resource-backed env values can be
+    // materialized as different attribute projections between reconcile and a
+    // later plan; hashing props.env as well would turn those irrelevant shape
+    // differences into perpetual updates.
     bindings: bindings.map((binding) => ({
       sid: binding.sid,
       data: binding.data,
@@ -4487,42 +4487,39 @@ export const LiveWorkerProvider = () =>
               stables: stables.length > 0 ? stables : undefined,
             };
           }
-          // Machine-local source locations (`main`, `assets.directory`,
-          // `vite.rootDir`) name WHERE the source lives; their deploy-relevant
-          // effect is fully captured by the content hashes `hasChanged` just
-          // compared (bundle, asset content, vite input — all deliberately
-          // path-independent). Left alone, the engine's raw-props fallback
-          // would still flag a relocated checkout (CI runner ↔ laptop, temp
-          // build dirs) as changed forever. When the ONLY residual raw-prop
-          // difference is such a path, suppress the fallback with an explicit
-          // noop; any other residual difference still falls through to the
-          // engine's conservative comparison, so props outside the hashed
-          // metadata surface keep deploying (#745). Guarded on resolved
-          // bindings — without them the metadata hash was skipped above and
-          // the raw-props fallback is the only net for metadata edits.
+          // Machine-local source paths and resource-backed `env` values have
+          // already been compared by their content hashes and canonical
+          // binding data. Ignore those representations in the raw fallback so
+          // checkout paths and resource attribute projections do not force
+          // perpetual updates (#745).
           if (Array.isArray(newBindings)) {
-            const normalizeSourcePaths = (props: WorkerProps) => ({
-              ...props,
-              ...(props.main !== undefined ? { main: "<source>" } : undefined),
-              ...(props.assets
-                ? {
-                    assets: {
-                      ...(typeof props.assets === "string"
-                        ? undefined
-                        : props.assets),
-                      directory: "<source>",
-                    },
-                  }
-                : undefined),
-              ...(props.vite
-                ? { vite: { ...props.vite, rootDir: "<source>" } }
-                : undefined),
-            });
+            const normalizeComparedProps = (props: WorkerProps) => {
+              const { env: _env, ...rest } = props;
+              return {
+                ...rest,
+                ...(props.main !== undefined
+                  ? { main: "<source>" }
+                  : undefined),
+                ...(props.assets
+                  ? {
+                      assets: {
+                        ...(typeof props.assets === "string"
+                          ? undefined
+                          : props.assets),
+                        directory: "<source>",
+                      },
+                    }
+                  : undefined),
+                ...(props.vite
+                  ? { vite: { ...props.vite, rootDir: "<source>" } }
+                  : undefined),
+              };
+            };
             if (
               olds !== undefined &&
               !havePropsChanged(
-                normalizeSourcePaths(olds),
-                normalizeSourcePaths(news),
+                normalizeComparedProps(olds),
+                normalizeComparedProps(news),
               )
             ) {
               return { action: "noop" };
