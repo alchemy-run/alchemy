@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
+import * as NodeFs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { makeDeployTarget } from "../../core/index.ts";
 import { makeAwsTarget } from "../aws.ts";
@@ -37,6 +38,15 @@ const writeFixtureProject = Effect.fn(function* (marker: string) {
   );
   return root;
 });
+
+/**
+ * Fully canonical form of an existing path. Effect's `fs.realPath` delegates
+ * to node's `fs.realpath`, which resolves symlinks (macOS `/var` ->
+ * `/private/var`) but NOT Windows 8.3 short names (`RUNNER~1` vs
+ * `runneradmin`); only `realpath.native` does both.
+ */
+const canonicalPath = (p: string) =>
+  Effect.sync(() => NodeFs.realpathSync.native(p));
 
 /** An adapter-less in-process target (no build child) for direct testing. */
 const inProcessTarget = makeDeployTarget({
@@ -95,18 +105,20 @@ describe("make().build", () => {
         const indexHtml = yield* fs.readFileString(
           path.join(output.clientDirectory!, "index.html"),
         );
-        // vite's resolveConfig realpaths the root (macOS: /var -> /private/var),
-        // so compare canonical paths.
+        // vite's resolveConfig canonicalizes the root, so compare fully
+        // canonical paths on both sides.
         return {
-          output,
+          clientDirectory: yield* canonicalPath(output.clientDirectory!),
+          distDirectory: yield* canonicalPath(output.distDirectory!),
+          serverModules: output.serverModules,
           indexHtml,
-          expectedOutDir: yield* fs.realPath(path.join(root, "dist")),
+          expectedOutDir: yield* canonicalPath(path.join(root, "dist")),
         };
       }),
     );
-    expect(result.output.clientDirectory).toBe(result.expectedOutDir);
-    expect(result.output.distDirectory).toBe(result.expectedOutDir);
-    expect(result.output.serverModules).toBeUndefined();
+    expect(result.clientDirectory).toBe(result.expectedOutDir);
+    expect(result.distDirectory).toBe(result.expectedOutDir);
+    expect(result.serverModules).toBeUndefined();
     expect(result.indexHtml).toContain("VITE_BUILD_MARKER");
   }, 120_000);
 

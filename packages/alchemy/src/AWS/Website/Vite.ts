@@ -60,21 +60,20 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  * {@link Octane | AWS.Website.Octane}, ...) — this composite never creates
  * a server function.
  *
- * @resource
- * @section Creating Vite Sites
- * @example Basic Vite SPA
+ * ### Creating Vite Sites
+ * **Example:** Basic Vite SPA
  * ```typescript
  * const site = yield* AWS.Website.Vite("Web");
  * ```
  *
- * @example Project in a Subdirectory
+ * **Example:** Project in a Subdirectory
  * ```typescript
  * const site = yield* AWS.Website.Vite("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.Vite("Web", {
  *   domain: {
@@ -84,8 +83,8 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  * });
  * ```
  *
- * @section Multi-Page Sites
- * @example Per-Route HTML Pages with a 404 Page
+ * ### Multi-Page Sites
+ * **Example:** Per-Route HTML Pages with a 404 Page
  * ```typescript
  * const site = yield* AWS.Website.Vite("Docs", {
  *   spa: false,
@@ -93,8 +92,8 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  * });
  * ```
  *
- * @section Sharing a Router
- * @example Serve Through an Existing AWS.Website.Router
+ * ### Sharing a Router
+ * **Example:** Serve Through an Existing AWS.Website.Router
  * ```typescript
  * const router = yield* AWS.Website.Router("Router", {});
  * const site = yield* AWS.Website.Vite("Web", {
@@ -102,8 +101,8 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  * });
  * ```
  *
- * @section Build Configuration
- * @example Custom Output Directory and Base Path
+ * ### Build Configuration
+ * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* AWS.Website.Vite("Docs", {
  *   vite: {
@@ -113,13 +112,15 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  * });
  * ```
  *
- * @section Local Development
- * @example Vite Dev Server Under `alchemy dev`
+ * ### Local Development
+ * **Example:** Vite Dev Server Under `alchemy dev`
  * ```typescript
  * // `alchemy dev` starts `vite` programmatically: site.url is the local
  * // dev server (HMR included); no bucket or distribution is created.
  * const site = yield* AWS.Website.Vite("Web");
  * ```
+ *
+ * @resource
  */
 export const Vite = (id: string, props: ViteProps = {}) =>
   makeFrameworkSite(id, props, {
