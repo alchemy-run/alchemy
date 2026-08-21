@@ -48,23 +48,21 @@ flooding the floci team with that maintenance burden isn't fair
 to them. It's easier to let alchemy's flywheel drive the
 emulator's development directly, and that requires a fork.
 
-Alchemy registers a local provider variant for every resource
-floci implements — **219 resources across ~39 services** today.
 The test harness has one switch:
 
 ```sh
-pnpm test:aws:floci   # ALCHEMY_TEST_DEV=1
+pnpm test:aws:floci
 ```
 
-It discovers the dualized services and reruns their **live**
-suites — the same files that run against real AWS — with local
-providers forced on. The harness pins everything to the
-emulator, not just the deploys: the out-of-band verification
-calls the tests make through
-[distilled](https://github.com/alchemy-run/distilled) are
-redirected too, so a test's every assertion runs against floci.
-A full run forks an RPC sidecar per test file and cold-starts a
-Docker container per Lambda.
+It runs the same test suite that normally runs against live AWS,
+except every call — deploys and the tests' own verification
+reads — goes to floci instead. Nothing is mocked: each Lambda
+still cold-starts in its own Docker container.
+
+In beta.73 we focused on patching the services floci already
+supports — **219 resources across ~39 services** today. In the
+next release we'll push for 100% local emulation of every AWS
+service alchemy supports.
 
 ## The rule, inverted
 
