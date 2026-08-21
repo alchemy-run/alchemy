@@ -128,6 +128,7 @@ export const collectBindingState = (
   const seen = new Set<string>();
   const redis: { name: string }[] = [];
   const buckets: { name: string }[] = [];
+  const postgres: { clusterId: string; variableName?: string }[] = [];
   for (const binding of active) {
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
@@ -142,8 +143,12 @@ export const collectBindingState = (
     if (bucket?.name !== undefined && bucket.name.length > 0) {
       buckets.push(bucket);
     }
+    const pg = binding?.data?.postgres;
+    if (pg?.clusterId !== undefined && pg.clusterId.length > 0) {
+      postgres.push(pg);
+    }
   }
-  return { env, mounts, redis, buckets };
+  return { env, mounts, redis, buckets, postgres };
 };
 
 export const defaultHttpServices = (

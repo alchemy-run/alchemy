@@ -23,7 +23,10 @@ export default Alchemy.Stack(
         {
           protocol: "tcp",
           internalPort: 80,
-          ports: [{ port: 80, handlers: ["http"] }],
+          ports: [
+            { port: 80, handlers: ["http"], forceHttps: true },
+            { port: 443, handlers: ["tls", "http"] },
+          ],
         },
       ],
     });

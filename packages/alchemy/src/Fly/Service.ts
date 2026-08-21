@@ -39,6 +39,7 @@ import {
   type FlyHostRuntimeContext,
 } from "./hosted.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
+import { attachPostgresSecrets } from "./Postgres.ts";
 import { attachRedisSecrets } from "./Redis.ts";
 import {
   deleteReplicaSet,
@@ -910,6 +911,13 @@ export const ServiceProvider = () =>
           const bound = collectBindingState(bindings ?? []);
           yield* attachRedisSecrets(appName, bound.redis);
           yield* attachBucketSecrets(appName, bound.buckets);
+          for (const pg of bound.postgres) {
+            yield* attachPostgresSecrets(
+              appName,
+              pg.clusterId,
+              pg.variableName,
+            );
+          }
           const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
           const guest = toFlyGuest(props.guest);
           const services =

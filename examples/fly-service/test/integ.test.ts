@@ -3,16 +3,34 @@ import * as Fly from "alchemy/Fly";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 import { SECRET_NAME } from "../src/shared.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Fly.providers(),
   state: Alchemy.localState(),
+  profile: process.env.ALCHEMY_PROFILE,
 });
 
 const hasFlyCreds = !!process.env.FLY_API_TOKEN;
-const { getWhenReady } = Test;
+
+const fetchOk = (url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`HTTP ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 20,
+      }),
+    );
+  });
 
 const stack = hasFlyCreds
   ? beforeAll(deploy(Stack), { timeout: 300_000 })
@@ -33,7 +51,7 @@ test.skipIf(!hasFlyCreds)(
     expect(out.workerMounts[0]?.volumeId).toBeString();
     expect(out.apiMachineId).not.toBe(out.workerMachineId);
 
-    const health = yield* getWhenReady(`${out.apiUrl}/health`);
+    const health = yield* fetchOk(`${out.apiUrl}/health`);
     expect(health.status).toBe(200);
     const body = (yield* health.json) as { ok: boolean; name: string };
     expect(body.ok).toBe(true);
@@ -43,14 +61,14 @@ test.skipIf(!hasFlyCreds)(
 );
 
 test.skipIf(!hasFlyCreds)(
-  "GetSecret returns the App secret name over /secret",
+  "Fly.Secret is injected as env and present on /secret",
   Effect.gen(function* () {
     const out = yield* stack!;
-    const response = yield* getWhenReady(`${out.apiUrl}/secret`);
+    const response = yield* fetchOk(`${out.apiUrl}/secret`);
     expect(response.status).toBe(200);
     const body = (yield* response.json) as { ok: boolean; name: string };
     expect(body.ok).toBe(true);
     expect(body.name).toBe(SECRET_NAME);
   }),
-  { timeout: 120_000 },
+  { timeout: 60_000 },
 );

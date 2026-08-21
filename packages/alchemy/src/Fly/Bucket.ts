@@ -993,13 +993,12 @@ export const AttachBucketLive = Layer.effect(
     Effect.fn(function* (bucket: Bucket, app?: App) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        const bucketName = toName(yield* readAttr(bucket.name));
-        if (isFlyHost(host) && bucketName !== undefined) {
+        if (isFlyHost(host)) {
           yield* host.bind`${bucket}`({
-            bucket: { name: bucketName },
+            bucket: { name: bucket.name },
           });
         }
-        if (app !== undefined || isFlyHost(host)) {
+        if (app !== undefined) {
           const appName = yield* resolveAttachAppName(app);
           yield* writeBucketSecrets(appName, bucket);
         }

@@ -176,24 +176,24 @@ export const AttachPostgresLive = Layer.effect(
         });
       }
 
-      const appName =
-        (yield* appNameOf(options?.app)) ??
-        (isFlyHost(host)
-          ? asString(yield* readAttr((host as { appName?: unknown }).appName))
-          : undefined);
-      if (appName === undefined) {
-        return yield* new AttachAppRequired({
-          message:
-            "Fly.AttachPostgres requires an App. Pass { app } or call it from a Service.",
+      if (isFlyHost(host)) {
+        yield* host.bind`${postgres}`({
+          postgres: { clusterId, variableName },
         });
       }
 
-      if (isFlyHost(host)) {
-        yield* host.bind`${postgres}`({});
+      const appName = yield* appNameOf(options?.app);
+      if (appName !== undefined) {
+        yield* attachPostgresSecrets(appName, clusterId, variableName);
+        return { appName, clusterId, variableName };
       }
-
-      yield* attachPostgresSecrets(appName, clusterId, variableName);
-      return { appName, clusterId, variableName };
+      if (isFlyHost(host)) {
+        return { appName: "", clusterId, variableName };
+      }
+      return yield* new AttachAppRequired({
+        message:
+          "Fly.AttachPostgres requires an App. Pass { app } or call it from a Service.",
+      });
     }),
   ),
 ).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromEnv));

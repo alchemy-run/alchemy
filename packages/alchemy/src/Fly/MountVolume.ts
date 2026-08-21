@@ -105,6 +105,11 @@ export interface ServiceBinding {
    * `BUCKET_NAME` as App secrets during Service reconcile.
    */
   bucket?: { name: string };
+  /**
+   * Managed Postgres cluster to attach. `Fly.AttachPostgres` writes
+   * `DATABASE_URL` as an App secret during Service reconcile.
+   */
+  postgres?: { clusterId: string; variableName?: string };
 }
 
 /**

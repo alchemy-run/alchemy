@@ -41,15 +41,19 @@ const web = yield* Fly.Machine("Web", {
     {
       protocol: "tcp",
       internalPort: 80,
-      ports: [{ port: 80, handlers: ["http"] }],
+      ports: [
+        { port: 80, handlers: ["http"], forceHttps: true },
+        { port: 443, handlers: ["tls", "http"] },
+      ],
     },
   ],
 });
 ```
 
 `region` replaces on change. `image` updates in place. Guest
-defaults to shared-cpu 1× / 256 MB. Omit `services` (or pass `[]`)
-for a worker that should not be reachable from the internet.
+defaults to shared-cpu 1× / 256 MB. Port 443 with `tls` is what
+makes `https://{app}.fly.dev` answer. Omit `services` (or pass
+`[]`) for a worker that should not be reachable from the internet.
 
 `{app}.fly.dev` over IPv4 still needs an
 [`IpAssignment`](/fly/networking) on the parent App.
@@ -69,7 +73,10 @@ const web1 = yield* Fly.Machine("Web1", {
     {
       protocol: "tcp",
       internalPort: 80,
-      ports: [{ port: 80, handlers: ["http"] }],
+      ports: [
+        { port: 80, handlers: ["http"], forceHttps: true },
+        { port: 443, handlers: ["tls", "http"] },
+      ],
     },
   ],
 });
@@ -82,7 +89,10 @@ const web2 = yield* Fly.Machine("Web2", {
     {
       protocol: "tcp",
       internalPort: 80,
-      ports: [{ port: 80, handlers: ["http"] }],
+      ports: [
+        { port: 80, handlers: ["http"], forceHttps: true },
+        { port: 443, handlers: ["tls", "http"] },
+      ],
     },
   ],
 });

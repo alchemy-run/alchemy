@@ -1,12 +1,13 @@
 import * as Fly from "alchemy/Fly";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { API_PORT, Marker, SECRET_NAME, Site } from "./shared.ts";
 
 /**
- * HTTP Service: reads the App secret via {@link Fly.GetSecret} and
- * serves it back by name (never the plaintext).
+ * HTTP Service: Fly injects {@link Marker} as env `{@link SECRET_NAME}`.
+ * Read it from `fetch` with `Config.string` — never the plaintext.
  */
 export default class Api extends Fly.Service<Api>()(
   "Api",
@@ -18,31 +19,24 @@ export default class Api extends Fly.Service<Api>()(
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
   },
   Effect.gen(function* () {
-    const secret = yield* Marker;
-    const get = yield* Fly.GetSecret(secret);
+    yield* Marker;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://service");
-        if (url.pathname === "/health") {
-          return yield* HttpServerResponse.json({
-            ok: true,
-            name: SECRET_NAME,
-          });
-        }
-        if (url.pathname === "/secret") {
-          const got = yield* get().pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({
-            ok: true,
-            name: got.name,
-          });
-        }
-        return yield* HttpServerResponse.json({
-          ok: true,
+        const value = yield* Config.string(SECRET_NAME).pipe(
+          Effect.orElseSucceed(() => ""),
+        );
+        const body = {
+          ok: value.length > 0,
           name: SECRET_NAME,
-        });
+        };
+        if (url.pathname === "/health" || url.pathname === "/secret") {
+          return yield* HttpServerResponse.json(body);
+        }
+        return yield* HttpServerResponse.json(body);
       }),
     };
-  }).pipe(Effect.provide(Fly.GetSecretHttp)),
+  }),
 ) {}
