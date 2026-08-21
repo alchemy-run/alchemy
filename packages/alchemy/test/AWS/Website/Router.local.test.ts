@@ -1,5 +1,4 @@
 import * as AWS from "@/AWS";
-import { DEFAULT_LOCAL_ENDPOINT } from "@/AWS/AuthProvider.ts";
 import { flociServices } from "@/AWS/Local/FlociServices.ts";
 import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
@@ -10,7 +9,6 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
@@ -37,25 +35,20 @@ const htmlPage = (marker: string) => `<!doctype html>
 `;
 
 /**
- * Fetch through the emulated CloudFront edge.
+ * Fetch the Router the way a developer does: open its URL.
  *
- * The distribution's `*.cloudfront.net` domain is a real AWS hostname that
- * resolves to nothing locally, so the request goes to the emulator with the
- * Host preserved — exactly what `rewriteAwsVirtualHostToFloci` does for
- * `ALCHEMY_TEST_DEV` runs, and what floci's virtual-host filters expect.
+ * No Host header, no emulator endpoint, no TLS exception — `router.url` under
+ * `alchemy dev` is a plain `http://localhost:<port>` the emulated distribution
+ * is served on, so a browser (and this test) can just GET it. Needing anything
+ * else here would mean the dev URL is not really usable.
  */
-const edgeFetch = Effect.fn("edgeFetch")(function* (
+const fetchRouter = Effect.fn("fetchRouter")(function* (
   routerUrl: string,
   path: string,
 ) {
   const client = yield* HttpClient.HttpClient;
-  const host = new URL(routerUrl).host;
   return yield* client
-    .execute(
-      HttpClientRequest.get(`${DEFAULT_LOCAL_ENDPOINT}${path}`).pipe(
-        HttpClientRequest.setHeader("host", host),
-      ),
-    )
+    .get(`${routerUrl}${path}`)
     .pipe(
       Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }),
     );
@@ -126,8 +119,10 @@ describe("AWS.Website.Router local", () => {
 
         const routerUrl = deployed.routerUrl as string;
         // The Router is a real (emulated) CloudFront distribution — the same
-        // resource graph a deploy produces, not a dev-only substitute.
-        expect(routerUrl).toMatch(/^https:\/\/E[A-Z0-9]+\.cloudfront\.net$/);
+        // resource graph a deploy produces, not a dev-only substitute — served
+        // on a local port of its own, because `E….cloudfront.net` resolves to
+        // nothing on a developer's machine.
+        expect(routerUrl).toMatch(/^http:\/\/localhost:\d+$/);
         // Each site kept its own dev server as its `url` (HMR is the point of
         // dev) while still registering with the Router.
         expect(deployed.siteA.url).toMatch(/^http:\/\/localhost:\d+/);
@@ -137,16 +132,16 @@ describe("AWS.Website.Router local", () => {
         expect(deployed.siteB.kvNamespace).not.toBe(deployed.siteA.kvNamespace);
 
         // ── Routing: each prefix reaches its own dev server ────────────────
-        const a = yield* edgeFetch(routerUrl, "/site-a/");
+        const a = yield* fetchRouter(routerUrl, "/site-a/");
         expect(a.status).toBe(200);
         expect(yield* a.text).toContain("router-dev-site-a");
 
-        const b = yield* edgeFetch(routerUrl, "/site-b/");
+        const b = yield* fetchRouter(routerUrl, "/site-b/");
         expect(b.status).toBe(200);
         expect(yield* b.text).toContain("router-dev-site-b");
 
         // ── The origin received the request CloudFront would have sent ─────
-        const echo = yield* edgeFetch(routerUrl, "/site-a/__echo");
+        const echo = yield* fetchRouter(routerUrl, "/site-a/__echo");
         expect(echo.status).toBe(200);
         const echoed = (yield* echo.json) as {
           marker: string;
@@ -156,8 +151,8 @@ describe("AWS.Website.Router local", () => {
         expect(echoed.marker).toBe("site-a");
         expect(echoed.path).toBe("/site-a/__echo");
         // `routeSite` sets x-forwarded-host to the viewer's Host before it
-        // rewrites the origin — the site's dev server sees the CloudFront
-        // domain there, exactly as a deployed server origin would.
+        // rewrites the origin — the site's dev server sees the hostname the
+        // request arrived on, exactly as a deployed server origin would.
         expect(echoed.headers["x-forwarded-host"]).toBe(
           new URL(routerUrl).host,
         );
@@ -170,7 +165,7 @@ describe("AWS.Website.Router local", () => {
           path.join(cwdA, "site", "site-a", "index.html"),
           htmlPage("router-dev-site-a-v2"),
         );
-        const edited = yield* edgeFetch(routerUrl, "/site-a/");
+        const edited = yield* fetchRouter(routerUrl, "/site-a/");
         expect(yield* edited.text).toContain("router-dev-site-a-v2");
 
         yield* stack.destroy();
@@ -203,7 +198,7 @@ describe("AWS.Website.Router local", () => {
           }),
         );
 
-        const response = yield* edgeFetch(
+        const response = yield* fetchRouter(
           deployed.routerUrl as string,
           "/anything",
         );
@@ -248,7 +243,7 @@ describe("AWS.Website.Router local", () => {
         const host = new URL(routerUrl).host;
 
         // What the edge produced, as observed by the origin itself.
-        const echo = yield* edgeFetch(routerUrl, "/docs/__echo?q=1");
+        const echo = yield* fetchRouter(routerUrl, "/docs/__echo?q=1");
         const echoed = (yield* echo.json) as {
           path: string;
           headers: Record<string, string>;

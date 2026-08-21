@@ -55,6 +55,21 @@ export const DEFAULT_FLOCI_PORT = 4566;
  */
 export const DEFAULT_ELB_LISTENER_PORTS = [80, 443];
 
+/**
+ * Ports published for floci's emulated CloudFront edge. Each emulated
+ * distribution is served on one of these as plain HTTP, so `alchemy dev`
+ * hands out a `router.url` a browser can open — a distribution's
+ * `*.cloudfront.net` domain resolves to nothing on a developer's machine.
+ * The emulator assigns a port per distribution and reports it back; it can
+ * only use ports the container actually published, so the resolved list is
+ * passed in as `FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS`. Taken host ports are
+ * skipped, exactly like the ELB listener ports above.
+ */
+export const DEFAULT_CLOUDFRONT_EDGE_PORTS = Array.from(
+  { length: 20 },
+  (_, index) => 9500 + index,
+);
+
 /** Default name of the managed container. */
 export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
 
@@ -144,6 +159,14 @@ export interface FlociConfig {
    * @default [80, 443]
    */
   readonly elbListenerPorts?: readonly number[] | undefined;
+  /**
+   * Ports to publish for the emulated CloudFront edge (floci serves each
+   * distribution on its own port). Ports already taken on the host are
+   * skipped; an empty result turns the feature off in the emulator so it
+   * never binds a port nothing can reach.
+   * @default 9500-9519
+   */
+  readonly cloudfrontEdgePorts?: readonly number[] | undefined;
   /**
    * How long to wait for the emulator to become healthy after starting it
    * (first run includes the image pull).
@@ -293,31 +316,24 @@ const publishedPorts = (
   );
 
 /**
- * The ELB listener ports the managed container should publish: every
- * configured port that is either already published by the container or
- * still free on the host. Taken ports are skipped (with a warning) so a
- * busy host port never blocks the emulator from starting.
+ * The requested ports the managed container should publish: every port that
+ * is either already published by the container or still free on the host.
+ * Taken ports are skipped (with a warning only when the caller asked for
+ * them explicitly) so a busy host port never blocks the emulator from
+ * starting.
  */
-const resolveElbListenerPorts = Effect.fn(function* (
-  containerName: string,
-  config?: FlociConfig,
+const resolvePublishablePorts = Effect.fn(function* (
+  requested: readonly number[],
+  published: ReadonlySet<number>,
+  onTaken?: (port: number) => Effect.Effect<void>,
 ) {
-  const requested = config?.elbListenerPorts ?? DEFAULT_ELB_LISTENER_PORTS;
-  const published = (yield* publishedPorts(containerName)) ?? new Set();
   const desired: number[] = [];
   for (const port of requested) {
     if (published.has(port) || (yield* isHostPortFree(port))) {
       desired.push(port);
-    } else if (config?.elbListenerPorts !== undefined) {
-      // Caller asked for these ports explicitly — warn so they know why
-      // the emulated load balancer is unreachable.
-      yield* Effect.logWarning(
-        `floci: host port ${port} is taken — emulated load balancer listeners on ${port} will not be reachable from the host`,
-      );
+    } else if (onTaken !== undefined) {
+      yield* onTaken(port);
     }
-    // Default 80/443 are opportunistic (most stacks have no ELB). A taken
-    // privileged port is the common case on a developer machine, not a
-    // problem — skip silently.
   }
   return desired;
 });
@@ -334,16 +350,34 @@ export const ensureFloci = (
     const port = config?.port ?? DEFAULT_FLOCI_PORT;
     const endpoint = `http://localhost:${port}`;
     const containerName = config?.containerName ?? DEFAULT_CONTAINER_NAME;
-    const elbPorts = yield* resolveElbListenerPorts(containerName, config);
+    const published = yield* publishedPorts(containerName);
+    const elbPorts = yield* resolvePublishablePorts(
+      config?.elbListenerPorts ?? DEFAULT_ELB_LISTENER_PORTS,
+      published ?? new Set(),
+      // Default 80/443 are opportunistic (most stacks have no ELB). A taken
+      // privileged port is the common case on a developer machine, not a
+      // problem — warn only when the caller asked for those ports.
+      config?.elbListenerPorts === undefined
+        ? undefined
+        : (port) =>
+            Effect.logWarning(
+              `floci: host port ${port} is taken — emulated load balancer listeners on ${port} will not be reachable from the host`,
+            ),
+    );
+    const edgePorts = yield* resolvePublishablePorts(
+      config?.cloudfrontEdgePorts ?? DEFAULT_CLOUDFRONT_EDGE_PORTS,
+      published ?? new Set(),
+    );
 
     // Converge the managed container's published ports: an older container
-    // that predates the ELB listener mappings can't serve emulated load
-    // balancers, so it is recreated (emulated state is ephemeral by
-    // design — the next apply reconciles it). An UNMANAGED server (a
-    // dev-mode JVM, a hand-run container) is never touched.
-    const published = yield* publishedPorts(containerName);
+    // that predates the ELB listener / CloudFront edge mappings can't serve
+    // emulated load balancers or distributions, so it is recreated (emulated
+    // state is ephemeral by design — the next apply reconciles it). An
+    // UNMANAGED server (a dev-mode JVM, a hand-run container) is never
+    // touched.
+    const publishPorts = [...elbPorts, ...edgePorts];
     const needsRecreate =
-      published !== undefined && elbPorts.some((p) => !published.has(p));
+      published !== undefined && publishPorts.some((p) => !published.has(p));
     // Preserve the existing container's image across a recreate (it may be
     // a locally-built dev image rather than the pinned release).
     const existingImage = needsRecreate
@@ -371,12 +405,12 @@ export const ensureFloci = (
       // Only recreate when the server IS our managed container (otherwise
       // removing the container would not free the endpoint anyway).
       yield* Effect.logInfo(
-        `floci: recreating ${containerName} to publish ELB listener ports [${elbPorts.join(", ")}]`,
+        `floci: recreating ${containerName} to publish ports [${publishPorts.join(", ")}]`,
       );
       yield* docker(["rm", "-f", containerName]);
     } else if (needsRecreate) {
       yield* Effect.logInfo(
-        `floci: recreating ${containerName} to publish ELB listener ports [${elbPorts.join(", ")}]`,
+        `floci: recreating ${containerName} to publish ports [${publishPorts.join(", ")}]`,
       );
       yield* docker(["rm", "-f", containerName]);
     } else {
@@ -406,7 +440,15 @@ export const ensureFloci = (
       // `localhost:<port>`, for one).
       "--add-host",
       "host.docker.internal:host-gateway",
-      ...elbPorts.flatMap((p) => ["-p", `${p}:${p}`]),
+      ...publishPorts.flatMap((p) => ["-p", `${p}:${p}`]),
+      // The emulator can only hand a distribution a port the container
+      // published, so it gets the resolved list rather than its own default
+      // range — and the feature is switched off outright when nothing could
+      // be published, so it never binds a port nothing can reach.
+      "-e",
+      edgePorts.length > 0
+        ? `FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS=${edgePorts.join(",")}`
+        : "FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS_ENABLED=false",
       ...(config?.dockerSocket === false
         ? []
         : ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-u", "root"]),
