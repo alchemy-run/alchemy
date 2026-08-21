@@ -3,7 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
-import type { TigrisCredentialsMissing } from "./BucketTypes.ts";
+import type { TigrisCredentialsMissing } from "./Errors.ts";
 
 export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
 

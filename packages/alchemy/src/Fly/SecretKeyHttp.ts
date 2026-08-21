@@ -4,7 +4,7 @@
  * NOT exported from `index.ts`.
  */
 import * as Effect from "effect/Effect";
-import { FlyKmsError } from "./KmsError.ts";
+import { FlyKmsError } from "./Errors.ts";
 import type { SecretAuth } from "./SecretHttp.ts";
 import { makeHttpSecretBinding } from "./SecretHttp.ts";
 import type { SecretKey } from "./SecretKey.ts";

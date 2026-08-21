@@ -10,7 +10,7 @@ import * as Binding from "../Binding.ts";
 import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
-import { TigrisCredentialsMissing } from "./BucketTypes.ts";
+import { TigrisCredentialsMissing } from "./Errors.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 
 /**
