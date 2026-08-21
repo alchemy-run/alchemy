@@ -86,10 +86,12 @@ patch floci to support the operation. We're strict about this.
 
 ## Results
 
-The first convergence run took the 13-service suite from **253
-failures to 33**, with **396 tests green** against the emulator.
-DynamoDB (105 tests), S3 (51), Step Functions (31), Cognito
-(19), and others are fully green.
+When we first pointed the 13-service suite at floci, **253
+tests failed**. Agents patched the fork until **396 were
+green**. Several services now pass completely: DynamoDB (105
+tests), S3 (51), Step Functions (31), Cognito (19), and others.
+The 33 failures still open are the backlog for the 100% push
+next release.
 
 The result is [`alchemy dev` for AWS](/aws/local-development).
 It also makes the factory cheaper: generation waves can now
