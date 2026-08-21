@@ -698,6 +698,60 @@ const getScriptSettings = (
     });
   });
 
+type ScriptSettingsRead = ReturnType<typeof getScriptSettings>;
+
+const isMissingScriptSettings = (error: Effect.Error<ScriptSettingsRead>) =>
+  error._tag === "WorkerNotFound" ||
+  error._tag === "WorkerHasNoVersions" ||
+  error._tag === "DispatchNamespaceScriptNotFound" ||
+  error._tag === "DispatchNamespaceNotFound";
+
+/**
+ * Observe the script state used to plan Durable Object migrations.
+ *
+ * A normal Worker is pre-created before reconcile. If that stub already
+ * exposed a Durable Object namespace, a transient missing-settings response
+ * cannot mean that the class is new: the precreate poll just proved it exists.
+ * Retry that observation and fail closed if it never converges. Treating the
+ * failed read as an absent Worker would emit `new_sqlite_classes` again and
+ * Cloudflare rejects the duplicate create migration.
+ *
+ * Workers for Platforms user workers skip precreate. With no previously
+ * observed Durable Object namespaces, a missing script is still a legitimate
+ * greenfield create and remains `undefined`.
+ *
+ * @internal
+ */
+export const observeWorkerSettingsForMigration = <R>(
+  read: Effect.Effect<
+    Effect.Success<ScriptSettingsRead>,
+    Effect.Error<ScriptSettingsRead>,
+    R
+  >,
+  observedDurableObjectClassNames: readonly string[],
+  retrySchedule: Schedule.Schedule<unknown, unknown, never> = Schedule.max([
+    Schedule.exponential(100),
+    Schedule.recurs(20),
+  ]),
+) =>
+  observedDurableObjectClassNames.length > 0
+    ? read.pipe(
+        Effect.retry({
+          while: isMissingScriptSettings,
+          schedule: retrySchedule,
+        }),
+      )
+    : read.pipe(
+        Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
+        Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
+          Effect.succeed(undefined),
+        ),
+        Effect.catchTag("DispatchNamespaceNotFound", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+
 /**
  * Deploy-time binding validation rejects an upload whose bindings
  * reference a resource Cloudflare can't see (each resource type has
@@ -3262,15 +3316,13 @@ export const LiveWorkerProvider = () =>
         // Read existing worker settings for migration tracking
         const oldSettings =
           existingSettings ??
-          (yield* workers
-            .getScriptScriptAndVersionSetting({
+          (yield* observeWorkerSettingsForMigration(
+            workers.getScriptScriptAndVersionSetting({
               accountId,
               scriptName: name,
-            })
-            .pipe(
-              Effect.map((s) => s as typeof s | undefined),
-              Effect.catch(() => Effect.succeed(undefined)),
-            ));
+            }),
+            Object.keys(output?.durableObjectNamespaces ?? {}),
+          ));
 
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
@@ -5090,27 +5142,9 @@ export const LiveWorkerProvider = () =>
           // existing settings inform asset/migration decisions and let the
           // reconciler converge whether the worker is brand-new, adopted, or
           // an in-place update.
-          const existingSettings = yield* getScriptSettings(
-            accountId,
-            name,
-            dispatchNamespace,
-          ).pipe(
-            // After a pre-create stub (or under a busy account right after
-            // the first upload) the settings read can race the script
-            // registry and 404 with "has no versions". Treat it as "no
-            // existing settings" so reconcile proceeds to upload/converge.
-            // The dispatch-namespace endpoints raise
-            // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DispatchNamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+          const existingSettings = yield* observeWorkerSettingsForMigration(
+            getScriptSettings(accountId, name, dispatchNamespace),
+            Object.keys(output?.durableObjectNamespaces ?? {}),
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(

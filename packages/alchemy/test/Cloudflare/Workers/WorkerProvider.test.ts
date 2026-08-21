@@ -2,6 +2,7 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  observeWorkerSettingsForMigration,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -12,11 +13,120 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
+import { CloudflareRateLimited } from "@distilled.cloud/cloudflare/Errors";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 
 describe("WorkerProvider", () => {
+  describe("observeWorkerSettingsForMigration", () => {
+    test.effect(
+      "retries a missing-settings race after precreate proved the DO exists",
+      () =>
+        Effect.gen(function* () {
+          const attempts = yield* Ref.make(0);
+          const observed = {
+            tags: ["alchemy:dos:SeatConnector=SeatConnector"],
+            bindings: [
+              {
+                type: "durable_object_namespace" as const,
+                name: "SeatConnector",
+                className: "SeatConnector",
+                namespaceId: "namespace-id",
+              },
+            ],
+          } satisfies workers.GetScriptScriptAndVersionSettingResponse;
+          const read = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+            Effect.flatMap((attempt) =>
+              attempt === 1
+                ? Effect.fail(
+                    new workers.WorkerHasNoVersions({
+                      code: 10007,
+                      message: "Worker has no versions",
+                    }),
+                  )
+                : Effect.succeed(observed),
+            ),
+          );
+
+          const settings = yield* observeWorkerSettingsForMigration(
+            read,
+            ["SeatConnector"],
+            Schedule.recurs(1),
+          );
+
+          expect(settings).toBe(observed);
+          expect(yield* Ref.get(attempts)).toBe(2);
+        }),
+    );
+
+    test.effect(
+      "keeps a missing script as a greenfield create without a precreated DO",
+      () =>
+        Effect.gen(function* () {
+          const settings = yield* observeWorkerSettingsForMigration(
+            Effect.fail(
+              new workers.WorkerNotFound({
+                code: 10007,
+                message: "Worker not found",
+              }),
+            ),
+            [],
+          );
+
+          expect(settings).toBeUndefined();
+        }),
+    );
+
+    test.effect(
+      "fails closed when settings stay missing after a precreated DO",
+      () =>
+        Effect.gen(function* () {
+          const result = yield* Effect.result(
+            observeWorkerSettingsForMigration(
+              Effect.fail(
+                new workers.WorkerHasNoVersions({
+                  code: 10007,
+                  message: "Worker has no versions",
+                }),
+              ),
+              ["SeatConnector"],
+              Schedule.recurs(0),
+            ),
+          );
+
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("WorkerHasNoVersions");
+          }
+        }),
+    );
+
+    test.effect("never turns an observation failure into a new migration", () =>
+      Effect.gen(function* () {
+        const result = yield* Effect.result(
+          observeWorkerSettingsForMigration(
+            Effect.fail(
+              new CloudflareRateLimited({
+                status: 429,
+                errors: [{ code: 10000, message: "rate limited" }],
+              }),
+            ),
+            [],
+          ),
+        );
+
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("CloudflareRateLimited");
+        }
+      }),
+    );
+  });
+
   describe("normalizeStateDomains", () => {
     // Worker state has gone through three generations: <= beta.44 stored each
     // custom domain as a `{ id, hostname, zoneId }` object; beta.45 – beta.57
