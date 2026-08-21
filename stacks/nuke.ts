@@ -6,6 +6,7 @@ import * as Hetzner from "alchemy/Hetzner";
 import * as Neon from "alchemy/Neon";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Prisma from "alchemy/Prisma";
+import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -22,6 +23,7 @@ export default Alchemy.Stack(
       // Prisma credentials resolve at layer build like Neon/Planetscale:
       // set PRISMA_SERVICE_TOKEN (with CI=1) or configure the profile.
       Prisma.providers(),
+      Stripe.providers(),
     ),
     state: Cloudflare.state(),
   },
