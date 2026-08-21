@@ -29,6 +29,9 @@
     {
       "path": "./submodules/distilled/packages/fly-io/tsconfig.json"
     },
+    {
+      "path": "./submodules/distilled/packages/stripe/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
