@@ -221,50 +221,16 @@ export const LiveContainerProvider = () =>
         constraints: props.constraints ?? {},
       });
 
-      const containsConfiguredValue = (
-        actual: unknown,
-        configured: unknown,
-      ): boolean => {
-        if (Array.isArray(configured)) return deepEqual(actual, configured);
-        if (configured !== null && typeof configured === "object") {
-          if (
-            actual === null ||
-            typeof actual !== "object" ||
-            Array.isArray(actual)
-          ) {
-            return false;
-          }
-          return Object.entries(configured).every(([key, value]) =>
-            containsConfiguredValue(
-              (actual as Record<string, unknown>)[key],
-              value,
-            ),
-          );
-        }
-        return deepEqual(actual, configured);
-      };
-
-      const hasSameApplicationConfiguration = (
-        existing: ContainerApplication["Attributes"],
-        props: AnyContainerApplicationProps,
+      const applicationConfigurationHash = (
         scaling: ReturnType<typeof scalingDefaults>,
         affinities: ContainerApplication.Affinities | undefined,
         configuration: ContainerApplication.Configuration,
       ) =>
-        // Durable Object applications report their current autoscaled instance
-        // count here, not the zero requested for scale-from-zero. Only treat it
-        // as configuration when callers explicitly set a fixed count.
-        (props.instances === undefined ||
-          existing.instances === scaling.instances) &&
-        existing.maxInstances === scaling.maxInstances &&
-        existing.schedulingPolicy === scaling.schedulingPolicy &&
-        deepEqual(existing.constraints, scaling.constraints) &&
-        deepEqual(existing.affinities, normalizeNulls(affinities)) &&
-        // Cloudflare enriches the response with defaults and aliases such as
-        // runtime, network, memory, disk.sizeMb, command, and entrypoint. Match
-        // every field Alchemy configured while ignoring those server-owned
-        // additions, otherwise every apply sends a semantically empty update.
-        containsConfiguredValue(existing.configuration, configuration);
+        sha256Object({
+          scaling,
+          affinities: normalizeNulls(affinities),
+          configuration,
+        });
 
       const registryCredentials = Effect.fn(function* (
         props: AnyContainerApplicationProps,
@@ -919,15 +885,12 @@ export const LiveContainerProvider = () =>
           deploymentImageRef,
         );
         const scaling = scalingDefaults(news);
-        if (
-          hasSameApplicationConfiguration(
-            existing,
-            news,
-            scaling,
-            news.affinities,
-            configuration,
-          )
-        ) {
+        const configurationHash = yield* applicationConfigurationHash(
+          scaling,
+          news.affinities,
+          configuration,
+        );
+        if (existing.hash?.configuration === configurationHash) {
           yield* Effect.logInfo(
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
@@ -937,7 +900,11 @@ export const LiveContainerProvider = () =>
           return {
             ...existing,
             configuration,
-            hash: { image: imageHash, digest: imageDigest },
+            hash: {
+              image: imageHash,
+              digest: imageDigest,
+              configuration: configurationHash,
+            },
             dev,
           };
         }
@@ -996,7 +963,11 @@ export const LiveContainerProvider = () =>
         return {
           ...updated,
           configuration,
-          hash: { image: imageHash, digest: imageDigest },
+          hash: {
+            image: imageHash,
+            digest: imageDigest,
+            configuration: configurationHash,
+          },
           dev,
         };
       });
@@ -1111,6 +1082,11 @@ export const LiveContainerProvider = () =>
             env,
             published.imageRef,
           );
+          const configurationHash = yield* applicationConfigurationHash(
+            scalingDefaults(news),
+            news.affinities,
+            configuration,
+          );
 
           // Precreate intentionally omits the Durable Object attachment so the
           // worker can bind to this application id and break the circular
@@ -1130,7 +1106,11 @@ export const LiveContainerProvider = () =>
           });
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
-            hash: { image: imageHash, digest: published.digest },
+            hash: {
+              image: imageHash,
+              digest: published.digest,
+              configuration: configurationHash,
+            },
             dev,
           };
         }),
@@ -1249,6 +1229,11 @@ export const LiveContainerProvider = () =>
               env,
               deploymentImageRef,
             );
+            const configurationHash = yield* applicationConfigurationHash(
+              scalingDefaults(news),
+              news.affinities,
+              configuration,
+            );
             yield* Effect.logInfo(
               `Cloudflare Container reconcile: recreating ${name} to attach durable object binding`,
             );
@@ -1278,7 +1263,11 @@ export const LiveContainerProvider = () =>
             });
             return {
               ...("applicationId" in result ? result : toAttributes(result)),
-              hash: { image: imageHash, digest: imageDigest },
+              hash: {
+                image: imageHash,
+                digest: imageDigest,
+                configuration: configurationHash,
+              },
               dev,
             };
           }
@@ -1315,6 +1304,11 @@ export const LiveContainerProvider = () =>
             env,
             published.imageRef,
           );
+          const configurationHash = yield* applicationConfigurationHash(
+            scalingDefaults(news),
+            news.affinities,
+            configuration,
+          );
           const result = yield* createApplication({
             id,
             news,
@@ -1325,7 +1319,11 @@ export const LiveContainerProvider = () =>
           });
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
-            hash: { image: imageHash, digest: published.digest },
+            hash: {
+              image: imageHash,
+              digest: published.digest,
+              configuration: configurationHash,
+            },
             dev,
           };
         }),
