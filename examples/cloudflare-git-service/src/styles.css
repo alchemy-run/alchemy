@@ -1,35 +1,106 @@
 @import "tailwindcss";
 
-/* GitHub-ish palette accents that Tailwind's default scale doesn't cover. */
-@theme {
-  --color-canvas: #ffffff;
-  --color-canvas-subtle: #f6f8fa;
-  --color-border-muted: #d1d9e0;
-  --color-fg-default: #1f2328;
-  --color-fg-muted: #59636e;
-  --color-accent: #0969da;
-  --color-success: #1a7f37;
-  --color-danger: #d1242f;
-  --color-attention: #9a6700;
+/* `dark:` utilities key off the .dark class, not the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic tokens, GitHub-Primer-derived. `@theme inline` maps utility
+ * names (bg-canvas, text-fg-muted, …) directly onto the raw variables
+ * below, which :root defines for light and .dark overrides. The .dark
+ * class on <html> is the single source of truth — system preference is
+ * applied by the pre-paint script in index.html, never by CSS @media.
+ *
+ * NOTE: never nest @theme inside @media — Tailwind v4 hoists it and
+ * unconditionally merges it over the base theme (verified v4.3.3).
+ */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-canvas-subtle: var(--canvas-subtle);
+  --color-border-muted: var(--border-muted);
+  --color-fg-default: var(--fg-default);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-on-emphasis: var(--fg-on-emphasis);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-success-emphasis: var(--success-emphasis);
+  --color-success-emphasis-hover: var(--success-emphasis-hover);
+  --color-danger: var(--danger);
+  --color-danger-emphasis: var(--danger-emphasis);
+  --color-danger-emphasis-hover: var(--danger-emphasis-hover);
+  --color-attention: var(--attention);
+  --color-done: var(--done);
+  --color-done-emphasis: var(--done-emphasis);
+  --color-folder: var(--folder);
+  --color-tab-active: var(--tab-active);
 }
 
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-canvas: #0d1117;
-    --color-canvas-subtle: #151b23;
-    --color-border-muted: #3d444d;
-    --color-fg-default: #f0f6fc;
-    --color-fg-muted: #9198a1;
-    --color-accent: #4493f8;
-    --color-success: #3fb950;
-    --color-danger: #f85149;
-    --color-attention: #d29922;
-  }
+:root {
+  color-scheme: light;
+
+  --canvas: #ffffff;
+  --canvas-subtle: #f6f8fa;
+  --border-muted: #d1d9e0;
+  --fg-default: #1f2328;
+  --fg-muted: #59636e;
+  --fg-on-emphasis: #ffffff;
+  --accent: #0969da;
+  --success: #1a7f37;
+  --success-emphasis: #1f883d;
+  --success-emphasis-hover: #1c8139;
+  --danger: #d1242f;
+  --danger-emphasis: #cf222e;
+  --danger-emphasis-hover: #a40e26;
+  --attention: #9a6700;
+  --done: #8250df;
+  --done-emphasis: #8250df;
+  --folder: #54aeff;
+  --tab-active: #fd8c73;
+
+  /* highlight.js — GitHub light syntax palette */
+  --hl-comment: #59636e;
+  --hl-keyword: #cf222e;
+  --hl-string: #0a3069;
+  --hl-literal: #0550ae;
+  --hl-title: #6639ba;
+  --hl-attr: #953800;
+  --hl-tag: #116329;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --canvas: #0d1117;
+  --canvas-subtle: #151b23;
+  --border-muted: #3d444d;
+  --fg-default: #f0f6fc;
+  --fg-muted: #9198a1;
+  --fg-on-emphasis: #ffffff;
+  --accent: #4493f8;
+  --success: #3fb950;
+  --success-emphasis: #238636;
+  --success-emphasis-hover: #29903b;
+  --danger: #f85149;
+  --danger-emphasis: #da3633;
+  --danger-emphasis-hover: #b62324;
+  --attention: #d29922;
+  --done: #ab7df8;
+  --done-emphasis: #8957e5;
+  --folder: #58a6ff;
+  --tab-active: #f78166;
+
+  /* highlight.js — GitHub dark syntax palette */
+  --hl-comment: #9198a1;
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-literal: #79c0ff;
+  --hl-title: #d2a8ff;
+  --hl-attr: #ffa657;
+  --hl-tag: #7ee787;
 }
 
 body {
-  background-color: var(--color-canvas);
-  color: var(--color-fg-default);
+  background-color: var(--canvas);
+  color: var(--fg-default);
 }
 
 /* README rendering (marked output). */
@@ -110,27 +181,7 @@ body {
   max-width: 100%;
 }
 
-/* highlight.js tokens — GitHub palette, light + dark. */
-:root {
-  --hl-comment: #59636e;
-  --hl-keyword: #cf222e;
-  --hl-string: #0a3069;
-  --hl-literal: #0550ae;
-  --hl-title: #6639ba;
-  --hl-attr: #953800;
-  --hl-tag: #116329;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --hl-comment: #9198a1;
-    --hl-keyword: #ff7b72;
-    --hl-string: #a5d6ff;
-    --hl-literal: #79c0ff;
-    --hl-title: #d2a8ff;
-    --hl-attr: #ffa657;
-    --hl-tag: #7ee787;
-  }
-}
+/* highlight.js token classes — colors flip with the .dark class above. */
 .hljs-comment,
 .hljs-quote {
   color: var(--hl-comment);
@@ -185,4 +236,18 @@ body {
 }
 .hljs-strong {
   font-weight: 600;
+}
+
+/*
+ * @pierre/diffs styling bridge. The diff/file components render into
+ * Shadow DOM, so Tailwind never reaches them — the only styling channel
+ * is inherited `--diffs-*` custom properties. Plain :root on purpose
+ * (consumed by the shadow root, not by Tailwind's @theme).
+ */
+:root {
+  --diffs-font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --diffs-font-size: 12px;
+  --diffs-line-height: 1.5;
+  --diffs-tab-size: 2;
+  --diffs-header-font-family: ui-sans-serif, system-ui, sans-serif;
 }

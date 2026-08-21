@@ -21,8 +21,8 @@ interface Env {
   ASSETS: Fetcher;
 }
 
-/** `/api/v1/**` — the typed REST management plane. */
-const API_PREFIX = /^\/api\/v1\//;
+/** `/api/v1/**` (native REST) and `/api/v3/**` (GitHub compat facade). */
+const API_PREFIX = /^\/api\/v[13]\//;
 
 /**
  * The git smart-HTTP wire endpoints: `/:owner/:repo[.git]/info/refs`,

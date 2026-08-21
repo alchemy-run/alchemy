@@ -1,29 +1,46 @@
 /** The Commits tab: paged history of the selected ref. */
 import { useEffect, useState } from "react";
 import { getLog, type CommitInfo } from "../api.ts";
-import { CopyButton, ErrorBox, Spinner, Button } from "../components.tsx";
+import { Button, CopyButton, ErrorBox, Spinner } from "../components.tsx";
 import { shortOid, subject, timeAgo } from "../format.ts";
+import { href, Link } from "../router.tsx";
 import type { RepoContext } from "./Repo.tsx";
 
-const CommitRow = ({ commit }: { commit: CommitInfo }) => {
+const CommitRow = ({
+  context,
+  commit,
+}: {
+  context: RepoContext;
+  commit: CommitInfo;
+}) => {
   const [expanded, setExpanded] = useState(false);
   const body = commit.message.split("\n").slice(1).join("\n").trim();
+  const commitHref = href(
+    context.repo.owner,
+    context.repo.name,
+    "commit",
+    commit.oid,
+  );
   return (
     <li className="border-b border-border-muted px-4 py-3 last:border-b-0">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() => body.length > 0 && setExpanded((value) => !value)}
-            className={`text-left text-sm font-semibold ${body.length > 0 ? "cursor-pointer hover:text-accent" : "cursor-default"}`}
+          <Link
+            to={commitHref}
+            className="text-left text-sm font-semibold hover:text-accent hover:underline"
           >
             {subject(commit.message)}
-            {body.length > 0 && (
-              <span className="ml-2 rounded border border-border-muted px-1 text-xs text-fg-muted">
-                …
-              </span>
-            )}
-          </button>
+          </Link>
+          {body.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className="ml-2 cursor-pointer rounded border border-border-muted px-1 text-xs text-fg-muted hover:text-accent"
+              title={expanded ? "Hide description" : "Show description"}
+            >
+              …
+            </button>
+          )}
           <p className="mt-0.5 text-xs text-fg-muted">
             {commit.author.name} committed {timeAgo(commit.author.date * 1000)}
           </p>
@@ -34,9 +51,12 @@ const CommitRow = ({ commit }: { commit: CommitInfo }) => {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <code className="rounded border border-border-muted px-2 py-0.5 font-mono text-xs text-accent">
+          <Link
+            to={commitHref}
+            className="rounded border border-border-muted px-2 py-0.5 font-mono text-xs text-accent hover:underline"
+          >
             {shortOid(commit.oid)}
-          </code>
+          </Link>
           <CopyButton text={commit.oid} />
         </div>
       </div>
@@ -79,7 +99,7 @@ export const CommitsTab = ({ context }: { context: RepoContext }) => {
     <div>
       <ul className="overflow-hidden rounded-md border border-border-muted">
         {commits.map((commit) => (
-          <CommitRow key={commit.oid} commit={commit} />
+          <CommitRow key={commit.oid} context={context} commit={commit} />
         ))}
         {commits.length === 0 && (
           <li className="px-4 py-8 text-center text-sm text-fg-muted">

@@ -1,10 +1,15 @@
 /**
- * Deployable git-service example app: the service plus a GitHub-style
- * web UI for browsing it.
+ * Deployable git-service example: a git host assembled from
+ * `@alchemy.run/git` building blocks, plus a GitHub-style web UI, on ONE
+ * origin.
  *
- * Deploys the whole service — the GitWorker front door, the GitRepo and
- * GitRegistry Durable Objects, and the GitObjects R2 bucket — and a Vite
- * React SPA (`index.html` + `src/`) that drives the service's REST API.
+ * - `src/git-host.ts` — the block assembly: `Git.ServerLive` +
+ *   `Git.ReposDurableObject` + `Git.RegistryDurableObject` wired into a
+ *   `Cloudflare.Worker` the example owns.
+ * - `src/worker.ts` — the site's front door: forwards `/api/v1`,
+ *   `/api/v3`, and the git wire paths to the GitHost over a private
+ *   service binding; serves the Vite SPA for everything else. Clone URLs
+ *   are therefore same-host.
  *
  * Set the deployer admin secret before deploying:
  *
@@ -13,38 +18,29 @@
  * bun run deploy
  * ```
  *
- * Then open the printed `webUrl`, sign in with the admin token, and create
- * a repo — or drive it from the terminal:
+ * Then open the printed `webUrl` and create a repo — or from the terminal:
  *
  * ```sh
- * curl -X POST "$URL/api/v1/repos" \
+ * curl -X POST "$WEB/api/v1/repos" \
  *   -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
  *   -H "Content-Type: application/json" \
- *   -d '{"owner":"acme","name":"web"}'
- * # → { repo, remote, token: { token: "gs_..." } }
+ *   -d '{"owner":"acme","name":"web","public":true}'
  *
  * git remote add origin "https://x:gs_...@<host>/acme/web.git"
  * git push origin main
  * ```
  */
-import { GitService } from "@alchemy.run/git";
-import GitWorker from "@alchemy.run/git/GitWorker";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import GitHost from "./src/git-host.ts";
 
 export default Alchemy.Stack(
   "GitServiceExample",
   { providers: Cloudflare.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    const git = yield* GitService();
+    const git = yield* GitHost;
 
-    // ONE origin for everything: `src/worker.ts` fronts this site and
-    // forwards `/api/v1/**` + the git wire paths to the GitWorker over a
-    // private service binding, serving the SPA assets for the rest. Clone
-    // URLs are therefore same-host (no workers.dev — which ad-block lists
-    // sometimes block), and the SPA calls the API same-origin (the client
-    // defaults to `location.origin`; no VITE_GIT_URL needed).
     const web = yield* Cloudflare.Website.Vite("Web", {
       main: "src/worker.ts",
       assets: {
@@ -52,10 +48,10 @@ export default Alchemy.Stack(
         runWorkerFirst: true,
       },
       env: {
-        GIT: GitWorker,
+        GIT: GitHost,
       },
     });
 
-    return { url: git.url, webUrl: web.url };
+    return { url: git.url.as<string>(), webUrl: web.url };
   }),
 );

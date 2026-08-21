@@ -10,17 +10,21 @@
  *   /:owner/:repo/tree/:ref/*path    → tree at path
  *   /:owner/:repo/blob/:ref/*path    → file view
  *   /:owner/:repo/commits/:ref       → commit log
+ *   /:owner/:repo/commit/:oid        → one commit: message + file diffs
+ *   /:owner/:repo/pulls              → pull requests (open/closed/merged)
+ *   /:owner/:repo/pulls/:number      → one pull request: merge box + diffs
  *   /:owner/:repo/settings           → tokens / storage / danger zone
  */
 import React, { useState } from "react";
 import ReactDOM from "react-dom/client";
 import { getConnection, signOut } from "./api.ts";
-import { RepoIcon } from "./components.tsx";
+import { RepoIcon, ThemeToggle } from "./components.tsx";
 import { ConnectPage } from "./pages/Connect.tsx";
 import { RepoPage } from "./pages/Repo.tsx";
 import { ReposPage } from "./pages/Repos.tsx";
 import { Link, Router, segments, useRouter } from "./router.tsx";
 import "./styles.css";
+import { ThemeProvider } from "./theme.tsx";
 
 const Header = ({
   onSignIn,
@@ -39,6 +43,7 @@ const Header = ({
           git service
         </Link>
         <div className="flex items-center gap-3 text-xs text-fg-muted">
+          <ThemeToggle />
           {connection !== null && (
             <span className="hidden font-mono sm:inline">
               {new URL(connection.url).host}
@@ -118,8 +123,10 @@ const Routes = () => {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Router>
-      <Routes />
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <Routes />
+      </Router>
+    </ThemeProvider>
   </React.StrictMode>,
 );

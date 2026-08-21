@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>git service</title>
+    <script>
+      // Set the theme class before first paint. Key "theme": "light" |
+      // "dark"; absent = follow the system preference.
+      (() => {
+        try {
+          const stored = localStorage.getItem("theme");
+          const dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch {
+          /* storage disabled — leave the default (light) */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

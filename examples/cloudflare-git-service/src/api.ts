@@ -116,6 +116,52 @@ export interface TreeEntry {
   type: "blob" | "tree" | "commit";
 }
 
+export type FileStatus = "added" | "removed" | "modified";
+
+/**
+ * One changed file in a commit diff or comparison. Content is NOT
+ * included — clients fetch old/new blobs by oid (`getBlob`) and diff
+ * locally. `oldSize`/`newSize` gate binary/oversize files without a
+ * round trip. Gitlinks (mode `160000`) carry commit oids — render
+ * "Subproject commit …", never fetch them as blobs. No rename detection
+ * in v1 (a rename is `removed` + `added`); a mode-only change is
+ * `modified` with `oldOid === newOid`.
+ */
+export interface DiffEntry {
+  path: string;
+  status: FileStatus;
+  oldOid?: string | null;
+  newOid?: string | null;
+  oldMode?: string | null;
+  newMode?: string | null;
+  oldSize?: number | null;
+  newSize?: number | null;
+}
+
+/** Changed files of one commit vs its FIRST parent (null for a root commit). */
+export interface CommitDiff {
+  oid: string;
+  parent: string | null;
+  files: DiffEntry[];
+  /** `true` when the list was cut at the server cap (1000 files). */
+  truncated: boolean;
+}
+
+/** GitHub-style three-dot comparison of two revisions. */
+export interface Comparison {
+  base: string;
+  head: string;
+  mergeBase: string;
+  aheadBy: number;
+  behindBy: number;
+  /** Head-side commits, committer-time descending, capped at 250. */
+  commits: CommitInfo[];
+  commitsTruncated: boolean;
+  /** File diff of mergeBase..head (three-dot). */
+  files: DiffEntry[];
+  filesTruncated: boolean;
+}
+
 export interface TokenInfo {
   id: string;
   name: string;
@@ -312,6 +358,239 @@ export const getFile = async (
   if (!res.ok) throw await parseError(res);
   return new Uint8Array(await res.arrayBuffer());
 };
+
+/** Changed files of a commit vs its first parent (empty tree for a root). */
+export const getCommitDiff = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  oid: string,
+) =>
+  request<CommitDiff>(
+    c,
+    "GET",
+    `/repos/${seg(owner)}/${seg(repo)}/commits/${seg(oid)}/diff`,
+  );
+
+/**
+ * Three-dot comparison of two revisions (short/full refname or 40-hex
+ * oid; annotated tags peeled): merge base, ahead/behind, head-side
+ * commits, and the mergeBase..head file diff.
+ */
+export const compareCommits = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  query: { base: string; head: string },
+) => {
+  const params = new URLSearchParams({ base: query.base, head: query.head });
+  return request<Comparison>(
+    c,
+    "GET",
+    `/repos/${seg(owner)}/${seg(repo)}/compare?${params}`,
+  );
+};
+
+/** JSON blob endpoint serves ≤ 1 MiB only (422 beyond; use /raw). */
+const MAX_JSON_BLOB = 1024 * 1024;
+
+/** Raw blob bytes by oid (the streaming non-JSON route, any size). */
+const getBlobRaw = async (
+  c: Connection,
+  owner: string,
+  repo: string,
+  oid: string,
+): Promise<Uint8Array> => {
+  const res = await fetch(
+    `${c.url}/api/v1/repos/${seg(owner)}/${seg(repo)}/blobs/${seg(oid)}/raw`,
+    { headers: c.token ? { Authorization: `Bearer ${c.token}` } : {} },
+  );
+  if (!res.ok) throw await parseError(res);
+  return new Uint8Array(await res.arrayBuffer());
+};
+
+/**
+ * Blob bytes by oid. Uses the JSON base64 route for blobs ≤ 1 MiB and
+ * falls back to `/raw` for bigger ones — pass `size` (known from a
+ * {@link DiffEntry}) to skip the doomed JSON attempt entirely.
+ */
+export const getBlob = async (
+  c: Connection,
+  owner: string,
+  repo: string,
+  oid: string,
+  options?: { size?: number },
+): Promise<Uint8Array> => {
+  if (options?.size !== undefined && options.size > MAX_JSON_BLOB) {
+    return getBlobRaw(c, owner, repo, oid);
+  }
+  try {
+    const json = await request<{
+      oid: string;
+      size: number;
+      encoding: "base64";
+      content: string;
+    }>(c, "GET", `/repos/${seg(owner)}/${seg(repo)}/blobs/${seg(oid)}`);
+    const binary = atob(json.content);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  } catch (cause) {
+    // ObjectTooLarge — the size hint was absent or stale; stream it raw.
+    if (cause instanceof ApiError && cause.tag === "ObjectTooLarge") {
+      return getBlobRaw(c, owner, repo, oid);
+    }
+    throw cause;
+  }
+};
+
+// ── pull requests ───────────────────────────────────────────────────────────
+
+export type PullState = "open" | "closed" | "merged";
+
+/** Why `mergeable` is what it is (see {@link PullDetail}). */
+export type MergeableReason =
+  | "ff"
+  | "merge-commit"
+  | "conflict"
+  | "up-to-date"
+  | "unknown";
+
+/**
+ * A pull request. PRs track **live** branches by ref name — the record
+ * stores intent + lifecycle, never a diff snapshot; diff and mergeability
+ * are recomputed from current ref tips on every read.
+ */
+export interface Pull {
+  /** Per-repo monotonic PR number (1-based, never reused). */
+  number: number;
+  title: string;
+  body: string | null;
+  /** Full base ref name, e.g. `refs/heads/main`. */
+  baseRef: string;
+  /** Full head ref name, e.g. `refs/heads/feature`. */
+  headRef: string;
+  state: PullState;
+  /** Epoch milliseconds. */
+  createdAt: number;
+  updatedAt: number;
+  /** Epoch milliseconds; `null` unless `state` is `merged`. */
+  mergedAt: number | null;
+  /** FF: the head tip; the merge commit otherwise. Set iff merged. */
+  mergeCommit: string | null;
+}
+
+/**
+ * PR detail = the row + live computed compare fields. Live fields are
+ * `null` when uncomputable: a missing base/head branch, a saturated
+ * ancestor walk, or a merged PR (its record is `mergeCommit`).
+ */
+export interface PullDetail extends Pull {
+  /** Current tip of `baseRef`; `null` if the branch is gone. */
+  baseOid: string | null;
+  /** Current tip of `headRef`; `null` if the branch is gone. */
+  headOid: string | null;
+  mergeBase: string | null;
+  /** Commits on head not on base (`null` when the walk saturates). */
+  aheadBy: number | null;
+  /** Commits on base not on head. */
+  behindBy: number | null;
+  /**
+   * `true` = FF-able or trivially merge-able; `false` = conflicting
+   * paths or up-to-date; `null` = uncomputable.
+   */
+  mergeable: boolean | null;
+  mergeableReason: MergeableReason | null;
+}
+
+/** Response of a successful PR merge. */
+export interface MergeResult {
+  method: "ff" | "merge-commit";
+  /** The oid the base ref now points at. */
+  oid: string;
+  /** The PR after the merge (`state: "merged"`). */
+  pull: Pull;
+}
+
+/** Lists PRs, newest first. `state` defaults to `open` server-side. */
+export const listPulls = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  query?: {
+    state?: PullState | "all";
+    cursor?: string;
+    limit?: number;
+  },
+): Promise<Page<Pull>> => {
+  const params = new URLSearchParams();
+  if (query?.state) params.set("state", query.state);
+  if (query?.cursor) params.set("cursor", query.cursor);
+  if (query?.limit) params.set("limit", String(query.limit));
+  const qs = params.size > 0 ? `?${params}` : "";
+  return request(c, "GET", `/repos/${seg(owner)}/${seg(repo)}/pulls${qs}`);
+};
+
+/** Reads one PR with live compare fields (ahead/behind/mergeable). */
+export const getPull = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  number: number,
+) =>
+  request<PullDetail>(
+    c,
+    "GET",
+    `/repos/${seg(owner)}/${seg(repo)}/pulls/${number}`,
+  );
+
+/** Opens a PR. `base`/`head` accept short (`main`) or full branch names. */
+export const createPull = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  payload: { title: string; body?: string; base: string; head: string },
+) => request<Pull>(c, "POST", `/repos/${seg(owner)}/${seg(repo)}/pulls`, payload);
+
+/** Patches title/body, or closes/reopens via `state`. */
+export const updatePull = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  number: number,
+  payload: {
+    title?: string;
+    body?: string | null;
+    state?: "open" | "closed";
+  },
+) =>
+  request<Pull>(
+    c,
+    "PATCH",
+    `/repos/${seg(owner)}/${seg(repo)}/pulls/${number}`,
+    payload,
+  );
+
+/**
+ * Merges an open PR: fast-forward when possible, else a merge commit iff
+ * the three-way tree merge is trivial. `expectedHeadOid` guards against
+ * a force-push racing the merge (409 RefConflict when stale).
+ */
+export const mergePull = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  number: number,
+  payload?: { message?: string; expectedHeadOid?: string },
+) =>
+  request<MergeResult>(
+    c,
+    "POST",
+    `/repos/${seg(owner)}/${seg(repo)}/pulls/${number}/merge`,
+    payload ?? {},
+  );
 
 // ── tokens ──────────────────────────────────────────────────────────────────
 

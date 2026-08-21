@@ -20,6 +20,7 @@ import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ApiError } from "./api.ts";
+import { useTheme } from "./theme.tsx";
 
 // ── markdown rendering ──────────────────────────────────────────────────────
 
@@ -122,8 +123,7 @@ export const FolderIcon = ({ className }: { className?: string }) => (
     viewBox="0 0 16 16"
     width="16"
     height="16"
-    className={className}
-    fill="#54aeff"
+    className={`fill-folder ${className ?? ""}`}
     aria-hidden="true"
   >
     <path d="M.513 1.513A1.75 1.75 0 0 1 1.75 1h3.5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1H13a1 1 0 0 1 1 1v.5H2.75a.75.75 0 0 0 0 1.5h11.978a1 1 0 0 1 .994 1.117L15 13.25A1.75 1.75 0 0 1 13.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75c0-.464.184-.91.513-1.237Z" />
@@ -165,6 +165,27 @@ export const ForkIcon = ({ className }: { className?: string }) => (
   />
 );
 
+export const PullRequestIcon = ({ className }: { className?: string }) => (
+  <Icon
+    className={className}
+    d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"
+  />
+);
+
+export const GitMergeIcon = ({ className }: { className?: string }) => (
+  <Icon
+    className={className}
+    d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.5-4.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z"
+  />
+);
+
+export const PullClosedIcon = ({ className }: { className?: string }) => (
+  <Icon
+    className={className}
+    d="M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 5.5a.75.75 0 0 1 .75.75v3.378a2.251 2.251 0 1 1-1.5 0V7.25a.75.75 0 0 1 .75-.75Zm-2.03-5.273a.75.75 0 0 1 1.06 0l.97.97.97-.97a.748.748 0 0 1 1.265.332.75.75 0 0 1-.205.729l-.97.97.97.97a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-.97-.97-.97.97a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l.97-.97-.97-.97a.75.75 0 0 1 0-1.06ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"
+  />
+);
+
 export const GearIcon = ({ className }: { className?: string }) => (
   <Icon
     className={className}
@@ -179,7 +200,56 @@ export const CopyIcon = ({ className }: { className?: string }) => (
   />
 );
 
+export const SunIcon = ({ className }: { className?: string }) => (
+  <Icon
+    className={className}
+    d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm5.657-8.157a.75.75 0 0 1 0 1.061l-1.061 1.06a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l1.06-1.06a.75.75 0 0 1 1.06 0Zm-9.193 9.193a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.061 0ZM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0ZM3 8a.75.75 0 0 1-.75.75H.75a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 3 8Zm13 0a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 16 8Zm-8 5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13Zm3.536-1.464a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1-1.06 1.061l-1.061-1.06a.75.75 0 0 1 0-1.061ZM2.343 2.343a.75.75 0 0 1 1.061 0l1.06 1.061a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-1.06-1.06a.75.75 0 0 1 0-1.06Z"
+  />
+);
+
+export const MoonIcon = ({ className }: { className?: string }) => (
+  <Icon
+    className={className}
+    d="M9.598 1.591a.749.749 0 0 1 .785-.175 7.001 7.001 0 1 1-8.967 8.967.75.75 0 0 1 .961-.96 5.5 5.5 0 0 0 7.046-7.046.75.75 0 0 1 .175-.786Zm1.616 1.945a7 7 0 0 1-7.678 7.678 5.499 5.499 0 1 0 7.678-7.678Z"
+  />
+);
+
+export const DeviceIcon = ({ className }: { className?: string }) => (
+  <Icon
+    className={className}
+    d="M14.25 1c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 14.25 12h-3.727c.099 1.041.52 1.872 1.292 2.757A.752.752 0 0 1 11.25 16h-6.5a.75.75 0 0 1-.565-1.243c.772-.885 1.192-1.716 1.292-2.757H1.75A1.75 1.75 0 0 1 0 10.25v-7.5C0 1.784.784 1 1.75 1ZM1.75 2.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25ZM9.018 12H6.982a5.72 5.72 0 0 1-.765 2.5h3.566a5.72 5.72 0 0 1-.765-2.5Z"
+  />
+);
+
 // ── atoms ───────────────────────────────────────────────────────────────────
+
+/** Cycles light → dark → system. Icon shows the current preference. */
+export const ThemeToggle = () => {
+  const { preference, setPreference } = useTheme();
+  const next =
+    preference === "light"
+      ? "dark"
+      : preference === "dark"
+        ? "system"
+        : "light";
+  return (
+    <button
+      type="button"
+      onClick={() => setPreference(next)}
+      title={`Theme: ${preference} (click for ${next})`}
+      aria-label={`Theme: ${preference}. Switch to ${next}.`}
+      className="cursor-pointer rounded-md border border-border-muted p-1.5 text-fg-muted hover:text-fg-default"
+    >
+      {preference === "light" ? (
+        <SunIcon />
+      ) : preference === "dark" ? (
+        <MoonIcon />
+      ) : (
+        <DeviceIcon />
+      )}
+    </button>
+  );
+};
 
 export const Spinner = () => (
   <div className="flex justify-center py-16">
@@ -240,9 +310,9 @@ export const Button = ({
     disabled={disabled}
     className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
       kind === "primary"
-        ? "border-transparent bg-success text-white hover:brightness-110"
+        ? "border-transparent bg-success-emphasis text-fg-on-emphasis hover:bg-success-emphasis-hover"
         : kind === "danger"
-          ? "border-border-muted text-danger hover:bg-danger hover:text-white"
+          ? "border-border-muted text-danger hover:border-transparent hover:bg-danger-emphasis hover:text-fg-on-emphasis"
           : "border-border-muted bg-canvas-subtle hover:bg-border-muted/30"
     }`}
   >
