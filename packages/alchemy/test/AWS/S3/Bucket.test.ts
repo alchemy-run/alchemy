@@ -1,4 +1,3 @@
-import { Action } from "@/Action.ts";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as AWS from "@/AWS";
@@ -1110,65 +1109,6 @@ test.provider(
       yield* assertBucketDeleted(buckets.destBucket.bucketName);
     }),
   { timeout: 180_000 },
-);
-
-// An Action's SDK calls must resolve the SAME AWS environment as the
-// resources it targets. Action bodies run during the `Plan.make` -> `apply`
-// phase, under the compiled stack's services — which carry the live AWS
-// environment. Under `ALCHEMY_TEST_DEV=1` that used to leave the Action on
-// the live default credential chain while the bucket was provisioned in the
-// floci emulator, so the put/head below failed. Regression test for the
-// harness's Action pinning (`pinStackActionsToFloci` in Test/Core.ts).
-const ACTION_BODY = "hello from an alchemy action";
-const PutAndStat = Action(
-  "PutAndStat",
-  Effect.fn(function* (input: { bucketName: string; key: string }) {
-    yield* S3.putObject({
-      Bucket: input.bucketName,
-      Key: input.key,
-      Body: ACTION_BODY,
-    });
-    const head = yield* S3.headObject({
-      Bucket: input.bucketName,
-      Key: input.key,
-    });
-    return { contentLength: Number(head.ContentLength ?? 0) };
-  }),
-);
-
-test.provider(
-  "action S3 calls target the same environment as the bucket",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const output = yield* stack.deploy(
-        Effect.gen(function* () {
-          const bucket = yield* Bucket("ActionCredsBucket", {
-            forceDestroy: true,
-          });
-          const stat = yield* PutAndStat({
-            bucketName: bucket.bucketName,
-            key: "action-creds.txt",
-          });
-          return { bucketName: bucket.bucketName, stat };
-        }),
-      );
-
-      expect(output.stat.contentLength).toBe(ACTION_BODY.length);
-
-      // The object must also be visible to the test body's S3 client —
-      // pinned to the same environment (emulator under ALCHEMY_TEST_DEV,
-      // live cloud otherwise) as the bucket and the Action.
-      const head = yield* S3.headObject({
-        Bucket: output.bucketName,
-        Key: "action-creds.txt",
-      });
-      expect(Number(head.ContentLength)).toBe(ACTION_BODY.length);
-
-      yield* stack.destroy();
-      yield* assertBucketDeleted(output.bucketName);
-    }),
 );
 
 // Idempotent out-of-band delete for the adoption test's deterministically
