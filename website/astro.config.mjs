@@ -26,6 +26,7 @@ function providersSidebarEntry() {
       { label: "AWS", link: "/aws" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
+      { label: "Fly", link: "/fly" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
@@ -983,6 +984,42 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Hetzner"),
+          ],
+        },
+        {
+          label: "Fly",
+          items: [
+            { label: "Overview", link: "/fly" },
+            { label: "Setup", link: "/fly/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "fly/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/fly/compute/apps" },
+                { label: "Machines", link: "/fly/compute/machines" },
+                { label: "Services", link: "/fly/compute/services" },
+                { label: "Sprites", link: "/fly/compute/sprites" },
+                { label: "Regions", link: "/fly/compute/regions" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Volumes", link: "/fly/data/volumes" },
+                { label: "Postgres", link: "/fly/data/postgres" },
+                { label: "Redis", link: "/fly/data/redis" },
+                { label: "Tigris", link: "/fly/data/tigris" },
+                { label: "Secrets", link: "/fly/data/secrets" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "IPs & certificates", link: "/fly/networking" }],
+            },
+            providerResourcesEntry("Fly"),
           ],
         },
         {

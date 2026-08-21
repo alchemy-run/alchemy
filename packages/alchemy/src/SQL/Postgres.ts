@@ -22,7 +22,8 @@ export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
  * Open an `@effect/sql-pg` client (a connection pool) from a connection URL.
  *
  * Accepts a plain `Redacted` URL or an Effect of one — e.g.
- * `Cloudflare.Hyperdrive.Connect(...)`'s `connectionString` — and returns a
+ * `Cloudflare.Hyperdrive.Connect(...)` or `Fly.ConnectPostgres(...)`'s
+ * `connectionString` — and returns a
  * `PgClient` (which implements the generic `SqlClient` interface) wrapped in
  * a chainable Proxy, so it can be resolved once at init and used from any
  * handler:

@@ -227,6 +227,18 @@
       "worker": "./src/Hetzner/*.ts",
       "import": "./lib/Hetzner/*.js"
     },
+    "./Fly": {
+      "types": "./lib/Fly/index.d.ts",
+      "bun": "./src/Fly/index.ts",
+      "worker": "./src/Fly/index.ts",
+      "import": "./lib/Fly/index.js"
+    },
+    "./Fly/*": {
+      "types": "./lib/Fly/*.d.ts",
+      "bun": "./src/Fly/*.ts",
+      "worker": "./src/Fly/*.ts",
+      "import": "./lib/Fly/*.js"
+    },
     "./Prisma": {
       "types": "./lib/Prisma/index.d.ts",
       "bun": "./src/Prisma/index.ts",
@@ -384,6 +396,7 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",

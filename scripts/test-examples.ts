@@ -24,6 +24,12 @@ const examples = [
   // "./examples/aws-website-nuxt",
   // "./examples/aws-website-sveltekit",
   // "./examples/aws-website-waku",
+  "./examples/fly-app",
+  "./examples/fly-service",
+  "./examples/fly-sprite",
+  "./examples/fly-redis",
+  "./examples/fly-bucket",
+  "./examples/fly-postgres",
 ] as const;
 
 type CommandResult = {

@@ -35,8 +35,8 @@ const db = yield* Cloudflare.D1.Database("app-db", {
 });
 ```
 
-The same prop exists on `Neon.Project`, `Neon.Branch`, and the
-PlanetScale databases and branches.
+The same prop exists on `Neon.Project`, `Neon.Branch`,
+`Fly.Postgres`, and the PlanetScale databases and branches.
 
 ## How files are applied
 
@@ -114,6 +114,7 @@ quirks:
 | Cloudflare D1 | [D1 migrations](/cloudflare/data/d1#migrations) — batched application (no transactions over HTTP) |
 | Neon | [Neon migrations](/neon/data/migrations) — applied transactionally on the branch |
 | PlanetScale | [PlanetScale migrations](/planetscale/data/migrations) — the same contract on Postgres and MySQL branches |
+| Fly Managed Postgres | [Fly Postgres](/fly/data/postgres#migrations) — applied over the direct URI |
 
 ## Generated migrations target the same contract
 
