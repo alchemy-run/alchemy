@@ -35,6 +35,7 @@ import {
   Stack,
   type StackEffect,
   type StackServices,
+  type StackSpec,
 } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
@@ -238,6 +239,36 @@ export const makeSidecarHandle = (
   };
 };
 
+/**
+ * Under {@link ALCHEMY_TEST_DEV}, pin every Action body on the stack to the
+ * floci emulator. Action bodies run during the `Plan.make` -> `apply` phase,
+ * where the compiled stack's services — carrying `AWS.providers()`'s live
+ * Endpoint/Region/Credentials — are the closest ambient provider. Without
+ * this, an Action's SDK calls resolve the live default credential chain
+ * while the resources it targets were provisioned in the emulator (the
+ * program pin only covers stack *registration*, and `withProviders` only the
+ * test body). Only the runners are pinned: provider lifecycle operations are
+ * left to the provider-mode machinery — local-mode rows already force floci
+ * via `provideProviderContext`, and live-stamped rows (a prior live run's
+ * state) must keep hitting the real cloud.
+ */
+const pinStackActionsToFloci = <S extends StackSpec>(stack: S): S => {
+  if (!Option.getOrElse(alchemyTestDevOverride(), () => false)) return stack;
+  const actions = Object.fromEntries(
+    Object.entries(stack.actions ?? {}).map(([fqn, action]) => {
+      const run = action.Run;
+      return [
+        fqn,
+        {
+          ...action,
+          Run: (input: any) => Effect.provide(run(input), flociServices()),
+        },
+      ];
+    }),
+  );
+  return { ...stack, actions } as S;
+};
+
 const overrideAlchemyContext = (overrides: { dev: boolean }) =>
   Layer.effect(
     AlchemyContext,
@@ -432,7 +463,10 @@ export const deploy = <A>(
   callOptions?: { stage?: string; scope?: Scope.Scope },
 ) =>
   _deploy({
-    stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
+    stack: Effect.map(
+      stack as Effect.Effect<CompiledStack<A>, never, any>,
+      pinStackActionsToFloci,
+    ),
     stage: callOptions?.stage ?? options.stage ?? "test",
     dev: resolveDev(options),
     scope: callOptions?.scope,
@@ -549,7 +583,7 @@ export const scratchStack = <ROut>(
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(
+        Plan.make(pinStackActionsToFloci(compiled)).pipe(
           Effect.flatMap(apply),
           Effect.provide(compiled.services),
         ),
@@ -566,7 +600,9 @@ export const scratchStack = <ROut>(
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(Effect.provide(compiled.services)),
+        Plan.make(pinStackActionsToFloci(compiled)).pipe(
+          Effect.provide(compiled.services),
+        ),
       ),
       Effect.provide(Layer.succeed(Stage, stage)),
       provideFreshArtifactStore,
