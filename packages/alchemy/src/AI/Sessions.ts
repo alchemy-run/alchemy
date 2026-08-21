@@ -47,5 +47,25 @@ export class Sessions extends Context.Service<
       never,
       RuntimeContext
     >;
+    /**
+     * STOP one session from the outside — the operator's off switch.
+     * Settles it (terminal: children cascade, the `settled`
+     * observation lands, attached views see the end); idempotent on
+     * an already-settled or never-seen key.
+     */
+    readonly stop: (
+      term: string,
+      key: string,
+    ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
+     * DELETE one session — stop it, then erase it: the transcript
+     * (its `ThreadStorage` rows), its clock, and its index row. After
+     * `remove` the session no longer lists and its history is gone.
+     * Idempotent.
+     */
+    readonly remove: (
+      term: string,
+      key: string,
+    ) => Effect.Effect<void, never, RuntimeContext>;
   }
 >()("alchemy/AI/Sessions") {}

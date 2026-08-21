@@ -87,6 +87,10 @@ export const SessionIndexMemory = (
               return;
           }
         }),
+      remove: (id) =>
+        Effect.sync(() => {
+          rows.delete(id);
+        }),
       list: () =>
         Effect.sync(() =>
           [...rows.entries()]

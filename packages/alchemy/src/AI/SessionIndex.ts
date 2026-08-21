@@ -53,6 +53,9 @@ export class SessionIndex extends Context.Service<
     readonly ingest: (observation: SessionObservation) => Effect.Effect<void>;
     /** Every known session, newest activity first. */
     readonly list: () => Effect.Effect<ReadonlyArray<SessionSummary>>;
+    /** Drop one session's row (`Sessions.remove` erases the directory
+     *  entry along with the transcript). Unknown ids are a no-op. */
+    readonly remove: (id: string) => Effect.Effect<void>;
   }
 >()("alchemy/AI/SessionIndex") {}
 

@@ -142,6 +142,9 @@ export const reminderInput = (note: string): ReminderInput => ({
   text: `[reminder] ${note}`,
 });
 
+/** The outcome an operator's `Sessions.stop`/`remove` settles with. */
+export const stoppedByOperator = { _tag: "Stopped", by: "operator" } as const;
+
 /** Unwrap an inbox row into its thread value + observation kind. */
 export const inputProvenance = (
   input: unknown,
@@ -1566,6 +1569,11 @@ export interface SessionEngine {
   ) => Effect.Effect<void>;
   /** Settle every RAM-resident session (process shutdown). */
   readonly interrupt: Effect.Effect<void>;
+  /** Drop one session's RAM entry (after `settle`) so the key can be
+   *  admitted FRESH — the eraser's second half. Purging the durable
+   *  rows is the driver's job (`ThreadStorage.remove` locally, the
+   *  DO's `deleteAll` on Cloudflare). */
+  readonly forget: (key: string) => Effect.Effect<void>;
   /** Run rounds for one session until it parks or settles —
    *  serialized per session; safe to call redundantly. */
   readonly burst: (key: string) => Effect.Effect<void>;
@@ -2435,6 +2443,11 @@ export const makeSessionEngine = (
         { discard: true },
       ),
     ),
+    forget: (key) =>
+      Effect.sync(() => {
+        sessions.delete(key);
+        if (lastKey === key) lastKey = undefined;
+      }),
     burst,
     restore,
     ensure: (key) => Effect.map(ensureSession(key), (s) => s.key),

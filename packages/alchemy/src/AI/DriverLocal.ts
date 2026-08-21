@@ -11,10 +11,11 @@ import { Driver, type Charter, type Interpretable } from "./Driver.ts";
 import {
   makeSessionEngine,
   reminderInput,
+  stoppedByOperator,
   type SessionEngine,
 } from "./DriverCore.ts";
 import * as Option from "effect/Option";
-import { SessionIndex } from "./SessionIndex.ts";
+import { SessionIndex, sessionId } from "./SessionIndex.ts";
 import {
   handleSessionSocketFrame,
   type SessionSocketClientFrame,
@@ -73,6 +74,10 @@ export const DriverLocal: Layer.Layer<
     const engines = new Map<string, SessionEngine>();
     /** term → key → attached socket writers (the broadcast seam). */
     const sockets = new Map<string, Map<string, Set<SendFrame>>>();
+    /** term → drop one key's RESIDENT state (fiber-start marker, wake
+     *  queue) so a removed key can be admitted fresh — registered by
+     *  each interpret over its own closures. */
+    const residents = new Map<string, (key: string) => void>();
 
     const socketsOf = (term: string, key: string): Set<SendFrame> => {
       let byKey = sockets.get(term);
@@ -177,6 +182,10 @@ export const DriverLocal: Layer.Layer<
             ),
         });
         engines.set(termName, engine);
+        residents.set(termName, (key) => {
+          started.delete(key);
+          wakes.delete(key);
+        });
 
         // ── RESTORE (bootstrap §3): persisted sessions come back
         // PARKED, threads primed, seq cursor continued. Their fibers
@@ -257,6 +266,16 @@ export const DriverLocal: Layer.Layer<
         return HttpServerResponse.empty();
       });
 
+    // the operator's off switch: settle in place (children cascade,
+    // the fiber loop's settled race ends it) — a term this process
+    // never interpreted has nothing to stop
+    const stop = (term: string, key: string): Effect.Effect<void> => {
+      const engine = engines.get(term);
+      return engine === undefined
+        ? Effect.void
+        : engine.settle(key, stoppedByOperator, { admit: true });
+    };
+
     return Layer.mergeAll(
       Layer.succeed(Driver, { interpret }),
       Layer.succeed(Sessions, {
@@ -265,6 +284,21 @@ export const DriverLocal: Layer.Layer<
           Option.match(sessionIndex, {
             onNone: () => Effect.succeed([]),
             onSome: (index) => index.list(),
+          }),
+        stop,
+        remove: (term, key) =>
+          Effect.gen(function* () {
+            yield* stop(term, key);
+            // forget the RAM shell + resident machinery so the key
+            // can be admitted fresh, then purge the durable rows
+            yield* engines.get(term)?.forget(key) ?? Effect.void;
+            residents.get(term)?.(key);
+            sockets.get(term)?.delete(key);
+            yield* threadStorage.remove(term, key);
+            yield* Option.match(sessionIndex, {
+              onNone: () => Effect.void,
+              onSome: (index) => index.remove(sessionId(term, key)),
+            });
           }),
       }),
     );
