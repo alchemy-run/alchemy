@@ -205,6 +205,18 @@ ALCHEMY_FLOCI_IMAGE=floci:dev alchemy dev   # use your own emulator build
 The default image is our patched release
 (`ghcr.io/alchemy-run/floci`).
 
+To wipe everything inside the emulator without recreating the
+container, point [`nuke`](/cli/nuke) at the local providers:
+
+```sh
+bun alchemy unsafe nuke --local --include 'AWS.*'
+```
+
+`--local` enumerates and deletes through each provider's local
+implementation, so it only ever sees emulated resources — no
+cloud credentials are involved and nothing in a real AWS account
+can be touched.
+
 ## Where next
 
 - [Local development](/environments/local-development) — the
