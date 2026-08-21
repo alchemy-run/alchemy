@@ -13,7 +13,7 @@ import type { Providers } from "../Providers.ts";
 import {
   hashDockerBuildInputs,
   resolveDockerBuildPaths,
-} from "./DockerBuild.ts";
+} from "../../Docker/BuildHash.ts";
 
 /**
  * Docker login credentials for the account's private ECR registry, in the

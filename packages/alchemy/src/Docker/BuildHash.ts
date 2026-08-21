@@ -1,3 +1,11 @@
+/**
+ * INTERNAL — deterministic identity for a Docker build: context + Dockerfile
+ * + platform + build args, with Docker's own semantics (`.dockerignore`
+ * pattern matching, symlink targets, permission bits, empty directories).
+ * Cloud-agnostic — consumed by `AWS.ECR.Image` and `AWS.Lambda.Function`
+ * image packaging; NOT exported from the Docker barrel.
+ */
+
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

@@ -13,7 +13,7 @@ import { sha256Object } from "../../Util/sha256.ts";
 import {
   hashDockerBuildInputs,
   resolveDockerBuildPaths,
-} from "../ECR/DockerBuild.ts";
+} from "../../Docker/BuildHash.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
