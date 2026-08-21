@@ -1,13 +1,34 @@
+import { Action } from "@/Action";
 import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { Bucket, PutObject, PutObjectHttp } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// The Floci sweep must override even a configured live AWS environment. This
+// sentinel makes the Action regression independent of local profiles.
+const forceLocal = process.env.ALCHEMY_TEST_DEV === "1";
+const actionProviders = forceLocal
+  ? Layer.merge(
+      AWS.providers(),
+      Layer.succeed(
+        AWSEnvironment,
+        Effect.succeed({
+          accountId: "111111111111",
+          region: "us-east-1",
+          credentials: Effect.die("live credentials must not be used"),
+        }),
+      ),
+    )
+  : AWS.providers();
+const { test: actionTest } = Test.make({ providers: actionProviders });
 
 const deployTestBucket = (stack: Test.ScratchStack) =>
   Effect.gen(function* () {
@@ -23,6 +44,48 @@ const deployTestBucket = (stack: Test.ScratchStack) =>
       }),
     );
   });
+
+actionTest.provider("Action - uses the configured S3 data plane", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const output = yield* stack.deploy(
+      Effect.gen(function* () {
+        const bucket = yield* Bucket("ActionDataPlaneBucket", {
+          forceDestroy: true,
+        });
+        const PutWithAction = Action(
+          "PutWithAction",
+          Effect.gen(function* () {
+            const putObject = yield* PutObject(bucket);
+            return () =>
+              Effect.gen(function* () {
+                const environment = yield* AWSEnvironment.current;
+                if (forceLocal && environment.accountId !== "000000000000") {
+                  return { accountId: environment.accountId };
+                }
+                const result = yield* putObject({
+                  Key: "action.txt",
+                  Body: "hello from Action",
+                });
+                return {
+                  accountId: environment.accountId,
+                  etag: result.ETag,
+                };
+              });
+          }).pipe(Effect.provide(PutObjectHttp)),
+        );
+        return yield* PutWithAction({});
+      }),
+    );
+
+    expect(output.etag).toBeDefined();
+    if (forceLocal) {
+      expect(output.accountId).toBe("000000000000");
+    }
+    yield* stack.destroy();
+  }),
+);
 
 test.provider("listObjectsV2 - list objects in bucket", (stack) =>
   Effect.gen(function* () {

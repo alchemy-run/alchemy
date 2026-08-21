@@ -530,11 +530,12 @@ export const scratchStack = <ROut>(
       ? Layer.succeed(State.State, State.InMemoryService({}))
       : Layer.provide(State.localState(), PlatformServices);
 
-  // `withProviders` already pins test-body distilled to Floci, but the stack
-  // *program* is composed under `AWS.providers()`'s live Endpoint. Dual
-  // providers still hit Floci in lifecycle ops; user-program distilled
-  // (e.g. ECS Service `findHostedZoneId`) would otherwise query real AWS.
-  const pinProgramToFloci = <A, E, R>(
+  // `withProviders` already pins the test body to Floci, but the stack program
+  // and its later plan/apply phase run under `AWS.providers()`'s live services.
+  // Pin both phases separately: Actions execute during apply, after the stack
+  // program has finished. This override must be inside `compiled.services` so
+  // Effect's closest-layer precedence selects Floci for Action data-plane calls.
+  const pinToFloci = <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, R> =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
@@ -542,15 +543,14 @@ export const scratchStack = <ROut>(
       : effect;
 
   const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
-    (pinProgramToFloci(effect) as Effect.Effect<any, any, never>).pipe(
+    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
         providers: options.providers,
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(
-          Effect.flatMap(apply),
+        pinToFloci(Plan.make(compiled).pipe(Effect.flatMap(apply))).pipe(
           Effect.provide(compiled.services),
         ),
       ),
@@ -559,14 +559,14 @@ export const scratchStack = <ROut>(
     );
 
   const buildPlan = (effect: Effect.Effect<any, any, any>) =>
-    (pinProgramToFloci(effect) as Effect.Effect<any, any, never>).pipe(
+    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
         providers: options.providers,
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(Effect.provide(compiled.services)),
+        pinToFloci(Plan.make(compiled)).pipe(Effect.provide(compiled.services)),
       ),
       Effect.provide(Layer.succeed(Stage, stage)),
       provideFreshArtifactStore,
