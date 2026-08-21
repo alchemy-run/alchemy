@@ -100,3 +100,22 @@ test(
     expect(keys).toEqual(["Cache", "Site"]);
   }),
 );
+
+test(
+  "Astro forwards the prerender environment to its source provider",
+  Effect.gen(function* () {
+    const resources = yield* compile(
+      Cloudflare.Website.Astro("Astro", {
+        prerenderEnvironment: "node",
+        sessionKVBindingName: false,
+      }),
+    );
+    expect(resources["Astro"]?.Props.source).toMatchObject({
+      provider: "@alchemy.run/frontend-frameworks/astro/source",
+      devMode: "server",
+      options: {
+        prerenderEnvironment: "node",
+      },
+    });
+  }),
+);

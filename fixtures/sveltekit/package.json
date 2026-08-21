@@ -19,13 +19,13 @@
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@playwright/test": "catalog:",
-    "@sveltejs/kit": "catalog:frameworks",
-    "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@playwright/test": "catalog:testing",
+    "@sveltejs/kit": "catalog:frontend",
+    "@sveltejs/vite-plugin-svelte": "catalog:frontend",
     "@types/node": "^24.12.0",
     "effect": "catalog:effect",
-    "svelte": "catalog:frameworks",
-    "vite": "catalog:"
+    "svelte": "catalog:frontend",
+    "vite": "catalog:build"
   }
 }

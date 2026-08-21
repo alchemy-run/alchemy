@@ -45,17 +45,17 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
+    "effect": "catalog:effect",
     "@distilled.cloud/aws": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@effect/platform-bun": "catalog:",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@effect/platform-bun": "catalog:effect",
     "alchemy": "workspace:*",
     "alchemy-test": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:effect"
   },
   "publishConfig": {
     "access": "public"

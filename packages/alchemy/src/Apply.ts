@@ -1,12 +1,20 @@
 import * as Cause from "effect/Cause";
+import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type { PlatformError } from "effect/PlatformError";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { AlchemyContext } from "./AlchemyContext.ts";
+import type { AuthError } from "./Auth/AuthProvider.ts";
+import {
+  type CredentialsRequired,
+  demandPlanCredentials,
+} from "./Auth/Demand.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
@@ -145,10 +153,28 @@ export const apply = <P extends Plan>(
   | Output.InvalidReferenceError
   | Output.MissingSourceError
   | StateStoreError
-  | DestroyError,
+  | DestroyError
+  | CredentialsRequired
+  | AuthError
+  | PlatformError
+  | ConfigError,
   Cli | State | Stack | Stage
 > =>
   Effect.gen(function* () {
+    // Credential-free dev: a dev-mode plan that needs the real cloud
+    // (`Alchemy.remote()` rows, remote-proxied bindings, deletions of rows
+    // stamped `providerMode: "live"`) demands cloud credentials exactly
+    // once, up front, BEFORE any lifecycle operation runs — a fully-local
+    // dev plan demands nothing. Non-dev runs never enter the seam: live
+    // providers keep the pre-existing lazy credential flow. Wired here (not
+    // in Deploy/Destroy) because `apply` is the single choke point every
+    // path shares — CLI deploy/destroy, `Test.make` deploys, and
+    // `test.provider` scratch stacks. See `Auth/Demand.ts`.
+    const alchemy = yield* Effect.serviceOption(AlchemyContext);
+    if (Option.isSome(alchemy) && alchemy.value.dev) {
+      yield* demandPlanCredentials(plan);
+    }
+
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
     const state = yield* yield* State;
@@ -597,12 +623,36 @@ const executeNode = (
     // ── noop ──
 
     if (node.action === "noop") {
-      // No work to do — the persisted attr is already stable. If the row was
-      // persisted under a legacy type name (the type was since renamed and
-      // carries the old name as an alias), migrate it to the canonical type
-      // so the state stops depending on the alias.
-      if (node.state.resourceType !== node.resource.Type) {
-        yield* commit({ ...node.state, resourceType: node.resource.Type });
+      // No work to do on the cloud resource — the persisted attr is already
+      // stable. Two pieces of row METADATA can still have drifted from the
+      // declaration, and this is the only pass that will ever see them:
+      //
+      // 1. `resourceType` — the row was persisted under a legacy type name
+      //    (the type was since renamed and carries the old name as an
+      //    alias); migrate it so the state stops depending on the alias.
+      // 2. `removalPolicy` — `RemovalPolicy.retain()` / `.destroy()` is a
+      //    decoration on the declaration, not a prop, so changing it never
+      //    produces a diff. Without this commit the new policy would never
+      //    reach state, and the orphan delete (which reads the policy from
+      //    the persisted row, see `Plan.ts`'s delete node) would act on the
+      //    stale one — destroying a resource the user had marked `retain`.
+      //    See https://github.com/alchemy-run/alchemy/issues/1248.
+      const policyChanged =
+        node.state.removalPolicy !== node.resource.RemovalPolicy;
+      if (node.state.resourceType !== node.resource.Type || policyChanged) {
+        yield* commit({
+          ...node.state,
+          resourceType: node.resource.Type,
+          removalPolicy: node.resource.RemovalPolicy,
+        });
+      }
+      // A policy flip is otherwise invisible (the row is a noop), and it is
+      // exactly the change a user wants confirmation of. Legacy rows with no
+      // persisted policy normalize silently — there is nothing to report.
+      if (policyChanged && node.state.removalPolicy !== undefined) {
+        yield* scopedSession.note(
+          `removal policy ${node.state.removalPolicy} → ${node.resource.RemovalPolicy}`,
+        );
       }
       yield* signalReadyStable;
       yield* storeAndSignal({

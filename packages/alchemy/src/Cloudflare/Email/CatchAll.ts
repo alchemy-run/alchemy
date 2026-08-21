@@ -90,11 +90,8 @@ export type CatchAll = Resource<
  * Email Routing must be enabled on the zone first (see
  * `Cloudflare.Email.Routing`), and `forward` actions require the destination
  * address to be verified (see `Cloudflare.Email.Address`).
- * @resource
- * @product Email
- * @category Email
- * @section Catching unmatched mail
- * @example Forward everything else to a verified destination
+ * ### Catching unmatched mail
+ * **Example:** Forward everything else to a verified destination
  * ```typescript
  * const routing = yield* Cloudflare.Email.Routing("Routing", {
  *   zone: "example.com",
@@ -106,7 +103,7 @@ export type CatchAll = Resource<
  * });
  * ```
  *
- * @example Silently drop unmatched mail
+ * **Example:** Silently drop unmatched mail
  * ```typescript
  * yield* Cloudflare.Email.CatchAll("DropTheRest", {
  *   zone: routing.zoneId,
@@ -115,14 +112,18 @@ export type CatchAll = Resource<
  * });
  * ```
  *
- * @section Workers
- * @example Hand unmatched mail to an email Worker
+ * ### Workers
+ * **Example:** Hand unmatched mail to an email Worker
  * ```typescript
  * yield* Cloudflare.Email.CatchAll("CatchAllWorker", {
  *   zone: routing.zoneId,
  *   actions: [{ type: "worker", value: ["my-email-worker"] }],
  * });
  * ```
+ *
+ * @resource
+ * @product Email
+ * @category Email
  */
 export const CatchAll = Resource<CatchAll>(CatchAllTypeId, {
   aliases: ["Cloudflare.EmailCatchAll"],
@@ -288,13 +289,12 @@ type ObservedCatchAll =
   | emailRouting.PutRuleCatchAllResponse;
 
 const normalizeActions = (actions: ObservedCatchAll["actions"]): Action[] =>
-  (actions ?? []).map(
-    (a): Action =>
-      a.type === "drop"
-        ? { type: "drop" }
-        : a.type === "forward"
-          ? { type: "forward", value: [...(a.value ?? [])] }
-          : { type: "worker", value: [...(a.value ?? [])] },
+  (actions ?? []).map((a): Action =>
+    a.type === "drop"
+      ? { type: "drop" }
+      : a.type === "forward"
+        ? { type: "forward", value: [...(a.value ?? [])] }
+        : { type: "worker", value: [...(a.value ?? [])] },
   );
 
 const actionsEqual = (a: Action[], b: Action[]): boolean =>

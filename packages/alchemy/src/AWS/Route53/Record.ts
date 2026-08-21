@@ -229,9 +229,8 @@ export interface Record extends Resource<
  * `Record` manages a single Route 53 record set using `UPSERT` for create and
  * update operations, and waits for Route 53 change propagation before
  * returning.
- * @resource
- * @section Creating Records
- * @example A Record Alias To CloudFront
+ * ### Creating Records
+ * **Example:** A Record Alias To CloudFront
  * ```typescript
  * const record = yield* Record("WebsiteAlias", {
  *   hostedZoneId: "Z1234567890",
@@ -244,7 +243,7 @@ export interface Record extends Resource<
  * });
  * ```
  *
- * @example TXT Record
+ * **Example:** TXT Record
  * ```typescript
  * const record = yield* Record("VerificationRecord", {
  *   hostedZoneId: "Z1234567890",
@@ -255,8 +254,8 @@ export interface Record extends Resource<
  * });
  * ```
  *
- * @section Routing Policies
- * @example Weighted Routing
+ * ### Routing Policies
+ * **Example:** Weighted Routing
  * ```typescript
  * const blue = yield* Record("Blue", {
  *   hostedZoneId: zone.id,
@@ -278,7 +277,7 @@ export interface Record extends Resource<
  * });
  * ```
  *
- * @example Failover Routing With Health Check
+ * **Example:** Failover Routing With Health Check
  * ```typescript
  * const primary = yield* Record("Primary", {
  *   hostedZoneId: zone.id,
@@ -301,7 +300,7 @@ export interface Record extends Resource<
  * });
  * ```
  *
- * @example Latency Routing
+ * **Example:** Latency Routing
  * ```typescript
  * const record = yield* Record("UsEast", {
  *   hostedZoneId: zone.id,
@@ -314,7 +313,7 @@ export interface Record extends Resource<
  * });
  * ```
  *
- * @example Geolocation Routing
+ * **Example:** Geolocation Routing
  * ```typescript
  * const record = yield* Record("Default", {
  *   hostedZoneId: zone.id,
@@ -326,16 +325,21 @@ export interface Record extends Resource<
  *   geoLocation: { countryCode: "*" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Record = Resource<Record>("AWS.Route53.Record");
 
-const normalizeHostedZoneId = (hostedZoneId: string) =>
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");
 
-const normalizeName = (name: string) =>
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const normalizeName = (name: string) =>
   name.endsWith(".") ? name : `${name}.`;
 
-const toAliasTarget = (
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const toAliasTarget = (
   aliasTarget: route53.AliasTarget | undefined,
 ): ResolvedRecordAliasTarget | undefined =>
   aliasTarget
@@ -420,8 +424,9 @@ const fromCidrRouting = (
  * Build the full `ResourceRecordSet` wire shape from props. Used for both the
  * UPSERT change batch and the DELETE change batch — DELETE requires an exact
  * match of every policy field, so this must round-trip the entire surface.
+ * @internal shared with `Records.ts` — not exported from the barrel.
  */
-const toRecordSet = (
+export const toRecordSet = (
   props: Pick<
     RecordProps,
     | "name"

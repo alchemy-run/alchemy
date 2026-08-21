@@ -93,13 +93,18 @@ test.provider.skipIf(!!process.env.FAST)(
         PrivateKey: new TextEncoder().encode(KEY_PEM),
       });
       const certificateArn = imported.CertificateArn!;
+      // Failure-path backup only (the happy path deletes the cert in-body,
+      // below). It runs inside the implicit file afterAll, whose budget is
+      // the 120s default — so this retry MUST stay well under that, or a
+      // still-in-use cert turns a passing file into an afterAll TimeoutError.
+      // If the cert is still ELB-held after ~60s, leak it for `pnpm nuke`.
       yield* Effect.addFinalizer(() =>
         acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.retry({
             while: (e) => e._tag === "ResourceInUseException",
             schedule: Schedule.max([
               Schedule.spaced("5 seconds"),
-              Schedule.recurs(24),
+              Schedule.recurs(12),
             ]),
           }),
           Effect.ignore,

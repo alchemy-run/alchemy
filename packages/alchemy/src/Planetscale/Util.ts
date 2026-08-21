@@ -5,8 +5,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
 
-export const DEFAULT_MIGRATIONS_TABLE = "__alchemy_migrations";
-
 /**
  * Tagged error raised when polling for a state predicate that has not yet
  * been reached. Used internally with `Effect.retry` to drive long-running

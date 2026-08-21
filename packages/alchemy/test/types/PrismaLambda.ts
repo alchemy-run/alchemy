@@ -23,7 +23,7 @@ export class PrismaLambdaApi extends AWS.Lambda.Function<
 export const PrismaLambdaApiLive = PrismaLambdaApi.make(
   {
     main: import.meta.filename,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const db = yield* Prisma.Connect(connection);

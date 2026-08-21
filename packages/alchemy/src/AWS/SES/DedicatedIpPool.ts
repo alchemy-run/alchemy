@@ -71,9 +71,8 @@ export interface DedicatedIpPool extends Resource<
  *
  * `STANDARD` → `MANAGED` is an in-place scaling change. `MANAGED` → `STANDARD`
  * is not supported by AWS and replaces the pool.
- * @resource
- * @section Creating Pools
- * @example Standard Pool
+ * ### Creating Pools
+ * **Example:** Standard Pool
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -82,14 +81,14 @@ export interface DedicatedIpPool extends Resource<
  * });
  * ```
  *
- * @example Managed Pool
+ * **Example:** Managed Pool
  * ```typescript
  * const pool = yield* SES.DedicatedIpPool("Transactional", {
  *   scalingMode: "MANAGED",
  * });
  * ```
  *
- * @example Explicit Pool Name
+ * **Example:** Explicit Pool Name
  * ```typescript
  * // Without poolName a deterministic lowercase name is derived from
  * // app/stage/id. Pool names allow lowercase letters, numbers, and dashes.
@@ -98,8 +97,8 @@ export interface DedicatedIpPool extends Resource<
  * });
  * ```
  *
- * @section Changing the Scaling Mode
- * @example Migrate a Standard Pool to Managed
+ * ### Changing the Scaling Mode
+ * **Example:** Migrate a Standard Pool to Managed
  * ```typescript
  * // STANDARD -> MANAGED is applied in place — the pool keeps its name and
  * // its dedicated IPs.
@@ -111,8 +110,8 @@ export interface DedicatedIpPool extends Resource<
  * // is created and the old one deleted, dropping its dedicated IPs.
  * ```
  *
- * @section Isolating Reputation
- * @example Separate Marketing and Transactional Reputation
+ * ### Isolating Reputation
+ * **Example:** Separate Marketing and Transactional Reputation
  * ```typescript
  * // Give each kind of mail its own pool so a marketing reputation hit
  * // cannot take down password resets.
@@ -123,6 +122,8 @@ export interface DedicatedIpPool extends Resource<
  *   scalingMode: "MANAGED",
  * });
  * ```
+ *
+ * @resource
  */
 export const DedicatedIpPool = Resource<DedicatedIpPool>(
   "AWS.SES.DedicatedIpPool",

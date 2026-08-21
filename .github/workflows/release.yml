@@ -1,68 +1,147 @@
-name: release
+name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
         description: >-
-          Release spec. Empty = next beta. `patch|minor|major` or `x.y.z`
-          for a stable release. `beta` / `beta.N` / `alpha` / `alpha.N`
-          for a prerelease. Anything else = tag release on
-          `0.0.0-<name>`.
+          Release spec. `beta` (the default) publishes the next
+          `2.0.0-beta.N`; `beta.N` publishes that exact candidate. `rc[.N]`
+          and `alpha[.N]` select those prerelease channels.
+          `patch|minor|major` or `x.y.z` publishes a stable release. Anything
+          else publishes `0.0.0-<name>`.
         required: false
         type: string
-        default: ""
+        default: "beta"
       force-latest:
-        description: >-
-          Publish under npm's `latest` dist-tag regardless of channel. On
-          by default — 2.0 prereleases are the effective current release,
-          so `latest` follows whatever we publish. Uncheck to cut a release
-          that stays off `latest` (it lands on `next` instead). If the
-          version is already on npm, its `latest` tag is moved rather than
-          the publish skipped.
+        description: Publish the release under the latest dist-tag
         required: false
         type: boolean
         default: true
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
-# Reusable workflows can't widen permissions — the caller must grant
-# `contents: write` (commit + tag) and `id-token: write` (npm OIDC).
 permissions:
   contents: write
   id-token: write
 
 jobs:
-  release:
-    uses: alchemy-run/actions/.github/workflows/release.yml@ba080391343b21c18ff098868e0c932e469da0aa # main
-    with:
-      # The bun workspace includes `distilled/packages/*` from the
-      # distilled submodule, so consumer checkouts must fetch it.
-      submodules: "true"
-      node-version: "24"
-      version: ${{ inputs.version }}
-      force-latest: ${{ inputs.force-latest }}
-      repo: alchemy-run/alchemy
-      current-version: "2.0.0"
-      # Each package builds in its own publish job: the tsc build pulls
-      # in the alchemy -> distilled project-reference chain (distilled/aws
-      # is huge), which doesn't fit the bump job's ubuntu-latest box.
-      build-mode: per-package
-      # Turbo scopes the build to the package being published and builds its
-      # workspace dependencies first. Each package build copies its shared
-      # license metadata, and alchemy also copies the repo-root README.
-      build-command: >-
-        PKG_NAME=$(node -p "require('./package.json').name");
-        cd ../..;
-        bun turbo run build --filter="$PKG_NAME"
-      packages: |
-        [
-          { "dir": "packages/alchemy",            "name": "alchemy",                         "runner": "ubuntu-22-large" },
-          { "dir": "packages/better-auth",        "name": "@alchemy.run/better-auth",        "runner": "ubuntu-22-large" },
-          { "dir": "packages/cloudflare-runtime", "name": "@alchemy.run/cloudflare-runtime", "runner": "ubuntu-22-large" },
-          { "dir": "packages/cloudflare-frameworks",         "name": "@alchemy.run/cloudflare-frameworks",         "runner": "ubuntu-22-large" },
-          { "dir": "packages/pr-package",         "name": "@alchemy.run/pr-package",         "runner": "ubuntu-22-large" }
-        ]
-    secrets: inherit
+  build:
+    name: Build and pack
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      channel: ${{ steps.release.outputs.channel }}
+    steps:
+      - name: Generate bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ALCHEMY_VERSION_BOT_ID }}
+          private-key: ${{ secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.bot-token.outputs.token }}
+          submodules: true
+
+      - name: Setup pnpm, Node.js, Bun
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          cache: true
+          install: false
+
+      - name: Install Node 24
+        run: pnpm runtime set node 24 -g
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - id: release
+        name: Prepare release
+        env:
+          FORCE_LATEST: ${{ inputs.force-latest }}
+        run: |
+          set -euo pipefail
+          bun scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
+
+      - name: Build release packages
+        run: >-
+          pnpm turbo run build
+          $(jq -r '.[] | "--filter=\(.name)"' release-packages.json)
+
+      - name: Pack release artifacts
+        run: |
+          set -euo pipefail
+          mkdir release-packages
+          while IFS= read -r dir; do
+            pnpm --dir "$dir" pack --pack-destination "$GITHUB_WORKSPACE/release-packages"
+          done < <(jq -r '.[].dir' release-packages.json)
+
+      - id: commit
+        name: Commit and tag
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          CHANNEL: ${{ steps.release.outputs.channel }}
+        run: bash scripts/release/commit.sh
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-packages
+          path: release-packages/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Setup pnpm, Node.js, Bun
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          cache: true
+          install: false
+
+      - name: Install Node 24
+        run: pnpm runtime set node 24 -g
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Remove token-based npm authentication
+        run: sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-packages
+          path: release-packages
+
+      - name: Publish tarballs with OIDC
+        env:
+          PUBLISH_TAG: ${{ needs.build.outputs.tag }}
+          CHANNEL_TAG: ${{ needs.build.outputs.channel == 'release' && 'latest' || needs.build.outputs.channel == 'tag' && needs.build.outputs.tag || 'next' }}
+          FORCE_LATEST: ${{ inputs.force-latest }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bash scripts/release/publish.sh
+
+      - name: Create GitHub release
+        if: needs.build.outputs.channel != 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
+        run: bun scripts/release/github-release.ts "v${VERSION}" "$CHANNEL"

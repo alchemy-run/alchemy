@@ -66,7 +66,7 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 
 `Drizzle.Schema` diffs the schema module on each deploy and writes
 pending migration SQL to `out`. Passing `schema.out` as the
-database's `migrationsDir` creates the dependency edge: generate
+database's `migrations` prop creates the dependency edge: generate
 first, apply second, in one `alchemy deploy`. On Neon:
 
 ```typescript
@@ -85,7 +85,7 @@ export const Db = Effect.gen(function* () {
   const project = yield* Neon.Project("app-db");
   const branch = yield* Neon.Branch("app-branch", {
     project,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   return branch;
@@ -99,7 +99,7 @@ export const Hyperdrive = Effect.gen(function* () {
 });
 ```
 
-`Planetscale.PostgresBranch` takes the same `migrationsDir` wiring.
+`Planetscale.PostgresBranch` takes the same `migrations` wiring.
 Register `Drizzle.providers()` alongside your cloud providers in the
 Stack. [Migrations](/sql/drizzle/migrations) covers what the schema
 resource does — and does not — decide on your behalf.

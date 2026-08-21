@@ -278,15 +278,13 @@ export const local = ({
           workflowName,
         }),
       ),
-      Effect.map(
-        (service): WorkerdConfig.Worker_Binding => ({
-          name: binding,
-          wrapped: {
-            moduleName: WORKFLOWS_WRAPPED_BINDING_MODULE,
-            innerBindings: [{ name: "binding", service }],
-          },
-        }),
-      ),
+      Effect.map((service): WorkerdConfig.Worker_Binding => ({
+        name: binding,
+        wrapped: {
+          moduleName: WORKFLOWS_WRAPPED_BINDING_MODULE,
+          innerBindings: [{ name: "binding", service }],
+        },
+      })),
     );
   });
 

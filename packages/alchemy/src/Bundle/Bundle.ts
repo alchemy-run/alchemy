@@ -305,12 +305,10 @@ export const watch = (
           return event;
         }
         return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
-          Effect.map(
-            (output): BundleWatchEvent.Success => ({
-              _tag: "Success",
-              output,
-            }),
-          ),
+          Effect.map((output): BundleWatchEvent.Success => ({
+            _tag: "Success",
+            output,
+          })),
           Effect.catch((error) =>
             Effect.succeed<BundleWatchEvent.Error>({
               _tag: "Error",

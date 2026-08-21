@@ -198,7 +198,9 @@ test(
     // way through to the workflow body's runtime read. The workflow body
     // unwraps `Redacted.value(secret)` and embeds it in the returned
     // `processed` payload.
-    expect(lastStatus.output?.secret).toBe(Redacted.value(WORKFLOW_SECRET_VALUE));
+    expect(lastStatus.output?.secret).toBe(
+      Redacted.value(WORKFLOW_SECRET_VALUE),
+    );
   }),
   { timeout: 120_000 },
 );

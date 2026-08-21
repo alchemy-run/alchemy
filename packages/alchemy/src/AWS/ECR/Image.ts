@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { isResolved } from "../../Diff.ts";
@@ -81,7 +82,16 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform: options.platform,
     "build-arg": options.buildArgs,
   });
-  yield* docker.image.push(options.imageUri, credentials);
+  // Pushes are idempotent; transient registry-transport failures (Docker
+  // Desktop's embedded proxy timing out under load, ECR 503s, credential
+  // helper contention) resolve on a bounded re-attempt.
+  yield* docker.image.push(options.imageUri, credentials).pipe(
+    Effect.retry({
+      while: (): boolean => true,
+      schedule: Schedule.exponential("2 seconds"),
+      times: 3,
+    }),
+  );
   return options.imageUri;
 });
 
@@ -148,9 +158,8 @@ export interface Image extends Resource<
  * when that hash changes — a content change produces a new tag and digest on
  * the same resource, so replacement is never needed.
  *
- * @resource
- * @section Building Images
- * @example Push to an ECR Repository
+ * ### Building Images
+ * **Example:** Push to an ECR Repository
  * ```typescript
  * const repository = yield* AWS.ECR.Repository("AppRepository", {});
  * const image = yield* AWS.ECR.Image("AppImage", {
@@ -159,15 +168,15 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @example Auto-created Repository
+ * **Example:** Auto-created Repository
  * ```typescript
  * const image = yield* AWS.ECR.Image("AppImage", {
  *   context: "./app",
  * });
  * ```
  *
- * @section Build Configuration
- * @example Custom Dockerfile, Platform, and Build Args
+ * ### Build Configuration
+ * **Example:** Custom Dockerfile, Platform, and Build Args
  * ```typescript
  * const image = yield* AWS.ECR.Image("WorkerImage", {
  *   repositoryUri: repository.repositoryUri,
@@ -178,14 +187,16 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @section Consuming the Image
- * @example Reference from a Task Definition
+ * ### Consuming the Image
+ * **Example:** Reference from a Task Definition
  * ```typescript
  * const task = yield* AWS.ECS.Task("ApiTask", {
  *   main: import.meta.url,
  *   sidecars: [{ name: "proxy", image: image.imageUri, essential: false }],
  * });
  * ```
+ *
+ * @resource
  */
 export const Image = Resource<Image>("AWS.ECR.Image");
 

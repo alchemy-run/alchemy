@@ -1,6 +1,9 @@
 {
   "files": [],
-  "exclude": ["node_modules", "dist"],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
   "references": [
     // distilled (dependencies first so `tsc -b` emits their `lib/` before the
     // packages that consume them — otherwise a clean build races the not-yet-emitted
@@ -23,12 +26,21 @@
     {
       "path": "./distilled/packages/neon/tsconfig.json"
     },
+    {
+      "path": "./distilled/packages/hetzner/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
+    {
+      "path": "./packages/node-utils/tsconfig.json"
+    },
     {
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {
-      "path": "./packages/cloudflare-frameworks/tsconfig.json"
+      "path": "./packages/frontend-frameworks/tsconfig.json"
+    },
+    {
+      "path": "./packages/floci/tsconfig.json"
     },
     {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
@@ -89,6 +101,9 @@
       "path": "./examples/aws-lambda-rpc/tsconfig.json"
     },
     {
+      "path": "./examples/aws-dev/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-lambda/tsconfig.json"
     },
     {
@@ -98,7 +113,7 @@
       "path": "./examples/aws-static-site/tsconfig.json"
     },
     {
-      "path": "./examples/aws-vite/tsconfig.json"
+      "path": "./examples/aws-website-vite/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-agent/tsconfig.json"
@@ -162,6 +177,12 @@
     },
     {
       "path": "./examples/docker-postgres/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-server/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-app/tsconfig.json"
     },
     {
       "path": "./examples/monorepo-single-stack/tsconfig.json"

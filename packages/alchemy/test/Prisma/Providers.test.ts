@@ -16,7 +16,13 @@ const devAlchemyContext = Layer.succeed(AlchemyContext, {
 
 const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(Prisma.providers()),
+    Effect.provide(
+      Prisma.providers().pipe(
+        // The dual registration always carries the (lazy) management-api
+        // layer; it registers auth at build without resolving credentials.
+        Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+      ),
+    ),
     Effect.provide(devAlchemyContext),
   );
 
@@ -72,6 +78,8 @@ describe("Prisma providers", () => {
         Prisma.Database.Type,
         Prisma.Connection.Type,
         Prisma.Branch.Type,
+        Prisma.Bucket.Type,
+        Prisma.BucketAccessKey.Type,
         Prisma.Compute.Type,
         Prisma.App.Type,
         Prisma.Deployment.Type,
@@ -84,6 +92,18 @@ describe("Prisma providers", () => {
         [Prisma.Database.Type, ["databaseId"]],
         [Prisma.Connection.Type, ["connectionId"]],
         [Prisma.Branch.Type, ["branchId"]],
+        [Prisma.Bucket.Type, ["bucketId"]],
+        [
+          Prisma.BucketAccessKey.Type,
+          [
+            "bucketAccessKeyId",
+            "bucketId",
+            "accessKeyId",
+            "secretAccessKey",
+            "endpoint",
+            "bucketName",
+          ],
+        ],
         [Prisma.Compute.Type, ["appId"]],
         [Prisma.App.Type, ["appId"]],
         [Prisma.Deployment.Type, ["deploymentId"]],
@@ -101,6 +121,11 @@ describe("Prisma providers", () => {
       for (const provider of providers) {
         expect(typeof provider.reconcile).toBe("function");
         expect(typeof provider.delete).toBe("function");
+        // ProviderLayer.dual registration: dev resolves the local variant
+        // and exposes both variants for per-resource mode resolution.
+        expect(provider.mode).toBe("local");
+        expect(typeof provider.modes?.live).toBe("object");
+        expect(typeof provider.modes?.local).toBe("object");
       }
       for (let i = 0; i < resourceTypes.length; i += 1) {
         expect(providers[i]?.stables).toEqual(
@@ -123,6 +148,12 @@ describe("Prisma providers", () => {
       );
       const branchProvider = yield* Provider.findProviderByType(
         Prisma.Branch.Type as any,
+      );
+      const bucketProvider = yield* Provider.findProviderByType(
+        Prisma.Bucket.Type as any,
+      );
+      const bucketKeyProvider = yield* Provider.findProviderByType(
+        Prisma.BucketAccessKey.Type as any,
       );
 
       const project = (yield* projectProvider.reconcile(
@@ -155,6 +186,13 @@ describe("Prisma providers", () => {
         }),
       )) as Prisma.Branch["Attributes"];
 
+      const bucket = (yield* bucketProvider.reconcile(
+        reconcileInput("Bucket", { project, name: "uploads" }),
+      )) as Prisma.Bucket["Attributes"];
+      const bucketKey = (yield* bucketKeyProvider.reconcile(
+        reconcileInput("BucketAccessKey", { bucket, role: "read_write" }),
+      )) as Prisma.BucketAccessKey["Attributes"];
+
       expect(project.projectId).toBe("dev:project:Project");
       expect(app.projectId).toBe(project.projectId);
       expect(app.appId).toBe("dev:app:App");
@@ -162,6 +200,14 @@ describe("Prisma providers", () => {
       expect(env.branchId).toBe("branch-preview");
       expect(Redacted.value(env.value)).toBe("secret");
       expect(branch.role).toBe("production");
+      expect(bucket.bucketId).toBe("dev:bucket:Bucket");
+      expect(bucket.name).toBe("uploads");
+      expect(bucket.projectId).toBe(project.projectId);
+      expect(bucketKey.bucketAccessKeyId).toBe(
+        "dev:bucket-access-key:BucketAccessKey",
+      );
+      expect(bucketKey.bucketId).toBe(bucket.bucketId);
+      expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
     }).pipe(providePrismaDev),
   );
 

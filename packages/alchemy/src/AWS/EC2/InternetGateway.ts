@@ -81,14 +81,13 @@ export interface InternetGateway extends Resource<
  * `0.0.0.0/0` {@link Route} pointing at the gateway and a
  * {@link RouteTableAssociation} binding the subnet to that route table.
  *
- * @resource
- * @section Creating an Internet Gateway
+ * ### Creating an Internet Gateway
  * Pass `vpcId` to create and attach the gateway in one step, or omit it to
  * create a standalone gateway and attach it later by setting the prop. Updating
  * `vpcId` moves the gateway between VPCs (detach then attach) without
  * recreating it.
  *
- * @example Internet Gateway Attached to a VPC
+ * **Example:** Internet Gateway Attached to a VPC
  * ```typescript
  * const internetGateway = yield* AWS.EC2.InternetGateway("InternetGateway", {
  *   vpcId: myVpc.vpcId,
@@ -98,7 +97,7 @@ export interface InternetGateway extends Resource<
  * `internetGatewayId` (prefixed `igw-`) is what you reference from a route's
  * `gatewayId`.
  *
- * @example Detached Internet Gateway
+ * **Example:** Detached Internet Gateway
  * ```typescript
  * const internetGateway = yield* AWS.EC2.InternetGateway("InternetGateway", {});
  * ```
@@ -106,7 +105,7 @@ export interface InternetGateway extends Resource<
  * when the VPC is provisioned separately; add the `vpcId` prop later to attach
  * it.
  *
- * @example Internet Gateway with Tags
+ * **Example:** Internet Gateway with Tags
  * ```typescript
  * const internetGateway = yield* AWS.EC2.InternetGateway("InternetGateway", {
  *   vpcId: myVpc.vpcId,
@@ -116,12 +115,12 @@ export interface InternetGateway extends Resource<
  * The `tags` map is merged with the alchemy auto-tags and can be changed in
  * place. A `Name` tag makes the gateway easy to identify in the AWS console.
  *
- * @section Enabling Public Internet Access
+ * ### Enabling Public Internet Access
  * An internet gateway only carries traffic once a route table sends traffic to
  * it and a subnet is associated with that table. The full pattern below makes a
  * subnet public.
  *
- * @example Internet Gateway with a Default Route
+ * **Example:** Internet Gateway with a Default Route
  * ```typescript
  * const internetGateway = yield* AWS.EC2.InternetGateway("InternetGateway", {
  *   vpcId: myVpc.vpcId,
@@ -140,6 +139,8 @@ export interface InternetGateway extends Resource<
  * With the default route in place, any subnet associated with
  * `publicRouteTable` can send and receive internet traffic. Add an analogous
  * route with `destinationIpv6CidrBlock: "::/0"` to enable IPv6.
+ *
+ * @resource
  */
 export const InternetGateway = Resource<InternetGateway>(
   "AWS.EC2.InternetGateway",

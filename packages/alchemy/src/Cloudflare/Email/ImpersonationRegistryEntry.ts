@@ -81,11 +81,8 @@ export type ImpersonationRegistryEntry = Resource<
  * Office365/Google integrations and are not exposed as inputs. Requires
  * the Email Security enterprise add-on; accounts without the entitlement
  * receive the typed `EmailSecurityNotEntitled` error.
- * @resource
- * @product Email Security
- * @category Email
- * @section Registering Protected Identities
- * @example Protect an executive's display name
+ * ### Registering Protected Identities
+ * **Example:** Protect an executive's display name
  * ```typescript
  * yield* Cloudflare.Email.ImpersonationRegistryEntry("Ceo", {
  *   name: "Jane Smith",
@@ -94,7 +91,7 @@ export type ImpersonationRegistryEntry = Resource<
  * });
  * ```
  *
- * @example Match several legitimate addresses with a regex
+ * **Example:** Match several legitimate addresses with a regex
  * ```typescript
  * yield* Cloudflare.Email.ImpersonationRegistryEntry("Finance", {
  *   name: "Accounts Payable",
@@ -104,6 +101,10 @@ export type ImpersonationRegistryEntry = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
+ *
+ * @resource
+ * @product Email Security
+ * @category Email
  */
 export const ImpersonationRegistryEntry = Resource<ImpersonationRegistryEntry>(
   EmailSecurityImpersonationRegistryEntryTypeId,

@@ -9,8 +9,8 @@
 // transform (`Cannot read properties of undefined (reading '.js')`) — and a
 // child process is also how the dev server runs in real life.
 import { Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { Framework } from "@alchemy.run/cloudflare-frameworks/core";
-import nextjsFramework from "@alchemy.run/cloudflare-frameworks/nextjs";
+import { Framework } from "@alchemy.run/frontend-frameworks/core";
+import nextjsFramework from "@alchemy.run/frontend-frameworks/nextjs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";

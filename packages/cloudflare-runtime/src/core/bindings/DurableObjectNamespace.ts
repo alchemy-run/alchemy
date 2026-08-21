@@ -87,11 +87,9 @@ export const local = ({
             uniqueKey ?? defaultDurableObjectUniqueKey(scriptName, className),
         }),
       ),
-      Effect.map(
-        (durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
-          name: binding,
-          durableObjectNamespace,
-        }),
-      ),
+      Effect.map((durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
+        name: binding,
+        durableObjectNamespace,
+      })),
     );
   });

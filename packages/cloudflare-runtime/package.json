@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.70",
+  "version": "2.0.0-beta.72",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -42,45 +42,46 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@alchemy.run/node-utils": "catalog:",
-    "@cloudflare/unenv-preset": "catalog:workers",
-    "@puppeteer/browsers": "catalog:cloudflare",
-    "magic-string": "catalog:cloudflare",
-    "sharp": "catalog:cloudflare",
-    "unenv": "catalog:workers",
-    "workerd": "catalog:workers"
+    "@alchemy.run/node-utils": "workspace:*",
+    "@cloudflare/unenv-preset": "catalog:cloudflare-runtime",
+    "@puppeteer/browsers": "catalog:cloudflare-runtime",
+    "capnp-es": "catalog:cloudflare-runtime",
+    "magic-string": "catalog:cloudflare-runtime",
+    "sharp": "catalog:cloudflare-runtime",
+    "unenv": "catalog:cloudflare-runtime",
+    "workerd": "catalog:cloudflare-runtime",
+    "yauzl": "catalog:cloudflare-runtime"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:workers",
-    "@cloudflare/vitest-pool-workers": "catalog:cloudflare",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/vitest-pool-workers": "catalog:cloudflare-runtime",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/vitest": "catalog:effect",
-    "@types/http-cache-semantics": "catalog:cloudflare",
-    "@types/node": "catalog:",
-    "@types/ws": "catalog:cloudflare",
-    "capnp-es": "catalog:cloudflare",
-    "capnweb": "catalog:cloudflare",
-    "http-cache-semantics": "catalog:cloudflare",
-    "heap-js": "catalog:cloudflare",
-    "itty-time": "catalog:cloudflare",
-    "mime": "catalog:cloudflare",
-    "mysql2": "catalog:cloudflare",
-    "postal-mime": "catalog:cloudflare",
-    "rolldown": "catalog:",
-    "tsdown": "catalog:",
-    "toucan-js": "catalog:cloudflare",
-    "vite": "catalog:",
-    "vitest": "catalog:",
-    "ws": "catalog:cloudflare"
+    "@types/http-cache-semantics": "catalog:cloudflare-runtime",
+    "@types/node": "catalog:tooling",
+    "@types/ws": "catalog:cloudflare-runtime",
+    "capnweb": "catalog:cloudflare-runtime",
+    "http-cache-semantics": "catalog:cloudflare-runtime",
+    "heap-js": "catalog:cloudflare-runtime",
+    "itty-time": "catalog:cloudflare-runtime",
+    "mime": "catalog:cloudflare-runtime",
+    "mysql2": "catalog:cloudflare-runtime",
+    "postal-mime": "catalog:cloudflare-runtime",
+    "rolldown": "catalog:build",
+    "tsdown": "catalog:build",
+    "toucan-js": "catalog:cloudflare-runtime",
+    "vite": "catalog:build",
+    "vitest": "catalog:testing",
+    "ws": "catalog:cloudflare-runtime"
   },
   "peerDependencies": {
-    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
-    "rolldown": "catalog:",
-    "vite": "catalog:cloudflare"
+    "rolldown": "catalog:build",
+    "vite": "catalog:cloudflare-runtime"
   },
   "peerDependenciesMeta": {
     "@effect/platform-bun": {
@@ -778,7 +779,7 @@
   "inlinedDependencies": {
     "capnp-es": "0.0.14",
     "capnweb": "0.8.0",
-    "effect": "4.0.0-beta.102",
+    "effect": "4.0.0-rc.110",
     "http-cache-semantics": "4.2.0",
     "postal-mime": "2.7.5"
   }

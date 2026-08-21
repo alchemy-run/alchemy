@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/better-auth",
-  "version": "2.0.0-beta.70",
+  "version": "2.0.0-beta.72",
   "description": "Better Auth integration for Alchemy.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -45,16 +45,16 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@distilled.cloud/aws": "catalog:",
-    "@neondatabase/serverless": "catalog:",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@distilled.cloud/aws": "workspace:*",
+    "@neondatabase/serverless": "catalog:database",
     "alchemy": "workspace:*",
-    "better-auth": "catalog:",
-    "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "kysely": "catalog:",
-    "mysql2": "catalog:",
-    "pg": "catalog:"
+    "better-auth": "catalog:auth",
+    "drizzle-orm": "catalog:database",
+    "effect": "catalog:effect",
+    "kysely": "catalog:database",
+    "mysql2": "catalog:database",
+    "pg": "catalog:database"
   },
   "peerDependenciesMeta": {
     "@cloudflare/workers-types": {
@@ -80,20 +80,20 @@
     }
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@distilled.cloud/aws": "catalog:",
-    "@distilled.cloud/cloudflare": "catalog:",
-    "@effect/platform-bun": "catalog:",
-    "@neondatabase/serverless": "catalog:",
-    "@types/pg": "catalog:",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/platform-bun": "catalog:effect",
+    "@neondatabase/serverless": "catalog:database",
+    "@types/pg": "catalog:database",
     "alchemy": "workspace:*",
     "alchemy-test": "workspace:*",
-    "better-auth": "catalog:",
-    "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "kysely": "catalog:",
-    "mysql2": "catalog:",
-    "pg": "catalog:"
+    "better-auth": "catalog:auth",
+    "drizzle-orm": "catalog:database",
+    "effect": "catalog:effect",
+    "kysely": "catalog:database",
+    "mysql2": "catalog:database",
+    "pg": "catalog:database"
   },
   "publishConfig": {
     "access": "public"

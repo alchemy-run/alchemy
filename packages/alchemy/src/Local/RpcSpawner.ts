@@ -1,4 +1,3 @@
-import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Cache from "effect/Cache";
 import type * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -18,7 +17,6 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
-import { killProcessGroup } from "../Util/killProcessGroup.ts";
 import { transformTypesFlags } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
@@ -34,10 +32,13 @@ export class RpcSpawner extends Context.Service<
   }
 >()("alchemy/Local/RpcSpawner") {}
 
-export interface RpcSpawnPayload extends Pick<
-  RpcServerEnvironment,
-  "alchemyContext" | "stack"
-> {
+/**
+ * The spawner forks one child per distinct `serverEntryUrl`. Stack-specific
+ * context (stack name/stage, AlchemyContext) is NOT part of the spawn key —
+ * it travels per RPC session (see `SESSION_ENV_PARAM`), so many stacks
+ * (e.g. every test file in a run) share a single sidecar process.
+ */
+export interface RpcSpawnPayload {
   serverEntryUrl: string;
 }
 
@@ -64,8 +65,8 @@ export const make = Effect.fn(function* ({
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
   const cache = yield* Cache.make({
-    lookup: (payload: RpcSpawnPayload) =>
-      spawn(payload).pipe(Scope.provide(scope)),
+    lookup: (serverEntryUrl: string) =>
+      spawn(serverEntryUrl).pipe(Scope.provide(scope)),
     capacity: Infinity,
   });
 
@@ -92,18 +93,14 @@ export const make = Effect.fn(function* ({
         : Console.log(line.line);
     });
 
-  const spawn = Effect.fn(function* ({
-    serverEntryUrl,
-    alchemyContext,
-    stack,
-  }: RpcSpawnPayload) {
+  const spawn = Effect.fn(function* (serverEntryUrl: string) {
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
     const main = fileURLToPath(serverEntryUrl);
+    // Stack-specific context is deliberately absent: sessions carry their
+    // own SessionEnvironment, so one child serves every stack.
     const environment: RpcServerEnvironment = {
       profile,
       envFile,
-      alchemyContext,
-      stack,
     };
     const command = ChildProcess.make(
       bin,
@@ -138,12 +135,10 @@ export const make = Effect.fn(function* ({
       Effect.ignore,
       Effect.forkScoped,
     );
-    const unregister = exitHook(() => {
-      killProcessGroup(handle.pid, "SIGKILL");
-    });
-    const kill = handle
-      .kill({ forceKillAfter: "500 millis" })
-      .pipe(Effect.tap(() => Effect.sync(unregister)));
+    // This scope is the child handle's sole owner. Graceful shutdown runs this
+    // finalizer; abrupt parent loss closes the RPC parent connection and the
+    // child self-terminates (both paths are covered by RpcSpawnerCleanup).
+    const kill = handle.kill({ forceKillAfter: "500 millis" });
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
     const url = yield* getRpcAddress(handle.stdout, (line) =>
       publish({ channel: "stdout", line }),
@@ -169,23 +164,23 @@ export const make = Effect.fn(function* ({
   });
 
   const register = Effect.fn(function* (
-    payload: RpcSpawnPayload,
+    serverEntryUrl: string,
     attempt = 0,
   ): Effect.fn.Return<string, PlatformError> {
-    const child = yield* Cache.get(cache, payload);
+    const child = yield* Cache.get(cache, serverEntryUrl);
     if (yield* child.isRunning) {
       return child.url;
     }
     if (attempt > 3) {
       return yield* Effect.die(
         new Error(
-          `Failed to spawn RPC server for "${payload.serverEntryUrl}" after ${attempt} attempts.`,
+          `Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`,
         ),
       );
     }
     yield* child.kill;
-    yield* Cache.invalidate(cache, payload);
-    return yield* register(payload, attempt + 1);
+    yield* Cache.invalidate(cache, serverEntryUrl);
+    return yield* register(serverEntryUrl, attempt + 1);
   });
 
   const server = yield* HttpServer.HttpServer;
@@ -214,7 +209,7 @@ export const make = Effect.fn(function* ({
         );
       }
       const payload = (yield* request.json) as unknown as RpcSpawnPayload;
-      const url = yield* register(payload);
+      const url = yield* register(payload.serverEntryUrl);
       return HttpServerResponse.text(url);
     }),
   );
