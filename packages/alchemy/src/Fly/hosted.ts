@@ -362,3 +362,86 @@ export const createFlyHostedSupport = ({
     hash,
   };
 };
+
+/**
+ * Bundle a Sprite program the same way {@link createFlyHostedSupport}
+ * bundles a Service — rolldown + bun bootstrap — without building a
+ * Docker image. The provider writes the files onto the Sprite.
+ */
+export const createSpriteHostedSupport = ({
+  stackName,
+  stage,
+  virtualEntryPlugin,
+}: {
+  stackName: string;
+  stage: string;
+  virtualEntryPlugin: (
+    content: (importPath: string) => string,
+  ) => rolldown.Plugin;
+}) => {
+  const alchemyEnv = {
+    ALCHEMY_STACK_NAME: stackName,
+    ALCHEMY_STAGE: stage,
+    ALCHEMY_PHASE: "runtime",
+  };
+
+  const bundleProgram = Effect.fn(function* (props: HostedProgramProps) {
+    const handler = props.handler ?? "default";
+    const realMain = yield* resolveMainPath(props.main);
+    const cwd = yield* findCwdForBundle(realMain);
+    const bootstrap = makeBunBootstrap(handler);
+
+    const buildBundle = Effect.fn(function* (
+      entry: string,
+      plugins?: rolldown.RolldownPluginOption,
+    ) {
+      return yield* Bundle.build(
+        {
+          ...props.build?.input,
+          input: entry,
+          cwd,
+          platform: "node",
+          external: [
+            "bun",
+            "bun:*",
+            ...((props.build?.input?.external as string[] | undefined) ?? []),
+          ],
+          resolve: {
+            conditionNames: ["bun", "import", "module", "default"],
+            ...props.build?.input?.resolve,
+          },
+          plugins: [props.build?.input?.plugins, plugins],
+        },
+        {
+          ...props.build?.output,
+          format: "esm",
+          sourcemap: props.build?.output?.sourcemap ?? false,
+          minify: props.build?.output?.minify ?? false,
+          entryFileNames: "index.mjs",
+        },
+        props.build,
+      );
+    });
+
+    const bundleOutput = props.isExternal
+      ? yield* buildBundle(realMain)
+      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
+
+    const files = bundleOutput.files.map((file) => ({
+      path: file.path,
+      content:
+        typeof file.content === "string"
+          ? new TextEncoder().encode(file.content)
+          : file.content,
+    }));
+
+    return { files, hash: bundleOutput.hash };
+  });
+
+  const hash = Effect.fn(function* (props: HostedProgramProps) {
+    const bundled = yield* bundleProgram(props);
+    return (yield* sha256Object({ bundleHash: bundled.hash })).slice(0, 16);
+  });
+
+  return { alchemyEnv, bundleProgram, hash };
+};

@@ -182,6 +182,9 @@
       "path": "./examples/fly-service/tsconfig.json"
     },
     {
+      "path": "./examples/fly-sprite/tsconfig.json"
+    },
+    {
       "path": "./examples/monorepo-single-stack/tsconfig.json"
     },
     {

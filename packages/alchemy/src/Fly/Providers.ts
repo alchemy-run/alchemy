@@ -6,12 +6,14 @@ import * as Provider from "../Provider.ts";
 import { App, AppProvider } from "./App.ts";
 import { FlyAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
+import { CheckpointHttp } from "./CheckpointHttp.ts";
 import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
 import { Machine, MachineProvider } from "./Machine.ts";
 import { DecryptHttp } from "./DecryptHttp.ts";
 import { EncryptHttp } from "./EncryptHttp.ts";
+import { ExecHttp } from "./ExecHttp.ts";
 import { GetSecretHttp } from "./GetSecretHttp.ts";
 import { ListSecretsHttp } from "./ListSecretsHttp.ts";
 import { MountVolumeLive } from "./MountVolume.ts";
@@ -19,6 +21,7 @@ import { Secret, SecretProvider } from "./Secret.ts";
 import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
 import { Service, ServiceProvider } from "./Service.ts";
 import { SignHttp } from "./SignHttp.ts";
+import { Sprite, SpriteProvider } from "./Sprite.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
 import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
 import { WriteSecretHttp } from "./WriteSecretHttp.ts";
@@ -67,6 +70,7 @@ export const providers = () =>
       Secret,
       SecretKey,
       Service,
+      Sprite,
       VolumeSnapshot,
     ]),
   ).pipe(
@@ -79,10 +83,13 @@ export const providers = () =>
         SecretProvider(),
         SecretKeyProvider(),
         ServiceProvider(),
+        SpriteProvider(),
         VolumeSnapshotProvider(),
       ),
     ),
     Layer.provideMerge(MountVolumeLive),
+    Layer.provideMerge(CheckpointHttp),
+    Layer.provideMerge(ExecHttp),
     Layer.provideMerge(GetSecretHttp),
     Layer.provideMerge(ListSecretsHttp),
     Layer.provideMerge(WriteSecretHttp),
