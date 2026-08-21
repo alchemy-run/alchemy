@@ -14,10 +14,12 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
-  PrismaClient,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
+  type GetV1AppsByAppIdDeploymentsResponse,
+  getV1AppsByAppIdDeployments,
+  postV1AppsByAppIdDeployments,
+} from "@distilled.cloud/prisma-postgres/management";
+import { Retry } from "@distilled.cloud/prisma-postgres";
+import { PrismaClient, isNotFound } from "./Client.ts";
 import {
   destroyDeployment,
   waitForDeploymentStatus,
@@ -219,18 +221,34 @@ export interface Deployment extends Resource<
  */
 export const Deployment = Resource<Deployment>("Prisma.Deployment");
 
-const findDeployment = (
-  client: PrismaManagementClient,
-  appId: string,
-  foundryVersionId: string | undefined,
-) =>
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listAppDeployments = (appId: string) =>
+  Effect.gen(function* () {
+    const deployments: GetV1AppsByAppIdDeploymentsResponse["data"][number][] =
+      [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getV1AppsByAppIdDeployments(
+        cursor === undefined
+          ? { appId, limit: 100 }
+          : { appId, limit: 100, cursor },
+      );
+      deployments.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore || nextCursor === null) break;
+      cursor = nextCursor;
+    }
+    return deployments;
+  });
+
+const findDeployment = (appId: string, foundryVersionId: string | undefined) =>
   foundryVersionId === undefined
     ? Effect.succeed(undefined)
-    : client.listAppDeployments(appId, { limit: 100 }).pipe(
+    : listAppDeployments(appId).pipe(
         Effect.flatMap((deployments) => {
           const matches = deployments.filter(
-            (deployment: { foundryVersionId: string }) =>
-              deployment.foundryVersionId === foundryVersionId,
+            (deployment) => deployment.foundryVersionId === foundryVersionId,
           );
           return matches.length > 1
             ? Effect.fail(
@@ -548,7 +566,7 @@ const ProviderLive = () =>
             : undefined;
           const listed = savedDeployment
             ? undefined
-            : yield* findDeployment(client, appId, output?.foundryVersionId);
+            : yield* findDeployment(appId, output?.foundryVersionId);
           const deployment =
             savedDeployment ??
             (listed ? yield* observeDeployment(client, listed.id) : undefined);
@@ -652,10 +670,20 @@ const ProviderLive = () =>
               : Effect.fail(error);
 
           if (!deployment) {
-            const created = yield* client.createAppDeployment(appId, {
-              portMapping: news.portMapping,
-              skipCodeUpload: news.skipCodeUpload,
-            });
+            const created = yield* postV1AppsByAppIdDeployments({
+              appId,
+              ...(news.portMapping === undefined
+                ? {}
+                : { portMapping: news.portMapping }),
+              ...(news.skipCodeUpload === undefined
+                ? {}
+                : { skipCodeUpload: news.skipCodeUpload }),
+            }).pipe(
+              // A replayed create would make a second deployment; the retry
+              // policy cannot see the request, so opt out explicitly.
+              Retry.none,
+              Effect.map((response) => response.data),
+            );
             createdDeploymentId = created.id;
             if (artifact !== undefined && !created.uploadUrl) {
               return yield* cleanupCreatedDeploymentOnFailure(

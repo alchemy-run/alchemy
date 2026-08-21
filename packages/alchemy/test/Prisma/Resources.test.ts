@@ -582,15 +582,30 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       }
     }
 
-    if (head === "apps" && id !== undefined && tail === undefined) {
-      if (request.method === "GET") return call(client.getApp, [id]);
-    }
-    if (head === "apps" && id === undefined && request.method === "GET") {
-      return call(
-        client.listApps,
-        [Object.fromEntries(new URLSearchParams(request.search))],
-        list,
-      );
+    if (head === "apps") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(
+              client.listApps,
+              [Object.fromEntries(new URLSearchParams(request.search))],
+              list,
+            )
+          : call(client.createApp, [body]);
+      }
+      if (tail === "deployments") {
+        return request.method === "GET"
+          ? call(
+              client.listAppDeployments,
+              [id, Object.fromEntries(new URLSearchParams(request.search))],
+              list,
+            )
+          : call(client.createAppDeployment, [id, body]);
+      }
+      if (tail === undefined) {
+        if (request.method === "GET") return call(client.getApp, [id]);
+        if (request.method === "PATCH")
+          return call(client.updateApp, [id, body]);
+      }
     }
 
     if (head === "branches" && id !== undefined) {
@@ -1938,6 +1953,8 @@ describe("Prisma resource providers", () => {
         "GET /v1/databases/database-1/connections",
         "GET /v1/databases/database-1/connections",
         "GET /v1/projects/project-1/branches",
+        "GET /v1/apps",
+        "GET /v1/projects/project-1/branches",
         "GET /v1/environment-variables",
         "GET /v1/source-repositories",
       ]);
@@ -2260,6 +2277,10 @@ describe("Prisma resource providers", () => {
           "POST /v1/connections",
           "GET /v1/projects/project-1/branches",
           "POST /v1/projects/project-1/branches",
+          "GET /v1/projects/project-1/branches",
+          "POST /v1/apps",
+          "GET /v1/projects/project-1/branches",
+          "POST /v1/apps/service-1/deployments",
           "POST /v1/environment-variables",
           "GET /v1/apps",
           "GET /v1/projects/project-1/databases",
@@ -2299,18 +2320,18 @@ describe("Prisma resource providers", () => {
               input: { gitName: "preview", isDefault: false },
             },
           ],
-          ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
+          ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
           [
             "createApp",
+            // JSON transport drops `undefined` members.
             {
               projectId: "project-1",
               displayName: "api",
-              regionId: "us-east-1",
               branchId: "branch-1",
-              branchGitName: undefined,
+              regionId: "us-east-1",
             },
           ],
-          ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
+          ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
           [
             "createAppDeployment",
             {
@@ -3712,7 +3733,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { limit: "100", gitName: "main" },
             },
           ],
           ["getApp", "service-1"],
@@ -3720,7 +3741,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { limit: "100", gitName: "main" },
             },
           ],
         ]);
@@ -5459,6 +5480,7 @@ describe("Prisma resource providers", () => {
         { databaseId: "database-1", name: "api-000000000000" },
         undefined,
         { gitName: "preview" },
+        { displayName: "api", branchId: "branch-main", projectId: "project-1" },
         {
           projectId: "project-1",
           class: "production",
@@ -5497,12 +5519,11 @@ describe("Prisma resource providers", () => {
         ],
         [
           "createApp",
+          // JSON transport drops `undefined` members.
           {
             projectId: "project-1",
             displayName: "api",
-            regionId: undefined,
             branchId: "branch-main",
-            branchGitName: undefined,
           },
         ],
         [

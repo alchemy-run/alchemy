@@ -1,9 +1,22 @@
 import { App as PrismaApp, AppProvider } from "@/Prisma/App";
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import { AlchemyContext } from "@/AlchemyContext";
+import {
+  data,
+  failure,
+  makeFakeManagementApi,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
 
 const app = (id: string, branchId: string | null = "branch-main") => ({
   id,
@@ -40,6 +53,72 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
   adopt: false,
 });
 
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers this
+ * suite declares, for the routes App now reaches through distilled
+ * operations. The handlers are synchronous, so the fake runs them directly:
+ * an injected `PrismaApiError` becomes its real status, `undefined` becomes a
+ * 404, everything else a `{ data }` (or `{ data, pagination }`) envelope. The
+ * delete path still resolves the hand-rolled client (destroyApp is D3), so
+ * the `PrismaClient` layer stays provided alongside.
+ */
+const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    // Never 5xx: a transient status would be replayed by the retry policy.
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return outcome.success === undefined
+    ? notFound("not found")
+    : wrap(outcome.success);
+};
+
+const clientBackedApi = (client: any) =>
+  makeFakeManagementApi((request) => {
+    // segments[0] is the "v1" prefix.
+    const [head, id, tail] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const body = request.bodyJson as any;
+    const query = Object.fromEntries(new URLSearchParams(request.search));
+    const call = (
+      handler: unknown,
+      args: unknown[],
+      wrap: (value: unknown) => Response = (value) => data(value),
+    ) =>
+      typeof handler === "function"
+        ? asResponse(runHandler((handler as any)(...args)), wrap)
+        : unhandled(request);
+    const list = (value: unknown) => page(value as unknown[]);
+
+    if (head === "apps") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(client.listApps, [query], list)
+          : call(client.createApp, [body]);
+      }
+      if (request.method === "GET") return call(client.getApp, [id]);
+      if (request.method === "PATCH") return call(client.updateApp, [id, body]);
+    }
+    if (
+      head === "projects" &&
+      tail === "branches" &&
+      request.method === "GET"
+    ) {
+      return call(client.listBranches, [id, query], list);
+    }
+    return unhandled(request);
+  });
+
 const provide =
   (client: PrismaManagementClient) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -47,6 +126,7 @@ const provide =
       Effect.provide(AppProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(liveProviderContext),
+      Effect.provide(clientBackedApi(client).layer),
     );
 
 describe("Prisma App", () => {
@@ -186,14 +266,14 @@ describe("Prisma App", () => {
 
         expect(output.branchId).toBe("branch-wanted");
         expect(output.regionId).toBe("eu-west-3");
+        // JSON drops undefined members, so the wire body carries neither
+        // regionId nor branchGitName.
         expect(calls[0]).toEqual([
           "createApp",
           {
             projectId: "project-1",
             displayName: "api",
-            regionId: undefined,
             branchId: "branch-wanted",
-            branchGitName: undefined,
           },
         ]);
         expect(calls.map(([name]) => name)).toEqual(["createApp", "updateApp"]);

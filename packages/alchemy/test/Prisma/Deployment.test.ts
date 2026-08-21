@@ -13,7 +13,10 @@ import {
   type PrismaManagementClient,
 } from "@/Prisma/Client";
 import { executeArtifactUpload } from "@/Prisma/Internal/ArtifactUpload";
-import { PrismaHttpClientLive } from "@/Prisma/Internal/HttpClient";
+import {
+  PrismaHttpClientLive,
+  PrismaUploadClient,
+} from "@/Prisma/Internal/HttpClient";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
 import { describe, expect, it } from "alchemy-test";
@@ -28,6 +31,15 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Result from "effect/Result";
+import {
+  data,
+  failure,
+  makeFakeManagementApi,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
 import {
   createServer as createHttpServer,
   type RequestListener,
@@ -52,6 +64,64 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 
 const deploymentProviderLive = () =>
   DeploymentProvider().pipe(Layer.provide(liveProviderContext));
+
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers this
+ * suite declares, for the routes Deployment now reaches through distilled
+ * operations (list/create under /v1/apps/{appId}/deployments). The handlers
+ * are synchronous, so the fake runs them directly: an injected
+ * `PrismaApiError` becomes its real status, `undefined` becomes a 404,
+ * everything else a `{ data }` (or `{ data, pagination }`) envelope. The
+ * observe/start/promote/delete paths still resolve the hand-rolled client
+ * (their helpers are D3), so the `PrismaClient` layer stays provided
+ * alongside; tests that stub uploads provide `PrismaUploadClient` because
+ * the ambient `HttpClient` is now this management fake.
+ */
+const runHandler = (effect: Effect.Effect<any, any>) =>
+  Effect.runSync(Effect.result(effect));
+
+const asResponse = (
+  outcome: ReturnType<typeof runHandler>,
+  wrap: (value: unknown) => Response,
+): Response => {
+  if (Result.isFailure(outcome)) {
+    const error = outcome.failure;
+    // Never 5xx: a transient status would be replayed by the retry policy.
+    return error instanceof PrismaApiError
+      ? failure(error.status, "error", error.message)
+      : failure(400, "error", String(error));
+  }
+  return outcome.success === undefined
+    ? notFound("not found")
+    : wrap(outcome.success);
+};
+
+const clientBackedApi = (client: any) =>
+  makeFakeManagementApi((request) => {
+    // segments[0] is the "v1" prefix.
+    const [head, id, tail] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const body = request.bodyJson as any;
+    const query = Object.fromEntries(new URLSearchParams(request.search));
+    const call = (
+      handler: unknown,
+      args: unknown[],
+      wrap: (value: unknown) => Response = (value) => data(value),
+    ) =>
+      typeof handler === "function"
+        ? asResponse(runHandler((handler as any)(...args)), wrap)
+        : unhandled(request);
+    const list = (value: unknown) => page(value as unknown[]);
+
+    if (head === "apps" && tail === "deployments") {
+      return request.method === "GET"
+        ? call(client.listAppDeployments, [id, query], list)
+        : call(client.createAppDeployment, [id, body]);
+    }
+    return unhandled(request);
+  });
 
 describe("Prisma Deployment", () => {
   it.effect("redacts signed upload URLs from transport failures", () => {
@@ -271,7 +341,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -345,7 +415,8 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(clientBackedApi(client).layer),
+      Effect.provide(Layer.succeed(PrismaUploadClient, http)),
       Effect.provide(PlatformServices),
     );
   });
@@ -420,7 +491,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -493,7 +564,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -616,7 +687,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -716,7 +787,8 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(clientBackedApi(client).layer),
+      Effect.provide(Layer.succeed(PrismaUploadClient, http)),
       Effect.provide(PlatformServices),
     );
   });
@@ -953,14 +1025,15 @@ describe("Prisma Deployment", () => {
           ["getDeployment", "version-old"],
           [
             "listAppDeployments",
-            { appId: "service-from-output", query: { limit: 100 } },
+            // Over the wire, query params arrive as strings.
+            { appId: "service-from-output", query: { limit: "100" } },
           ],
           ["getDeployment", "version-new"],
         ]);
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -1018,7 +1091,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1333,7 +1406,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1522,7 +1595,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -1653,7 +1726,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1796,7 +1869,7 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1941,7 +2014,7 @@ describe("Prisma Deployment", () => {
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },

@@ -82,6 +82,17 @@ export interface ObservedBucket {
   readonly project: { readonly id: string };
 }
 
+export interface ObservedApp {
+  readonly id: string;
+  readonly name: string;
+  readonly projectId: string;
+  readonly region: { readonly id: string };
+  readonly branchId: string | null;
+  readonly latestDeploymentId: string | null;
+  readonly appEndpointDomain: string;
+  readonly createdAt: string;
+}
+
 export interface ObservedBranch {
   readonly id: string;
   readonly gitName: string;
