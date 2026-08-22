@@ -62,13 +62,14 @@ const htmlPage = (marker: string) => `<!doctype html>
 `;
 
 describe.concurrent("Foldkit", () => {
-  // The resource's reason to exist: a Foldkit app routes on the client, so
-  // `notFoundHandling` defaults to `single-page-application` and deep links
-  // boot the app without the caller configuring anything. The same project
-  // through `Website.Vite` 404s on `/counter/42` unless `assets` is passed
-  // by hand.
+  // Asset routing carries no default, because a Foldkit app can be delivered
+  // client-only, prerendered or server-rendered and those want different
+  // routing. A caller that configures nothing gets the asset layer's own
+  // behavior: the index is served, and a deep link is a miss. The previous
+  // default answered that miss with the unrendered template at 200, which a
+  // server-rendered deployment had no way to notice.
   test.provider(
-    "Foldkit: deploys with SPA fallback by default",
+    "Foldkit: deploys without imposing an asset routing default",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -83,7 +84,8 @@ describe.concurrent("Foldkit", () => {
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            // Deliberately no `assets` — the default is what's under test.
+            // Deliberately no `assets` — the ABSENCE of a default is what
+            // is under test.
             return yield* Cloudflare.Website.Foldkit(
               "FixFoldkitDefault",
               foldkitProps(rootDir),
@@ -99,10 +101,12 @@ describe.concurrent("Foldkit", () => {
           timeout: "120 seconds",
           label: "foldkit index",
         });
-        // Deep link falls back to index.html so client-side routing can boot.
-        yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+        // The deep link matches no file and nothing rewrites it, so it is a
+        // miss. A client-only app opts into the fallback through `assets`;
+        // see the next case.
+        yield* expectDirectStatus(`${site.url!}/counter/42`, 404, {
           timeout: "60 seconds",
-          label: "foldkit spa fallback",
+          label: "foldkit deep link miss",
         });
 
         yield* stack.destroy();
@@ -111,11 +115,10 @@ describe.concurrent("Foldkit", () => {
     { timeout: 360_000 },
   );
 
-  // An explicit `assets` must win over the built-in default rather than be
-  // overridden by it — a spread in the wrong order would silently ignore
-  // whatever the caller passed.
+  // An explicit `assets` reaches the Worker unchanged — nothing merges over
+  // it, and nothing is merged into it.
   test.provider(
-    "Foldkit: an explicit assets config overrides the SPA default",
+    "Foldkit: an explicit assets config is passed through",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
