@@ -1,3 +1,9 @@
+/**
+ * Minimal Railway stack: a Project and an image Service.
+ * The full graph (Postgres, Redis, Bucket, Volume, Variable,
+ * Environment, TcpProxy, Effect Service + bindings) is
+ * `examples/railway-service`.
+ */
 import * as Alchemy from "alchemy";
 import * as Railway from "alchemy/Railway";
 import * as Effect from "effect/Effect";

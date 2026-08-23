@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
+import { SECRET_NAME } from "../src/shared.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -29,25 +30,74 @@ const fetchOk = (url: string) =>
     );
   });
 
-const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
+const stack = beforeAll(deploy(Stack), { timeout: 480_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 120_000,
+  timeout: 180_000,
 });
 
 test(
-  "Service connects to Postgres through ConnectPostgres + Drizzle",
+  "deploys the full graph and serves /health",
   Effect.gen(function* () {
     const out = yield* stack;
     expect(out.projectId).toBeString();
+    expect(out.environmentId).toBeString();
+    expect(out.stagingId).toBeString();
+    expect(out.stagingName).toBe("staging");
+    expect(out.secretName).toBeString();
+    expect(out.volumeId).toBeString();
     expect(out.postgresServiceId).toBeString();
-    expect(out.apiUrl).toBeString();
+    expect(out.postgresPublic).toBeString();
+    expect(out.redisServiceId).toBeString();
+    expect(out.redisProxy).toContain(":");
+    expect(out.bucketId).toBeString();
+    expect(out.echoUrl).toMatch(/^https:\/\/.+\.up\.railway\.app$/);
     expect(out.apiUrl).toMatch(/^https:\/\/.+\.up\.railway\.app$/);
+    expect(out.workerServiceId).toBeString();
+    expect(out.workspaceId).toBeString();
+    expect(out.regionCount).toBeGreaterThan(0);
 
     const health = yield* fetchOk(`${out.apiUrl}/health`);
     expect(health.status).toBe(200);
     const body = (yield* health.json) as { rows: unknown };
     expect(body.rows).toBeDefined();
   }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
+);
+
+test(
+  "Variable is injected as env on /secret",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const response = yield* fetchOk(`${out.apiUrl}/secret`);
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { ok: boolean; name: string };
+    expect(body.ok).toBe(true);
+    expect(body.name).toBe(SECRET_NAME);
+  }),
+  { timeout: 60_000 },
+);
+
+test(
+  "ReadWriteRedis round-trips a key on /redis",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const response = yield* fetchOk(`${out.apiUrl}/redis`);
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { ok: boolean };
+    expect(body.ok).toBe(true);
+  }),
+  { timeout: 60_000 },
+);
+
+test(
+  "Bucket Put/Get/Head/List/Delete on /bucket",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const response = yield* fetchOk(`${out.apiUrl}/bucket`);
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { ok: boolean };
+    expect(body.ok).toBe(true);
+  }),
+  { timeout: 60_000 },
 );

@@ -1,14 +1,74 @@
 import * as Railway from "alchemy/Railway";
+import * as Redacted from "effect/Redacted";
 
+export const VOLUME_PATH = "/data";
+export const MARKER_FILE = `${VOLUME_PATH}/hello.txt`;
+export const MARKER = "hello-from-railway-worker";
 export const API_PORT = 3000;
+export const SECRET_NAME = "RAILWAY_EXAMPLE_MARKER";
+export const OBJECT_KEY = "example.txt";
+export const REDIS_KEY = "example-marker";
 
 /**
- * Parent Project the Service and Postgres share. Name is generated.
+ * Parent Project every other resource shares. Name is generated.
+ * Production is `Site.environmentId` — do not recreate it as an
+ * Environment.
  */
 export const Site = Railway.Project("Site");
 
 /**
- * Official SSL Postgres in {@link Site}. `ConnectPostgres` packs the
- * private `{name}.railway.internal` URI onto the Service.
+ * Extra staging environment. Production already exists on {@link Site}.
+ * Empty on create (no `sourceEnvironmentId`) so it does not clone
+ * Postgres / Redis / Services.
+ */
+export const Staging = Railway.Environment("Staging", {
+  project: Site,
+  name: "staging",
+});
+
+/**
+ * Shared project variable. Railway injects it as env
+ * {@link SECRET_NAME}. {@link Api} reads it with `Config.string`.
+ */
+export const Marker = Railway.Variable("Marker", {
+  project: Site,
+  name: SECRET_NAME,
+  value: Redacted.make(MARKER),
+});
+
+/**
+ * Block disk {@link Worker} mounts at {@link VOLUME_PATH}. A Volume
+ * attaches to one Service.
+ */
+export const Disk = Railway.Volume("Disk", {
+  project: Site,
+  mountPath: VOLUME_PATH,
+});
+
+/**
+ * Official SSL Postgres. `public` (default) opens a TCP proxy for
+ * laptop access. In-Service connections use `{name}.railway.internal`
+ * via {@link Railway.ConnectPostgres}.
  */
 export const Db = Railway.Postgres("Db", { project: Site });
+
+/**
+ * Redis. {@link CacheProxy} exposes it on `*.proxy.rlwy.net`.
+ * {@link Api} binds {@link Railway.ReadWriteRedis}.
+ */
+export const Cache = Railway.Redis("Cache", { project: Site });
+
+/**
+ * Public TCP proxy for {@link Cache} (Postgres already creates one
+ * when `public` is true).
+ */
+export const CacheProxy = Railway.TcpProxy("CacheProxy", {
+  redis: Cache,
+  environment: Site,
+  applicationPort: 6379,
+});
+
+/**
+ * S3-compatible bucket. {@link Api} binds Put/Get/Head/List/Delete.
+ */
+export const Data = Railway.Bucket("Data", { project: Site });
