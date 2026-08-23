@@ -39,6 +39,7 @@ import {
   toEnvRecord,
   type FlyBuildOptions,
   type FlyHostRuntimeContext,
+  type HostedProgramProps,
 } from "./hosted.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
@@ -871,27 +872,48 @@ export const ServiceProvider = () =>
         nuke: { dependsOn: ["Fly.App"] },
 
         diff: Effect.fn(function* ({ id, news, output }) {
-          if (news === undefined || !isResolved(news)) return undefined;
-          if (output === undefined) return undefined;
-          const desiredAppName = appNameOf(news.app);
-          const appChanged =
-            desiredAppName !== undefined && desiredAppName !== output.appName;
-          const desiredName =
-            news.name !== undefined
-              ? sanitizeFlyAppName(news.name)
-              : output.name;
-          const nameChanged = desiredName !== output.name;
-          const desiredRegion = news.region ?? DEFAULT_REGION;
-          const regionChanged = desiredRegion !== output.region;
-          if (appChanged || nameChanged || regionChanged) {
-            return {
-              action: "replace" as const,
-              deleteFirst: nameChanged === false && appChanged === false,
-            };
+          if (news === undefined || output === undefined) return undefined;
+          if (isResolved(news)) {
+            const desiredAppName = appNameOf(news.app);
+            const appChanged =
+              desiredAppName !== undefined && desiredAppName !== output.appName;
+            const desiredName =
+              news.name !== undefined
+                ? sanitizeFlyAppName(news.name)
+                : output.name;
+            const nameChanged = desiredName !== output.name;
+            const desiredRegion = news.region ?? DEFAULT_REGION;
+            const regionChanged = desiredRegion !== output.region;
+            if (appChanged || nameChanged || regionChanged) {
+              return {
+                action: "replace" as const,
+                deleteFirst: nameChanged === false && appChanged === false,
+              };
+            }
           }
-          const hash = yield* hosted.hash(news);
-          if (hash !== output.code.hash) {
-            return { action: "update" as const };
+          // The code hash depends only on statically-known props (`main`,
+          // `build`, `image`, `port`). Never gate it on the WHOLE props
+          // being resolved: `app` is a resource reference that stays
+          // unresolved at diff time, so a whole-props guard makes
+          // code-only changes silently noop. By diff time the
+          // effect-config form has been evaluated, so the object view is
+          // safe to read.
+          const statics = news as Partial<
+            Pick<ServiceProps, "main" | "build" | "image" | "port">
+          >;
+          if (
+            isResolved({
+              main: statics.main,
+              build: statics.build,
+              image: statics.image,
+              port: statics.port,
+            }) &&
+            statics.main !== undefined
+          ) {
+            const hash = yield* hosted.hash(statics as HostedProgramProps);
+            if (hash !== output.code.hash) {
+              return { action: "update" as const };
+            }
           }
           return undefined;
         }),

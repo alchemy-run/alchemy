@@ -197,8 +197,8 @@ catalogs:
       specifier: 1.0.3
       version: 1.0.3
     '@foldkit/vite-plugin':
-      specifier: ^0.15.0
-      version: 0.15.0
+      specifier: ^0.16.1
+      version: 0.16.1
     '@octanejs/adapter-cloudflare':
       specifier: 0.0.12
       version: 0.0.12
@@ -245,8 +245,8 @@ catalogs:
       specifier: 7.2.0
       version: 7.2.0
     foldkit:
-      specifier: ^0.147.0
-      version: 0.147.0
+      specifier: ^0.148.2
+      version: 0.148.2
     hono:
       specifier: ^4.12.14
       version: 4.12.33
@@ -1542,11 +1542,11 @@ importers:
         version: 4.0.0-rc.111
       foldkit:
         specifier: catalog:frontend
-        version: 0.147.0(effect@4.0.0-rc.111)
+        version: 0.148.2(effect@4.0.0-rc.111)
     devDependencies:
       '@foldkit/vite-plugin':
         specifier: catalog:frontend
-        version: 0.15.0(effect@4.0.0-rc.111)(foldkit@0.147.0(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+        version: 0.16.1(effect@4.0.0-rc.111)(foldkit@0.148.2(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       '@tailwindcss/vite':
         specifier: catalog:frontend
         version: 4.3.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -1559,6 +1559,31 @@ importers:
       tailwindcss:
         specifier: catalog:frontend
         version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/cloudflare-foldkit-ssr:
+    dependencies:
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      foldkit:
+        specifier: catalog:frontend
+        version: 0.148.2(effect@4.0.0-rc.111)
+    devDependencies:
+      '@foldkit/vite-plugin':
+        specifier: catalog:frontend
+        version: 0.16.1(effect@4.0.0-rc.111)(foldkit@0.148.2(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/node':
+        specifier: ^24.12.0
+        version: 24.13.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
       typescript:
         specifier: catalog:build
         version: 7.0.2
@@ -3448,7 +3473,7 @@ importers:
         version: 4.0.0-rc.111(effect@4.0.0-rc.111)
       '@foldkit/vite-plugin':
         specifier: catalog:frontend
-        version: 0.15.0(effect@4.0.0-rc.111)(foldkit@0.147.0(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+        version: 0.16.1(effect@4.0.0-rc.111)(foldkit@0.148.2(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       '@octanejs/adapter-cloudflare':
         specifier: catalog:frontend
         version: 0.0.12(@octanejs/app-core@0.0.18(octane@0.1.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))))
@@ -3517,7 +3542,7 @@ importers:
         version: 4.0.0-rc.111
       foldkit:
         specifier: catalog:frontend
-        version: 0.147.0(effect@4.0.0-rc.111)
+        version: 0.148.2(effect@4.0.0-rc.111)
       hono:
         specifier: catalog:frontend
         version: 4.12.33
@@ -6150,13 +6175,12 @@ packages:
   '@floating-ui/vue@1.1.9':
     resolution: {integrity: sha512-BfNqNW6KA83Nexspgb9DZuz578R7HT8MZw1CfK9I6Ah4QReNWEJsXWHN+SdmOVLNGmTPDi+fDT535Df5PzMLbQ==}
 
-  '@foldkit/vite-plugin@0.15.0':
-    resolution: {integrity: sha512-H0+sdhSn43GaNeIaZuf8/uZT1wBcIIuva/75wqKWLHdqA6lcp6LbKm8GhwCi+IuqSVyB6hkaq+c3ll6lAIgxqA==}
-    engines: {node: '>=18.0.0'}
-    deprecated: Server-rendering security fixes are available in @foldkit/vite-plugin@0.16.0 with foldkit@0.148.0. Safe for SPA use; upgrade if you use the plugin's ssr option.
+  '@foldkit/vite-plugin@0.16.1':
+    resolution: {integrity: sha512-zYbiQbYPRh32jSeocJEKVwsbrL1xD3IKZDBPbE1Dvq4s6LOMWbqbJmON781SVwVJ9cFp0Wh6AITNGsH8GLvccA==}
+    engines: {node: '>=20.19.0'}
     peerDependencies:
       effect: 4.0.0-rc.111
-      foldkit: ^0
+      foldkit: '>=0.148.0'
       vite: ^7.0.0 || ^8.0.0
 
   '@headlessui/tailwindcss@0.2.2':
@@ -12247,10 +12271,9 @@ packages:
   focus-trap@7.8.0:
     resolution: {integrity: sha512-/yNdlIkpWbM0ptxno3ONTuf+2g318kh2ez3KSeZN5dZ8YC6AAmgeWz+GasYYiBJPFaYcSAPeu4GfhUaChzIJXA==}
 
-  foldkit@0.147.0:
-    resolution: {integrity: sha512-RCyvuRjEXiMP62XCO5A+ati2kb+Na+HOQeTmDJU8dbtWuqHrU+0jSbWos4GPaxshOJ/V1kxP9X8nj63cBXu7Dw==}
-    engines: {node: '>=18.0.0'}
-    deprecated: Server-rendering security fixes are available in foldkit@0.148.0. Safe for SPA use; upgrade if you use foldkit/experimental/server.
+  foldkit@0.148.2:
+    resolution: {integrity: sha512-Bf735uDqbKU1jSUAMgkV1aMUEf5X+4ljsfQFkylgowOSKqTSEY0NYgrsAKiFSFkW3G2ReF1qyX61lBdbItYxnQ==}
+    engines: {node: '>=20.19.0'}
     peerDependencies:
       effect: 4.0.0-rc.111
 
@@ -19357,10 +19380,10 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
-  '@foldkit/vite-plugin@0.15.0(effect@4.0.0-rc.111)(foldkit@0.147.0(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
+  '@foldkit/vite-plugin@0.16.1(effect@4.0.0-rc.111)(foldkit@0.148.2(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       effect: 4.0.0-rc.111
-      foldkit: 0.147.0(effect@4.0.0-rc.111)
+      foldkit: 0.148.2(effect@4.0.0-rc.111)
       magic-string: 0.30.21
       vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       ws: 8.21.3
@@ -19368,10 +19391,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@foldkit/vite-plugin@0.15.0(effect@4.0.0-rc.111)(foldkit@0.147.0(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
+  '@foldkit/vite-plugin@0.16.1(effect@4.0.0-rc.111)(foldkit@0.148.2(effect@4.0.0-rc.111))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       effect: 4.0.0-rc.111
-      foldkit: 0.147.0(effect@4.0.0-rc.111)
+      foldkit: 0.148.2(effect@4.0.0-rc.111)
       magic-string: 0.30.21
       vite: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       ws: 8.21.3
@@ -27582,7 +27605,7 @@ snapshots:
     dependencies:
       tabbable: 6.5.0
 
-  foldkit@0.147.0(effect@4.0.0-rc.111):
+  foldkit@0.148.2(effect@4.0.0-rc.111):
     dependencies:
       effect: 4.0.0-rc.111
       parse5: 8.0.1

@@ -37,8 +37,14 @@ import {
 export interface PostgresDatabaseProps extends BaseDatabaseProps {
   /**
    * The PostgreSQL database cluster size. Required.
-   * Short sizes are expanded using the target region and architecture.
+   *
+   * Short NAS sizes (`"PS_10"`) are expanded using the target region and
+   * architecture. [PlanetScale Metal](https://planetscale.com/docs/metal)
+   * requires the full SKU (e.g. `"M1_10_AWS_ARM_D_METAL_10"`) because
+   * Metal also encodes CPU series, architecture, and NVMe drive size.
+   *
    * @see https://planetscale.com/docs/postgres/pricing
+   * @see {@link PostgresClusterSize}
    */
   clusterSize: PostgresClusterSize;
 
@@ -72,6 +78,14 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", {
  *   clusterSize: "PS_10",
+ * });
+ * ```
+ *
+ * **Example:** PlanetScale Metal (NVMe)
+ * ```typescript
+ * const db = yield* Planetscale.PostgresDatabase("MyDb", {
+ *   clusterSize: "M1_10_AWS_ARM_D_METAL_10",
+ *   arch: "arm",
  * });
  * ```
  *

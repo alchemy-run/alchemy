@@ -102,7 +102,7 @@ catalogs:
   frontend:
     "@astrojs/internal-helpers": 0.10.1
     "@astrojs/underscore-redirects": 1.0.3
-    "@foldkit/vite-plugin": ^0.15.0
+    "@foldkit/vite-plugin": ^0.16.1
     "@octanejs/adapter-cloudflare": 0.0.12
     "@octanejs/vite-plugin": 0.1.22
     "@opennextjs/aws": 4.1.0
@@ -119,7 +119,7 @@ catalogs:
     "@vitejs/plugin-react": ^6.0.2
     "@vitejs/plugin-rsc": ^0.5.27
     astro: 7.2.0
-    foldkit: ^0.147.0
+    foldkit: ^0.148.2
     hono: ^4.12.14
     next: 16.2.10
     nitropack: 2.13.4
@@ -177,6 +177,6 @@ minimumReleaseAgeExclude:
   - '@effect/sql-pg@4.0.0-rc.111'
   - '@effect/sql-sqlite-do@4.0.0-rc.111'
   - '@effect/vitest@4.0.0-rc.111'
-  - '@foldkit/vite-plugin@0.15.0'
+  - '@foldkit/vite-plugin@0.16.1'
   - effect@4.0.0-rc.111
-  - foldkit@0.147.0
+  - foldkit@0.148.2
