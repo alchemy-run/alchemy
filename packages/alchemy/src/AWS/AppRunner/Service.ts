@@ -298,6 +298,22 @@ export interface ServiceProps extends PlatformProps {
    */
   kmsKeyArn?: string;
   /**
+   * Keep the CloudWatch log groups App Runner auto-creates for the service
+   * (`/aws/apprunner/{serviceName}/{serviceId}/application` and
+   * `.../service`) when the service is deleted.
+   *
+   * By default they are deleted along with the service — App Runner itself
+   * leaves them behind, so every deploy+destroy cycle would otherwise
+   * strand a pair. Set this when the logs must outlive the service (an
+   * incident post-mortem, a compliance retention window). The kept groups
+   * are inert: their names embed the service id, so no future service ever
+   * writes to them, and nothing but a manual delete (or
+   * `alchemy unsafe nuke`) removes them.
+   *
+   * @default false
+   */
+  retainLogGroups?: boolean;
+  /**
    * User-defined tags for the service.
    */
   tags?: Record<string, string>;
@@ -1687,7 +1703,7 @@ await Effect.runPromise(program).catch((err) => {
           return toAttrs(observed, platformAttributes);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output, force }) {
           // A service mid-operation rejects deletion with
           // InvalidStateException — wait (bounded) for it to settle first.
           const observed = yield* waitForSettled(output.serviceArn);
@@ -1768,11 +1784,19 @@ await Effect.runPromise(program).catch((err) => {
           // Last, because the reap can sit through App Runner's final log
           // flush: an interruption during that window must not strand the
           // repository or the roles, which cost money and block re-creates.
-          for (const logGroupName of logGroupNamesFor(
-            output.serviceName,
-            output.serviceId,
-          )) {
-            yield* reapLogGroup(logGroupName);
+          //
+          // `retainLogGroups` keeps them; account-wide teardown (`force`)
+          // overrides that opt-out, since nuke's contract is to leave
+          // nothing behind. Nuke also enumerates from the cloud, so `olds`
+          // carries Attributes rather than Props there and the flag reads
+          // as unset anyway.
+          if (!olds.retainLogGroups || force) {
+            for (const logGroupName of logGroupNamesFor(
+              output.serviceName,
+              output.serviceId,
+            )) {
+              yield* reapLogGroup(logGroupName);
+            }
           }
         }),
 
