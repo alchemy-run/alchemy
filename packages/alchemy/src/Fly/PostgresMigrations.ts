@@ -1,6 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import type { Client } from "pg";
 import {
   makePgMigrationExecutor,
@@ -40,6 +41,27 @@ const toMigrationError = (cause: unknown) =>
     cause,
   });
 
+/**
+ * A freshly-provisioned Fly Managed Postgres cluster reports `ready` on the
+ * API before its hostname is resolvable and its endpoint accepts
+ * connections — reconcile's first migration connect can fail with
+ * `ENOTFOUND` (DNS still propagating) or a refused/reset socket. These are
+ * eventual consistency, not failures: retry the connect on a bounded
+ * schedule (~45s) before surfacing the error.
+ */
+const TRANSIENT_CONNECT_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+]);
+
+const isTransientConnectError = (error: PostgresMigrationError): boolean => {
+  const code = (error.cause as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" && TRANSIENT_CONNECT_CODES.has(code);
+};
+
 /** Open a pg client for the scope of `use`, closing it afterwards. */
 export const withPgClient = <A, E, R>(
   connectionUri: Redacted.Redacted<string>,
@@ -57,7 +79,28 @@ export const withPgClient = <A, E, R>(
         return client;
       },
       catch: toMigrationError,
-    }),
+    }).pipe(
+      Effect.retry({
+        while: isTransientConnectError,
+        schedule: Schedule.spaced("3 seconds"),
+        times: 15,
+      }),
+      // Still unreachable after the bounded retry: almost always a missing
+      // route rather than propagation — MPG hostnames only exist on the org
+      // private network. Say so instead of a bare `getaddrinfo ENOTFOUND`.
+      Effect.mapError((error) =>
+        isTransientConnectError(error)
+          ? new PostgresMigrationError({
+              message:
+                `${error.message} — Fly Managed Postgres is only reachable ` +
+                "on the org's private network. Run the deploy behind a " +
+                "WireGuard peer or `fly mpg proxy`, or from a machine on " +
+                "6PN. See https://fly.io/docs/mpg/create-and-connect/",
+              cause: error.cause,
+            })
+          : error,
+      ),
+    ),
     use,
     (client) => Effect.promise(() => client.end().catch(() => {})),
   );
