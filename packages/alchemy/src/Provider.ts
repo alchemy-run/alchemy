@@ -612,32 +612,65 @@ export const providerForMode = <R extends ResourceLike>(
     : Effect.succeed(service);
 
 /**
- * Resolve the data-plane override layer for a resource, or `undefined` when
- * its data plane is the real cloud:
+ * Why a resource's deploy-time binding clients target the data plane they
+ * do — see {@link describeDataPlane}.
  *
- * - no provider registered in context (bare runtime, unit tests) → live;
- * - mode-agnostic provider (no `modes`) → live even in dev;
- * - dual provider without a registered {@link ProviderService.localDataPlane}
- *   → live (nothing to route to);
- * - otherwise the resource's effective mode decides — its registration-
- *   captured {@link ResourceLike.Mode} (`Alchemy.remote()` → `"live"`) or
- *   the run default (`alchemy dev` → `"local"`), the same resolution
- *   `Plan.make` applies to lifecycle operations.
+ * - `local` — the resource runs on its provider's local emulator; `layer`
+ *   is the override to provide closest around every client call.
+ * - `live` — the resource targets the real cloud: either pinned there
+ *   (`Alchemy.remote()`) or the run is a plain deploy.
+ * - `undeclared` — the resource resolves to local mode, but its provider
+ *   is a dual registration without a {@link ProviderService.localDataPlane}
+ *   (a process-hosted local variant with no API to route to, or a missing
+ *   `dataPlane` on a hand-written `ProviderLayer.dual`). Clients fall back
+ *   to the real cloud — reported by name so the two are never confused.
+ * - `agnostic` — the provider is mode-agnostic (plain registration); its
+ *   resources live on the real cloud even in dev.
+ * - `unregistered` — no provider in context (bare runtime, unit tests).
+ */
+export type DataPlaneResolution =
+  | { readonly kind: "local"; readonly layer: Layer.Layer<any, any, never> }
+  | { readonly kind: "live" }
+  | { readonly kind: "undeclared"; readonly providerType: string }
+  | { readonly kind: "agnostic" }
+  | { readonly kind: "unregistered" };
+
+/**
+ * Resolve where a resource's deploy-time binding clients should be routed:
+ * its registration-captured {@link ResourceLike.Mode} (`Alchemy.remote()`
+ * → `"live"`) or the run default (`alchemy dev` → `"local"`) — the same
+ * resolution `Plan.make` applies to lifecycle operations — combined with
+ * whether the provider registered a local data plane at all.
+ */
+export const describeDataPlane = (resource: {
+  readonly Type: string;
+  readonly Mode?: ProviderMode | undefined;
+}): Effect.Effect<DataPlaneResolution> =>
+  Effect.gen(function* () {
+    const found = yield* tryFindProviderByType(resource.Type);
+    if (Option.isNone(found)) return { kind: "unregistered" as const };
+    const provider = found.value;
+    if (provider.modes === undefined) return { kind: "agnostic" as const };
+    const mode = resource.Mode ?? (yield* defaultProviderMode);
+    if (mode !== "local") return { kind: "live" as const };
+    if (provider.localDataPlane === undefined) {
+      return { kind: "undeclared" as const, providerType: resource.Type };
+    }
+    return { kind: "local" as const, layer: provider.localDataPlane() };
+  });
+
+/**
+ * The data-plane override layer for a resource, or `undefined` when its
+ * clients target the real cloud for any reason (see
+ * {@link describeDataPlane} for which).
  */
 export const resolveLocalDataPlane = (resource: {
   readonly Type: string;
   readonly Mode?: ProviderMode | undefined;
 }): Effect.Effect<Layer.Layer<any, any, never> | undefined> =>
-  Effect.gen(function* () {
-    const found = yield* tryFindProviderByType(resource.Type);
-    if (Option.isNone(found)) return undefined;
-    const provider = found.value;
-    if (provider.modes === undefined || provider.localDataPlane === undefined) {
-      return undefined;
-    }
-    const mode = resource.Mode ?? (yield* defaultProviderMode);
-    return mode === "local" ? provider.localDataPlane() : undefined;
-  });
+  describeDataPlane(resource).pipe(
+    Effect.map((plane) => (plane.kind === "local" ? plane.layer : undefined)),
+  );
 
 export const findProviderByType: {
   <R extends ResourceLike>(

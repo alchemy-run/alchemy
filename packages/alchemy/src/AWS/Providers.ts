@@ -22,7 +22,7 @@ import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { flociDual } from "./Local/FlociServices.ts";
+import { flociDual, flociServices } from "./Local/FlociServices.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as AccessAnalyzer from "./AccessAnalyzer/index.ts";
@@ -1288,14 +1288,21 @@ export const providers = () =>
           // Dual: live ECS in deploy, floci-emulated (RPC-sidecar-hosted,
           // hot-reloading real containers) in dev — see FlociServiceProvider
           // / FlociTaskProvider.
+          // Hand-written floci local providers still live on the floci data
+          // plane: declare it so deploy-time binding clients (Action bodies,
+          // plan-time `execute`) route to the emulator — and so a binding
+          // spanning a `flociDual` sibling (RunTask(cluster, task)) does not
+          // see "mixed data planes". Pinned by test/AWS/LocalDataPlane.test.ts.
           ProviderLayer.dual(ECS.Service, {
             live: () => ECS.ServiceProvider(),
             local: () => ECS.FlociServiceProvider(),
+            dataPlane: flociServices,
           }),
           flociDual(ECS.TaskDefinition, () => ECS.TaskDefinitionProvider()),
           ProviderLayer.dual(ECS.Task, {
             live: () => ECS.TaskProvider(),
             local: () => ECS.FlociTaskProvider(),
+            dataPlane: flociServices,
           }),
           EFS.AccessPointProvider(),
           EFS.FileSystemProvider(),
@@ -1425,6 +1432,7 @@ export const providers = () =>
           ProviderLayer.dual(Lambda.Function, {
             live: () => Lambda.FunctionProvider(),
             local: () => Lambda.FlociFunctionProvider(),
+            dataPlane: flociServices,
           }),
           flociDual(Lambda.LayerVersion, () => Lambda.LayerVersionProvider()),
           flociDual(Lambda.Version, () => Lambda.VersionProvider()),
