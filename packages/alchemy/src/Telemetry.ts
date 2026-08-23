@@ -42,9 +42,8 @@
  *
  * - the exporter's batching fiber runs inside the event's I/O context
  *   (required on workerd, where timers/fetches are pinned to the request),
- * - buffered spans/logs/metrics are flushed when the request scope
- *   finalizes — registered with `ctx.waitUntil`, so flushing never delays
- *   the response.
+ * - buffered spans/logs/metrics are flushed before the runtime event settles,
+ *   while ordinary request finalizers remain registered with `ctx.waitUntil`.
  */
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -56,6 +55,7 @@ import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as OtlpExporter from "effect/unstable/observability/OtlpExporter";
 import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
@@ -291,6 +291,7 @@ const fanoutClient = (
 
 const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
+  shutdownTimeout?: Duration.Input;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -337,6 +338,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.traces,
             resource,
             exportInterval: options?.exportInterval,
+            shutdownTimeout: options?.shutdownTimeout,
           }),
         );
       }
@@ -347,6 +349,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.logs,
             resource,
             exportInterval: options?.exportInterval,
+            shutdownTimeout: options?.shutdownTimeout,
           }),
         );
       }
@@ -357,6 +360,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.metrics,
             resource,
             exportInterval: options?.exportInterval,
+            shutdownTimeout: options?.shutdownTimeout,
           }),
         );
       }
@@ -391,8 +395,11 @@ const makeExporterLayer = (options?: {
  * A malformed configuration degrades to `Layer.empty` with a warning
  * instead of failing the event.
  */
+const eventTelemetryFlushTimeout: Duration.Input = "3 seconds";
+
 const fromBoundConfig: TelemetryLayer = makeExporterLayer({
   exportInterval: "1 hour",
+  shutdownTimeout: eventTelemetryFlushTimeout,
 });
 
 /**
@@ -420,8 +427,8 @@ const reference = Telemetry;
 /**
  * Install a custom telemetry Layer (any Layer providing a `Tracer`,
  * loggers, and/or metric exporters). It is built once per event into the
- * event's request scope, so scoped exporters flush when the request scope
- * finalizes.
+ * event's request scope. Effect OTLP exporters are explicitly flushed before
+ * the runtime event settles; other scoped exporters finalize with the scope.
  *
  * Custom layers COMPOSE with the built-in OTLP destinations and with each
  * other: loggers and metric exporters merge; a custom `Tracer` (a single
@@ -613,7 +620,7 @@ const destinationsOutput = (
  * bindings) — url and header values accept resource Outputs, so exporter
  * config is wired from resources like any other binding. At runtime the
  * exporter reads the bound values back and ships traces, logs, and metrics
- * over OTLP/HTTP JSON, flushed as each event's scope closes.
+ * over OTLP/HTTP JSON before each event settles.
  *
  * Exporters COMPOSE: merge several `otlp` layers (or vendor sugar like
  * `Axiom.Telemetry`) and every destination receives the telemetry — spans
@@ -659,6 +666,22 @@ export const layerOtlp = (options: OtlpOptions): Layer.Layer<never> =>
   );
 
 /**
+ * Flush buffered OTLP event telemetry before the owning runtime event settles.
+ * Custom telemetry Layers without Effect's OTLP flusher are a no-op.
+ */
+export const flushEventTelemetry = (
+  context: Context.Context<never>,
+): Effect.Effect<void> => {
+  const flusher = Context.getOrUndefined(context, OtlpExporter.Flusher);
+  return flusher === undefined
+    ? Effect.void
+    : flusher.flush.pipe(
+        Effect.timeoutOption(eventTelemetryFlushTimeout),
+        Effect.asVoid,
+      );
+};
+
+/**
  * Build the configured {@link Telemetry} Layer into an event's request
  * scope, returning the Context of telemetry services to provide to the
  * event's handler effect.
@@ -666,9 +689,8 @@ export const layerOtlp = (options: OtlpOptions): Layer.Layer<never> =>
  * Called by the runtime bridges (Worker, Durable Object, Workflow, Lambda)
  * once per event. Building into the *request* scope — not the
  * never-finalized isolate scope — is what makes export work on workerd:
- * the batching fiber lives inside the event's I/O context and the final
- * flush runs from the scope's finalizer, which the bridges register with
- * `ctx.waitUntil`.
+ * the batching fiber lives inside the event's I/O context, and the bridges
+ * explicitly flush its buffers before allowing the event to settle.
  *
  * A failed build (bad user Layer, config error) degrades to an empty
  * Context with a warning instead of failing the event.

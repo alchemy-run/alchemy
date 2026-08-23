@@ -19,7 +19,7 @@ import {
 } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
-import { buildEventTelemetry } from "../../Telemetry.ts";
+import { buildEventTelemetry, flushEventTelemetry } from "../../Telemetry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
@@ -88,6 +88,7 @@ export const makeWorkerBridge = (
     ) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    let eventTelemetry = Context.empty();
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
@@ -109,13 +110,22 @@ export const makeWorkerBridge = (
                 Layer.succeed(Scope.Scope, scope),
                 // The configured telemetry exporters. Constructed as part
                 // of this per-event layer, but `buildEventTelemetry`
-                // attaches their batching fibers and flush finalizers to
-                // the request `scope` (not this build's transient scope),
-                // so buffered telemetry flushes when the scope closes into
-                // `ctx.waitUntil` below — never on workerd's ephemeral
-                // isolate scope.
+                // attaches their batching fibers and finalizers to the
+                // request `scope` (not this build's transient scope). The
+                // captured Context is explicitly flushed before this event
+                // settles; ordinary scope finalizers close via `waitUntil`.
                 Layer.effectContext(
-                  buildEventTelemetry(built.context, scope, built.telemetry()),
+                  buildEventTelemetry(
+                    built.context,
+                    scope,
+                    built.telemetry(),
+                  ).pipe(
+                    Effect.tap((context) =>
+                      Effect.sync(() => {
+                        eventTelemetry = context;
+                      }),
+                    ),
+                  ),
                 ),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
@@ -130,20 +140,18 @@ export const makeWorkerBridge = (
         (error) => Exit.die(error),
       )
       .then((exit) => onExit(exit, scope))
-      .finally(() =>
-        isScopeEjected(scope)
-          ? undefined
-          : ctx.waitUntil(
-              // The HttpMiddleware tracer ends the request's root span in a
-              // dispatcher task scheduled after the handler effect resolves.
-              // Yield one macrotask before closing the scope so that span
-              // reaches the telemetry exporter's buffer before the scope's
-              // flush finalizer runs.
-              new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-                Effect.runPromise(Scope.close(scope, Exit.void)),
-              ),
-            ),
-      );
+      .finally(() => {
+        if (isScopeEjected(scope)) return undefined;
+        // The HttpMiddleware tracer ends the request's root span in a
+        // dispatcher task scheduled after the handler effect resolves.
+        // Yield one macrotask, flush telemetry before the event settles, then
+        // close ordinary request resources in the background via waitUntil.
+        return new Promise((resolve) => setTimeout(resolve, 0))
+          .then(() => Effect.runPromise(flushEventTelemetry(eventTelemetry)))
+          .then(() =>
+            ctx.waitUntil(Effect.runPromise(Scope.close(scope, Exit.void))),
+          );
+      });
   };
   class WorkerBridge extends Base {
     constructor(

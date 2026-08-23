@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
 
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -9,7 +10,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
 import { HttpServerResponse } from "effect/unstable/http";
-import { buildEventTelemetry } from "../../Telemetry.ts";
+import { buildEventTelemetry, flushEventTelemetry } from "../../Telemetry.ts";
 import type {
   DurableObjectExport,
   DurableObjectShape,
@@ -129,6 +130,7 @@ export const makeDurableObjectBridge =
         ) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
+        let eventTelemetry = Context.empty();
 
         const { instance, services, context, telemetry } = await this.#instance;
 
@@ -142,11 +144,17 @@ export const makeDurableObjectBridge =
                 ),
                 Layer.succeed(Scope.Scope, scope),
                 // The configured telemetry exporters, attached to the *call*
-                // scope by `buildEventTelemetry` so buffered telemetry
-                // flushes when the scope closes into `waitUntil` below (the
-                // isolate scope never finalizes on workerd).
+                // scope by `buildEventTelemetry`. The captured Context is
+                // explicitly flushed before this call settles; ordinary scope
+                // finalizers close via `waitUntil`.
                 Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
+                  buildEventTelemetry(context, scope, telemetry()).pipe(
+                    Effect.tap((context) =>
+                      Effect.sync(() => {
+                        eventTelemetry = context;
+                      }),
+                    ),
+                  ),
                 ),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
@@ -162,18 +170,20 @@ export const makeDurableObjectBridge =
                 ? Promise.resolve(exit.value)
                 : Promise.reject(Cause.squash(exit.cause)),
           )
-          .finally(() =>
-            isScopeEjected(scope)
-              ? undefined
-              : this.ctx.waitUntil(
-                  // Match WorkerBridge: yield one macrotask so the
-                  // HttpMiddleware tracer's late span-end reaches the
-                  // telemetry exporter before the scope's flush finalizer.
-                  new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-                    Effect.runPromise(Scope.close(scope, Exit.void)),
-                  ),
+          .finally(() => {
+            if (isScopeEjected(scope)) return undefined;
+            // Match WorkerBridge: wait for the late HTTP span, flush its
+            // telemetry, then close ordinary call resources in the background.
+            return new Promise((resolve) => setTimeout(resolve, 0))
+              .then(() =>
+                Effect.runPromise(flushEventTelemetry(eventTelemetry)),
+              )
+              .then(() =>
+                this.ctx.waitUntil(
+                  Effect.runPromise(Scope.close(scope, Exit.void)),
                 ),
-          );
+              );
+          });
       }
 
       async fetch(request: Request): Promise<any> {
