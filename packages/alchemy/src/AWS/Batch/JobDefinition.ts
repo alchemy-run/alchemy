@@ -939,72 +939,10 @@ export const JobDefinitionProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { Stack } from "alchemy/Stack";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Batch";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the \`run\` Effect registered by the job's
-// impl shape plus any host.run loops) and run it TO COMPLETION — a Batch
-// job is not a server. Exit 0 on success (job SUCCEEDED) and 1 on failure
-// (job FAILED, subject to the definition's retry strategy).
-const program = handler.pipe(
-  Effect.flatMap((job) => job.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Batch job bootstrap starting...");
-await Effect.runPromise(program).then(
-  () => {
-    console.log("Batch job completed.");
-    process.exit(0);
-  },
-  (err) => {
-    console.error("Batch job failed:", err);
-    process.exit(1);
-  },
-);
+await bootstrap(entrypoint);
 `,
               ),
             );

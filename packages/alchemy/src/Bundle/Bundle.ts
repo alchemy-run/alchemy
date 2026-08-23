@@ -4,7 +4,6 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
-import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
@@ -324,27 +323,6 @@ export const watch = (
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
 // oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
-/**
- * Ids the virtual-entry `resolveId` hook wants to see: the virtual entry ids
- * themselves, plus bare package specifiers (anything not starting with `.`,
- * `/` or `\0`) so the bootstrap's own imports can be anchored (below).
- */
-// oxlint-disable-next-line no-control-regex
-const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
-
-/**
- * A real file inside alchemy's own installation, used as the fallback
- * resolution anchor for imports made by a generated virtual entry.
- *
- * A virtual module has no filesystem location, so rolldown resolves its bare
- * imports from the build `cwd` — the consumer's project. That only finds
- * alchemy's *own* dependencies (`@distilled.cloud/*`, `@effect/platform-*`)
- * when the package manager happens to hoist them; under an isolated layout
- * (bun `--linker=isolated`, pnpm) they live beside alchemy, not the project,
- * so the import is reported `[UNRESOLVED_IMPORT]`, left external, and the
- * deployed Lambda/container crashes at startup with `Cannot find module`.
- */
-const ALCHEMY_RESOLVE_ANCHOR = fileURLToPath(import.meta.url);
 
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
@@ -380,34 +358,9 @@ export const virtualEntryPlugin = Effect.gen(function* () {
         },
       },
       resolveId: {
-        filter: { id: ENTRY_OR_BARE_REGEX },
-        async handler(id, importer) {
-          if (ENTRY_REGEX.test(id)) {
-            return entries.has(id) ? { id } : null;
-          }
-          // A bare import made BY a virtual entry. Give it a real on-disk
-          // anchor to resolve from, through rolldown's own resolver so the
-          // build's `conditionNames`/`external` still apply: first the real
-          // entry it wraps (the consumer's graph — keeps a single `effect`
-          // identity and the consumer's `alchemy`), then alchemy's own
-          // installation (where its private SDK deps always resolve). An id
-          // neither anchor resolves falls through to the default behaviour.
-          if (
-            importer === undefined ||
-            !ENTRY_REGEX.test(importer) ||
-            path.isAbsolute(id)
-          ) {
-            return null;
-          }
-          const realEntry = entries.get(importer);
-          for (const anchor of [realEntry, ALCHEMY_RESOLVE_ANCHOR]) {
-            if (anchor === undefined) continue;
-            const resolved = await this.resolve(id, anchor, {
-              skipSelf: true,
-            });
-            if (resolved !== null) return resolved;
-          }
-          return null;
+        filter: { id: ENTRY_REGEX },
+        handler(id) {
+          return entries.has(id) ? { id } : null;
         },
       },
       load: {

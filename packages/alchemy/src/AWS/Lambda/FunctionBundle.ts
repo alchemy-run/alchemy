@@ -26,7 +26,6 @@ import {
   resolvePackageInstallIdentity,
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
-import { Self } from "../../Self.ts";
 import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { zipCode, zipFiles, type ZipFile } from "../../Util/zip.ts";
 import type { FunctionArchitecture, FunctionProps } from "./Function.ts";
@@ -184,116 +183,10 @@ export const makeFunctionBundler = Effect.gen(function* () {
       ? undefined
       : virtualEntryPlugin(
           (importPath) => `
-import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import { registerLambdaExtension } from "alchemy/AWS/Lambda/RuntimeExtension";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as Endpoint from "@distilled.cloud/aws/Endpoint";
-import * as Exit from "effect/Exit";
-import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
-import * as Context from "effect/Context";
-import * as Scope from "effect/Scope";
-import { MinimumLogLevel } from "effect/References";
-
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Lambda";
 import entrypoint from ${JSON.stringify(importPath)};
 
-// Register the internal extension: it buys the Shutdown phase (SIGTERM +
-// 500 ms) — without any registered extension the sandbox is killed with no
-// signal at all, and init-level finalizers would never run.
-await registerLambdaExtension();
-
-// Instance scope: the sandbox-lifetime layer build lives under it, and it is
-// closed on SIGTERM (Lambda's Shutdown phase) so init-level finalizers run
-// before the sandbox dies. Each invocation still gets its own request scope
-// from the handler dispatch.
-const instanceScope = Scope.makeUnsafe();
-
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  nodeServicesLayer,
-  fetchHttpClientLayer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-const entryLayer = layer.pipe(
-  Layer.provideMerge(stack),
-  Layer.provideMerge(Credentials.fromEnv()),
-  Layer.provideMerge(Region.fromEnv()),
-  // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local
-  // emulators (floci) into the Lambda container — without it, runtime
-  // bindings in \`alchemy dev\` would call REAL AWS with dummy credentials.
-  // Resolves undefined when unset, so live deploys are unaffected.
-  Layer.provideMerge(Endpoint.fromEnv()),
-  Layer.provideMerge(platform),
-  Layer.provideMerge(
-    Layer.succeed(
-      ConfigProvider.ConfigProvider,
-      // Auto-bound \`Config\` values arrive in the env as
-      // \`{"_tag":"Redacted","value":...}\` markers; reify them so a \`Config\`
-      // re-read inside a handler decodes the raw source value.
-      reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-    )
-  ),
-  Layer.provideMerge(
-    Layer.succeed(
-      MinimumLogLevel,
-      process.env.DEBUG ? "Debug" : "Info",
-    )
-  ),
-);
-
-// Build the layer stack against the instance scope (not a transient
-// \`Effect.provide\`/\`Effect.scoped\` region) so services and init-level
-// finalizers live for the sandbox and are released at Shutdown.
-const handlerEffect = Layer.buildWithScope(entryLayer, instanceScope).pipe(
-  Effect.flatMap((context) =>
-    tag.pipe(
-      Effect.flatMap(func => func.RuntimeContext.exports),
-      Effect.flatMap(exports => exports.handler),
-      Effect.provideContext(context),
-    )
-  ),
-  Scope.provide(instanceScope),
-);
-
-const handler = await Effect.runPromise(handlerEffect);
-
-// Lambda's Shutdown phase: close the instance scope so init-level
-// finalizers run, then exit inside the 500 ms budget. SIGKILL follows if we
-// overstay, so finalizers must be fast and best-effort.
-process.on("SIGTERM", () => {
-  console.log("[alchemy] SIGTERM — closing instance scope");
-  Effect.runPromise(Scope.close(instanceScope, Exit.void))
-    .catch((error) => console.error("[alchemy] shutdown finalizers failed", error))
-    .finally(() => process.exit(0));
-});
-
-export default handler;
+export default await bootstrap(entrypoint);
 `,
         );
 

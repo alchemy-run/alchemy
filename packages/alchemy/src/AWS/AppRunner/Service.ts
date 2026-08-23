@@ -999,68 +999,10 @@ export const ServiceProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/AppRunner";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT (App Runner injects PORT
-// for the configured service port), so a returned { fetch } handler is
-// actually served and host.run loops stay alive.
-const program = handler.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("App Runner service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("App Runner service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `,
               ),
             );

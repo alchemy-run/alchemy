@@ -7,7 +7,6 @@ import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../Bundle/TempRoot.ts";
 import type { ResourceBinding } from "../Resource.ts";
-import { Self } from "../Self.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
@@ -72,72 +71,19 @@ export const collectBindingState = (
   return { env, volumes };
 };
 
+/**
+ * The generated entry for `Hetzner.Service` units: a shim importing only
+ * `alchemy/Runtime/Bootstrap/Hetzner` plus the user's `main` — see that
+ * module for why the entry never imports alchemy's own dependencies.
+ */
 const makeBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Hetzner";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-const tag = Context.Service(${JSON.stringify(Self.key)});
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-const program = tag.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Hetzner service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Hetzner service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `;
 
 export const createHetznerHostedSupport = ({
