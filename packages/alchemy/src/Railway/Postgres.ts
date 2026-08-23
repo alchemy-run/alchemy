@@ -11,8 +11,8 @@ import type {
   TcpProxyCreateResponse,
   VolumeInstanceResponse,
   VolumeState,
-} from "@distilled.cloud/railway/railway";
-import * as railway from "@distilled.cloud/railway/railway";
+} from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

@@ -159,7 +159,7 @@ website/src/content/docs/providers/{Cloud}/  # generated, do not edit
 
 | Mistake | Do this instead |
 | --- | --- |
-| `export * as Services from "./services"` | `export * from "./services/index.ts"` |
+| `export * as Services` / `Railway.railway.op` | Flat GraphQL: `import * as Railway from "@distilled.cloud/railway"` then `Railway.projectCreate`. No `./railway` export. |
 | Invent verb-first GraphQL names (`createProject`) | Keep wire names (`projectCreate`). Only patch when the generated name is broken (`Apps_list`) |
 | `skipIf` for missing `FLY_API_TOKEN` / `RAILWAY_API_TOKEN` | Token is in Doppler. Fail loud |
 | `Input<T>` on Props | Plain types. Engine wraps |
@@ -190,7 +190,9 @@ Workspace is **not** a resource. `me.workspace ?? me.workspaces[0]`
 is the default, overridable with `workspaceId` on Project.
 
 API: GraphQL v2 `POST https://backboard.railway.com/graphql/v2`.
-SDK: `import * as railway from "@distilled.cloud/railway/railway"`.
+SDK: `import * as Railway from "@distilled.cloud/railway"` — one
+flat GraphQL surface, operations on the package root. There is no
+`./railway` export.
 
 ### In scope (wave 1 — comparable to Fly/Hetzner)
 
@@ -230,9 +232,11 @@ observability dashboards, GitHub repo linking as a resource (Service
 ## Distilled Railway rules
 
 - Package stays `@distilled.cloud/railway`.
-- `src/index.ts`: `export * from "./services/index.ts"` (not Services).
-- Callers: `import * as railway from "@distilled.cloud/railway/railway"`
-  then `railway.projectCreate({ input })`. GraphQL field names are the
+- `src/index.ts`: `export * from "./services/railway.ts"`. One GraphQL
+  service, so ops are on the package root. No `export * as railway`,
+  no `./railway` export condition.
+- Callers: `import * as Railway from "@distilled.cloud/railway"` then
+  `Railway.projectCreate({ input })`. GraphQL field names are the
   spec. **Do not** patch them to verb-first.
 - `convert.ts` applies `patches/railway/*.json` to the **Smithy**
   model after GraphQL→Smithy (same as Fly addons). Keep

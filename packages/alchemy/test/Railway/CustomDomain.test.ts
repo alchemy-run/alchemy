@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway/railway";
+import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";

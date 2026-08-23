@@ -1,6 +1,6 @@
 import { Retry as RailwayRetry } from "@distilled.cloud/railway";
-import type { DomainsResponseServiceDomainsItem } from "@distilled.cloud/railway/railway";
-import * as railway from "@distilled.cloud/railway/railway";
+import type { DomainsResponseServiceDomainsItem } from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

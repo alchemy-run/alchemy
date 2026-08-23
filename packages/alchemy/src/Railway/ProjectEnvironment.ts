@@ -4,8 +4,8 @@ import type {
   EnvironmentRenameResponse,
   EnvironmentResponse,
   EnvironmentsResponseEdgesItemNode,
-} from "@distilled.cloud/railway/railway";
-import * as railway from "@distilled.cloud/railway/railway";
+} from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

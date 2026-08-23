@@ -1,5 +1,5 @@
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/railway";
+import * as railway from "@distilled.cloud/railway";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";

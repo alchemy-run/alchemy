@@ -1,6 +1,6 @@
 import type { Config } from "@distilled.cloud/railway";
 import { Credentials } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/railway";
+import * as railway from "@distilled.cloud/railway";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
