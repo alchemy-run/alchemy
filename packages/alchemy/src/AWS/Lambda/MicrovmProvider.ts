@@ -478,6 +478,8 @@ export const MicrovmImageProvider = () =>
         : yield* findImageByName(name);
 
       // Ensure + sync: rebuild only when the build identity changed.
+      const updated =
+        observed !== undefined && output?.codeArtifact?.hash !== artifact.hash;
       const image = !observed
         ? yield* createImage(
             name,
@@ -487,7 +489,7 @@ export const MicrovmImageProvider = () =>
             desiredTags,
             session,
           )
-        : output?.codeArtifact?.hash === artifact.hash
+        : !updated
           ? observed
           : yield* updateImage(
               observed.imageArn,
@@ -496,6 +498,13 @@ export const MicrovmImageProvider = () =>
               baseImageArn,
               session,
             );
+
+      // A new version means every RUNNING MicroVM serves STALE code —
+      // opted-in images recycle them (sessions relaunch on demand).
+      if (updated && news.recycleMicrovmsOnUpdate === true) {
+        yield* session.note("Recycling MicroVMs of the previous version...");
+        yield* terminateRunningMicrovms(image.imageArn, session);
+      }
 
       yield* syncTags(
         image.imageArn,

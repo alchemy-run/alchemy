@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -231,6 +232,27 @@ export const SandboxMicrovmSession = (
           return stub;
         });
 
+      /** Whether the session's cached machine is GONE — terminated or
+       *  vanished (idle expiry, an image update recycling its VMs). A
+       *  dead cached VM must not poison the session: the caches drop
+       *  and the retry relaunches (RunMicrovm is clientToken-idempotent,
+       *  so a live machine is reattached, never duplicated). */
+      const isMachineGone = (token: string) =>
+        Effect.gen(function* () {
+          const launched = vms.get(token);
+          if (launched === undefined) return false;
+          const vm = yield* launched;
+          const observed = yield* getMicrovm({
+            microvmIdentifier: vm.microvmId,
+          }).pipe(Effect.result);
+          return Result.isSuccess(observed)
+            ? observed.success.state === "TERMINATED" ||
+                observed.success.state === "TERMINATING"
+            : // not found (or unreadable): treat as gone — the relaunch
+              // is idempotent, so a false positive costs one API call
+              true;
+        });
+
       // The session context carries Thread at call time (every driver
       // provides it); the contract's R stays clean — same cast the
       // container session layer makes for DurableObjectState.
@@ -239,8 +261,23 @@ export const SandboxMicrovmSession = (
       ): Effect.Effect<A, E> =>
         Effect.gen(function* () {
           const thread = yield* Thread;
-          const stub = yield* stubFor(sessionToken(thread.key));
-          return yield* use(stub);
+          const token = sessionToken(thread.key);
+          const attempt = Effect.gen(function* () {
+            const stub = yield* stubFor(token);
+            return yield* use(stub);
+          });
+          return yield* attempt.pipe(
+            Effect.catch((error) =>
+              Effect.gen(function* () {
+                if (!(yield* isMachineGone(token))) {
+                  return yield* Effect.fail(error);
+                }
+                vms.delete(token);
+                stubs.delete(token);
+                return yield* attempt;
+              }),
+            ),
+          );
         }) as unknown as Effect.Effect<A, E>;
 
       return {

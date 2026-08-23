@@ -142,6 +142,16 @@ export interface MicrovmImageProps {
   codeArtifact?: microvms.CodeArtifact;
 
   /**
+   * Terminate the image's RUNNING MicroVMs whenever an update produces a
+   * new image version, so no machine keeps serving stale code. Callers
+   * whose sessions relaunch machines on demand (e.g. the AI sandbox
+   * session, whose `RunMicrovm` is clientToken-idempotent and which
+   * relaunches when its cached machine is gone) should opt in.
+   * @default false
+   */
+  recycleMicrovmsOnUpdate?: boolean;
+
+  /**
    * A description of the image version.
    */
   description?: string;

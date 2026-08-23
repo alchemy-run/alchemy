@@ -91,6 +91,9 @@ export const SandboxMicrovmRuntime = AWS.AI.SandboxMicrovmImage.make(
       // a dev tree, not a stub: sessions run installs, tests, and
       // type-checks inside the VM
       resources: [{ minimumMemoryInMiB: 4096 }],
+      // a new bake means every running machine serves a STALE tree —
+      // recycle them; sessions relaunch their machine on next use
+      recycleMicrovmsOnUpdate: true,
     };
   }),
   Effect.gen(function* () {
