@@ -3272,11 +3272,7 @@ export const LiveWorkerProvider = () =>
               Effect.catch(() => Effect.succeed(undefined)),
             ));
 
-        const oldTags = selectWorkerMigrationTags(
-          oldSettings,
-          output?.tags,
-          olds === undefined,
-        );
+        const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
         // Parse the DO logical-id→class mapping from script tags (packed
@@ -3478,16 +3474,16 @@ export const LiveWorkerProvider = () =>
               previousClassName = observed.className;
             }
           }
-          // A class new to this script is a host move when the declaration
-          // says so: `transferredFrom` lists the former host(s) — moves
-          // are always declared, never inferred, because a class deleted
-          // on one worker and created on another is otherwise ambiguous
-          // between "move the data" and "delete + fresh namespace". The
-          // declared source must be observed to still host the namespace;
-          // otherwise (fresh stage, transfer already completed) fall
-          // through to a plain create.
-          const fromScript = !previousClassName
-            ? dispatchNamespace
+          if (!previousClassName) {
+            // A class new to this script is a host move when the declaration
+            // says so: `transferredFrom` lists the former host(s) — moves
+            // are always declared, never inferred, because a class deleted
+            // on one worker and created on another is otherwise ambiguous
+            // between "move the data" and "delete + fresh namespace". The
+            // declared source must be observed to still host the namespace;
+            // otherwise (fresh stage, transfer already completed) fall
+            // through to a plain create.
+            const fromScript = dispatchNamespace
               ? undefined
               : yield* resolveTransferSource({
                   accountId,
@@ -3499,16 +3495,28 @@ export const LiveWorkerProvider = () =>
                     name,
                   ),
                   observedNamespaces,
-                })
-            : undefined;
-          const migration = planDurableObjectClassMigration({
-            previousClassName,
-            className: binding.className,
-            fromScript,
-          });
-          newSqliteClasses.push(...migration.newSqliteClasses);
-          renamedClasses.push(...migration.renamedClasses);
-          transferredClasses.push(...migration.transferredClasses);
+                });
+            if (fromScript !== undefined) {
+              // Data-preserving move: ship Cloudflare's
+              // `transferred_classes` migration instead of creating a
+              // fresh class.
+              transferredClasses.push({
+                from: binding.className,
+                fromScript,
+                to: binding.className,
+              });
+              continue;
+            }
+            // Default all new Durable Object classes to SQLite. Cloudflare
+            // recommends SQLite for new namespaces, and container-backed
+            // Durable Objects require it.
+            newSqliteClasses.push(binding.className);
+          } else if (previousClassName !== binding.className) {
+            renamedClasses.push({
+              from: previousClassName,
+              to: binding.className,
+            });
+          }
         }
 
         yield* Effect.logInfo(
@@ -5089,10 +5097,26 @@ export const LiveWorkerProvider = () =>
           ).pipe(
             // After a pre-create stub (or under a busy account right after
             // the first upload) the settings read can race the script
-            // registry and 404 with "has no versions". Treat it as "no
-            // existing settings" so reconcile proceeds to upload/converge.
-            // The dispatch-namespace endpoints raise
+            // registry and 404 with "has no versions". When we already hold
+            // attributes for this script, that 404 is far more likely the
+            // race than a deleted worker, so wait briefly for the registry
+            // before concluding there are no existing settings — planning
+            // the stub's Durable Object classes as new again is rejected by
+            // Cloudflare. A worker that really is gone falls through to the
+            // upsert below. The dispatch-namespace endpoints raise
             // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
+            Effect.retry({
+              while: (error) =>
+                output !== undefined &&
+                (error._tag === "WorkerNotFound" ||
+                  error._tag === "WorkerHasNoVersions" ||
+                  error._tag === "DispatchNamespaceScriptNotFound" ||
+                  error._tag === "DispatchNamespaceNotFound"),
+              schedule: Schedule.max([
+                Schedule.exponential(250),
+                Schedule.recurs(6),
+              ]),
+            }),
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
             Effect.catchTag("WorkerHasNoVersions", () =>
               Effect.succeed(undefined),
@@ -5588,60 +5612,6 @@ export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
     }
   }
   return map;
-}
-
-/**
- * Select the tags that describe the previous Durable Object migration state.
- * Live settings are authoritative whenever they exist. During a create pass,
- * a precreate stub may already have registered the classes even when its
- * settings have not propagated yet, so its persisted tags are the fallback.
- * Updates deliberately ignore cached tags when the Worker is missing so the
- * normal upsert path can self-heal out-of-band deletion.
- *
- * @internal exported for unit testing.
- */
-export function selectWorkerMigrationTags(
-  observedSettings:
-    | { readonly tags?: ReadonlyArray<string> | null }
-    | undefined,
-  precreatedTags: ReadonlyArray<string> | undefined,
-  isCreate: boolean,
-) {
-  return Array.from(
-    new Set(
-      observedSettings !== undefined
-        ? (observedSettings.tags ?? [])
-        : isCreate
-          ? (precreatedTags ?? [])
-          : [],
-    ),
-  );
-}
-
-/** @internal exported for unit testing. */
-export function planDurableObjectClassMigration({
-  previousClassName,
-  className,
-  fromScript,
-}: {
-  previousClassName: string | undefined;
-  className: string;
-  fromScript?: string;
-}) {
-  return {
-    newSqliteClasses:
-      previousClassName === undefined && fromScript === undefined
-        ? [className]
-        : [],
-    renamedClasses:
-      previousClassName !== undefined && previousClassName !== className
-        ? [{ from: previousClassName, to: className }]
-        : [],
-    transferredClasses:
-      previousClassName === undefined && fromScript !== undefined
-        ? [{ from: className, fromScript, to: className }]
-        : [],
-  };
 }
 
 const isDurableObjectTag = (tag: string) =>

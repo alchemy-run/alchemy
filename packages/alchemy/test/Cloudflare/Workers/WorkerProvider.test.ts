@@ -2,7 +2,6 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
-  planDurableObjectClassMigration,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -10,7 +9,6 @@ import {
   shouldObserveWorkerCrons,
   shouldObserveWorkerDomains,
   shouldObserveWorkerRoutes,
-  selectWorkerMigrationTags,
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
@@ -19,82 +17,6 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 describe("WorkerProvider", () => {
-  describe("selectWorkerMigrationTags", () => {
-    const precreatedTags = [
-      "alchemy:dos:ExampleDurableObject=ExampleDurableObject",
-    ];
-
-    test("prevents a duplicate create migration when precreate settings are missing", () => {
-      const tags = selectWorkerMigrationTags(undefined, precreatedTags, true);
-      const previousClassNames = getDurableObjectTagMap(tags);
-      const migration = planDurableObjectClassMigration({
-        previousClassName: previousClassNames.ExampleDurableObject,
-        className: "ExampleDurableObject",
-      });
-
-      expect(migration.newSqliteClasses).toEqual([]);
-      expect(previousClassNames).toEqual({
-        ExampleDurableObject: "ExampleDurableObject",
-      });
-    });
-
-    test("keeps observed settings authoritative during create", () => {
-      const tags = selectWorkerMigrationTags(
-        { tags: [] },
-        precreatedTags,
-        true,
-      );
-
-      expect(tags).toEqual([]);
-    });
-
-    test("ignores cached tags on update when settings are missing", () => {
-      const tags = selectWorkerMigrationTags(undefined, precreatedTags, false);
-
-      expect(tags).toEqual([]);
-    });
-
-    test("classifies new, renamed, and transferred classes", () => {
-      expect(
-        planDurableObjectClassMigration({
-          previousClassName: undefined,
-          className: "NewClass",
-        }),
-      ).toEqual({
-        newSqliteClasses: ["NewClass"],
-        renamedClasses: [],
-        transferredClasses: [],
-      });
-      expect(
-        planDurableObjectClassMigration({
-          previousClassName: "OldClass",
-          className: "RenamedClass",
-        }),
-      ).toEqual({
-        newSqliteClasses: [],
-        renamedClasses: [{ from: "OldClass", to: "RenamedClass" }],
-        transferredClasses: [],
-      });
-      expect(
-        planDurableObjectClassMigration({
-          previousClassName: undefined,
-          className: "MovedClass",
-          fromScript: "former-host",
-        }),
-      ).toEqual({
-        newSqliteClasses: [],
-        renamedClasses: [],
-        transferredClasses: [
-          {
-            from: "MovedClass",
-            fromScript: "former-host",
-            to: "MovedClass",
-          },
-        ],
-      });
-    });
-  });
-
   describe("normalizeStateDomains", () => {
     // Worker state has gone through three generations: <= beta.44 stored each
     // custom domain as a `{ id, hostname, zoneId }` object; beta.45 – beta.57
