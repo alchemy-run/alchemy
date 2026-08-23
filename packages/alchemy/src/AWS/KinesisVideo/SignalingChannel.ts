@@ -284,6 +284,7 @@ export const SignalingChannelProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          yield* waitForChannelGone(output.channelName);
         }),
       });
     }),

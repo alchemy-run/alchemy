@@ -508,10 +508,9 @@ export interface WorkerVersionAffinity {
  *   and the currently-live version keeps the remainder, instead of the
  *   default 100% cutover.
  *
- * A gradual rollout carries only what a version can: code, bindings,
- * compatibility settings, and cache configuration. Workers with static
- * assets cannot roll out gradually (the versions API cannot carry assets),
- * a deploy that changes Durable Object class migrations must go out at
+ * A gradual rollout carries only what a version can: code, static assets,
+ * bindings, compatibility settings, and cache configuration. A deploy that
+ * changes Durable Object class migrations must go out at
  * 100% (migrations cannot ride a rollout), and script-level settings
  * (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
@@ -524,10 +523,10 @@ export interface WorkerVersionOptions {
    * locally-declared Worker — or a literal script name as an escape hatch.
    *
    * When set, this resource does not create a script of its own: it
-   * uploads a version (code + bindings + compatibility settings) to the
-   * parent's script. Script-level settings apply immediately to *all*
-   * versions of the parent, so they cannot be set on a version worker —
-   * `name`, `assets`, `namespace`, `crons`, `domain`, `routes`, `tags`,
+   * uploads a version (code + static assets + bindings + compatibility
+   * settings) to the parent's script. Script-level settings apply immediately
+   * to *all* versions of the parent, so they cannot be set on a version worker —
+   * `name`, `namespace`, `crons`, `domain`, `routes`, `tags`,
    * `logpush`, `observability`, `placement`, `limits`, and `subdomain` are
    * rejected, as are locally-hosted Durable Object or Workflow classes
    * (their migrations would mutate the parent).
@@ -1062,6 +1061,23 @@ export interface WorkerSourceDescriptor {
    * local Worker host.
    */
   readonly devMode: "server" | "bundle";
+  /**
+   * The framework project root. Server-mode dev children are spawned with
+   * this directory as their working directory — some framework dev servers
+   * (e.g. `next dev`, which 404s every route when `process.cwd()` differs
+   * from its `dir`) require cwd to be the project root. Relative paths
+   * resolve against the engine's working directory. Defaults to the
+   * engine's working directory.
+   */
+  readonly rootDir?: string;
+  /**
+   * The JS runtime the server-mode dev child must run under. Some framework
+   * dev servers are runtime-sensitive — `next dev` (Turbopack) silently 404s
+   * every route when cold-started under bun — so the provider can pin the
+   * child to `"node"`. When the requested runtime is not installed, the
+   * engine falls back to its own runtime. Defaults to the engine's runtime.
+   */
+  readonly runtime?: "node";
   /**
    * Provider-specific options (rootDir, memo, framework config, ...).
    * Must be JSON-serializable AND JSON-stable: the descriptor persists
@@ -1856,11 +1872,11 @@ export const isSelf = (value: unknown): value is Self =>
  * in `domains`. Because the aliased URL is known before the version
  * exists, `Worker.URL` works on version workers and resolves to it.
  *
- * A version carries code, bindings, and compatibility settings. Script-level
- * settings (routes, domains, crons, tags, observability, …) belong to the
- * parent and are rejected on version workers, as are locally-hosted Durable
- * Object or Workflow classes. Preview URLs require the parent's workers.dev
- * subdomain to be enabled (the default).
+ * A version carries code, static assets, bindings, and compatibility
+ * settings. Script-level settings (routes, domains, crons, tags,
+ * observability, …) belong to the parent and are rejected on version workers,
+ * as are locally-hosted Durable Object or Workflow classes. Preview URLs
+ * require the parent's workers.dev subdomain to be enabled (the default).
  *
  * **Example:** PR preview: a version of another stage's Worker
  * ```typescript

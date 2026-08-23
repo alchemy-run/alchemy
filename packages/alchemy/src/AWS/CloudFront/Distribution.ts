@@ -4,6 +4,8 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -11,6 +13,7 @@ import { toWireSeconds } from "../../Util/Duration.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import { AWSEnvironment } from "../Environment.ts";
 
 const CLOUDFRONT_HOSTED_ZONE_ID = "Z2FDTNDATAQYW2" as const;
 
@@ -451,6 +454,17 @@ export interface Distribution extends Resource<
      */
     domainName: string;
     /**
+     * The distribution's own URL — what a viewer opens.
+     *
+     * `https://{domainName}` on AWS. Under `alchemy dev` the emulator has no
+     * such hostname to offer (`*.cloudfront.net` resolves to nothing on a
+     * developer's machine), so it serves the distribution's edge on a local
+     * port and this is `http://localhost:{port}`. Reading `url` instead of
+     * building one from {@link domainName} is what makes a consumer work
+     * unchanged in both modes.
+     */
+    url: string;
+    /**
      * Route 53 hosted zone ID for CloudFront aliases.
      */
     hostedZoneId: string;
@@ -803,7 +817,12 @@ export const DistributionProvider = () =>
             return undefined;
           }
 
-          return toAttrs(current.distribution, current.etag, current.tags);
+          return toAttrs(
+            current.distribution,
+            current.etag,
+            current.tags,
+            yield* resolveUrl(current.distribution),
+          );
         }),
         // CloudFront is a global service (no region). Enumerate every
         // distribution in the account via the paginated `listDistributions`
@@ -841,14 +860,19 @@ export const DistributionProvider = () =>
                       Schedule.recurs(30),
                     ]),
                   }),
-                  Effect.map((current) =>
+                  Effect.flatMap((current) =>
                     current
-                      ? toAttrs(
-                          current.distribution,
-                          current.etag,
-                          current.tags,
+                      ? Effect.map(
+                          resolveUrl(current.distribution),
+                          (url) =>
+                            toAttrs(
+                              current.distribution,
+                              current.etag,
+                              current.tags,
+                              url,
+                            ) as Distribution["Attributes"] | undefined,
                         )
-                      : undefined,
+                      : Effect.succeed(undefined),
                   ),
                 ),
               { concurrency: 10 },
@@ -1021,7 +1045,12 @@ export const DistributionProvider = () =>
               `CloudFront Distribution reconcile: deployed ${created.distributionId} domain=${deployed.DomainName}`,
             );
             yield* session.note(created.distributionId);
-            return toAttrs(deployed, created.etag, created.tags);
+            return toAttrs(
+              deployed,
+              created.etag,
+              created.tags,
+              yield* resolveUrl(deployed),
+            );
           }
 
           // Sync config — diff observed config against desired and patch
@@ -1125,7 +1154,12 @@ export const DistributionProvider = () =>
             `CloudFront Distribution reconcile: deployed ${observed.distribution.Id} domain=${deployed.DomainName}`,
           );
           yield* session.note(observed.distribution.Id);
-          return toAttrs(deployed, updated.ETag, desiredTags);
+          return toAttrs(
+            deployed,
+            updated.ETag,
+            desiredTags,
+            yield* resolveUrl(deployed),
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.logInfo(
@@ -1587,14 +1621,68 @@ const toConfig = (
   AnycastIpListId: props.anycastIpListId,
 });
 
+/**
+ * The distribution's own URL.
+ *
+ * On AWS this is `https://` + the CloudFront domain name. The local emulator
+ * has no such hostname — `*.cloudfront.net` resolves to nothing on a
+ * developer's machine — so it serves each distribution's edge on a plain-HTTP
+ * port of its own and reports which one. Asking it here (rather than having
+ * every consumer interpolate a URL from `domainName`) is what keeps `url`
+ * openable in both modes. Anything unexpected falls back to the AWS-shaped
+ * URL: a missing edge port must never fail a reconcile.
+ */
+const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
+  distribution: cloudfront.Distribution,
+) {
+  const awsUrl = `https://${distribution.DomainName}`;
+  const env = yield* AWSEnvironment.current;
+  const endpoint = env.endpoint;
+  if (endpoint === undefined || !(yield* AWSEnvironment.isLocalEmulator)) {
+    return awsUrl;
+  }
+  return yield* Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.get(
+      `${endpoint}/_floci/cloudfront-edge/${distribution.Id}`,
+    );
+    // A distribution legitimately has no edge port: the emulator binds one
+    // opportunistically and stays Host-addressable when it can't, and the
+    // endpoint 404s (with a JSON error body) for one it doesn't know yet.
+    // `client.get` does not fail on 404, so every shape lands here — `null`,
+    // an error object, or a port-less entry. Anything that isn't a numeric
+    // `Port` means "no local edge", which is the AWS URL.
+    const edge = (yield* response.json) as { Port?: number } | null;
+    if (
+      edge === null ||
+      typeof edge !== "object" ||
+      typeof edge.Port !== "number"
+    ) {
+      return awsUrl;
+    }
+    const host = yield* Effect.sync(() => new URL(endpoint).hostname);
+    return `http://${host}:${edge.Port}`;
+  }).pipe(
+    Effect.timeout("10 seconds"),
+    Effect.provide(FetchHttpClient.layer),
+    // `orElseSucceed` alone only covers the error channel. A malformed body
+    // throws inside the generator, which Effect surfaces as a DEFECT — that
+    // escaped the fallback and killed a reconcile with a raw TypeError.
+    // Resolving a convenience URL must never be able to fail a deploy.
+    Effect.catchCause(() => Effect.succeed(awsUrl)),
+  );
+});
+
 const toAttrs = (
   distribution: cloudfront.Distribution,
   etag: string | undefined,
   tags: Record<string, string>,
+  url: string,
 ): Distribution["Attributes"] => ({
   distributionId: distribution.Id,
   distributionArn: distribution.ARN,
   domainName: distribution.DomainName,
+  url,
   hostedZoneId: CLOUDFRONT_HOSTED_ZONE_ID,
   status: distribution.Status,
   aliases: distribution.DistributionConfig.Aliases?.Items ?? [],

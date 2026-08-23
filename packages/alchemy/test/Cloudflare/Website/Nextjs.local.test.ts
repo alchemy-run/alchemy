@@ -16,7 +16,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
+import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
@@ -26,7 +26,6 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-app");
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const fixtureEntries = [
   "package.json",
@@ -108,12 +107,14 @@ describe.concurrent("Nextjs dev", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
+        // Clone outside the repo so Next does not treat the alchemy
+        // monorepo as the workspace root (that lookup hits typescript 7
+        // / tsgo, which has no `lib/typescript.js`).
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-dev-",
-          tempRoot,
           entries: fixtureEntries,
         });
-        yield* linkJsApiTypeScript(rootDir);
+        yield* prepareNextjsFixture(rootDir);
 
         const bindingMarker = "nextjs-dev-binding-marker";
 
@@ -194,10 +195,9 @@ describe.concurrent("Nextjs dev", () => {
 
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-dev-hmr-",
-          tempRoot,
           entries: fixtureEntries,
         });
-        yield* linkJsApiTypeScript(rootDir);
+        yield* prepareNextjsFixture(rootDir);
 
         const bindingMarker = "nextjs-hmr-binding-marker";
 
@@ -269,10 +269,9 @@ describe.concurrent("Nextjs dev", () => {
 
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-dev-remote-",
-          tempRoot,
           entries: fixtureEntries,
         });
-        yield* linkJsApiTypeScript(rootDir);
+        yield* prepareNextjsFixture(rootDir);
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {

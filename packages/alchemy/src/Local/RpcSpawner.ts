@@ -32,10 +32,13 @@ export class RpcSpawner extends Context.Service<
   }
 >()("alchemy/Local/RpcSpawner") {}
 
-export interface RpcSpawnPayload extends Pick<
-  RpcServerEnvironment,
-  "alchemyContext" | "stack"
-> {
+/**
+ * The spawner forks one child per distinct `serverEntryUrl`. Stack-specific
+ * context (stack name/stage, AlchemyContext) is NOT part of the spawn key —
+ * it travels per RPC session (see `SESSION_ENV_PARAM`), so many stacks
+ * (e.g. every test file in a run) share a single sidecar process.
+ */
+export interface RpcSpawnPayload {
   serverEntryUrl: string;
 }
 
@@ -62,8 +65,8 @@ export const make = Effect.fn(function* ({
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
   const cache = yield* Cache.make({
-    lookup: (payload: RpcSpawnPayload) =>
-      spawn(payload).pipe(Scope.provide(scope)),
+    lookup: (serverEntryUrl: string) =>
+      spawn(serverEntryUrl).pipe(Scope.provide(scope)),
     capacity: Infinity,
   });
 
@@ -90,18 +93,14 @@ export const make = Effect.fn(function* ({
         : Console.log(line.line);
     });
 
-  const spawn = Effect.fn(function* ({
-    serverEntryUrl,
-    alchemyContext,
-    stack,
-  }: RpcSpawnPayload) {
+  const spawn = Effect.fn(function* (serverEntryUrl: string) {
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
     const main = fileURLToPath(serverEntryUrl);
+    // Stack-specific context is deliberately absent: sessions carry their
+    // own SessionEnvironment, so one child serves every stack.
     const environment: RpcServerEnvironment = {
       profile,
       envFile,
-      alchemyContext,
-      stack,
     };
     const command = ChildProcess.make(
       bin,
@@ -165,23 +164,23 @@ export const make = Effect.fn(function* ({
   });
 
   const register = Effect.fn(function* (
-    payload: RpcSpawnPayload,
+    serverEntryUrl: string,
     attempt = 0,
   ): Effect.fn.Return<string, PlatformError> {
-    const child = yield* Cache.get(cache, payload);
+    const child = yield* Cache.get(cache, serverEntryUrl);
     if (yield* child.isRunning) {
       return child.url;
     }
     if (attempt > 3) {
       return yield* Effect.die(
         new Error(
-          `Failed to spawn RPC server for "${payload.serverEntryUrl}" after ${attempt} attempts.`,
+          `Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`,
         ),
       );
     }
     yield* child.kill;
-    yield* Cache.invalidate(cache, payload);
-    return yield* register(payload, attempt + 1);
+    yield* Cache.invalidate(cache, serverEntryUrl);
+    return yield* register(serverEntryUrl, attempt + 1);
   });
 
   const server = yield* HttpServer.HttpServer;
@@ -210,7 +209,7 @@ export const make = Effect.fn(function* ({
         );
       }
       const payload = (yield* request.json) as unknown as RpcSpawnPayload;
-      const url = yield* register(payload);
+      const url = yield* register(payload.serverEntryUrl);
       return HttpServerResponse.text(url);
     }),
   );

@@ -730,11 +730,6 @@ export const TableProvider = () =>
           Effect.catchTag("PolicyNotFoundException", () =>
             Effect.succeed(undefined),
           ),
-          // Local emulators (floci/LocalStack) don't implement resource
-          // policies — treat "operation not supported" as "no policy".
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed(undefined),
-          ),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([
@@ -920,12 +915,6 @@ export const TableProvider = () =>
               ),
             ),
           }),
-          // Local emulators (floci/LocalStack) don't implement Contributor
-          // Insights — "operation not supported" means the feature is
-          // effectively disabled.
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed("DISABLED" as const),
-          ),
         );
 
       // Enabling Contributor Insights makes DynamoDB create CloudWatch rules
@@ -953,11 +942,6 @@ export const TableProvider = () =>
                     name.includes(`-${tableName}-`),
                 ),
             ],
-          ),
-          // Local emulators (floci/LocalStack) don't implement CloudWatch
-          // insight rules — nothing to wait for.
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed([] as string[]),
           ),
         );
 
@@ -1600,8 +1584,23 @@ export const TableProvider = () =>
                   // we give up), skip it rather than failing the whole
                   // enumeration. Our own table is ACTIVE by the time list()
                   // runs, so it always hydrates via the retry above.
-                  Effect.catchTag("ValidationException", () =>
-                    Effect.succeed(undefined),
+                  //
+                  // `AccessDeniedException` is the same case seen from the
+                  // other side: enumerating an account walks tables we do not
+                  // own, and one can deny the tag read outright (a restrictive
+                  // resource policy live; a peer test's table under the local
+                  // emulator). A table we cannot read is not ours to return.
+                  // `TableNotFoundException` completes the set: a peer can
+                  // delete a table between `listTables` and our describes, and
+                  // that is what DynamoDB raises for a table that vanished.
+                  Effect.catchTag(
+                    [
+                      "ValidationException",
+                      "AccessDeniedException",
+                      "TableNotFoundException",
+                      "ResourceNotFoundException",
+                    ],
+                    () => Effect.succeed(undefined),
                   ),
                 ),
               { concurrency: 8 },

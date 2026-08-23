@@ -35,6 +35,7 @@ import type * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import * as FrameworkCore from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
+import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
 import { createRequire } from "node:module";
 import type * as NodeNet from "node:net";
@@ -300,6 +301,16 @@ export const start = Effect.fn("Nextjs.DevServer.start")(function* (
   options: DevServerOptions,
 ) {
   const hostname = options.hostname ?? "localhost";
+  // Resolve symlinks in the project root (macOS /tmp, /var/folders):
+  // Turbopack's watcher reports events under the real path, so a symlinked
+  // root never receives HMR invalidations.
+  const root = yield* Effect.sync(() => {
+    try {
+      return NodeFs.realpathSync.native(options.root);
+    } catch {
+      return options.root;
+    }
+  });
 
   // 1. Open the platform proxy hosting the worker's bindings.
   const proxy = yield* PlatformProxy.open({
@@ -328,13 +339,13 @@ export const start = Effect.fn("Nextjs.DevServer.start")(function* (
   const http = yield* acquireHttpServer(hostname, options.port);
 
   // 4. The public programmatic dev API: next({ dev: true }) + prepare().
-  const createNext = yield* loadNext(options.root);
+  const createNext = yield* loadNext(root);
   const app = yield* Effect.acquireRelease(
     Effect.tryPromise({
       try: async () => {
         const app = createNext({
           dev: true,
-          dir: options.root,
+          dir: root,
           hostname,
           port: http.port,
         });

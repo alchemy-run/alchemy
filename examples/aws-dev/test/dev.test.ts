@@ -26,6 +26,11 @@
  *   - DynamoDB Streams   → `/items` writes; the table stream + its
  *                          EventSourceMapping deliver the change record to
  *                          `consumeTableChanges`, read back by `/changes`
+ *   - Action data plane  → the deploy-time SeedObject Action put/gets an
+ *                          object through the S3 bindings inside the CLI
+ *                          process; the stack outputs carry the dummy
+ *                          account id (000000000000) proving the calls hit
+ *                          the emulator, not real AWS
  *   - HOT RELOAD         → rewriting src/marker.ts (no redeploy) must serve
  *                          the new marker; restoring it must swap back
  */
@@ -54,6 +59,21 @@ const markerSource = fs.readFileSync(markerPath, "utf8");
 // The whole suite needs docker (floci runs as a container).
 const dockerAvailable =
   spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+
+// Credential-free dev, deterministically: an isolated (unconfigured)
+// alchemy profile plus stripped AWS env credentials keep this suite
+// hermetic — it must pass on a machine with zero AWS configuration, and
+// must never touch a developer's real profile. (Action data-plane calls
+// are routed to the emulator per bound resource by the engine regardless
+// of ambient credentials — see Binding.Service's data-plane routing.)
+const devEnv: NodeJS.ProcessEnv = {
+  ...process.env,
+  ALCHEMY_PROFILE: "aws-dev-cli-test",
+};
+delete devEnv.AWS_ACCESS_KEY_ID;
+delete devEnv.AWS_SECRET_ACCESS_KEY;
+delete devEnv.AWS_SESSION_TOKEN;
+delete devEnv.AWS_PROFILE;
 
 let proc: ReturnType<typeof spawn> | undefined;
 let output = "";
@@ -107,6 +127,10 @@ const fetchOk = async (
 const outputUrl = (key: string) =>
   output.match(new RegExp(`${key}:\\s*['"]?(http[^\\s'",]+)`))?.[1];
 
+/** Extract a plain (single-token) stack output value from stdout. */
+const outputValue = (key: string) =>
+  output.match(new RegExp(`${key}:\\s*['"]?([^\\s'",]+)`))?.[1];
+
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.
   fs.writeFileSync(markerPath, markerSource);
@@ -132,11 +156,21 @@ afterAll(async () => {
     }
   }
   if (!process.env.NO_DESTROY && dockerAvailable) {
-    spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
-      cwd: root,
-      stdio: "inherit",
-      timeout: 120_000,
-    });
+    const destroyed = spawnSync(
+      "bun",
+      [alchemyBin, "destroy", "--stage", STAGE, "--yes"],
+      {
+        cwd: root,
+        stdio: "inherit",
+        timeout: 120_000,
+        env: devEnv,
+      },
+    );
+    if (destroyed.status !== 0) {
+      throw new Error(
+        `alchemy destroy exited ${destroyed.status} — local teardown must succeed`,
+      );
+    }
   }
 }, 180_000);
 
@@ -149,6 +183,7 @@ test.skipIf(!dockerAvailable)(
       // the way a terminal would.
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: devEnv,
     });
     pump(proc.stdout!);
     pump(proc.stderr!);
@@ -167,6 +202,19 @@ test.skipIf(!dockerAvailable)(
     // captured from the CLI's stdout is authoritative.
     expect(new URL(api).hostname).toEndWith("localhost");
     expect(api).not.toContain("amazonaws.com");
+
+    // Action data plane: the deploy-time SeedObject Action ran inside the
+    // CLI's exec process and put/get an object through the S3 bindings.
+    // The dummy account id proves the calls hit the emulator, not real
+    // AWS; the roundtripped body proves the put actually landed.
+    const seedAccount = await pollUntil("seedAccount in stack outputs", () =>
+      outputValue("seedAccount"),
+    );
+    expect(seedAccount).toBe("000000000000");
+    const seedText = await pollUntil("seedText in stack outputs", () =>
+      outputValue("seedText"),
+    );
+    expect(seedText).toBe("seed-object-body-v1");
 
     // Marker + env: the function reads MY_VARIABLE through effect/Config.
     const home = (await (await fetchOk(api)).json()) as {

@@ -16,13 +16,15 @@ import {
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import { Server, type ServerDevProps } from "./Server.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
-import type {
-  WebsiteAssetsConfig,
-  WebsiteDomainProps,
-  WebsiteEdgeProps,
-  WebsiteInvalidationProps,
+import {
+  normalizeWebsiteDomain,
+  type WebsiteAssetsConfig,
+  type WebsiteDomainProps,
+  type WebsiteEdgeProps,
+  type WebsiteInvalidationProps,
 } from "./shared.ts";
 
 /**
@@ -205,6 +207,13 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
     });
 
     if (isLocal) {
+      // Router-attached sites register with the Router in dev exactly as they
+      // do live — same resource types and ids — with `next dev` standing in
+      // for the S3 + Lambda origins.
+      const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, build.url)
+        : undefined;
       return {
         bucket: undefined,
         build,
@@ -215,7 +224,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
         imageFunction: undefined,
         imageUrl: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         revalidationFunction: undefined,
         revalidationQueue: undefined,
         server: undefined,

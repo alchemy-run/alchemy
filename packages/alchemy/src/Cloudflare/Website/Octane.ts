@@ -234,6 +234,7 @@ export const Octane: {
             source: {
               provider: OCTANE_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,

@@ -14,6 +14,7 @@ import { getAuthProvider } from "../Auth/AuthProvider.ts";
 import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
 import {
   AWS_AUTH_PROVIDER_NAME,
+  LOCAL_ACCOUNT_ID,
   type AwsAuthConfig,
   type AwsResolvedCredentials,
 } from "./AuthProvider.ts";
@@ -61,8 +62,21 @@ export class AWSEnvironment extends Context.Service<
   Effect.Effect<AWSEnvironmentShape>
 >()("AWS::Environment") {
   static current = AWSEnvironment.use((env) => env);
+  /**
+   * Whether this environment is the floci / `{ method: "local" }` emulator
+   * (dummy account {@link LOCAL_ACCOUNT_ID}). A set `endpoint` is not
+   * enough: `AWS_ENDPOINT_URL` and explicit endpoint overrides also
+   * populate it on real-account credentials.
+   */
+  static isLocalEmulator = Effect.map(
+    AWSEnvironment.current,
+    (env) => env.accountId === LOCAL_ACCOUNT_ID,
+  );
   readonly kind = "Environment" as const;
 }
+
+/** @see {@link AWSEnvironment.isLocalEmulator} */
+export const isLocalEmulator = AWSEnvironment.isLocalEmulator;
 
 export const Default = Layer.effect(
   AWSEnvironment,

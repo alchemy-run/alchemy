@@ -1081,17 +1081,21 @@ export const ProviderLive = () =>
               );
           }
 
-          // Sync — storage class is the only mutable property; location
-          // and jurisdiction are immutable (the diff function flags those
-          // as `replace`). Only patch when the desired class drifts from
-          // observed to avoid unnecessary API calls.
+          // Sync — storage class is the only mutable bucket property
+          // (location and jurisdiction are immutable; the diff flags those
+          // as `replace`). PATCH carries the class in the
+          // `cf-r2-storage-class` header. Address the bucket by the
+          // RESOLVED name, never `observed.name` — a response missing the
+          // name would collapse the URI to the collection path, which the
+          // control plane rejects with `PATCH not supported for requested
+          // URI`. Only patch when the desired class drifts from observed.
           const desiredStorageClass = news.storageClass ?? "Standard";
           const observedStorageClass = observed.storageClass ?? "Standard";
           if (observedStorageClass !== desiredStorageClass) {
             observed = yield* r2
               .patchBucket({
                 accountId: acct,
-                bucketName: observed.name!,
+                bucketName: name,
                 storageClass: desiredStorageClass,
                 jurisdiction: observed.jurisdiction ?? jurisdiction,
               })
@@ -1106,7 +1110,7 @@ export const ProviderLive = () =>
           }
 
           const attrs = {
-            bucketName: observed.name!,
+            bucketName: observed.name ?? name,
             // Distilled widened generated string enums to open unions.
             storageClass: (observed.storageClass ??
               "Standard") as Bucket.StorageClass,

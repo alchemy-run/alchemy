@@ -77,7 +77,6 @@ test.provider("create, update, delete bucket", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("TestBucket", {
           forceDestroy: true,
-          name: "test-bucket-initial",
           storageClass: "Standard",
         });
       }),
@@ -94,11 +93,15 @@ test.provider("create, update, delete bucket", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("TestBucket", {
           forceDestroy: true,
-          name: "test-bucket-initial",
           storageClass: "InfrequentAccess",
         });
       }),
     );
+
+    // The storage-class change is an IN-PLACE update (PATCH with the
+    // `cf-r2-storage-class` header), never a replacement: same physical
+    // bucket name and unchanged creation date.
+    expect(updatedBucket.bucketName).toEqual(bucket.bucketName);
 
     const actualUpdatedBucket = yield* getBucketWhenReady(
       updatedBucket.bucketName,
@@ -106,10 +109,11 @@ test.provider("create, update, delete bucket", (stack) =>
     );
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
     expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
+    expect(actualUpdatedBucket.creationDate).toEqual(actualBucket.creationDate);
 
     yield* stack.destroy();
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    yield* waitForBucketToBeDeleted(updatedBucket.bucketName, accountId);
   }).pipe(logLevel),
 );
 

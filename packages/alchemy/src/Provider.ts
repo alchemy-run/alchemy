@@ -10,7 +10,7 @@ import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
-import type { ProviderMode } from "./ProviderMode.ts";
+import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
 import type {
   ResourceBinding,
   ResourceClass,
@@ -133,6 +133,22 @@ export interface ProviderService<
    * even during a live deploy (and vice versa).
    */
   modes?: { readonly [M in ProviderMode]: Effect.Effect<ProviderService<Res>> };
+  /**
+   * Data-plane override context for this provider's **local** mode: a layer
+   * of cloud environment services (endpoint, credentials, region,
+   * environment) that points data-plane API calls at the local emulator —
+   * the same override the local lifecycle variant runs under (e.g. AWS's
+   * `flociServices()`).
+   *
+   * Set by `ProviderLayer.dual` registrations that pass `dataPlane`.
+   * Consumed by `Binding.Service`'s client wrapper (via
+   * {@link resolveLocalDataPlane}) so deploy-time binding invocations —
+   * inside an `Action` body or a plan-time `execute` — target whatever
+   * data plane the bound resource actually lives on: a local-mode resource
+   * routes to the emulator while an `Alchemy.remote()` resource keeps
+   * hitting the real cloud. Pass a module-memoized layer reference.
+   */
+  localDataPlane?: () => Layer.Layer<any, any, never>;
   /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
@@ -594,6 +610,34 @@ export const providerForMode = <R extends ResourceLike>(
   mode !== undefined && service.modes !== undefined
     ? service.modes[mode]
     : Effect.succeed(service);
+
+/**
+ * Resolve the data-plane override layer for a resource, or `undefined` when
+ * its data plane is the real cloud:
+ *
+ * - no provider registered in context (bare runtime, unit tests) → live;
+ * - mode-agnostic provider (no `modes`) → live even in dev;
+ * - dual provider without a registered {@link ProviderService.localDataPlane}
+ *   → live (nothing to route to);
+ * - otherwise the resource's effective mode decides — its registration-
+ *   captured {@link ResourceLike.Mode} (`Alchemy.remote()` → `"live"`) or
+ *   the run default (`alchemy dev` → `"local"`), the same resolution
+ *   `Plan.make` applies to lifecycle operations.
+ */
+export const resolveLocalDataPlane = (resource: {
+  readonly Type: string;
+  readonly Mode?: ProviderMode | undefined;
+}): Effect.Effect<Layer.Layer<any, any, never> | undefined> =>
+  Effect.gen(function* () {
+    const found = yield* tryFindProviderByType(resource.Type);
+    if (Option.isNone(found)) return undefined;
+    const provider = found.value;
+    if (provider.modes === undefined || provider.localDataPlane === undefined) {
+      return undefined;
+    }
+    const mode = resource.Mode ?? (yield* defaultProviderMode);
+    return mode === "local" ? provider.localDataPlane() : undefined;
+  });
 
 export const findProviderByType: {
   <R extends ResourceLike>(
