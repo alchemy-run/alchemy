@@ -25,13 +25,11 @@ export type _EcrImageFunctionAccepted = Assert<
   {
     image: {
       uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest";
-    };
-    architecture: "x86_64";
-    imageConfig: {
       command: ["index.handler"];
       entryPoint: ["/lambda-entrypoint.sh"];
       workingDirectory: "/var/task";
     };
+    architecture: "x86_64";
   } extends FunctionProps
     ? true
     : false
@@ -101,15 +99,6 @@ export type _ImageLayersRejected = Assert<
     image: { context: "./lambda"; dockerfile: "Dockerfile" };
     architecture: "x86_64";
     layers: ["arn:aws:lambda:us-east-1:123456789012:layer:example:1"];
-  } extends FunctionProps
-    ? false
-    : true
->;
-
-export type _ZipImageConfigRejected = Assert<
-  {
-    main: "./handler.ts";
-    imageConfig: { command: ["index.handler"] };
   } extends FunctionProps
     ? false
     : true

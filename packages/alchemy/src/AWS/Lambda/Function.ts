@@ -139,12 +139,16 @@ export interface FunctionBuildOptions
 
 export type FunctionArchitecture = "x86_64" | "arm64";
 
-/** Overrides for instructions declared by a Lambda container image. */
+/**
+ * Overrides for instructions declared by a Lambda container image. Set
+ * directly on {@link FunctionImageProps.image} alongside the image source;
+ * omit to use the image's own `CMD` / `ENTRYPOINT` / `WORKDIR`.
+ */
 export interface FunctionImageConfig {
   /** Parameters passed to the image entry point, overriding Dockerfile `CMD`. */
-  command?: string[];
+  command?: readonly string[];
   /** Runtime executable, overriding Dockerfile `ENTRYPOINT`. */
-  entryPoint?: string[];
+  entryPoint?: readonly string[];
   /** Working directory, overriding Dockerfile `WORKDIR`. */
   workingDirectory?: string;
 }
@@ -306,7 +310,6 @@ export interface FunctionZipProps extends FunctionCommonProps {
    */
   bundle?: false;
   image?: never;
-  imageConfig?: never;
   /**
    * Exported handler symbol inside the bundled module.
    * @default "handler"
@@ -358,11 +361,6 @@ export interface FunctionImageProps extends FunctionCommonProps {
    * repository with content-addressed tags.
    */
   image: FunctionImageSource;
-  /**
-   * Optional overrides for the image's Dockerfile instructions. Omit to use
-   * the image defaults; removing this property clears existing overrides.
-   */
-  imageConfig?: FunctionImageConfig;
   handler?: never;
   runtime?: never;
   layers?: never;
@@ -380,7 +378,6 @@ const isFunctionImageProps = (
 
 interface FunctionPackageValidationProps {
   image?: unknown;
-  imageConfig?: unknown;
   main?: unknown;
   handler?: unknown;
   runtime?: unknown;
@@ -399,13 +396,6 @@ export const validateFunctionPackageProps = Effect.fn(
   "AWS.Lambda.validateFunctionPackageProps",
 )(function* (id: string, props: FunctionPackageValidationProps) {
   if (props.image === undefined) {
-    if (props.imageConfig !== undefined) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): imageConfig requires an image function and cannot be used with a ZIP function`,
-        ),
-      );
-    }
     if (props.main === undefined) {
       return yield* Effect.fail(
         new Error(`Function(${id}): declare exactly one of main or image`),
@@ -433,14 +423,22 @@ export const validateFunctionPackageProps = Effect.fn(
   }
 });
 
+/**
+ * The Lambda `ImageConfig` for an image source's overrides; `undefined` when
+ * the source declares none, so the image's own instructions apply.
+ */
 const toLambdaImageConfig = (
   config: FunctionImageConfig | undefined,
 ): Lambda.ImageConfig | undefined =>
-  config === undefined
+  config === undefined ||
+  (config.command === undefined &&
+    config.entryPoint === undefined &&
+    config.workingDirectory === undefined)
     ? undefined
     : {
-        Command: config.command,
-        EntryPoint: config.entryPoint,
+        Command: config.command === undefined ? undefined : [...config.command],
+        EntryPoint:
+          config.entryPoint === undefined ? undefined : [...config.entryPoint],
         WorkingDirectory: config.workingDirectory,
       };
 
@@ -452,7 +450,7 @@ const imageConfigForUpdate = (
   props: FunctionProps,
 ): Lambda.ImageConfig | undefined =>
   isFunctionImageProps(props)
-    ? (toLambdaImageConfig(props.imageConfig) ?? {})
+    ? (toLambdaImageConfig(props.image) ?? {})
     : undefined;
 
 /**
@@ -672,13 +670,11 @@ export const normalizeFunctionUrl = (
  * const func = yield* AWS.Lambda.Function("Worker", {
  *   image: {
  *     uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker@sha256:...",
- *   },
- *   architecture: "x86_64",
- *   imageConfig: {
  *     command: ["app.handler"],
  *     entryPoint: ["/lambda-entrypoint.sh"],
  *     workingDirectory: "/var/task",
  *   },
+ *   architecture: "x86_64",
  * });
  * ```
  *
@@ -1693,7 +1689,7 @@ export const FunctionProvider = () =>
           ...(isFunctionImageProps(news)
             ? {
                 PackageType: "Image" as const,
-                ImageConfig: toLambdaImageConfig(news.imageConfig),
+                ImageConfig: toLambdaImageConfig(news.image),
               }
             : {
                 // Effect-mode functions are wrapped in a generated entry whose
@@ -2122,8 +2118,8 @@ export const FunctionProvider = () =>
             if (
               isFunctionImageProps(olds) &&
               !deepEqual(
-                toLambdaImageConfig(olds.imageConfig),
-                toLambdaImageConfig(news.imageConfig),
+                toLambdaImageConfig(olds.image),
+                toLambdaImageConfig(news.image),
               )
             ) {
               return { action: "update" };

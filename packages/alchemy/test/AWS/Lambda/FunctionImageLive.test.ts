@@ -178,8 +178,7 @@ test.provider.skipIf(skipLive)(
               ? undefined
               : yield* AWS.Lambda.Function("ExternalFunction", {
                   functionName: externalFunctionName,
-                  image: { uri },
-                  imageConfig,
+                  image: { uri, ...imageConfig },
                   architecture: "x86_64",
                   env: { IMAGE_FUNCTION_ENV: "external" },
                   functionUrl: false,
@@ -260,7 +259,7 @@ test.provider.skipIf(skipLive)(
       );
       yield* pointAliasAt(rebuilt.image.repositoryName, rebuilt.image.imageTag);
 
-      // Omitting imageConfig while updating the digest clears every override.
+      // Omitting the overrides while updating the digest clears every override.
       const retaggedPlan = yield* stack.plan(program(aliasUri));
       expect(retaggedPlan.resources.ExternalFunction).toMatchObject({
         action: "update",

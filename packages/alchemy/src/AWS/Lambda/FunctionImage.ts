@@ -17,9 +17,10 @@ import {
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
+import type { FunctionImageConfig } from "./Function.ts";
 
 /** A Lambda container image built from a local Docker context. */
-export interface FunctionDockerImageSource {
+export interface FunctionDockerImageSource extends FunctionImageConfig {
   uri?: never;
   /** Docker build context directory. */
   context: string;
@@ -35,7 +36,7 @@ export interface FunctionDockerImageSource {
 }
 
 /** An existing private ECR image, addressed by tag or immutable digest. */
-export interface FunctionEcrImageSource {
+export interface FunctionEcrImageSource extends FunctionImageConfig {
   /**
    * Full private ECR image URI, including a tag or digest.
    *
@@ -59,14 +60,24 @@ export type FunctionImageSource =
   | FunctionDockerImageSource
   | FunctionEcrImageSource;
 
+// Instruction overrides ride along on the source object; they are function
+// configuration, not image identity, so they never enter the image hash.
+const FunctionImageConfigFields = {
+  command: Schema.optionalKey(Schema.Array(Schema.String)),
+  entryPoint: Schema.optionalKey(Schema.Array(Schema.String)),
+  workingDirectory: Schema.optionalKey(Schema.String),
+};
+
 const FunctionDockerImageSourceSchema = Schema.Struct({
   context: Schema.String,
   dockerfile: Schema.String,
   buildArgs: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  ...FunctionImageConfigFields,
 }) satisfies Schema.Schema<FunctionDockerImageSource>;
 
 const FunctionEcrImageSourceSchema = Schema.Struct({
   uri: Schema.String,
+  ...FunctionImageConfigFields,
 }) satisfies Schema.Schema<FunctionEcrImageSource>;
 
 const FunctionImageSourceRecordSchema = Schema.Record(

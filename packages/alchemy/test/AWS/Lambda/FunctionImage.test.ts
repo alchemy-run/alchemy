@@ -103,19 +103,6 @@ describe("Lambda Function images", (it) => {
       if (Result.isFailure(mixedPackage)) {
         expect(mixedPackage.failure.message).toContain("main, runtime, layers");
       }
-
-      const zipConfig = yield* Effect.result(
-        validateFunctionPackageProps("ZipConfig", {
-          main: "./handler.ts",
-          imageConfig: { command: ["index.handler"] },
-        }),
-      );
-      expect(Result.isFailure(zipConfig)).toBe(true);
-      if (Result.isFailure(zipConfig)) {
-        expect(zipConfig.failure.message).toContain(
-          "imageConfig requires an image function",
-        );
-      }
     }),
   );
 

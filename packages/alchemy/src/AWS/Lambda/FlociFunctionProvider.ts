@@ -74,7 +74,6 @@ export const FlociFunctionProvider = () =>
           ? {
               functionName: attrs.functionName,
               image: news.image,
-              imageConfig: news.imageConfig,
               architecture: news.architecture,
             }
           : {
