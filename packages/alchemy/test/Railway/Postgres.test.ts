@@ -168,10 +168,10 @@ const FixtureStack = Alchemy.Stack(
   }),
 );
 
-const fixture = beforeAll(deploy(FixtureStack), { timeout: 120_000 });
+const fixture = beforeAll(deploy(FixtureStack), { timeout: 480_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-  timeout: 120_000,
+  timeout: 480_000,
 });
 
 test.provider(
@@ -302,7 +302,7 @@ test.provider(
       );
       expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 480_000 },
 );
 
 test(
@@ -396,5 +396,5 @@ test(
     const rows = yield* selectOne(out.publicConnectionUri);
     expect(firstOk(rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 480_000 },
 );

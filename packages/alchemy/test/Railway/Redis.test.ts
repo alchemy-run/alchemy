@@ -237,5 +237,5 @@ test.provider(
       );
       expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 480_000 },
 );

@@ -9,6 +9,7 @@ import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -204,6 +205,48 @@ const currentWorkspaceId = Effect.fn(function* () {
   return env.workspaceId;
 });
 
+/**
+ * Railway allows one project create per workspace every 30 seconds.
+ * Concurrent stacks (the live suite) stampede that cap; hold a process
+ * slot, retry the typed tag, and wait out the window after a success
+ * so the next waiter does not 429.
+ */
+const projectCreateSlot = Semaphore.makeUnsafe(1);
+
+const createProject = (input: {
+  name: string;
+  workspaceId: string;
+  description?: string;
+  defaultEnvironmentName?: string;
+}) =>
+  Semaphore.withPermits(
+    projectCreateSlot,
+    1,
+  )(
+    railway
+      .projectCreate({
+        input: {
+          name: input.name,
+          workspaceId: input.workspaceId,
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.defaultEnvironmentName !== undefined
+            ? { defaultEnvironmentName: input.defaultEnvironmentName }
+            : {}),
+        },
+      })
+      .pipe(
+        RailwayRetry.none,
+        Effect.retry({
+          while: (e) => e._tag === "RailwayRateLimited",
+          schedule: Schedule.spaced("31 seconds"),
+          times: 8,
+        }),
+        Effect.tap(() => Effect.sleep("31 seconds")),
+      ),
+  );
+
 const findByName = (workspaceId: string, name: string) =>
   railway.projects
     .items({ workspaceId, first: 50, includeDeleted: false })
@@ -284,30 +327,20 @@ export const ProjectProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* railway
-          .projectCreate({
-            input: {
-              name,
-              workspaceId,
-              ...(props.description !== undefined
-                ? { description: props.description }
-                : {}),
-              ...(props.defaultEnvironmentName !== undefined
-                ? { defaultEnvironmentName: props.defaultEnvironmentName }
-                : {}),
-            },
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-            Effect.catchTag("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const created = yield* createProject({
+          name,
+          workspaceId,
+          ...(props.description !== undefined
+            ? { description: props.description }
+            : {}),
+          ...(props.defaultEnvironmentName !== undefined
+            ? { defaultEnvironmentName: props.defaultEnvironmentName }
+            : {}),
+        }).pipe(
+          Effect.catchTag("RailwayValidationError", () =>
+            Effect.succeed(undefined),
+          ),
+        );
         current = created ?? (yield* findByName(workspaceId, name));
       }
 

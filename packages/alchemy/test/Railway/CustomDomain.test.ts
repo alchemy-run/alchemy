@@ -190,7 +190,7 @@ test.provider(
       const projectGone = yield* waitUntilProjectGone(project.projectId);
       expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 480_000 },
 );
 
 test.provider.skipIf(!TEST_DOMAIN)(
@@ -246,5 +246,5 @@ test.provider.skipIf(!TEST_DOMAIN)(
       const projectGone = yield* waitUntilProjectGone(project.projectId);
       expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 480_000 },
 );
