@@ -576,22 +576,32 @@ export const SpriteProvider = () =>
         stables: ["spriteId", "name"],
 
         diff: Effect.fn(function* ({ news, output }) {
-          if (news === undefined || !isResolved(news)) return undefined;
-          if (output === undefined) return undefined;
-          const desiredName =
-            news.name !== undefined
-              ? sanitizeFlyAppName(news.name)
-              : output.name;
-          if (desiredName !== output.name) {
-            return { action: "replace" as const };
+          if (news === undefined || output === undefined) return undefined;
+          if (isResolved(news)) {
+            const desiredName =
+              news.name !== undefined
+                ? sanitizeFlyAppName(news.name)
+                : output.name;
+            if (desiredName !== output.name) {
+              return { action: "replace" as const };
+            }
+            const desiredAuth = news.urlAuth ?? DEFAULT_URL_AUTH;
+            if (desiredAuth !== output.urlAuth) {
+              return { action: "update" as const };
+            }
           }
-          const desiredAuth = news.urlAuth ?? DEFAULT_URL_AUTH;
-          if (desiredAuth !== output.urlAuth) {
-            return { action: "update" as const };
-          }
-          const hash = yield* hosted.hash(news as HostedProgramProps);
-          if (hash !== output.code.hash) {
-            return { action: "update" as const };
+          // The code hash depends only on statically-known props — never
+          // gate it on the WHOLE props being resolved: an unresolved
+          // reference elsewhere in props would make code-only changes
+          // silently noop (see the same pattern in Service.ts). By diff
+          // time the effect-config form has been evaluated, so the object
+          // view is safe to read.
+          const statics = news as Partial<Pick<SpriteProps, "main" | "port">>;
+          if (isResolved({ main: statics.main, port: statics.port })) {
+            const hash = yield* hosted.hash(news as HostedProgramProps);
+            if (hash !== output.code.hash) {
+              return { action: "update" as const };
+            }
           }
           return undefined;
         }),
