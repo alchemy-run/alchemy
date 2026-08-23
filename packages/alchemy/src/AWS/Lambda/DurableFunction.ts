@@ -12,6 +12,7 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { toSeconds, toWireDays } from "../../Util/Duration.ts";
+import type { DistributiveOmit } from "../../Util/types.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import {
@@ -23,7 +24,6 @@ import {
   Function,
   type FunctionProps,
   type FunctionServices,
-  type FunctionZipProps,
   type HandlerContext,
 } from "./Function.ts";
 
@@ -78,10 +78,8 @@ export type DurableFunctionInitServices =
  * durable-execution envelope — there is no HTTP surface), plus the
  * `DurableConfig` tuning knobs below.
  */
-export interface DurableFunctionProps extends Omit<
-  FunctionZipProps,
-  "functionUrl" | "durableConfig"
-> {
+/** The DurableConfig tuning knobs a DurableFunction adds to Function props. */
+export interface DurableFunctionTuning {
   /**
    * Maximum total duration of a durable execution, from start to terminal
    * state (minimum 60 seconds, maximum 1 year). Rounded up to whole seconds.
@@ -95,6 +93,28 @@ export interface DurableFunctionProps extends Omit<
    */
   retentionPeriod?: Duration.Input;
 }
+
+/**
+ * Props of a {@link DurableFunction}: any Function props that carry a
+ * `main` — the orchestrator body is an Effect that has to be bundled into
+ * an entrypoint — minus `functionUrl` (every invocation arrives as the
+ * durable envelope, so there is no HTTP surface), plus the DurableConfig
+ * knobs.
+ *
+ * Selected by SHAPE (`Extract<…, { main: string }>`), not by packaging, so
+ * any future main-bearing variant is durable-capable automatically; a
+ * prebuilt `image` function is excluded because it has no `main` for the
+ * `impl` Effect to live in.
+ *
+ * The Omit DISTRIBUTES over the union: a bare `Omit` computes the COMMON
+ * keys and merges the members, which would make `main` optional and let
+ * `image` through alongside it.
+ */
+export type DurableFunctionProps = DistributiveOmit<
+  Extract<FunctionProps, { main: string }>,
+  "functionUrl" | "durableConfig"
+> &
+  DurableFunctionTuning;
 
 /**
  * Options for starting a durable execution.

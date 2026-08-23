@@ -367,6 +367,8 @@ export interface FunctionImageProps extends FunctionCommonProps {
   build?: never;
   uploadSourceMap?: never;
   exports?: never;
+  // Durability needs a `main` for the orchestrator body — see
+  // DurableFunctionProps.
   durableConfig?: never;
 }
 
@@ -1725,9 +1727,7 @@ export const FunctionProvider = () =>
           TracingConfig: { Mode: news.tracing ?? "PassThrough" },
           // Durability is create-time-only; a presence flip is a replacement
           // (see `diff`), so passing the same value on update is a no-op.
-          DurableConfig: isFunctionImageProps(news)
-            ? undefined
-            : news.durableConfig,
+          DurableConfig: news.durableConfig,
           VpcConfig: vpc
             ? {
                 SubnetIds: vpc.subnetIds,

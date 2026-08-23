@@ -3,7 +3,10 @@ import type {
   FunctionImageProps,
   FunctionProps,
 } from "@/AWS/Lambda/index.ts";
-import { Function as LambdaFunction } from "@/AWS/Lambda/index.ts";
+import {
+  DurableFunction as DurableFn,
+  Function as LambdaFunction,
+} from "@/AWS/Lambda/index.ts";
 import * as Effect from "effect/Effect";
 
 type Assert<T extends true> = T;
@@ -108,8 +111,52 @@ export type _PackageTypeIsDerived = Assert<
   "packageType" extends keyof FunctionProps ? false : true
 >;
 
-export type _DurableFunctionIsZipOnly = Assert<
+// Durability is orthogonal to packaging: both a bundled and an image
+// durable function are representable.
+export type _DurableZipAccepted = Assert<
   {
+    main: "./orchestrator.ts";
+    executionTimeout: "1 hour";
+  } extends DurableFunctionProps
+    ? true
+    : false
+>;
+
+// A prebuilt image has no `main` for the orchestrator's `impl` Effect to be
+// bundled into, so it is not durable-capable. (Packaging is NOT the reason:
+// props are selected by shape, so any main-bearing variant qualifies.)
+export type _DurablePrebuiltImageRejected = Assert<
+  {
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+    architecture: "x86_64";
+    retentionPeriod: "7 days";
+  } extends DurableFunctionProps
+    ? false
+    : true
+>;
+
+// The distribution preserves every main-bearing prop: a durable function
+// still accepts the full bundled surface (runtime, layers, build, …).
+export type _DurableKeepsZipProps = Assert<
+  {
+    main: "./orchestrator.ts";
+    runtime: "nodejs24.x";
+    layers: [];
+    build: { install: ["sharp"] };
+  } extends DurableFunctionProps
+    ? true
+    : false
+>;
+
+// The `Omit` distributes, so each variant keeps its own shape: a durable
+// function still cannot be neither, both, or missing its entrypoint.
+export type _DurableEmptyRejected = Assert<
+  { executionTimeout: "1 hour" } extends DurableFunctionProps ? false : true
+>;
+
+export type _DurableMixedPackageRejected = Assert<
+  {
+    main: "./orchestrator.ts";
     image: { context: "./lambda"; dockerfile: "Dockerfile" };
     architecture: "x86_64";
   } extends DurableFunctionProps
@@ -118,6 +165,37 @@ export type _DurableFunctionIsZipOnly = Assert<
 >;
 
 LambdaFunction("zip-inline-accepted", { main: "./handler.ts" }, Effect.void);
+
+const durableImpl = Effect.succeed({
+  run: () => Effect.void,
+}) as Effect.Effect<any>;
+
+class DurableZip extends DurableFn<DurableZip>()(
+  "durable-zip-accepted",
+  { main: "./orchestrator.ts", executionTimeout: "1 hour" },
+  durableImpl,
+) {}
+
+class DurableNoUrl extends DurableFn<DurableNoUrl>()(
+  "durable-url-rejected",
+  // @ts-expect-error Durable invocations arrive as the durable envelope, so
+  // a durable function has no HTTP surface.
+  { main: "./orchestrator.ts", functionUrl: true },
+  durableImpl,
+) {}
+
+class DurablePrebuiltImage extends DurableFn<DurablePrebuiltImage>()(
+  "durable-image-rejected",
+  // @ts-expect-error A prebuilt image has no `main` for the orchestrator
+  // body to be bundled into.
+  {
+    image: { context: "./l", dockerfile: "Dockerfile" },
+    architecture: "x86_64",
+  },
+  durableImpl,
+) {}
+
+export type { DurableZip, DurableNoUrl, DurablePrebuiltImage };
 
 const imageProps: FunctionImageProps = {
   image: { context: "./lambda", dockerfile: "Dockerfile" },
