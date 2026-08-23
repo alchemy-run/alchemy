@@ -822,14 +822,24 @@ test.provider("managed r2.dev domain converges drift and adoption", (stack) =>
 
     yield* stack.destroy();
 
+    // Pin the physical name on every deploy so adding `name` cannot be
+    // what schedules the update — same shape as the CORS drift case
+    // above. A PR/user suffix keeps concurrent runs from colliding.
+    const suffix = (process.env.PULL_REQUEST ?? process.env.USER ?? "local")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 24);
+    const bucketName = `alchemy-test-r2-pub-drift-${suffix}`;
+
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("DriftPublicBucket", {
           forceDestroy: true,
+          name: bucketName,
+          publicAccess: false,
         });
       }),
     );
-    const bucketName = initial.bucketName;
     expect(initial.publicDomain).toBeUndefined();
 
     // Drift: enable the managed domain out of band.
@@ -839,16 +849,22 @@ test.provider("managed r2.dev domain converges drift and adoption", (stack) =>
       enabled: true,
     });
 
-    // Re-deploy without publicAccess. Reconcile diffs desired against
-    // observed cloud state, so the leaked enable is turned back off.
+    // Re-deploy with publicAccess still false. The storage-class change
+    // is what makes Plan run reconcile (unchanged props skip it); the
+    // managed-domain sync must still disable the leaked enable because
+    // it diffs desired against *observed* cloud state, not olds.
     const repaired = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("DriftPublicBucket", {
           forceDestroy: true,
           name: bucketName,
+          publicAccess: false,
+          storageClass: "InfrequentAccess",
         });
       }),
     );
+    expect(repaired.bucketName).toEqual(bucketName);
+    expect(repaired.storageClass).toEqual("InfrequentAccess");
     expect(repaired.publicDomain).toBeUndefined();
 
     const afterRepair = yield* r2.listBucketDomainManageds({
