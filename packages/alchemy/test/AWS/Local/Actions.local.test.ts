@@ -25,7 +25,7 @@
  *
  * Out-of-band checks use the distilled SDK under `flociServices()` (the
  * emulator) and, where it matters, the ambient live environment (to prove
- * absence). Requires Docker (floci runs as a container); skipped otherwise.
+ * absence). Requires Docker (floci runs as a container).
  */
 import { Action } from "@/Action";
 import * as AWS from "@/AWS";
@@ -44,7 +44,6 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
-import { dockerAvailable } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -67,7 +66,7 @@ const readBody = (body: Stream.Stream<Uint8Array, Error>) =>
     ),
   );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "one Action binding S3, SQS and DynamoDB routes every client to the emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -161,7 +160,7 @@ test.provider.skipIf(!dockerAvailable)(
   { timeout: 300_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "an Action's output feeds a downstream resource",
   (stack) =>
     Effect.gen(function* () {
@@ -213,7 +212,7 @@ test.provider.skipIf(!dockerAvailable)(
   { timeout: 300_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "InvokeFunction(fn) Action invokes the dev Lambda on the emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -263,7 +262,7 @@ test.provider.skipIf(!dockerAvailable)(
   { timeout: 600_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "RunTask(cluster, task) Action launches the task on the emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -312,7 +311,7 @@ test.provider.skipIf(!dockerAvailable)(
   { timeout: 300_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "a binding spanning a remote() resource and a local one fails at bind with a per-resource explanation",
   (stack) =>
     Effect.gen(function* () {
