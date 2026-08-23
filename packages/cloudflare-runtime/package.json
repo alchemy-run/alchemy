@@ -779,7 +779,7 @@
   "inlinedDependencies": {
     "capnp-es": "0.0.14",
     "capnweb": "0.8.0",
-    "effect": "4.0.0-rc.111",
+    "effect": "catalog:effect",
     "http-cache-semantics": "4.2.0",
     "postal-mime": "2.7.5"
   }
