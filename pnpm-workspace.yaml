@@ -89,20 +89,20 @@ catalogs:
     mongodb: ^6.10.0
     pg: ^8.22.0
   effect:
-    "@effect/atom-react": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/platform-bun": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/platform-node": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/platform-node-shared": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/sql-d1": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/sql-mysql2": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/sql-pg": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/sql-sqlite-do": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/vitest": ">=4.0.0-rc.110 || >=4.0.0"
-    effect: ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/atom-react": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/platform-bun": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/platform-node": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/platform-node-shared": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/sql-d1": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/sql-mysql2": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/sql-pg": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/sql-sqlite-do": ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/vitest": ">=4.0.0-rc.111 || >=4.0.0"
+    effect: ">=4.0.0-rc.111 || >=4.0.0"
   frontend:
     "@astrojs/internal-helpers": 0.10.1
     "@astrojs/underscore-redirects": 1.0.3
-    "@foldkit/vite-plugin": ^0.15.0
+    "@foldkit/vite-plugin": ^0.16.1
     "@octanejs/adapter-cloudflare": 0.0.12
     "@octanejs/vite-plugin": 0.1.22
     "@opennextjs/aws": 4.1.0
@@ -119,7 +119,7 @@ catalogs:
     "@vitejs/plugin-react": ^6.0.2
     "@vitejs/plugin-rsc": ^0.5.27
     astro: 7.2.0
-    foldkit: ^0.147.0
+    foldkit: ^0.148.2
     hono: ^4.12.14
     next: 16.2.10
     nitropack: 2.13.4
@@ -159,8 +159,8 @@ catalogs:
     tsx: ^4.20.6
 overrides:
   "@cloudflare/workers-types": 5.20260812.1
-  effect: 4.0.0-rc.110
-  "@effect/platform-browser": 4.0.0-rc.110
+  effect: 4.0.0-rc.111
+  "@effect/platform-browser": 4.0.0-rc.111
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
@@ -168,15 +168,15 @@ patchedDependencies:
   "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
   starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
 minimumReleaseAgeExclude:
-  - '@effect/atom-react@4.0.0-rc.110'
-  - '@effect/platform-bun@4.0.0-rc.110'
-  - '@effect/platform-node-shared@4.0.0-rc.110'
-  - '@effect/platform-node@4.0.0-rc.110'
-  - '@effect/sql-d1@4.0.0-rc.110'
-  - '@effect/sql-mysql2@4.0.0-rc.110'
-  - '@effect/sql-pg@4.0.0-rc.110'
-  - '@effect/sql-sqlite-do@4.0.0-rc.110'
-  - '@effect/vitest@4.0.0-rc.110'
-  - '@foldkit/vite-plugin@0.15.0'
-  - effect@4.0.0-rc.110
-  - foldkit@0.147.0
+  - '@effect/atom-react@4.0.0-rc.111'
+  - '@effect/platform-bun@4.0.0-rc.111'
+  - '@effect/platform-node-shared@4.0.0-rc.111'
+  - '@effect/platform-node@4.0.0-rc.111'
+  - '@effect/sql-d1@4.0.0-rc.111'
+  - '@effect/sql-mysql2@4.0.0-rc.111'
+  - '@effect/sql-pg@4.0.0-rc.111'
+  - '@effect/sql-sqlite-do@4.0.0-rc.111'
+  - '@effect/vitest@4.0.0-rc.111'
+  - '@foldkit/vite-plugin@0.16.1'
+  - effect@4.0.0-rc.111
+  - foldkit@0.148.2

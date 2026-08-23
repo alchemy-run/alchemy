@@ -20,6 +20,21 @@ type Env = Cloudflare.InferEnv<typeof AsyncContainerWorker>;
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
+    // Reports what `env.ECHO` actually IS at runtime. A `durable_object_
+    // namespace` binding has `idFromName`; when the Worker instead uploads the
+    // Container declaration as a `json` binding, this echoes that json back
+    // (`{"_id":"Effect","op":"alchemy/EffectClass"}`) and `getContainer` below
+    // dies with `t.idFromName is not a function`.
+    if (url.pathname === "/binding") {
+      const binding = env.ECHO as unknown;
+      return Response.json({
+        kind:
+          typeof (binding as { idFromName?: unknown } | null)?.idFromName ===
+          "function"
+            ? "durable_object_namespace"
+            : JSON.stringify(binding),
+      });
+    }
     if (url.pathname === "/hello") {
       return getContainer(env.ECHO, "default").fetch(request);
     }

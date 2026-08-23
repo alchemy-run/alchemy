@@ -501,26 +501,25 @@ export const credentialsUri = (
 ): string | undefined => unwrapSensitive(credentials?.pgbouncer_uri);
 
 export const directUri = (
-  cluster: ManagedCluster | undefined,
+  _cluster: ManagedCluster | undefined,
   credentials: ClusterCredentials | undefined,
 ): string | undefined => {
-  const user = credentials?.user;
-  const password = unwrapSensitive(credentials?.password);
-  const dbname = credentials?.dbname;
-  const hash = cluster?.mpgd_cluster_id;
-  if (
-    user === undefined ||
-    user.length === 0 ||
-    password === undefined ||
-    password.length === 0 ||
-    dbname === undefined ||
-    dbname.length === 0 ||
-    hash === undefined ||
-    hash.length === 0
-  ) {
+  // Derive the direct host from the server-provided PgBouncer URI:
+  // `pgbouncer.<hash>.flympg.net` → `direct.<hash>.flympg.net`. The `<hash>`
+  // is the cluster's DNS hash, which is NOT any id the cluster API returns —
+  // `mpgd_cluster_id` is the `fly-mpg-…` cluster id, and a host synthesized
+  // from it does not resolve. Rewriting the observed pooled host is the only
+  // reliable derivation.
+  const pooled = unwrapSensitive(credentials?.pgbouncer_uri);
+  if (pooled === undefined || pooled.length === 0) return undefined;
+  try {
+    const url = new URL(pooled);
+    if (!url.hostname.startsWith("pgbouncer.")) return undefined;
+    url.hostname = url.hostname.replace(/^pgbouncer\./, "direct.");
+    return url.toString();
+  } catch {
     return undefined;
   }
-  return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@direct.${hash}.flympg.net/${dbname}`;
 };
 
 const secretVersion = (
