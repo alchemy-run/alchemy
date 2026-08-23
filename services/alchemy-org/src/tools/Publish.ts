@@ -1,10 +1,12 @@
 import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import { Self } from "alchemy/Self";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
+import { publishTargets } from "../Repos.ts";
 import { Approvals } from "../services/Approvals.ts";
 
 const branch = AI.Parameter("branch", S.String)`
@@ -25,18 +27,30 @@ The branch holding your work — the one you pushed with pushBranch.`;
 const base = AI.Parameter("base", S.optionalKey(S.String))`
 The branch to merge into (default: the checkout's own branch).`;
 
-export class PushBranch extends AI.Tool<PushBranch>()("pushBranch")`
+export class PushBranch extends (AI.Tool<PushBranch>()("pushBranch")`
 Publish your work: push the tree's current HEAD to the origin
 repository as ${branch}. Commit first (bash: git add / git commit) —
 this pushes exactly what HEAD points at. Authentication is handled
-for you.` {}
+for you.`) {}
 
-export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
+export class OpenPullRequest extends (AI.Tool<OpenPullRequest>()(
   "openPullRequest",
 )`
 Open a pull request on the origin repository: ${head} into ${base},
 titled ${title}, described by ${body}. Push the branch first with
-pushBranch. Returns the pull request URL.` {}
+pushBranch. Returns the pull request URL.`) {}
+
+/**
+ * The credential the publish pair authenticates with — a runtime read
+ * of a GitHub token. A SEAM by design: production mints it from the
+ * host's FQN-memoized `PersonalAccessToken` resource
+ * ({@link PublishTokenLive}); tests provide a literal from the
+ * environment without any stack machinery.
+ */
+export class PublishToken extends Context.Service<
+  PublishToken,
+  Effect.Effect<Redacted.Redacted<string>>
+>()("alchemy-org/PublishToken") {}
 
 /**
  * ONE token resource per host, FQN-memoized — the SAME
@@ -45,12 +59,16 @@ pushBranch. Returns the pull request URL.` {}
  * layer init binds it into the deployed environment; the returned
  * Effect reads it back at runtime.
  */
-const mintToken = Effect.gen(function* () {
-  const Token = yield* GitHub.PersonalAccessToken;
-  const self = yield* Self;
-  const token = yield* Token(`${self.LogicalId}GitHubToken`, {});
-  return yield* token.value;
-});
+export const PublishTokenLive = Layer.effect(
+  PublishToken,
+  Effect.gen(function* () {
+    const self = yield* Self;
+    const token = yield* GitHub.PersonalAccessToken(
+      `${self.LogicalId}GitHubToken`,
+    );
+    return yield* token.value;
+  }),
+);
 
 /** Run one git command in the sandbox tree; failures are model-visible. */
 const gitIn =
@@ -89,7 +107,7 @@ export const PushBranchLive = Layer.effect(
   PushBranch,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    const token = yield* mintToken;
+    const token = yield* PublishToken;
     const git = gitIn(sandbox);
 
     return ((input: { branch: string }) =>
@@ -102,9 +120,7 @@ export const PushBranchLive = Layer.effect(
           { timeout: 300_000 },
         ).pipe(
           // the push URL carries the credential — never echo it back
-          Effect.mapError((error) =>
-            error.replaceAll(value, "<token>"),
-          ),
+          Effect.mapError((error) => error.replaceAll(value, "<token>")),
         );
         return `pushed HEAD to ${origin.owner}/${origin.repository}@${input.branch}\n${output}`.trim();
       })) as never;
@@ -112,18 +128,36 @@ export const PushBranchLive = Layer.effect(
 );
 
 /**
- * Open the pull request against the tree's origin over the GitHub
- * REST API — no `Repository` resource involved, because the org must
- * never claim ownership of the repository it is contributing to.
- * Gated by {@link Approvals} (disarmed deploys answer immediately).
+ * Open the pull request through the {@link GitHub.CreatePullRequest}
+ * BINDING (octokit-backed): one authenticated client per repository in
+ * {@link publishTargets}, bound at init; the tree's `origin` picks the
+ * target at call time. The targets are deferred `Repository` identity
+ * handles — the binding resolves their identity statically and never
+ * provisions them, so the org still claims no ownership of the
+ * repositories it contributes to. Gated by {@link Approvals} (disarmed
+ * deploys answer immediately).
  */
 export const OpenPullRequestLive = Layer.effect(
   OpenPullRequest,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
     const approvals = yield* Approvals;
-    const token = yield* mintToken;
     const git = gitIn(sandbox);
+
+    const targets = yield* Effect.forEach(
+      publishTargets,
+      Effect.fn(function* (repo) {
+        const identity = GitHub.repositoryIdentity(repo);
+        if (identity === undefined) {
+          return yield* Effect.die(
+            new Error(
+              "publishTargets must declare owner/name as plain strings",
+            ),
+          );
+        }
+        return { identity, client: yield* GitHub.CreatePullRequest(repo) };
+      }),
+    );
 
     return ((input: {
       head: string;
@@ -136,6 +170,18 @@ export const OpenPullRequestLive = Layer.effect(
         // context (the layer builds in the shared per-isolate graph)
         const thread = yield* AI.Thread;
         const origin = yield* originOf(git);
+        const target = targets.find(
+          (t) =>
+            t.identity.owner === origin.owner &&
+            t.identity.repository === origin.repository,
+        );
+        if (target === undefined) {
+          return yield* Effect.fail(
+            `the tree's origin ${origin.owner}/${origin.repository} is not a repository this deploy publishes to — targets: ${targets
+              .map((t) => `${t.identity.owner}/${t.identity.repository}`)
+              .join(", ")}`,
+          );
+        }
         const base =
           input.base ??
           (yield* git(["rev-parse", "--abbrev-ref", "HEAD"]).pipe(
@@ -152,41 +198,18 @@ export const OpenPullRequestLive = Layer.effect(
           );
         }
 
-        const value = Redacted.value(yield* token);
-        const response = yield* Effect.tryPromise({
-          try: () =>
-            fetch(
-              `https://api.github.com/repos/${origin.owner}/${origin.repository}/pulls`,
-              {
-                method: "POST",
-                headers: {
-                  accept: "application/vnd.github+json",
-                  authorization: `Bearer ${value}`,
-                  "user-agent": "alchemy-org",
-                },
-                body: JSON.stringify({
-                  title: input.title,
-                  body: input.body,
-                  head: input.head,
-                  base,
-                }),
-              },
-            ).then(async (res) => ({ status: res.status, json: await res.json() })),
-          catch: (error) => `pulls.create failed: ${String(error)}`,
-        });
-        const pull = response.json as {
-          html_url?: string;
-          number?: number;
-          message?: string;
-          errors?: Array<{ message?: string }>;
-        };
-        if (response.status !== 201) {
-          const detail =
-            pull.errors?.map((e) => e.message).join("; ") ?? pull.message;
-          return yield* Effect.fail(
-            `pulls.create returned ${response.status}: ${detail ?? "unknown error"}`,
+        const pull = yield* target
+          .client({
+            title: input.title,
+            body: input.body,
+            head: input.head,
+            base,
+          })
+          .pipe(
+            Effect.mapError(
+              (error) => `${error.operation} failed: ${error.message}`,
+            ),
           );
-        }
         return `opened pull request #${pull.number}: ${pull.html_url}`;
       })) as never;
   }),

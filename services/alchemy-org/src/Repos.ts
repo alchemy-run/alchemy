@@ -24,3 +24,24 @@ export const testAlchemy = GitHub.Repository("test-alchemy", {
   hasIssues: true,
   deleteBranchOnMerge: true,
 });
+
+/**
+ * The alchemy repository itself — an IDENTITY HANDLE only, never
+ * yielded under the Stack: the org contributes to this repository (the
+ * baked sandbox worktree's origin — `SandboxBake.ts`) but must never
+ * claim ownership of it. Deferred consts with static `owner`/`name`
+ * resolve without provisioning (see `RepositoryLike`), which is
+ * exactly how the publish bindings consume it.
+ */
+export const alchemy = GitHub.Repository("alchemy", {
+  owner: "alchemy-run",
+  name: "alchemy",
+});
+
+/**
+ * The repositories this deploy may PUBLISH to (push branches, open
+ * pull requests): each gets an authenticated `CreatePullRequest`
+ * client bound at init; the session tree's `origin` picks the target
+ * at call time (`tools/Publish.ts`).
+ */
+export const publishTargets = [alchemy, testAlchemy] as const;

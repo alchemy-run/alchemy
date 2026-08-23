@@ -21,6 +21,7 @@ import { CheckoutsSandbox } from "./services/CheckoutsSandbox.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import {
   OpenPullRequestLive,
+  PublishTokenLive,
   PushBranchLive,
   ReadDiffLive,
   ReadIssueLive,
@@ -76,7 +77,12 @@ const Spill = SpillingTools.pipe(
  *  push rides the sandbox's own git, the PR the GitHub REST API, both
  *  authenticated by the host's one FQN-memoized token resource. */
 const EngineerWorker = GeneralEngineer.pipe(
-  Layer.provide([PushBranchLive, OpenPullRequestLive]),
+  Layer.provide(
+    Layer.mergeAll(PushBranchLive, OpenPullRequestLive).pipe(
+      // the host-minted PAT — one FQN-memoized resource for the pair
+      Layer.provide(PublishTokenLive),
+    ),
+  ),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
   Layer.provide(SandboxSession),

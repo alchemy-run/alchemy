@@ -1,5 +1,6 @@
 import {
   CreateIssueCommentHttp,
+  CreatePullRequestHttp,
   CreatePullRequestReviewHttp,
   GetIssueHttp,
   GetPullRequestHttp,
@@ -16,6 +17,7 @@ import * as Layer from "effect/Layer";
  */
 export const GitHubWorker = Layer.mergeAll(
   CreateIssueCommentHttp,
+  CreatePullRequestHttp,
   CreatePullRequestReviewHttp,
   GetIssueHttp,
   GetPullRequestHttp,
