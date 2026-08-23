@@ -4,14 +4,52 @@ import * as Schedule from "effect/Schedule";
 import { pollUntil, waitForBranchReady } from "../Util.ts";
 
 /**
- * Available PlanetScale PostgreSQL cluster sizes.
+ * Full PlanetScale Metal SKU as expected by the API.
  *
- * `PS_*` sizes are backed by network-attached storage (NAS) and can be
- * specified either as the short size (`"PS_10"`) or the API SKU
- * (`"PS_10_AWS_X86"`). Short NAS sizes are expanded to a SKU by
- * {@link toPostgresClusterSku} using the target region and arch.
+ * Short display names (`"M-10"`, `"M_10"`) are **not** valid SKUs. Metal
+ * SKUs encode CPU series, compute size, provider, architecture, and NVMe
+ * storage size, e.g. `"M1_10_AWS_ARM_D_METAL_10"`.
+ *
+ * Hyphenated SKUs copied from PlanetScale's pricing docs
+ * (`"M1-10-AWS-ARM-D-METAL-10"`) are accepted and normalized to
+ * underscores by {@link toPostgresClusterSku}.
  *
  * @see https://planetscale.com/docs/postgres/pricing
+ * @see https://planetscale.com/docs/metal
+ */
+export type PostgresMetalClusterSize =
+  | "M1_10_AWS_ARM_D_METAL_10"
+  | "M1_10_AWS_AMD_D_METAL_10"
+  | "M1_20_AWS_ARM_D_METAL_10"
+  | "M1_40_AWS_ARM_D_METAL_10"
+  | "M1_80_AWS_ARM_D_METAL_10"
+  | "M1_160_AWS_ARM_D_METAL_10"
+  | "M6_640_AWS_INTEL_D_METAL_474"
+  | `M${string}_METAL_${string}`
+  | `M${string}-METAL-${string}`;
+
+/**
+ * Available PlanetScale PostgreSQL cluster sizes.
+ *
+ * ## Network-attached storage (NAS)
+ *
+ * `PS_*` sizes are backed by network-attached storage and can be specified
+ * either as the short size (`"PS_10"`) or the API SKU (`"PS_10_AWS_X86"`).
+ * Short NAS sizes are expanded to a SKU by {@link toPostgresClusterSku}
+ * using the target region and arch.
+ *
+ * ## Metal
+ *
+ * [PlanetScale Metal](https://planetscale.com/docs/metal) sizes are backed
+ * by locally-attached NVMe. Pass the **full Metal SKU** (see
+ * {@link PostgresMetalClusterSize}) — short `M-*` names are not valid on
+ * their own because Metal SKUs also encode CPU series, architecture, and
+ * drive size. List available SKUs for your org via PlanetScale's
+ * `list_cluster_size_skus` API, or copy a SKU from
+ * [Postgres pricing](https://planetscale.com/docs/postgres/pricing).
+ *
+ * @see https://planetscale.com/docs/postgres/pricing
+ * @see https://planetscale.com/docs/metal
  */
 export type PostgresClusterSize =
   | "PS_DEV"
@@ -25,20 +63,25 @@ export type PostgresClusterSize =
   | "PS_640"
   | "PS_1280"
   | "PS_2560"
+  | PostgresMetalClusterSize
   | (string & {});
 
 /**
  * Converts a {@link PostgresClusterSize} into the SKU string expected by
  * the PlanetScale API.
  *
+ * Hyphens are normalized to underscores so SKUs copied from PlanetScale
+ * docs (`"PS-10"`, `"M1-10-AWS-ARM-D-METAL-10"`) match the API form.
+ *
  * For NAS-backed clusters, the API expects a suffixed name like
  * `PS_<size>_<provider>_<arch>`. Short `PS_*` sizes are expanded using the
  * supplied region and arch.
  *
- * Metal-backed sizes (anything starting with `M`) are passed through
- * unchanged. The short `M_*` form is not a valid SKU on its own — the API
- * requires the full Metal SKU (e.g. `M6_640_AWS_INTEL_D_METAL_474`), which
- * encodes the CPU series, provider, arch, and storage size
+ * Metal-backed sizes (anything starting with `M`) are passed through after
+ * hyphen normalization. The short `M_*` / `M-*` form is not a valid SKU on
+ * its own — the API requires the full Metal SKU (e.g.
+ * `M1_10_AWS_ARM_D_METAL_10`), which encodes the CPU series, provider,
+ * arch, and storage size.
  *
  * Already-suffixed NAS sizes are also passed through unchanged.
  */
@@ -47,7 +90,7 @@ export function toPostgresClusterSku(input: {
   arch?: "x86" | "arm";
   region?: string;
 }): string {
-  const size = input.size;
+  const size = input.size.replaceAll("-", "_");
   if (!size.startsWith("PS_") || size.match(/(AWS|GCP)/)) return size;
   // Not all AWS regions start with "aws-", but all GCP regions start with "gcp-".
   const provider = input.region?.startsWith("gcp") ? "GCP" : "AWS";
