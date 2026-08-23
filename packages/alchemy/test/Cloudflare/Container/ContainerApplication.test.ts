@@ -43,12 +43,17 @@ describe("ContainerApplication", () => {
   );
 
   // Issue #953 (2): an `image` that already references the target registry
-  // (e.g. a digest reference pushed by CI) is deployed as-is — no docker
-  // pull/tag/push round-trip. The first deploy pushes a public image into the
-  // account registry the normal way; the second deploy references the pushed
-  // tag directly. The old (remote) path would have re-tagged it into a
-  // repository named after the consumer app, so `configuration.image`
-  // matching the original reference verbatim proves the as-is path ran.
+  // (e.g. pushed by CI) is deployed as-is — no docker pull/tag/push
+  // round-trip. The first deploy pushes a public image into the account
+  // registry the normal way; the second deploy references it directly, both
+  // by digest and by tag. The old (remote) path would have re-tagged it into
+  // a repository named after the consumer app, so `configuration.image`
+  // landing on the source's digest reference proves the as-is path ran.
+  //
+  // The tag consumer is the only place `resolveRegistryDigest` (the
+  // `HEAD /v2/<repo>/manifests/<tag>` probe against Cloudflare's registry)
+  // runs on the happy path — a digest reference short-circuits it and a
+  // local push reads the digest from `docker push` output.
   test.provider(
     "pre-pushed registry image is deployed as-is",
     (scratch) =>
@@ -65,21 +70,29 @@ describe("ContainerApplication", () => {
           }),
         );
         const pushedRef = source.app.configuration.image!;
-        expect(pushedRef).toMatch(/^registry\.cloudflare\.com\//);
+        expect(pushedRef).toMatch(
+          /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
+        );
+        // The mutable tag the provider pushed: `<repo>:<sourceHash>`.
+        const taggedRef = `${pushedRef.slice(0, pushedRef.indexOf("@"))}:${source.app.hash!.image}`;
 
-        const both = yield* scratch.deploy(
+        const all = yield* scratch.deploy(
           Effect.gen(function* () {
             return {
               app: yield* Cloudflare.Container("PrepushSource", {
                 image: "mendhak/http-https-echo:latest",
               }).Application,
-              consumer: yield* Cloudflare.Container("PrepushConsumer", {
+              byDigest: yield* Cloudflare.Container("PrepushByDigest", {
                 image: pushedRef,
+              }).Application,
+              byTag: yield* Cloudflare.Container("PrepushByTag", {
+                image: taggedRef,
               }).Application,
             };
           }),
         );
-        expect(both.consumer.configuration.image).toBe(pushedRef);
+        expect(all.byDigest.configuration.image).toBe(pushedRef);
+        expect(all.byTag.configuration.image).toBe(pushedRef);
 
         yield* scratch.destroy();
       }).pipe(logLevel),
