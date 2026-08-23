@@ -1,0 +1,324 @@
+---
+title: "Part 3: Manifests"
+description: Apply raw Kubernetes objects with Kubernetes.Manifest — a Namespace, a ConfigMap, and a Redis StatefulSet with a ClusterIP Service — and wire their outputs into the Deployment's namespace and env.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+A real app needs more than compute: namespaces, config, stateful
+services. Apply those as raw objects with `Kubernetes.Manifest` and
+wire what they produce into `Echo`. Start from the
+[Part 2](/kubernetes/tutorial/part-2) file.
+
+## Start clean
+
+Tear down the Part 2 stack before editing:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+The CronJob fires every two minutes, and moving a workload to a new
+namespace is a replacement on a live stack. Starting clean keeps this
+part's plan a simple list of creates.
+
+## Add a Namespace
+
+Declare a Namespace right after `cluster`:
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
++  const ns = yield* Kubernetes.Manifest("Namespace", {
++    cluster,
++    manifest: {
++      apiVersion: "v1",
++      kind: "Namespace",
++      metadata: { name: "tutorial" },
++    },
++  });
+```
+
+A [`Kubernetes.Manifest`](/providers/kubernetes/manifest) is
+[one literal object](/kubernetes/objects/manifests#any-object), the
+same thing you would put in YAML, applied with server-side apply. Any
+`kind` works, built-in or CRD. `metadata.name` is required because
+apply addresses objects by name. A
+[Namespace](/kubernetes/objects/manifests#namespaces) is
+cluster-scoped, so `ns.namespace` is `undefined` and `ns.name` is
+`"tutorial"`.
+
+## Move the workloads into it
+
+Give both workloads the new namespace:
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
++  namespace: ns.name,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  replicas: 3,
+});
+
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
++  namespace: ns.name,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 60,
+  schedule: "*/2 * * * *",
+});
+```
+
+A workload's `namespace` must exist before it is applied. Passing
+`ns.name`, an [Output](/infrastructure-as-code/outputs), instead of
+`"tutorial"` is what orders the Namespace first. A bare string carries
+no edge. On a deployed stack, changing `namespace` is a replacement
+because cluster, namespace, and name are the workload's identity.
+
+## Add a ConfigMap
+
+Keep the settings in a constant and apply them as a ConfigMap:
+
+```diff lang="typescript"
++const settings = {
++  LOG_LEVEL: "debug",
++  GREETING: "hello from part 3",
++};
+
+export default Alchemy.Stack(
+  // ...
+  Effect.gen(function* () {
+    const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
+    const ns = yield* Kubernetes.Manifest("Namespace", { /* ... */ });
+
++    const config = yield* Kubernetes.Manifest("Config", {
++      cluster,
++      manifest: {
++        apiVersion: "v1",
++        kind: "ConfigMap",
++        metadata: { name: "app-config", namespace: ns.name },
++        data: settings,
++      },
++    });
+```
+
+A ConfigMap's `data` is a string map, so keep it in a constant.
+`metadata.namespace: ns.name` is a reference too, so the ConfigMap
+lands after the Namespace. Outputs work anywhere inside the literal.
+
+## Feed it into the Deployment
+
+Pass the settings and the ConfigMap's name to `Echo` as env vars:
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  namespace: ns.name,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  replicas: 3,
++  env: {
++    ...settings,
++    CONFIG_MAP: config.name,
++  },
+});
+```
+
+`env` becomes the container's environment. Strings go in verbatim,
+Outputs resolve at deploy time. A Manifest's attributes are the
+object's [identity](/kubernetes/objects/manifests#any-object), not its
+contents, so `config.name` gives `"app-config"` and an ordering edge
+while the values come from `settings`. To use `envFrom` instead,
+override the synthesized container with
+[container-level fields](/kubernetes/workloads/pod-template#container-level-fields).
+
+## Add Redis as a StatefulSet
+
+Declare it after `config` and before `Echo`:
+
+```diff lang="typescript"
+const config = yield* Kubernetes.Manifest("Config", { /* ... */ });
+
++const redis = yield* Kubernetes.Manifest("Redis", {
++  cluster,
++  manifest: {
++    apiVersion: "apps/v1",
++    kind: "StatefulSet",
++    metadata: { name: "redis", namespace: ns.name },
++    spec: {
++      serviceName: "redis",
++      replicas: 1,
++      selector: { matchLabels: { app: "redis" } },
++      template: {
++        metadata: { labels: { app: "redis" } },
++        spec: {
++          containers: [
++            { name: "redis", image: "redis:7", ports: [{ containerPort: 6379 }] },
++          ],
++        },
++      },
++    },
++  },
++});
+
+const echo = yield* Kubernetes.Deployment("Echo", { /* ... */ });
+```
+
+There is no `Kubernetes.StatefulSet` resource. Anything the two
+workload resources don't model is a Manifest, written as the API
+expects it. The API server validates the shape, so a typo in `spec`
+fails the deploy with the server's message.
+
+## Give it a stable address
+
+Put a ClusterIP Service between `redis` and `Echo`:
+
+```diff lang="typescript"
+const redis = yield* Kubernetes.Manifest("Redis", { /* ... */ });
+
++const redisService = yield* Kubernetes.Manifest("RedisService", {
++  cluster,
++  manifest: {
++    apiVersion: "v1",
++    kind: "Service",
++    metadata: { name: "redis", namespace: ns.name },
++    spec: {
++      type: "ClusterIP",
++      selector: { app: "redis" },
++      ports: [{ port: 6379, targetPort: 6379 }],
++    },
++  },
++});
+
+const echo = yield* Kubernetes.Deployment("Echo", { /* ... */ });
+```
+
+The Service gives Redis one stable in-cluster DNS name: `redis` from
+the same namespace, `redis.tutorial.svc` from anywhere. The
+StatefulSet's `serviceName: "redis"` names it. Nothing here is
+reachable from your laptop. That is the point of a
+[ClusterIP](/kubernetes/guides/exposing-services#service-types).
+
+## Hand the address to the Deployment
+
+Build the Redis URL from the Service's name:
+
+```diff lang="typescript"
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+
+// ...
+  env: {
+    ...settings,
+    CONFIG_MAP: config.name,
++    REDIS_URL: Output.interpolate`redis://${redisService.name}:6379`,
+  },
+```
+
+`redisService.name` is not known until the Service is applied, so an
+ordinary template literal won't do.
+[`Output.interpolate`](/infrastructure-as-code/outputs#interpolate)
+resolves after deploy and makes `Echo` depend on the Service. The
+echo image won't connect to Redis. Part 5 replaces it with your own
+code that could.
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]6 to create[/g]
+
+[g]+[/g] [b]Config[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+[g]+[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+[g]+[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]Redis[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]Config[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]Redis[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [g]created[/g]
+[g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4",
+[s2]kind: "CronJob",
+}`} />
+
+The plan is alphabetical, but the ✓ lines show the graph: Namespace
+first, then Config, Redis, and RedisService, then the workloads. Every
+edge came from a reference, none from `dependsOn`. See what landed:
+
+```sh
+kubectl get all,configmap -n tutorial
+```
+
+And the environment `Echo`'s container received:
+
+```sh
+kubectl get deploy -n tutorial myapp-echo-dev-alex-k3m7p2q6r4s5t2v6 \
+  -o jsonpath='{.spec.template.spec.containers[0].env}'
+```
+
+`LOG_LEVEL`, `GREETING`, `CONFIG_MAP=app-config`, and
+`REDIS_URL=redis://redis:6379`, next to the `PORT` and `ALCHEMY_*`
+variables Alchemy adds to every workload.
+
+## Recap
+
+Four Manifests, `Echo` carrying the config and the Redis address in
+`env`, and every ordering edge derived from an Output. Part 4 installs
+a chart with `Kubernetes.HelmChart` and watches Alchemy prune what the
+chart stops rendering.
+
+## Where next
+
+- [Part 4: Helm Charts](/kubernetes/tutorial/part-4) — render
+  podinfo, tune values, see pruning.
+- [Manifests](/kubernetes/objects/manifests) — CRDs, Secrets with
+  `Redacted`, ordering rules.
+- [Pod template](/kubernetes/workloads/pod-template) — the
+  `podTemplate` escape hatch when `env` and `resources` aren't
+  enough.

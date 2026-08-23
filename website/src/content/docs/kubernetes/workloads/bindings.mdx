@@ -1,0 +1,330 @@
+---
+title: Bindings
+description: How a Binding.Service lands on a Kubernetes workload — env vars on the pod spec everywhere, IAM on a Pod Identity role on EKS — and how to bind through plain env vars on clusters without an adapter.
+---
+
+A `Kubernetes.Deployment` or `Kubernetes.Job` is a binding host with
+the same contract as `AWS.Lambda.Function` and `AWS.ECS.Task`. One
+`yield* AWS.DynamoDB.PutItem(table)` in the init Effect becomes an env
+var on the pod spec and, on EKS, an IAM statement on a generated Pod
+Identity role.
+
+## The binding contract
+
+`WorkloadBindingContract` is `{ env?: Record<string, any> }`. The
+[EKS adapter](/kubernetes/clusters/eks#what-the-adapter-adds) adds
+`policyStatements?: PolicyStatement[]`, so every AWS `Binding.Service`
+works unchanged on a Kubernetes workload. The general model is
+[what one binding call records](/infrastructure-as-effects/binding#what-one-binding-call-does-at-deploy-time).
+
+```typescript
+// Inside the Stack's Effect.gen body.
+// providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers())
+const table = yield* AWS.DynamoDB.Table("Entries", {
+  partitionKey: "pk",
+  attributes: { pk: "S" },
+});
+const uploads = yield* AWS.S3.Bucket("Uploads", {});
+
+const api = yield* Kubernetes.Deployment(
+  "Api",
+  { cluster, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    // Each yield* records one policy statement on the host and returns
+    // a typed client. Nothing is created here — the adapter does that
+    // on deploy.
+    const putItem = yield* AWS.DynamoDB.PutItem(table); // dynamodb:PutItem on table.tableArn
+    const getObject = yield* AWS.S3.GetObject(uploads); // s3:GetObject on ${bucketArn}/* (+ s3:ListBucket)
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putItem({ Item: { pk: { S: "hello" } } });
+        const object = yield* getObject({ Key: "banner.png" });
+        return HttpServerResponse.text(
+          `banner is ${object.ContentLength} bytes`,
+        );
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(AWS.DynamoDB.PutItemHttp, AWS.S3.GetObjectHttp),
+    ),
+  ),
+);
+```
+
+The impl form is under
+[Effect servers](/kubernetes/workloads/deployments#effect-servers).
+Each `yield*` fed two channels.
+
+**The policy channel.** The `*Http` layer calls
+``host.bind`Allow(${host}, AWS.DynamoDB.PutItem(${table}))`({ policyStatements: [...] })``,
+guarded by `!globalThis.__ALCHEMY_RUNTIME__`. On EKS the statements
+become the Pod Identity role's inline policy.
+
+**The env channel.** Bindings with `data.env` are collected. Every
+`Output` the init Effect captures, such as `yield* table.tableName`
+inside the DynamoDB client, registers an env var through the host's
+`RuntimeContext`. Non-string values are JSON-encoded and the key is
+Alchemy-generated, so read through the client, not by name.
+
+Both land in the container `env` list with your own `env` prop, which
+wins on a shared key. The full precedence is under
+[What gets created](/kubernetes/workloads/deployments#what-gets-created).
+
+| Binding line       | Pod spec                                   | IAM (EKS)                                                                       |
+| ------------------ | ------------------------------------------ | ------------------------------------------------------------------------------- |
+| `PutItem(table)`   | env var with the table name (Alchemy key)  | `dynamodb:PutItem` on the table ARN, inline policy                              |
+| `GetObject(uploads)` | env var with the bucket name (Alchemy key) | `s3:GetObject` + `s3:GetObjectVersion` on `arn:…:uploads/*`, `s3:ListBucket` on the bucket |
+
+:::caution[PORT is just an env var]
+Setting `PORT` in `env` overrides the injected one but does not move
+`containerPort` or the Service port. Change the `port` prop instead.
+:::
+
+At boot the same init Effect runs inside the container. The
+`__ALCHEMY_RUNTIME__` guard skips `host.bind`, so only the client is
+built. See
+[the `__ALCHEMY_RUNTIME__` guard](/infrastructure-as-effects/phases#the-__alchemy_runtime__-guard).
+
+## Pod Identity on EKS
+
+Every Deployment or Job on an `auth.kind: "aws-eks"` cluster gets
+workload identity, bindings or not. It is part of
+[what the EKS adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds),
+and a [Job's `{ run }`](/kubernetes/workloads/jobs#effect-jobs) gets
+the same. The identity step runs on every deploy.
+
+The role is named from the logical id (`<id>-pod-role`, at most 64
+characters), trusts `pods.eks.amazonaws.com` for `sts:AssumeRole` and
+`sts:TagSession`, and carries Alchemy's internal tags. An existing
+role of that name is adopted only when it has those tags. Otherwise
+the deploy fails with "already exists and is not managed by alchemy".
+
+`identity.managedPolicyArns` are attached when the role is first
+created. That is how an external `image:` workload gets AWS access:
+it has no init Effect, and the SDK in the container uses the default
+credential chain.
+
+Active bindings' `policyStatements` become one inline policy,
+`<id>-pod-policy`, each `Sid` sanitized to alphanumerics. When none
+remain the policy is deleted, so removing a binding removes its grant
+on the next deploy.
+
+A [`PodIdentityAssociation`](/providers/aws/eks/podidentityassociation)
+keyed on the cluster, namespace, and the generated ServiceAccount
+binds the role to the workload. A changed role ARN is re-pointed in
+place. Changing `namespace` therefore replaces the workload.
+
+`AWS_REGION` is injected. EKS pods get none by default.
+
+Inside the container the bootstrap provides `Credentials.fromChain()`
+and `Region.fromEnv()`, so clients read the Pod Identity endpoint
+(`AWS_CONTAINER_CREDENTIALS_FULL_URI` plus the agent's token file).
+No static keys, no IRSA annotations, nothing in `podTemplate`.
+`Credentials | Region | AWSEnvironment` are ambient workload services,
+which is why the example above type-checks.
+
+`attrs.identity` is
+`{ kind: "aws-pod-identity", roleArn, roleName, associationArn, associationId }`
+on EKS and `undefined` elsewhere. It is stable, so `roleArn` is safe
+in a bucket policy or a KMS key policy.
+
+```typescript
+// External image, no init Effect — grant through managed policies.
+const worker = yield* Kubernetes.Deployment("Worker", {
+  cluster,
+  image: "ghcr.io/acme/worker:1.4",
+  port: 8080,
+  serviceType: "ClusterIP",
+  identity: {
+    managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"],
+  },
+});
+
+worker.identity; // { kind: "aws-pod-identity", roleArn, roleName, associationArn, associationId }
+worker.serviceAccountName; // the ServiceAccount the association is bound to
+```
+
+On delete the association goes first (skipped when the cluster is
+gone or deleting), then inline policies, managed-policy detachments,
+and the role.
+
+:::note[Not separate plan rows]
+The role and association are reconciled inside the workload row.
+`alchemy plan` shows one row per workload, noted
+`Applied Kubernetes Deployment <namespace>/<name>`. Cluster
+provisioning lives on the [AWS EKS page](/aws/compute/eks).
+:::
+
+:::caution[managedPolicyArns is applied on first create only]
+Adding or removing an ARN once the role exists is silently ignored.
+Only the inline policy from bindings re-syncs every deploy. Replace
+the workload (change `namespace`) or grant through a binding instead.
+:::
+
+## Env-only bindings
+
+A kubeconfig, token, client-cert, or exec cluster has no managed
+registry, so
+[no `main`](/kubernetes/workloads/image-sources#registry-requirement),
+no init Effect, and nothing to bind. There is no identity step
+either. Point a binding-bearing impl at one and reconcile dies before
+touching the cluster:
+
+> `'Api': bindings carry cloud credential grants (policyStatements)
+> but this cluster's platform has no workload-identity adapter.
+> Target a managed cluster (e.g. AWS.EKS.Cluster) or bind through
+> environment variables instead.`
+
+"Bind through environment variables" means the `env` prop on an
+`image:` workload, fed from other resources' outputs.
+
+**Wire other objects' outputs.** Manifest attributes such as `name`
+and `namespace` are Outputs. Interpolate them into `env`. Numbers and
+objects are JSON-stringified. The StatefulSet and Service are plain
+[Manifests](/kubernetes/objects/manifests#any-object), and the image
+reached the cluster as
+[Using your own images](/kubernetes/clusters/local#using-your-own-images)
+describes.
+
+```typescript
+import * as Output from "alchemy/Output";
+
+const redis = yield* Kubernetes.Manifest("Redis", {
+  cluster,
+  manifest: {
+    apiVersion: "apps/v1",
+    kind: "StatefulSet",
+    metadata: { name: "redis", namespace: "default" },
+    spec: {
+      serviceName: "redis",
+      selector: { matchLabels: { app: "redis" } },
+      template: {
+        metadata: { labels: { app: "redis" } },
+        spec: { containers: [{ name: "redis", image: "redis:7-alpine" }] },
+      },
+    },
+  },
+});
+const redisSvc = yield* Kubernetes.Manifest("RedisService", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Service",
+    metadata: { name: "redis", namespace: "default" },
+    spec: { selector: { app: "redis" }, ports: [{ port: 6379 }] },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3", // the only image source on a registry-less cluster
+  port: 8080,
+  env: {
+    REDIS_HOST: Output.interpolate`${redisSvc.name}.${redisSvc.namespace}.svc.cluster.local`,
+    REDIS_PORT: 6379, // lands as the string "6379"
+    LOG_LEVEL: "info",
+  },
+});
+```
+
+**Secrets.** Never put secrets in `env`. It is plain text on the
+Deployment object. Create a `Secret` Manifest as
+[Secrets](/kubernetes/objects/manifests#secrets) describes and
+reference it with `valueFrom.secretKeyRef`. The `env` prop writes
+literals only, so `valueFrom` needs the
+[container-level override](/kubernetes/workloads/pod-template#container-level-fields).
+[Arrays replace](/kubernetes/workloads/pod-template#merge-rules), so
+the whole container is restated, which is only possible on an
+`image:` source.
+
+```typescript
+import * as Config from "effect/Config";
+
+const dbSecret = yield* Kubernetes.Manifest("DbSecret", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: "db-credentials", namespace: "default" },
+    // Resolved at plan time from the deploying shell's environment —
+    // never a literal in alchemy.run.ts.
+    stringData: { password: Config.string("DB_PASSWORD") },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  env: { DB_HOST: "postgres.default.svc.cluster.local" },
+  podTemplate: {
+    spec: {
+      // Arrays REPLACE: restate the whole synthesized container.
+      containers: [
+        {
+          name: "api",
+          image: "ghcr.io/acme/api:v3",
+          ports: [{ containerPort: 8080 }],
+          env: [
+            { name: "PORT", value: "8080" },
+            { name: "DB_HOST", value: "postgres.default.svc.cluster.local" },
+            {
+              name: "DB_PASSWORD",
+              valueFrom: {
+                secretKeyRef: { name: dbSecret.name, key: "password" },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+});
+```
+
+**Consume from any language.** The names are the keys you wrote and
+the values are strings: `process.env.REDIS_HOST`,
+`os.environ["REDIS_HOST"]`, `std::env::var("REDIS_HOST")`. Parse
+JSON-encoded ones yourself. `ALCHEMY_STACK_NAME`, `ALCHEMY_STAGE`, and
+`ALCHEMY_PHASE` are present but ignorable.
+
+:::tip[ConfigMaps]
+Same pattern with `configMapKeyRef`, or pass the values straight into
+`env`. Tutorial part 3 does this.
+:::
+
+## Runtime-only methods and RuntimeContext
+
+A binding's client runs only inside the pod. Its methods require
+`Alchemy.RuntimeContext`, which the bootstrap provides to `{ fetch }`
+and `{ run }` and the init Effect lacks. `yield* putItem(...)` in the
+init body is a type error. Inside `fetch` it compiles. Same rule as
+Lambda and Workers:
+[The types hold the boundary](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
+and [Init vs runtime](/infrastructure-as-effects/phases#init-vs-runtime).
+
+```typescript
+Effect.gen(function* () {
+  const putItem = yield* AWS.DynamoDB.PutItem(table);
+  // yield* putItem({ ... })   ✗ RuntimeContext is not available at init
+  return {
+    fetch: Effect.gen(function* () {
+      yield* putItem({ Item: { pk: { S: "1" } } }); // ✓
+      return HttpServerResponse.text("ok");
+    }),
+  };
+});
+```
+
+## Where next
+
+- [Pod template](/kubernetes/workloads/pod-template) — merge rules
+  and recipes for the synthesized pod template.
+- [Secrets](/kubernetes/objects/manifests#secrets) — Secrets and
+  ConfigMaps as Manifests.
+- [What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds)
+  — everything EKS adds beyond identity.
+- [Bindings](/infrastructure-as-effects/binding) — the binding model
+  across every Alchemy host.

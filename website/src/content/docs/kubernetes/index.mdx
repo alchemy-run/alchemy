@@ -1,0 +1,138 @@
+---
+title: Kubernetes
+description: Run Deployments, Jobs, raw manifests, and Helm charts on any Kubernetes cluster from one typed program — a kubeconfig context, a raw connection, or a managed cluster like EKS — with the cluster's adapter deciding what you get for free.
+---
+
+An Alchemy app on Kubernetes is **workloads** plus **objects**.
+[`Kubernetes.Deployment`](/providers/kubernetes/deployment) runs a
+server, `Kubernetes.Job` runs to completion, `Kubernetes.Manifest`
+is any Kubernetes object, and `Kubernetes.HelmChart` is a rendered
+chart. Each one points at a cluster through its `cluster` prop.
+
+That value carries a
+[connection](/kubernetes/clusters/connecting#the-connection-model).
+Its `auth.kind` selects a **cluster adapter**, and the adapter decides
+what the workload gets for free: auth only, or auth plus workload
+identity plus a managed image registry.
+
+```typescript
+// alchemy.run.ts — inside the Stack's Effect.gen body
+const local = Kubernetes.KubeConfig({ context: "docker-desktop" }); // any cluster kubectl can reach
+// const cluster = yield* AWS.EKS.Cluster("Cluster", { compute: "auto", /* … */ }); // …or a managed one
+
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster: local,                 // ← the only line that changes between clusters
+  image: "nginx:1.27",
+  port: 80,
+  replicas: 2,
+});
+
+return { url: web.url };          // LoadBalancer hostname once the cluster assigns one
+```
+
+`KubeConfig()` returns a plain connection and appears in no plan.
+`Deployment` synthesizes a Kubernetes Deployment plus a Service via
+server-side apply. Swap `cluster` for an `AWS.EKS.Cluster` and every
+other prop stays the same.
+
+New here? [Set up a project](/kubernetes/setup), then start the
+[tutorial](/kubernetes/tutorial/part-1). It runs on a local cluster
+and costs nothing.
+
+## What the cluster adapter gives you
+
+`Kubernetes.providers()` ships the auth-only adapters `kubeconfig`,
+`token`, `client-cert`, and `exec`. Managed-cloud adapters come from
+their provider layer and add identity and a registry. Today that is
+EKS (`aws-eks`, from `AWS.providers()`). The adapter is
+[selected by `auth.kind`](/kubernetes/clusters/connecting#how-the-adapter-is-chosen).
+
+| Capability | kubeconfig / token / client-cert / exec | [EKS (`aws-eks`)](/kubernetes/clusters/eks#what-the-adapter-adds) |
+| --- | --- | --- |
+| Auth | Whatever the kubeconfig says: static token, client cert, or exec plugin (`aws eks get-token`, `kubelogin`, `gke-gcloud-auth-plugin`). `token` / `client-cert` / `exec` need an [explicit `endpoint`](/kubernetes/clusters/connecting#token-client-certificate-and-exec) | SigV4/STS bearer tokens from your AWS credentials. Endpoint and CA discovered from the cluster |
+| `image:` (pre-built reference) | Used verbatim. The cluster pulls it | Mirrored into a per-workload ECR repository |
+| `main:` (bundled Effect program) / `context:` (your Dockerfile) | [Not available](/kubernetes/workloads/image-sources#registry-requirement). No registry to push to | Bundled / built and pushed to ECR |
+| Bindings | [`{ env }`](/kubernetes/workloads/bindings#the-binding-contract). Bind through environment variables | `{ env, policyStatements }`. Every AWS `Binding.Service` lands IAM statements on a generated [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) role |
+| `url` from a `LoadBalancer` Service | Whatever the cluster's LB assigns. See [Local clusters](/kubernetes/clusters/local#reaching-a-service) | Internet-facing NLB via EKS Auto Mode (`loadBalancerClass` default) |
+| Providers in the Stack | `Kubernetes.providers()` | `Layer.mergeAll(AWS.providers(), Kubernetes.providers())` |
+| [Tools on the deploying machine](/kubernetes/setup#install) | `helm` only for `HelmChart` | Docker for every image source (`image` is pulled, tagged, and pushed), plus `helm` for `HelmChart` |
+
+Same four resources, different adapter underneath. That is why the
+tutorial runs on a local cluster and only its optional last part
+switches to EKS.
+
+:::note[EKS is one adapter, not the centre]
+Provisioning the cluster itself (Network, Cluster, AccessEntry, Addon,
+HyperPod) stays on the [AWS tab](/aws/compute/eks). This hub owns
+workloads and objects. Adapter internals live in
+[Cluster adapters](/kubernetes/guides/cluster-adapters#the-interface).
+:::
+
+## Clusters
+
+- **[Connecting](/kubernetes/clusters/connecting)**: the `Connection`
+  model, `KubeConfig()`, raw auth kinds, adapter selection.
+- **[Local clusters](/kubernetes/clusters/local)**: Docker Desktop,
+  OrbStack, kind, k3s. `LoadBalancer` behaviour and your own images.
+- **[EKS](/kubernetes/clusters/eks)**: STS auth, Pod Identity, ECR
+  mirroring, NLB defaults.
+
+## Workloads
+
+- **[Deployments](/kubernetes/workloads/deployments)**: a replicated
+  server, the analog of `AWS.ECS.Service`.
+  [Reference](/providers/kubernetes/deployment).
+- **[Jobs](/kubernetes/workloads/jobs)**: run-to-completion work, the
+  analog of `AWS.ECS.Task`. `schedule` makes a CronJob.
+  [Reference](/providers/kubernetes/job).
+- **[Image sources](/kubernetes/workloads/image-sources)**: one of
+  `image`, `context`, or `main`, and which clusters support which.
+- **[Bindings](/kubernetes/workloads/bindings)**: the
+  `{ env, policyStatements }` contract and Pod Identity.
+- **[Pod template](/kubernetes/workloads/pod-template)**: the
+  `podTemplate` escape hatch and its merge rules.
+
+## Objects
+
+- **[Manifests](/kubernetes/objects/manifests)**: any object as a
+  literal `{ apiVersion, kind, metadata, … }`. CRDs need no
+  registration. [Reference](/providers/kubernetes/manifest).
+- **[Helm charts](/kubernetes/objects/helm)**: `helm template`, then
+  apply. No in-cluster release, no hooks.
+  [Reference](/providers/kubernetes/helmchart).
+
+## Guides
+
+- **[Exposing services](/kubernetes/guides/exposing-services)**:
+  Service types, LB annotations, Ingress, Cloudflare Tunnel.
+- **[How apply works](/kubernetes/guides/how-apply-works)**:
+  server-side apply, drift, pruning, conflicts, delete order.
+- **[Cluster adapters](/kubernetes/guides/cluster-adapters)**: the
+  `ClusterAdapter` interface and registering a new `auth.kind`.
+
+## What are you building?
+
+| You're building | Reach for |
+| --- | --- |
+| An HTTP server from a pre-built image | [Deployment](/kubernetes/workloads/deployments#what-gets-created) with `image:`. Works on every cluster |
+| An Effect HTTP server, no Dockerfile | [Deployment](/kubernetes/workloads/deployments#effect-servers) with `main: import.meta.url` + `{ fetch }`. Needs a registry adapter ([EKS](/kubernetes/clusters/eks#what-the-adapter-adds)) |
+| A legacy app with its own Dockerfile | [Deployment](/kubernetes/workloads/deployments#what-gets-created) with `context:`. See [Image sources](/kubernetes/workloads/image-sources#three-sources) |
+| A one-off task (migration, seed) | [Job](/kubernetes/workloads/jobs#jobs) |
+| Something on a schedule | [Job](/kubernetes/workloads/jobs#cronjobs) with `schedule: "0 3 * * *"` |
+| A Namespace, ConfigMap, StatefulSet, CRD instance… | [Manifest](/kubernetes/objects/manifests#any-object) |
+| Secrets (ConfigMaps, Secrets as Manifests) | [Manifest](/kubernetes/objects/manifests#secrets) |
+| An off-the-shelf chart (ingress-nginx, podinfo, Karpenter) | [HelmChart](/kubernetes/objects/helm#chart-sources) |
+| AWS access from a Pod (S3, DynamoDB, SQS…) | Any AWS `Binding.Service` on a Deployment/Job. [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) |
+| A public URL | `serviceType: "LoadBalancer"` → `url`. See [Exposing services](/kubernetes/guides/exposing-services#service-types) |
+| A domain + TLS in front of it | [Ingress](/kubernetes/guides/exposing-services#ingress) or [Cloudflare Tunnel](/kubernetes/guides/exposing-services#cloudflare-tunnel) |
+| GPU / spot / ARM placement | [podTemplate recipes](/kubernetes/workloads/pod-template#recipes) |
+| The EKS cluster itself | [`AWS.EKS.Cluster`](/aws/compute/eks) on the AWS tab |
+| A cluster Alchemy can't reach yet (GKE identity, AKS…) | `KubeConfig()` today ([Connecting](/kubernetes/clusters/connecting#kubeconfig)). Write an adapter for identity/registry ([Cluster adapters](/kubernetes/guides/cluster-adapters#registering-an-auth-kind)) |
+
+## Where next
+
+- [Setup](/kubernetes/setup): install, pick a cluster, plan your first
+  manifest.
+- [Tutorial](/kubernetes/tutorial/part-1): a Deployment, a Job,
+  manifests, and a Helm chart on a local cluster, then optionally EKS.
+- [Providers reference](/providers): generated API docs.

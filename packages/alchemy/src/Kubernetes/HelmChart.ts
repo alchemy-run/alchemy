@@ -206,7 +206,9 @@ const resolveReleaseName = (
   Effect.suspend(() => {
     if (news.releaseName) return Effect.succeed(news.releaseName);
     if (output?.releaseName) return Effect.succeed(output.releaseName);
-    return createPhysicalName({ id, lowercase: true });
+    // Helm caps release names at 53 characters (they prefix every object
+    // name the chart renders, which must stay a valid DNS label).
+    return createPhysicalName({ id, lowercase: true, maxLength: 53 });
   });
 
 /**

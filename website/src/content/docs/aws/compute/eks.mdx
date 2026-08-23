@@ -1,6 +1,6 @@
 ---
 title: EKS
-description: Stand up an EKS Auto Mode cluster on a Network and run containers on it — Deployments for servers, Jobs for run-to-completion work, Manifests for everything else. No YAML, no kubectl.
+description: Stand up an EKS Auto Mode cluster on a Network, grant access, install add-ons, and point the cluster-agnostic Kubernetes workloads at it. No YAML, no kubectl.
 ---
 
 **EKS** (Elastic Kubernetes Service) is AWS's managed Kubernetes:
@@ -27,15 +27,12 @@ Alchemy models these directly:
 [`Cluster`](/providers/aws/eks/cluster) with `compute: "auto"`
 stands up the control plane from a VPC, and the cluster-agnostic
 `alchemy/Kubernetes` workloads target it by passing the cluster
-resource as their `cluster` prop:
-[`Kubernetes.Deployment`](/providers/kubernetes/deployment)
-synthesizes a Kubernetes `Deployment` + `Service`;
-[`Kubernetes.Job`](/providers/kubernetes/job) a `Job` or `CronJob`;
-and [`Kubernetes.Manifest`](/providers/kubernetes/manifest) applies
-any raw Kubernetes object. The workloads live in the same TypeScript
-program as the cluster, with no YAML and no `kubectl apply` step —
-and the same workloads run on any other cluster your kubeconfig can
-reach (`Kubernetes.KubeConfig(...)`).
+resource as their `cluster` prop. This page covers the cluster —
+provisioning, access, add-ons, and HyperPod. Everything about the
+workloads themselves lives in the
+[Kubernetes hub](/kubernetes): what the EKS adapter adds on top of
+any other cluster is summarized on
+[Amazon EKS](/kubernetes/clusters/eks).
 
 The workload providers ship in `Kubernetes.providers()` — compose it
 with `AWS.providers()` in the Stack:
@@ -120,47 +117,17 @@ The deploying principal is bootstrapped as cluster admin
 Mode defaults), so these are for everyone (and everything) else that
 needs in.
 
-## Deploy a server
+## Run workloads on the cluster
 
-[`Kubernetes.Deployment`](/providers/kubernetes/deployment) is a
-replicated Kubernetes server — the Kubernetes analog of
-`AWS.ECS.Service`. It
-synthesizes a Kubernetes `Deployment` + `Service` (+
-`ServiceAccount`) and applies them via server-side apply, with the
-container image coming from exactly one of three sources flat on
-props: `image` (a registry reference, mirrored into ECR), `context`
-(build your own Dockerfile), or `main` (bundle an inline Effect
-program). The simplest form runs a remote image with no Effect
-runtime in the container:
-
-```typescript
-const echo = yield* Kubernetes.Deployment("EchoServer", {
-  cluster,
-  image: "registry.k8s.io/echoserver:1.10",
-  namespace: "default",
-  replicas: 2,
-  port: 8080,
-  serviceType: "LoadBalancer",
-});
-
-echo.url;            // LoadBalancer hostname (an NLB on Auto Mode)
-echo.deploymentName; // K8s-native attrs: deploymentName, serviceName, ...
-```
-
-`serviceType: "LoadBalancer"` provisions a cloud load balancer and
-exposes its hostname as `url`. Swap `image` for
-`context: "./legacy"` to build your own Dockerfile (`dockerfile` is
-a path, defaulting to `${context}/Dockerfile`).
-
-## Effect servers with bindings
-
-Pass `main: import.meta.url` and an init Effect and the program is
-bundled into a generated image instead — the same authoring model as
-[Lambda](/aws/compute/lambda). Bindings work identically too:
-`Deployment` accepts the same `{ env, policyStatements }` binding
-contract as a Lambda `Function`, so every AWS `Binding.Service`
-attaches environment variables to the Pod spec and IAM policy
-statements to a generated **Pod Identity role**:
+Pass the cluster resource as the `cluster` prop of any
+`alchemy/Kubernetes` workload. Because the target is an EKS cluster,
+the [`aws-eks` adapter](/kubernetes/clusters/eks#what-the-adapter-adds)
+adds what a plain kubeconfig cluster can't: authentication with your
+AWS credentials (no kubeconfig step), a per-workload **ECR
+repository** so `main:` and `context:` image sources work, and
+**Pod Identity** so AWS bindings land IAM policy statements on a
+generated role — the same `{ env, policyStatements }` contract as
+[Lambda](/aws/compute/lambda):
 
 ```typescript
 const api = yield* Kubernetes.Deployment(
@@ -176,101 +143,23 @@ const api = yield* Kubernetes.Deployment(
     };
   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
 );
+
+api.url; // internet-facing NLB hostname (EKS Auto Mode)
 ```
 
-Every Kubernetes workload on EKS gets Pod Identity as standard:
-Alchemy creates
-the IAM role, wires it to the workload's ServiceAccount with a
-[`PodIdentityAssociation`](/providers/aws/eks/podidentityassociation),
-and Pods resolve credentials through the EKS Pod Identity
-container-credentials chain — no OIDC provider or IRSA annotation
-ceremony. The tagged form
-(`class Api extends Kubernetes.Deployment<Api, Shape>()("Api") {}` +
-`Api.make(props, impl)`) works exactly as it does on Lambda and
-Cloudflare Workers.
+The same program runs against any other cluster by swapping
+`cluster`; the hub explains each workload in full:
 
-## Run-to-completion work with Job
-
-[`Kubernetes.Job`](/providers/kubernetes/job) runs a container to
-completion — the Kubernetes analog of `AWS.ECS.Task`. Same three image sources,
-same bindings and Pod Identity; an Effect impl returns `{ run }`
-instead of `{ fetch }`, executing to completion inside the Pod:
-
-```typescript
-const migrate = yield* Kubernetes.Job("DbMigrate", {
-  cluster,
-  image: "ghcr.io/acme/migrator:v3",
-  backoffLimit: 2,
-});
-```
-
-Set `schedule` (standard 5-field cron) and a Kubernetes `CronJob` is
-synthesized instead of a plain `Job`:
-
-```typescript
-const nightly = yield* Kubernetes.Job("NightlyBackfill", {
-  cluster,
-  main: import.meta.url,
-  schedule: "0 3 * * *",
-});
-```
-
-## Everything else is a Manifest
-
-[`Kubernetes.Manifest`](/providers/kubernetes/manifest) applies any
-raw Kubernetes object — StatefulSets, Namespaces, CRDs — via server-side apply.
-The manifest is a literal object, exactly as you would write it in
-YAML:
-
-```typescript
-const namespace = yield* Kubernetes.Manifest("DemoNamespace", {
-  cluster,
-  manifest: {
-    apiVersion: "v1",
-    kind: "Namespace",
-    metadata: { name: "demo" },
-  },
-});
-```
-
-There is no kubeconfig step: Alchemy authenticates to the cluster's
-API with your AWS credentials (a presigned STS token) and applies
-objects via **server-side apply** under the `alchemy` field manager,
-so deploys converge the live objects the same way the rest of your
-Stack converges cloud resources. Unknown kinds resolve through the
-Kubernetes API discovery endpoint, so CRDs work without any
-registration.
-
-## Install a Helm chart
-
-[`Kubernetes.HelmChart`](/providers/kubernetes/helmchart) renders a
-chart with the
-local `helm` CLI (`helm template` — install helm on your machine,
-like Docker for image builds) and applies the rendered objects
-through the same server-side-apply path as `Manifest`:
-
-```typescript
-const ingress = yield* Kubernetes.HelmChart("IngressNginx", {
-  cluster,
-  chart: "ingress-nginx",
-  repo: "https://kubernetes.github.io/ingress-nginx",
-  version: "4.11.2",
-  namespace: "ingress-nginx",
-  createNamespace: true,
-  values: {
-    controller: { replicaCount: 2 },
-  },
-});
-```
-
-`chart` also accepts `oci://` references and local chart directories,
-and `values` is a literal object — the same shape as a `values.yaml`
-file. Because the objects are applied (not `helm install`ed), Alchemy
-owns their lifecycle: drift is corrected on every deploy, objects
-that drop out of the render are pruned, and destroy deletes them —
-there is no in-cluster Helm release record. Charts that rely on
-install/upgrade hooks for correctness should be installed with Helm
-directly.
+- [Deployments](/kubernetes/workloads/deployments) — a replicated
+  server (the Kubernetes analog of `AWS.ECS.Service`): Deployment +
+  Service + ServiceAccount, `serviceType` and `url`, Effect servers.
+- [Jobs](/kubernetes/workloads/jobs) — run-to-completion work (the
+  analog of `AWS.ECS.Task`); set `schedule` for a CronJob.
+- [Bindings](/kubernetes/workloads/bindings#pod-identity-on-eks) —
+  how bindings become a Pod Identity role and pod environment.
+- [Manifests](/kubernetes/objects/manifests) and
+  [Helm charts](/kubernetes/objects/helm) — any raw object, and
+  charts rendered with `helm template` and applied as objects.
 
 ## Run on SageMaker HyperPod
 
@@ -333,6 +222,10 @@ surface.
 
 ## Where next
 
+- [Kubernetes hub](/kubernetes) — the workloads and objects you run
+  on this cluster, on any cluster.
+- [Amazon EKS in the Kubernetes hub](/kubernetes/clusters/eks) —
+  exactly what the EKS adapter adds (STS auth, Pod Identity, ECR).
 - [VPC & networking](/aws/networking) — what the `Network` helper
   builds under the cluster.
 - [HyperPod](/aws/compute/hyperpod) — run training fleets on this
@@ -340,7 +233,6 @@ surface.
 - [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or ECS
   is the better fit than running your own Kubernetes workloads.
 - [`Cluster` reference](/providers/aws/eks/cluster),
-  [`Deployment` reference](/providers/kubernetes/deployment),
-  [`Job` reference](/providers/kubernetes/job),
-  [`Manifest` reference](/providers/kubernetes/manifest) — every prop
-  and attribute.
+  [`AccessEntry` reference](/providers/aws/eks/accessentry),
+  [`Addon` reference](/providers/aws/eks/addon) — every prop and
+  attribute.

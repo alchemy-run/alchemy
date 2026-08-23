@@ -1,0 +1,252 @@
+---
+title: Jobs
+description: Run-to-completion and scheduled work with Kubernetes.Job — retries, TTL, what a redeploy does to a finished Job, CronJobs via schedule, and Effect jobs that return run.
+---
+
+A [`Kubernetes.Job`](/providers/kubernetes/job) runs a container to
+completion, the Kubernetes analog of `AWS.ECS.Task`. It takes the
+same `cluster`, the same
+[three image sources](/kubernetes/workloads/image-sources#three-sources),
+and the same bindings as a Deployment. There is no Service and no
+`url`. The pod exits when the work is done.
+
+```typescript
+// inside the Stack body
+const migrate = yield* Kubernetes.Job("DbMigrate", {
+  cluster,
+  image: "ghcr.io/acme/migrator:v3",
+  args: ["migrate", "--to", "latest"],
+  backoffLimit: 2,
+});
+
+migrate.jobName; // "<stack>-dbmigrate-<stage>-<suffix>-<8-char spec hash>"
+migrate.kind;    // "Job"
+```
+
+Applying a `batch/v1` Job starts it, so the Job runs on deploy. The
+deploy does not wait for it to finish. Objects follow the
+[same naming and label scheme](/kubernetes/workloads/deployments#what-gets-created)
+as a Deployment, with one twist in the Job's own name.
+
+## Jobs
+
+A Job resource applies a `ServiceAccount` then a `batch/v1 Job` with
+[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply).
+The container env is a Deployment's minus `PORT`. See
+[What gets created](/kubernetes/workloads/deployments#what-gets-created).
+The shared props (`resources`, `env`, `namespace`, `labels`,
+`podTemplate`, `architecture`, `identity`, `tags`) are in
+[Props by group](/kubernetes/workloads/deployments#props-by-group).
+
+A Job's pod template is immutable, so Alchemy content-addresses
+one-shot Jobs. The name is the base name (truncated to 54 characters)
+plus 8 hex characters of a SHA-256 over `backoffLimit`,
+`ttlSecondsAfterFinished`, and the pod template. The ServiceAccount
+keeps the plain base name. Names cap at 63 characters because
+Kubernetes stamps the Job name into a pod label.
+
+A redeploy with no changes is a no-op. Any spec change (image, `args`,
+`env`, a binding's env, a `main` edit, `backoffLimit`) produces a new
+name. The old Job and its pods are deleted, the new one is applied,
+and it runs.
+
+`restartPolicy` (`"Never"` default, or `"OnFailure"`) is pod-level.
+With `Never` each failed attempt is a new pod and the failed one stays
+for `kubectl logs`. With `OnFailure` the container restarts in place.
+
+`backoffLimit` is the number of retries before the Job is `Failed`.
+Kubernetes defaults to 6, backing off 10s, 20s, 40s, capped at 6
+minutes.
+
+`ttlSecondsAfterFinished` is the seconds after success or failure
+before Kubernetes garbage-collects the Job and its pods. Unset means
+never. Set it on anything you deploy repeatedly. If TTL has already
+collected the Job and a later deploy reconciles an unchanged spec (a
+`tags` change, say), the same-named Job is re-created and runs again.
+
+`command` / `args` pick what the container does for `image` and
+`context` sources.
+
+```typescript
+const backfill = yield* Kubernetes.Job("Backfill", {
+  cluster,
+  image: "ghcr.io/acme/tools:v3",
+  command: ["node", "backfill.js"],
+  args: ["--since", "2026-01-01"],
+  // each failed attempt is a fresh pod; the failed pod stays for `kubectl logs`
+  restartPolicy: "Never",
+  // give up after 3 retries (Kubernetes default is 6)
+  backoffLimit: 3,
+  // garbage-collect the finished Job (and its pods) an hour after it ends
+  ttlSecondsAfterFinished: 3600,
+  resources: { requests: { cpu: "250m", memory: "512Mi" } },
+});
+
+// Change `args` and deploy again: the old Job is deleted, a new
+// content-addressed Job is applied, and it runs. Deploying with nothing
+// changed is a no-op — the Job does not run twice.
+```
+
+:::note[Re-running a Job]
+A Job re-runs exactly when its spec changes. To force a re-run, bump
+an env var (`env: { RUN: "2" }`).
+:::
+
+:::caution
+`alchemy deploy` returns as soon as the Job is applied. A failed Job
+does not fail the deploy. Check it with
+`kubectl get job <jobName> -n <namespace>` and
+`kubectl logs job/<jobName>`, or see
+[Debugging](/kubernetes/guides/how-apply-works#debugging).
+:::
+
+Attributes: `connection`, `namespace`, `kind` (`"Job"` or
+`"CronJob"`), `jobName`, `schedule`, `serviceAccountName`, `imageUri`,
+`identity`, `registry`, `kubernetesObjects`, `code.hash`. All are in
+the [reference](/providers/kubernetes/job).
+
+## CronJobs
+
+Set `schedule` to a 5-field cron expression and Alchemy synthesizes a
+`batch/v1 CronJob`. `kind` becomes `"CronJob"`. `backoffLimit`,
+`ttlSecondsAfterFinished`, `restartPolicy`, and the pod template go
+into `jobTemplate` unchanged.
+
+A CronJob is mutable, so it keeps the base name (truncated to 52
+characters) and updates in place. Nothing runs on deploy. Adding or
+removing `schedule` swaps the kind: the old object is deleted and the
+new kind applied. Removing it applies a one-shot Job, which runs.
+
+The cluster's controller manager interprets the expression, usually
+in UTC on managed clusters. `concurrencyPolicy`, `timeZone`,
+`startingDeadlineSeconds`, `successfulJobsHistoryLimit`, and
+`failedJobsHistoryLimit` have no props, and
+[`podTemplate`](/kubernetes/workloads/pod-template#merge-rules)
+reaches only the pod template inside `jobTemplate`. To set them,
+write the CronJob as a
+[`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object).
+
+Every tick creates a Job, so set `ttlSecondsAfterFinished`. Without
+it Kubernetes keeps the last 3 successful and 1 failed Job by default.
+
+```typescript
+const nightly = yield* Kubernetes.Job("NightlyReport", {
+  cluster,
+  image: "ghcr.io/acme/tools:v3",
+  args: ["report", "--yesterday"],
+  // 5-field cron → a CronJob is synthesized; runs at 03:00 cluster time
+  schedule: "0 3 * * *",
+  // these apply to each run's Job
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 86400,
+});
+
+nightly.kind;     // "CronJob"
+nightly.schedule; // "0 3 * * *"
+// Editing `schedule` or the image updates the CronJob in place; nothing runs
+// until the next tick.
+```
+
+:::note
+A CronJob never runs on deploy. A one-shot Job always does.
+:::
+
+## Effect jobs
+
+Pass `main: import.meta.url` and an init Effect that returns
+`{ run }`. `run` is an `Effect<void, never, …>`. When it returns, the
+process exits 0, so lingering sockets or timers can't keep the pod
+alive. A defect exits 1, a failed attempt against `backoffLimit`.
+
+Init runs before `run`, so resolve bindings there. Bindings work as in
+a Deployment. See
+[The binding contract](/kubernetes/workloads/bindings#the-binding-contract)
+and [Effect servers](/kubernetes/workloads/deployments#effect-servers).
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+// inside the Stack body (EKS — `main` needs the adapter's managed registry)
+const seed = yield* Kubernetes.Job(
+  "SeedData",
+  { cluster, main: import.meta.url, backoffLimit: 2, ttlSecondsAfterFinished: 600 },
+  Effect.gen(function* () {
+    // init: bindings and clients
+    const putItem = yield* AWS.DynamoDB.PutItem(table);
+    return {
+      // run: executes to completion, then the pod exits 0
+      run: Effect.gen(function* () {
+        yield* putItem({ Item: { pk: { S: "seed#1" }, message: { S: "hello" } } });
+        yield* Effect.log("seeded");
+      }).pipe(Effect.orDie), // a failure exits 1 → counts against backoffLimit
+    };
+  }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+);
+```
+
+The [tagged form](/kubernetes/workloads/deployments#the-tagged-form)
+works the same way. `schedule` works with `main` too.
+
+```typescript
+// src/backfill.ts — the tagged form (same shape as a tagged Deployment)
+export class Backfill extends Kubernetes.Job<Backfill, {
+  progress: () => Effect.Effect<number>;
+}>()("Backfill") {}
+
+export default Backfill.make(
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    return { cluster, main: import.meta.url, schedule: "0 3 * * *" }; // an Effect CronJob
+  }),
+  Effect.gen(function* () {
+    return {
+      run: Effect.log("backfilling…"),
+      progress: () => Effect.succeed(0),
+    };
+  }),
+);
+```
+
+:::caution[`main` needs a managed registry]
+Today only the EKS adapter has one. On a kubeconfig cluster use
+`image:` with `command` / `args`. See
+[Registry requirement](/kubernetes/workloads/image-sources#registry-requirement).
+:::
+
+## Updates and replacement
+
+Replacement happens on a `cluster` identity change or a `namespace`
+change, as in the Deployment's
+[Updates and replacement](/kubernetes/workloads/deployments#updates-and-replacement).
+Content drift in `main`, `context`, or `image` surfaces through
+`code.hash`.
+
+For a one-shot Job an update deletes the old Job, applies a new one,
+and runs it. For a CronJob it is an in-place edit. Removed objects are
+pruned per
+[Pruning and drift](/kubernetes/guides/how-apply-works#pruning-and-drift).
+
+`name` is not sticky. The base name is recomputed on every reconcile
+and only the ServiceAccount's name is kept, so changing `name` renames
+the Job or CronJob, and a renamed one-shot Job runs.
+
+| Change                                         | One-shot Job                              | CronJob                    |
+| ---------------------------------------------- | ----------------------------------------- | -------------------------- |
+| `cluster` identity, `namespace`                | replace                                   | replace                    |
+| image, `args`, `env`, `backoffLimit`, `podTemplate`, code edit | new content-addressed Job — runs | in-place edit, no run   |
+| `schedule` added / removed                     | Job deleted, CronJob created              | CronJob deleted, Job created — runs |
+| `name`                                         | renamed — runs                            | renamed, no run            |
+| nothing                                        | no-op, does not re-run                    | no-op                      |
+
+## Where next
+
+- [Image sources](/kubernetes/workloads/image-sources) — `main`,
+  `context`, `image`: which to use and why `main` needs a registry.
+- [Bindings](/kubernetes/workloads/bindings) — env and Pod Identity
+  bindings inside `run`.
+- [Manifests](/kubernetes/objects/manifests) — when you need CronJob
+  fields Alchemy doesn't expose.
+- [`Job` reference](/providers/kubernetes/job) — every prop and
+  attribute.

@@ -2424,6 +2424,18 @@ importers:
         specifier: 4.0.0-rc.110
         version: 4.0.0-rc.110
 
+  examples/kubernetes-local:
+    dependencies:
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.110(effect@4.0.0-rc.110)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.110
+        version: 4.0.0-rc.110
+
   examples/monorepo-multi-stack/backend:
     dependencies:
       '@effect/platform-bun':

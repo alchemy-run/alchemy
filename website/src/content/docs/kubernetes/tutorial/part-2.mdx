@@ -1,0 +1,236 @@
+---
+title: "Part 2: Jobs and CronJobs"
+description: Run a container to completion with Kubernetes.Job, control retries and cleanup with backoffLimit and ttlSecondsAfterFinished, then turn it into a CronJob with one schedule prop.
+sidebar:
+  order: 2
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+[Part 1](/kubernetes/tutorial/part-1) deployed a long-running server.
+Now add a `Kubernetes.Job` that runs to completion, then retry it,
+clean it up, and schedule it. The Part 1 file carries over. If you
+destroyed it, the first deploy recreates `Echo`.
+
+## Add a Job
+
+Declare a Job below `Echo`:
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  replicas: 3,
+});
+
++const hello = yield* Kubernetes.Job("Hello", {
++  cluster,
++  image: "busybox:1.36",
++  command: ["sh", "-c"],
++  args: ["echo hello from alchemy; date"],
++});
+```
+
+[`Kubernetes.Job`](/providers/kubernetes/job) is the analog of
+`AWS.ECS.Task`: a `batch/v1 Job` plus a `ServiceAccount` (see
+[Jobs](/kubernetes/workloads/jobs#jobs)). Kubernetes runs it the
+moment it is applied. `command` and `args` pass through verbatim.
+busybox has no entrypoint that exits, so we give it a shell line.
+
+## Expose the Job name
+
+Add the Job's name to the outputs:
+
+```diff lang="typescript"
+return {
+  url: echo.url,
+  deployment: echo.deploymentName,
++  job: hello.jobName,
+};
+```
+
+The generated name is `<base>-<8 hex chars>`. A one-shot Job's pod
+template is immutable, so Alchemy hashes the spec into the name. You
+need the exact name for `kubectl logs`.
+
+## Deploy and watch it run
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+[g]+[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [g]created[/g]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4-3f9a1c2e",
+}`} />
+
+If `Echo` was still deployed, the plan is `1 to create`. Check on
+the Job:
+
+```sh
+kubectl get jobs
+```
+
+After a few seconds `COMPLETIONS` reads `1/1`. Read its output with
+the `job` output from the deploy:
+
+```sh
+kubectl logs job/myapp-hello-dev-alex-h6g5f4e3d2c7b2a4-3f9a1c2e
+```
+
+It prints `hello from alchemy` and the date. The deploy did not wait
+for completion. `Job` means "make sure this Job object exists", and
+Kubernetes runs it asynchronously.
+
+## Change the command and run it again
+
+Edit the shell line:
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+-  args: ["echo hello from alchemy; date"],
++  args: ["echo hello again; date"],
+});
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [y]updated[/y]`} />
+
+The name is content-addressed, so a changed spec is a new Job object
+with a new hash suffix, and it runs. The old one is
+[pruned](/kubernetes/guides/how-apply-works#pruning-and-drift) with
+its pods. Edit and deploy re-runs a one-shot Job, and the two edits
+below do the same.
+
+## Limit retries with backoffLimit
+
+Cap the retries:
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
++  backoffLimit: 1,
+});
+```
+
+`backoffLimit` is the Kubernetes field: retries before the Job is
+marked failed. The default of 6 retries a broken command for minutes.
+Swap `args` for `["exit 1"]` to watch it stop after two attempts.
+`restartPolicy` and the backoff curve are on
+[Jobs](/kubernetes/workloads/jobs#jobs).
+
+## Clean up finished Jobs with ttlSecondsAfterFinished
+
+Have finished Jobs delete themselves:
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
+  backoffLimit: 1,
++  ttlSecondsAfterFinished: 60,
+});
+```
+
+Finished Jobs and their pods stay around forever by default. The TTL
+controller deletes them this many seconds after completion. A
+TTL-collected Job does not look missing to Alchemy, so the next
+deploy is still `no changes`. See
+[Jobs](/kubernetes/workloads/jobs#jobs) for why.
+
+## Put it on a schedule
+
+Add a cron schedule and expose the resource's `kind`:
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 60,
++  schedule: "*/2 * * * *",
+});
+
+return {
+  url: echo.url,
+  deployment: echo.deploymentName,
+  job: hello.jobName,
++  kind: hello.kind,
+};
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [y]updated[/y]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4",
+[s2]kind: "CronJob",
+}`} />
+
+A 5-field cron `schedule` makes the resource synthesize a `batch/v1`
+[`CronJob`](/kubernetes/workloads/jobs#cronjobs) around the same pod
+template. The `kind` output only shows the flip. Still `1 to update`:
+Alchemy prunes the Job and applies the CronJob, which is mutable and
+keeps a stable name. `kubectl get cronjobs` lists it, and within two
+minutes `kubectl get jobs` shows the first run. The TTL now applies
+to each run.
+
+## Recap
+
+`Hello` runs when applied and re-runs whenever its spec changes.
+`backoffLimit` and `ttlSecondsAfterFinished` pass straight through,
+and `schedule` turns the same resource into a CronJob in place. Part 3
+applies raw objects with `Kubernetes.Manifest` and wires their outputs
+into `Echo`.
+
+## Where next
+
+- [Part 3: Manifests](/kubernetes/tutorial/part-3) — namespaces,
+  config, and a StatefulSet.
+- [Jobs](/kubernetes/workloads/jobs) — the Effect `{ run }` form,
+  `restartPolicy`, and everything else about Jobs.

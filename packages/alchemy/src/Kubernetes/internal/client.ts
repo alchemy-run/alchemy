@@ -324,7 +324,11 @@ export const deleteObject = Effect.fn(function* ({
       requestJson({
         transport,
         method: "DELETE",
-        path,
+        // The REST default propagation policy is per-kind — batch/v1 Jobs
+        // (and CronJobs) default to `Orphan`, which leaves their pods
+        // behind on delete. Ask for background cascading deletion the way
+        // `kubectl delete` does so dependents are garbage-collected.
+        path: `${path}?propagationPolicy=Background`,
       }),
     ),
     Effect.catchIf(
