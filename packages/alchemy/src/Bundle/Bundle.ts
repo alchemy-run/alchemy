@@ -323,6 +323,13 @@ export const watch = (
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
 // oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
+/**
+ * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
+ * bare package specifiers (not starting with `.`, `/` or `\0`) so an
+ * unresolvable import in a generated entry fails the build (below).
+ */
+// oxlint-disable-next-line no-control-regex
+const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
@@ -358,9 +365,35 @@ export const virtualEntryPlugin = Effect.gen(function* () {
         },
       },
       resolveId: {
-        filter: { id: ENTRY_REGEX },
-        handler(id) {
-          return entries.has(id) ? { id } : null;
+        filter: { id: ENTRY_OR_BARE_REGEX },
+        async handler(id, importer) {
+          if (ENTRY_REGEX.test(id)) {
+            return entries.has(id) ? { id } : null;
+          }
+          // A bare import made BY a generated entry. Rolldown only WARNS on
+          // an unresolved import and leaves it external, which for a
+          // generated entry means the deployed process dies at boot with
+          // `Cannot find module` — the class of bug the shim design
+          // (alchemy/Runtime/Bootstrap/*) exists to prevent. Make it a build
+          // error with the cause spelled out instead. Externals resolve to
+          // `{ external: true }`, not null, so they pass through.
+          if (importer === undefined || !ENTRY_REGEX.test(importer)) {
+            return null;
+          }
+          const resolved = await this.resolve(id, importer, {
+            skipSelf: true,
+          });
+          if (resolved === null) {
+            const entry = entries.get(importer);
+            this.error(
+              new Error(
+                `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
+                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
+                  "check that `alchemy` is installed in the project containing the entry.",
+              ),
+            );
+          }
+          return resolved;
         },
       },
       load: {

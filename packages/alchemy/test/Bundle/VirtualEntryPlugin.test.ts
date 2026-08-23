@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Result from "effect/Result";
 import {
   isolatedProject,
   materializeIsolatedProject,
@@ -99,9 +100,11 @@ export default bootstrap;
     );
   }
 
-  // Negative control for the harness itself: without `alchemy` linked the
-  // same project resolves nothing, so a green run above is a real signal.
-  it.effect("the harness resolves nothing without the alchemy link", () =>
+  // An unresolvable import in a generated entry is a BUILD error with the
+  // cause spelled out — never a warning that leaves the import external and
+  // the deployed process dead at boot. (Doubles as the negative control for
+  // the harness: without the `alchemy` link the project resolves nothing.)
+  it.effect("an unresolvable import in a generated entry fails the build", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const project = isolatedProject(
@@ -112,16 +115,59 @@ export default bootstrap;
       yield* fs.remove(`${project.dir}/node_modules`, { recursive: true });
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       try {
+        const result = yield* Effect.result(
+          Bundle.build(
+            {
+              cwd: project.dir,
+              input: project.main,
+              platform: "node",
+              plugins: [
+                virtualEntryPlugin(
+                  () => `
+import * as bootstrap from "alchemy/Runtime/Bootstrap/Ecs";
+export default bootstrap;
+`,
+                ),
+              ],
+            },
+            { format: "esm" },
+          ),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure.message).toContain(
+            'imports "alchemy/Runtime/Bootstrap/Ecs", which cannot be resolved',
+          );
+        }
+      } finally {
+        yield* removeIsolatedProject(project);
+      }
+    }),
+  );
+
+  // Deliberate externals (runtime-provided modules such as `bun:*`,
+  // `cloudflare:workers`) resolve to `{ external: true }`, not to nothing, so
+  // the guard leaves them alone.
+  it.effect("a declared external in a generated entry is not an error", () =>
+    Effect.gen(function* () {
+      const project = isolatedProject(
+        "bootstrap-external",
+        import.meta.filename,
+      );
+      yield* materializeIsolatedProject(project);
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+      try {
         const result = yield* Bundle.build(
           {
             cwd: project.dir,
             input: project.main,
             platform: "node",
+            external: ["bun:sqlite"],
             plugins: [
               virtualEntryPlugin(
                 () => `
-import * as bootstrap from "alchemy/Runtime/Bootstrap/Ecs";
-export default bootstrap;
+import { Database } from "bun:sqlite";
+export default Database;
 `,
               ),
             ],
@@ -129,7 +175,7 @@ export default bootstrap;
           { format: "esm" },
         );
         expect(bareImports(result)).toEqual([
-          'import * as bootstrap from "alchemy/Runtime/Bootstrap/Ecs";',
+          'import { Database } from "bun:sqlite";',
         ]);
       } finally {
         yield* removeIsolatedProject(project);
