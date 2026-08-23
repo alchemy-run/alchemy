@@ -14,10 +14,7 @@ import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
-import {
-  parseRepoDigest,
-  repositoryFromImageRef,
-} from "../../Docker/Registry.ts";
+import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -112,7 +109,6 @@ class ContainerRegistryError extends Schema.TaggedError<ContainerRegistryError>(
       "InvalidImageReference",
       "ManifestRequestFailed",
       "InvalidManifestDigest",
-      "PushDigestMissing",
     ]),
     message: Schema.String,
     imageRef: Schema.optional(Schema.String),
@@ -630,7 +626,7 @@ export const LiveContainerProvider = () =>
         // host-arch `docker pull` adds arm64 next to our amd64), and an
         // un-scoped push then ships the wrong variant — Cloudflare's amd64
         // hosts never boot it and the app 503s "provisioning" forever.
-        const pushed = yield* docker.image
+        yield* docker.image
           .push(
             imageRef,
             {
@@ -656,24 +652,13 @@ export const LiveContainerProvider = () =>
               ]),
             }),
           );
-        const parsedImageRef = parseRepoDigest(
-          imageRef,
-          `${pushed.stdout}\n${pushed.stderr}`,
-        );
-        const digest =
-          parsedImageRef === undefined
-            ? yield* resolveRegistryDigest(imageRef, credentials)
-            : digestFromImageRef(parsedImageRef);
-        if (digest === undefined) {
-          return yield* new ContainerRegistryError({
-            reason: "PushDigestMissing",
-            message: "Container registry push did not produce a digest",
-            imageRef,
-          });
-        }
+        // Resolve the pushed manifest digest from the registry itself rather
+        // than scraping `docker push` output: one mechanism for every image
+        // source (local build, remote re-push, pre-pushed tag), and the
+        // registry is authoritative for what the application will pull.
+        const digest = yield* resolveRegistryDigest(imageRef, credentials);
         return {
-          imageRef:
-            parsedImageRef ?? `${repositoryFromImageRef(imageRef)}@${digest}`,
+          imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
           digest,
           previousDigest:
             previousImageRef === undefined
