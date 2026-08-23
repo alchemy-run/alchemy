@@ -1038,6 +1038,10 @@ export default defineConfig({
                 { label: "Projects", link: "/railway/compute/projects" },
                 { label: "Services", link: "/railway/compute/services" },
                 {
+                  label: "Functions, templates & VMs",
+                  link: "/railway/compute/functions",
+                },
+                {
                   label: "Environments",
                   link: "/railway/compute/environments",
                 },
@@ -1049,6 +1053,8 @@ export default defineConfig({
               items: [
                 { label: "Volumes", link: "/railway/data/volumes" },
                 { label: "Postgres", link: "/railway/data/postgres" },
+                { label: "MySQL", link: "/railway/data/mysql" },
+                { label: "Mongo", link: "/railway/data/mongo" },
                 { label: "Redis", link: "/railway/data/redis" },
                 { label: "Variables", link: "/railway/data/variables" },
                 { label: "Buckets", link: "/railway/data/buckets" },
@@ -1058,7 +1064,7 @@ export default defineConfig({
               label: "Networking",
               items: [
                 {
-                  label: "Custom domains & TCP",
+                  label: "Custom domains, TCP & private networks",
                   link: "/railway/networking",
                 },
               ],

@@ -70,6 +70,16 @@ export interface VolumeProps {
    * the volume in place.
    */
   service?: Ref<VolumeService>;
+  /**
+   * Requested provisioned size in megabytes (Railway IaC parity).
+   *
+   * The public GraphQL `VolumeCreateInput` has no `size`/`sizeMB` field,
+   * and `VolumeInstanceUpdateInput` cannot grow a volume — growing is
+   * Pro-dashboard-only. Alchemy records this prop and reports the cloud
+   * plan default on the observed `sizeMB` attribute. Changing it does
+   * not call an API.
+   */
+  sizeMB?: number;
 }
 
 export type Volume = Resource<
@@ -94,7 +104,10 @@ export type Volume = Resource<
     serviceId: string | undefined;
     /** Observed instance state (`READY`, `UPDATING`, …). */
     state: VolumeState | undefined;
-    /** Provisioned size in MB. */
+    /**
+     * Observed provisioned size in MB. Railway picks this from the
+     * workspace plan; the public create/update APIs cannot set it.
+     */
     sizeMB: number;
     /** RFC3339 creation timestamp. */
     createdAt: string;
@@ -213,6 +226,21 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * is deleted.
  * :::
  *
+ * @section Size
+ * `sizeMB` on attributes is the observed plan default. Railway's public
+ * `VolumeCreateInput` has no size field; growing is Pro-dashboard-only.
+ * Passing `sizeMB` on props is IaC-parity documentation — it is not
+ * applied.
+ *
+ * @example Observed size
+ * ```typescript
+ * const data = yield* Railway.Volume("Data", {
+ *   project: site,
+ *   mountPath: "/data",
+ * });
+ * // data.sizeMB is the plan default (e.g. 5120 on Hobby)
+ * ```
+ *
  * @section Attach to a Service
  * Pass `service` to attach at create time. Omit it and attach later with
  * `MountVolume`.
@@ -228,6 +256,16 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  *   mountPath: "/data",
  *   service: api,
  * });
+ * ```
+ *
+ * @section Backups
+ * Snapshot a mounted volume with {@link VolumeBackup}. Railway only
+ * backups attached volumes. Restore is destructive — see
+ * `restoreVolumeBackup`.
+ *
+ * @example Manual snapshot
+ * ```typescript
+ * const snap = yield* Railway.VolumeBackup("Nightly", { volume: data });
  * ```
  *
  * @section Module-scope declarations

@@ -63,8 +63,11 @@ export interface VariableProps {
    */
   name?: string;
   /**
-   * Variable value. Wrap with `Redacted.make(...)` so it is never logged.
-   * Updated in place via `variableUpsert`. Never persisted in attributes.
+   * Variable value. Wrap secrets with `Redacted.make(...)` so they are
+   * never logged. May also be a `Railway.ref(...)` template
+   * (`${{Db.DATABASE_URL}}`, `${{shared.NAME}}`); Railway stores the
+   * template and interpolates it at build/runtime. Updated in place via
+   * `variableUpsert`. Never persisted in attributes.
    */
   value: Redacted.Redacted<string> | string;
 }
@@ -199,6 +202,45 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  *   service: api,
  *   name: "API_TOKEN",
  *   value: Redacted.make("sk_live_…"),
+ * });
+ * ```
+ *
+ * @section Variable references
+ * `value` may be a `Railway.ref(resource, key)` template instead of a
+ * plaintext secret. Upsert stores `${{LogicalName.KEY}}` (or
+ * `${{shared.NAME}}`) — not a resolved URI. Railway interpolates it.
+ * Next to {@link ConnectPostgres}: use `ConnectPostgres` for a typed
+ * client inside an Effect-native Service; use `Railway.ref` when you
+ * want Railway's own `${{Db.DATABASE_URL}}` interpolation (IaC
+ * `db.env.DATABASE_URL`).
+ *
+ * @example Reference Postgres DATABASE_URL
+ * ```typescript
+ * const db = yield* Railway.Postgres("Db", { project: site });
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ * });
+ * const databaseUrl = yield* Railway.Variable("DatabaseUrl", {
+ *   project: site,
+ *   service: api,
+ *   name: "DATABASE_URL",
+ *   value: Railway.ref(db, "DATABASE_URL"),
+ * });
+ * ```
+ *
+ * @example Shared variable
+ * ```typescript
+ * yield* Railway.Variable("SentryDsn", {
+ *   project: site,
+ *   name: "SENTRY_DSN",
+ *   value: Redacted.make("https://…"),
+ * });
+ * yield* Railway.Variable("ApiSentry", {
+ *   project: site,
+ *   service: api,
+ *   name: "SENTRY_DSN",
+ *   value: Railway.ref("shared", "SENTRY_DSN"),
  * });
  * ```
  *

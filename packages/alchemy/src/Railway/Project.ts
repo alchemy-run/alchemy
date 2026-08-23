@@ -213,7 +213,7 @@ const currentWorkspaceId = Effect.fn(function* () {
  */
 const projectCreateSlot = Semaphore.makeUnsafe(1);
 
-const createProject = (input: {
+export const createProject = (input: {
   name: string;
   workspaceId: string;
   description?: string;

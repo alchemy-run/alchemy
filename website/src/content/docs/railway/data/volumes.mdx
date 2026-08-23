@@ -108,10 +108,31 @@ const data = yield* Railway.Volume("Data", {
 });
 ```
 
+## Backups
+
+[`Railway.VolumeBackup`](/providers/railway/volumebackup) is a
+snapshot of a volume instance. The volume should be attached to a
+Service — Railway only backups mounted volumes. `lock` drops the
+expiration. `schedules` (`DAILY` / `WEEKLY` / `MONTHLY`) is
+volume-instance state.
+
+```typescript
+const snap = yield* Railway.VolumeBackup("Nightly", {
+  volume: data,
+  lock: true,
+  schedules: ["DAILY", "WEEKLY"],
+});
+```
+
+Restore is destructive to the volume instance. Call
+`restoreVolumeBackup` — it is not a reconciler step. Volume backups
+are Pro-plan gated (`RailwayForbidden` on Hobby).
+
 ## Where next
 
 - [Tutorial part 3](/railway/tutorial/part-3) — mount a disk into a
   Service step by step.
 - [Services](/railway/compute/services) — `MountVolume`.
-- [`Volume` reference](/providers/railway/volume) and
-  [`MountVolume` reference](/providers/railway/mountvolume).
+- [`Volume` reference](/providers/railway/volume),
+  [`MountVolume` reference](/providers/railway/mountvolume), and
+  [`VolumeBackup` reference](/providers/railway/volumebackup).

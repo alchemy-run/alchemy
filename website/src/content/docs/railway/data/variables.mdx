@@ -119,6 +119,44 @@ export default class Api extends Railway.Service<Api>()(
 Yield the Variable in the Stack (or from Service init) so it is
 part of the graph.
 
+## Variable references
+
+[`Railway.ref`](/providers/railway/ref) emits a Railway template
+(`${{Service.KEY}}` or `${{shared.NAME}}`). Store it as a Variable
+`value` or a `Service.env` entry. Railway keeps the template
+(`unrendered: true`) and interpolates it — it is not a resolved
+URI. Distinct from the unexported resource-prop `Ref<T>`.
+
+Use `ConnectPostgres` / `ConnectMySQL` / `ConnectMongo` for a typed
+client inside an Effect-native Service. Use `Railway.ref` when you
+want Railway's own interpolation (IaC `db.env.DATABASE_URL`,
+`ctx.shared.SENTRY_DSN`).
+
+```typescript
+const db = yield* Railway.Postgres("Db", { project: site });
+yield* Railway.Variable("DatabaseUrl", {
+  project: site,
+  service: api,
+  name: "DATABASE_URL",
+  value: Railway.ref(db, "DATABASE_URL"),
+});
+```
+
+Shared variables use the `"shared"` namespace:
+
+```typescript
+yield* Railway.Variable("ApiSentry", {
+  project: site,
+  service: api,
+  name: "SENTRY_DSN",
+  value: Railway.ref("shared", "SENTRY_DSN"),
+});
+```
+
+Railway interpolates by service **name**. Set `name` on
+Postgres/Service to the LogicalId if the template must resolve to
+that service.
+
 ## Environment
 
 Defaults to the Project's primary environment. Pass a
@@ -138,7 +176,10 @@ const token = yield* Railway.Variable("StagingToken", {
 The [tutorial](/railway/tutorial/part-4) stores a Variable and reads
 it from a Service. [Services](/railway/compute/services) covers
 `Config.redacted` for values from `.env`. [Postgres](/railway/data/postgres),
+[MySQL](/railway/data/mysql), [Mongo](/railway/data/mongo),
 [Redis](/railway/data/redis), and [Buckets](/railway/data/buckets)
-bind typed clients (`ConnectPostgres`, `ReadWriteRedis`, `PutObject`)
-that use Railway-owned variables internally. See the
-[`Variable` reference](/providers/railway/variable).
+bind typed clients (`ConnectPostgres`, `ConnectMySQL`,
+`ConnectMongo`, `ReadWriteRedis`, `PutObject`) that use Railway-owned
+variables internally. See the
+[`Variable` reference](/providers/railway/variable) and
+[`ref` reference](/providers/railway/ref).

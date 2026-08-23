@@ -6,13 +6,20 @@
  * - `Marker` — shared Variable the Api reads via `Config.string`
  * - `Disk` — Volume the Worker mounts with `MountVolume`
  * - `Db` — Postgres + `ConnectPostgres` / Drizzle
+ * - `Mysql` — MySQL (same shape as Postgres)
+ * - `DatabaseUrl` — `Railway.ref(Db, "DATABASE_URL")` template
  * - `Cache` — Redis + `ReadWriteRedis`
  * - `CacheProxy` — TcpProxy so Redis is reachable from a laptop
  * - `Data` — Bucket + Put/Get/Head/List/Delete
- * - `Echo` — image Service (`hashicorp/http-echo`)
- * - `Api` — Effect HTTP Service (`src/api.ts`)
+ * - `Echo` — image Service (`hashicorp/http-echo`, healthcheck + replicas)
+ * - `Ping` — canvas Function (single TypeScript file, Bun runtime)
+ * - `Api` — Effect HTTP Service (`src/api.ts`, healthcheck + replicas)
  * - `Worker` — Effect background Service that writes the volume
  *   (`src/worker.ts`)
+ * - `Backend` — canvas Group around the data plane
+ *
+ * `VolumeBackup` is Pro-plan gated (`RailwayForbidden` on Hobby) and
+ * omitted here; see `Railway.VolumeBackup` and the volumes hub page.
  *
  * Effect-native images are pushed to `RAILWAY_REGISTRY` (GHCR / Docker
  * Hub). Railway has no private registry of its own.
@@ -29,9 +36,12 @@ import {
   Cache,
   CacheProxy,
   Data,
+  DatabaseUrl,
   Db,
   Disk,
   Marker,
+  Mysql,
+  Ping,
   Site,
   Staging,
 } from "./src/shared.ts";
@@ -49,12 +59,19 @@ export default Alchemy.Stack(
     const marker = yield* Marker;
     const disk = yield* Disk;
     const db = yield* Db;
+    const mysql = yield* Mysql;
+    const databaseUrl = yield* DatabaseUrl;
     const cache = yield* Cache;
     const cacheProxy = yield* CacheProxy;
     const data = yield* Data;
     const echo = yield* Echo;
+    const ping = yield* Ping;
     const worker = yield* Worker;
     const api = yield* Api;
+    const backend = yield* Railway.Group("Backend", {
+      project: site,
+      resources: [db, mysql, cache, echo, api, worker],
+    });
 
     const domain = process.env.RAILWAY_TEST_DOMAIN;
     const www =
@@ -82,7 +99,12 @@ export default Alchemy.Stack(
       postgresServiceId: db.serviceId,
       postgresName: db.name,
       postgresPublic: db.publicConnectionUri,
-      redisServiceId: cache.serviceId,
+      mysqlServiceId: mysql.serviceId,
+      mysqlName: mysql.name,
+      databaseUrlName: databaseUrl.name,
+      pingUrl: ping.url,
+      groupId: backend.groupId,
+      redisServiceId: cache.serviceId;
       redisProxy: `${cacheProxy.domain}:${cacheProxy.proxyPort}`,
       bucketId: data.bucketId,
       echoUrl: echo.url,

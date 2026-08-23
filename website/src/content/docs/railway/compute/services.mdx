@@ -5,8 +5,10 @@ description: A container in a Railway Project — a public image, or an Effect p
 
 A [`Service`](/providers/railway/service) is a container in a
 Railway [Project](/railway/compute/projects). Point it at a public
-image (`hashicorp/http-echo`) or an Effect program (`main` +
-`registry`). Several Services share one Project.
+image (`hashicorp/http-echo`), an Effect program (`main` +
+`registry`), or a GitHub repo (`repo` + `branch`). Several Services
+share one Project. Canvas Functions — one TypeScript file, no
+Docker — are [`Railway.Function`](/railway/compute/functions).
 
 ## Image service
 
@@ -129,6 +131,56 @@ export default Alchemy.Stack(
 
 There is no IpAssignment resource. Railway's edge terminates TLS on
 443 and forwards to `port`.
+
+## Healthcheck and replicas
+
+`healthcheck` / `healthcheckPath` is the HTTP path Railway probes.
+`healthcheckTimeout` is seconds. `replicas` is a count, or a
+per-region map (`{ "us-west2": 2, "europe-west4": 1 }`).
+
+```typescript
+const api = yield* Railway.Service("Api", {
+  project: site,
+  image: "hashicorp/http-echo",
+  port: 5678,
+  healthcheck: "/health",
+  healthcheckTimeout: 30,
+  replicas: 1,
+});
+```
+
+## GitHub source, build, start, cron
+
+`repo` is the third source, next to `image` and `main`. Requires a
+GitHub connection on the Railway account. `buildCommand` /
+`startCommand` are Railway's build/start (distinct from hosted
+`build.install`). `cronSchedule` runs the service on a cron
+expression.
+
+```typescript
+const api = yield* Railway.Service("Api", {
+  project: site,
+  repo: "acme/web",
+  branch: "main",
+  rootDirectory: "apps/api",
+  buildCommand: "pnpm build",
+  startCommand: "pnpm start",
+  healthcheck: "/health",
+});
+```
+
+## Canvas groups
+
+[`Railway.Group`](/providers/railway/group) organizes services,
+databases, volumes, and buckets on the canvas. IaC:
+`group("Backend", [api, worker, db])`.
+
+```typescript
+const backend = yield* Railway.Group("Backend", {
+  project: site,
+  resources: [api, worker, db],
+});
+```
 
 ## What a deploy does
 
@@ -271,15 +323,19 @@ Service logs live in the Railway dashboard. `alchemy logs` /
 ## Where next
 
 The [tutorial](/railway/tutorial/part-2) builds a Service step by
-step. [Volumes](/railway/data/volumes) covers `MountVolume`.
+step. [Functions](/railway/compute/functions) covers canvas Functions.
+[Volumes](/railway/data/volumes) covers `MountVolume`.
 [Postgres](/railway/data/postgres) binds with `ConnectPostgres`.
+[MySQL](/railway/data/mysql) and [Mongo](/railway/data/mongo) are the
+same shape.
 [Redis](/railway/data/redis) binds with `ReadWriteRedis`.
 [Buckets](/railway/data/buckets) bind with `PutObject` / `GetObject`.
-[Variables](/railway/data/variables) covers `Config.redacted` and
-`Railway.Variable`.
+[Variables](/railway/data/variables) covers `Config.redacted`,
+`Railway.Variable`, and `Railway.ref`.
 The [`Service` reference](/providers/railway/service) lists every
 prop.
 [Example: railway-project](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-project)
 is an image Service.
 [Example: railway-service](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service)
-is an Effect-native Service bound to Postgres.
+is an Effect-native Service bound to Postgres, MySQL, Redis, a
+canvas Function, and a Group.

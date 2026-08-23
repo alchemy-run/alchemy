@@ -25,6 +25,24 @@ import type { Postgres } from "./Postgres.ts";
  * });
  * ```
  *
+ * @section Variable references
+ * `ConnectPostgres` packs a typed private URI onto the Service. To store
+ * Railway's template instead of a resolved URI (IaC
+ * `db.env.DATABASE_URL`), pass `Railway.ref(Db, "DATABASE_URL")` as a
+ * {@link Variable} `value` or `Service.env` entry. Railway interpolates
+ * `${{Db.DATABASE_URL}}` at build/runtime.
+ *
+ * @example Railway.ref
+ * ```typescript
+ * const db = yield* Railway.Postgres("Db", { project: site });
+ * yield* Railway.Variable("DatabaseUrl", {
+ *   project: site,
+ *   service: api,
+ *   name: "DATABASE_URL",
+ *   value: Railway.ref(db, "DATABASE_URL"),
+ * });
+ * ```
+ *
  * @binding
  * @product Railway
  * @category Storage & Databases

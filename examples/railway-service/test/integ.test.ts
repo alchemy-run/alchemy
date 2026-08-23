@@ -48,6 +48,11 @@ test(
     expect(out.volumeId).toBeString();
     expect(out.postgresServiceId).toBeString();
     expect(out.postgresPublic).toBeString();
+    expect(out.mysqlServiceId).toBeString();
+    expect(out.mysqlName).toBeString();
+    expect(out.databaseUrlName).toBe("APP_DATABASE_URL");
+    expect(out.pingUrl).toMatch(/^https:\/\/.+\.up\.railway\.app$/);
+    expect(out.groupId).toBeString();
     expect(out.redisServiceId).toBeString();
     expect(out.redisProxy).toContain(":");
     expect(out.bucketId).toBeString();

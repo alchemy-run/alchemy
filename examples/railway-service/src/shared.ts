@@ -9,6 +9,15 @@ export const SECRET_NAME = "RAILWAY_EXAMPLE_MARKER";
 export const OBJECT_KEY = "example.txt";
 export const REDIS_KEY = "example-marker";
 
+const PING_SOURCE = `Bun.serve({
+  hostname: "0.0.0.0",
+  port: Number(process.env.PORT ?? 3000),
+  fetch() {
+    return new Response("ok");
+  },
+});
+`;
+
 /**
  * Parent Project every other resource shares. Name is generated.
  * Production is `Site.environmentId` — do not recreate it as an
@@ -51,6 +60,32 @@ export const Disk = Railway.Volume("Disk", {
  * via {@link Railway.ConnectPostgres}.
  */
 export const Db = Railway.Postgres("Db", { project: Site });
+
+/**
+ * Official MySQL. Same shape as {@link Db}. In-Service connections
+ * use {@link Railway.ConnectMySQL}.
+ */
+export const Mysql = Railway.MySQL("Mysql", { project: Site });
+
+/**
+ * Railway variable-reference template (`${{Db.DATABASE_URL}}`). Stored
+ * unrendered; Railway interpolates it. Distinct from
+ * {@link Railway.ConnectPostgres}, which packs a typed URI.
+ */
+export const DatabaseUrl = Railway.Variable("DatabaseUrl", {
+  project: Site,
+  name: "APP_DATABASE_URL",
+  value: Railway.ref("Db", "DATABASE_URL"),
+});
+
+/**
+ * Canvas Function: one TypeScript file on the Bun function runtime.
+ * No Docker, no GitHub. Distinct from Effect-native {@link Api}.
+ */
+export const Ping = Railway.Function("Ping", {
+  project: Site,
+  source: PING_SOURCE,
+});
 
 /**
  * Redis. {@link CacheProxy} exposes it on `*.proxy.rlwy.net`.

@@ -1,8 +1,10 @@
+import * as railway from "@distilled.cloud/railway";
 import { DEFAULT_API_BASE_URL } from "@distilled.cloud/railway";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
+import * as Os from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
@@ -12,14 +14,23 @@ import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnv, getEnvRedacted, retryOnce } from "../Auth/Env.ts";
 import { AlchemyProfile } from "../Auth/Profile.ts";
 import * as Clank from "../Util/Clank.ts";
+import {
+  loginSessionUrl,
+  pollLoginSessionToken,
+  provideAnonymousRailway,
+} from "./LoginSession.ts";
 
 export const RAILWAY_AUTH_PROVIDER_NAME = "Railway";
 export const RAILWAY_API_TOKEN_ENV = "RAILWAY_API_TOKEN";
 export const RAILWAY_API_URL_ENV = "RAILWAY_API_URL";
 
 const STORAGE_KEY = "railway-stored";
+const OAUTH_STORAGE_KEY = "railway-oauth";
 
-export type RailwayAuthConfig = { method: "env" } | { method: "stored" };
+export type RailwayAuthConfig =
+  | { method: "env" }
+  | { method: "stored" }
+  | { method: "oauth" };
 
 export type RailwayStoredCredentials = {
   type: "token";
@@ -40,6 +51,11 @@ const options: Array<{
   label: string;
   hint?: string;
 }> = [
+  {
+    value: "oauth",
+    label: "OAuth (CLI login session)",
+    hint: "recommended — open railway.com/cli-login, confirm the pairing code",
+  },
   {
     value: "env",
     label: "Environment Variables",
@@ -67,10 +83,15 @@ const resolveApiBaseUrl = (explicit?: string) =>
  * {@link AuthProviders} registry. Include this in the Railway `providers()`
  * layer so `alchemy login` can discover it.
  *
- * Auth is a Railway account/team token (`RAILWAY_API_TOKEN`) sent as
- * `Authorization: Bearer`. Project tokens are not used — they cannot
- * reach workspace-wide operations. An optional `RAILWAY_API_URL`
- * overrides the backboard host (default `https://backboard.railway.com`).
+ * Supported methods:
+ * - `env`: reads `RAILWAY_API_TOKEN` (account Bearer). Project tokens are
+ *   not used — they cannot reach workspace-wide operations.
+ * - `stored`: prompts for an API token and writes it to
+ *   `~/.alchemy/credentials/<profile>/railway-stored.json`.
+ * - `oauth`: CLI login session (`loginSessionCreate` → print pairing URL →
+ *   poll `loginSessionVerify` / `loginSessionConsume` → store the token).
+ *   Does not require a pre-existing token. An optional `RAILWAY_API_URL`
+ *   overrides the backboard host (default `https://backboard.railway.com`).
  */
 export const RailwayAuth = AuthProviderLayer<
   RailwayAuthConfig,
@@ -108,6 +129,80 @@ export const RailwayAuth = AuthProviderLayer<
       return { method: "stored" as const };
     });
 
+    const loginOAuth = Effect.fn(function* (profileName: string) {
+      const apiBaseUrl = yield* resolveApiBaseUrl();
+      const hostname = yield* Effect.sync(() => {
+        try {
+          return Os.hostname();
+        } catch {
+          return "alchemy";
+        }
+      });
+
+      const withAnonymous = <A, E>(
+        effect: Effect.Effect<A, E, railway.RailwayOpContext>,
+      ) => provideAnonymousRailway(effect, apiBaseUrl);
+
+      const code = yield* withAnonymous(railway.loginSessionCreate({})).pipe(
+        Effect.mapError(
+          (e) =>
+            new AuthError({
+              message: "Railway login session create failed",
+              cause: e,
+            }),
+        ),
+      );
+
+      const url = loginSessionUrl(code, { hostname });
+      yield* Clank.info("Railway: opening browser for CLI login...");
+      yield* Clank.info(url);
+      yield* Clank.info(`Railway: pairing code is ${code}`);
+      yield* Clank.openUrl(url).pipe(
+        Effect.catch(() =>
+          Clank.warn(
+            "Railway: could not open browser automatically. Please open the URL above and enter the pairing code.",
+          ),
+        ),
+      );
+      yield* Clank.info("Railway: waiting for login (up to 5 minutes).");
+
+      const cancel = withAnonymous(railway.loginSessionCancel({ code })).pipe(
+        Effect.catch(() => Effect.void),
+      );
+
+      const token = yield* withAnonymous(pollLoginSessionToken(code)).pipe(
+        Effect.onInterrupt(() => cancel),
+        Effect.tapError(() => cancel),
+        Effect.mapError(
+          (e) =>
+            new AuthError({
+              message: "Railway login session poll failed",
+              cause: e,
+            }),
+        ),
+      );
+
+      if (token == null || token.length === 0) {
+        yield* cancel;
+        return yield* new AuthError({
+          message: "Railway login session timed out after 5 minutes.",
+        });
+      }
+
+      yield* store.write<RailwayStoredCredentials>(
+        profileName,
+        OAUTH_STORAGE_KEY,
+        {
+          type: "token",
+          token,
+          apiBaseUrl:
+            apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
+        },
+      );
+      yield* Clank.success("Railway: OAuth credentials saved.");
+      return { method: "oauth" as const };
+    });
+
     const configureInteractive = (profileName: string) =>
       Clank.select({
         message: "Railway authentication method",
@@ -117,6 +212,7 @@ export const RailwayAuth = AuthProviderLayer<
           Match.value(method).pipe(
             Match.when("env", () => Effect.succeed({ method: "env" as const })),
             Match.when("stored", () => loginStored(profileName)),
+            Match.when("oauth", () => loginOAuth(profileName)),
             Match.exhaustive,
           ),
         ),
@@ -187,6 +283,30 @@ export const RailwayAuth = AuthProviderLayer<
             ),
           ),
         ),
+        Match.when({ method: "oauth" }, () =>
+          store
+            .read<RailwayStoredCredentials>(profileName, OAUTH_STORAGE_KEY)
+            .pipe(
+              Effect.flatMap((creds) =>
+                creds == null
+                  ? Effect.fail(
+                      new AuthError({
+                        message:
+                          "Railway OAuth credentials not found. Run: alchemy login --configure",
+                      }),
+                    )
+                  : resolveApiBaseUrl(creds.apiBaseUrl).pipe(
+                      Effect.map((apiBaseUrl) => ({
+                        type: "token" as const,
+                        token: Redacted.make(creds.token),
+                        tokenKind: "account" as const,
+                        apiBaseUrl,
+                        source: { type: "oauth" as const },
+                      })),
+                    ),
+              ),
+            ),
+        ),
         Match.exhaustive,
       );
 
@@ -199,6 +319,15 @@ export const RailwayAuth = AuthProviderLayer<
             .pipe(
               Effect.andThen(
                 Clank.success("Railway: stored credentials removed"),
+              ),
+            ),
+        ),
+        Match.when({ method: "oauth" }, () =>
+          store
+            .delete(profileName, OAUTH_STORAGE_KEY)
+            .pipe(
+              Effect.andThen(
+                Clank.success("Railway: OAuth credentials removed"),
               ),
             ),
         ),
@@ -235,6 +364,17 @@ export const RailwayAuth = AuthProviderLayer<
               .pipe(
                 Effect.flatMap((creds) =>
                   creds == null ? loginStored(profileName) : Effect.void,
+                ),
+              ),
+          ),
+          Match.when({ method: "oauth" }, () =>
+            store
+              .read<RailwayStoredCredentials>(profileName, OAUTH_STORAGE_KEY)
+              .pipe(
+                Effect.flatMap((creds) =>
+                  creds == null
+                    ? loginOAuth(profileName).pipe(Effect.asVoid)
+                    : Effect.void,
                 ),
               ),
           ),

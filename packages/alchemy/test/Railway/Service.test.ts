@@ -5,6 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
@@ -58,6 +59,8 @@ test.provider(
             project,
             image: "hashicorp/http-echo",
             port: 5678,
+            healthcheckPath: "/health",
+            replicas: 1,
           });
           return { project, api };
         }),
@@ -93,6 +96,10 @@ test.provider(
       expect(instance.source?.image).toEqual(
         expect.stringContaining("hashicorp/http-echo"),
       );
+      expect(instance.healthcheckPath).toEqual("/health");
+      expect(instance.numReplicas).toEqual(1);
+      expect(created.api.healthcheckPath).toEqual("/health");
+      expect(created.api.replicas).toEqual(1);
 
       const domains = yield* railway.domains({
         environmentId: created.api.environmentId,
@@ -142,6 +149,8 @@ test.provider(
             image: "hashicorp/http-echo",
             port: 5678,
             name: nextName,
+            healthcheckPath: "/health",
+            replicas: 2,
           });
           return { project, api };
         }),
@@ -152,11 +161,91 @@ test.provider(
       expect(updated.api.projectId).toEqual(created.api.projectId);
       expect(updated.api.url).toEqual(created.api.url);
 
+      const updatedInstance = yield* railway.serviceInstance({
+        environmentId: updated.api.environmentId,
+        serviceId: updated.api.serviceId,
+      });
+      expect(updatedInstance.healthcheckPath).toEqual("/health");
+      expect(updatedInstance.numReplicas).toEqual(2);
+
       const fetchedUpdate = yield* railway.service({
         id: updated.api.serviceId,
       });
       expect(fetchedUpdate.id).toEqual(updated.api.serviceId);
       expect(fetchedUpdate.name).toEqual(nextName);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+      const projectGone = yield* waitUntilProjectGone(
+        created.project.projectId,
+      );
+      expect(projectGone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 480_000 },
+);
+
+// GitHub repo source requires a GitHub App connection on the Railway
+// account. The probe always runs and pins the typed gate tag. The
+// lifecycle is opt-in via RAILWAY_TEST_GITHUB=1.
+const githubEntitled = !!process.env.RAILWAY_TEST_GITHUB;
+
+test.provider(
+  "unconnected GitHub surfaces a typed entitlement error",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const result = yield* Effect.result(railway.githubRepos({}));
+      if (Result.isSuccess(result)) {
+        yield* Effect.logInfo(
+          `GitHub is connected (${result.success.length} repos); probe is a no-op`,
+        );
+        yield* stack.destroy();
+        return;
+      }
+
+      // GitHub App is not connected for this token: GraphQL `Not Authorized`
+      // is already the typed `RailwayForbidden` tag (never UnknownRailwayError).
+      expect(result.failure._tag).toEqual("RailwayForbidden");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 480_000 },
+);
+
+test.provider.skipIf(!githubEntitled)(
+  "create a github repo service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const repos = yield* railway.githubRepos({});
+      const repo = repos[0];
+      expect(repo).toBeDefined();
+      expect(repo!.fullName.length).toBeGreaterThan(0);
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Railway.Project("Site");
+          const api = yield* Railway.Service("Api", {
+            project,
+            repo: repo!.fullName,
+            branch: repo!.defaultBranch,
+          });
+          return { project, api };
+        }),
+      );
+
+      expect(created.api.serviceId).toEqual(expect.any(String));
+      expect(created.api.repo).toEqual(repo!.fullName);
+
+      const instance = yield* railway.serviceInstance({
+        environmentId: created.api.environmentId,
+        serviceId: created.api.serviceId,
+      });
+      expect(instance.source?.repo).toEqual(repo!.fullName);
 
       yield* stack.destroy();
 

@@ -1,12 +1,12 @@
 ---
 title: Railway
-description: Deploy Effect programs to Railway as Projects, Services, Postgres, Redis, Volumes, and Buckets.
+description: Deploy Effect programs to Railway as Projects, Services, databases, Volumes, and Buckets.
 ---
 
 A Project is a workspace-scoped namespace. A Service is a container —
-a public image, or an Effect program Alchemy bundles, builds, and
-pushes. Postgres, Redis, Volumes, Variables, and Buckets live in the
-same TypeScript program.
+a public image, an Effect program Alchemy bundles, or a canvas
+Function. Postgres, MySQL, Mongo, Redis, Volumes, Variables, and
+Buckets live in the same TypeScript program.
 
 The production environment is created with the Project. Extra
 environments (staging) are a separate resource. Workspace is **not**
@@ -21,25 +21,33 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
   other resource. Alchemy generates a unique name unless you pass
   one. `https://railway.com/project/{projectId}` is the dashboard.
 - **[Services](/railway/compute/services)** — a container in a
-  Project. Pass `image` for a public tag (`hashicorp/http-echo`), or
-  `main` + `registry` for an Effect program. `url` is
-  `https://{name}.up.railway.app`.
+  Project. Pass `image` for a public tag (`hashicorp/http-echo`),
+  `main` + `registry` for an Effect program, or `repo` for GitHub.
+  `healthcheck` / `replicas` / `cronSchedule` / `buildCommand` match
+  Railway IaC. `url` is `https://{name}.up.railway.app`.
+- **[Functions, templates & VMs](/railway/compute/functions)** —
+  canvas Functions (one TypeScript file), marketplace templates,
+  sandboxes, and cloud agents.
 - **[Environments](/railway/compute/environments)** — extra deploy
   environments under a Project. Do **not** recreate production —
   it is `project.environmentId`.
 - **[Regions](/railway/compute/regions)** — where a Service, Volume,
-  or Postgres instance runs (`us-west2`, `us-east4`, …). Buckets use
+  or database instance runs (`us-west2`, `us-east4`, …). Buckets use
   a shorter set (`sjc`, `iad`, `ams`, `sin`).
 
 ## Data
 
 - **[Volumes](/railway/data/volumes)** — block disk in a Project.
   Create one, then mount it into a Service with
-  `MountVolume(volume, { path })`.
+  `MountVolume(volume, { path })`. Snapshot with `VolumeBackup`.
 - **[Postgres](/railway/data/postgres)** — official SSL Postgres
   image, a Volume, `DATABASE_URL`, and an optional public TCP proxy.
   Bind `ConnectPostgres` on a Service; pass the connection string
   to Drizzle or SQL.
+- **[MySQL](/railway/data/mysql)** — official `mysql` image,
+  `MYSQL_URL`, `ConnectMySQL`.
+- **[Mongo](/railway/data/mongo)** — official `mongo` image,
+  `MONGO_URL`, `ConnectMongo`.
 - **[Redis](/railway/data/redis)** — `redis:7` or `bitnami/redis`.
   Bind `ReadWriteRedis` on a Service.
 - **[Buckets](/railway/data/buckets)** — S3-compatible object
@@ -49,15 +57,18 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 
 - **[Variables](/railway/data/variables)** — `Config.redacted` in a
   Service for values from `.env`. `Railway.Variable` when Railway
-  should own a value shared across services. The plaintext is never
-  stored in attributes.
+  should own a value shared across services. `Railway.ref(Db,
+  "DATABASE_URL")` emits `${{Db.DATABASE_URL}}` (IaC
+  `db.env.DATABASE_URL`). The plaintext is never stored in
+  attributes.
 
 ## Networking
 
-- **[Custom domains & TCP](/railway/networking)** — your hostname on
-  a Service (`CustomDomain`), plus public TCP for Postgres/Redis
-  (`TcpProxy` on `*.proxy.rlwy.net`). HTTP Services already get a
-  generated `*.up.railway.app` domain.
+- **[Custom domains, TCP & private networks](/railway/networking)** —
+  your hostname on a Service (`CustomDomain`), public TCP for
+  Postgres/MySQL/Mongo/Redis (`TcpProxy` on `*.proxy.rlwy.net`), and
+  named private meshes (`PrivateNetwork` + `PrivateNetworkEndpoint`).
+  HTTP Services already get a generated `*.up.railway.app` domain.
 
 ## What are you building?
 
@@ -65,15 +76,21 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 | ---------------------------- | ------------------------------------------------------------------------- |
 | An HTTP API on Railway       | [Project](/railway/compute/projects) + [Service](/railway/compute/services) |
 | A raw container              | [Service](/railway/compute/services) with an `image`                      |
+| A canvas Function            | [Function](/railway/compute/functions)                                    |
 | A background worker          | [Service](/railway/compute/services) with `ServerHost.run`                |
 | Persistent disk              | [Volume](/railway/data/volumes) + `MountVolume`                           |
+| Volume snapshot              | [VolumeBackup](/railway/data/volumes#backups)                             |
 | Postgres                     | [Postgres](/railway/data/postgres) + `ConnectPostgres`                    |
+| MySQL                        | [MySQL](/railway/data/mysql) + `ConnectMySQL`                             |
+| Mongo                        | [Mongo](/railway/data/mongo) + `ConnectMongo`                             |
 | Redis                        | [Redis](/railway/data/redis) + `ReadRedis` / `WriteRedis` / `ReadWriteRedis` |
 | Object storage               | [Bucket](/railway/data/buckets) + `PutObject` / `GetObject`               |
 | Staging next to production   | [Environment](/railway/compute/environments)                              |
 | Config / API tokens          | [`Config.redacted`](/railway/data/variables). [`Railway.Variable`](/railway/data/variables) when Railway should own it |
+| Cross-service env            | [`Railway.ref`](/railway/data/variables#variable-references)              |
 | Your own domain              | [CustomDomain](/railway/networking#custom-domains)                        |
 | Laptop access to Postgres    | [TcpProxy](/railway/networking#tcp-proxies) (or Postgres `public: true`)  |
+| Custom private DNS           | [PrivateNetwork](/railway/networking#private-networks)                    |
 
 ## Where next
 
@@ -83,7 +100,8 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
   Project running an HTTP Service with a mounted Volume and a
   Variable.
 - `examples/railway-service` — every resource and binding in one
-  stack (Project, Environment, Variable, Volume, Postgres, Redis,
-  Bucket, TcpProxy, image Service, Effect Api + Worker).
+  stack (Project, Environment, Variable, Volume, Postgres, MySQL,
+  Redis, Bucket, TcpProxy, image Service, canvas Function, Effect
+  Api + Worker, `Railway.ref`, canvas Group).
 - [Providers reference](/providers) — generated API docs for every
   Railway resource Alchemy ships.

@@ -1,8 +1,12 @@
 import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
+  Builder,
+  DeploymentTriggersResponseEdgesItemNode,
   ProjectResponseServicesEdgesItemNode,
+  RestartPolicyType,
   ServiceCreateResponse,
   ServiceInstanceResponse,
+  ServiceInstanceUpdateInput,
   ServiceResponse,
   ServiceUpdateResponse,
 } from "@distilled.cloud/railway";
@@ -11,10 +15,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import { DockerLive, Docker } from "../Docker/Docker.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
@@ -126,6 +131,94 @@ export interface ServiceProps extends PlatformProps {
    * in place via `serviceUpdate`.
    */
   name?: string;
+  /**
+   * GitHub repository (`owner/repo`). Creates/syncs
+   * `serviceCreate.source.repo` / `serviceInstanceUpdate.source.repo`.
+   * Mutually exclusive with the public-image and `main` paths. Requires a
+   * GitHub connection on the Railway account.
+   */
+  repo?: string;
+  /**
+   * GitHub branch for {@link repo}. Passed as `serviceCreate.branch` and
+   * synced onto the deployment trigger.
+   */
+  branch?: string;
+  /**
+   * Monorepo subdirectory Railway builds from (`rootDirectory`).
+   */
+  rootDirectory?: string;
+  /**
+   * Build command (`pnpm build`). Distinct from hosted
+   * {@link RailwayBuildOptions} (`build.install`).
+   */
+  buildCommand?: string;
+  /**
+   * Start command (`pnpm start`).
+   */
+  startCommand?: string;
+  /**
+   * HTTP healthcheck path (`/health`). Synced via
+   * `serviceInstanceUpdate.healthcheckPath`. Alias of {@link healthcheck}
+   * (Railway IaC `healthcheck: "/health"`).
+   */
+  healthcheckPath?: string;
+  /**
+   * HTTP healthcheck path. Same as {@link healthcheckPath}; matches
+   * Railway IaC `healthcheck`.
+   */
+  healthcheck?: string;
+  /**
+   * Healthcheck timeout in seconds.
+   */
+  healthcheckTimeout?: number;
+  /**
+   * Replica count (`numReplicas`) or per-region map
+   * (`multiRegionConfig`). A number scales the current region; a map
+   * places replicas (`{ "us-west2": 2, "europe-west4": 1 }`).
+   */
+  replicas?: number | Record<string, number>;
+  /**
+   * Cron expression (`cronSchedule`). Observed as `cronSchedule` /
+   * `nextCronRunAt`.
+   */
+  cronSchedule?: string;
+  /**
+   * Restart policy (`ALWAYS`, `NEVER`, `ON_FAILURE`).
+   */
+  restartPolicyType?: RestartPolicyType;
+  /**
+   * Max retries when {@link restartPolicyType} is `ON_FAILURE`.
+   */
+  restartPolicyMaxRetries?: number;
+  /**
+   * Drain window in seconds before a replica is stopped.
+   */
+  drainingSeconds?: number;
+  /**
+   * Overlap window in seconds while a new replica starts.
+   */
+  overlapSeconds?: number;
+  /**
+   * Sleep the application when idle.
+   */
+  sleepApplication?: boolean;
+  /**
+   * Auto-deploy on new commits / image tags
+   * (`serviceInstanceAutoDeployUpdate`).
+   */
+  autoUpdates?: boolean;
+  /**
+   * Dockerfile path relative to {@link rootDirectory}.
+   */
+  dockerfilePath?: string;
+  /**
+   * Builder (`RAILPACK`, `NIXPACKS`, `HEROKU`, `PAKETO`).
+   */
+  builder?: Builder;
+  /**
+   * Git watch patterns that trigger a rebuild.
+   */
+  watchPatterns?: string[];
 }
 
 export type Service = Resource<
@@ -142,6 +235,22 @@ export type Service = Resource<
     environmentId: string;
     /** Observed `source.image`, if set. */
     image: string | undefined;
+    /** Observed `source.repo` (`owner/repo`), if set. */
+    repo: string | undefined;
+    /** Observed healthcheck path. */
+    healthcheckPath: string | undefined;
+    /** Observed healthcheck timeout in seconds. */
+    healthcheckTimeout: number | undefined;
+    /** Observed replica count (`numReplicas`). */
+    replicas: number | undefined;
+    /** Observed build command. */
+    buildCommand: string | undefined;
+    /** Observed start command. */
+    startCommand: string | undefined;
+    /** Observed cron schedule. */
+    cronSchedule: string | undefined;
+    /** Observed root directory. */
+    rootDirectory: string | undefined;
     /** Observed region, if Railway reported one. */
     region: string | undefined;
     /** Port published on the generated service domain. */
@@ -150,6 +259,12 @@ export type Service = Resource<
     url: string | undefined;
     /** Generated Railway service domain hostname. */
     domain: string | undefined;
+    /**
+     * Internal DNS name on the default private mesh
+     * (`{name}.railway.internal`). Derived from the service name — no
+     * extra API call.
+     */
+    dnsName: string;
     /** Railway service domain id. */
     domainId: string | undefined;
     /** Latest deployment id, if one exists. */
@@ -254,6 +369,59 @@ export type ServiceRuntimeContext = RailwayHostRuntimeContext;
  *   image: "hashicorp/http-echo",
  *   port: 5678,
  *   region: "us-west2",
+ * });
+ * ```
+ *
+ * @section Healthcheck and replicas
+ * `healthcheckPath` (or `healthcheck`, matching Railway IaC) is the
+ * HTTP path Railway probes. `replicas` is a count or a per-region map.
+ *
+ * @example Healthcheck and a single replica
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   healthcheck: "/health",
+ *   replicas: 1,
+ * });
+ * ```
+ *
+ * @example Per-region replicas
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   replicas: { "us-west2": 2, "europe-west4": 1 },
+ * });
+ * ```
+ *
+ * @section GitHub source
+ * `repo` + `branch` is the third source, next to `image` and `main`.
+ * Railway must have GitHub connected to the account.
+ *
+ * @example GitHub repo
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   repo: "acme/web",
+ *   branch: "main",
+ *   rootDirectory: "apps/api",
+ *   buildCommand: "pnpm build",
+ *   startCommand: "pnpm start",
+ * });
+ * ```
+ *
+ * @section Cron
+ * `cronSchedule` runs the service on a cron expression.
+ *
+ * @example Cron schedule
+ * ```typescript
+ * const worker = yield* Railway.Service("Worker", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   cronSchedule: "0 * * * *",
  * });
  * ```
  *
@@ -451,6 +619,314 @@ const rateLimited = {
   times: 3 as const,
 };
 
+const undef = <T>(value: T | null | undefined): T | undefined =>
+  value == null ? undefined : value;
+
+const sameWatchPatterns = (
+  observed: readonly string[] | null | undefined,
+  desired: readonly string[] | undefined,
+) => desired === undefined || deepEqual([...(observed ?? [])], [...desired]);
+
+const replicaSum = (replicas: Record<string, number>) =>
+  Object.values(replicas).reduce((sum, n) => sum + n, 0);
+
+const toMultiRegionConfig = (replicas: Record<string, number>) => {
+  const config: Record<string, { numReplicas: number }> = {};
+  for (const [region, numReplicas] of Object.entries(replicas)) {
+    config[region] = { numReplicas };
+  }
+  return config;
+};
+
+const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
+  input: ServiceInstanceUpdateInput,
+  key: K,
+  desired: ServiceInstanceUpdateInput[K] | undefined,
+  observed: unknown,
+): boolean => {
+  if (desired === undefined) return false;
+  if (deepEqual(undef(observed as never), desired)) return false;
+  input[key] = desired;
+  return true;
+};
+
+const replicaDelta = (
+  replicas: number | Record<string, number> | undefined,
+  observedNum: number | null | undefined,
+  previous: number | Record<string, number> | undefined,
+): Pick<ServiceInstanceUpdateInput, "numReplicas" | "multiRegionConfig"> => {
+  if (replicas === undefined) return {};
+  if (typeof replicas === "number") {
+    return observedNum === replicas ? {} : { numReplicas: replicas };
+  }
+  const numReplicas = replicaSum(replicas);
+  const sameMap = previous !== undefined && deepEqual(previous, replicas);
+  if (sameMap && observedNum === numReplicas) return {};
+  return {
+    numReplicas,
+    multiRegionConfig: toMultiRegionConfig(replicas),
+  };
+};
+
+const instanceSettingsDelta = (input: {
+  instance: ServiceInstanceResponse | undefined;
+  sourceImage: string | undefined;
+  sourceRepo: string | undefined;
+  registryCredentials: { username: string; password: string } | undefined;
+  previousReplicas: number | Record<string, number> | undefined;
+  props: {
+    region?: string;
+    rootDirectory?: string;
+    buildCommand?: string;
+    startCommand?: string;
+    healthcheckPath?: string;
+    healthcheckTimeout?: number;
+    replicas?: number | Record<string, number>;
+    cronSchedule?: string;
+    restartPolicyType?: RestartPolicyType;
+    restartPolicyMaxRetries?: number;
+    drainingSeconds?: number;
+    overlapSeconds?: number;
+    sleepApplication?: boolean;
+    dockerfilePath?: string;
+    builder?: Builder;
+    watchPatterns?: string[];
+  };
+}): ServiceInstanceUpdateInput | undefined => {
+  const instance = input.instance;
+  const delta: ServiceInstanceUpdateInput = {};
+  let changed = false;
+
+  if (input.sourceRepo !== undefined) {
+    if (undef(instance?.source?.repo) !== input.sourceRepo) {
+      delta.source = { repo: input.sourceRepo };
+      changed = true;
+    }
+  } else if (
+    input.sourceImage !== undefined &&
+    !sameImage(instance?.source?.image, input.sourceImage)
+  ) {
+    delta.source = { image: input.sourceImage };
+    changed = true;
+  }
+
+  if (input.registryCredentials !== undefined) {
+    delta.registryCredentials = input.registryCredentials;
+    changed = true;
+  }
+
+  changed =
+    assignIfChanged(delta, "region", input.props.region, instance?.region) ||
+    changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "rootDirectory",
+      input.props.rootDirectory,
+      instance?.rootDirectory,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "buildCommand",
+      input.props.buildCommand,
+      instance?.buildCommand,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "startCommand",
+      input.props.startCommand,
+      instance?.startCommand,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "healthcheckPath",
+      input.props.healthcheckPath ?? input.props.healthcheck,
+      instance?.healthcheckPath,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "healthcheckTimeout",
+      input.props.healthcheckTimeout,
+      instance?.healthcheckTimeout,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "cronSchedule",
+      input.props.cronSchedule,
+      instance?.cronSchedule,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "restartPolicyType",
+      input.props.restartPolicyType,
+      instance?.restartPolicyType,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "restartPolicyMaxRetries",
+      input.props.restartPolicyMaxRetries,
+      instance?.restartPolicyMaxRetries,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "drainingSeconds",
+      input.props.drainingSeconds,
+      instance?.drainingSeconds,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "overlapSeconds",
+      input.props.overlapSeconds,
+      instance?.overlapSeconds,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "sleepApplication",
+      input.props.sleepApplication,
+      instance?.sleepApplication,
+    ) || changed;
+  changed =
+    assignIfChanged(
+      delta,
+      "dockerfilePath",
+      input.props.dockerfilePath,
+      instance?.dockerfilePath,
+    ) || changed;
+  changed =
+    assignIfChanged(delta, "builder", input.props.builder, instance?.builder) ||
+    changed;
+
+  const watchPatterns = input.props.watchPatterns;
+  if (
+    watchPatterns !== undefined &&
+    !sameWatchPatterns(instance?.watchPatterns, watchPatterns)
+  ) {
+    delta.watchPatterns = watchPatterns;
+    changed = true;
+  }
+
+  const replicas = replicaDelta(
+    input.props.replicas,
+    instance?.numReplicas,
+    input.previousReplicas,
+  );
+  if (replicas.numReplicas !== undefined) {
+    delta.numReplicas = replicas.numReplicas;
+    changed = true;
+  }
+  if (replicas.multiRegionConfig !== undefined) {
+    delta.multiRegionConfig = replicas.multiRegionConfig;
+    changed = true;
+  }
+
+  return changed ? delta : undefined;
+};
+
+const listDeploymentTriggers = (
+  projectId: string,
+  environmentId: string,
+  serviceId: string,
+) =>
+  railway.deploymentTriggers
+    .items({
+      projectId,
+      environmentId,
+      serviceId,
+      first: 50,
+    })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((triggers) => Array.from(triggers)),
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed([] as DeploymentTriggersResponseEdgesItemNode[]),
+      ),
+    );
+
+const syncBranch = Effect.fn(function* (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+  repo: string;
+  branch: string | undefined;
+}) {
+  if (input.branch === undefined) return false;
+  const triggers = yield* listDeploymentTriggers(
+    input.projectId,
+    input.environmentId,
+    input.serviceId,
+  );
+  const current = triggers[0];
+  if (current === undefined) {
+    yield* railway
+      .deploymentTriggerCreate({
+        input: {
+          branch: input.branch,
+          environmentId: input.environmentId,
+          projectId: input.projectId,
+          provider: "github",
+          repository: input.repo,
+          serviceId: input.serviceId,
+        },
+      })
+      .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+    return true;
+  }
+  const branchChanged = current.branch !== input.branch;
+  const repoChanged = current.repository !== input.repo;
+  if (!branchChanged && !repoChanged) return false;
+  yield* railway
+    .deploymentTriggerUpdate({
+      id: current.id,
+      input: {
+        ...(branchChanged ? { branch: input.branch } : {}),
+        ...(repoChanged ? { repository: input.repo } : {}),
+      },
+    })
+    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  return true;
+});
+
+const syncAutoUpdates = Effect.fn(function* (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+  enabled: boolean | undefined;
+}) {
+  if (input.enabled === undefined) return;
+  const status = yield* railway
+    .serviceInstanceAutoDeployStatus({
+      environmentId: input.environmentId,
+      projectId: input.projectId,
+      serviceId: input.serviceId,
+    })
+    .pipe(
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
+  if (status?.enabled === input.enabled) return;
+  yield* railway
+    .serviceInstanceAutoDeployUpdate({
+      input: {
+        enabled: input.enabled,
+        environmentId: input.environmentId,
+        projectId: input.projectId,
+        serviceId: input.serviceId,
+      },
+    })
+    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+});
+
 const waitForInstance = (environmentId: string, serviceId: string) =>
   getInstance(environmentId, serviceId).pipe(
     Effect.flatMap((instance) => {
@@ -623,10 +1099,19 @@ const toAttrs = (input: {
   projectId: input.projectId,
   environmentId: input.environmentId,
   image: input.instance?.source?.image ?? undefined,
+  repo: input.instance?.source?.repo ?? undefined,
+  healthcheckPath: input.instance?.healthcheckPath ?? undefined,
+  healthcheckTimeout: input.instance?.healthcheckTimeout ?? undefined,
+  replicas: input.instance?.numReplicas ?? undefined,
+  buildCommand: input.instance?.buildCommand ?? undefined,
+  startCommand: input.instance?.startCommand ?? undefined,
+  cronSchedule: input.instance?.cronSchedule ?? undefined,
+  rootDirectory: input.instance?.rootDirectory ?? undefined,
   region: input.instance?.region ?? undefined,
   port: input.port,
   url: input.domain?.url,
   domain: input.domain?.domain,
+  dnsName: `${input.service.name}.railway.internal`,
   domainId: input.domain?.id,
   deploymentId: input.instance?.latestDeployment?.id,
   deploymentStatus: input.instance?.latestDeployment?.status,
@@ -761,6 +1246,7 @@ export const ServiceProvider = () =>
         reconcile: Effect.fn(function* ({
           id,
           news,
+          olds,
           output,
           bindings,
           session,
@@ -800,6 +1286,7 @@ export const ServiceProvider = () =>
           };
 
           let sourceImage: string | undefined;
+          let sourceRepo: string | undefined;
           let codeHash = output?.code.hash ?? "";
           let registryCredentials:
             | { username: string; password: string }
@@ -825,10 +1312,12 @@ export const ServiceProvider = () =>
             registryCredentials = resolved.registryCredentials;
           } else if (props.image !== undefined && props.image.length > 0) {
             sourceImage = props.image;
+          } else if (props.repo !== undefined && props.repo.length > 0) {
+            sourceRepo = props.repo;
           } else {
             return yield* new ServiceImageOrMainRequired({
               message:
-                "Railway.Service requires `image` (public image) or `main` + `registry` (Effect-native).",
+                "Railway.Service requires `image` (public image), `main` + `registry` (Effect-native), or `repo` (GitHub).",
             });
           }
 
@@ -847,7 +1336,13 @@ export const ServiceProvider = () =>
                   projectId,
                   environmentId,
                   name,
-                  source: { image: sourceImage },
+                  source:
+                    sourceRepo !== undefined
+                      ? { repo: sourceRepo }
+                      : { image: sourceImage },
+                  ...(sourceRepo !== undefined && props.branch !== undefined
+                    ? { branch: props.branch }
+                    : {}),
                   ...(registryCredentials !== undefined
                     ? { registryCredentials }
                     : {}),
@@ -881,34 +1376,44 @@ export const ServiceProvider = () =>
           let instance = yield* waitForInstance(environmentId, current.id);
           let needsDeploy = false;
 
-          const observedImage = instance?.source?.image ?? undefined;
-          const imageChanged =
-            sourceImage !== undefined && !sameImage(observedImage, sourceImage);
-          const observedRegion = instance?.region ?? undefined;
-          const regionChanged =
-            props.region !== undefined && props.region !== observedRegion;
-          if (
-            imageChanged ||
-            regionChanged ||
-            registryCredentials !== undefined
-          ) {
+          const instanceDelta = instanceSettingsDelta({
+            instance,
+            sourceImage,
+            sourceRepo,
+            registryCredentials,
+            previousReplicas: olds?.replicas,
+            props,
+          });
+          if (instanceDelta !== undefined) {
             yield* railway
               .serviceInstanceUpdate({
                 environmentId,
                 serviceId: current.id,
-                input: {
-                  ...(imageChanged ? { source: { image: sourceImage } } : {}),
-                  ...(regionChanged ? { region: props.region } : {}),
-                  ...(registryCredentials !== undefined
-                    ? { registryCredentials }
-                    : {}),
-                },
+                input: instanceDelta,
               })
               .pipe(RailwayRetry.none, Effect.retry(rateLimited));
             needsDeploy = true;
             instance =
               (yield* getInstance(environmentId, current.id)) ?? instance;
           }
+
+          if (sourceRepo !== undefined) {
+            const branchChanged = yield* syncBranch({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              repo: sourceRepo,
+              branch: props.branch,
+            });
+            if (branchChanged) needsDeploy = true;
+          }
+
+          yield* syncAutoUpdates({
+            projectId,
+            environmentId,
+            serviceId: current.id,
+            enabled: props.autoUpdates,
+          });
 
           const envChanged = yield* syncEnv({
             projectId,
@@ -945,7 +1450,10 @@ export const ServiceProvider = () =>
           }
 
           instance =
-            (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+            sourceRepo !== undefined
+              ? ((yield* getInstance(environmentId, current.id)) ?? instance)
+              : ((yield* waitForDeployment(environmentId, current.id)) ??
+                instance);
 
           return toAttrs({
             service: current,

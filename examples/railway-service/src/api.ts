@@ -42,6 +42,8 @@ export default class Api extends Railway.Service<Api>()(
     port: API_PORT,
     registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/example",
     build: { install: ["pg"] },
+    healthcheck: "/health",
+    replicas: 1,
   },
   Effect.gen(function* () {
     yield* Marker;

@@ -50,3 +50,19 @@ export const findRegion = (ref: string) =>
   });
 
 export type RailwayRegion = RegionsResultItem;
+
+/**
+ * Workspace audit logs. Query-only — Railway has no audit-log
+ * create/update/delete, so this is not a resource.
+ */
+export {
+  AuditLog,
+  getAuditLog,
+  listAuditLogEventTypes,
+  listAuditLogs,
+  type AuditLogEntry,
+  type AuditLogEnvironment,
+  type AuditLogEventType,
+  type AuditLogProject,
+  type ListAuditLogsOptions,
+} from "./AuditLog.ts";
