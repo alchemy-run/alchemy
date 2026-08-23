@@ -588,10 +588,15 @@ export const JobDefinitionProvider = () =>
       const createRoleName = (id: string, suffix: string) =>
         createPhysicalName({ id: `${id}-${suffix}`, maxLength: 64 });
 
+      // Batch caps `containerProperties.image` at 255 characters, and the
+      // image ref is `<account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>`
+      // — up to 52 characters of registry prefix plus the 16-character
+      // content tag — so the repository name (ECR itself allows 256) must
+      // stop at 180 to fit in every region.
       const createRepositoryName = (id: string) =>
         createPhysicalName({
           id: `${id}-repo`,
-          maxLength: 256,
+          maxLength: 180,
           lowercase: true,
         });
 
@@ -958,7 +963,10 @@ await bootstrap(entrypoint);
               : file.content,
         }));
 
-        return { files, hash: bundleOutput.hash };
+        // 16 hex characters of the content hash, like the ECS/App Runner image
+        // sources: the full sha256 as a tag pushed long repository names over
+        // Batch's 255-character `image` limit.
+        return { files, hash: bundleOutput.hash.slice(0, 16) };
       });
 
       /** Build + push the container image for the bundled program. */
