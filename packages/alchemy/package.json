@@ -439,7 +439,7 @@
     "@octanejs/vite-plugin": "catalog:frontend",
     "@opennextjs/aws": "catalog:frontend",
     "@opennextjs/cloudflare": "catalog:frontend",
-    "@oxc-project/types": "^0.139.0",
+    "@oxc-project/types": "^0.146.0",
     "@sveltejs/kit": "catalog:frontend",
     "@sveltejs/vite-plugin-svelte": "catalog:frontend",
     "@tanstack/react-router": "catalog:frontend",

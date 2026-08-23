@@ -165,7 +165,7 @@ export const effect = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   serverEntryUrl: string,
   eff: Effect.Effect<
     RpcProviderService<

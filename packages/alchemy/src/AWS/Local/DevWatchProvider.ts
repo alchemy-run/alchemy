@@ -166,7 +166,7 @@ export const makeDevWatchProvider = <
   Props = R["Props"],
   Attrs = R["Attributes"],
 >(
-  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   serverEntryUrl: string,
   spec: DevWatchSpec<Props, Attrs>,
 ) =>
