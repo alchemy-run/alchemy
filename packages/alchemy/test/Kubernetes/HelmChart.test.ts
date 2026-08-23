@@ -11,7 +11,6 @@ import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { spawnSync } from "node:child_process";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
@@ -19,99 +18,89 @@ const testOptions = {
 const { test } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
-// builds); skip the render tests on machines without it.
-const isHelmReady =
-  spawnSync("helm", ["version"], { stdio: "ignore" }).status === 0;
-
+// builds) — `helm` must be installed on the machine running this suite.
 const chartDir = `${import.meta.dirname}/fixtures/chart`;
 
 const describe = layer(NodeServices.layer);
 
 describe("renderHelmChart (local fixture)", (it) => {
-  it.effect.skipIf(!isHelmReady)(
-    "renders values, release name, and namespace",
-    () =>
-      Effect.gen(function* () {
-        const objects = yield* renderHelmChart({
-          chart: chartDir,
-          releaseName: "probe",
-          namespace: "demo",
-          values: { message: "hello-from-values" },
-        });
-        expect(objects).toHaveLength(1);
-        const configMap = objects[0]! as unknown as {
-          kind: string;
-          metadata: { name: string };
-          data: Record<string, string>;
-        };
-        expect(configMap.kind).toBe("ConfigMap");
-        expect(configMap.metadata.name).toBe("probe-config");
-        expect(configMap.data.message).toBe("hello-from-values");
-        expect(configMap.data.release).toBe("probe");
-        expect(configMap.data.namespace).toBe("demo");
-      }),
+  it.effect("renders values, release name, and namespace", () =>
+    Effect.gen(function* () {
+      const objects = yield* renderHelmChart({
+        chart: chartDir,
+        releaseName: "probe",
+        namespace: "demo",
+        values: { message: "hello-from-values" },
+      });
+      expect(objects).toHaveLength(1);
+      const configMap = objects[0]! as unknown as {
+        kind: string;
+        metadata: { name: string };
+        data: Record<string, string>;
+      };
+      expect(configMap.kind).toBe("ConfigMap");
+      expect(configMap.metadata.name).toBe("probe-config");
+      expect(configMap.data.message).toBe("hello-from-values");
+      expect(configMap.data.release).toBe("probe");
+      expect(configMap.data.namespace).toBe("demo");
+    }),
   );
 
-  it.effect.skipIf(!isHelmReady)(
-    "values toggle conditional templates on and off",
-    () =>
-      Effect.gen(function* () {
-        const withoutSecond = yield* renderHelmChart({
-          chart: chartDir,
-          releaseName: "probe",
-          namespace: "demo",
-        });
-        expect(withoutSecond).toHaveLength(1);
+  it.effect("values toggle conditional templates on and off", () =>
+    Effect.gen(function* () {
+      const withoutSecond = yield* renderHelmChart({
+        chart: chartDir,
+        releaseName: "probe",
+        namespace: "demo",
+      });
+      expect(withoutSecond).toHaveLength(1);
 
-        const withSecond = yield* renderHelmChart({
-          chart: chartDir,
-          releaseName: "probe",
-          namespace: "demo",
-          values: { secondConfigMap: { enabled: true } },
-        });
-        expect(withSecond).toHaveLength(2);
-        expect(withSecond.map((object) => object.metadata.name).sort()).toEqual(
-          ["probe-config", "probe-second"],
-        );
-      }),
+      const withSecond = yield* renderHelmChart({
+        chart: chartDir,
+        releaseName: "probe",
+        namespace: "demo",
+        values: { secondConfigMap: { enabled: true } },
+      });
+      expect(withSecond).toHaveLength(2);
+      expect(withSecond.map((object) => object.metadata.name).sort()).toEqual([
+        "probe-config",
+        "probe-second",
+      ]);
+    }),
   );
 
   // Regression for #1312: the fixture chart ships a `helm.sh/hook: pre-delete`
   // Job. HelmChart has no Helm release and no hook lifecycle, so the hook
   // must never enter the managed-object graph (where it would be created and
   // reconciled like an ordinary workload on every deploy).
-  it.effect.skipIf(!isHelmReady)(
-    "excludes Helm lifecycle hooks from the render",
-    () =>
-      Effect.gen(function* () {
-        const objects = yield* renderHelmChart({
-          chart: chartDir,
-          releaseName: "probe",
-          namespace: "demo",
-        });
-        expect(objects.map((object) => object.kind)).not.toContain("Job");
-        expect(objects.map((object) => object.metadata.name)).toEqual([
-          "probe-config",
-        ]);
-      }),
+  it.effect("excludes Helm lifecycle hooks from the render", () =>
+    Effect.gen(function* () {
+      const objects = yield* renderHelmChart({
+        chart: chartDir,
+        releaseName: "probe",
+        namespace: "demo",
+      });
+      expect(objects.map((object) => object.kind)).not.toContain("Job");
+      expect(objects.map((object) => object.metadata.name)).toEqual([
+        "probe-config",
+      ]);
+    }),
   );
 
-  it.effect.skipIf(!isHelmReady)(
-    "a bad chart reference fails with a typed HelmError",
-    () =>
-      Effect.gen(function* () {
-        const result = yield* Effect.result(
-          renderHelmChart({
-            chart: `${chartDir}-does-not-exist`,
-            releaseName: "probe",
-            namespace: "demo",
-          }),
-        );
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(result.failure._tag).toBe("HelmError");
-        }
-      }),
+  it.effect("a bad chart reference fails with a typed HelmError", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        renderHelmChart({
+          chart: `${chartDir}-does-not-exist`,
+          releaseName: "probe",
+          namespace: "demo",
+        }),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("HelmError");
+      }
+    }),
   );
 });
 
