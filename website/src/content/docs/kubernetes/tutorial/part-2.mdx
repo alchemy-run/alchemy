@@ -1,6 +1,6 @@
 ---
 title: "Part 2: Jobs and CronJobs"
-description: Run a container to completion with Kubernetes.Job, control retries and cleanup with backoffLimit and ttlSecondsAfterFinished, then turn it into a CronJob with one schedule prop.
+description: Run a container to completion with Kubernetes.Job, then turn it into a CronJob with a schedule.
 sidebar:
   order: 2
 ---
@@ -9,7 +9,7 @@ import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 Add a `Kubernetes.Job` to the [Part 1](/kubernetes/tutorial/part-1)
-file, then retry it, clean it up, and schedule it.
+file, then limit retries, clean up, and schedule it.
 
 ## Add a Job
 
@@ -30,9 +30,8 @@ const echo = yield* Kubernetes.Deployment("Echo", {
 +});
 ```
 
-A [`Kubernetes.Job`](/kubernetes/workloads/jobs#jobs) is a `batch/v1`
-Job plus a ServiceAccount. Kubernetes runs it the moment it is
-applied.
+A [`Kubernetes.Job`](/kubernetes/workloads/jobs#jobs) runs a container
+to completion. It starts as soon as you deploy.
 
 ## Expose the Job name
 
@@ -44,8 +43,7 @@ return {
 };
 ```
 
-A Job's pod template is immutable, so Alchemy hashes the spec into
-the name.
+Each change to the Job gets a new name.
 
 ## Deploy and watch it run
 
@@ -89,7 +87,7 @@ After a few seconds `COMPLETIONS` reads `1/1`:
 kubectl logs job/myapp-hello-dev-alex-h6g5f4e3d2c7b2a4-3f9a1c2e
 ```
 
-The deploy does not wait for completion.
+Deploy doesn't wait for the Job to finish.
 
 ## Change the command and run it again
 
@@ -111,8 +109,8 @@ Proceed?
 ◉ Yes ○ No
 [g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [y]updated[/y]`} />
 
-A changed spec is a new Job, and it runs. The old one is
-[pruned](/kubernetes/guides/how-apply-works#pruning-and-drift).
+A new Job runs under the new name. The old one is
+[removed](/kubernetes/guides/how-apply-works#pruning-and-drift).
 
 ## Limit retries with backoffLimit
 
@@ -142,7 +140,7 @@ const hello = yield* Kubernetes.Job("Hello", {
 ```
 
 Finished Jobs and their pods are deleted this many seconds after
-completion. The next deploy is still `no changes`.
+completion. A later deploy still reports `no changes`.
 
 ## Put it on a schedule
 
@@ -179,7 +177,7 @@ Proceed?
 [s2]kind: "CronJob",
 }`} />
 
-A cron `schedule` makes the same resource a
+Adding a `schedule` turns the Job into a
 [`CronJob`](/kubernetes/workloads/jobs#cronjobs). Within two minutes
 `kubectl get jobs` shows the first run.
 

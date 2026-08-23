@@ -1,14 +1,14 @@
 ---
 title: Cluster adapters
-description: The ClusterAdapter seam that makes Kubernetes workloads cluster-agnostic — the interface, how an auth kind is registered and found, and a sketch of a GKE adapter built on the exec credential path.
+description: Write a cluster adapter so Kubernetes workloads can target a new platform such as GKE or AKS.
 ---
 
-A [`Connection`](/kubernetes/clusters/connecting#the-connection-model)
-is data. Its `auth.kind`
-[selects](/kubernetes/clusters/connecting#how-the-adapter-is-chosen)
-a `ClusterAdapterService` that talks to the API server and,
-optionally, gives workloads an identity and an image registry. Read
-this to add a platform (GKE, AKS, a corporate OIDC proxy).
+A [`Connection`](/kubernetes/clusters/connecting#what-cluster-accepts)'s
+`auth.kind`
+[picks](/kubernetes/clusters/connecting#deploying-to-eks)
+the `ClusterAdapterService` that talks to the API server and,
+optionally, gives workloads an identity and an image registry. Write
+one to support a new platform (GKE, AKS, a corporate OIDC proxy).
 
 ## The interface
 
@@ -18,31 +18,31 @@ import type * as Kubernetes from "alchemy/Kubernetes";
 interface ClusterAdapterService {
   readonly kind: "Kubernetes.ClusterAdapter";
 
-  // REQUIRED — resolve endpoint/CA and a per-request header mint.
+  // REQUIRED: resolve endpoint/CA and mint headers per request.
   readonly connect: (
     connection: Kubernetes.Connection,
   ) => Effect.Effect<Kubernetes.ClusterTransport, Kubernetes.ClusterNotFoundError | Error>;
 
-  // OPTIONAL — workload identity (EKS Pod Identity).
+  // OPTIONAL: workload identity (EKS Pod Identity).
   readonly identity?: {
     readonly reconcile: (o: WorkloadIdentityReconcileOptions) => Effect.Effect<WorkloadIdentityResult, any, AdapterLifecycleServices>;
     readonly delete: (o: WorkloadIdentityDeleteOptions) => Effect.Effect<void, any, AdapterLifecycleServices>;
   };
 
-  // OPTIONAL — managed image registry (ECR).
+  // OPTIONAL: managed image registry (ECR).
   readonly registry?: {
     readonly resolve: (o: ImageRegistryResolveOptions) => Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
     readonly hash: (o: ImageRegistryHashOptions) => Effect.Effect<string | undefined, any, AdapterLifecycleServices>;
     readonly delete: (o: ImageRegistryDeleteOptions) => Effect.Effect<void, any, AdapterLifecycleServices>;
   };
 
-  // OPTIONAL — platform-specific generated container entries for `main` workloads.
+  // OPTIONAL: platform-specific entry files for `main` workloads.
   readonly bootstrap?: {
     readonly server?: (handler: string) => (importPath: string) => string;
     readonly job?: (handler: string) => (importPath: string) => string;
   };
 
-  // OPTIONAL — defaults for `serviceType: "LoadBalancer"` Services.
+  // OPTIONAL: defaults for `serviceType: "LoadBalancer"` Services.
   readonly loadBalancerDefaults?: (o: { connection: Kubernetes.Connection }) => Effect.Effect<
     { loadBalancerClass?: string | undefined; annotations?: Record<string, string> },
     any,
@@ -51,45 +51,44 @@ interface ClusterAdapterService {
 }
 ```
 
-`connect` is required. Its `ClusterTransport.headers` Effect runs
-once per API request, so short-lived tokens are minted fresh. Fail
-with `ClusterNotFoundError` only when the cluster is definitively
-gone; any other error is treated as transient.
+Implement `connect`. Its `ClusterTransport.headers` Effect runs on
+every API request, so mint short-lived tokens there. Fail with
+`ClusterNotFoundError` only when the cluster is gone for good; any
+other error is treated as transient.
 
-`identity` receives the workload's bindings and returns
-`{ env, serviceAccountAnnotations?, state }`. Without it, a binding
-carrying `policyStatements` dies, the mechanism behind
-[env-only bindings](/kubernetes/workloads/bindings#env-only-bindings).
-`registry.resolve` turns `main`, `context`, or `image` into
-`{ imageUri, codeHash, state }`; without it, `image` passes through
-verbatim and `main` or `context` dies, the
-[registry requirement](/kubernetes/workloads/image-sources#registry-requirement).
-`bootstrap` overrides the generated entry for `main` workloads.
-`loadBalancerDefaults` are spread under the user's
-`serviceAnnotations`
+Add `identity` to give workloads a cloud identity: it receives the
+workload's bindings and returns
+`{ env, serviceAccountAnnotations?, state }`. Without it, bindings are
+[env-only](/kubernetes/workloads/bindings#env-only-bindings) and
+`policyStatements` fail the deploy. Add `registry` to support `main`
+and `context`: `resolve` turns any image source into
+`{ imageUri, codeHash, state }`. Without it, only `image` works,
+[verbatim](/kubernetes/workloads/image-sources#registry-requirement).
+`bootstrap` replaces the generated entry file for `main` workloads.
+`loadBalancerDefaults` go under the user's `serviceAnnotations`
 ([Service types](/kubernetes/guides/exposing-services#service-types)).
 
-`AdapterLifecycleServices = InstanceId | Stack | Stage` are
-per-resource, so never capture them at layer build; capture
-everything else once with `Effect.context` inside the `Layer.effect`.
-`Manifest` and `HelmChart` only use `connect`, so an auth-only
-adapter gives every resource except `main`/`context` images and
-cloud-grant bindings.
+`AdapterLifecycleServices` (`InstanceId | Stack | Stage`) are
+per-resource: don't capture them when you build the layer. Capture
+everything else once with `Effect.context` inside `Layer.effect`. An
+adapter with only `connect` supports every resource; you lose only
+`main`/`context` images and cloud-grant bindings.
 
 ## Registering an auth kind
 
-`AuthRegistry` in `alchemy/Kubernetes/Connection` is extended by
-module augmentation. A new kind makes `{ auth: { kind: "gke", … } }`
-valid on every workload's `cluster` prop.
+Add your kind to `AuthRegistry` in `alchemy/Kubernetes/Connection`
+with module augmentation. `{ auth: { kind: "gke", … } }` then
+type-checks on every workload's `cluster` prop.
 
 ### Augment `AuthRegistry`
 
-The descriptor is serializable identity, never credentials: it is
-[persisted on every workload](/kubernetes/clusters/connecting#the-connection-model)
-and its JSON decides whether a workload moved clusters.
+Put only what identifies the cluster in the descriptor, never
+credentials: it is
+[saved on every workload](/kubernetes/clusters/connecting#what-cluster-accepts),
+and changing it replaces the workload.
 
 ```typescript
-// In-repo: relative path. External package: "alchemy/Kubernetes/Connection".
+// In your package:
 declare module "alchemy/Kubernetes/Connection" {
   interface AuthRegistry {
     /** Authenticate against a GKE cluster with gke-gcloud-auth-plugin. */
@@ -104,11 +103,10 @@ declare module "alchemy/Kubernetes/Connection" {
 
 ### Augment the state registries
 
-Optional, for adapters with `identity` or `registry`. The EKS block
-is the template:
+Only if you add `identity` or `registry`. Copy the EKS block:
 
 ```typescript
-// packages/alchemy/src/AWS/EKS/KubernetesAdapter.ts
+// What the built-in EKS adapter declares
 declare module "../../Kubernetes/ClusterAdapter.ts" {
   interface IdentityStateRegistry {
     "aws-pod-identity": {
@@ -138,15 +136,13 @@ declare module "../../Kubernetes/ClusterAdapter.ts" {
 
 ### Build the layer
 
-`Kubernetes.ClusterAdapter("gke")` returns a Context service keyed
-`Kubernetes.ClusterAdapter/gke`. Use `Layer.effect`, return an object
-`satisfies ClusterAdapterService`, and die when
-`connection.auth.kind` is not yours.
+Build a `Layer.effect` for `Kubernetes.ClusterAdapter("gke")`.
+Return an object that `satisfies ClusterAdapterService`, and die if
+`connection.auth.kind` isn't yours.
 
 ### Provide it into the Stack
 
-Adapters are looked up with `Effect.serviceOption`, so merge the
-layer beside `Kubernetes.providers()`:
+Merge the layer beside `Kubernetes.providers()`:
 
 ```typescript
 export default Alchemy.Stack(
@@ -173,20 +169,19 @@ export default Alchemy.Stack(
 );
 ```
 
-Optionally, stamp a `connection` on the platform's cluster resource
-so it satisfies `ClusterLike` and passes as `cluster` directly, as
-[`AWS.EKS.Cluster`](/kubernetes/clusters/eks#what-the-adapter-adds)
+To let users pass a cluster resource as `cluster` directly, give it
+a `connection` attribute, as
+[`AWS.EKS.Cluster`](/kubernetes/clusters/eks#what-eks-adds)
 does.
 
 :::caution
-`auth` is persisted in plain state, so never put a secret in an `AuthRegistry` member.
+`auth` is saved in plain state. Never put a secret in an `AuthRegistry` member.
 :::
 
 ## A GKE adapter sketch
 
-An auth-only adapter, not yet run against a live project. It
-discovers endpoint and CA from the GKE API, then delegates header
-minting to the built-in
+An auth-only adapter. It looks up the endpoint and CA from the GKE
+API, then hands token minting to the built-in
 [`exec` adapter](/kubernetes/clusters/connecting#token-client-certificate-and-exec)
 with `gke-gcloud-auth-plugin`:
 
@@ -206,11 +201,7 @@ declare module "alchemy/Kubernetes/Connection" {
   }
 }
 
-/**
- * An access token for the GKE control-plane API, minted by the gcloud CLI the
- * user is already logged into — zero extra dependencies. Same spawn pattern as
- * the built-in exec-credential runner.
- */
+/** An access token for the GKE API from the gcloud CLI you're already logged into. */
 const gcloudAccessToken = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const { exitCode, stdout, stderr } = yield* ChildProcess.make(
@@ -247,7 +238,7 @@ const gcloudAccessToken = Effect.gen(function* () {
   return stdout.trim();
 });
 
-/** Describe the cluster through the GKE API; a 404 is a definitive "gone". */
+/** Look up the cluster in the GKE API; a 404 means it is gone. */
 const describeGkeCluster = Effect.fn(function* (auth: {
   project: string;
   location: string;
@@ -281,8 +272,7 @@ export const GkeKubernetesAdapter = () =>
   Layer.effect(
     Kubernetes.ClusterAdapter("gke"),
     Effect.gen(function* () {
-      // Capture deps ONCE at layer build; InstanceId/Stack/Stage stay ambient.
-      // Both services are in StackServices, so no extra wiring is needed.
+      // Capture dependencies once when the layer is built.
       const context = yield* Effect.context<
         HttpClient.HttpClient | ChildProcessSpawner.ChildProcessSpawner
       >();
@@ -295,7 +285,7 @@ export const GkeKubernetesAdapter = () =>
         }
         const auth = connection.auth;
 
-        // 1. Observe: discover endpoint/CA unless the connection already carries them.
+        // 1. Look up endpoint and CA unless the connection already has them.
         let { endpoint, certificateAuthorityData } = connection;
         if (!endpoint || !certificateAuthorityData) {
           const described = yield* describeGkeCluster(auth).pipe(
@@ -312,8 +302,8 @@ export const GkeKubernetesAdapter = () =>
           }
         }
 
-        // 2. Delegate per-request token minting to the built-in `exec` adapter
-        //    (ExecCredential protocol, cached until expirationTimestamp).
+        // 2. Let the built-in `exec` adapter mint tokens per request
+        //    (cached until expirationTimestamp).
         const exec = yield* Kubernetes.findClusterAdapter("exec");
         return yield* exec.connect({
           endpoint,
@@ -330,11 +320,11 @@ export const GkeKubernetesAdapter = () =>
   );
 ```
 
-This gives every `Kubernetes.*` resource on GKE with `image:` sources
-and env-only bindings. Adding `identity` (Workload Identity
+You now get every `Kubernetes.*` resource on GKE with `image:`
+sources and env-only bindings. Add `identity` (Workload Identity
 Federation via `serviceAccountAnnotations`) and `registry` (Artifact
-Registry) would light up `main:` and cloud-grant bindings with no
-workload changes.
+Registry) to unlock `main:` and cloud-grant bindings without changing
+any workload.
 
 ## Where next
 

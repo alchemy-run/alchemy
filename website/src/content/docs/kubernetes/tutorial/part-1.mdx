@@ -1,6 +1,6 @@
 ---
 title: "Part 1: Your First Deployment"
-description: Point a Stack at your local cluster with Kubernetes.KubeConfig, deploy a pre-built image as a Kubernetes.Deployment, reach it, scale it, and tear it down.
+description: Deploy a pre-built image to your local cluster with Kubernetes.Deployment, reach it, scale it, and tear it down.
 sidebar:
   order: 1
 ---
@@ -8,8 +8,8 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-Point a Stack at the local cluster from Setup, deploy a pre-built
-image as a `Kubernetes.Deployment`, reach it, scale it, tear it down.
+Deploy a pre-built image to your local cluster, reach it from your
+laptop, scale it, and tear it down.
 
 ## Prerequisites
 
@@ -17,13 +17,14 @@ image as a `Kubernetes.Deployment`, reach it, scale it, tear it down.
 - A [local cluster](/kubernetes/setup#pick-a-cluster) in
   `kubectl config get-contexts`
 
-Steps assume the `docker-desktop` context; kind and minikube need
-[one change](#choose-how-to-reach-it).
+Replace `docker-desktop` with your context name. On kind or minikube,
+also set `serviceType` (see
+[Choose how to reach it](#choose-how-to-reach-it)).
 
 ## Create a project
 
-Continue in the Setup project, or start fresh and install as in
-[Setup](/kubernetes/setup#install):
+Keep using the Setup project, or start a new one and
+[install Alchemy](/kubernetes/setup#install):
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -42,7 +43,7 @@ Continue in the Setup project, or start fresh and install as in
 
 ## Create the Stack
 
-Start from the Setup `alchemy.run.ts` with `DemoNamespace` removed:
+Start with an empty Stack:
 
 ```typescript
 // alchemy.run.ts
@@ -70,8 +71,8 @@ Effect.gen(function* () {
 }),
 ```
 
-[`KubeConfig`](/kubernetes/clusters/connecting#kubeconfig) is a plain
-helper, not a resource; use your context name.
+[`KubeConfig`](/kubernetes/clusters/connecting#kubeconfig) connects to
+any cluster in your kubeconfig.
 
 ## Add a Deployment
 
@@ -87,10 +88,10 @@ Effect.gen(function* () {
 }),
 ```
 
-One resource synthesizes
-[three objects](/kubernetes/workloads/deployments#what-gets-created).
-It must be `image:`: a kubeconfig cluster has
-[no registry](/kubernetes/workloads/image-sources#registry-requirement).
+This creates a Deployment, a Service, and a
+[ServiceAccount](/kubernetes/workloads/deployments#what-gets-created).
+Use a pre-built image; local clusters
+[can't build images](/kubernetes/workloads/image-sources#registry-requirement).
 
 ## Choose how to reach it
 
@@ -103,12 +104,12 @@ const echo = yield* Kubernetes.Deployment("Echo", {
 });
 ```
 
-`LoadBalancer` is the default and fills the Deployment's
+`LoadBalancer` is the default and gives the Deployment a
 [`url`](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url).
 
 :::note[No LoadBalancer on your cluster?]
-kind and minikube have no LoadBalancer: use `serviceType: "NodePort"`
-and `kubectl port-forward` instead of `url`
+On kind or minikube, set `serviceType: "NodePort"` and use
+`kubectl port-forward` instead of `url`
 ([Reaching a service](/kubernetes/clusters/local#reaching-a-service)).
 :::
 
@@ -128,7 +129,7 @@ const echo = yield* Kubernetes.Deployment("Echo", {
 +};
 ```
 
-`deploymentName` is the object name for `kubectl`.
+`deploymentName` is the name you pass to `kubectl`.
 
 ## Deploy
 
@@ -160,8 +161,6 @@ Proceed?
 [s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
 }`} />
 
-One row: the kubeconfig connection is not a resource.
-
 ## Try it out
 
 ```sh
@@ -169,7 +168,7 @@ curl http://localhost:8080
 ```
 
 The pod's hostname is under `os.hostname`. List the objects Alchemy
-owns:
+created:
 
 ```sh
 kubectl get deployment,service,serviceaccount \
@@ -197,8 +196,8 @@ Proceed?
 [d]Applied Kubernetes Deployment default/myapp-echo-dev-alex-k3m7p2q6r4s5t2v6[/d]
 [g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [y]updated[/y]`} />
 
-`replicas` is mutable, so this is an in-place update; repeated curls
-now return different hostnames.
+The Deployment updates in place; repeated curls now return different
+hostnames.
 
 ## Deploy again
 
@@ -235,8 +234,6 @@ Deploy again without editing anything:
 Proceed?
 ◉ Yes ○ No
 [r]✗[/r] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [r]deleted[/r]`} />
-
-Objects go in reverse apply order. Part 2 recreates `Echo`.
 
 ## Where next
 

@@ -1,6 +1,6 @@
 ---
 title: "Part 3: Manifests"
-description: Apply raw Kubernetes objects with Kubernetes.Manifest — a Namespace, a ConfigMap, and a Redis StatefulSet with a ClusterIP Service — and wire their outputs into the Deployment's namespace and env.
+description: Add a Namespace, a ConfigMap, and a Redis StatefulSet with Kubernetes.Manifest and pass their names into your Deployment.
 sidebar:
   order: 3
 ---
@@ -8,9 +8,9 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-Apply a Namespace, a ConfigMap, and a Redis StatefulSet as raw objects
-with `Kubernetes.Manifest`, and wire their outputs into `Echo`. Start
-from the [Part 2](/kubernetes/tutorial/part-2) file.
+Add a Namespace, a ConfigMap, and a Redis StatefulSet with
+`Kubernetes.Manifest`, and pass their names into `Echo`. Start from
+the [Part 2](/kubernetes/tutorial/part-2) file.
 
 ## Start clean
 
@@ -29,8 +29,7 @@ from the [Part 2](/kubernetes/tutorial/part-2) file.
   </TabItem>
 </Tabs>
 
-Moving a workload to a new namespace is a replacement, so start from
-a clean stack.
+Changing a workload's namespace replaces it.
 
 ## Add a Namespace
 
@@ -48,8 +47,8 @@ Effect.gen(function* () {
 +  });
 ```
 
-A [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object) is
-one literal object of any `kind`, applied with server-side apply.
+A [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object)
+applies any Kubernetes object you write as a literal.
 
 ## Move the workloads into it
 
@@ -75,8 +74,8 @@ const hello = yield* Kubernetes.Job("Hello", {
 });
 ```
 
-Passing `ns.name`, an [Output](/infrastructure-as-code/outputs),
-instead of `"tutorial"` is what orders the Namespace first.
+Pass `ns.name` (an [Output](/infrastructure-as-code/outputs)) rather
+than `"tutorial"` so the Namespace is created first.
 
 ## Add a ConfigMap
 
@@ -104,7 +103,7 @@ export default Alchemy.Stack(
 +    });
 ```
 
-Outputs work anywhere inside the literal.
+You can use Outputs anywhere in the manifest.
 
 ## Feed it into the Deployment
 
@@ -123,9 +122,8 @@ const echo = yield* Kubernetes.Deployment("Echo", {
 });
 ```
 
-A Manifest's attributes are the object's identity, not its contents,
-so `config.name` gives `"app-config"` while the values come from
-`settings`.
+`config.name` is `"app-config"`. Reuse `settings` for the values; a
+Manifest only exposes the object's name.
 
 ## Add Redis as a StatefulSet
 
@@ -157,7 +155,7 @@ const config = yield* Kubernetes.Manifest("Config", { /* ... */ });
 const echo = yield* Kubernetes.Deployment("Echo", { /* ... */ });
 ```
 
-Anything the two workload resources don't model is a Manifest.
+Use a Manifest for any object `Deployment` and `Job` don't cover.
 
 ## Give it a stable address
 
@@ -182,7 +180,7 @@ const echo = yield* Kubernetes.Deployment("Echo", { /* ... */ });
 ```
 
 A [ClusterIP](/kubernetes/guides/exposing-services#service-types)
-Service gives Redis the in-cluster DNS name `redis`.
+Service makes Redis reachable inside the cluster as `redis`.
 
 ## Hand the address to the Deployment
 
@@ -201,7 +199,8 @@ import * as Effect from "effect/Effect";
 ```
 
 [`Output.interpolate`](/infrastructure-as-code/outputs#interpolate)
-resolves after deploy and makes `Echo` depend on the Service.
+builds the URL from the Service name, so the Service is created
+before `Echo`.
 
 ## Deploy
 
@@ -244,8 +243,8 @@ Proceed?
 [s2]kind: "CronJob",
 }`} />
 
-The ✓ lines follow the graph: every edge came from a reference, none
-from `dependsOn`.
+Resources are created in the order your references require:
+Namespace first, `Echo` last.
 
 ```sh
 kubectl get all,configmap -n tutorial

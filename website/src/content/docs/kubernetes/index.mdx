@@ -1,44 +1,43 @@
 ---
 title: Kubernetes
-description: Run Deployments, Jobs, raw manifests, and Helm charts on any Kubernetes cluster from one typed program; the cluster's adapter decides what you get for free.
+description: Deploy servers, jobs, manifests, and Helm charts to any Kubernetes cluster with Alchemy.
 ---
 
 [`Kubernetes.Deployment`](/providers/kubernetes/deployment) runs a
-server, `Kubernetes.Job` runs to completion, `Kubernetes.Manifest` is
-any object, and `Kubernetes.HelmChart` is a rendered chart. Each points
-at a cluster through its `cluster` prop, whose `auth.kind` selects a
-[cluster adapter](/kubernetes/clusters/connecting#the-connection-model).
+server, `Kubernetes.Job` runs a container to completion,
+`Kubernetes.Manifest` applies any object, and `Kubernetes.HelmChart`
+installs a chart. Point each at a cluster with its
+[`cluster` prop](/kubernetes/clusters/connecting#what-cluster-accepts).
 
 ```typescript
 // alchemy.run.ts — inside the Stack's Effect.gen body
-const local = Kubernetes.KubeConfig({ context: "docker-desktop" }); // any cluster kubectl can reach
-// const cluster = yield* AWS.EKS.Cluster("Cluster", { compute: "auto", /* … */ }); // …or a managed one
+const local = Kubernetes.KubeConfig({ context: "docker-desktop" }); // any context in your kubeconfig
+// const cluster = yield* AWS.EKS.Cluster("Cluster", { compute: "auto", /* … */ }); // …or an EKS cluster
 
 const web = yield* Kubernetes.Deployment("Web", {
-  cluster: local,                 // ← the only line that changes between clusters
+  cluster: local,                 // swap this to target another cluster
   image: "nginx:1.27",
   port: 80,
   replicas: 2,
 });
 
-return { url: web.url };          // LoadBalancer hostname once the cluster assigns one
+return { url: web.url };          // the LoadBalancer hostname, once the cluster assigns one
 ```
 
-## What the cluster adapter gives you
+## What each cluster supports
 
-`Kubernetes.providers()` ships `kubeconfig`, `token`, `client-cert`, and
-`exec`; `AWS.providers()` adds `aws-eks`
-([selection](/kubernetes/clusters/connecting#how-the-adapter-is-chosen)).
+Any cluster runs pre-built images. EKS also builds your own and gives
+Pods AWS access; add `AWS.providers()` beside `Kubernetes.providers()`.
 
-| | kubeconfig / token / client-cert / exec | [EKS](/kubernetes/clusters/eks#what-the-adapter-adds) |
+| | Any other cluster | [EKS](/kubernetes/clusters/eks#what-eks-adds) |
 | --- | --- | --- |
-| Auth | Kubeconfig or [explicit `endpoint`](/kubernetes/clusters/connecting#token-client-certificate-and-exec) | SigV4/STS tokens |
-| `image:` | Used verbatim | Mirrored into ECR |
-| `main:` / `context:` | [Not available](/kubernetes/workloads/image-sources#registry-requirement) | Pushed to ECR |
-| Bindings | [`{ env }`](/kubernetes/workloads/bindings#the-binding-contract) | `{ env, policyStatements }` via [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) |
+| Auth | Kubeconfig, [token, cert, or exec](/kubernetes/clusters/connecting#token-client-certificate-and-exec) | Your AWS credentials |
+| `image:` | Used as-is | Copied to ECR |
+| `main:` / `context:` | [Not available](/kubernetes/workloads/image-sources#registry-requirement) | Built and pushed to ECR |
+| Bindings | [Env vars](/kubernetes/workloads/bindings#bind-a-resource) | Env vars + [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) |
 
 :::note
-The cluster itself is provisioned on the [AWS tab](/aws/compute/eks).
+Create the EKS cluster on the [AWS tab](/aws/compute/eks).
 :::
 
 ## Clusters
@@ -49,8 +48,8 @@ The cluster itself is provisioned on the [AWS tab](/aws/compute/eks).
 
 ## Workloads
 
-- [Deployments](/kubernetes/workloads/deployments) (≈ `AWS.ECS.Service`)
-- [Jobs](/kubernetes/workloads/jobs) (≈ `AWS.ECS.Task`)
+- [Deployments](/kubernetes/workloads/deployments)
+- [Jobs](/kubernetes/workloads/jobs)
 - [Image sources](/kubernetes/workloads/image-sources)
 - [Bindings](/kubernetes/workloads/bindings)
 - [Pod template](/kubernetes/workloads/pod-template)
@@ -68,7 +67,7 @@ The cluster itself is provisioned on the [AWS tab](/aws/compute/eks).
 
 ## What are you building?
 
-| Building | Reach for |
+| Building | Use |
 | --- | --- |
 | A server from a pre-built image | [Deployment](/kubernetes/workloads/deployments#what-gets-created) with `image:` |
 | An Effect server | [Deployment](/kubernetes/workloads/deployments#effect-servers) with `main:` (EKS only) |

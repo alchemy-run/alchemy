@@ -1,19 +1,19 @@
 ---
 title: Pod template
-description: Tune the Pod template Alchemy synthesizes for a Deployment or Job with a deep-partial `podTemplate` — the merge rules, what they make easy, what they make dangerous, and recipes for the common knobs.
+description: Customize the pod spec of a Kubernetes Deployment or Job with podTemplate, including merge rules, container overrides, and recipes for common settings.
 ---
 
-`podTemplate` is a deep-partial `PodTemplateSpec` merged onto the one
-Alchemy synthesizes for a Deployment or Job. Objects recurse, arrays
-and primitives replace.
+`podTemplate` is a partial `PodTemplateSpec` merged onto the default
+one for a Deployment or Job. Objects merge, arrays and primitives
+replace.
 
-## What Alchemy synthesizes
+## The default pod template
 
-`command`, `args`, `resources`, `env`, and `port` already target the
-container, so reach for the prop first.
+`command`, `args`, `resources`, `env`, and `port` already set the
+container, so use the prop when one exists.
 
 ```typescript
-// The base `podTemplate` the reconciler builds before your override is merged.
+// The pod template your `podTemplate` is merged onto.
 {
   metadata: { labels: { "app.kubernetes.io/name": <name>, ...labels } },
   spec: {
@@ -21,10 +21,10 @@ container, so reach for the prop first.
     containers: [
       {
         name: <name>,
-        image: <resolved imageUri>,       // ECR URI on EKS; your `image` verbatim elsewhere
+        image: <imageUri>,                // ECR URI on EKS; your `image` elsewhere
         command, args,                    // from props
         ports: [{ containerPort: port }], // Deployment only
-        env: [ /* name/value pairs — see Deployments → What gets created */ ],
+        env: [ /* ALCHEMY_*, PORT, your env */ ],
         resources,                        // from props
       },
     ],
@@ -32,20 +32,20 @@ container, so reach for the prop first.
 }
 ```
 
-The base has no `volumes`, `initContainers`, `tolerations`,
+The default has no `volumes`, `initContainers`, `tolerations`,
 `affinity`, `securityContext`, or `imagePullSecrets`.
 
 ## Merge rules
 
-Objects merge recursively, arrays replace wholesale, primitives
-replace. `containers` is the one array the base already has.
-`spec.serviceAccountName` swaps the generated ServiceAccount and on
-EKS breaks [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks).
+Objects merge recursively; arrays and primitives replace. `containers`
+is the one array the default already fills. Don't set
+`spec.serviceAccountName`: on EKS it breaks
+[Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks).
 
 ```typescript
-// ❌ Intent: add a readiness probe. Result: `containers` becomes this ONE
-// object — no name, no image, no env. The API server rejects the apply
-// (a container needs `name` and `image`) and the deploy fails.
+// ❌ Adding a readiness probe like this replaces `containers` with this
+// ONE object: no name, no image, no env. The deploy fails because a
+// container needs `name` and `image`.
 podTemplate: {
   spec: {
     containers: [
@@ -56,25 +56,21 @@ podTemplate: {
 ```
 
 ```typescript
-// What actually reaches the cluster for that override:
+// What reaches the cluster for that override:
 spec: {
   serviceAccountName: "api-…",
   containers: [{ readinessProbe: { httpGet: { path: "/health", port: 3000 } } }],
 }
 ```
 
-A `podTemplate` change is an in-place
-[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply),
-which is where an invalid container is rejected.
+Changing `podTemplate` updates the workload
+[in place](/kubernetes/guides/how-apply-works#server-side-apply).
 
 ## Container-level fields
 
-Anything under `containers[0]` that is not a prop (probes,
-`volumeMounts`, `envFrom`, `valueFrom`, `imagePullPolicy`, container
-`securityContext`) needs the full-container override. The image URI of
-`main` and `context` is
-[computed at deploy time](/kubernetes/workloads/image-sources#three-sources),
-so this only works with `image:`.
+Anything on the container that is not a prop (probes, `volumeMounts`,
+`envFrom`, `valueFrom`, `imagePullPolicy`, container `securityContext`)
+needs the full container override. Works with `image:` only.
 
 ```typescript
 const api = yield* Kubernetes.Deployment("Api", {
@@ -98,7 +94,7 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-A `main:` Effect server has no probe today, so answer `/` quickly.
+A `main:` Effect server gets no probe, so answer `/` quickly.
 
 :::tip
 If the override grows beyond a few lines, or you need container-level fields on `main:`, write a [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object) instead.
@@ -108,7 +104,7 @@ If the override grows beyond a few lines, or you need container-level fields on 
 
 ### Tolerations and nodeSelector
 
-Pair `kubernetes.io/arch` with the
+Match `kubernetes.io/arch` to the
 [`architecture`](/kubernetes/workloads/image-sources#architecture) prop.
 
 ```typescript
@@ -122,7 +118,7 @@ podTemplate: {
 
 ### Affinity and spread
 
-`podAntiAffinity` needs a literal label, so add one via `labels`.
+`podAntiAffinity` needs a literal label, so add one with `labels`.
 
 ```typescript
 labels: { app: "api" },
@@ -147,7 +143,7 @@ podTemplate: {
 
 Container-level `securityContext` (`capabilities`,
 `readOnlyRootFilesystem`) needs the
-[override](#container-level-fields) instead.
+[container override](#container-level-fields).
 
 ```typescript
 podTemplate: {
@@ -164,8 +160,9 @@ podTemplate: {
 
 ### imagePullSecrets
 
-For a registry-less cluster pulling a private `image:`; EKS mirrors
-instead. The Secret is a [Manifest](/kubernetes/objects/manifests#secrets).
+Pull a private `image:` on a cluster without a registry (EKS doesn't
+need this). Create the Secret as a
+[Manifest](/kubernetes/objects/manifests#secrets).
 
 ```typescript
 import * as Config from "effect/Config";
@@ -177,7 +174,7 @@ const pull = yield* Kubernetes.Manifest("GhcrPull", {
     kind: "Secret",
     metadata: { name: "ghcr-pull", namespace: "default" },
     type: "kubernetes.io/dockerconfigjson",
-    // The contents of ~/.docker/config.json for the registry, from the env.
+    // The contents of ~/.docker/config.json for the registry, read from the env.
     stringData: { ".dockerconfigjson": Config.string("GHCR_DOCKER_CONFIG_JSON") },
   },
 });
@@ -192,8 +189,8 @@ const api = yield* Kubernetes.Deployment("Api", {
 
 ### Volumes: emptyDir and a PVC from a Manifest
 
-`spec.volumes` merges cleanly; `volumeMounts` needs the override. The
-PVC is a [Manifest](/kubernetes/objects/manifests#any-object).
+`spec.volumes` merges in; `volumeMounts` needs the container override.
+The PVC is a [Manifest](/kubernetes/objects/manifests#any-object).
 
 ```typescript
 const data = yield* Kubernetes.Manifest("ApiData", {
@@ -216,7 +213,7 @@ const api = yield* Kubernetes.Deployment("Api", {
         { name: "scratch", emptyDir: {} },
         { name: "data", persistentVolumeClaim: { claimName: data.name } },
       ],
-      containers: [{ // full override — container-level mounts
+      containers: [{ // full override: mounts are container-level
         name: "api",
         image: "ghcr.io/acme/api:v3",
         ports: [{ containerPort: 8080 }],
@@ -241,7 +238,7 @@ podTemplate: {
     initContainers: [{
       name: "log-shipper",
       image: "fluent/fluent-bit:3.1",
-      restartPolicy: "Always", // native sidecar: starts before, outlives the app container
+      restartPolicy: "Always", // native sidecar: starts before the app, stops after it
       volumeMounts: [{ name: "scratch", mountPath: "/var/log/app" }],
     }],
     volumes: [{ name: "scratch", emptyDir: {} }],
@@ -260,7 +257,7 @@ podTemplate: {
     containers: [{
       name: "api",
       image: "my-api:dev", // same string as `image`
-      imagePullPolicy: "IfNotPresent", // the one field you came for
+      imagePullPolicy: "IfNotPresent", // pull only if the node doesn't have it
       ports: [{ containerPort: 8080 }],
       env: [{ name: "PORT", value: "8080" }],
     }],
@@ -293,7 +290,7 @@ podTemplate: {
 
 ### Annotations and grace period
 
-Both merge cleanly.
+Both merge in.
 
 ```typescript
 podTemplate: {

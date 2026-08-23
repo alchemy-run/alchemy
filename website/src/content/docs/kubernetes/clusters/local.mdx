@@ -1,20 +1,19 @@
 ---
 title: Local clusters
-description: Run the Kubernetes workloads on Docker Desktop, OrbStack, kind, k3s, or minikube — which to pick, how to reach a Service without a cloud load balancer, and what "no managed registry" means for your images.
+description: Deploy Kubernetes workloads to Docker Desktop, OrbStack, kind, k3s, or minikube, reach a Service from your laptop, and use images you build locally.
 ---
 
-Every local cluster is a
-[`KubeConfig()` connection](/kubernetes/clusters/connecting#kubeconfig),
-so it is auth only; the only thing that changes is the two image
-sources that need a registry.
+Connect with
+[`KubeConfig()`](/kubernetes/clusters/connecting#kubeconfig).
+Everything works except `main:` and `context:`; use `image:`.
 
 ## Which local cluster
 
-Docker Desktop (`docker-desktop`), OrbStack (`orbstack`), and
-k3s/k3d (`default` / `k3d-dev`) assign `LoadBalancer` addresses.
-kind (`kind-dev`) and minikube (`minikube`) do not: a default
-Deployment waits ~3 minutes and returns `url: undefined`, so set
-`serviceType: "ClusterIP"` there.
+Docker Desktop (`docker-desktop`), OrbStack (`orbstack`), and k3s/k3d
+(`default` / `k3d-dev`) give `LoadBalancer` Services an address, so
+`api.url` works. kind (`kind-dev`) and minikube (`minikube`) don't: a
+default Deployment waits about 3 minutes and returns
+`url: undefined`, so set `serviceType: "ClusterIP"` there.
 
 ```typescript
 Effect.gen(function* () {
@@ -35,10 +34,9 @@ Effect.gen(function* () {
 
 ## Reaching a Service
 
-`LoadBalancer` (the default) gives you `api.url` where the cluster
-supports it. `NodePort` works everywhere, but the cluster-assigned
-port is not an attribute. `ClusterIP` plus port-forward is the
-dependable fallback and the right choice on kind and minikube
+`LoadBalancer` (the default) gives you `api.url` where supported.
+`NodePort` works everywhere, but you must look up the assigned port
+yourself. On kind and minikube use `ClusterIP` and port-forward
 ([Service types](/kubernetes/guides/exposing-services#service-types)).
 
 ```typescript
@@ -52,7 +50,7 @@ Effect.gen(function* () {
     serviceType: "ClusterIP", // no LB on kind: skip the 3-minute wait, url stays undefined
   });
 
-  // api.serviceName / api.namespace are what you port-forward to:
+  // port-forward to api.serviceName in api.namespace:
   return { service: api.serviceName, namespace: api.namespace };
 });
 ```
@@ -62,26 +60,23 @@ kubectl port-forward -n default svc/myapp-api-dev-alex-k3m7p2q6r4s5t2v6 8080:808
 curl http://localhost:8080/
 ```
 
-Port-forward to `api.serviceName`, not a guess: without a `name`
-prop the names are generated.
+Port-forward to `api.serviceName`: unless you pass `name`, the
+Service name is generated.
 
-## Registry-less limits
+## Limits without a registry
 
-`main:` and `context:` fail on every kubeconfig-backed cluster
-([Registry requirement](/kubernetes/workloads/image-sources#registry-requirement));
-`image:` works. With no `main:` there is no `{ fetch }` or `{ run }`,
-so bindings are
-[env only](/kubernetes/workloads/bindings#env-only-bindings).
+`main:` and `context:` fail on kubeconfig clusters; use `image:`.
+Bindings are [env only](/kubernetes/workloads/bindings#env-only-bindings).
 
 ## Using your own images
 
-Build the image, make it pullable by the node, pass the reference as
-`image:`.
+Build the image, make sure the node can pull it, and pass the
+reference as `image:`.
 
-### Shared daemon: Docker Desktop, OrbStack
+### Docker Desktop and OrbStack
 
-The node is your Docker daemon, so a `Docker.Image` build is already
-there; a rebuild rolls the Deployment.
+An image you build with `Docker.Image` is already on the node.
+Rebuilding it rolls the Deployment.
 
 ```typescript
 // alchemy.run.ts
@@ -105,22 +100,19 @@ export default Alchemy.Stack(
       cluster,
       image: image.imageRef, // "my-api:dev" — already in the node's image store
       port: 8080,
-      // a non-:latest tag defaults imagePullPolicy to IfNotPresent, so the
-      // kubelet uses the local image instead of asking Docker Hub
+      // use a real tag, not :latest
     });
     return { url: api.url };
   }),
 );
 ```
 
-Use a real tag: `:latest` means `imagePullPolicy: Always`, and the
-kubelet fails with `ErrImagePull` asking Docker Hub for a local-only
-image.
+Use a real tag; `:latest` fails with `ErrImagePull`.
 
-### Separate containerd: kind, minikube, k3d
+### kind, minikube, and k3d
 
-Load the tag into the cluster before deploying; a rebuilt tag must
-be re-loaded.
+Load the image into the cluster before you deploy, and again after
+every rebuild.
 
 ```sh
 kind load docker-image my-api:dev --name dev
@@ -130,7 +122,7 @@ k3d image import my-api:dev -c dev
 
 ### A local registry
 
-Or run a registry container, push to it, and use the
+Or run a registry container, push to it, and pass the
 `localhost:5001/...` reference as `image:`.
 
 ```sh

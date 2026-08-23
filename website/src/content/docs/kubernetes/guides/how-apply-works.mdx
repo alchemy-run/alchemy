@@ -1,11 +1,11 @@
 ---
 title: How apply works
-description: Server-side apply under the alchemy field manager, how dropped objects are pruned and drift is corrected, what a field-manager conflict is, the order objects are deleted in, and how to debug it with kubectl.
+description: What an Alchemy deploy does to your Kubernetes objects and how to debug it with kubectl.
 ---
 
-Every `Kubernetes.*` resource ends in the same client: a server-side
-apply `PATCH` under the `alchemy` field manager with `force=true`,
-then a delete of whatever dropped out.
+Every `Kubernetes.*` resource applies its objects with server-side
+apply under the `alchemy` field manager, then deletes whatever
+dropped out.
 
 ## Server-side apply
 
@@ -19,41 +19,36 @@ Accept: application/json
 { "apiVersion": "apps/v1", "kind": "Deployment", "metadata": {...}, "spec": {...} }
 ```
 
-Uncommon kinds, including custom resources, are resolved through API
-discovery; `Kind 'X' not found in API group 'Y'` means the
+If you see `Kind 'X' not found in API group 'Y'`, the
 [CRD is not installed yet](/kubernetes/objects/manifests#custom-resources)
 or the `apiVersion` is wrong.
 
-Under `fieldManager=alchemy`, fields in the body become owned by
-`alchemy`, fields not in the body are left alone, and fields Alchemy
-applied last time but omits now are removed. Removing a key from a
-Manifest `spec` or from chart `values` really removes it from the
-object. `force=true` takes any contested field, so Alchemy never sees
-a 409 ([others do](#conflicts)).
+Alchemy owns every field it sends and leaves the rest alone. Remove a
+key from a Manifest `spec` or from chart `values` and it is removed
+from the object. `force=true` takes any field someone else owns; other
+tools get a [conflict](#conflicts) instead.
 
-Objects within one resource apply in rank order (Namespace, CRD,
+Objects in one resource apply in order: Namespace, CRD,
 ServiceAccount, ConfigMap and Secret, Service, workloads, then
-everything discovered), so a chart's custom resources always find
-their CRD. Declaring the same object twice is last-writer-wins.
+everything else. A chart's custom resources always find their CRD. If
+you declare the same object twice, the last one wins.
 
 ## Pruning and drift
 
-Each multi-object resource persists its object set keyed
-`apiVersion/kind/namespace/name`; keys missing from the next deploy
-are deleted first, in reverse rank order. That happens when a Helm
+An object that drops out of a resource is deleted on the next deploy,
+before anything is applied. That happens when a Helm
 [`values`](/kubernetes/objects/helm#values) change stops rendering an
 object, a [Job spec changes](/kubernetes/workloads/jobs#jobs), or
 `createNamespace` flips to `false`. A `Manifest` never prunes;
 changing its identity is a
 [replacement](/kubernetes/objects/manifests#any-object).
 
-Apply restates every owned field, so an out-of-band `kubectl scale`
-or `set image` is reverted the next time the resource reconciles,
-while fields Alchemy does not own survive. A resource reconciles only
-when the plan sees a prop or content-hash change:
+An out-of-band `kubectl scale` or `set image` is reverted the next
+time the resource applies; fields Alchemy never sent survive. A
+resource applies only when a prop or content hash changes:
 
 ```typescript
-// Deploy #1 — applies spec.replicas = 3 under manager "alchemy".
+// Deploy #1: applies spec.replicas = 3 under manager "alchemy".
 const api = yield* Kubernetes.Deployment("Api", {
   cluster,
   image: "ghcr.io/acme/api:v3",
@@ -62,26 +57,24 @@ const api = yield* Kubernetes.Deployment("Api", {
 
 // Someone runs: kubectl scale deploy/<api.deploymentName> --replicas=10
 //
-// `alchemy deploy` with NO prop change: the plan is a no-op for Api and replicas stay at 10.
-// `alchemy deploy` after ANY prop/hash change (new image tag, a label, an env var):
-// the apply re-asserts replicas = 3 and takes the field back from kubectl.
-// `alchemy deploy --force`: every resource reconciles even without a change —
-// the apply runs, replicas go back to 3.
+// `alchemy deploy` with NO prop change: Api is a no-op and replicas stay at 10.
+// `alchemy deploy` after ANY prop change (new image tag, a label, an env var):
+// replicas go back to 3 and the field is taken back from kubectl.
+// `alchemy deploy --force`: every resource applies even without a change;
+// replicas go back to 3.
 ```
 
-Field drift is fixed by [`alchemy deploy --force`](/cli/deploy).
-Existence drift is fixed by `alchemy sync`, which re-reads the object
-(`Manifest`), the ServiceAccount anchor (`Deployment`, `Job`), or
-only cluster reachability (`HelmChart`).
+To fix changed fields, run [`alchemy deploy --force`](/cli/deploy).
+If an object was deleted out of band, run `alchemy sync`.
 
 :::caution[HorizontalPodAutoscalers]
-`Deployment` always applies `spec.replicas`, so for an autoscaled workload write the Deployment as a [`Manifest`](/kubernetes/objects/manifests#any-object) and omit `spec.replicas`.
+`Deployment` always applies `spec.replicas`. For an autoscaled workload, write the Deployment as a [`Manifest`](/kubernetes/objects/manifests#any-object) and leave out `spec.replicas`.
 :::
 
 ## Conflicts
 
-Conflicts are what other server-side appliers see when they touch a
-field Alchemy owns:
+Other server-side appliers get a conflict when they touch a field
+Alchemy owns:
 
 ```
 $ kubectl apply --server-side -f deployment.yaml
@@ -90,40 +83,39 @@ Please review the fields above--they currently have other managers. Here
 are the ways you can resolve this warning: ...
 ```
 
-Don't co-manage; partition fields instead. A writer that only touches
-fields Alchemy never sends (an annotation, a field
-[left out of a Manifest](/kubernetes/objects/manifests#any-object))
-coexists indefinitely. `--force-conflicts` wins once; the next
-reconcile takes the field back. Client-side `kubectl apply`, `edit`,
-and `scale` never conflict and are reverted the same way.
+Don't share fields. Let other tools write only fields Alchemy never
+sends (an annotation, a field
+[left out of a Manifest](/kubernetes/objects/manifests#any-object)).
+`--force-conflicts` wins once; the next apply takes the field back.
+Client-side `kubectl apply`, `edit`, and `scale` never conflict and
+are reverted the same way.
 
-A Manifest matching an existing object adopts it by taking ownership
-of the fields it sends.
+A Manifest that matches an existing object takes it over, owning the
+fields it sends.
 
 ## Delete order
 
-Inside a resource, references are deleted in descending rank with
-`propagationPolicy=Background`; a 404 is success. Alchemy does not
-wait for deletion, so a Namespace can still be `Terminating` when
+Objects in a resource are deleted in reverse apply order; an object
+that is already gone counts as deleted. Alchemy doesn't wait, so a
+Namespace can still be `Terminating` when
 [`alchemy destroy`](/cli/destroy) returns.
 
-`Deployment` and `Job` then run the adapter's cloud-side cleanup
+`Deployment` and `Job` then clean up their cloud-side resources
 ([EKS](/kubernetes/clusters/eks#destroy-and-a-missing-cluster)).
-`HelmChart` with `includeCrds` deletes the CRDs last, cascading every
-custom resource of those kinds cluster-wide.
+`HelmChart` with `includeCrds` deletes the CRDs last, which deletes
+every custom resource of those kinds cluster-wide.
 
-Across the stack, deletes run in reverse dependency order, and
-dependencies exist only where Outputs flow: a workload whose
-`namespace` is `ns.name` goes before the Namespace; a literal
-`namespace: "apps"` may go in either order
+Across the stack, deletes run in reverse dependency order. Only
+Outputs create dependencies: a workload with `namespace: ns.name` is
+deleted before the Namespace; one with a literal `namespace: "apps"`
+may go in either order
 ([Namespaces](/kubernetes/objects/manifests#namespaces)).
 
 ## Debugging
 
-Apply failures are `KubernetesApiError`s formatted
-`PATCH <path> responded <status>: <body>`: `422` is schema
-validation, `404` means the kind does not exist on this cluster,
-`403` means the adapter's identity lacks RBAC.
+A failed apply reads `PATCH <path> responded <status>: <body>`. `422`
+is a schema error, `404` means the kind doesn't exist on this cluster,
+`403` means your identity lacks RBAC.
 
 ### See who owns what
 
@@ -131,8 +123,8 @@ validation, `404` means the kind does not exist on this cluster,
 kubectl -n default get deploy api -o yaml --show-managed-fields
 ```
 
-`manager: alchemy` with `operation: Apply` lists the fields Alchemy
-will re-assert.
+Look for `manager: alchemy` with `operation: Apply`: those are the
+fields Alchemy will take back.
 
 ### See what Alchemy remembers
 
@@ -140,7 +132,7 @@ will re-assert.
 alchemy state get --stack <stack> --stage <stage> --fqn Api
 ```
 
-The persisted references pruning and delete operate on.
+This lists the objects pruning and delete act on.
 
 ### Reproduce a render
 
@@ -149,7 +141,7 @@ helm template <release> <chart> --repo <repo> --version <v> \
   --namespace <ns> --include-crds --no-hooks -f values.yaml
 ```
 
-Alchemy's exact command;
+This is the exact command Alchemy runs;
 [hook-annotated objects](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt)
 are dropped.
 

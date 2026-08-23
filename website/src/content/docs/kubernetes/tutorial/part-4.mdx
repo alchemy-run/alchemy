@@ -1,6 +1,6 @@
 ---
 title: "Part 4: Helm Charts"
-description: Install the podinfo chart with Kubernetes.HelmChart, pin its version, tune values, own its namespace, and watch Alchemy prune objects the chart stops rendering.
+description: Install the podinfo Helm chart, pin its version, set values, and see objects removed when the chart stops rendering them.
 sidebar:
   order: 4
 ---
@@ -8,10 +8,10 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-Install a Helm chart with `Kubernetes.HelmChart`, tune its values, and
-watch Alchemy prune objects the chart stops rendering. Continue from
-[Part 3](/kubernetes/tutorial/part-3) with its stack deployed. `helm`
-must be on your `PATH` ([Setup](/kubernetes/setup#install)).
+Install a Helm chart, change its values, and remove objects by turning
+them off in the chart. Continue from
+[Part 3](/kubernetes/tutorial/part-3) with its stack deployed. You need
+`helm` on your `PATH` ([Setup](/kubernetes/setup#install)).
 
 ## Install podinfo
 
@@ -35,10 +35,10 @@ return {
 };
 ```
 
-Pin `version` or helm resolves the latest on every deploy
-([full props](/providers/kubernetes/helmchart)).
+Pin `version`, or every deploy picks up the newest release
+([all props](/providers/kubernetes/helmchart)).
 
-## Own the namespace with createNamespace
+## Create the namespace
 
 ```diff lang="typescript"
 const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
@@ -51,8 +51,8 @@ const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
 });
 ```
 
-The chart emits and [owns](/kubernetes/objects/helm#lifecycle) the
-`podinfo` Namespace, applied first and deleted with the rest.
+The chart creates the `podinfo` Namespace first and deletes it on
+destroy ([lifecycle](/kubernetes/objects/helm#lifecycle)).
 
 ## Deploy
 
@@ -88,15 +88,13 @@ Proceed?
 [s2]podinfoRelease: "myapp-podinfo-dev-alex-q2w3e4r5t6y7u2i3",
 }`} />
 
-The three rendered objects were
-[server-side applied](/kubernetes/guides/how-apply-works#server-side-apply)
-like Manifests.
+See the three objects:
 
 ```sh
 kubectl get all -n podinfo
 ```
 
-Port-forward to the Service, named after the release:
+Port-forward to the Service (named after the release) and call it:
 
 ```sh
 kubectl port-forward -n podinfo svc/myapp-podinfo-dev-alex-q2w3e4r5t6y7u2i3 9898:9898
@@ -120,13 +118,13 @@ const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
 });
 ```
 
-[`values`](/kubernetes/objects/helm#values) is the chart's
-`values.yaml`. Deploy: the plan is `1 to update` and
+[`values`](/kubernetes/objects/helm#values) replaces the chart's
+`values.yaml`. Deploy again: the plan says `1 to update`, and
 `kubectl get deploy -n podinfo` shows `2/2`.
 
-## Turn an object off and watch it get pruned
+## Turn the Service off
 
-Stop the port-forward, then switch the Service off:
+Stop the port-forward, then disable the Service:
 
 ```diff lang="typescript"
 values: {
@@ -146,13 +144,13 @@ Proceed?
 [d]Applying 2 objects from podinfo...[/d]
 [g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [y]updated[/y]`} />
 
-Objects that leave the render are
-[pruned](/kubernetes/guides/how-apply-works#pruning-and-drift);
+The chart no longer renders the Service, so it gets
+[deleted](/kubernetes/guides/how-apply-works#pruning-and-drift).
 `kubectl get svc -n podinfo` is now empty.
 
 ## Put it back
 
-Delete the `service` line:
+Remove the `service` line and deploy:
 
 ```diff lang="typescript"
 values: {
@@ -172,13 +170,13 @@ Proceed?
 [d]Applying 3 objects from podinfo...[/d]
 [g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [y]updated[/y]`} />
 
-The Service re-enters the managed set.
+The Service is back.
 
-## What you didn't get from Helm
+## No Helm release
 
-`helm list -n podinfo` shows nothing: Helm only rendered, and hooks
-never run. See
-[What Helm does that Alchemy doesn't](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt).
+`helm list -n podinfo` shows nothing: there is no Helm release, and
+chart hooks don't run
+([details](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt)).
 
 ## Clean up
 
@@ -217,7 +215,7 @@ Proceed?
 [r]✗[/r] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]
 [r]✗[/r] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]`} />
 
-Dependents delete first, so the `tutorial` Namespace goes last.
+The `tutorial` Namespace goes last, after everything inside it.
 
 ## Where next
 
