@@ -26,6 +26,13 @@ interface Marker {
  * key-addressing honest while the tools keep repo-relative paths
  * (exactly the local `Workspace.perRun` reading experience).
  *
+ * The image may ship with a BAKED clone (`SandboxMicrovm.ts` /
+ * `Sandbox.ts` bake the org repo, `.git` and all): when the requested
+ * remote matches the bake's origin, the bake IS the worktree and is
+ * adopted in place — full history, warm installs, zero clone. A bake
+ * for a different repo is prewarm content, not a claimed tree: it is
+ * reset and the requested tree derived greenfield.
+ *
  * `release` empties the tree (the machine itself is recycled by
  * `sleepAfter`); public remotes only for now — the org's sandbox repo
  * is public, and pushes are not part of the review pipeline.
@@ -89,6 +96,26 @@ export const CheckoutsSandbox = Layer.effect(
       .exec("find", [".", "-mindepth", "1", "-delete"], { timeout: 60_000 })
       .pipe(Effect.ignore);
 
+    /** Clone-URL identity: scheme/`.git`-suffix/trailing-slash agnostic. */
+    const sameRemote = (a: string, b: string) => {
+      const normalize = (url: string) =>
+        url
+          .trim()
+          .replace(/^git@([^:]+):/, "https://$1/")
+          .replace(/\.git$/, "")
+          .replace(/\/+$/, "")
+          .toLowerCase();
+      return normalize(a) === normalize(b);
+    };
+
+    /** The tree's baked origin, when the image shipped with a clone
+     *  (`SandboxMicrovm.ts` / `Sandbox.ts` bake the repo, `.git` and
+     *  all). None when the tree is not a git repository. */
+    const bakedOrigin = git(["remote", "get-url", "origin"]).pipe(
+      Effect.map((url) => url.trim()),
+      Effect.option,
+    );
+
     return {
       checkout: (options) =>
         Effect.gen(function* () {
@@ -118,6 +145,37 @@ export const CheckoutsSandbox = Layer.effect(
                 stderr: `sandbox tree already holds '${current.key}' — one workspace per session sandbox`,
               }),
             );
+          }
+
+          // no marker: the tree may still carry the image's BAKED clone
+          const baked = Option.getOrUndefined(yield* bakedOrigin);
+          if (baked !== undefined) {
+            if (sameRemote(baked, options.remote.url)) {
+              // the bake IS the worktree: adopt it in place — full
+              // history, remote intact, node_modules warm. The baked
+              // branch is a build-time snapshot; converge only when the
+              // requested ref differs (or `fresh` demands the tip).
+              const head = yield* git([
+                "rev-parse",
+                "--abbrev-ref",
+                "HEAD",
+              ]).pipe(Effect.orElseSucceed(() => ""));
+              if (head !== ref || options.fresh === true) {
+                yield* git(["fetch", "origin", ref]);
+                yield* git(["checkout", "--detach", "FETCH_HEAD"]);
+                yield* git(["reset", "--hard", "FETCH_HEAD"]);
+              }
+              const marker: Marker = {
+                key: options.key,
+                branch: ref,
+                remote: options.remote,
+              };
+              yield* writeMarker(marker);
+              return checkout(marker);
+            }
+            // a bake for a DIFFERENT repo is prewarm content, not a
+            // claimed tree — reset and derive the requested one
+            yield* emptyTree;
           }
 
           // greenfield: derive the tree in place (shallow — the ref's

@@ -24,6 +24,7 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { testAlchemy } from "./src/Repos.ts";
+import { SandboxMicrovmRuntime } from "./src/SandboxMicrovm.ts";
 import Worker from "./src/Worker.ts";
 
 export default Alchemy.Stack(
@@ -82,9 +83,11 @@ export default Alchemy.Stack(
     // The session sandbox image — HARDCODED to the AWS Lambda MicroVM
     // (Firecracker; the SAME guest physics as the container image,
     // built server-side on AWS; locally, floci emulates the MicroVM
-    // API). To go back to the Cloudflare Container machine, swap for
+    // API), with the alchemy repo BAKED IN (src/SandboxMicrovm.ts):
+    // each session's VM is a warm worktree of `sam/harness`. To go
+    // back to the Cloudflare Container machine, swap for
     // `Cloudflare.AI.SandboxContainerRuntime` (and mirror the swap in
     // src/Worker.ts + src/services/DriverCloudflare.ts).
-    Effect.provide(AWS.AI.SandboxMicrovmRuntime),
+    Effect.provide(SandboxMicrovmRuntime),
   ),
 );
