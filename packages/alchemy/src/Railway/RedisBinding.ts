@@ -2,14 +2,9 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { Url } from "../Redis/index.ts";
 import { isRailwayHost } from "./MountVolume.ts";
-import {
-  REDIS_URL_ENV,
-  RedisUrlMissing,
-  redisCommand as sendRedisCommand,
-  type Redis,
-} from "./Redis.ts";
+import { REDIS_URL_ENV, RedisUrlMissing, type Redis } from "./Redis.ts";
 
 /**
  * Shared scaffolding for Railway Redis bindings.
@@ -18,6 +13,9 @@ import {
  * Deploy-time writes `REDIS_URL` onto the host Service as a Railway
  * reference (`${{RedisName.REDIS_URL}}`). Runtime commands use that URL
  * internally — callers never read `Config.redacted`.
+ *
+ * The RESP client lives in `alchemy/Redis`. This file only wires the
+ * Railway host binding.
  *
  * NOT exported from `index.ts`.
  */
@@ -44,9 +42,7 @@ const redisUrlFromEnv = Config.redacted(REDIS_URL_ENV).pipe(
 );
 
 export const makeRedisBinding = <Client>(options: {
-  makeClient: (
-    url: Effect.Effect<string, RedisUrlMissing, RuntimeContext>,
-  ) => Client;
+  makeClient: (url: Url) => Client;
 }) =>
   Effect.succeed(
     Effect.fn(function* (redis: Redis) {
@@ -75,5 +71,3 @@ export const makeRedisBinding = <Client>(options: {
       return options.makeClient(url);
     }),
   );
-
-export const redisCommand = sendRedisCommand;

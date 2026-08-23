@@ -313,6 +313,12 @@
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
     },
+    "./Redis": {
+      "types": "./lib/Redis/index.d.ts",
+      "bun": "./src/Redis/index.ts",
+      "worker": "./src/Redis/index.ts",
+      "import": "./lib/Redis/index.js"
+    },
     "./SQL/*": {
       "types": "./lib/SQL/*.d.ts",
       "bun": "./src/SQL/*.ts",

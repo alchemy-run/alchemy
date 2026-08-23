@@ -28,16 +28,10 @@ export const REDIS_ADDON_TYPE = "upstash_redis";
 export const REDIS_PROVIDER = "upstash_redis";
 export const REDIS_URL_ENV = "REDIS_URL";
 
-export class RedisUrlMissing extends Data.TaggedError("Fly.RedisUrlMissing")<{
-  name: string;
-}> {}
-
-export class RedisCommandError extends Data.TaggedError(
-  "Fly.RedisCommandError",
-)<{
-  command: string;
-  cause: unknown;
-}> {}
+export {
+  CommandError as RedisCommandError,
+  UrlMissing as RedisUrlMissing,
+} from "../Redis/index.ts";
 
 export interface RedisProps {
   /**
