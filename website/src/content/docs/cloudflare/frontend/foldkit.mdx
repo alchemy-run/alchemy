@@ -5,17 +5,23 @@ sidebar:
   order: 8
 ---
 
-[Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. Its apps are client-only Vite projects —
-the Foldkit Vite plugin only adds HMR and devtools wiring — so
-`Cloudflare.Website.Foldkit` deploys them with a single declaration:
-no `main` entrypoint, no build command, no output directory, no
-Wrangler configuration.
+[Foldkit](https://foldkit.dev) is a TypeScript frontend framework
+built on Effect, using the Elm architecture. Foldkit apps build
+through Vite, so `Cloudflare.Website.Foldkit` deploys one as a
+Cloudflare Worker with a single declaration: no adapter, no build
+command, no output directory, no Wrangler configuration.
 
 `Foldkit` is [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite)
-with Foldkit's defaults applied: client-side routing is assumed, so
-deep links fall back to `index.html` without you configuring
-anything.
+with a narrowed prop surface, so the Vite page is the reference for
+everything it does. It runs one `vite build` over the project: the
+client output deploys as the Worker's static assets, and Alchemy's
+injected Cloudflare plugin builds a server bundle only when the
+declaration names a `main` — your Foldkit config declares no server
+environment of its own.
+
+Foldkit scaffolds three rendering modes — SPA, SSG, and SSR — and
+they want different asset routing, so `Foldkit` applies no routing
+default. See [Asset routing](#asset-routing) for which to set.
 
 ## Configure Vite
 
@@ -43,6 +49,28 @@ Foldkit pins its `effect` peer dependency to an exact version.
 Alchemy runs your app's own Vite build with your app's own
 `node_modules`, so that pin is between Foldkit and your package
 manager — Alchemy imposes no Effect version on your frontend.
+:::
+
+## Remove `@cloudflare/vite-plugin`
+
+:::caution[Remove @cloudflare/vite-plugin if present]
+Alchemy appends its own Cloudflare Vite plugin
+(`@alchemy.run/cloudflare-runtime/vite`) and is **not compatible**
+with `@cloudflare/vite-plugin` in your `vite.config.ts`.
+`create-foldkit-app` does not add it, so this applies only if you
+added it yourself:
+
+```diff lang="typescript"
+// vite.config.ts
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+-import { cloudflare } from "@cloudflare/vite-plugin";
+
+export default defineConfig({
+-  plugins: [foldkit(), cloudflare()],
++  plugins: [foldkit()],
+});
+```
 :::
 
 ## Declare the Website
