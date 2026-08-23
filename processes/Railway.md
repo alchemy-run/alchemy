@@ -233,8 +233,8 @@ observability dashboards, GitHub repo linking as a resource (Service
 
 - Package stays `@distilled.cloud/railway`.
 - `src/index.ts`: `export * from "./services/railway.ts"`. One GraphQL
-  service, so ops are on the package root. No `export * as railway`,
-  no `./railway` export condition.
+  service, so ops are on the package root. `package.json` `exports`
+  is only `"."` — no `./railway`, `./Credentials`, `./Retry`, etc.
 - Callers: `import * as Railway from "@distilled.cloud/railway"` then
   `Railway.projectCreate({ input })`. GraphQL field names are the
   spec. **Do not** patch them to verb-first.
