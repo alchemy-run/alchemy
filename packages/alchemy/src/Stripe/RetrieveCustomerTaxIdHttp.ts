@@ -1,5 +1,5 @@
 import { Credentials } from "@distilled.cloud/stripe";
-import { GetProductsProductFeaturesId } from "@distilled.cloud/stripe/stripe";
+import { GetCustomersCustomerTaxIdsId } from "@distilled.cloud/stripe/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,8 +9,8 @@ import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
 import { sanitizeKey } from "../RuntimeContext.ts";
 import { STRIPE_API_KEY_ENV } from "./AuthProvider.ts";
-import type { ProductFeature } from "./ProductFeature.ts";
-import { RetrieveProductFeature } from "./RetrieveProductFeature.ts";
+import type { CustomerTaxId } from "./CustomerTaxId.ts";
+import { RetrieveCustomerTaxId } from "./RetrieveCustomerTaxId.ts";
 import {
   bindStripeEnv,
   idEnvKey,
@@ -18,8 +18,8 @@ import {
   stripeApiKey,
 } from "./StripeHttp.ts";
 
-const productEnvKey = (resource: { readonly LogicalId: string }): string =>
-  `STRIPE_PRODUCT_${sanitizeKey(resource.LogicalId)}`;
+const customerEnvKey = (resource: { readonly LogicalId: string }): string =>
+  `STRIPE_CUSTOMER_${sanitizeKey(resource.LogicalId)}`;
 
 const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 
@@ -30,31 +30,31 @@ const toIdEffect = (value: unknown): Effect.Effect<string> => {
 };
 
 /**
- * HTTP implementation of {@link RetrieveProductFeature}. The list-item
- * retrieve takes both `product` and `id`.
+ * HTTP implementation of {@link RetrieveCustomerTaxId}. The nested
+ * retrieve takes both `customer` and `id`.
  *
  * @layer
- * @provides Stripe.RetrieveProductFeature
+ * @provides Stripe.RetrieveCustomerTaxId
  */
-export const RetrieveProductFeatureHttp = Layer.effect(
-  RetrieveProductFeature,
+export const RetrieveCustomerTaxIdHttp = Layer.effect(
+  RetrieveCustomerTaxId,
   Effect.gen(function* () {
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
     const auth = makeStripeAuth(context);
 
-    return Effect.fn(function* (feature: ProductFeature) {
-      const idKey = idEnvKey(feature);
-      const productKey = productEnvKey(feature);
+    return Effect.fn(function* (taxId: CustomerTaxId) {
+      const idKey = idEnvKey(taxId);
+      const customerKey = customerEnvKey(taxId);
       if (globalThis.__ALCHEMY_RUNTIME__) {
-        return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
+        return Effect.fn(`Stripe.RetrieveCustomerTaxId(${taxId.LogicalId})`)(
           function* (request?: { expand?: string[] }) {
             return yield* auth.authorize(
-              GetProductsProductFeaturesId({
+              GetCustomersCustomerTaxIdsId({
                 ...(request ?? {}),
                 id: yield* envName(idKey),
-                product: yield* envName(productKey),
+                customer: yield* envName(customerKey),
               }),
             );
           },
@@ -64,23 +64,23 @@ export const RetrieveProductFeatureHttp = Layer.effect(
       const host = yield* Binding.Host;
       if (host !== undefined) {
         const token = yield* stripeApiKey(context);
-        yield* bindStripeEnv(host, feature as unknown as ResourceLike, {
+        yield* bindStripeEnv(host, taxId as unknown as ResourceLike, {
           [STRIPE_API_KEY_ENV]: Redacted.make(token),
-          [idKey]: feature.id,
-          [productKey]: feature.product,
+          [idKey]: taxId.id,
+          [customerKey]: taxId.customer,
         });
       }
 
-      const id = toIdEffect(feature.id);
-      const product = toIdEffect(feature.product);
+      const id = toIdEffect(taxId.id);
+      const customer = toIdEffect(taxId.customer);
 
-      return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
+      return Effect.fn(`Stripe.RetrieveCustomerTaxId(${taxId.LogicalId})`)(
         function* (request?: { expand?: string[] }) {
           return yield* auth.authorize(
-            GetProductsProductFeaturesId({
+            GetCustomersCustomerTaxIdsId({
               ...(request ?? {}),
               id: yield* id,
-              product: yield* product,
+              customer: yield* customer,
             }),
           );
         },
