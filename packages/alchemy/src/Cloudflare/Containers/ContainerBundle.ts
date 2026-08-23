@@ -41,13 +41,30 @@ import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
  * (mirroring the Worker runtime) so the container bootstrap can build
  * `CloudflareEnvironment` for HTTP capability bindings (R2/KV/Queue `*Http`).
  *
- * Explicit `props.environmentVariables` win on a name collision.
+ * `bindings` carries the resource's binding contract — the `{ env }` a
+ * `Binding.Service` attaches with ``host.bind`${resource}`({ env })`` when the
+ * container is the host (`Prisma.Connect`, and any other capability whose
+ * runtime config travels as environment variables). Bindings are resolved by
+ * the engine before `reconcile`, so they land here already evaluated. They are
+ * applied FIRST, at the lowest precedence: an explicitly declared `env` or
+ * `environmentVariables` entry always wins over a capability-injected one.
  */
 export const makeContainerEnv = (
   props: AnyContainerApplicationProps,
   accountId: string,
+  bindings: readonly {
+    data?: { env?: Record<string, any> } | undefined;
+  }[] = [],
 ) => {
   const env: Record<string, string | Redacted.Redacted<string>> = {};
+  for (const binding of bindings) {
+    for (const [name, value] of Object.entries(binding.data?.env ?? {})) {
+      if (Output.isOutput(value) || value === undefined) {
+        continue;
+      }
+      env[name] = value;
+    }
+  }
   for (const [name, value] of Object.entries(props.env ?? {})) {
     if (Output.isOutput(value) || value === undefined) {
       continue;

@@ -1,9 +1,15 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
-import { deferredResourceMeta, type ResourceLike } from "./Resource.ts";
+import { resolveLocalDataPlane } from "./Provider.ts";
+import {
+  deferredResourceMeta,
+  isResource,
+  type ResourceLike,
+} from "./Resource.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
@@ -140,7 +146,17 @@ export const Service = <
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
       Effect.all(args.map(resolveArg), { concurrency: "unbounded" }).pipe(
-        Effect.flatMap((resolved) => f(...resolved)),
+        Effect.flatMap((resolved) =>
+          f(...resolved).pipe(
+            // Deploy-time data-plane routing: the client's calls must target
+            // whatever data plane the bound resource actually lives on. In an
+            // `alchemy dev` run a local-mode resource exists only on the
+            // emulator, so invoking its client against the ambient (live)
+            // cloud environment would miss it — or worse, mutate the real
+            // cloud. See {@link routeClientDataPlane}.
+            Effect.flatMap((client) => routeClientDataPlane(resolved, client)),
+          ),
+        ),
       ),
     );
   // Plan-time invoke (see the `execute` doc on `Service`): bind hostless —
@@ -155,6 +171,105 @@ export const Service = <
       ) as Effect.Effect<any, never, any>,
     );
   return taggedFunction(tag as any, callable) as unknown as Self;
+};
+
+/**
+ * Route a binding client's invocations to the data plane its bound
+ * resource(s) actually live on.
+ *
+ * A dual-provider resource in an `alchemy dev` run resolves to its LOCAL
+ * provider (unless pinned live via `Alchemy.remote()`), so the physical
+ * resource exists only on the local emulator. A client invoked at deploy
+ * time — inside an {@link ../Action.ts Action} body or a plan-time
+ * {@link Service.execute} — would otherwise resolve the ambient (live)
+ * cloud environment and miss it, or mutate the real cloud. The bound
+ * resource's provider registers the emulator context as
+ * {@link ProviderService.localDataPlane} (e.g. AWS's `flociServices()`);
+ * this wrapper provides it *closest* around every invocation, so it wins
+ * over the ambient environment exactly like the local provider's lifecycle
+ * override does.
+ *
+ * Resolution happens once per bind, in the same context the bind step ran
+ * in (the Provider registry and `AlchemyContext` are ambient during stack
+ * evaluation and apply). At runtime inside a deployed Function/Worker there
+ * is no registry and no engine — the wrapper is skipped entirely.
+ */
+const routeClientDataPlane = (
+  resolvedArgs: readonly unknown[],
+  client: unknown,
+): Effect.Effect<any> =>
+  Effect.suspend(() => {
+    if (globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(client);
+    // Bind arguments are the capability's target resources by convention —
+    // scan the top level plus one array level (multi-resource bindings like
+    // ExecuteTransaction take tuples of resources).
+    const resources = resolvedArgs.flatMap((arg): ResourceLike[] =>
+      Array.isArray(arg)
+        ? arg.filter(isResource)
+        : isResource(arg)
+          ? [arg]
+          : [],
+    );
+    if (resources.length === 0) return Effect.succeed(client);
+    return Effect.gen(function* () {
+      const planes: (Layer.Layer<any, any, never> | undefined)[] = [];
+      for (const resource of resources) {
+        planes.push(yield* resolveLocalDataPlane(resource));
+      }
+      const defined = [...new Set(planes.filter((p) => p !== undefined))];
+      if (defined.length === 0) return client;
+      if (defined.length > 1 || planes.some((p) => p === undefined)) {
+        return yield* Effect.die(
+          `Binding client spans mixed data planes: [${resources
+            .map((r) => r.FQN)
+            .join(
+              ", ",
+            )}] resolve to different targets (some local, some live). ` +
+            "A single API call cannot span the local emulator and the real " +
+            "cloud — make the bound resources' modes agree (e.g. pipe them " +
+            "all through Alchemy.remote(), or none).",
+        );
+      }
+      return wrapClientInvocations(client, defined[0]);
+    });
+  });
+
+/**
+ * Wrap every invocation surface of a binding client so its returned Effects
+ * run with `layer` provided closest. Handles the client shapes bindings
+ * return: a callable (the common per-operation client), an object of
+ * methods/Effects (multi-method clients), or a bare Effect. Anything else
+ * passes through untouched. Proxies preserve identity, extra properties,
+ * and method names.
+ */
+const wrapClientInvocations = (
+  client: unknown,
+  layer: Layer.Layer<any, any, never>,
+): unknown => {
+  const provide = (value: unknown): unknown =>
+    Effect.isEffect(value)
+      ? Effect.provide(value as Effect.Effect<any, any, any>, layer)
+      : value;
+  if (Effect.isEffect(client)) return provide(client);
+  if (typeof client === "function") {
+    return new Proxy(client, {
+      apply: (target, thisArg, argArray) =>
+        provide(Reflect.apply(target, thisArg, argArray)),
+    });
+  }
+  if (typeof client === "object" && client !== null) {
+    return new Proxy(client, {
+      get: (target, prop, receiver) => {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value === "function") {
+          return (...args: any[]) =>
+            provide(Reflect.apply(value, target, args));
+        }
+        return provide(value);
+      },
+    });
+  }
+  return client;
 };
 
 /**

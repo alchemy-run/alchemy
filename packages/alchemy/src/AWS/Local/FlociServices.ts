@@ -102,4 +102,8 @@ export const flociDual = <
   ProviderLayer.dual(cls, {
     live,
     local: () => provideProviderContext(live(), flociServices()),
+    // Registered as the resource's local data plane so deploy-time binding
+    // clients (Action bodies, plan-time `execute`) route their API calls to
+    // the emulator whenever the bound resource resolves to local mode.
+    dataPlane: flociServices,
   });

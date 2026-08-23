@@ -1,5 +1,6 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
+import * as Floci from "@alchemy.run/floci";
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -11,7 +12,6 @@ import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as Floci from "@alchemy.run/floci";
 
 import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
 import { flociServices } from "../AWS/Local/FlociServices.ts";
@@ -28,6 +28,7 @@ import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
 import * as RpcProviderProxy from "../Dev/RpcProviderProxy.ts";
 import * as RpcSpawner from "../Dev/RpcSpawner.ts";
+import { ALCHEMY_DEV } from "../Phase.ts";
 import * as Plan from "../Plan.ts";
 import {
   type CompiledStack,
@@ -39,7 +40,6 @@ import {
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
-import { ALCHEMY_DEV } from "../Phase.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
@@ -250,9 +250,10 @@ export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
  * Floci serves virtual-host data planes on the gateway when the Host
  * header is the AWS hostname (`{bucket}.s3-website-{region}.amazonaws.com`,
  * `{apiId}.appsync-api.{region}.amazonaws.com`,
- * `{apiId}.execute-api.{region}.amazonaws.com`). Live tests GET those
- * hosts; under {@link ALCHEMY_TEST_DEV} rewrite the URL to the emulator
- * and keep the Host so the virtual-host filter still fires.
+ * `{apiId}.execute-api.{region}.amazonaws.com`,
+ * `{distributionId}.cloudfront.net`). Live tests GET those hosts; under
+ * {@link ALCHEMY_TEST_DEV} rewrite the URL to the emulator and keep the
+ * Host so the virtual-host filter still fires.
  */
 const rewriteAwsVirtualHostToFloci = (
   request: HttpClientRequest.HttpClientRequest,
@@ -266,7 +267,8 @@ const rewriteAwsVirtualHostToFloci = (
   if (
     !/\.s3-website-[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
     !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname)
+    !/\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
+    !/\.cloudfront\.net$/i.test(url.hostname)
   ) {
     return request;
   }
@@ -528,11 +530,12 @@ export const scratchStack = <ROut>(
       ? Layer.succeed(State.State, State.InMemoryService({}))
       : Layer.provide(State.localState(), PlatformServices);
 
-  // `withProviders` already pins test-body distilled to Floci, but the stack
-  // *program* is composed under `AWS.providers()`'s live Endpoint. Dual
-  // providers still hit Floci in lifecycle ops; user-program distilled
-  // (e.g. ECS Service `findHostedZoneId`) would otherwise query real AWS.
-  const pinProgramToFloci = <A, E, R>(
+  // `withProviders` already pins the test body to Floci, but the stack program
+  // and its later plan/apply phase run under `AWS.providers()`'s live services.
+  // Pin both phases separately: Actions execute during apply, after the stack
+  // program has finished. This override must be inside `compiled.services` so
+  // Effect's closest-layer precedence selects Floci for Action data-plane calls.
+  const pinToFloci = <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, R> =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
@@ -540,7 +543,7 @@ export const scratchStack = <ROut>(
       : effect;
 
   const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
-    (pinProgramToFloci(effect) as Effect.Effect<any, any, never>).pipe(
+    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
         providers: options.providers,
@@ -549,6 +552,7 @@ export const scratchStack = <ROut>(
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled).pipe(
           Effect.flatMap(apply),
+          pinToFloci,
           Effect.provide(compiled.services),
         ),
       ),
@@ -557,14 +561,14 @@ export const scratchStack = <ROut>(
     );
 
   const buildPlan = (effect: Effect.Effect<any, any, any>) =>
-    (pinProgramToFloci(effect) as Effect.Effect<any, any, never>).pipe(
+    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
         providers: options.providers,
         state: stateLayer,
       } as any) as any,
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled).pipe(Effect.provide(compiled.services)),
+        pinToFloci(Plan.make(compiled)).pipe(Effect.provide(compiled.services)),
       ),
       Effect.provide(Layer.succeed(Stage, stage)),
       provideFreshArtifactStore,

@@ -108,6 +108,42 @@ if (!flags.includes("--concurrency") && !flags.includes("-c")) {
   flags.unshift("--concurrency", "32");
 }
 
+// The emulator container outlives any single run, so orphaned rows survive
+// into the next one — and a hard kill (machine death, SIGKILL) skips every
+// finalizer and `afterAll`, so orphans are routine rather than exceptional.
+// They do not just linger; they actively break later runs: a fixed-name
+// fixture collides (`DuplicateLoadBalancerName`), and a Glue table whose S3
+// location was deleted fails unrelated Athena queries, because the query
+// engine resolves the whole catalog.
+//
+// This is the emulator's counterpart to the `pnpm nuke` + `state clear` step
+// that precedes a live-cloud suite run (see AGENTS.md, "The convergence
+// loop"). Set `ALCHEMY_FLOCI_NO_RESET=1` to keep state across runs while
+// iterating on a single suite.
+if (!process.env.ALCHEMY_FLOCI_NO_RESET) {
+  const endpoint =
+    process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+  try {
+    const res = await fetch(`${endpoint}/_floci/state/reset`, {
+      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+    });
+    console.log(
+      res.ok
+        ? `test:aws:floci: reset emulator state (${endpoint})`
+        : `test:aws:floci: emulator state reset returned ${res.status}; continuing`,
+    );
+  } catch (error) {
+    // Not fatal: the emulator may simply not be up yet, in which case
+    // `ensureFloci` starts a fresh one during the run — which is clean anyway.
+    console.log(
+      `test:aws:floci: could not reset emulator state (${
+        error instanceof Error ? error.message : String(error)
+      }); continuing`,
+    );
+  }
+}
+
 const proc = Bun.spawn(["bun", "alchemy-test", ...files.sort(), ...flags], {
   cwd: alchemyRoot,
   // Bun.spawn's default env is a snapshot taken at process start, so the

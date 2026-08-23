@@ -767,11 +767,13 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     version: number;
     /**
-     * Internal cache of the built image hash, used to skip rebuilds when the
-     * bundled program and Dockerfile are unchanged.
+     * Internal hashes of the built image and desired application
+     * configuration, used to skip unchanged builds and updates.
      */
     hash?: {
       image: string;
+      digest?: string;
+      configuration?: string;
     };
     dev: DevContainerImage | undefined;
   },

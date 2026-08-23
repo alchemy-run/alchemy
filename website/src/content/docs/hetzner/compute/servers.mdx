@@ -82,7 +82,8 @@ the server's deploy key and the `root` user by default; pass
 
 ## Cloud-init
 
-`userData` runs at first boot (create-only, max 32 KiB):
+`userData` runs on the server's first boot — the place to install
+packages, write config files, or add users:
 
 ```typescript
 const server = yield* Hetzner.Server("box", {
@@ -95,12 +96,36 @@ packages:
 });
 ```
 
+A shell script works too, and so does a bare snippet — Alchemy adds the
+`#!/bin/bash` shebang cloud-init needs to execute one:
+
+```typescript
+const server = yield* Hetzner.Server("box", {
+  serverType: "cx22",
+  image: "ubuntu-24.04",
+  userData: `#!/bin/bash
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+systemctl enable --now nginx
+`,
+});
+```
+
+Alchemy has its own bootstrap script that pre-installs
+[Bun](https://bun.sh) for [Services](/hetzner/compute/services). Your
+`userData` does not replace it: the two are combined into a multipart
+cloud-init document and both run, Alchemy's first. To take over the
+whole payload, bootstrap included, pass a document that already starts
+with a `Content-Type:` header.
+
+The composed document is capped at 32 KiB (Hetzner's limit) — over that,
+the deploy fails with `Hetzner.ServerUserDataTooLarge`.
+
 :::caution
-When you omit `userData`, Alchemy installs its own bootstrap that
-pre-installs [Bun](https://bun.sh) for
-[Services](/hetzner/compute/services). Providing your own `userData`
-replaces that bootstrap — Services still work (the first deploy
-installs Bun over SSH), it's just slower.
+Cloud-init only runs once, on first boot, so **changing `userData`
+replaces the server**. Plan for it the way you would an `image` or
+`serverType` change: the new server is created, dependents are pointed
+at it, then the old one is deleted.
 :::
 
 ## Attach infrastructure
