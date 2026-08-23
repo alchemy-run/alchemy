@@ -23,7 +23,7 @@ const PROCESS_HOSTED = new Set(["Command.Dev", "AWS.Website.Server"]);
  * binding such as `InvokeFunction(fn)` then targets the real cloud, and a
  * binding spanning a declaring sibling (`RunTask(cluster, task)`) dies with
  * "Binding client spans mixed data planes" (the reported bug; its e2e is
- * test/AWS/Local/EcsDataPlane.local.test.ts).
+ * test/AWS/Local/Actions.local.test.ts).
  *
  * `flociDual` declares it for you; the hand-written floci providers
  * (`ProviderLayer.dual` with a `Floci*Provider` local) have to say so
