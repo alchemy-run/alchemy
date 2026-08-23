@@ -9,6 +9,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import AsyncContainerStack from "./fixtures/async/stack.ts";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import ExternalStack from "./fixtures/external/stack.ts";
+import InferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import RemoteStack from "./fixtures/remote/stack.ts";
 
@@ -252,6 +253,44 @@ describe.concurrent.each([
         // The echo image reflects the request as JSON ("method" only appears
         // in a real echo response, never in an error page) — proof the
         // request went Worker → DO class → container port 8080 and back.
+        const hello = yield* fetchReady(new URL("/hello", url), "method");
+        expect(hello).toContain("method");
+      }).pipe(logLevel),
+      { timeout },
+    );
+  });
+  /**
+   * Issue #1321 — the same sid collision as above in the shape the
+   * Containers guide documents: `className` omitted, so the env key, the
+   * Container's logical id and the DO class are all one name
+   * (`Probe: Container("Probe", …)`). Deployed and driven over HTTP: the
+   * Worker must see a real namespace and reach the container through it.
+   */
+  describe("async container with inferred class name", () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = make();
+    const stack = beforeAll(deploy(InferredClassStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(InferredClassStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "binds the container class as a durable object namespace",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const body = yield* fetchReady(new URL("/binding", url), "kind");
+        expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    test(
+      "serves through the container-backed DO class",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
         const hello = yield* fetchReady(new URL("/hello", url), "method");
         expect(hello).toContain("method");
       }).pipe(logLevel),
