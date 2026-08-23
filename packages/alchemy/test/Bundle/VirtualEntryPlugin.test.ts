@@ -55,10 +55,11 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
           );
           yield* materializeIsolatedProject(project);
           const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-          // In-repo, every bundler resolves `alchemy/*` through the `bun`
-          // export condition (`src/*.ts`) so a test can never exercise a
-          // stale `lib/` build — see FunctionBundle.ts. Node-runtime
-          // modules still need the `node` condition for their own deps.
+          // The exact production condition sets: bun modules resolve
+          // `alchemy/*` through the `bun` condition (`src/*.ts`); node
+          // modules (Lambda zip, the *Node container variants) resolve
+          // through `import` → `lib/*.js`, so this test requires a built
+          // lib (`pnpm build`), exactly like a deployed Node bundle.
           const isNode = name.endsWith("Node") || name === "Lambda";
 
           try {
@@ -70,8 +71,8 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
                 external: ["bun", "bun:*"],
                 resolve: {
                   conditionNames: isNode
-                    ? ["bun", "node", "import", "module", "default"]
-                    : ["bun", "import", "module", "default"],
+                    ? [...Bundle.NODE_CONDITION_NAMES]
+                    : [...Bundle.BUN_CONDITION_NAMES],
                 },
                 plugins: [
                   virtualEntryPlugin(

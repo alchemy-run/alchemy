@@ -1458,6 +1458,11 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
       input: realMain,
       cwd,
       platform: "node",
+      // Prisma Compute runs the bundle on bun.
+      resolve: {
+        conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+        ...props.bundle?.input?.resolve,
+      },
       plugins: [
         props.bundle?.input?.plugins,
         virtualEntryPlugin(

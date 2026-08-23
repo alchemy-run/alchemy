@@ -197,18 +197,16 @@ export default await bootstrap(entrypoint);
         cwd,
         external: externalOption,
         platform: "node",
-        // Workspace tests and generated service patches execute
-        // distilled from `src` through its `bun` export condition.
-        // Resolve the deployed Lambda bundle the same way so a live
-        // binding test cannot silently exercise stale `lib` output.
+        // The zip runtime is Node (`nodejs22.x` | `nodejs24.x`): resolve with
+        // the node conditions and let rolldown supply the import kind. A
+        // `bun` condition here would hand a Node function any package's
+        // bun-specific entry. (Container-image functions are built by the
+        // user's Dockerfile and never pass through this bundler.)
         resolve: {
           ...inputOptions.resolve,
           conditionNames: [
-            "bun",
-            ...(
-              inputOptions.resolve?.conditionNames ??
-              Bundle.NODE_CONDITION_NAMES
-            ).filter((condition) => condition !== "bun"),
+            ...(inputOptions.resolve?.conditionNames ??
+              Bundle.NODE_CONDITION_NAMES),
           ],
         },
         plugins: [inputOptions.plugins, entryPlugin],

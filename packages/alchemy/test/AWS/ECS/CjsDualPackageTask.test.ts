@@ -6,24 +6,26 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
-import InlineDockerfileTaskLive, {
-  InlineDockerfileTask,
-} from "./fixtures/inline-dockerfile-task.ts";
+import CjsDualPackageTaskLive, {
+  CjsDualPackageTask,
+} from "./fixtures/pg-task.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// Live proof of the `main` + `Dockerfile.inline` environment composition: the
-// fixture's inline content carries a `RUN` that bakes a marker file into an
-// image layer, and its bundled `{ run }` program reads the marker back at
-// container runtime, exiting non-zero if absent. Exit code 0 proves the
-// inline preamble replaced the generated `FROM` (the RUN executed at build
-// time) AND the bundle was layered on top of that environment.
+// Live behavioral proof for CommonJS dual-package resolution: a deployed
+// task whose program imports `pg` (a CJS consumer of the dual-package
+// `pg-pool`, whose exports list `import` before `require`). With the former
+// bundler conditions (`"import"` in the set for both import kinds) the
+// bundle died AT LOAD with `TypeError: The superclass is not a constructor`
+// and the container exited 1; the fixture must boot, construct a Pool, and
+// exit 0. The unit-level pin is test/Bundle/ConditionNames.test.ts — this
+// is the same defect observed from the cloud.
 //
 // Docker + ECR + Fargate placement is minutes of wall clock, so like the
-// other Task e2e tests this is gated out of the default sweep: run it
+// Task e2e smoke test it is gated out of the default sweep: run it
 // explicitly with `AWS_TEST_SLOW=1`.
 test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
-  "inline-dockerfile environment bakes RUN artifact into the bundled image",
+  "task importing a CJS dual-package consumer (pg) boots and exits 0",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -36,30 +38,26 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
 
       const { clusterArn, taskDefinitionArn } = yield* stack.deploy(
         Effect.gen(function* () {
-          const cluster = yield* Cluster("InlineDockerfileCluster", {
-            clusterName: "alchemy-test-inline-dockerfile",
+          const cluster = yield* Cluster("CjsDualCluster", {
+            clusterName: "alchemy-test-cjs-dual",
           });
-          const task = yield* InlineDockerfileTask;
+          const task = yield* CjsDualPackageTask;
           return {
             clusterArn: cluster.clusterArn,
             taskDefinitionArn: task.taskDefinitionArn,
           };
-        }).pipe(Effect.provide(InlineDockerfileTaskLive)),
+        }).pipe(Effect.provide(CjsDualPackageTaskLive)),
       );
-
       expect(taskDefinitionArn).toBeTruthy();
 
-      // Launch the one-shot task once, out-of-band. The task/execution
-      // roles were created seconds ago: ECS rejects `runTask` with
-      // "unable to assume the role" until IAM propagates, so retry that
-      // one typed error (bounded).
+      // Launch once, out-of-band; retry the IAM-propagation rejection.
       const started = yield* ecs
         .runTask({
           cluster: clusterArn,
           taskDefinition: taskDefinitionArn!,
           launchType: "FARGATE",
           count: 1,
-          startedBy: "alchemy-inline-dockerfile-test",
+          startedBy: "alchemy-cjs-dual-test",
           networkConfiguration: {
             awsvpcConfiguration: {
               subnets: [subnetId!],
@@ -80,8 +78,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       const taskArn = started.tasks?.[0]?.taskArn;
       expect(taskArn).toBeTruthy();
 
-      // Wait for the task to stop: image pull + container boot + the
-      // one-shot program running to completion (~1-3 minutes cold).
       const stopped = yield* ecs
         .describeTasks({ cluster: clusterArn, tasks: [taskArn!] })
         .pipe(
@@ -97,7 +93,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
         );
 
-      // Exit 0 requires the artifact to have been baked by the inline RUN.
+      // Exit 0 = pg loaded, BoundPool constructed. A mis-resolved bundle
+      // dies at module load and exits 1.
       expect(stopped.stoppedReason ?? "").not.toContain("CannotPullContainer");
       expect(stopped.containers?.[0]?.exitCode).toBe(0);
 
