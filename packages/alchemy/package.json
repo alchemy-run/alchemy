@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.72",
+  "version": "2.0.0-beta.74",
   "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -227,6 +227,18 @@
       "worker": "./src/Hetzner/*.ts",
       "import": "./lib/Hetzner/*.js"
     },
+    "./Fly": {
+      "types": "./lib/Fly/index.d.ts",
+      "bun": "./src/Fly/index.ts",
+      "worker": "./src/Fly/index.ts",
+      "import": "./lib/Fly/index.js"
+    },
+    "./Fly/*": {
+      "types": "./lib/Fly/*.d.ts",
+      "bun": "./src/Fly/*.ts",
+      "worker": "./src/Fly/*.ts",
+      "import": "./lib/Fly/*.js"
+    },
     "./Prisma": {
       "types": "./lib/Prisma/index.d.ts",
       "bun": "./src/Prisma/index.ts",
@@ -384,6 +396,7 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
@@ -413,11 +426,11 @@
     "yaml": "catalog:shared"
   },
   "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@cloudflare/containers": "catalog:cloudflare",
     "@cloudflare/puppeteer": "catalog:cloudflare",
     "@cloudflare/workers-types": "catalog:cloudflare-runtime",
-    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/platform-node-shared": "catalog:effect",
@@ -472,6 +485,7 @@
     "ws": "catalog:shared"
   },
   "peerDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
@@ -488,6 +502,9 @@
     "ws": "catalog:shared"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/frontend-frameworks": {
+      "optional": true
+    },
     "@aws/durable-execution-sdk-js": {
       "optional": true
     },

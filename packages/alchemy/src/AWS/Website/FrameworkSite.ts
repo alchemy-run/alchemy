@@ -9,13 +9,15 @@ import {
   Function as LambdaFunction,
   type FunctionProps,
 } from "../Lambda/Function.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import { Server, type ServerDevProps } from "./Server.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
-import type {
-  WebsiteAssetsConfig,
-  WebsiteDomainProps,
-  WebsiteEdgeProps,
-  WebsiteInvalidationProps,
+import {
+  normalizeWebsiteDomain,
+  type WebsiteAssetsConfig,
+  type WebsiteDomainProps,
+  type WebsiteEdgeProps,
+  type WebsiteInvalidationProps,
 } from "./shared.ts";
 
 /**
@@ -164,6 +166,20 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(
     const remoted = yield* ProviderModePolicy;
     const isLocal = ctx.dev && remoted !== true;
 
+    const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+
+    // A Router-attached dev server is an ORIGIN for the emulated CloudFront
+    // edge, which runs in a container and reaches the host through its
+    // gateway address — it cannot open a connection to the host's loopback.
+    // Frameworks bind loopback by default (Vite picks `[::1]`), so the edge
+    // would get a refused connection and answer 502. Bind all interfaces
+    // unless the caller asked for a specific host. Standalone dev sites, and
+    // `mode: "external"` (we start nothing), keep the framework's default.
+    const dev: ServerDevProps | undefined =
+      isLocal && routerDomain && props.dev?.mode !== "external"
+        ? { ...props.dev, host: props.dev?.host ?? "0.0.0.0" }
+        : props.dev;
+
     const build = yield* Server("Build", {
       framework: config.framework,
       target: config.target,
@@ -171,17 +187,23 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(
       env: props.server?.environment,
       options: config.options,
       memo: props.memo,
-      dev: props.dev,
+      dev,
     });
 
     if (isLocal) {
+      // Router-attached sites register with the Router in dev exactly as they
+      // do live — same resource types and ids — with the framework's dev
+      // server standing in for the S3 + Lambda origins.
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, build.url)
+        : undefined;
       return {
         bucket: undefined,
         build,
         files: undefined,
         distribution: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         server: undefined,
         serverUrl: undefined,
         url: build.url,

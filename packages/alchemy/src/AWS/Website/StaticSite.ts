@@ -29,6 +29,7 @@ import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
   normalizeWebsiteDomain,
   type StaticSiteBuildProps,
@@ -275,13 +276,20 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         env: props.dev.env,
       });
       const devUrl = Output.map(dev.url, (url) => url ?? props.dev?.url);
+      // A Router-attached site registers with the Router in dev exactly as it
+      // does live — same resource types, same ids, same route entries — with
+      // the local dev server standing in for the S3 origin.
+      const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, devUrl)
+        : undefined;
       return {
         bucket: undefined,
         build: undefined,
         files: undefined,
         distribution: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         url: devUrl,
         urls: [devUrl],
       };
