@@ -1,8 +1,6 @@
 import * as Bundle from "@/Bundle/Bundle";
-import {
-  makeFunctionBundler,
-  type FunctionProps,
-} from "@/AWS/Lambda/FunctionBundle";
+import type { FunctionProps } from "@/AWS/Lambda/Function";
+import { makeFunctionBundler } from "@/AWS/Lambda/FunctionBundle";
 import { exec } from "@/Util/exec.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
