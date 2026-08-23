@@ -10,6 +10,7 @@ import {
   BillingPortalConfigurationProvider,
 } from "./BillingPortalConfiguration.ts";
 import { Coupon, CouponProvider } from "./Coupon.ts";
+import { CreateCustomerHttp } from "./CreateCustomerHttp.ts";
 import * as Credentials from "./Credentials.ts";
 import { Customer, CustomerProvider } from "./Customer.ts";
 import {
@@ -30,8 +31,25 @@ import {
   RadarValueListItem,
   RadarValueListItemProvider,
 } from "./RadarValueListItem.ts";
+import { RetrieveBillingMeterHttp } from "./RetrieveBillingMeterHttp.ts";
+import { RetrieveBillingPortalConfigurationHttp } from "./RetrieveBillingPortalConfigurationHttp.ts";
+import { RetrieveCouponHttp } from "./RetrieveCouponHttp.ts";
+import { RetrieveCustomerHttp } from "./RetrieveCustomerHttp.ts";
+import { RetrieveEntitlementsFeatureHttp } from "./RetrieveEntitlementsFeatureHttp.ts";
+import { RetrievePaymentLinkHttp } from "./RetrievePaymentLinkHttp.ts";
+import { RetrievePaymentMethodConfigurationHttp } from "./RetrievePaymentMethodConfigurationHttp.ts";
+import { RetrievePriceHttp } from "./RetrievePriceHttp.ts";
+import { RetrieveProductFeatureHttp } from "./RetrieveProductFeatureHttp.ts";
+import { RetrieveProductHttp } from "./RetrieveProductHttp.ts";
+import { RetrievePromotionCodeHttp } from "./RetrievePromotionCodeHttp.ts";
+import { RetrieveRadarValueListHttp } from "./RetrieveRadarValueListHttp.ts";
+import { RetrieveRadarValueListItemHttp } from "./RetrieveRadarValueListItemHttp.ts";
+import { RetrieveShippingRateHttp } from "./RetrieveShippingRateHttp.ts";
+import { RetrieveTaxRateHttp } from "./RetrieveTaxRateHttp.ts";
+import { RetrieveWebhookEndpointHttp } from "./RetrieveWebhookEndpointHttp.ts";
 import { ShippingRate, ShippingRateProvider } from "./ShippingRate.ts";
 import { TaxRate, TaxRateProvider } from "./TaxRate.ts";
+import { UpdateCustomerHttp } from "./UpdateCustomerHttp.ts";
 import { WebhookEndpoint, WebhookEndpointProvider } from "./WebhookEndpoint.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -106,6 +124,28 @@ export const providers = () =>
         ShippingRateProvider(),
         TaxRateProvider(),
         WebhookEndpointProvider(),
+      ),
+    ),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        CreateCustomerHttp,
+        RetrieveBillingMeterHttp,
+        RetrieveBillingPortalConfigurationHttp,
+        RetrieveCouponHttp,
+        RetrieveCustomerHttp,
+        RetrieveEntitlementsFeatureHttp,
+        RetrievePaymentLinkHttp,
+        RetrievePaymentMethodConfigurationHttp,
+        RetrievePriceHttp,
+        RetrieveProductFeatureHttp,
+        RetrieveProductHttp,
+        RetrievePromotionCodeHttp,
+        RetrieveRadarValueListHttp,
+        RetrieveRadarValueListItemHttp,
+        RetrieveShippingRateHttp,
+        RetrieveTaxRateHttp,
+        RetrieveWebhookEndpointHttp,
+        UpdateCustomerHttp,
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),

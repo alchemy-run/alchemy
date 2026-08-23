@@ -1,0 +1,20 @@
+import { GetWebhookEndpointsWebhookEndpoint } from "@distilled.cloud/stripe/stripe";
+import * as Layer from "effect/Layer";
+import { RetrieveWebhookEndpoint } from "./RetrieveWebhookEndpoint.ts";
+import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
+
+/**
+ * HTTP implementation of {@link RetrieveWebhookEndpoint}. Provide it on the
+ * Function or Worker Effect.
+ *
+ * @layer
+ * @provides Stripe.RetrieveWebhookEndpoint
+ */
+export const RetrieveWebhookEndpointHttp = Layer.effect(
+  RetrieveWebhookEndpoint,
+  makeHttpStripeIdBinding({
+    tag: "Stripe.RetrieveWebhookEndpoint",
+    operation: GetWebhookEndpointsWebhookEndpoint,
+    idField: "webhook_endpoint",
+  }),
+);
