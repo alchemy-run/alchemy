@@ -59,7 +59,7 @@ export const makeStripeAuth = (
 const envName = (key: string): Effect.Effect<string> =>
   Config.string(key).pipe(Effect.orDie);
 
-const toIdEffect = (value: unknown): Effect.Effect<string> => {
+export const asStringEffect = (value: unknown): Effect.Effect<string> => {
   if (typeof value === "string") return Effect.succeed(value);
   if (Effect.isEffect(value)) {
     return value as Effect.Effect<string>;
@@ -69,11 +69,12 @@ const toIdEffect = (value: unknown): Effect.Effect<string> => {
 
 export const stripeApiKey = (
   ambient: Context.Context<Credentials | HttpClient.HttpClient>,
-) =>
+): Effect.Effect<string> =>
   Credentials.pipe(
     Effect.provideContext(ambient),
     Effect.flatMap((resolve) => resolve),
     Effect.map((cfg) => Redacted.value(cfg.apiKey)),
+    Effect.orDie,
   );
 
 const isEnvHost = (type: string | undefined): boolean =>
@@ -89,11 +90,11 @@ export const bindStripeEnv = (
   host: ResourceLike,
   resource: ResourceLike | undefined,
   env: Record<string, unknown>,
-) => {
+): Effect.Effect<void> => {
   const type = host.Type;
   const target = resource ?? host;
   if (isEnvHost(type)) {
-    return (host as any).bind`${target}`({ env });
+    return (host as any).bind`${target}`({ env }) as Effect.Effect<void>;
   }
   if (type === "Cloudflare.Worker") {
     const bindings = Object.entries(env).map(([name, value]) =>
@@ -101,7 +102,7 @@ export const bindStripeEnv = (
         ? { type: "secret_text" as const, name, text: value }
         : { type: "plain_text" as const, name, text: value },
     );
-    return (host as any).bind`${target}`({ bindings });
+    return (host as any).bind`${target}`({ bindings }) as Effect.Effect<void>;
   }
   return Effect.void;
 };
@@ -152,10 +153,7 @@ export const makeHttpStripeIdBinding = <
         });
       }
 
-      const id =
-        typeof resource.id === "string"
-          ? Effect.succeed(resource.id)
-          : toIdEffect(yield* resource.id as unknown as Effect.Effect<unknown>);
+      const id = asStringEffect(resource.id);
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, IdField>,
       ) {
