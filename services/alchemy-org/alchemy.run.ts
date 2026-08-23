@@ -51,12 +51,6 @@ export default Alchemy.Stack(
       main: "edge.ts",
       env: {
         ORG: Worker,
-        // the backend's own origin, inlined into the client bundle
-        // (`import.meta.env.VITE_API_ORIGIN`): the SPA attaches its
-        // session SOCKETS directly to the Worker — same-origin HTTP
-        // rides the service binding, but WebSocket upgrades do not
-        // survive the dev chain's node upstream (runtime bug, tracked)
-        VITE_API_ORIGIN: org.url.as<string>(),
       },
       // PINNED dev port: without it the Worker and the Website both
       // race for the default (1337), and every restart reshuffles —

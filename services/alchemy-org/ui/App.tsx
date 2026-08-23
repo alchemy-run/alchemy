@@ -33,7 +33,7 @@ import {
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
-import { attachUrl, useAgent, useChat } from "alchemy/AI/React";
+import { useAgent, useChat } from "alchemy/AI/React";
 import {
   AlarmClock,
   CircleDot,
@@ -80,9 +80,6 @@ interface ApprovalRequest {
   at: number;
 }
 
-/** The backend's own origin (inlined at build): session sockets attach
- *  here directly — see the `useAgent` note in `Chat`. */
-const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN ?? "") as string;
 
 /** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
 const DEFAULT_THREAD = "Engineer:main";
@@ -1021,13 +1018,12 @@ const Chat = ({
   // "live"` when the transcript hydrated from `initial` (the
   // /messages snapshot — a full replay would render every message
   // twice); `"replay"` when no snapshot exists and the socket owns
-  // the history. The socket attaches DIRECTLY to the backend origin
-  // (VITE_API_ORIGIN) when configured: same-origin HTTP rides the
-  // service binding, but WS upgrades do not survive the dev chain.
+  // the history. SAME-ORIGIN like every other request: `/attach/*`
+  // rides the service binding to the backend, in dev included (the
+  // vite chain relays WebSocket upgrades — cloudflare-runtime's
+  // `websockets.ts`).
   const agent = useAgent({
-    ...(API_ORIGIN
-      ? { url: attachUrl(id, new URL(API_ORIGIN)) }
-      : { chatId: id }),
+    chatId: id,
     history: hydrated ? "live" : "replay",
   });
   const { messages, sendMessage, status, stop } = useChat({
