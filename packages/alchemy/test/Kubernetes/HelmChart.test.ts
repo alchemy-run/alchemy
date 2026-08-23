@@ -76,6 +76,26 @@ describe("renderHelmChart (local fixture)", (it) => {
       }),
   );
 
+  // Regression for #1312: the fixture chart ships a `helm.sh/hook: pre-delete`
+  // Job. HelmChart has no Helm release and no hook lifecycle, so the hook
+  // must never enter the managed-object graph (where it would be created and
+  // reconciled like an ordinary workload on every deploy).
+  it.effect.skipIf(!isHelmReady)(
+    "excludes Helm lifecycle hooks from the render",
+    () =>
+      Effect.gen(function* () {
+        const objects = yield* renderHelmChart({
+          chart: chartDir,
+          releaseName: "probe",
+          namespace: "demo",
+        });
+        expect(objects.map((object) => object.kind)).not.toContain("Job");
+        expect(objects.map((object) => object.metadata.name)).toEqual([
+          "probe-config",
+        ]);
+      }),
+  );
+
   it.effect.skipIf(!isHelmReady)(
     "a bad chart reference fails with a typed HelmError",
     () =>
@@ -113,6 +133,37 @@ metadata:
       expect(objects).toHaveLength(1);
       expect(objects[0]?.kind).toBe("ConfigMap");
       expect(objects[0]?.metadata.name).toBe("example");
+    }),
+  );
+
+  it.effect("excludes helm.sh/hook-annotated objects (#1312)", () =>
+    Effect.gen(function* () {
+      const objects = yield* parseRenderedManifests(
+        "example",
+        `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ordinary
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: uninstall-hook
+  annotations:
+    helm.sh/hook: pre-delete
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: smoke-test
+  annotations:
+    "helm.sh/hook": test
+`,
+      );
+
+      expect(objects.map((object) => object.metadata.name)).toEqual([
+        "ordinary",
+      ]);
     }),
   );
 
