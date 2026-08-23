@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
@@ -103,8 +104,30 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       );
       expect(later).toBeGreaterThan(first);
 
+      // App Runner auto-creates these two log groups for the service; they
+      // survive `deleteService`, so the provider reaps them explicitly.
+      const logGroupNames = [
+        `/aws/apprunner/${service.serviceName}/${service.serviceId}/application`,
+        `/aws/apprunner/${service.serviceName}/${service.serviceId}/service`,
+      ];
+      const observeLogGroups = Effect.forEach(logGroupNames, (logGroupName) =>
+        logs
+          .describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 })
+          .pipe(
+            Effect.map((response) =>
+              (response.logGroups ?? []).some(
+                (group) => group.logGroupName === logGroupName,
+              ),
+            ),
+          ),
+      );
+      // Sanity check the names: a typo here would make the post-destroy
+      // assertion below pass vacuously.
+      expect(yield* observeLogGroups).toEqual([true, true]);
+
       // Destroy immediately — App Runner services bill while running — and
-      // verify zero leftovers: service, managed repository, and both roles.
+      // verify zero leftovers: service, managed repository, both roles, and
+      // both log groups.
       const { repositoryName, instanceRoleName, accessRoleName, serviceArn } =
         service;
       yield* stack.destroy();
@@ -130,6 +153,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         );
         expect(roleError._tag).toBe("NoSuchEntityException");
       }
+
+      expect(yield* observeLogGroups).toEqual([false, false]);
     }),
   // Docker build + push (~2-4 min) + create (~3-5 min) + delete (~2-3 min).
   { timeout: 1_200_000 },

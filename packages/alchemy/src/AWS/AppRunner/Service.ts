@@ -1,4 +1,5 @@
 import * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
@@ -785,6 +786,96 @@ const emptyPlatformAttributes: PlatformAttributes = {
   accessRoleName: undefined,
   codeHash: undefined,
 };
+
+/**
+ * The two CloudWatch log groups App Runner auto-creates for a service:
+ * `.../application` (the container's stdout/stderr) and `.../service`
+ * (App Runner's own deployment and health-check events).
+ *
+ * Both names embed the AWS-generated service id, so a pair belongs to
+ * exactly one service instance — it can never be shared with, or reused
+ * by, another service.
+ */
+const logGroupNamesFor = (serviceName: string, serviceId: string) => [
+  `/aws/apprunner/${serviceName}/${serviceId}/application`,
+  `/aws/apprunner/${serviceName}/${serviceId}/service`,
+];
+
+/**
+ * Delete one of a service's auto-created log groups, idempotently.
+ *
+ * `deleteService` does NOT remove them, so without this every
+ * deploy+destroy cycle strands a pair (matching how the Lambda and ECS
+ * providers reap `/aws/lambda/{name}` and their task log group).
+ *
+ * App Runner can flush a final batch of events after the service itself
+ * is gone, silently re-creating a just-deleted group, so the delete is
+ * followed by a bounded observe→delete convergence loop. A group that
+ * never reappears — the common case — costs a single extra describe.
+ * Reaping is auxiliary to an already-completed service deletion, so a
+ * group that survives the budget warns rather than failing the destroy.
+ */
+const reapLogGroup = Effect.fn(function* (logGroupName: string) {
+  const deleteGroup = logs.deleteLogGroup({ logGroupName }).pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "OperationAbortedException" ||
+        error._tag === "ServiceUnavailableException",
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(6),
+      ]),
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.timeoutOrElse({
+      duration: "30 seconds",
+      orElse: () =>
+        Effect.logWarning(
+          `Timed out deleting App Runner log group ${logGroupName}`,
+        ),
+    }),
+  );
+
+  // A describe that cannot complete in time is not deletion proof —
+  // assume the group is still present and let the bounded loop converge.
+  const observeGroup = logs
+    .describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 })
+    .pipe(
+      Effect.map((response) =>
+        (response.logGroups ?? []).some(
+          (group) => group.logGroupName === logGroupName,
+        ),
+      ),
+      Effect.timeoutOrElse({
+        duration: "15 seconds",
+        orElse: () =>
+          Effect.logWarning(
+            `Timed out observing App Runner log group ${logGroupName} — assuming still present`,
+          ).pipe(Effect.as(true)),
+      }),
+    );
+
+  yield* deleteGroup;
+
+  // Re-reaps at t=0s/5s/…/30s, each attempt idempotent.
+  const stillPresent = yield* Effect.gen(function* () {
+    const present = yield* observeGroup;
+    if (present) yield* deleteGroup;
+    return present;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (present) => !present,
+      times: 6,
+    }),
+  );
+
+  if (stillPresent) {
+    yield* Effect.logWarning(
+      `App Runner log group ${logGroupName} kept reappearing after delete`,
+    );
+  }
+});
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -1672,6 +1763,16 @@ await Effect.runPromise(program).catch((err) => {
               .pipe(
                 Effect.catchTag("NoSuchEntityException", () => Effect.void),
               );
+          }
+
+          // Last, because the reap can sit through App Runner's final log
+          // flush: an interruption during that window must not strand the
+          // repository or the roles, which cost money and block re-creates.
+          for (const logGroupName of logGroupNamesFor(
+            output.serviceName,
+            output.serviceId,
+          )) {
+            yield* reapLogGroup(logGroupName);
           }
         }),
 
