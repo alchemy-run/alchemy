@@ -24,7 +24,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
  * The `build` options force the *cyclic* chunk layout from the issue: the
  * schema group captures only the schema modules
  * (`includeDependenciesRecursively: false`), so `drizzle-orm` stays in the
- * entry chunk and the graph becomes `worker.js -> auth-*.js -> worker.js`.
+ * entry chunk and the graph becomes `worker* -> auth-*.js -> worker*`.
  * ESM evaluation then runs the schema chunk before drizzle's class bindings
  * initialize. Without WorkerBundle's default `strictExecutionOrder: true`,
  * Cloudflare rejects the upload with `ScriptStartupError: Cannot access
@@ -88,11 +88,22 @@ test(
     const authChunk = files.find((f) => /^auth-.*\.js$/.test(f));
     expect(authChunk).toBeDefined();
 
-    // ...which imports the entry back (drizzle-orm stayed in `worker.js`):
-    // the cyclic `worker.js <-> auth-*.js` graph that TDZ-crashed workerd
-    // startup in #749 before `strictExecutionOrder` became the default.
+    // ...which imports the entry's code back (drizzle-orm stayed with the
+    // entry): the cyclic `worker* <-> auth-*.js` graph that TDZ-crashed
+    // workerd startup in #749 before `strictExecutionOrder` became the
+    // default.
+    //
+    // The entry's code lives in `worker.js` itself under some chunking
+    // outcomes and, since rolldown 1.2, in a hashed `worker-*.js` chunk that
+    // `worker.js` re-exports. Assert the cycle rather than a chunk filename.
     const authContent = yield* fs.readFileString(path.join(dir, authChunk!));
-    expect(authContent).toMatch(/from\s*"\.\/worker\.js"/);
+    const entryImport = authContent.match(/from\s*"\.\/(worker[^"]*\.js)"/);
+    expect(entryImport).not.toBeNull();
+
+    const entryContent = yield* fs.readFileString(
+      path.join(dir, entryImport![1]),
+    );
+    expect(entryContent).toContain(`./${authChunk}`);
   }),
 );
 
