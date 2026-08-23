@@ -5097,13 +5097,12 @@ export const LiveWorkerProvider = () =>
           ).pipe(
             // After a pre-create stub (or under a busy account right after
             // the first upload) the settings read can race the script
-            // registry and 404 with "has no versions". When we already hold
-            // attributes for this script, that 404 is far more likely the
-            // race than a deleted worker, so wait briefly for the registry
-            // before concluding there are no existing settings — planning
-            // the stub's Durable Object classes as new again is rejected by
-            // Cloudflare. A worker that really is gone falls through to the
-            // upsert below. The dispatch-namespace endpoints raise
+            // registry and 404 with "has no versions". If we already hold
+            // attributes for this script, wait briefly for the registry:
+            // planning the stub's Durable Object classes as new again is
+            // rejected by Cloudflare. A worker that really is gone still
+            // falls through to the upsert below. The dispatch-namespace
+            // endpoints raise
             // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
             Effect.retry({
               while: (error) =>

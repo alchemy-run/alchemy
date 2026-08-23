@@ -7,14 +7,10 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 /**
- * A Worker hosting a Durable Object is pre-created as a stub that already
- * registers the class. Reconcile then reads the script settings to learn
- * which classes exist; under load that read can 404 "has no versions" even
- * though precreate just observed the class. The deploy used to send
- * `new_sqlite_classes` for the class a second time, which Cloudflare rejects.
- *
- * Everything below runs against the real API except the settings reads
- * after precreate has observed the namespace: the next two answer 404.
+ * Precreate registers a Worker's Durable Object classes, then reconcile's
+ * settings read can 404 "has no versions" and the deploy re-sends
+ * `new_sqlite_classes`, which Cloudflare rejects. Everything here hits the
+ * real API except those two reads.
  */
 
 const settingsPath = /\/workers\/scripts\/[^/]+\/settings$/;
