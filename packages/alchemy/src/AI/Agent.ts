@@ -9,7 +9,7 @@ import {
   type Driver,
   type TurnServices,
 } from "./Driver.ts";
-import { fragment, type Fragment, type Services } from "./Fragment.ts";
+import { fragment, type Services } from "./Fragment.ts";
 import type { Tool, ToolParameters } from "./Tool.ts";
 
 // ─────────────────────────── the Actor ────────────────────────────
