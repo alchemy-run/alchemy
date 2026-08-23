@@ -1317,7 +1317,7 @@ export const LiveWorkerProvider = () =>
        * hostname up with {@link resolveZoneId} (`GET /zones?name=` per
        * parent label) — never by listing the account's first page of zones.
        */
-      const inferZoneIdForHostname = (
+      const resolvePinnedZoneId = (
         hostname: string,
         zoneCache: Map<string, string>,
         zone?: ZoneReference,
@@ -1388,7 +1388,8 @@ export const LiveWorkerProvider = () =>
 
           if (desired.length === 0) return [];
 
-          const zoneCache: ZoneCache = new Map();
+          const inferredZoneCache: ZoneCache = new Map();
+          const pinnedZoneCache = new Map<string, string>();
 
           // Attach `hostname` to this Worker. Skip the PUT entirely if
           // the hostname is already attached to *this* Worker — that's a
@@ -1400,7 +1401,7 @@ export const LiveWorkerProvider = () =>
             const desiredZoneId =
               zone === undefined
                 ? undefined
-                : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
+                : yield* resolvePinnedZoneId(hostname, pinnedZoneCache, zone);
             if (
               live &&
               !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
@@ -1449,7 +1450,7 @@ export const LiveWorkerProvider = () =>
 
             const zoneId =
               desiredZoneId ??
-              (yield* inferZoneIdForHostname(hostname, zoneCache));
+              (yield* inferZoneIdForHostname(hostname, inferredZoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
