@@ -3,34 +3,18 @@ title: EKS
 description: What changes when `cluster` is an `AWS.EKS.Cluster` — SigV4 auth with no kubeconfig, a Pod Identity role per workload, a per-workload ECR repository that unlocks `main:` and `context:`, and Auto Mode load-balancer defaults.
 ---
 
-An `AWS.EKS.Cluster` carries a `connection` whose `auth.kind` is
-`aws-eks`, so the whole resource is a valid `cluster` (the
-`{ connection }` form of
-[`ClusterLike`](/kubernetes/clusters/connecting#the-connection-model)).
-That kind resolves to the adapter in `alchemy/AWS`, the only
-built-in adapter that adds workload identity and a registry on top
-of auth.
-
-Creating the cluster (`Network`, `Cluster` with `compute: "auto"`,
-`AccessEntry`, `Addon`, HyperPod) is the AWS tab's
-[EKS page](/aws/compute/eks). This page assumes you have one.
-[Tutorial part 5](/kubernetes/tutorial/part-5) moves the tutorial
-app onto EKS.
+An `AWS.EKS.Cluster` is a valid `cluster`: its `connection` has
+`auth.kind: "aws-eks"`, the only built-in adapter that adds workload
+identity and a registry on top of auth. Creating the cluster is the
+AWS tab's [EKS page](/aws/compute/eks).
 
 ## Targeting an EKS cluster
 
-The adapter lives in `AWS.providers()` and is looked up by auth
-kind, so the Stack needs both layers merged into one `providers:`
-value. With `Kubernetes.providers()` alone the deploy dies with the
-"no adapter registered" error
+The adapter lives in `AWS.providers()`, so merge it with
+`Kubernetes.providers()`
 ([How the adapter is chosen](/kubernetes/clusters/connecting#how-the-adapter-is-chosen)).
-
-Pass the resource when the cluster lives in the same program. For a
-cluster created elsewhere, write a raw `aws-eks` connection:
-`{ auth: { kind: "aws-eks", clusterName, region? } }`. `endpoint`
-and the CA are optional because the adapter re-describes the cluster
-(`eks:DescribeCluster`) when they are missing or stale. `region`
-defaults to the ambient AWS region.
+Pass the resource, or a raw `aws-eks` connection for a cluster
+created elsewhere.
 
 ```typescript
 // alchemy.run.ts
@@ -60,54 +44,28 @@ export default Alchemy.Stack(
 );
 ```
 
-The identity running `alchemy deploy` needs Kubernetes API access
-to the cluster, plus IAM, EKS, and ECR permissions for the role,
-association, and repository below. The creating principal is admin
-under the Auto Mode defaults; anyone else needs an `AccessEntry`
-([AWS page](/aws/compute/eks)). Every prop is in the
-[`Cluster` reference](/providers/aws/eks/cluster).
-
-:::note[Kubeconfig context vs the adapter]
-An `aws eks update-kubeconfig` context through
-[`KubeConfig()`](/kubernetes/clusters/connecting#kubeconfig) reaches
-the same API server but is auth only: no Pod Identity, no ECR,
-`image:` only.
-:::
+The deploying identity needs cluster API access plus IAM, EKS, and
+ECR permissions. An `aws eks update-kubeconfig` context through
+[`KubeConfig()`](/kubernetes/clusters/connecting#kubeconfig) is auth
+only.
 
 ## What the adapter adds
 
-A kubeconfig connection gives you `connect`. The `aws-eks` adapter
-implements all five hooks, the
-[overview's comparison table](/kubernetes#what-the-cluster-adapter-gives-you)
-expanded.
+`aws-eks` implements all five adapter hooks
+([comparison table](/kubernetes#what-the-cluster-adapter-gives-you)).
 
 ### Auth
 
-SigV4 bearer tokens, no kubeconfig. Each API request carries a
-token minted from the ambient AWS credentials: a presigned STS
-`GetCallerIdentity` URL encoded as `k8s-aws-v1.…` with a 60-second
-expiry, the same scheme as `aws eks get-token`. `endpoint` and
-`certificateAuthorityData` come from the connection when present and
-are re-described otherwise, which also covers EKS rotating the
-endpoint DNS when a cluster is recreated under the same name. A
-cluster that is gone or `DELETING` surfaces as a typed
-`Kubernetes.ClusterNotFoundError`, which `read` and `delete` treat
-as "everything in-cluster is already gone"
-([Destroy and a missing cluster](#destroy-and-a-missing-cluster)).
+SigV4 bearer tokens from the ambient AWS credentials, like
+`aws eks get-token`. A gone or `DELETING` cluster surfaces as
+`Kubernetes.ClusterNotFoundError`.
 
 ### Identity
 
-EKS Pod Identity for every workload. Per Deployment or Job the
-adapter creates an IAM role (`<id>-pod-role…`), an inline policy
-(`<id>-pod-policy…`) built from the workload's `policyStatements`
-bindings, and a
-[`PodIdentityAssociation`](/providers/aws/eks/podidentityassociation)
-tying the role to the workload's `namespace` and ServiceAccount. The
-result is the `identity` attribute. `identity.managedPolicyArns`
-adds managed policies to the role. The trust policy, the
-in-container credential chain, `AWS_REGION`, and what keys a
-replacement are on
-[Pod Identity on EKS](/kubernetes/workloads/bindings#pod-identity-on-eks).
+Per workload: an IAM role, an inline policy from its
+`policyStatements` bindings, and a `PodIdentityAssociation` to its
+ServiceAccount
+([Pod Identity on EKS](/kubernetes/workloads/bindings#pod-identity-on-eks)).
 
 ```typescript
 Effect.gen(function* () {
@@ -134,16 +92,11 @@ Effect.gen(function* () {
 
 ### Registry
 
-One private ECR repository per workload, named from the logical id
-(`<id>-repo…`, lowercased). All three image sources land in it:
-`main` bundled, `context` built, and a bare `image:` reference
-mirrored in (`docker pull`, tag, push) so nodes pull from ECR with
-IAM auth. Docker must be installed on the deploying machine,
-mirroring included. The result is the `registry` attribute and
-`imageUri`, the ECR reference the pod runs. The repository is
-deleted with the workload. How images are built is under
-[three sources](/kubernetes/workloads/image-sources#three-sources)
-and [architecture](/kubernetes/workloads/image-sources#architecture).
+One private ECR repository per workload; `main` is bundled,
+`context` built, and a bare `image:` mirrored into it. Docker must be
+installed on the deploying machine. This is what unlocks `main:` and
+`context:`
+([Registry requirement](/kubernetes/workloads/image-sources#registry-requirement)).
 
 ```typescript
 const web = yield* Kubernetes.Deployment("Web", {
@@ -155,28 +108,11 @@ web.imageUri;  // "<account>.dkr.ecr.<region>.amazonaws.com/<web-repo>:<content-
 web.registry;  // { kind: "aws-ecr", repositoryName, repositoryUri } | undefined
 ```
 
-:::tip[This is what unlocks main]
-The registry hook is why `{ fetch }` / `{ run }` and `context:` work
-here and die on a kubeconfig cluster. See
-[Registry requirement](/kubernetes/workloads/image-sources#registry-requirement).
-:::
-
 ### Load balancer defaults
 
-For `serviceType: "LoadBalancer"` on Auto Mode
-(`kubernetesNetworkConfig.elasticLoadBalancing.enabled`), the
-adapter sets `spec.loadBalancerClass: eks.amazonaws.com/nlb`,
-without which Auto Mode ignores the Service, and defaults
-`service.beta.kubernetes.io/aws-load-balancer-scheme` to
-`internet-facing`, because Auto Mode otherwise creates an internal
-NLB. User `serviceAnnotations` always win. The NLB listens on the
-Service `port`, so `url` is `http://<nlb-hostname>:<port>` unless
-the port is 80. The provider waits up to ~3 minutes for the hostname
-([Exposing it: serviceType and url](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url)).
-Clusters without Auto Mode load balancing get no
-`loadBalancerClass` and rely on the AWS Load Balancer Controller's
-own annotations
-([Service types](/kubernetes/guides/exposing-services#service-types)).
+On Auto Mode the adapter sets `loadBalancerClass: eks.amazonaws.com/nlb`
+and defaults the scheme to `internet-facing`; your
+`serviceAnnotations` win.
 
 ```typescript
 const api = yield* Kubernetes.Deployment("Api", {
@@ -194,25 +130,12 @@ api.url; // "http://k8s-….elb.amazonaws.com:3000" once the NLB exists
 
 ## Destroy and a missing cluster
 
-Delete connects with the persisted connection. If the cluster is
-gone, `DELETING`, or unreachable, the in-cluster objects are skipped
-because they die with the cluster. The adapter-owned resources are
-still cleaned up: the `PodIdentityAssociation` (skipped when the
-cluster is gone), the IAM role with its inline policy, and the ECR
-repository, force-deleted with its images. The in-cluster side is
-under [delete order](/kubernetes/guides/how-apply-works#delete-order).
-
-A stack that owns both cluster and workloads destroys in one
-`alchemy destroy`. A stack targeting a shared cluster through a raw
-`aws-eks` connection removes only what it created. `read` on a
-missing cluster returns "gone", so the next plan shows the workloads
-as needing re-creation rather than erroring. Nothing else on the
-account is touched.
+If the cluster is gone or `DELETING`, delete skips the in-cluster
+objects but still removes the IAM role and ECR repository; `read`
+returns "gone", so the next plan re-creates the workloads.
 
 ## Where next
 
-- [Deployments](/kubernetes/workloads/deployments) — props, `url`,
-  the tagged form, `{ fetch }`.
+- [Deployments](/kubernetes/workloads/deployments)
 - [Pod Identity on EKS](/kubernetes/workloads/bindings#pod-identity-on-eks)
-  — how bindings become IAM on the pod role.
-- [EKS on the AWS tab](/aws/compute/eks) — provisioning the cluster.
+- [EKS on the AWS tab](/aws/compute/eks)

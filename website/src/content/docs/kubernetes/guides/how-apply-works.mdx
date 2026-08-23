@@ -1,21 +1,15 @@
 ---
 title: How apply works
-description: What Alchemy sends to the API server — server-side apply under the alchemy field manager, how dropped objects are pruned and drift is corrected, what a field-manager conflict is, the order objects are deleted in, and how to debug all of it with kubectl.
+description: Server-side apply under the alchemy field manager, how dropped objects are pruned and drift is corrected, what a field-manager conflict is, the order objects are deleted in, and how to debug it with kubectl.
 ---
 
-Every `Kubernetes.*` resource ends in the same client. It resolves
-the kind's REST path, `PATCH`es it as a server-side apply under the
-`alchemy` field manager with `force=true`, records the object
-references, and deletes whatever dropped out. Read this when
-something surprised you: a `kubectl scale` that got undone, an HPA
-fighting a Deployment, an object gone after a Helm value change, a
-Namespace stuck `Terminating` after `destroy`.
+Every `Kubernetes.*` resource ends in the same client: a server-side
+apply `PATCH` under the `alchemy` field manager with `force=true`,
+then a delete of whatever dropped out.
 
 ## Server-side apply
 
-Every object goes through one request. A Manifest's literal, the
-three objects a Deployment synthesizes, the two of a Job, every
-rendered chart object.
+Every object goes through one request:
 
 ```
 PATCH /apis/apps/v1/namespaces/default/deployments/api?fieldManager=alchemy&force=true
@@ -25,118 +19,38 @@ Accept: application/json
 { "apiVersion": "apps/v1", "kind": "Deployment", "metadata": {...}, "spec": {...} }
 ```
 
-The path comes from the kind. A static table covers the common kinds
-(Namespace, CustomResourceDefinition, ServiceAccount, ConfigMap,
-Secret, Service, Deployment, StatefulSet, DaemonSet, Job, CronJob,
-Pod). Anything else, including every custom resource, is resolved
-once per process through discovery at `/apis/<group>/<version>` or
-`/api/v1`. A Manifest of an unknown kind fails with
-`Kind 'X' not found in API group 'Y'`: the
+Uncommon kinds, including custom resources, are resolved through API
+discovery; `Kind 'X' not found in API group 'Y'` means the
 [CRD is not installed yet](/kubernetes/objects/manifests#custom-resources)
 or the `apiVersion` is wrong.
 
-`fieldManager=alchemy` makes Alchemy one manager among others. The
-API server records which manager last applied each field in
-`metadata.managedFields`. Fields in the body become owned by
-`alchemy`. Fields not in the body are left alone. Fields Alchemy
-applied last time but omits now are removed if Alchemy was their only
-owner. Removing a key from a Manifest `spec` or from chart `values`
-really removes it from the object.
+Under `fieldManager=alchemy`, fields in the body become owned by
+`alchemy`, fields not in the body are left alone, and fields Alchemy
+applied last time but omits now are removed. Removing a key from a
+Manifest `spec` or from chart `values` really removes it from the
+object. `force=true` takes any contested field, so Alchemy never sees
+a 409 ([others do](#conflicts)).
 
-`force=true` settles ownership. Where the server would answer
-`409 Conflict`, `force` takes the field instead, so Alchemy never
-sees a conflict ([others do](#conflicts)). Apply is a true upsert.
-No provider has a separate create path.
-
-What each resource applies is what it owns. `Manifest` applies your
-[literal object](/kubernetes/objects/manifests#any-object) and
-nothing more. `Deployment` applies its
-[three objects](/kubernetes/workloads/deployments#what-gets-created):
-the ServiceAccount, the `apps/v1/Deployment` with `spec.replicas`,
-`selector`, and a pod template of `serviceAccountName` plus one
-container (`image`, `command`, `args`, `ports`, `env`, `resources`)
-deep-merged with
-[`podTemplate`](/kubernetes/workloads/pod-template#merge-rules), and
-the Service (`type`, `loadBalancerClass` when the adapter sets it,
-`selector`, `ports`, `annotations`). `spec.replicas` is always
-applied, as `1` when omitted. `Job` applies the ServiceAccount plus a
-`batch/v1/Job` whose name embeds a hash of the spec, so a
-[spec change is a new Job](/kubernetes/workloads/jobs#jobs), or a
-`batch/v1/CronJob` under a stable name. `HelmChart` applies every
-object `helm template --no-hooks` rendered, with `namespace`
-injected where omitted, plus a `v1/Namespace` when `createNamespace`
-is set and the namespace is not `default`
-([lifecycle](/kubernetes/objects/helm#lifecycle)).
-
-Objects within one resource apply in rank chunks: Namespace (10),
-CustomResourceDefinition (15), ServiceAccount (20), ConfigMap and
-Secret (30), Service (40), Deployment, StatefulSet, DaemonSet (50),
-Job, CronJob, Pod (60), everything discovered (100). Chunks apply in
-order, objects within a chunk concurrently. A chart's custom
-resources always find their CRD, and an `Ingress` lands after its
-Service.
-
-Two retry loops can look like a hang. Transport errors retry every
-5 seconds up to 8 times. HTTP 5xx, 429, 401, and 403 retry every 6
-seconds up to 10 times, since a fresh managed cluster's access
-entries propagate asynchronously. Any other 4xx fails immediately
-with the server's message.
-
-:::note
-The `Content-Type` is `application/apply-patch+yaml` with a JSON
-body. JSON is valid YAML, and that is the server-side apply media
-type.
-:::
-
-:::caution
-Declaring the same object twice, in two Manifests or in a Manifest
-that duplicates a chart object, is silently last-writer-wins under
-one manager name, and deleting either resource deletes the object.
-One object, one resource.
-:::
+Objects within one resource apply in rank order (Namespace, CRD,
+ServiceAccount, ConfigMap and Secret, Service, workloads, then
+everything discovered), so a chart's custom resources always find
+their CRD. Declaring the same object twice is last-writer-wins.
 
 ## Pruning and drift
 
-Both come from one function, `reconcileObjects`. Every multi-object
-resource calls it with the objects it persisted last time and the
-objects it wants now. Each object is keyed
-`apiVersion/kind/namespace/name`, with `_cluster` standing in for
-cluster-scoped kinds. Keys in the previous set (the persisted
-`kubernetesObjects` or `objects` attribute) but not in the desired
-set are deleted first, in reverse rank order, 404 tolerated. The
-desired set is then applied in rank chunks and persisted as the next
-deploy's previous set.
+Each multi-object resource persists its object set keyed
+`apiVersion/kind/namespace/name`; keys missing from the next deploy
+are deleted first, in reverse rank order. That happens when a Helm
+[`values`](/kubernetes/objects/helm#values) change stops rendering an
+object, a [Job spec changes](/kubernetes/workloads/jobs#jobs), or
+`createNamespace` flips to `false`. A `Manifest` never prunes;
+changing its identity is a
+[replacement](/kubernetes/objects/manifests#any-object).
 
-A prune happens when a Helm [`values`](/kubernetes/objects/helm#values)
-change or `version` bump stops rendering an object, and when a chart
-moves an object to a new `apiVersion`. That is a different key, so
-the old path is deleted and the new one applied. A `Job` spec change
-prunes too: the new content-addressed Job is applied and the old one
-deleted, which is how
-[re-run on change](/kubernetes/workloads/jobs#jobs) works. Flipping
-`createNamespace` to `false` deletes the Namespace and everything in
-it. The [HelmChart lifecycle](/kubernetes/objects/helm#lifecycle)
-section carries the caution. A `Manifest` is one object and never
-prunes. Changing its `apiVersion`, `kind`, `name`, or `namespace` is a
-[replacement](/kubernetes/objects/manifests#any-object): the new
-object is created, then the old resource is deleted.
-
-Apply restates every owned field, so an out-of-band change to an
-owned field is reverted the next time the resource reconciles: a
-`kubectl scale`, a `kubectl set image`, a `kubectl edit` of the
-container env. Changes to fields Alchemy does not own survive: a
-`kubectl annotate`, the `restartedAt` annotation from
-`kubectl rollout restart`, anything under `status`.
-
-A resource reconciles only when the plan decides it changed. The
-engine diffs props, and the providers add content hashes. Deployment
-and Job hash the
-[image source](/kubernetes/workloads/image-sources#three-sources).
-HelmChart hashes chart, repo, version, values, flags, and the content
-of a local chart directory, which is why editing files under
-`context` or a chart directory shows up in
-[`alchemy plan`](/cli/plan). No change means no apply, and the drift
-stays.
+Apply restates every owned field, so an out-of-band `kubectl scale`
+or `set image` is reverted the next time the resource reconciles,
+while fields Alchemy does not own survive. A resource reconciles only
+when the plan sees a prop or content-hash change:
 
 ```typescript
 // Deploy #1 — applies spec.replicas = 3 under manager "alchemy".
@@ -156,42 +70,18 @@ const api = yield* Kubernetes.Deployment("Api", {
 ```
 
 Field drift is fixed by [`alchemy deploy --force`](/cli/deploy).
-Every resource reconciles and every apply restates its owned fields.
-There is no need to nudge a value or bump a version.
-
-Existence drift is fixed by `alchemy sync`. It calls each provider's
-`read` and compares with the persisted attributes. `--dry-run`
-reports `missing` and `drifted`, a real run recreates or reconciles.
-`Manifest` re-reads the object: 404 is `missing`, a different `uid`
-is `drifted`. `Deployment` and `Job` read the ServiceAccount as an
-existence anchor, so a deleted Deployment with a surviving
-ServiceAccount is not detected. `HelmChart` only checks that the
-cluster is reachable, so a hand-deleted chart object is invisible to
-`sync`. Use `alchemy deploy --force` to re-apply the render.
-
-A cluster that no longer exists (`ClusterNotFoundError`) reads as
-everything gone for all four resources. A cluster that is merely
-unreachable is caught by the `Deployment` and `Job` `read`, which
-keep persisted state. `Manifest` and `HelmChart` let the error
-propagate, so `sync` fails for those while syncing the rest. No
-resource is marked missing by an outage.
-
-`sync` detects existence, not field values. Field drift is only
-corrected by a reconcile.
+Existence drift is fixed by `alchemy sync`, which re-reads the object
+(`Manifest`), the ServiceAccount anchor (`Deployment`, `Job`), or
+only cluster reachability (`HelmChart`).
 
 :::caution[HorizontalPodAutoscalers]
-`Deployment` always applies `spec.replicas`, so the next reconcile
-(including `--force`) undoes what an HPA scaled. For an autoscaled
-workload, write the Deployment as a
-[`Manifest`](/kubernetes/objects/manifests#any-object) and omit
-`spec.replicas` so Alchemy never owns the field.
+`Deployment` always applies `spec.replicas`, so for an autoscaled workload write the Deployment as a [`Manifest`](/kubernetes/objects/manifests#any-object) and omit `spec.replicas`.
 :::
 
 ## Conflicts
 
-Every Alchemy apply is `force=true`, so Alchemy never receives a
-409. Conflicts are what other server-side appliers see when they
-touch a field Alchemy owns:
+Conflicts are what other server-side appliers see when they touch a
+field Alchemy owns:
 
 ```
 $ kubectl apply --server-side -f deployment.yaml
@@ -200,96 +90,40 @@ Please review the fields above--they currently have other managers. Here
 are the ways you can resolve this warning: ...
 ```
 
-Don't co-manage. If Alchemy declares the object, make the change in
-the program and deploy. If two managers must share an object,
-partition fields. Server-side apply lets each own different fields,
-so a writer that only touches fields Alchemy never sends (an extra
-annotation, a field you
-[leave out of a Manifest](/kubernetes/objects/manifests#any-object))
-coexists indefinitely. That is how cert-manager, an HPA with
-`spec.replicas` omitted, or a mesh injector runs beside Alchemy.
-`--force-conflicts` on their side wins once. The next Alchemy
-reconcile takes the field back.
+Don't co-manage; partition fields instead. A writer that only touches
+fields Alchemy never sends (an annotation, a field
+[left out of a Manifest](/kubernetes/objects/manifests#any-object))
+coexists indefinitely. `--force-conflicts` wins once; the next
+reconcile takes the field back. Client-side `kubectl apply`, `edit`,
+and `scale` never conflict and are reverted the same way.
 
-Two kinds of write never report a conflict. Client-side
-`kubectl apply` patches under `kubectl-client-side-apply`, and
-`kubectl edit`, `scale`, and `set` write under managers like
-`kubectl-edit`. None of them apply, so none are refused, and Alchemy
-reverts the
-[fields it owns](/kubernetes/workloads/deployments#what-gets-created)
-at the next reconcile. `--show-managed-fields` under
-[Debugging](#debugging) shows who owns what.
-
-Two stacks or stages declaring the same object both apply as
-`alchemy`. The last deploy wins and either `destroy` deletes the
-object. Generated names embed stack and stage, so the risk is an
-explicit `name` or `metadata.name` shared across stages.
-
-A Manifest that matches an object created with kubectl (same
-`apiVersion`, `kind`, `name`, and `namespace`) adopts it by taking
-ownership of the fields it sends. Fields that only exist in the old
-`last-applied-configuration` annotation remain until someone removes
-them. There is no import step.
+A Manifest matching an existing object adopts it by taking ownership
+of the fields it sends.
 
 ## Delete order
 
-Inside a resource, the persisted references are deleted sequentially
-in descending rank: discovered kinds and custom resources (100), Job,
-CronJob, Pod (60), Deployment, StatefulSet, DaemonSet (50), Service
-(40), ConfigMap and Secret (30), ServiceAccount (20),
-CustomResourceDefinition (15), Namespace (10). Each `DELETE` uses
-`propagationPolicy=Background`, like `kubectl delete`, so a Job's
-pods and a Deployment's ReplicaSets are garbage-collected instead of
-orphaned. A 404 is success, so delete is idempotent. Alchemy does not
-wait for deletion to finish, so a Namespace or a CRD with many
-instances can still be `Terminating` when
-[`alchemy destroy`](/cli/destroy) prints done.
+Inside a resource, references are deleted in descending rank with
+`propagationPolicy=Background`; a 404 is success. Alchemy does not
+wait for deletion, so a Namespace can still be `Terminating` when
+[`alchemy destroy`](/cli/destroy) returns.
 
-`Manifest` sends one `DELETE` and swallows any residual error, for
-example when the CRD was removed before its instance. `Deployment`
-and `Job` delete the in-cluster objects first, then run the adapter's
-cloud-side cleanup (`identity.delete`, then `registry.delete`). What
-that is on EKS is under
-[Destroy and a missing cluster](/kubernetes/clusters/eks#destroy-and-a-missing-cluster).
-`HelmChart` deletes all persisted `objects` in that order. With
-`includeCrds` (the default) the CRDs go last and cascade every custom
-resource of those kinds cluster-wide. The
-[lifecycle](/kubernetes/objects/helm#lifecycle) section owns the
-caution. `ClusterNotFoundError` means nothing in-cluster to delete
-for any resource. A merely unreachable cluster fails the `Manifest`
-and `HelmChart` delete. `Deployment` and `Job` skip the in-cluster
-part and still run the cloud-side cleanup.
+`Deployment` and `Job` then run the adapter's cloud-side cleanup
+([EKS](/kubernetes/clusters/eks#destroy-and-a-missing-cluster)).
+`HelmChart` with `includeCrds` deletes the CRDs last, cascading every
+custom resource of those kinds cluster-wide.
 
-Across the stack, the engine deletes in reverse dependency order, and
-dependencies exist only where Outputs flow. A workload whose
-`namespace` is the Namespace Manifest's `ns.name` Output is deleted
-before the Namespace. One that spells `namespace: "apps"` as a
-literal may go in either order. The Namespace cascade turns the later
-`DELETE`s into tolerated 404s, so `destroy` still succeeds. The
-wiring is under [Namespaces](/kubernetes/objects/manifests#namespaces).
-
-:::note
-`destroy` returning does not mean the Namespace is gone. Check
-`kubectl get ns` before re-creating one with the same name.
-:::
+Across the stack, deletes run in reverse dependency order, and
+dependencies exist only where Outputs flow: a workload whose
+`namespace` is `ns.name` goes before the Namespace; a literal
+`namespace: "apps"` may go in either order
+([Namespaces](/kubernetes/objects/manifests#namespaces)).
 
 ## Debugging
 
-Start with [`alchemy plan`](/cli/plan). It shows `update` with the
-changed props or `code.hash`, and `replace` when the cluster identity
-or namespace changed (Deployment, Job, Manifest) or the release name
-or namespace changed (HelmChart). No entry means nothing will be
-applied.
-
-Then read the error. Apply failures are `KubernetesApiError`s
-formatted `PATCH <path> responded <status>: <body>`, where the body
-is the server's `Status`. `422` is schema validation, see
-`details.causes[].field`. `404` on a discovery path means the kind or
-`apiVersion` does not exist on this cluster. `403` after the retries
-means the adapter's identity lacks RBAC. Transport errors surface as
-`Failed Kubernetes <method> <path>: …` after the bounded retries. A
-missing adapter dies with the message under
-[How the adapter is chosen](/kubernetes/clusters/connecting#how-the-adapter-is-chosen).
+Apply failures are `KubernetesApiError`s formatted
+`PATCH <path> responded <status>: <body>`: `422` is schema
+validation, `404` means the kind does not exist on this cluster,
+`403` means the adapter's identity lacks RBAC.
 
 ### See who owns what
 
@@ -297,58 +131,30 @@ missing adapter dies with the message under
 kubectl -n default get deploy api -o yaml --show-managed-fields
 ```
 
-Look for `manager: alchemy` with `operation: Apply`. The `f:` tree
-under it is the set of fields Alchemy will re-assert. Other entries
-are the other writers: `kube-controller-manager`,
-`kubectl-client-side-apply`, an HPA.
-
-### See what the cluster thinks
-
-`kubectl describe deploy` and `kubectl describe pod` show events:
-image pull errors on registry-less clusters (the
-[`image` reference is used verbatim](/kubernetes/workloads/image-sources#registry-requirement)),
-`FailedScheduling`, or a `LoadBalancer` Service with no
-`loadBalancerClass` on Auto Mode stuck at `<pending>`. When `url`
-came back `undefined`, read the Service directly:
-`kubectl get svc <name> -o jsonpath='{.status.loadBalancer.ingress}'`.
+`manager: alchemy` with `operation: Apply` lists the fields Alchemy
+will re-assert.
 
 ### See what Alchemy remembers
-
-The persisted `kubernetesObjects` and `objects` references are what
-pruning and delete operate on. Print them when an expected prune did
-not happen or a delete touched something unexpected:
 
 ```sh
 alchemy state get --stack <stack> --stage <stage> --fqn Api
 ```
 
-See [Inspecting state](/cli/inspecting-state). To compare existence,
-`alchemy sync --dry-run` lists `missing` and `drifted` per the `read`
-rules above. `alchemy sync` repairs existence, `alchemy deploy --force`
-repairs fields.
+The persisted references pruning and delete operate on.
 
 ### Reproduce a render
-
-For charts, run the same command Alchemy does to see which objects
-will be applied and which
-[hook-annotated ones were dropped](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt):
 
 ```sh
 helm template <release> <chart> --repo <repo> --version <v> \
   --namespace <ns> --include-crds --no-hooks -f values.yaml
 ```
 
-:::tip
-`kubectl get <kind> -o yaml` hides `managedFields` since Kubernetes
-1.21. `--show-managed-fields` is required to see ownership.
-:::
+Alchemy's exact command;
+[hook-annotated objects](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt)
+are dropped.
 
 ## Where next
 
-- [Cluster adapters](/kubernetes/guides/cluster-adapters) — the seam
-  that mints the auth headers on every request, and how to add a
-  platform.
-- [HelmChart lifecycle](/kubernetes/objects/helm#lifecycle) — the
-  chart lifecycle from the user's side.
-- [Manifests](/kubernetes/objects/manifests) — Manifests in full.
-- [`alchemy plan`](/cli/plan) — the plan command.
+- [Cluster adapters](/kubernetes/guides/cluster-adapters)
+- [HelmChart lifecycle](/kubernetes/objects/helm#lifecycle)
+- [Manifests](/kubernetes/objects/manifests)

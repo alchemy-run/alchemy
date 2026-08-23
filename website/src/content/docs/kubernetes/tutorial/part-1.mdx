@@ -8,27 +8,22 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-Point a Stack at the local cluster you picked in Setup, deploy a
-pre-built image as a `Kubernetes.Deployment`, reach it, scale it,
-and tear it down. Nothing up to Part 4 costs money.
+Point a Stack at the local cluster from Setup, deploy a pre-built
+image as a `Kubernetes.Deployment`, reach it, scale it, tear it down.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) (recommended) or Node.js 22+
-- Alchemy installed. See [Setup](/kubernetes/setup#install)
-- A running local cluster listed by `kubectl config get-contexts`.
-  See [Pick a cluster](/kubernetes/setup#pick-a-cluster)
+- [Alchemy installed](/kubernetes/setup#install)
+- A [local cluster](/kubernetes/setup#pick-a-cluster) in
+  `kubectl config get-contexts`
 
-The steps assume Docker Desktop's `docker-desktop` context or
-OrbStack's `orbstack`. kind and minikube need the one change in
-[Choose how to reach it](#choose-how-to-reach-it).
+Steps assume the `docker-desktop` context; kind and minikube need
+[one change](#choose-how-to-reach-it).
 
 ## Create a project
 
-Continue in the project from Setup. Its `alchemy.run.ts` is the file
-the next four parts build on.
-
-Starting fresh? Create an empty project first:
+Continue in the Setup project, or start fresh and install as in
+[Setup](/kubernetes/setup#install):
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -45,12 +40,9 @@ Starting fresh? Create an empty project first:
   </TabItem>
 </Tabs>
 
-Then install alchemy and Effect as in [Setup](/kubernetes/setup#install).
-
 ## Create the Stack
 
-Start from the Setup `alchemy.run.ts` with the `DemoNamespace`
-verify resource removed:
+Start from the Setup `alchemy.run.ts` with `DemoNamespace` removed:
 
 ```typescript
 // alchemy.run.ts
@@ -70,17 +62,7 @@ export default Alchemy.Stack(
 );
 ```
 
-`Kubernetes.providers()` is the four workload providers plus the
-built-in cluster adapters from
-[Setup](/kubernetes/setup#add-the-provider). `Alchemy.localState()`
-keeps state on disk, which is fine for a solo tutorial. See
-[State Store](/state-store) for shared options. If you skipped
-Setup's destroy, expect an extra `1 to delete` row for
-`DemoNamespace` below.
-
 ## Point at your cluster
-
-Describe how to reach the cluster:
 
 ```diff lang="typescript"
 Effect.gen(function* () {
@@ -89,12 +71,9 @@ Effect.gen(function* () {
 ```
 
 [`KubeConfig`](/kubernetes/clusters/connecting#kubeconfig) is a plain
-helper, not a resource. No `yield*`, and it never shows up in a plan.
-Use whatever context name `kubectl config get-contexts` shows.
+helper, not a resource; use your context name.
 
 ## Add a Deployment
-
-Declare a Deployment running a pre-built echo image:
 
 ```diff lang="typescript"
 Effect.gen(function* () {
@@ -108,20 +87,12 @@ Effect.gen(function* () {
 }),
 ```
 
-One [`Kubernetes.Deployment`](/providers/kubernetes/deployment)
-synthesizes
-[three objects](/kubernetes/workloads/deployments#what-gets-created):
-a Deployment, a Service, and a ServiceAccount. `port` is both the
-container port and the Service port. The echo image listens on 8080
-and answers every request with a JSON copy of it.
-
-It has to be `image:` here. A kubeconfig cluster has
-[no managed image registry](/kubernetes/workloads/image-sources#registry-requirement),
-so Part 5 is where `main:` comes in.
+One resource synthesizes
+[three objects](/kubernetes/workloads/deployments#what-gets-created).
+It must be `image:`: a kubeconfig cluster has
+[no registry](/kubernetes/workloads/image-sources#registry-requirement).
 
 ## Choose how to reach it
-
-Make the Service type explicit:
 
 ```diff lang="typescript"
 const echo = yield* Kubernetes.Deployment("Echo", {
@@ -132,24 +103,16 @@ const echo = yield* Kubernetes.Deployment("Echo", {
 });
 ```
 
-`serviceType` picks the Service type. `LoadBalancer` is the default
-and is what fills the Deployment's
+`LoadBalancer` is the default and fills the Deployment's
 [`url`](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url).
 
 :::note[No LoadBalancer on your cluster?]
-Docker Desktop and OrbStack publish LoadBalancer Services locally, so
-`url` resolves. kind and minikube do not. Use `serviceType: "NodePort"`
-or `ClusterIP` there, then
-`kubectl port-forward svc/<deployment output> 8080:8080` and curl
-`localhost:8080` wherever the steps use the `url`. Keeping the default
-on kind still deploys, but only after a ~3-minute wait, and `url` comes
-back `undefined`. See
-[Reaching a service](/kubernetes/clusters/local#reaching-a-service).
+kind and minikube have no LoadBalancer: use `serviceType: "NodePort"`
+and `kubectl port-forward` instead of `url`
+([Reaching a service](/kubernetes/clusters/local#reaching-a-service)).
 :::
 
 ## Return Stack outputs
-
-Return the values you will need:
 
 ```diff lang="typescript"
 const echo = yield* Kubernetes.Deployment("Echo", {
@@ -165,9 +128,7 @@ const echo = yield* Kubernetes.Deployment("Echo", {
 +};
 ```
 
-`url` is `http://<address>:8080`. The load balancer listens on the
-Service `port`, so a non-80 port is part of the URL.
-`deploymentName` is the generated object name for `kubectl`.
+`deploymentName` is the object name for `kubectl`.
 
 ## Deploy
 
@@ -199,35 +160,23 @@ Proceed?
 [s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
 }`} />
 
-One row, because the kubeconfig connection is not a resource. Behind
-it Alchemy applied the ServiceAccount, Service, and Deployment and
-waited for an address. "Applied" means
-[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply)
-with the field manager `alchemy`. The first deploy pulls the image,
-so the pods take a few seconds.
+One row: the kubeconfig connection is not a resource.
 
 ## Try it out
-
-Hit the `url`:
 
 ```sh
 curl http://localhost:8080
 ```
 
-The response is a JSON document with the request and the pod's
-hostname under `os.hostname`. List the objects Alchemy owns:
+The pod's hostname is under `os.hostname`. List the objects Alchemy
+owns:
 
 ```sh
 kubectl get deployment,service,serviceaccount \
   -l app.kubernetes.io/name=myapp-echo-dev-alex-k3m7p2q6r4s5t2v6
 ```
 
-The `app.kubernetes.io/name` label is on every object and is the
-Service's selector.
-
 ## Scale it
-
-Run three replicas:
 
 ```diff lang="typescript"
 const echo = yield* Kubernetes.Deployment("Echo", {
@@ -248,16 +197,12 @@ Proceed?
 [d]Applied Kubernetes Deployment default/myapp-echo-dev-alex-k3m7p2q6r4s5t2v6[/d]
 [g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [y]updated[/y]`} />
 
-`replicas` is mutable, so this is an in-place update, not a
-replacement. `kubectl get pods` shows three pods, and repeated curls
-return different `os.hostname` values. Updates re-apply the full
-object, so drift from `kubectl edit` is corrected on the next change
-or with `alchemy deploy --force`. See
-[pruning and drift](/kubernetes/guides/how-apply-works#pruning-and-drift).
+`replicas` is mutable, so this is an in-place update; repeated curls
+now return different hostnames.
 
 ## Deploy again
 
-Run `alchemy deploy` once more without editing anything:
+Deploy again without editing anything:
 
 <Terminal content={`[u]Plan[/u]: [d]no changes[/d]
 
@@ -265,9 +210,6 @@ Run `alchemy deploy` once more without editing anything:
 [s2]url: "http://localhost:8080",
 [s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
 }`} />
-
-Declare, deploy, and Alchemy diffs against what it deployed last
-time.
 
 ## Destroy
 
@@ -294,21 +236,10 @@ Proceed?
 ◉ Yes ○ No
 [r]✗[/r] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [r]deleted[/r]`} />
 
-The objects go in reverse apply order: Deployment, Service,
-ServiceAccount. State is cleared. Part 2 recreates `Echo` on its
-first deploy, so destroying now costs nothing.
-
-## Recap
-
-One resource made three objects reachable at a `url`. You updated it
-in place, ran a no-op deploy, and destroyed it. Part 2 adds
-`Kubernetes.Job` and turns it into a CronJob with one prop.
+Objects go in reverse apply order. Part 2 recreates `Echo`.
 
 ## Where next
 
-- [Part 2: Jobs and CronJobs](/kubernetes/tutorial/part-2) — run
-  something to completion, then on a schedule.
-- [Deployments](/kubernetes/workloads/deployments) — every prop and
-  attribute, the tagged form, Effect servers.
-- [Local clusters](/kubernetes/clusters/local) — which local cluster
-  to pick and how to reach services on each.
+- [Part 2: Jobs and CronJobs](/kubernetes/tutorial/part-2)
+- [Deployments](/kubernetes/workloads/deployments)
+- [Local clusters](/kubernetes/clusters/local)

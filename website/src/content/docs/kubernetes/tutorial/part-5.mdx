@@ -8,33 +8,17 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-A kubeconfig cluster can deploy images but not build them, and pass
-env vars but not grant cloud permissions. Point the same file at EKS
-and the cluster adapter fills in both. Start from the
-[Part 4](/kubernetes/tutorial/part-4) file with the stack destroyed.
+On EKS the cluster adapter builds images and grants cloud permissions;
+a kubeconfig cluster can't. Start from
+[Part 4](/kubernetes/tutorial/part-4) with the stack destroyed. You
+need AWS credentials ([AWS Setup](/aws/setup)), Docker, and `helm`.
 
-:::caution[Costs and time]
-The EKS control plane, Auto Mode nodes, each `LoadBalancer` NLB, and
-the NAT gateway all bill hourly. Expect a few dollars for an
-afternoon. Cluster create and destroy each take 10–15 minutes.
-`alchemy destroy` at the end removes everything, including the
-cluster.
+:::caution[Costs]
+EKS, NLBs, and NAT bill hourly; cluster create and destroy each take
+10–15 minutes.
 :::
 
-## Prerequisites
-
-- AWS credentials in your environment. See [AWS Setup](/aws/setup)
-- Docker running. The adapter builds `main:` into an image and mirrors
-  `Hello`'s `busybox` image into ECR through it (see
-  [Image sources](/kubernetes/workloads/image-sources#three-sources))
-- `helm`, still needed for `Podinfo`
-
-`kubectl` access is optional. Alchemy talks to EKS directly, but
-`aws eks update-kubeconfig` works if you want to look around.
-
 ## Add the AWS providers
-
-Merge the AWS providers into the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -54,14 +38,12 @@ export default Alchemy.Stack(
   },
 ```
 
-`Kubernetes.providers()` ships the built-in adapters. The `aws-eks`
-adapter is registered by `AWS.providers()`, so EKS needs both layers.
-See [What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds).
+`AWS.providers()` registers the `aws-eks`
+[adapter](/kubernetes/clusters/eks#what-the-adapter-adds).
 
 ## Move shared infrastructure to a module
 
-The Deployment you are about to write lives in its own file and needs
-the cluster and the namespace. Create `src/infra.ts`:
+Create `src/infra.ts`:
 
 ```typescript
 // src/infra.ts
@@ -101,7 +83,7 @@ export const Namespace = Effect.gen(function* () {
 });
 ```
 
-Then replace the inline Namespace in `alchemy.run.ts`:
+Then use it in `alchemy.run.ts`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -124,17 +106,11 @@ import * as Layer from "effect/Layer";
 +    const ns = yield* Namespace;
 ```
 
-Module-scope declarations are memoized by logical id, so yielding
-`Cluster` or `Namespace` from two places converges on one resource.
-`compute: "auto"` is EKS Auto Mode. Network and
-[`Cluster`](/providers/aws/eks/cluster) props are on the
-[AWS EKS page](/aws/compute/eks#create-an-auto-mode-cluster). The
-`cluster` line is still kubeconfig for now, and `ns.name` keeps
-feeding the Part 3 resources.
+Module-scope declarations are memoized by logical id, so both files
+share one `Namespace`. Cluster props:
+[AWS EKS page](/aws/compute/eks#create-an-auto-mode-cluster).
 
 ## Swap the cluster
-
-Replace the kubeconfig connection with the EKS cluster:
 
 ```diff lang="typescript"
 import * as Effect from "effect/Effect";
@@ -148,10 +124,8 @@ import * as Layer from "effect/Layer";
 +    const cluster = yield* Cluster;
 ```
 
-Nothing else changes. `AWS.EKS.Cluster` carries a `connection` whose
-`auth.kind` is `"aws-eks"`, which is
-[how each resource finds the adapter](/kubernetes/clusters/connecting#how-the-adapter-is-chosen).
-Note the `yield*`: the cluster is a resource and gets a plan row.
+`AWS.EKS.Cluster` carries a connection with `auth.kind: "aws-eks"`,
+which is [how the adapter is chosen](/kubernetes/clusters/connecting#how-the-adapter-is-chosen).
 
 ## Write your own server
 
@@ -179,20 +153,17 @@ export default Kubernetes.Deployment(
 );
 ```
 
-This is the inline-Effect form: props, then an init Effect that
-returns the runtime API. The
-[tagged form](/kubernetes/workloads/deployments#the-tagged-form) is
-equivalent. `main: import.meta.url` makes this file the entrypoint.
-Alchemy [bundles it](/kubernetes/workloads/image-sources#bundling-and-tree-shaking)
-with rolldown, builds an image on `oven/bun:1`, and pushes it to a
-registry the adapter creates. A kubeconfig cluster
-[refused](/kubernetes/workloads/image-sources#registry-requirement)
-that step. [`fetch`](/kubernetes/workloads/deployments#effect-servers)
-is served on `port` by a Bun HTTP server.
+`main: import.meta.url` makes this file the entrypoint: Alchemy
+[bundles it](/kubernetes/workloads/image-sources#bundling-and-tree-shaking),
+builds an image, and pushes it to a
+[registry](/kubernetes/workloads/image-sources#registry-requirement)
+the adapter creates.
+[`fetch`](/kubernetes/workloads/deployments#effect-servers) is served
+on `port`.
 
 ## Add a DynamoDB table
 
-Append a table to `src/infra.ts`:
+Append to `src/infra.ts`:
 
 ```diff lang="typescript"
 // src/infra.ts
@@ -204,12 +175,7 @@ export const Cluster = Effect.gen(function* () { /* ... */ });
 +});
 ```
 
-An ordinary [AWS resource](/providers/aws/dynamodb/table) in the same
-program. It exists so the next step has something to bind.
-
 ## Bind the table
-
-Declare the bindings in the init Effect and provide their layers:
 
 ```diff lang="typescript"
 // src/api.ts
@@ -239,19 +205,13 @@ export default Kubernetes.Deployment(
 );
 ```
 
-`PutItem(Entries)` is a `Binding.Service`. At deploy it records
-`{ env, policyStatements }` on the Deployment: the table name and
-`dynamodb:PutItem` on that table (see
-[the binding contract](/kubernetes/workloads/bindings#the-binding-contract)).
-The EKS adapter turns `policyStatements` into a
-[Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks)
-role on the ServiceAccount, so the pod gets credentials with no keys
-anywhere. The local cluster would have rejected this. It supports only
-[env-only bindings](/kubernetes/workloads/bindings#env-only-bindings).
+Each binding records
+[`env` and `policyStatements`](/kubernetes/workloads/bindings#the-binding-contract);
+the adapter turns the policy into a
+[Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) role,
+which a kubeconfig cluster [can't](/kubernetes/workloads/bindings#env-only-bindings).
 
 ## Use it in fetch
-
-Call the bound clients from the handler:
 
 ```diff lang="typescript"
 // src/api.ts
@@ -277,14 +237,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
     };
 ```
 
-`putItem` and `scan` are typed Effects that close over the env the
-binding set and sign with Pod Identity credentials. A `POST` writes
-one item and returns its id. Anything else returns the item count.
-Nothing in this handler knows it runs on Kubernetes.
+`putItem` and `scan` sign with Pod Identity credentials.
 
 ## Replace Echo with Api
 
-Swap the echo Deployment for your own in `alchemy.run.ts`:
+In `alchemy.run.ts`:
 
 ```diff lang="typescript"
 -import * as Output from "alchemy/Output";
@@ -321,14 +278,8 @@ import { Cluster, Namespace } from "./src/infra.ts";
     };
 ```
 
-Yielding `Api` registers the resource in the `tutorial` namespace.
-`Hello`, the Manifests, and `Podinfo` deploy to EKS unchanged. The
-Job's `image:` is [mirrored into ECR](/kubernetes/workloads/image-sources#three-sources)
-by the adapter, and the StatefulSet pulls `redis:7` directly. `Config`
-and `RedisService` stay owned even though `Api` doesn't read them. If
-a lint complains about unused `config` or `redisService`, make those
-two lines bare `yield*`. `identity` and `registry` are the two
-attributes only a managed adapter fills in.
+`Hello`, the Manifests, and `Podinfo` deploy to EKS unchanged;
+`identity` and `registry` are filled in only by a managed adapter.
 
 ## Deploy
 
@@ -389,15 +340,10 @@ Proceed?
 [s2]podinfoRelease: "myapp-podinfo-dev-alex-…",
 }`} />
 
-The `Api` row created an IAM role with the `dynamodb:PutItem` and
-`dynamodb:Scan` policy, a PodIdentityAssociation to the
-ServiceAccount, and an ECR repository, then bundled `src/api.ts`,
-built and pushed the image, applied the usual three objects, and
-waited for the NLB hostname. The role and repository have no plan
-rows. The [adapter](/kubernetes/clusters/eks#what-the-adapter-adds)
-provisions them inside the Deployment's lifecycle and deletes them
-with it. `url` carries port 3000 for the same reason Part 1 carried
-8080.
+The `Api` row also created an IAM role, PodIdentityAssociation, and
+ECR repository, managed by the
+[adapter](/kubernetes/clusters/eks#what-the-adapter-adds) inside the
+Deployment's lifecycle.
 
 ## Try it out
 
@@ -410,9 +356,7 @@ curl http://k8s-tutorial-myappapi-….elb.us-east-1.amazonaws.com:3000
 # → {"count":2}
 ```
 
-The pod wrote to DynamoDB with credentials from the Pod Identity
-agent on the node. The first request may take a few seconds while the
-NLB target registers. Retry if it times out.
+Retry if the first request times out.
 
 ## Ship a change
 
@@ -433,10 +377,8 @@ Proceed?
 ◉ Yes ○ No
 [g]✓[/g] [b]Api[/b] [d](Kubernetes.Deployment)[/d] [y]updated[/y]`} />
 
-The [bundle's](/kubernetes/workloads/image-sources#bundling-and-tree-shaking)
-hash changed, so Alchemy rebuilt, pushed a new tag, and applied the
-Deployment with the new `image`. A rolling update. The role,
-association, repository, Service, and ServiceAccount are untouched.
+The bundle hash changed, so Alchemy rebuilt, pushed a new tag, and
+rolled the Deployment.
 
 ## Destroy
 
@@ -471,29 +413,10 @@ association, repository, Service, and ServiceAccount are untouched.
 Proceed?
 ◉ Yes ○ No`} />
 
-Reverse dependency order: workloads with their roles and
-repositories, then the cluster (ten minutes or more), the table, and
-the network. The cluster and NAT gateway bill until this finishes.
-Let it complete and confirm in the AWS console that the cluster list
-is empty.
-
-## Recap
-
-One `cluster` line and `AWS.providers()` moved the file from Parts 1
-to 4 onto EKS. `Api` was bundled from `main` into ECR, its DynamoDB
-binding became a Pod Identity role, and the Job, Manifests, and chart
-deployed unchanged. One workload model, and the adapter decides what
-comes free.
+The cluster delete takes ten minutes or more.
 
 ## Where next
 
-- [Connecting to clusters](/kubernetes/clusters/connecting) — the
-  Connection model behind `KubeConfig()` and `AWS.EKS.Cluster`, every
-  auth kind, and adapter selection.
-- [Bindings](/kubernetes/workloads/bindings) — the binding contract,
-  Pod Identity details, and env-only binding on other clusters.
-- [EKS clusters](/kubernetes/clusters/eks) — everything the EKS
-  adapter adds, LB defaults, and where cluster provisioning docs
-  live.
-- [EKS on the AWS tab](/aws/compute/eks) — Network, Cluster,
-  AccessEntry, Addon, HyperPod.
+- [Connecting to clusters](/kubernetes/clusters/connecting)
+- [Bindings](/kubernetes/workloads/bindings)
+- [EKS clusters](/kubernetes/clusters/eks)

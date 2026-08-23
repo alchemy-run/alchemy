@@ -3,25 +3,15 @@ title: Connecting to a cluster
 description: The `cluster` prop explained — the serializable Connection every workload targets, `KubeConfig()` for anything kubectl can reach, raw token / client-cert / exec connections, and how the connection's `auth.kind` picks the adapter.
 ---
 
-Every `Kubernetes.*` resource has a `cluster` prop. It takes a
-**Connection**: plain data that says where the API server is and how
-to authenticate, or a resource that carries one. The `auth.kind`
-inside it picks the
-[cluster adapter](/kubernetes#what-the-cluster-adapter-gives-you),
-which decides whether a workload gets auth only or auth plus workload
-identity and a registry.
-
-You used `Kubernetes.KubeConfig()` in the tutorial and an
-`AWS.EKS.Cluster` in [Part 5](/kubernetes/tutorial/part-5). Both are
-Connections. The concrete cases are
-[local clusters](/kubernetes/clusters/local) and
-[EKS](/kubernetes/clusters/eks).
+Every `Kubernetes.*` resource has a `cluster` prop: a **Connection**
+(API server plus auth) or a resource carrying one. Its `auth.kind`
+picks the
+[cluster adapter](/kubernetes#what-the-cluster-adapter-gives-you).
 
 ## The Connection model
 
-A `Connection` is four fields. `auth` is a discriminated union keyed
-by `kind`. The built-in kinds are `kubeconfig`, `token`,
-`client-cert`, and `exec`; `alchemy/AWS` adds `aws-eks`.
+A `Connection` is four fields; `auth` is a discriminated union keyed
+by `kind`.
 
 ```typescript
 // The shape behind every `cluster` prop (alchemy/Kubernetes):
@@ -38,22 +28,9 @@ interface Connection {
 }
 ```
 
-`endpoint` is optional when the adapter can discover it: a
-kubeconfig file carries the server and the EKS adapter re-describes
-the cluster. `certificateAuthorityData` is base64 PEM, as a
-kubeconfig stores it.
-
-It is plain data on purpose. The workload provider resolves it at
-reconcile time and persists it on the workload's `connection`
-attribute, so `alchemy destroy` can reconnect after the cluster
-resource has left the program.
-
-The `cluster` prop is typed `ClusterLike`:
-`Connection | { connection: Connection }`. An
-[`AWS.EKS.Cluster`](/providers/aws/eks/cluster) exposes `connection`
-on its attributes, so you pass the whole resource and the
-[EKS adapter](/kubernetes/clusters/eks#what-the-adapter-adds) takes
-over.
+`cluster` is typed `ClusterLike`:
+`Connection | { connection: Connection }`, so an
+[`AWS.EKS.Cluster`](/providers/aws/eks/cluster) is passed whole.
 
 ```typescript
 // Both of these are a valid `cluster` (ClusterLike):
@@ -69,23 +46,14 @@ Effect.gen(function* () {
 });
 ```
 
-`auth` is the workload's cluster identity. Changing it replaces the
-workload. Changing only `endpoint` or the CA does not.
-
-:::note[Persisted with the workload]
-`alchemy state get` shows the resolved Connection on the workload's
-`connection` attribute ([Inspecting state](/cli/inspecting-state),
-[`Deployment` reference](/providers/kubernetes/deployment)). For
-`token` and `client-cert` that includes the credential itself.
-:::
+Changing `auth` replaces the workload; `endpoint` or the CA does not.
+The resolved Connection is persisted on the workload's `connection`
+attribute so `alchemy destroy` can reconnect.
 
 ## KubeConfig
 
-`Kubernetes.KubeConfig({ path?, context? })` is the "anything
-kubectl can reach" connection. It is a helper, not a resource: it
-returns `{ auth: { kind: "kubeconfig", path, context } }` and
-appears in no plan. Pass the context you enabled in
-[Setup](/kubernetes/setup#pick-a-cluster).
+`Kubernetes.KubeConfig({ path?, context? })` is the "anything kubectl
+can reach" connection: a helper, not a resource.
 
 ```typescript
 Effect.gen(function* () {
@@ -105,25 +73,9 @@ Effect.gen(function* () {
 });
 ```
 
-The file is the explicit `path`, else the first entry of
-`$KUBECONFIG` (only the first, unlike kubectl), else
-`~/.kube/config`. A leading `~` is expanded. The context is the
-explicit `context`, else the file's `current-context`. A missing
-file, context, cluster, or server fails with a typed
-`Kubernetes.KubeConfigError` naming the file.
-
-In a checked-in stack always pass `context`, so a teammate's
-`current-context` cannot retarget a deploy. The local context names
-are on
-[Local clusters](/kubernetes/clusters/local#which-local-cluster).
-
-From the cluster stanza the adapter reads `server`,
-`certificate-authority` or `certificate-authority-data`, and
-`insecure-skip-tls-verify`. From the user stanza it reads `token`,
-`tokenFile`, `client-certificate`/`client-key` (files or `-data`
-forms), and `exec` plugins. Exec plugins run per request and are
-cached until 30 seconds before their `expirationTimestamp`, or 60
-seconds when the plugin declares none.
+The file is `path`, else the first entry of `$KUBECONFIG`, else
+`~/.kube/config`; the context is `context`, else `current-context`.
+In a checked-in stack always pass `context`.
 
 ```typescript
 // Exec plugins declared in the file are honored — a GKE context via
@@ -132,43 +84,20 @@ seconds when the plugin declares none.
 const gke = Kubernetes.KubeConfig({ context: "gke_my-project_europe-west1_prod" });
 ```
 
-An explicit `endpoint`, `certificateAuthorityData`, or
-`insecureSkipTlsVerify` on the Connection overrides the file. Spread
-the helper's result and add the field. Not read from the file:
-`proxy-url`, `tls-server-name`, legacy `auth-provider` stanzas, and
-`impersonate*` settings. Those need an `exec` plugin or a raw kind.
-
-:::tip[Kubeconfig on EKS vs the EKS adapter]
-An `aws eks update-kubeconfig` context through `KubeConfig()` is
-auth only.
-[Targeting an EKS cluster](/kubernetes/clusters/eks#targeting-an-eks-cluster)
-covers how to get the full adapter.
-:::
+An `aws eks update-kubeconfig` context is auth only; see
+[Targeting an EKS cluster](/kubernetes/clusters/eks#targeting-an-eks-cluster).
 
 ## Token, client certificate, and exec
 
-The raw kinds are for when there is no kubeconfig file: CI with a
-service-account token, a connection built from another resource, a
-machine without `kubectl`. Three rules apply to all of them.
-
-`endpoint` is required. Without it the connect fails with
-`A 'token' Kubernetes connection requires an explicit endpoint (only
-kubeconfig-backed and managed-cloud connections can discover it)`,
-with your kind in the message.
-
-TLS is yours. Pass `certificateAuthorityData` (base64 PEM) or, for a
+No kubeconfig file involved. `endpoint` is required; pass
+`certificateAuthorityData` (base64 PEM) or, for a
 [self-signed local cluster](/kubernetes/clusters/local#which-local-cluster),
-`insecureSkipTlsVerify: true`. With neither, the platform trust
-store is used.
-
-Nothing else is read from disk or the environment.
+`insecureSkipTlsVerify: true`.
 
 ### token
 
-`{ kind: "token", token }` sends `Authorization: Bearer <token>` on
-every request. The classic case is a long-lived ServiceAccount token
-(a `kubernetes.io/service-account-token` Secret) for CI. Read it
-from config, never a literal.
+`{ kind: "token", token }` sends a bearer token. Read it from
+config, never a literal.
 
 ```typescript
 Effect.gen(function* () {
@@ -187,9 +116,8 @@ Effect.gen(function* () {
 
 ### client-cert
 
-`{ kind: "client-cert", certificate, key }`, both as PEM text, not
-base64. A kubeconfig's `-data` fields are decoded for you; here they
-are not. Requests use mutual TLS with no bearer header.
+`{ kind: "client-cert", certificate, key }`, both PEM text, not
+base64.
 
 ```typescript
 Effect.gen(function* () {
@@ -209,13 +137,8 @@ Effect.gen(function* () {
 
 ### exec
 
-`{ kind: "exec", command, args?, env? }` runs a
-`client.authentication.k8s.io` ExecCredential plugin with no
-kubeconfig involved. The plugin's `status.token` becomes the bearer
-token, or its `clientCertificateData`/`clientKeyData` the client
-certificate, cached like a plugin declared in a kubeconfig. A plugin
-that exits non-zero or returns malformed JSON fails with a typed
-`Kubernetes.ExecCredentialError` carrying the exit code and stderr.
+`{ kind: "exec", command, args?, env? }` runs an ExecCredential
+plugin; failures surface as `Kubernetes.ExecCredentialError`.
 
 ```typescript
 // EKS through the raw exec kind — auth only (see the EKS page for the
@@ -232,35 +155,17 @@ const cluster: Kubernetes.Connection = {
 };
 ```
 
-This reaches the same API server as the
-[EKS adapter](/kubernetes/clusters/eks#what-the-adapter-adds) and
-gets none of what it adds.
-
 :::caution[Credentials are persisted in state]
-A `token` or client `key` is stored on the workload's attributes so
-destroy can reconnect. Use a remote, access-controlled state store
-rather than a committed `.alchemy/` directory, or prefer `exec` and
-`kubeconfig`, which persist only how to mint a credential.
+A `token` or client `key` is stored in state, so use a remote state store or prefer `exec` and `kubeconfig`.
 :::
 
 ## How the adapter is chosen
 
-Every adapter is a Context service keyed
-`Kubernetes.ClusterAdapter/<auth kind>`. At reconcile, read, and
-delete time the workload provider looks up `connection.auth.kind` in
-the stack's composed provider layers, the same way resource providers
-are found by type. `Kubernetes.providers()` registers `kubeconfig`,
-`token`, `client-cert`, and `exec`. `AWS.providers()` registers
-`aws-eks`, the
-[EKS adapter](/kubernetes/clusters/eks#what-the-adapter-adds). What
-each adapter gives you is the
-[comparison table on the overview](/kubernetes#what-the-cluster-adapter-gives-you).
-
-Both layers register with `provideMerge`, so they must be merged
-into one `providers:` value, not one provided to the other. The
-[`Kubernetes.providers()` line from Setup](/kubernetes/setup#add-the-provider)
-covers every built-in kind. Targeting an `AWS.EKS.Cluster` means
-adding `AWS.providers()` alongside it.
+Adapters are Context services keyed by auth kind, looked up in the
+stack's providers. `Kubernetes.providers()` registers the four
+built-in kinds; `AWS.providers()` registers `aws-eks`, the
+[EKS adapter](/kubernetes/clusters/eks#what-the-adapter-adds). Merge
+both into one `providers:` value to target an `AWS.EKS.Cluster`.
 
 ```typescript
 // alchemy.run.ts — the providers layer decides which auth kinds resolve
@@ -277,10 +182,8 @@ export default Alchemy.Stack(
 );
 ```
 
-With only `Kubernetes.providers()` an `AWS.EKS.Cluster` target dies
-with this error.
+Without `AWS.providers()` an EKS target dies with:
 
-:::note[The error you'll see]
 ```text
 No Kubernetes cluster adapter is registered for auth kind 'aws-eks'.
 Add the provider layer that contributes it to the stack's providers —
@@ -289,21 +192,12 @@ e.g. 'aws-eks' ships with `AWS.providers()`; the built-in kinds
 `Kubernetes.providers()`. Compose multiple provider layers with
 `Layer.mergeAll(AWS.providers(), Kubernetes.providers())`.
 ```
-Change `providers: Kubernetes.providers()` to
-`providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers())`.
-:::
 
-Beyond `connect`, an adapter can implement `identity`, `registry`,
-`bootstrap`, and `loadBalancerDefaults`. The
-[interface](/kubernetes/guides/cluster-adapters#the-interface) and
-[registering an auth kind](/kubernetes/guides/cluster-adapters#registering-an-auth-kind)
-are in the Cluster adapters guide.
+Adapters can also implement `identity`, `registry`, `bootstrap`, and
+`loadBalancerDefaults` ([interface](/kubernetes/guides/cluster-adapters#the-interface)).
 
 ## Where next
 
-- [Local clusters](/kubernetes/clusters/local) — which local cluster
-  to use, reaching a Service, and the registry-less limits.
-- [EKS](/kubernetes/clusters/eks) — what changes when `cluster` is
-  an `AWS.EKS.Cluster`.
-- [Cluster adapters](/kubernetes/guides/cluster-adapters) — add an
-  auth kind for GKE or AKS.
+- [Local clusters](/kubernetes/clusters/local)
+- [EKS](/kubernetes/clusters/eks)
+- [Cluster adapters](/kubernetes/guides/cluster-adapters)

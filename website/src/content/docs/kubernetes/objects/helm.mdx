@@ -4,20 +4,16 @@ description: Install a Helm chart from a repository, an OCI registry, or a local
 ---
 
 [`Kubernetes.HelmChart`](/providers/kubernetes/helmchart) renders a
-chart on your machine with the `helm` CLI and applies the objects the
-way a [Manifest](/kubernetes/objects/manifests#any-object) is
-applied. You need only the binary; see
-[Setup](/kubernetes/setup#install) for installing it. `HELM_BIN`
-overrides its path. A missing binary fails the deploy with
-`Failed to run 'helm': … install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary`.
+chart locally with the `helm` CLI and applies the objects like a
+[Manifest](/kubernetes/objects/manifests#any-object). You need only
+the binary ([Setup](/kubernetes/setup#install)); `HELM_BIN` overrides
+its path.
 
 ## Chart sources
 
-`chart` takes three forms. A repository chart name with `repo`
-becomes `--repo` on every render, with no `helm repo add` step. An
-`oci://` reference needs no `repo`. A local directory is any path on
-disk: `version` is ignored and the directory is content-hashed into
-`code.hash`, so a template edit shows as an update in `alchemy plan`.
+`chart` takes three forms: a repository chart name with `repo`, an
+`oci://` reference, or a local directory, which is content-hashed so a
+template edit shows as an update in `alchemy plan`.
 
 ```typescript
 // 1. Repository chart — repo URL is passed per render, no `helm repo add`.
@@ -50,44 +46,21 @@ ingress.objects; // KubernetesObjectRef[] — every applied object
 ingress.code.hash; // hash of all render inputs (+ local chart files)
 ```
 
-The chart's objects share one identity: the cluster, `releaseName`,
-and `namespace` (default `"default"`). Changing any of those is a
-replace. Changing `chart`, `repo`, `version`, `values`,
-`includeCrds`, `createNamespace`, or a local chart's contents is an
-update.
-
-The default `releaseName` derives from the stack, stage, and logical
-id, lowercased and capped at Helm's 53-character limit
-(`createPhysicalName({ maxLength: 53 })`), for example
-`kuberneteslocalexample-podinfgxktg4nyz5zvh4jz6du2ewxf`. Charts that
-name objects from `.Release.Name` then name them differently, so set
-`releaseName` when the names matter.
+Identity is the cluster, `releaseName`, and `namespace` (default
+`"default"`); changing any of those is a replace. Set `releaseName`
+when the chart names objects from `.Release.Name` and the names matter.
 
 ## Values
 
-`values` has exactly the shape of a `values.yaml`. It is written to a
-temporary `values.json` and passed as `--values`. An empty object
-passes nothing.
+`values` has exactly the shape of a `values.yaml`.
+[Outputs](/infrastructure-as-code/outputs) work anywhere inside it and
+order the chart after the referenced resource, like
+[`namespace: ns.name`](/kubernetes/objects/manifests#namespaces).
+Secret values follow the [Secret Manifest](/kubernetes/objects/manifests#secrets)
+rule: `Config.string`, never `Redacted`.
 
-[Outputs](/infrastructure-as-code/outputs) work anywhere inside
-`values` and order the chart after the referenced resource, the same
-way [`namespace: ns.name`](/kubernetes/objects/manifests#namespaces)
-does. Secret values follow the
-[Secret Manifest](/kubernetes/objects/manifests#secrets) rule:
-`Config.string`, never `Redacted`, which would render as
-`<redacted>`.
-
-Pin `version` for repository and OCI charts. Without it Helm resolves
-the latest chart at render time, but the resource's hash contains
-only your inputs, so an unchanged stack no-ops until an unrelated
-`values` edit re-renders and silently jumps versions. With a pin, an
-upgrade is a `version` bump and a visible object delta in the plan.
-
-`releaseName` feeds `.Release.Name` and `namespace` feeds
-`.Release.Namespace`, so templates render exactly as under
-`helm install`. When taking over objects Helm installed under a known
-name, set `releaseName` to match and read the ownership caution under
-[Lifecycle](#lifecycle) first.
+Pin `version`: the resource's hash contains only your inputs, so an
+unpinned chart can silently jump versions on an unrelated edit.
 
 ```typescript
 const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
@@ -109,61 +82,27 @@ const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
 
 ## Lifecycle
 
-Every reconcile runs the same sequence.
-
-Render runs
+Every reconcile runs
 `helm template <releaseName> <chart> --namespace <ns> --no-hooks`
-locally, plus `--repo`, `--version`, `--include-crds`, and `--values`
-as configured. The output is parsed as multi-document YAML. Every
-object must carry `apiVersion`, `kind`, and `metadata.name`;
-`generateName` alone fails the render because server-side apply
-needs a concrete name. A bad chart reference or template error is a
-typed `HelmError` carrying helm's stderr.
+locally, fills in `metadata.namespace` on namespaced objects that omit
+it, prunes objects that dropped out of the render since the last
+deploy (in reverse apply order), then
+[server-side applies](/kubernetes/guides/how-apply-works#server-side-apply)
+the rest in dependency rank order. A template error is a typed
+`HelmError` carrying helm's stderr.
 
-Charts routinely omit `metadata.namespace`. For each object without
-one the provider resolves the kind's scope, by static table or
-discovery as Manifest does, and sets `metadata.namespace` on
-namespaced kinds. Cluster-scoped kinds and objects with their own
-namespace pass through untouched. With `createNamespace: true` and a
-`namespace` other than `"default"`, a `v1/Namespace` object is
-prepended to the managed set, so it is owned and deleted on destroy.
-
-The previous deploy's `objects` attribute is compared with the new
-render by (`apiVersion`, `kind`, `namespace`, `name`). Anything that
-dropped out is deleted first, in reverse apply order. That is what
-happens when a value turns a template off.
-
-The desired objects are then
-[server-side applied](/kubernetes/guides/how-apply-works#server-side-apply)
-in dependency rank order: Namespaces and CRDs first, workloads later,
-discovered kinds last. The attributes record `connection`,
-`releaseName`, `namespace`, `chart`, `version`, `objects` (the prune
-baseline for the next deploy), and `code.hash`.
-
-Destroy deletes every ref in `objects` in reverse rank order: CRs
-before CRDs, workloads before Services and ConfigMaps, the Namespace
-last. 404s are ignored. If the cluster is gone the delete is a no-op.
-
-The whole render is re-applied on any input change or
-`alchemy deploy --force`, so manual edits to chart-managed fields are
-overwritten then. An unchanged stack no-ops, and refresh checks only
-that the cluster is reachable, not each object.
-[Pruning and drift](/kubernetes/guides/how-apply-works#pruning-and-drift)
-has the full model.
+Destroy deletes every ref in `objects` in reverse rank order. With
+`createNamespace: true` the Namespace is managed too, so destroy
+deletes it and everything in it; prefer a
+[Namespace Manifest](/kubernetes/objects/manifests#namespaces) when
+other resources share it. The full render is re-applied on any input
+change or `alchemy deploy --force`
+([pruning and drift](/kubernetes/guides/how-apply-works#pruning-and-drift)).
 
 :::caution[CRDs are part of the managed set by default]
-`includeCrds: true` applies the chart's `crds/` directory, so a CRD
-is re-applied on every reconcile and deleted on destroy, taking every
+`includeCrds: true` deletes the chart's CRDs on destroy, taking every
 [custom resource](/kubernetes/objects/manifests#custom-resources) of
-that kind with it. If other stacks or teams rely on the CRDs, set
-`includeCrds: false` and manage them separately.
-:::
-
-:::caution[`createNamespace: true` owns the Namespace]
-Destroy deletes it and everything else that lives there. When other
-resources share the namespace, prefer a
-[Namespace Manifest](/kubernetes/objects/manifests#namespaces) you
-control explicitly.
+that kind with them; set `includeCrds: false` if other stacks rely on them.
 :::
 
 ```typescript
@@ -184,28 +123,10 @@ const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
 
 ## What Helm does that Alchemy doesn't
 
-`HelmChart` uses Helm as a template engine, not a package manager.
-
-| Helm (`helm install`) | `Kubernetes.HelmChart` | If you need it |
-| --- | --- | --- |
-| Writes a release record in the cluster; `helm ls`, `helm status`, `helm rollback` work | No release record. State is the `objects` attribute; rollback is redeploying the previous inputs | Install with Helm directly |
-| Runs lifecycle hooks (`helm.sh/hook`) with weights and delete policies | Rendered with `--no-hooks`, and hook-annotated objects are filtered by the parser, so they are neither executed nor applied | Install with Helm, or express the hook's work as a [`Kubernetes.Job`](/kubernetes/workloads/jobs#jobs) you own |
-| Three-way merge; never touches CRDs after install | Server-side apply against live state; CRDs managed by default | See the `includeCrds` caution under [Lifecycle](#lifecycle) |
-| `--create-namespace` creates but does not own the namespace | `createNamespace: true` owns it | See the `createNamespace` caution under [Lifecycle](#lifecycle) |
-| `helm test` | Not available (tests are hooks) | Run the test Pod as a `Kubernetes.Job` |
-| Waits for readiness with `--wait` | Returns once the API server accepts the objects | Check readiness out of band (`kubectl rollout status`) |
-
-If a chart's README says it relies on hooks, or you need
-`helm rollback`, use Helm. If you want the chart's objects in the
-same plan as your workloads, drift-corrected and pruned, use
-`HelmChart`. Hooks are excluded twice because a chart's `pre-delete`
-uninstall Job, applied as an ordinary object, would otherwise run on
-every deploy.
-
-Taking over objects a Helm release installed seizes their fields
-from the `helm` field manager; see
-[conflicts](/kubernetes/guides/how-apply-works#conflicts) for what
-`force` does there. Owning a hook's work yourself looks like this.
+`HelmChart` is a template engine, not a package manager: no release
+record (`helm ls`, `helm rollback`, `helm test`), no `--wait`, and
+no hooks, which are neither executed nor applied. Express a hook's
+work as a [`Kubernetes.Job`](/kubernetes/workloads/jobs#jobs) you own.
 
 ```typescript
 // A chart's pre-upgrade migration hook never runs under HelmChart.
@@ -226,46 +147,8 @@ const app = yield* Kubernetes.HelmChart("App", {
 });
 ```
 
-## Combining with Manifests and Deployments
-
-The API server accepts an Ingress whose class nobody has installed
-yet, so a chart-installed controller and the Ingress that uses it
-have no natural edge. To apply the Ingress only after the controller,
-carry a chart output in a harmless field, the
-[same idiom](/kubernetes/objects/manifests#namespaces) as
-`namespace: ns.name`.
-
-```typescript
-const route = yield* Kubernetes.Manifest("ApiIngress", {
-  cluster,
-  manifest: {
-    apiVersion: "networking.k8s.io/v1",
-    kind: "Ingress",
-    metadata: {
-      name: "api",
-      namespace: ns.name,
-      // Ordering edge: the value is irrelevant, the reference applies the
-      // Ingress after the ingress-nginx chart.
-      annotations: {
-        "alchemy.run/ingress-controller": ingressNginx.releaseName,
-      },
-    },
-    spec: { ingressClassName: "nginx", rules: [/* ... */] },
-  },
-});
-```
-
-The full controller, ClusterIP Deployment, and Ingress are in the
-[Ingress](/kubernetes/guides/exposing-services#ingress) section of
-the exposing-services guide.
-
 ## Where next
 
-- [Exposing services](/kubernetes/guides/exposing-services) — Service
-  types, LB annotations, Ingress, Cloudflare Tunnel.
+- [Exposing services](/kubernetes/guides/exposing-services)
 - [How apply works](/kubernetes/guides/how-apply-works#pruning-and-drift)
-  — field manager, pruning, drift, conflicts, delete order, debugging.
-- [Custom resources](/kubernetes/objects/manifests#custom-resources)
-  — the CRs that drive a chart-installed operator are Manifests.
-- [`HelmChart` reference](/providers/kubernetes/helmchart) — every
-  prop and attribute.
+- [`HelmChart` reference](/providers/kubernetes/helmchart)

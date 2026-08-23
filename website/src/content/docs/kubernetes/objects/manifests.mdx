@@ -4,15 +4,10 @@ description: Apply any Kubernetes object — Namespaces, ConfigMaps, StatefulSet
 ---
 
 [`Kubernetes.Manifest`](/providers/kubernetes/manifest) applies any
-object that is not a `Deployment` or a `Job`. You write the object as
-a TypeScript literal with the same shape as its YAML. Alchemy applies
-it and owns it from then on.
+object that is not a `Deployment` or a `Job`, written as a literal with
+the same shape as its YAML.
 
 ## Any object
-
-The `manifest` prop is the object itself: `apiVersion`, `kind`,
-`metadata`, then the kind's own fields. A StatefulSet is the usual
-"not a Deployment, not a Job" workload.
 
 ```typescript
 // Inside the Stack's Effect.gen body; `cluster` is a
@@ -40,50 +35,21 @@ redis.ref; // { apiVersion: "apps/v1", kind: "StatefulSet", name: "redis", names
 redis.uid; // server-assigned UID (string | undefined)
 ```
 
-The object was
+The object is
 [server-side applied](/kubernetes/guides/how-apply-works#server-side-apply)
-under the field manager `alchemy`. One call creates it if it is
-missing and converges it if it already exists.
+under the field manager `alchemy`. `metadata.name` is required;
+`generateName` is not supported.
 
-`metadata.name` is required. Without it the provider fails with
-`Kubernetes.Manifest requires manifest.metadata.name (got <apiVersion>/<kind>)`.
-`generateName` is not supported because server-side apply addresses
-objects by a concrete name.
-
-The attributes are the object's identity (`apiVersion`, `kind`,
-`name`, `namespace`, with `namespace` undefined for cluster-scoped
-kinds), `ref` as that tuple in one value, `uid` when the API server
-returns one, and the cluster's
-[connection](/kubernetes/clusters/connecting#the-connection-model),
-persisted so destroy can reconnect without the original graph.
-
-An object's identity is (cluster, `apiVersion`, `kind`,
-`metadata.name`, `metadata.namespace`). Change any part and the plan
-shows a replace: the new object is applied, then the old one is
-deleted. Every other edit is an update that re-applies the object.
-The cluster counts by its auth descriptor, not its endpoint, so a
-managed cluster rotating its endpoint does not replace your objects.
-
-Refresh fetches the object by `ref` and checks existence only. A 404
-means the next deploy re-creates it. A vanished cluster
-(`Kubernetes.ClusterNotFoundError`) means the object is treated as
-gone. A hand-edited field on a live object is corrected the next
-time the Manifest reconciles or on `alchemy deploy --force`. See
-[pruning and drift](/kubernetes/guides/how-apply-works#pruning-and-drift).
-
-Destroy deletes the object. A 404 is ignored, and residual API errors
-are tolerated, for example when the CRD behind a custom resource was
-removed first.
+Identity is (cluster, `apiVersion`, `kind`, `metadata.name`,
+`metadata.namespace`); changing any part is a replace. Destroy deletes
+the object and ignores a 404.
 
 :::caution[Manifest does not adopt]
-There is no existence probe before the first apply. If an object with
-the same identity already exists, the apply takes over the fields you
-declare and `alchemy destroy` deletes the whole object. See
-[conflicts](/kubernetes/guides/how-apply-works#conflicts).
+An existing object with the same identity is taken over and deleted by
+`alchemy destroy`; see [conflicts](/kubernetes/guides/how-apply-works#conflicts).
 :::
 
-The headless Service a StatefulSet needs is another Manifest next to
-it.
+The headless Service a StatefulSet needs is another Manifest.
 
 ```typescript
 const redisService = yield* Kubernetes.Manifest("RedisService", {
@@ -103,32 +69,14 @@ const redisService = yield* Kubernetes.Manifest("RedisService", {
 
 ## Namespaces
 
-A Namespace is cluster-scoped, so it is a Manifest like any other. It
-is also the object almost every stack needs first. `Deployment`,
-`Job`, and namespaced Manifests all require their namespace to
-[already exist](/kubernetes/workloads/deployments#what-gets-created).
-Applying into a missing namespace fails with a 404.
-
-Namespaced kinds need `metadata.namespace`. Cluster-scoped kinds
-(Namespace, CustomResourceDefinition, ClusterRole) leave it off and
-get `namespace: undefined` back. A namespaced kind without one fails
-with `Kubernetes object <apiVersion>/<kind>/<name> requires a namespace`.
-`Manifest` does not default it to `default` the way `HelmChart`
-does, so write `namespace: "default"` when that is what you mean.
+A Namespace is a cluster-scoped Manifest that `Deployment`, `Job`,
+and namespaced Manifests require to already exist. Namespaced kinds
+need `metadata.namespace`; `Manifest` does not default it.
 
 Alchemy orders resources by the data that flows between them, not by
-declaration order. A bare string `namespace: "apps"` creates no edge
-to the Namespace manifest, so on a fresh deploy the Deployment can
-apply first. Reference the Namespace's `name` attribute instead and
-the Deployment deploys after it and is destroyed before it. When no
-field naturally carries an output, put it in a harmless one: a label
-on a Manifest, an unused `values` key on a HelmChart. The value does
-not matter, the reference creates the edge.
-
-:::tip[`namespace: ns.name`, not `namespace: "apps"`]
-The output reference is what creates the dependency edge. The value
-is identical.
-:::
+declaration order: `namespace: ns.name` creates the edge, a bare
+`"apps"` does not. When no field carries an output, put it in a
+harmless one such as a label.
 
 ```typescript
 const ns = yield* Kubernetes.Manifest("AppsNamespace", {
@@ -164,21 +112,14 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-Deleting a Namespace deletes everything inside it. Never point a
-Namespace manifest at a namespace other tools own.
+Deleting a Namespace deletes everything inside it.
 
 ## Custom resources
 
-`Manifest` accepts any `apiVersion` and `kind`. Core kinds are known
-statically. Anything else is discovered from the API server at apply
-time and cached for the rest of the process; the
-[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply)
-guide covers both paths. A custom resource whose CRD is not installed
-fails with a typed `KubernetesApiError`, a 404 reading
-`Kind '<Kind>' not found in API group '<apiVersion>'`. Discovery is
-not retried, so the CRD must exist first. Carry the CRD's output into
-a label on the CR and Alchemy applies the CRD first and removes the
-CR first on destroy.
+Core kinds are known statically; anything else is discovered from the
+API server at apply time. A custom resource whose CRD is not installed
+fails with a 404, so reference the CRD's output from the CR to apply
+the CRD first.
 
 ```typescript
 const widgetCrd = yield* Kubernetes.Manifest("WidgetCrd", {
@@ -230,42 +171,17 @@ const widget = yield* Kubernetes.Manifest("Widget", {
 });
 ```
 
-:::note
 Deleting a CRD deletes every custom resource of that kind
-cluster-wide. Keep a CRD manifest in the stack only if this stack
-owns the kind.
-:::
-
-:::caution[Eventual consistency]
-The API server registers a new CRD asynchronously (its `Established`
-condition). A CR that races it may hit the discovery 404 once on the
-first deploy. Re-running `alchemy deploy` converges.
-:::
-
-More often an operator already installed the CRD, such as
-cert-manager's `Certificate` or Argo's `Application`. Then the stack
-holds only the CR and discovery finds the kind on the cluster.
-Operators usually arrive as a
-[Helm chart](/kubernetes/objects/helm#values). When discovery or the
-apply fails, [debugging](/kubernetes/guides/how-apply-works#debugging)
-explains how to read the error.
+cluster-wide. A CR that races a fresh CRD may hit the 404 once;
+re-running `alchemy deploy` converges. Operators usually arrive as a
+[Helm chart](/kubernetes/objects/helm#values).
 
 ## Secrets
 
-A `Secret` is a Manifest with `stringData`. The API server
-base64-encodes it into `data` for you.
-
-Never inline the value in `alchemy.run.ts`. Read it from the deploy
-environment with `Config.string("DB_PASSWORD")`. `Config` values in
-props resolve at plan time, so the applied manifest carries the real
-value. It is sent to the API server over TLS and lands in etcd like
-any Secret applied with `kubectl`.
-
-:::note[Redacted is not unwrapped here]
-`Config.redacted(...)` and `Redacted.make(...)` are not supported
-inside `manifest` or Helm `values`. The cluster would receive the
-literal `<redacted>`. Use `Config.string`.
-:::
+A `Secret` is a Manifest with `stringData`. Read the value from the
+deploy environment with `Config.string`, never a literal.
+`Config.redacted` and `Redacted.make` are not unwrapped inside
+`manifest` or Helm `values`; the cluster would receive `<redacted>`.
 
 ```typescript
 import * as Config from "effect/Config";
@@ -296,66 +212,12 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-For `envFrom` or volume mounts see
+The resolved `manifest` is written to state in plaintext, so use a
+remote [state store](/state-store). For `envFrom` or volume mounts see
 [container-level fields](/kubernetes/workloads/pod-template#container-level-fields).
-Container overrides in `podTemplate` replace the synthesized
-container wholesale and are only safe for `image:` sources. On EKS
-with AWS bindings you often need no Secret at all, because
-[Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks)
-grants the access directly.
-
-:::caution[Secrets in state]
-The resolved `manifest` is written to state verbatim, plaintext
-included. Use a remote [state store](/state-store) and restrict who
-can read it. Rotate by changing the environment variable and
-redeploying. Pods still need a restart to pick up the new value.
-:::
-
-## Typing the manifest
-
-`manifest` is `KubernetesManifest`: `apiVersion`, `kind`, an optional
-`metadata` with `name`, `namespace`, `labels` and `annotations`, and
-`[key: string]: unknown` for the rest. It is loose on purpose so any
-kind is accepted and the API server validates the shape.
-
-Because props are deep `Input<T>`, any leaf can be an
-[output](/infrastructure-as-code/outputs) of another resource:
-`namespace: ns.name`, `data: { TABLE_NAME: table.tableName }`,
-`Output.interpolate` for composed strings. That is how you wire
-values and how you declare ordering. For editor help, write the
-literal with `satisfies` against a Kubernetes typings package. The
-literal keeps its narrow type and still satisfies
-`KubernetesManifest`.
-
-```typescript
-import type { V1StatefulSet } from "@kubernetes/client-node";
-
-const redisSpec = {
-  apiVersion: "apps/v1",
-  kind: "StatefulSet",
-  metadata: { name: "redis", namespace: ns.name },
-  spec: {
-    /* autocompleted */
-  },
-} satisfies V1StatefulSet; // compile-time shape check; runtime validation is the API server's
-
-const redis = yield* Kubernetes.Manifest("Redis", {
-  cluster,
-  manifest: redisSpec,
-});
-```
-
-A typo in `kind` or `apiVersion` is a discovery 404 at deploy time. A
-typo inside `spec` is a 422 from the API server. Both are covered
-under [debugging](/kubernetes/guides/how-apply-works#debugging).
 
 ## Where next
 
-- [Helm charts](/kubernetes/objects/helm) — install whole charts with
-  `Kubernetes.HelmChart`; their objects take the same apply path.
+- [Helm charts](/kubernetes/objects/helm)
 - [How apply works](/kubernetes/guides/how-apply-works#server-side-apply)
-  — the field manager, `force`, pruning, drift, and conflicts.
-- [Pod template recipes](/kubernetes/workloads/pod-template#recipes)
-  — mount these ConfigMaps and Secrets into a Deployment or Job.
-- [`Manifest` reference](/providers/kubernetes/manifest) — every
-  prop and attribute.
+- [`Manifest` reference](/providers/kubernetes/manifest)

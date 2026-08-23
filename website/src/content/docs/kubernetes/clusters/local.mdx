@@ -3,34 +3,18 @@ title: Local clusters
 description: Run the Kubernetes workloads on Docker Desktop, OrbStack, kind, k3s, or minikube — which to pick, how to reach a Service without a cloud load balancer, and what "no managed registry" means for your images.
 ---
 
-Pick a local cluster, reach a Service on it, run your own image.
-Every cluster here is a
+Every local cluster is a
 [`KubeConfig()` connection](/kubernetes/clusters/connecting#kubeconfig),
-so it is auth only. The only thing that changes is the two image
-sources that need a registry, covered at the end. If you have not
-deployed locally yet, start with
-[Tutorial part 1](/kubernetes/tutorial/part-1).
+so it is auth only; the only thing that changes is the two image
+sources that need a registry.
 
 ## Which local cluster
 
-The tutorial assumes Docker Desktop or OrbStack.
-[Setup](/kubernetes/setup#pick-a-cluster) covers enabling one. This
-is the comparison.
-
-| Cluster        | Enable                                 | Context               | `LoadBalancer` Services                                              | Local image without a push                               |
-| -------------- | -------------------------------------- | --------------------- | -------------------------------------------------------------------- | -------------------------------------------------------- |
-| Docker Desktop | Settings → Kubernetes → Enable         | `docker-desktop`      | Yes, `url` is `http://localhost:<port>`                              | Yes, shared daemon                                       |
-| OrbStack       | Enable Kubernetes in settings          | `orbstack`            | Yes, `url` is `http://<ip>:<port>` on the OrbStack network           | Yes, shared daemon                                       |
-| kind           | `kind create cluster --name dev`       | `kind-dev`            | No, `url` stays `undefined` unless you install MetalLB or cloud-provider-kind | `kind load docker-image <ref> --name dev`       |
-| minikube       | `minikube start`                       | `minikube`            | Pending until `minikube tunnel` runs in another terminal             | `minikube image load <ref>`                              |
-| k3s / k3d      | Install k3s / `k3d cluster create dev` | `default` / `k3d-dev` | Yes, the bundled ServiceLB assigns the node IP                       | `k3s ctr images import` / `k3d image import <ref> -c dev` |
-
-A default `LoadBalancer` Deployment waits up to ~3 minutes for an
-address on a cluster that will never assign one. On kind the deploy
-still succeeds after the wait and returns `url: undefined`, with
-`kubectl get svc` showing `EXTERNAL-IP <pending>`. Set
-`serviceType: "ClusterIP"` on kind and minikube to skip the wait
-([Exposing it: serviceType and url](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url)).
+Docker Desktop (`docker-desktop`), OrbStack (`orbstack`), and
+k3s/k3d (`default` / `k3d-dev`) assign `LoadBalancer` addresses.
+kind (`kind-dev`) and minikube (`minikube`) do not: a default
+Deployment waits ~3 minutes and returns `url: undefined`, so set
+`serviceType: "ClusterIP"` there.
 
 ```typescript
 Effect.gen(function* () {
@@ -49,41 +33,13 @@ Effect.gen(function* () {
 });
 ```
 
-:::tip[Self-signed API servers]
-The kubeconfig a local cluster writes carries its CA, so there is
-nothing to configure. Only a hand-written
-[raw connection](/kubernetes/clusters/connecting#token-client-certificate-and-exec)
-needs `insecureSkipTlsVerify: true`.
-:::
-
 ## Reaching a Service
 
-Three ways to hit a Deployment on a laptop. Service types and
-Ingress in full are in the
-[Exposing services guide](/kubernetes/guides/exposing-services#service-types).
-
-### LoadBalancer
-
-The default, where the cluster supports it. On Docker Desktop,
-OrbStack, and k3s, `api.url` is the address to curl. Return it from
-the Stack so `alchemy deploy` prints it.
-
-### NodePort
-
-Works everywhere. The port is cluster-assigned (30000–32767) and
-not an attribute, because alchemy's Service spec sets only `port`
-and `targetPort`. Read it with
-`kubectl get svc <serviceName> -n <namespace>`. `url` is
-`undefined` for a `NodePort` Service. On Docker Desktop the node is
-`localhost`; on kind and minikube the node IP needs a port mapping
-or `minikube service`.
-`kubectl port-forward svc/<serviceName> 18080:8080` works too, so
-on a laptop you rarely need the node port.
-
-### ClusterIP and port-forward
-
-The dependable fallback on any cluster, and the right choice on kind
-and minikube.
+`LoadBalancer` (the default) gives you `api.url` where the cluster
+supports it. `NodePort` works everywhere, but the cluster-assigned
+port is not an attribute. `ClusterIP` plus port-forward is the
+dependable fallback and the right choice on kind and minikube
+([Service types](/kubernetes/guides/exposing-services#service-types)).
 
 ```typescript
 Effect.gen(function* () {
@@ -106,39 +62,26 @@ kubectl port-forward -n default svc/myapp-api-dev-alex-k3m7p2q6r4s5t2v6 8080:808
 curl http://localhost:8080/
 ```
 
-Without a `name` prop the Deployment, Service, and ServiceAccount
-share a generated base name, so port-forward to `api.serviceName`
-rather than a guess. The naming rules are under
-[What gets created](/kubernetes/workloads/deployments#what-gets-created).
-
-:::note[Ingress on a local cluster]
-ingress-nginx via `HelmChart` works on Docker Desktop and OrbStack
-exactly as in
-[the guide](/kubernetes/guides/exposing-services#ingress).
-:::
+Port-forward to `api.serviceName`, not a guess: without a `name`
+prop the names are generated.
 
 ## Registry-less limits
 
-`main:` and `context:` fail on every kubeconfig-backed cluster with
-the "this cluster has no managed image registry" error
-([Registry requirement](/kubernetes/workloads/image-sources#registry-requirement)).
-`image:` works, and the reference goes to the kubelet verbatim
-([the three sources](/kubernetes/workloads/image-sources#three-sources)).
-With no `main:` there is no `{ fetch }` or `{ run }`, so a local
-cluster binds through `env` only
-([env-only bindings](/kubernetes/workloads/bindings#env-only-bindings)).
+`main:` and `context:` fail on every kubeconfig-backed cluster
+([Registry requirement](/kubernetes/workloads/image-sources#registry-requirement));
+`image:` works. With no `main:` there is no `{ fetch }` or `{ run }`,
+so bindings are
+[env only](/kubernetes/workloads/bindings#env-only-bindings).
 
 ## Using your own images
 
 Build the image, make it pullable by the node, pass the reference as
-`image:`. The middle step depends on the cluster.
+`image:`.
 
 ### Shared daemon: Docker Desktop, OrbStack
 
-The node is your Docker daemon, so a locally built tag is already
-there. Build with `Docker.Image` from `alchemy/Docker`, with
-`Docker.providers()` merged into the Stack, and hand `imageRef` to
-the Deployment. A rebuild rolls the Deployment.
+The node is your Docker daemon, so a `Docker.Image` build is already
+there; a rebuild rolls the Deployment.
 
 ```typescript
 // alchemy.run.ts
@@ -170,10 +113,14 @@ export default Alchemy.Stack(
 );
 ```
 
+Use a real tag: `:latest` means `imagePullPolicy: Always`, and the
+kubelet fails with `ErrImagePull` asking Docker Hub for a local-only
+image.
+
 ### Separate containerd: kind, minikube, k3d
 
-Build the same way, then load the tag into the cluster before
-deploying.
+Load the tag into the cluster before deploying; a rebuilt tag must
+be re-loaded.
 
 ```sh
 kind load docker-image my-api:dev --name dev
@@ -181,14 +128,10 @@ minikube image load my-api:dev
 k3d image import my-api:dev -c dev
 ```
 
-Loading is out of band. A rebuilt tag must be re-loaded or the
-kubelet keeps the old layers.
-
 ### A local registry
 
-For teams or CI-like loops, run a registry container, push to it,
-and use the `localhost:5001/...` reference. kind documents a
-local-registry recipe of its own.
+Or run a registry container, push to it, and use the
+`localhost:5001/...` reference as `image:`.
 
 ```sh
 docker run -d -p 5001:5000 --name registry registry:2
@@ -196,33 +139,8 @@ docker tag my-api:dev localhost:5001/my-api:dev
 docker push localhost:5001/my-api:dev
 ```
 
-Then `image: "localhost:5001/my-api:dev"`. To push from the Stack,
-`Docker.Image` takes a `registry` block. See
-[Build and push](/docker/build-and-push).
-
-### The pull-policy gotcha
-
-Alchemy does not set `imagePullPolicy`, so the Kubernetes defaults
-apply. `:latest` or no tag means `Always`: the kubelet asks Docker
-Hub for a local-only image and fails with `ErrImagePull`. Any other
-tag means `IfNotPresent`. Use a real tag like `my-api:dev` or a git
-SHA. `IfNotPresent` on a `:latest` tag means restating the whole
-container, because `podTemplate.spec.containers` is an array and
-arrays replace wholesale. The shape is under
-[Container-level fields](/kubernetes/workloads/pod-template#container-level-fields).
-
-:::tip[Or let the cloud do it]
-On EKS the same `main:` and `context:` props build and push into a
-per-workload ECR repository with no registry setup. See
-[What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds).
-:::
-
 ## Where next
 
-- [EKS](/kubernetes/clusters/eks) — Pod Identity, ECR, and `main:`
-  without any of the above.
-- [Deployments](/kubernetes/workloads/deployments) — everything the
-  Deployment creates and every prop.
-- [Exposing services](/kubernetes/guides/exposing-services) —
-  Service types, Ingress, and Cloudflare Tunnel for a public
-  hostname on a local cluster.
+- [EKS](/kubernetes/clusters/eks) — `main:` with no registry setup
+- [Deployments](/kubernetes/workloads/deployments)
+- [Exposing services](/kubernetes/guides/exposing-services)

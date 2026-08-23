@@ -1,13 +1,12 @@
 ---
 title: Deployments
-description: Run a replicated server on any cluster with Kubernetes.Deployment — what objects it creates, every prop by group, how serviceType and url work, Effect servers with fetch, the tagged form, and what updates in place versus replaces.
+description: Run a replicated server on any cluster with Kubernetes.Deployment — what it creates, serviceType and url, Effect servers with fetch, the tagged form, and what replaces.
 ---
 
 A [`Kubernetes.Deployment`](/providers/kubernetes/deployment) is a
-replicated server on any cluster, the Kubernetes analog of
-`AWS.ECS.Service`. Give it a cluster, an image source, and a port.
-It applies a `Deployment`, a `Service`, and a `ServiceAccount`, and
-hands back the Service's address.
+replicated server on any cluster. Give it a cluster, an image source,
+and a port; it applies a `Deployment`, a `Service`, and a
+`ServiceAccount`.
 
 ```typescript
 import * as Kubernetes from "alchemy/Kubernetes";
@@ -26,46 +25,15 @@ web.url;            // LoadBalancer address once assigned (string | undefined)
 web.deploymentName; // the Kubernetes object names are attributes too
 ```
 
-[`KubeConfig()`](/kubernetes/clusters/connecting#kubeconfig) returns
-a connection. `image` is
+`image` is
 [one of three image sources](/kubernetes/workloads/image-sources#three-sources).
 
 ## What gets created
 
-Three objects share one base name and one label set. The base name
-is `name` if set, otherwise the engine's physical name,
-`<stack>-<id>-<stage>-<16-character hash>`, lowercased with anything
-outside `[a-z0-9-]` replaced by `-`. The default stage `dev_<username>`
-becomes `dev-<username>`. `deploymentName`, `serviceName`, and
-`serviceAccountName` expose it. Don't hard-code that they are equal.
-
-Labels are `app.kubernetes.io/name: <baseName>` with your `labels`
-merged over it. The same map is the Deployment selector, the pod
-labels, and the Service selector.
-
-The container env is built in five layers. Later wins.
-
-1. binding env from each `Binding.Service`,
-2. adapter env (EKS injects `AWS_REGION`),
-3. `ALCHEMY_STACK_NAME`, `ALCHEMY_STAGE`, `ALCHEMY_PHASE=runtime`,
-4. `PORT`,
-5. your `env`.
-
-Non-string values are JSON-stringified. A `Kubernetes.Job` builds the
-same list minus `PORT`.
-
-Objects are applied ServiceAccount, then Service, then Deployment,
-each with
-[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply)
-under the `alchemy` field manager.
-
-| Object           | Name       | Carries                                                              |
-| ---------------- | ---------- | -------------------------------------------------------------------- |
-| `ServiceAccount` | base name  | identity annotations from the cluster adapter, when it has identity   |
-| `Service`        | base name  | `type`, `ports` (`port` → `targetPort: port`), `selector`, annotations |
-| `Deployment`     | base name  | `replicas`, `selector`, the pod template (container, env, resources)  |
-
-The intro Deployment applies this:
+Three objects share one base name (`name`, or the engine's physical
+name lowercased) and one label set, `app.kubernetes.io/name` plus
+your `labels`. Container env, later wins: binding env, adapter env,
+`ALCHEMY_*`, `PORT`, your `env`.
 
 ```yaml
 # What `Kubernetes.Deployment("Web", { image: "nginx:1.27", port: 80, replicas: 2 })` applies
@@ -102,45 +70,19 @@ spec:
             - { name: PORT, value: "80" }
 ```
 
-On EKS the adapter provisions cloud resources beside these, recorded
-in `identity` and `registry`. See
+On EKS the adapter also provisions cloud resources, recorded in
+`identity` and `registry`. See
 [What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds).
-
-Attributes: `connection`, `namespace`, `deploymentName`,
-`serviceName`, `serviceAccountName`, `port`, `imageUri`, `identity`,
-`registry`, `url`, `kubernetesObjects`, `code.hash`. The
-[`connection`](/kubernetes/clusters/connecting#the-connection-model)
-is persisted so `alchemy destroy` can reconnect.
 
 ## Props by group
 
 The [reference](/providers/kubernetes/deployment) lists every prop.
-This groups them by the question they answer.
-
-**Sizing.** `replicas` (default `1`) and `resources`, with `requests`
-and `limits` as `cpu` / `memory` strings. On EKS Auto Mode the
-requests drive node provisioning.
-
-**The container.** `command` overrides the entrypoint. `args` are the
-arguments. `env` wins over everything generated. `port` (default
-`3000`) is both the `containerPort` and the Service port.
-
-**Placement.** `namespace` (default `"default"`) must already exist.
-Declare it as a
-[Namespace manifest](/kubernetes/objects/manifests#namespaces) and
-pass its `name` attribute. `labels` merge over the name label and
-double as the Service selector. `podTemplate` is the deep-partial
-escape hatch. Objects merge, arrays and primitives replace. See the
-[merge rules](/kubernetes/workloads/pod-template#merge-rules).
-
-**Cloud.** `architecture` (`"amd64"` default, or `"arm64"`) is the
-platform the image is
-[built or mirrored for](/kubernetes/workloads/image-sources#architecture).
-`identity` holds adapter-specific workload-identity options. See
-[Pod Identity on EKS](/kubernetes/workloads/bindings#pod-identity-on-eks).
-`tags` go on adapter-owned cloud resources only. `name` overrides the
-base name. See [Updates and replacement](#updates-and-replacement)
-before changing it later.
+Sizing: `replicas`, `resources`. Container: `command`, `args`, `env`,
+`port` (default `3000`). Placement: `namespace` (must already exist —
+pass a [Namespace manifest](/kubernetes/objects/manifests#namespaces)'s
+`name`), `labels`,
+[`podTemplate`](/kubernetes/workloads/pod-template#merge-rules).
+Cloud: `architecture`, `identity`, `tags`, `name`.
 
 ```typescript
 const ns = yield* Kubernetes.Manifest("AppNamespace", {
@@ -168,33 +110,13 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-:::caution
-`namespace` must exist before the Deployment is applied. Pass
-`ns.name` from a `Kubernetes.Manifest`, not a bare string, so the
-dependency is in the graph.
-:::
-
 ## Exposing it: serviceType and url
 
-There is always a Service. `serviceType` picks its type. The default
-is `"LoadBalancer"`, not `kubectl`'s `ClusterIP`, which is why `url`
-works out of the box. With `"ClusterIP"` or `"NodePort"`, `url` is
-`undefined`.
-
-The load balancer listens on `port`, so `url` is `http://<hostname>`
-when `port` is 80 and `http://<hostname>:<port>` otherwise. An IP is
-used when the load balancer publishes one instead of a hostname.
-
-The provider polls `status.loadBalancer.ingress` every 5 seconds, up
-to 36 times. If there is still no address, the deploy succeeds and
-`url` is `undefined`. The next `alchemy deploy` fills it in.
-
-`serviceAnnotations` land on the Service. The adapter may add defaults
-underneath, on EKS per
-[What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds),
-and yours win. Where the address resolves locally depends on the
-cluster. See
-[Reaching a service](/kubernetes/clusters/local#reaching-a-service).
+`serviceType` defaults to `"LoadBalancer"`, so `url` works out of the
+box; with `"ClusterIP"` or `"NodePort"` it is `undefined`. The
+provider waits about 3 minutes for an address; if none arrives, `url`
+stays `undefined` until the next deploy. Adapter defaults for
+`serviceAnnotations` go underneath yours.
 
 ```typescript
 const api = yield* Kubernetes.Deployment("Api", {
@@ -224,29 +146,15 @@ const worker = yield* Kubernetes.Deployment("Internal", {
 // Reach it from other pods as http://<serviceName>.<namespace>.svc:<port>
 ```
 
-:::note
-`url` is `string | undefined`. It is `undefined` for `ClusterIP` and
-`NodePort`, and may be `undefined` right after the first deploy of a
-`LoadBalancer` Service.
-:::
-
-NodePort, per-cloud annotations, and
-[Ingress](/kubernetes/guides/exposing-services#ingress) in front of a
-`ClusterIP` Service are covered in
+Ingress and per-cloud annotations:
 [Service types](/kubernetes/guides/exposing-services#service-types).
 
 ## Effect servers
 
-Write the server in Effect instead of shipping an image.
-`main: import.meta.url` is the bundle entrypoint. The third argument
-is the init Effect and returns `{ fetch }`. Alchemy bundles with
-rolldown, generates a Dockerfile (`FROM oven/bun:1` by default),
-builds and pushes the image, and serves `fetch` with a Bun HTTP server
-on `PORT`.
-
-`fetch` reads `HttpServerRequest` and returns an `HttpServerResponse`,
-both from `effect/unstable/http`. Its error channel must be `never`.
-Init runs once per pod. `fetch` runs per request.
+Pass `main: import.meta.url` and an init Effect that returns
+`{ fetch }`. Alchemy bundles it, builds and pushes an image, and
+serves `fetch` on `PORT`. Init runs once per pod; `fetch` runs per
+request and its error channel must be `never`.
 
 ```typescript
 import * as AWS from "alchemy/AWS";
@@ -279,7 +187,7 @@ const api = yield* Kubernetes.Deployment(
 ```
 
 The same call can be a module's `export default`, with `props` as an
-Effect that `yield*`s resources from a shared `infra.ts`.
+Effect.
 
 ```typescript
 // src/api.ts — the same call as a module default export.
@@ -300,29 +208,19 @@ export default Kubernetes.Deployment(
 const api = yield* Api;
 ```
 
-Every AWS `Binding.Service` works inside init as on Lambda. See
+Bindings resolve in init — see
 [The binding contract](/kubernetes/workloads/bindings#the-binding-contract).
-`handler` names the export to load (default `"default"`). `image`,
-`dockerfile`, and `context` become `main`'s environment modifiers
-under [Three sources](/kubernetes/workloads/image-sources#three-sources).
-`build` is under
-[Bundling and tree-shaking](/kubernetes/workloads/image-sources#bundling-and-tree-shaking).
 
 :::caution[`main` needs a managed registry]
-Today only the EKS adapter has one. On a kubeconfig cluster use
-`image:` with an
-[image you built yourself](/kubernetes/clusters/local#using-your-own-images).
-See [Registry requirement](/kubernetes/workloads/image-sources#registry-requirement).
+Today only the EKS adapter has one; on a kubeconfig cluster use
+`image:` (see [Registry requirement](/kubernetes/workloads/image-sources#registry-requirement)).
 :::
 
 ## The tagged form
 
-The tagged form gives the Stack a class you `yield*` by name, with
-typed members. `examples/aws-eks/src/Api.ts` uses it.
 `class Api extends Kubernetes.Deployment<Api, Shape>()("Api") {}`
-declares the identity. `Api.make(props, impl)` returns a Layer. The
-Stack provides the Layer and `yield*`s the class. `Shape` is optional.
-Members returned beyond `fetch` become part of the typed handle.
+declares the identity, `Api.make(props, impl)` returns a Layer, and
+the Stack provides the Layer and `yield*`s the class.
 
 ```typescript
 // src/api.ts
@@ -365,60 +263,18 @@ export default Alchemy.Stack(
 );
 ```
 
-The `providers` layer is the one from
-[Add the provider](/kubernetes/setup#add-the-provider). The same form
-works for a `Kubernetes.Job`. See
-[Effect jobs](/kubernetes/workloads/jobs#effect-jobs).
+The same form works for a
+[`Kubernetes.Job`](/kubernetes/workloads/jobs#effect-jobs).
 
 ## Updates and replacement
 
-Replacement happens in two cases: `cluster` changes identity, or
-`namespace` changes. Identity is the connection's `auth` descriptor
-per
-[The connection model](/kubernetes/clusters/connecting#the-connection-model).
-Rotating the endpoint or CA of the same cluster is not a replacement.
-Workload identity keys on cluster, namespace, and service account,
-which is why both force one.
-
-Everything else is an in-place update via server-side apply.
-Kubernetes rolls pods when the pod template changed. A Service-only
-change does not. Drift is covered in
-[Pruning and drift](/kubernetes/guides/how-apply-works#pruning-and-drift)
-and outside edits in
-[Conflicts](/kubernetes/guides/how-apply-works#conflicts).
-
-The plan re-hashes `main` bundles, `context` directories, and `image`
-references. A changed hash shows as an `update` against `code.hash`
-with no prop change. Edit the code and deploy.
-
-| Change                                             | Effect                                  |
-| -------------------------------------------------- | --------------------------------------- |
-| `cluster` identity, `namespace`                    | replace                                 |
-| `image`, `env`, `resources`, `command` / `args`, `port`, `podTemplate`, code edit under `main` / `context` | rolling update of pods |
-| `replicas`                                         | in-place scale, existing pods untouched |
-| `serviceType`, `serviceAnnotations`                | Service update, no pod restart          |
-
-:::note[`name` is sticky]
-Changing `name` on an existing Deployment does not rename its
-objects. The provider keeps the original `deploymentName`. A
-`Kubernetes.Job` does the opposite. See
-[Jobs → Updates and replacement](/kubernetes/workloads/jobs#updates-and-replacement).
-:::
-
-:::caution[Selector immutability]
-`labels` feed `spec.selector.matchLabels`, which is immutable on
-`apps/v1` Deployments, so changing `labels` on a live Deployment may
-be rejected. For pod-only labels set `podTemplate.metadata.labels`
-instead.
-:::
+Only a `cluster` identity change or a `namespace` change replaces;
+everything else is an in-place apply that rolls pods when the pod
+template changed. `name` is sticky and `labels` feed the immutable
+selector, so put pod-only labels in `podTemplate.metadata.labels`.
 
 ## Where next
 
-- [Jobs](/kubernetes/workloads/jobs) — run-to-completion and
-  scheduled work with `Kubernetes.Job`.
-- [Image sources](/kubernetes/workloads/image-sources) — `main` vs
-  `context` vs `image`, and why `main` needs a registry.
-- [Exposing services](/kubernetes/guides/exposing-services) —
-  Ingress, TLS, and per-cloud load-balancer annotations.
-- [`Deployment` reference](/providers/kubernetes/deployment) — every
-  prop and attribute.
+- [Jobs](/kubernetes/workloads/jobs)
+- [Image sources](/kubernetes/workloads/image-sources)
+- [`Deployment` reference](/providers/kubernetes/deployment)

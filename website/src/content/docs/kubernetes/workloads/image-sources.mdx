@@ -3,10 +3,9 @@ title: Image sources
 description: Where a workload's container image comes from — main (bundle an Effect program), context (build your Dockerfile), or image (a pre-built reference) — why main and context need a cluster with a managed registry, and how bundling and tree-shaking work.
 ---
 
-Every workload needs a container image. One of three keys on the
-props says where it comes from. `image` and `context` describe an
-environment that runs as-is. `main` adds a bundled Effect program and
-can borrow either of the other two as its environment.
+Every workload needs a container image. One of three props says where
+it comes from: `image` (pre-built, runs as-is), `context` (your
+Dockerfile), or `main` (a bundled Effect program).
 
 ```typescript
 // 1. a pre-built image — the environment runs as-is
@@ -25,49 +24,29 @@ yield* Kubernetes.Deployment(
 );
 ```
 
-What `main` returns is `{ fetch }` for a
+`main` returns `{ fetch }` for a
 [Deployment](/kubernetes/workloads/deployments#effect-servers) and
-`{ run }` for a [Job](/kubernetes/workloads/jobs#effect-jobs). This
-page is about the image.
+`{ run }` for a [Job](/kubernetes/workloads/jobs#effect-jobs).
 
 ## Three sources
 
-`main` wins if present and the other keys become its environment
-modifiers. Otherwise `image`, otherwise `context` / `dockerfile`.
+`main` wins if present and the other keys become its environment.
+Otherwise `image`, otherwise `context`. Declare one.
 
-| Source                     | You provide                                                                                       | Alchemy does                                                                                    | Container runs                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `image`                    | a registry reference (`nginx:1.27`, `ghcr.io/acme/api:v3`)                                        | on a managed registry: mirrors it (pull → tag → push); elsewhere: uses the reference verbatim    | the image's own entrypoint, plus your `command` / `args`                       |
-| `context` (+ `dockerfile`) | a build-context directory and a Dockerfile — a path (default `${context}/Dockerfile`) or inline content | `docker build` in your context, push to the managed registry                                | your Dockerfile's `CMD` / `ENTRYPOINT`                                          |
-| `main`                     | an entry module (`import.meta.url`) and an init Effect                                            | bundles with rolldown, generates a Dockerfile, builds and pushes                                | `bun /app/index.mjs` — the generated entry that serves `{ fetch }` or runs `{ run }` |
+**`image`** is a registry reference. A managed registry mirrors it;
+elsewhere it is used verbatim, so private registries need an
+`imagePullSecrets` [recipe](/kubernetes/workloads/pod-template#recipes).
 
-**`image`** is a reference the cluster can pull, or the deploying
-machine when mirroring. Mirrored private registries need docker
-credentials locally. Registry-less clusters need node pull access, an
-`imagePullSecrets` [recipe](/kubernetes/workloads/pod-template#recipes)
-in `podTemplate`. Pick what runs with
-[`command` / `args`](/kubernetes/workloads/deployments#props-by-group).
-The identity is the reference string plus platform.
+**`context` + `dockerfile`** runs `docker build` in your context.
+`dockerfile` is a path relative to the cwd (default
+`${context}/Dockerfile`) or `Docker.Dockerfile.inline` content, which
+has no context and no `COPY`. Your Dockerfile supplies `CMD` /
+`ENTRYPOINT`. Never interpolate secrets into it.
 
-**`context` + `dockerfile`** builds your own Dockerfile. `dockerfile`
-is a path relative to the cwd, not the context (default
-`${context}/Dockerfile`), or inline content built with an empty
-context, so no `COPY`. The Dockerfile must define its own `CMD` /
-`ENTRYPOINT`. Inline content uses the `Docker.Dockerfile.inline`
-tagged template and may interpolate `Output`s. Never interpolate
-secrets, they are baked into image layers. The identity is a hash of
-the context directory, the Dockerfile content, and the platform.
-
-**`main`** is the bundled Effect program. `handler` is the export to
-load (default `"default"`). `image` becomes the Dockerfile's `FROM`
-(default `oven/bun:1`) and must run bun. `dockerfile` (a path) +
-`context` is a two-stage build: your Dockerfile is built first, then
-the generated stage `FROM`s it. `dockerfile` (inline) replaces
-`FROM <image>` as the preamble, with no context and no `COPY`.
-`build` is covered under
-[Bundling and tree-shaking](#bundling-and-tree-shaking).
-
-The generated Dockerfile:
+**`main`** is bundled with rolldown and baked into a generated image.
+`image` is the `FROM` (default `oven/bun:1`, must run bun).
+`dockerfile` + `context` builds your Dockerfile first and `FROM`s it.
+Inline `dockerfile` replaces the preamble.
 
 ```dockerfile
 # the preamble: `FROM <image>` (default oven/bun:1), your inline
@@ -116,56 +95,24 @@ const tools = yield* Kubernetes.Job(
 );
 ```
 
-The per-source prop interfaces (`BundledDeploymentProps`,
-`DockerfileDeploymentProps`, `ImageDeploymentProps`, and their Job
-twins) are in the [Deployment](/providers/kubernetes/deployment) and
-[Job](/providers/kubernetes/job) references.
-
-:::note[Exactly one source]
-Declaring two sources (`image` + `context`, `image` + `dockerfile`,
-inline `dockerfile` + `context`) is rejected at plan time on clusters
-with a managed registry. On a registry-less cluster the first match
-in the order above is used and the rest are ignored. Declare one.
-:::
+Per-source prop interfaces: [Deployment](/providers/kubernetes/deployment),
+[Job](/providers/kubernetes/job).
 
 :::caution[Mutable tags]
-`acme/api:latest` is mirrored once. Pushing a new `latest` upstream
-changes nothing until the prop changes. Pin digests or version tags.
+`acme/api:latest` is mirrored once; pin digests or version tags.
 :::
 
 ## Registry requirement
 
 The cluster adapter,
 [selected by `auth.kind`](/kubernetes/clusters/connecting#how-the-adapter-is-chosen),
-decides which branch you are on. This is the detail behind the
-[adapter comparison table](/kubernetes#what-the-cluster-adapter-gives-you).
+decides. With a registry (today EKS → ECR) every source is built or
+mirrored and pushed under a content-hash tag (`code.hash`); an
+existing tag skips the work. Without one (`kubeconfig`, `token`,
+`client-cert`, `exec`) only `image` works, verbatim, and `main` or
+`context` fail the deploy:
 
-**The adapter has a registry** (today: EKS, backed by ECR). Every
-source goes through it. `main` is bundled, built, and pushed.
-`context` is built and pushed. `image` is pulled, tagged, and pushed,
-never used verbatim. The tag is the content hash, and an existing tag
-skips the build or mirror. On EKS it is one private ECR repository
-per workload, per
-[What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds).
-`imageUri` is `<registry uri>:<hash>` and `registry` is the adapter's
-handle.
-
-**No registry** (`kubeconfig`, `token`, `client-cert`, `exec`). Only
-`image` works, placed in the pod spec verbatim. Alchemy pulls and
-pushes nothing. `main` and `context` fail the deploy with:
-
-> `'<id>': this cluster has no managed image registry, so 'main' and 'context' image sources cannot be built and pushed. Use a pre-built 'image' reference the cluster can pull, or target a cluster whose platform provides a registry (e.g. AWS.EKS → ECR).`
-
-Alchemy won't guess a registry or push to Docker Hub for you. A
-future GKE or AKS adapter supplies Artifact Registry or ACR through
-the same
-[`registry` slot](/kubernetes/guides/cluster-adapters#the-interface).
-
-Mirroring is platform-pinned on pull and push. A throttled pull fails
-after a few minutes instead of hanging. The push retries with backoff.
-The plan session's notes show it: `Bundling Api program...`,
-`Building container image <uri>...`, `Pulling container image nginx:1.27...`,
-`Pushed <uri>`.
+> `'<id>': this cluster has no managed image registry, so 'main' and 'context' image sources cannot be built and pushed. …`
 
 ```typescript
 // Registry-less cluster: only `image`, used verbatim — the nodes pull it.
@@ -189,33 +136,14 @@ web2.imageUri;  // "<ecr repository uri>:<content hash>" — the mirrored copy, 
 web2.registry;  // the adapter's registry handle (see Clusters → EKS → What the adapter adds)
 ```
 
-| I'm on…          | and I want…        | Do this                                                                                                                                     |
-| ---------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| a local cluster  | an Effect program  | build your own image from a Dockerfile and use `image:` ([Using your own images](/kubernetes/clusters/local#using-your-own-images)), or develop against EKS |
-| a local cluster  | a public image     | `image:` just works                                                                                                                         |
-| EKS              | anything           | all three sources work; expect Docker locally                                                                                               |
-
-:::caution[`main` and `context` need a managed registry]
-On `kubeconfig`, `token`, `client-cert`, and `exec` clusters the
-deploy fails with "this cluster has no managed image registry …".
-Use `image:` there. Today the only adapter with a registry is EKS.
-:::
-
-:::note[Docker on the deploying machine]
-With a registry adapter every source, including `image`, needs Docker
-running where you run `alchemy deploy`, because mirroring is a local
-pull and push. Registry-less `image:` needs no Docker. See
-[Install](/kubernetes/setup#install).
-:::
+With a registry adapter every source, `image` included, needs Docker
+running where you deploy. Registry-less `image:` needs none.
 
 ## Architecture
 
 `architecture: "amd64" | "arm64"` (default `"amd64"`) is the image
-platform for builds and mirrors. It must match the nodes. An arm64
-image on amd64 nodes fails with `exec format error` at pod start, not
-at deploy time. Flipping it rebuilds or re-mirrors and rolls the
-workload. Pair it with a `nodeSelector` on `kubernetes.io/arch`, a
-[recipe](/kubernetes/workloads/pod-template#recipes) in `podTemplate`.
+platform for builds and mirrors and must match the nodes; a mismatch
+fails with `exec format error` at pod start.
 
 ```typescript
 const api = yield* Kubernetes.Deployment(
@@ -230,64 +158,21 @@ const api = yield* Kubernetes.Deployment(
 );
 ```
 
-On registry-less clusters `architecture` only affects the content
-hash. Each node pulls the verbatim `image` for its own architecture,
-so multi-arch manifests just work.
-
-## What triggers a rebuild
-
-Each source has a content hash that becomes the image tag and the
-`code.hash` attribute. `main` hashes the rolldown bundle, the
-generated Dockerfile, the platform, and the two-stage environment if
-any. It is computed at plan time, so `alchemy plan` runs the bundler.
-`context` hashes every file under `context`, the Dockerfile text, and
-the platform. `image` hashes the reference string and the platform.
-
-A mismatch with `code.hash` shows as an `update` with no prop change,
-applied per the Deployment's
-[Updates and replacement](/kubernetes/workloads/deployments#updates-and-replacement).
-For a one-shot Job a new hash means the
-[Job re-runs](/kubernetes/workloads/jobs#jobs). Edit code, deploy.
-
-On a registry-less cluster a re-pushed mutable tag is invisible to
-`alchemy plan`. The node may or may not re-pull depending on its
-`imagePullPolicy`. Pin a digest or bump the tag, per the
-[mutable-tags caution](#three-sources).
-
-An existing tag in the registry skips the build and push, so a
-rollback to a previous hash is a tag lookup. `replicas`, `env`,
-`resources`, and `serviceType` do not rebuild, though they still roll
-pods where Kubernetes requires it.
+On registry-less clusters nodes pull the verbatim `image` for their
+own architecture.
 
 ## Bundling and tree-shaking
 
-`main` is bundled with rolldown: ESM, one `index.mjs` plus split
-chunks, `platform: "node"` with the `bun` export condition so
-`@effect/platform-bun` resolves its Bun implementations, `bun` and
-`bun:*` external, no minify and no sourcemap by default.
-`build.input` and `build.output` pass through to rolldown
-(`external`, `plugins`, `resolve`, `minify`, `sourcemap`).
+`main` is bundled with rolldown: ESM, `index.mjs` plus split chunks,
+`platform: "node"` with the `bun` export condition, `bun:*` external,
+no minify or sourcemap by default. `build.input` and `build.output`
+pass through to rolldown.
 
-Top-level call and `new` expressions in `effect`, `@effect/*`,
-`alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` get
-`/*#__PURE__*/` annotations, so unused parts are tree-shaken. Other
-packages are untouched unless listed. `build.pure.packages` adds
-names or picomatch globs (`replaceDefaults: true` replaces the
-defaults). `build: { pure: false }` disables the plugin.
-
-Listing a package annotates calls whose result is bound, which is
-safe anywhere. If the package also declares `"sideEffects": false`
-(or `[]`), discarded calls such as `router.on("/path", handler)` are
-marked pure too and dropped when unused. The defaults declare exactly
-that on purpose.
-
-`build.bundleAnalyzer: true` emits a bundle analysis report beside the
-output.
-
-This decides image size and cold start. `@distilled.cloud/aws` is
-large, and this keeps only the operations your
-[server](/kubernetes/workloads/deployments#effect-servers) or
-[job](/kubernetes/workloads/jobs#effect-jobs) calls.
+Top-level calls in `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
+and `@distilled.cloud/*` get `/*#__PURE__*/` annotations so unused
+parts are tree-shaken. `build.pure.packages` adds names or globs
+(`replaceDefaults: true` replaces the defaults); `build: { pure: false }`
+disables it. `build.bundleAnalyzer: true` emits a report.
 
 ```typescript
 const api = yield* Kubernetes.Deployment(
@@ -310,20 +195,11 @@ const api = yield* Kubernetes.Deployment(
 { main: import.meta.url, build: { pure: false } }
 ```
 
-:::caution
 Only list a package that declares `"sideEffects": false` if its
-modules really have no meaningful top-level side effects. Otherwise
-top-level registrations can be tree-shaken away.
-:::
+top-level calls really are side-effect free.
 
 ## Where next
 
-- [Bindings](/kubernetes/workloads/bindings) — env and Pod Identity
-  bindings inside a `main` program.
+- [Bindings](/kubernetes/workloads/bindings)
 - [Using your own images](/kubernetes/clusters/local#using-your-own-images)
-  — getting your own image onto a registry-less cluster.
 - [What the adapter adds](/kubernetes/clusters/eks#what-the-adapter-adds)
-  — the ECR repository the EKS adapter manages.
-- [`Deployment`](/providers/kubernetes/deployment) and
-  [`Job`](/providers/kubernetes/job) references — the per-source
-  prop interfaces.

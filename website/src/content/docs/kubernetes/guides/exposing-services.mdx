@@ -1,39 +1,22 @@
 ---
 title: Exposing services
-description: Pick a Service type for a Deployment, tune the cloud load balancer with annotations, put an Ingress controller in front of many Deployments, or publish a private cluster through a Cloudflare Tunnel.
+description: Pick a Service type for a Deployment, tune the load balancer with annotations, front many Deployments with an Ingress controller, or publish a private cluster through a Cloudflare Tunnel.
 ---
 
-Every `Kubernetes.Deployment` gets a Service. What sits in front of it
-is up to you: one cloud load balancer per Deployment, one Ingress
-controller for all of them, or a Cloudflare Tunnel with no inbound
-path at all.
+Every `Kubernetes.Deployment` gets a Service. What fronts it is up to
+you: a cloud load balancer, an Ingress controller, or a Cloudflare
+Tunnel.
 
 ## Service types
 
-A Deployment
-[synthesizes one `v1/Service`](/kubernetes/workloads/deployments#what-gets-created)
-named after it. `spec.type` is `serviceType`, the selector is the
-merged labels, and the one port mapping is
-`{ port, targetPort: port, protocol: "TCP" }`, so the Service port is
-the container port.
-
-| `serviceType`            | What you get                                                                       | `url`                                                   | Reach for it when                                           |
-| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
-| `LoadBalancer` (default) | A cloud load balancer (an NLB on EKS Auto Mode); its address lands in `status.loadBalancer.ingress` | `http://<host>[:port]` once published; `undefined` if not within the bounded wait | One public service and the fastest path to a URL            |
-| `ClusterIP`              | A stable virtual IP and `<svc>.<ns>.svc.cluster.local`, reachable only in-cluster | Always `undefined`                                      | Anything behind an Ingress or a Tunnel; internal APIs; clusters with no LB |
-| `NodePort`               | `ClusterIP` plus a port on every node (30000–32767)                                | Always `undefined`                                      | Bare-metal or kind-style clusters where you front the nodes |
-
-The bounded wait, non-80 ports, and what `undefined` means are under
+`serviceType` is `LoadBalancer` (default, a cloud load balancer and a
+`url`), `ClusterIP` (in-cluster only, no `url`), or `NodePort`;
+details under
 [Exposing it: serviceType and url](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url).
-What a local cluster does with `LoadBalancer` is on
-[Local clusters](/kubernetes/clusters/local#reaching-a-service).
 
-On `LoadBalancer`, the adapter's defaults are spread under your
-`serviceAnnotations`, so your keys win. Only the adapter can set
-`spec.loadBalancerClass`. The
-[EKS adapter](/kubernetes/clusters/eks#what-the-adapter-adds) sets
-`eks.amazonaws.com/nlb` on Auto Mode clusters plus the
-internet-facing scheme annotation.
+On `LoadBalancer`, the
+[adapter's defaults](/kubernetes/clusters/eks#what-the-adapter-adds)
+are spread under your `serviceAnnotations`, so your keys win:
 
 ```typescript
 // One public Deployment. On EKS the adapter adds
@@ -56,10 +39,7 @@ const api = yield* Kubernetes.Deployment("Api", {
 api.url; // "http://<nlb-hostname>:8080"
 ```
 
-The defaults only reach the Service the Deployment synthesizes. A
-Service from a `HelmChart` or a `Manifest` gets none, so on EKS Auto
-Mode you set the class and scheme yourself. The rest of this page
-uses the internal form:
+The rest of this page uses the internal form:
 
 ```typescript
 // Internal only: no cloud LB, no url. Reachable inside the cluster as
@@ -72,26 +52,12 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-`serviceType` and `serviceAnnotations` are documented on the
-[Deployment reference](/providers/kubernetes/deployment).
-
 ## Ingress
 
-One cloud load balancer per Deployment gets expensive fast. An
-Ingress controller is one load balancer in front of many `ClusterIP`
-Services, routed by host and path. Install it with
-`Kubernetes.HelmChart`, then declare routes with an `Ingress`
-Manifest.
-
-Install the chart with a
-[pinned `version`](/kubernetes/objects/helm#chart-sources) in its own
-namespace, either with `createNamespace: true` or a
-[Namespace Manifest](/kubernetes/objects/manifests#namespaces). On a
-local cluster the default [`values`](/kubernetes/objects/helm#values)
-are fine. On EKS Auto Mode the chart's Service is not the synthesized
-one, so the
-[adapter's NLB defaults](/kubernetes/clusters/eks#what-the-adapter-adds)
-do not reach it. Set the class and scheme in `values`:
+One Ingress controller fronts many `ClusterIP` Services. Install it
+with `Kubernetes.HelmChart`; on EKS Auto Mode set the LB class and
+scheme in `values`, since the adapter's defaults do not reach a
+chart's Service:
 
 ```typescript
 const ingressNginx = yield* Kubernetes.HelmChart("IngressNginx", {
@@ -117,20 +83,8 @@ const ingressNginx = yield* Kubernetes.HelmChart("IngressNginx", {
 });
 ```
 
-:::caution
-Some ingress-nginx versions ship admission-webhook Jobs annotated
-`helm.sh/hook`. Alchemy renders with `--no-hooks`, so they are never
-applied. See
-[what Helm does that Alchemy doesn't](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt).
-:::
-
-Now the route. `Ingress` is
-[any object](/kubernetes/objects/manifests#any-object), resolved
-through API discovery. `ingressClassName: "nginx"` selects the
-controller. The backend is the Deployment's
-[`serviceName` and `port`](/kubernetes/workloads/deployments#what-gets-created)
-Outputs, so nothing drifts and the Ingress applies after the
-Deployment.
+Then the route, with the Deployment's `serviceName` and `port`
+Outputs as the backend:
 
 ```typescript
 const api = yield* Kubernetes.Deployment("Api", {
@@ -172,46 +126,20 @@ yield* Kubernetes.Manifest("ApiIngress", {
 });
 ```
 
-`api.url` is `undefined` on a `ClusterIP` Deployment. The public
-address belongs to the controller's Service, and `HelmChart`
-attributes carry references, not status, so read it from the cluster:
+The public address is the controller's Service; point DNS at it:
 
 ```sh
 kubectl -n ingress-nginx get svc ingress-nginx-controller
 ```
 
-Point DNS at that hostname. A Cloudflare DNS
-[`Record`](/cloudflare/networking/domains) does it from the same
-stack. On EKS Auto Mode the built-in ALB controller works too: an
-`IngressClass` whose `spec.controller` is `eks.amazonaws.com/alb`
-plus an `IngressClassParams` for the scheme, both plain Manifests.
-Check the EKS Auto Mode docs for the current `IngressClassParams`
-shape.
-
 ## Cloudflare Tunnel
 
-A [Tunnel](/cloudflare/networking/tunnel) needs no inbound path.
-`cloudflared` runs as a pod, dials out to Cloudflare, and forwards
-hostnames to in-cluster Service DNS names. That makes it the zero-LB
-path for local clusters and private EKS endpoints: no `LoadBalancer`
-support, no port-forward. The Tunnel, its `Configuration`, and the
-DNS CNAME are the Tunnel page's story. This section adds the
-Kubernetes half.
-
-The upstream for each hostname is
-`http://<serviceName>.<namespace>.svc.cluster.local:<port>`. Those
-parts are Outputs, so build the string with
-[`Output.interpolate`](/infrastructure-as-code/outputs#interpolate).
-A plain template literal does not resolve. The connector is a raw
-`Deployment` [Manifest](/kubernetes/objects/manifests#any-object)
-reading its token from a `Secret` through `envFrom`, which sidesteps
-the [arrays-replace rule](/kubernetes/workloads/pod-template#merge-rules)
-of `podTemplate`.
-
-`tunnel.token` is an `Output<Redacted<string>>` and
-[Manifest values are plain strings](/kubernetes/objects/manifests#secrets),
-so a `Redacted` in `stringData` is applied as the literal
-`<redacted>`. Unwrap it with `Output.map(tunnel.token, Redacted.value)`.
+A [Tunnel](/cloudflare/networking/tunnel) needs no inbound path:
+`cloudflared` runs as a pod, dials out, and forwards hostnames to
+in-cluster Service DNS names. Build the upstream with
+[`Output.interpolate`](/infrastructure-as-code/outputs#interpolate),
+and unwrap the token with `Output.map(tunnel.token, Redacted.value)`
+because [Manifest values are plain strings](/kubernetes/objects/manifests#secrets).
 
 ```typescript
 import * as Output from "alchemy/Output";
@@ -283,30 +211,17 @@ yield* Kubernetes.Manifest("Cloudflared", {
 });
 ```
 
-The `Configuration` rules are described under
-[Route hostnames with a Configuration](/cloudflare/networking/tunnel#route-hostnames-with-a-configuration).
-Finish with a proxied CNAME to the tunnel, shown under
-[Point DNS at the tunnel](/cloudflare/networking/tunnel#point-dns-at-the-tunnel).
+Finish with a
+[proxied CNAME](/cloudflare/networking/tunnel#point-dns-at-the-tunnel).
+Tunnel resources need `Cloudflare.providers()` merged beside
+`Kubernetes.providers()` in the Stack.
 
-:::caution[The token is in plan output and state]
-`Output.map(tunnel.token, Redacted.value)` makes the token a plain
-string. It shows in `alchemy plan` diffs and is persisted in state.
-Use a remote state store and rotate it by rotating the Tunnel. See
-[Secrets](/kubernetes/objects/manifests#secrets).
-:::
-
-:::note
-Tunnel resources need `Cloudflare.providers()` in the same Stack:
-`Layer.mergeAll(Cloudflare.providers(), Kubernetes.providers())`, as
-in [Add the provider](/kubernetes/setup#add-the-provider).
+:::caution
+The unwrapped token shows in `alchemy plan` diffs and is persisted in state, so use a remote state store.
 :::
 
 ## Where next
 
-- [How apply works](/kubernetes/guides/how-apply-works) — what
-  server-side apply and pruning mean for the objects you just created.
-- [Helm charts](/kubernetes/objects/helm) — the full HelmChart story.
-- [Tunnel](/cloudflare/networking/tunnel) — the Tunnel resources in
-  depth.
-- [Deployment reference](/providers/kubernetes/deployment) —
-  `serviceType` and `serviceAnnotations`.
+- [How apply works](/kubernetes/guides/how-apply-works)
+- [Helm charts](/kubernetes/objects/helm)
+- [Tunnel](/cloudflare/networking/tunnel)

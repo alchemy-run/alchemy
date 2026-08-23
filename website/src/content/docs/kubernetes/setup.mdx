@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Install Alchemy, point it at a Kubernetes cluster — a local one, EKS, or any kubeconfig context — add Kubernetes.providers() to a Stack, and plan your first manifest.
+description: Install Alchemy, point it at a Kubernetes cluster, add Kubernetes.providers() to a Stack, and plan your first manifest.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
@@ -9,19 +9,10 @@ import Terminal from "../../../components/Terminal.astro";
 
 export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
 
-You need the alchemy package, a cluster your kubeconfig can reach, and
-`Kubernetes.providers()` in a Stack. There is no `alchemy login`. The
-built-in adapters read your kubeconfig like `kubectl` does. Only a
-managed cluster resource (EKS) brings its own cloud credentials.
-
-## Prerequisites
-
-- [Bun](https://bun.sh) (recommended) or Node.js 22+
-- A cluster and a kubeconfig context that reaches it. A local one is
-  enough (see [Pick a cluster](#pick-a-cluster))
-- `kubectl`, used here to check the context and inspect results
-- `helm`, only for `Kubernetes.HelmChart`
-- Docker, only for EKS
+You need [Bun](https://bun.sh) or Node.js 22+, a cluster your kubeconfig
+can reach, and `Kubernetes.providers()` in a Stack. There is no
+`alchemy login`; the built-in adapters read your kubeconfig like
+`kubectl` does.
 
 ## Create a project directory
 
@@ -57,61 +48,40 @@ managed cluster resource (EKS) brings its own cloud credentials.
   </TabItem>
 </Tabs>
 
-### Helm
-
-Only [`Kubernetes.HelmChart`](/providers/kubernetes/helmchart) needs
-helm. It runs `helm template` on the deploying machine during `deploy`.
+[`Kubernetes.HelmChart`](/providers/kubernetes/helmchart) needs `helm`
+on `PATH` (or at `HELM_BIN`); EKS needs Docker for
+[every image source](/kubernetes/clusters/eks#what-the-adapter-adds).
 
 ```sh
 brew install helm   # macOS; other platforms: https://helm.sh/docs/intro/install/
 ```
 
-Alchemy runs `helm` from `PATH`, or the binary at `HELM_BIN`. Without
-it the first `HelmChart` deploy fails and says so.
-
-### Docker
-
-Only EKS needs Docker, for every image source. Even a pre-built
-`image:` is pulled, tagged, and pushed into the workload's
-[ECR repository](/kubernetes/clusters/eks#what-the-adapter-adds).
-Anything `docker ps` talks to works. `DOCKER_BIN` overrides the binary
-as on the [Docker setup page](/docker/setup).
-
 ## Pick a cluster
 
-Any cluster `kubectl` can reach works. Your choice picks a column of
-the [adapter table](/kubernetes#what-the-cluster-adapter-gives-you).
-A kubeconfig cluster has no registry, so workloads run pre-built
-`image:` references. `main:` and `context:` need a registry adapter
-such as EKS
+Any cluster `kubectl` can reach works. Without a registry adapter such
+as EKS, workloads run pre-built `image:` references only
 ([why](/kubernetes/workloads/image-sources#registry-requirement)).
 
 <Tabs syncKey="cluster">
   <TabItem label="Local">
 
 Docker Desktop (Settings → Kubernetes → Enable, context
-`docker-desktop`) or OrbStack (context `orbstack`) is the easiest.
-`kind` and `k3s` / `k3d` also work.
+`docker-desktop`) or OrbStack (context `orbstack`) is the easiest;
+`kind` and `k3s` also work
+([trade-offs](/kubernetes/clusters/local#which-local-cluster)).
 
 ```sh
 kubectl config current-context   # e.g. docker-desktop
 kubectl get nodes                 # one Ready node
 ```
 
-Alchemy reads the same file (`$KUBECONFIG`, else `~/.kube/config`)
-and the same `current-context`, unless you pass `context` to
-`Kubernetes.KubeConfig()`. Trade-offs between them are in
-[Which local cluster](/kubernetes/clusters/local#which-local-cluster).
-
   </TabItem>
   <TabItem label="EKS">
 
-Pass the `AWS.EKS.Cluster` resource as `cluster` for the full adapter
-([what it adds](/kubernetes/clusters/eks#what-the-adapter-adds)).
-Create the cluster on the [AWS tab](/aws/compute/eks) with credentials
-from [AWS setup](/aws/setup). An `aws eks update-kubeconfig` context
-through `KubeConfig()` is auth-only. See
-[Targeting an EKS cluster](/kubernetes/clusters/eks#targeting-an-eks-cluster).
+Pass the `AWS.EKS.Cluster` resource as `cluster` for the full adapter;
+create it on the [AWS tab](/aws/compute/eks). A context from
+`aws eks update-kubeconfig` is auth-only
+([details](/kubernetes/clusters/eks#targeting-an-eks-cluster)).
 
 ```typescript
 // full adapter: the resource IS the cluster value
@@ -127,33 +97,19 @@ const existing = Kubernetes.KubeConfig({ context: "arn:aws:eks:us-east-1:1234567
   </TabItem>
   <TabItem label="Other managed cluster">
 
-For GKE, AKS, DigitalOcean, on-prem, or anything else, write a context
-with the provider's CLI
+Write a context with the provider's CLI
 (`gcloud container clusters get-credentials …`,
-`az aks get-credentials …`,
-`doctl kubernetes cluster kubeconfig save …`) and point
-`Kubernetes.KubeConfig({ context })` at it. Exec plugins
-(`gke-gcloud-auth-plugin`, `kubelogin`) are honoured. See
-[kubeconfig](/kubernetes/clusters/connecting#kubeconfig). Without a
-kubeconfig file, a raw
-[token, client certificate, or exec](/kubernetes/clusters/connecting#token-client-certificate-and-exec)
-connection needs an explicit `endpoint`.
+`az aks get-credentials …`) and point `Kubernetes.KubeConfig({ context })`
+at it ([kubeconfig](/kubernetes/clusters/connecting#kubeconfig)).
 
 ```typescript
 const gke = Kubernetes.KubeConfig({ context: "gke_my-proj_us-central1_prod" });
 ```
 
-These are auth-only. Bind through env vars and run `image:` references
-your cluster can pull. To add identity and a registry, see
-[Cluster adapters](/kubernetes/guides/cluster-adapters#registering-an-auth-kind).
-
   </TabItem>
 </Tabs>
 
 ## Add the provider
-
-Create `alchemy.run.ts` with `Kubernetes.providers()` as `providers`
-and `Alchemy.localState()` as `state` (see [State Store](/state-store)).
 
 ```typescript
 // alchemy.run.ts
@@ -173,9 +129,7 @@ export default Alchemy.Stack(
 );
 ```
 
-`Kubernetes.providers()` registers the four workload providers and the
-four built-in adapters. Without it a `Kubernetes.*` resource does not
-type-check. EKS needs the AWS layer too.
+EKS needs the AWS layer too, which ships the `aws-eks` adapter:
 
 ```diff lang="typescript"
 import * as Alchemy from "alchemy";
@@ -193,15 +147,9 @@ export default Alchemy.Stack(
   },
 ```
 
-The `aws-eks` adapter ships in `AWS.providers()`. See
-[How the adapter is chosen](/kubernetes/clusters/connecting#how-the-adapter-is-chosen).
-
 ## Verify
 
-Add one [Namespace](/kubernetes/objects/manifests#namespaces) as a
-[`Kubernetes.Manifest`](/providers/kubernetes/manifest) and run
-`alchemy plan`. A Namespace is cluster-scoped, so nothing has to exist
-first.
+Plan one [Namespace](/kubernetes/objects/manifests#namespaces) manifest.
 
 ```diff lang="typescript"
 Effect.gen(function* () {
@@ -239,11 +187,9 @@ Effect.gen(function* () {
 
 [g]+[/g] [b]DemoNamespace[/b] [d](Kubernetes.Manifest)[/d]`} />
 
-The [plan](/cli/plan) proves the program type-checks and the providers
-layer is wired. It does not open a connection, so an unreachable
-context only surfaces on `deploy`. `cluster` is not a row because
-`KubeConfig()` returns a plain value, not a resource
-([the connection model](/kubernetes/clusters/connecting#the-connection-model)).
+`plan` does not open a connection, so an unreachable context only
+surfaces on `deploy`. `KubeConfig()` is a
+[plain value](/kubernetes/clusters/connecting#the-connection-model), not a row.
 
 :::tip[Round-trip it]
 
@@ -253,31 +199,11 @@ kubectl get namespace demo        # STATUS Active
 bun alchemy destroy
 ```
 
-`deploy` uses
-[server-side apply under the `alchemy` field manager](/kubernetes/guides/how-apply-works#server-side-apply).
-`destroy` deletes it. Once green, delete the `DemoNamespace` block.
-Part 1 starts from the empty Stack.
-:::
-
-## State storage
-
-Kubernetes has no state backend of its own. `Alchemy.localState()`
-keeps state under `.alchemy/`, fine for the tutorial and solo work.
-For a team, pass `AWS.state()` or `Cloudflare.state()`. See
-[State Store](/state-store).
-
-:::caution
-Workload attributes
-[persist the cluster connection](/kubernetes/clusters/connecting#the-connection-model),
-so a raw `token` ends up in state. Prefer a kubeconfig context or exec
-plugin, and a remote state store for shared stacks. Details on
-[token, client certificate, and exec](/kubernetes/clusters/connecting#token-client-certificate-and-exec).
+Then delete the `DemoNamespace` block; part 1 starts from the empty Stack.
 :::
 
 ## Where next
 
-- [Tutorial part 1](/kubernetes/tutorial/part-1): deploy from a
-  pre-built image, reach it, scale it, destroy it.
-- [Connecting to clusters](/kubernetes/clusters/connecting): the
-  `Connection` model and the auth kinds.
-- [Kubernetes overview](/kubernetes): the adapter table and the map.
+- [Tutorial part 1](/kubernetes/tutorial/part-1)
+- [Connecting to clusters](/kubernetes/clusters/connecting)
+- [State Store](/state-store)

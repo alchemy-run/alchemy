@@ -3,16 +3,14 @@ title: Pod template
 description: Tune the Pod template Alchemy synthesizes for a Deployment or Job with a deep-partial `podTemplate` — the merge rules, what they make easy, what they make dangerous, and recipes for the common knobs.
 ---
 
-`podTemplate` is the escape hatch for what the Deployment and Job
-props don't cover: a deep-partial `PodTemplateSpec` merged onto the
-one Alchemy synthesizes. Objects recurse, arrays and primitives
-replace. `containers` is an array, which is the one footgun.
+`podTemplate` is a deep-partial `PodTemplateSpec` merged onto the one
+Alchemy synthesizes for a Deployment or Job. Objects recurse, arrays
+and primitives replace.
 
 ## What Alchemy synthesizes
 
-This is the base your override merges onto. `command`, `args`,
-`resources`, `env`, and `port` already target the container, so
-reach for the prop first.
+`command`, `args`, `resources`, `env`, and `port` already target the
+container, so reach for the prop first.
 
 ```typescript
 // The base `podTemplate` the reconciler builds before your override is merged.
@@ -34,36 +32,15 @@ reach for the prop first.
 }
 ```
 
-The `env` list comes from
-[bindings](/kubernetes/workloads/bindings#the-binding-contract), the
-adapter, `ALCHEMY_*`, `PORT`, and your `env` prop, in the precedence
-[What gets created](/kubernetes/workloads/deployments#what-gets-created)
-owns. It is a plain `name`/`value` array inside `containers[0]`, so a
-container override must restate whatever it relies on.
-
-`labels` lands on `metadata.labels` and on the Deployment's selector.
-Labels under `podTemplate.metadata.labels` reach the pod only. A
-[Job](/kubernetes/workloads/jobs#jobs) adds `restartPolicy` and has
-no `ports` and no `PORT`. The same template serves `Job` and
-`CronJob`, so you never nest `jobTemplate`.
-
 The base has no `volumes`, `initContainers`, `tolerations`,
-`affinity`, `securityContext`, or `imagePullSecrets`, so adding them
-is clean.
+`affinity`, `securityContext`, or `imagePullSecrets`.
 
 ## Merge rules
 
-Objects merge recursively: `{ spec: { nodeSelector: { pool: "arm" } } }`
-adds one key under `spec`. Arrays replace wholesale, with no
-element-wise or by-name merge. Primitives replace:
-`spec.serviceAccountName: "other"` swaps the generated ServiceAccount,
-and on EKS that breaks
-[Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks),
-whose association is keyed on the generated name.
-
-Keys absent from the base are simply set, so pod-level arrays
-(`volumes`, `tolerations`, `initContainers`, `imagePullSecrets`) are
-safe. `containers` is the one array the base already has.
+Objects merge recursively, arrays replace wholesale, primitives
+replace. `containers` is the one array the base already has.
+`spec.serviceAccountName` swaps the generated ServiceAccount and on
+EKS breaks [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks).
 
 ```typescript
 // ❌ Intent: add a readiness probe. Result: `containers` becomes this ONE
@@ -86,30 +63,18 @@ spec: {
 }
 ```
 
-:::caution[spec.containers replaces the synthesized container]
-Setting `spec.containers` means restating the whole container:
-`name`, `image`, `ports`, and every `env` entry you rely on. That is
-only possible with `image:` sources. With `main` or `context` the
-image URI is
-[computed at deploy time](/kubernetes/workloads/image-sources#three-sources),
-so write a `Manifest` instead (see below).
-:::
-
-`podTemplate` is a plain prop. A change is an in-place update through
-the same
-[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply)
-path as everything else, which is where an invalid container is
-rejected. On a [Job](/kubernetes/workloads/jobs#jobs) it means a new
-run.
+A `podTemplate` change is an in-place
+[server-side apply](/kubernetes/guides/how-apply-works#server-side-apply),
+which is where an invalid container is rejected.
 
 ## Container-level fields
 
 Anything under `containers[0]` that is not a prop (probes,
-`volumeMounts`, `envFrom`, `valueFrom` env entries,
-`imagePullPolicy`, container `securityContext`, `lifecycle`, extra
-`ports`) needs the full-container override, which only works with
-[`image:` sources](/kubernetes/workloads/image-sources#three-sources).
-This is the canonical shape the recipes refer back to.
+`volumeMounts`, `envFrom`, `valueFrom`, `imagePullPolicy`, container
+`securityContext`) needs the full-container override. The image URI of
+`main` and `context` is
+[computed at deploy time](/kubernetes/workloads/image-sources#three-sources),
+so this only works with `image:`.
 
 ```typescript
 const api = yield* Kubernetes.Deployment("Api", {
@@ -133,32 +98,18 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-The override replaces the container the `env`, `resources`, and
-`command`/`args` props were written into, so those props are ignored
-for it. Restate them in the override. The
-[`secretKeyRef` example](/kubernetes/workloads/bindings#env-only-bindings),
-the re-tagged images under
-[Using your own images](/kubernetes/clusters/local#using-your-own-images),
-and `envFrom` for [Secrets](/kubernetes/objects/manifests#secrets)
-are all this one pattern.
+A `main:` Effect server has no probe today, so answer `/` quickly.
 
 :::tip
-If the override grows beyond a few lines, write the Deployment as a
-`Kubernetes.Manifest` instead (last section).
+If the override grows beyond a few lines, or you need container-level fields on `main:`, write a [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object) instead.
 :::
 
 ## Recipes
 
-Each recipe is a `podTemplate` fragment on an `image:` or `main:`
-Deployment unless it says otherwise. Pod-level fields first, the ones
-that need the container override last.
-
 ### Tolerations and nodeSelector
 
-Both pod-level and absent from the base. Pair
-`nodeSelector: { "kubernetes.io/arch": "arm64" }` with the
-[`architecture: "arm64"`](/kubernetes/workloads/image-sources#architecture)
-prop so the image and the node agree.
+Pair `kubernetes.io/arch` with the
+[`architecture`](/kubernetes/workloads/image-sources#architecture) prop.
 
 ```typescript
 podTemplate: {
@@ -171,9 +122,7 @@ podTemplate: {
 
 ### Affinity and spread
 
-Both pod-level. `podAntiAffinity` needs a label it can name
-literally. The generated `app.kubernetes.io/name` is derived from the
-logical id, so add your own via `labels` and select on that.
+`podAntiAffinity` needs a literal label, so add one via `labels`.
 
 ```typescript
 labels: { app: "api" },
@@ -196,9 +145,9 @@ podTemplate: {
 
 ### Pod securityContext
 
-The pod-level `securityContext` merges cleanly. The container-level
-one (`capabilities`, `readOnlyRootFilesystem`) needs the
-[container override](#container-level-fields).
+Container-level `securityContext` (`capabilities`,
+`readOnlyRootFilesystem`) needs the
+[override](#container-level-fields) instead.
 
 ```typescript
 podTemplate: {
@@ -215,12 +164,8 @@ podTemplate: {
 
 ### imagePullSecrets
 
-For a registry-less cluster pulling a private `image:`. EKS does not
-need this for mirrored images. Create a `kubernetes.io/dockerconfigjson`
-Secret as a [Manifest](/kubernetes/objects/manifests#secrets) and
-reference it by name. The API server base64-encodes `stringData`, so
-read the docker config JSON from the deploy environment with
-`Config.string`.
+For a registry-less cluster pulling a private `image:`; EKS mirrors
+instead. The Secret is a [Manifest](/kubernetes/objects/manifests#secrets).
 
 ```typescript
 import * as Config from "effect/Config";
@@ -245,15 +190,10 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-Getting the image reachable from a local cluster is covered under
-[Using your own images](/kubernetes/clusters/local#using-your-own-images).
-
 ### Volumes: emptyDir and a PVC from a Manifest
 
-`spec.volumes` is pod-level and merges cleanly. `volumeMounts` is
-container-level and needs the override. The PVC is a
-[Manifest](/kubernetes/objects/manifests#any-object) whose `name`
-feeds `claimName`, so the Deployment deploys after the claim exists.
+`spec.volumes` merges cleanly; `volumeMounts` needs the override. The
+PVC is a [Manifest](/kubernetes/objects/manifests#any-object).
 
 ```typescript
 const data = yield* Kubernetes.Manifest("ApiData", {
@@ -290,17 +230,10 @@ const api = yield* Kubernetes.Deployment("Api", {
 });
 ```
 
-:::note
-A `ReadWriteOnce` PVC with `replicas > 1` leaves the extra replicas
-Pending on a multi-node cluster. That is Kubernetes, not Alchemy.
-:::
-
 ### Sidecar container
 
-Prefer a native sidecar: an `initContainers` entry with
-`restartPolicy: "Always"`. `initContainers` is absent from the base,
-so the main container is untouched and this works for `main:` and
-`context:` sources too.
+A native sidecar (Kubernetes 1.29+) leaves the main container
+untouched, so it works with `main:` and `context:` too.
 
 ```typescript
 podTemplate: {
@@ -316,27 +249,10 @@ podTemplate: {
 },
 ```
 
-Native sidecars need Kubernetes 1.29 or newer. Sharing the volume
-with the main container needs its `volumeMounts`, which brings back
-the override.
-
-### Readiness and liveness probes
-
-Container-level. The block under
-[Container-level fields](#container-level-fields) shows both.
-Without a `readinessProbe` the Service routes to the container as
-soon as it starts, so a slow-to-bind server eats connection errors.
-A `main:` Effect server has no probe today and no way to add one
-short of a Manifest, so answer `/` quickly. When `url` appears is
-under
-[Exposing it](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url).
-
 ### imagePullPolicy
 
-Container-level, so full override. The case is a local cluster where
-you re-tag the same `image:` string or use `:latest`, which is where
-[Using your own images](/kubernetes/clusters/local#using-your-own-images)
-sends you. One new field. Everything else is restated.
+For a local cluster re-tagging the same `image:` string
+([Using your own images](/kubernetes/clusters/local#using-your-own-images)).
 
 ```typescript
 podTemplate: {
@@ -354,9 +270,9 @@ podTemplate: {
 
 ### envFrom a ConfigMap or Secret
 
-Container-level, so full override. Every key of a ConfigMap or
+Every key of a ConfigMap or
 [Secret Manifest](/kubernetes/objects/manifests#secrets) becomes an
-env var. The Manifest's `name` attribute is the reference.
+env var.
 
 ```typescript
 podTemplate: {
@@ -375,13 +291,9 @@ podTemplate: {
 },
 ```
 
-If the values are not secret, the `env` prop with `config.name`
-Outputs (tutorial part 3) needs no override.
-
 ### Annotations and grace period
 
-`metadata.annotations` and `spec.terminationGracePeriodSeconds` both
-merge cleanly. This is the smallest useful `podTemplate`.
+Both merge cleanly.
 
 ```typescript
 podTemplate: {
@@ -392,46 +304,8 @@ podTemplate: {
 },
 ```
 
-## When to write a Manifest instead
-
-Reach for [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object)
-when you need container-level fields on a `main:` or `context:`
-source, when the override restates more than the props provide, when
-you need another kind (StatefulSet, DaemonSet), or when you need
-fields outside the template such as Deployment `strategy`,
-`minReadySeconds`, or Service internals beyond `serviceType` and
-`serviceAnnotations`.
-
-You give up everything
-[What gets created](/kubernetes/workloads/deployments#what-gets-created)
-lists: the Service and ServiceAccount, `url`, bindings and Pod
-Identity, image build and mirror. Mixing is normal. Tutorial part 3
-puts an `image:` Deployment next to a Manifest StatefulSet.
-
-```typescript
-// Same app as a Manifest: you own every field, Alchemy owns the lifecycle.
-const api = yield* Kubernetes.Manifest("Api", {
-  cluster,
-  manifest: {
-    apiVersion: "apps/v1",
-    kind: "Deployment",
-    metadata: { name: "api", namespace: "default" },
-    spec: {
-      replicas: 2,
-      strategy: { type: "RollingUpdate", rollingUpdate: { maxUnavailable: 0 } },
-      selector: { matchLabels: { app: "api" } },
-      template: { /* full PodTemplateSpec, no merge */ },
-    },
-  },
-});
-```
-
 ## Where next
 
-- [Manifests](/kubernetes/objects/manifests) — any object as a
-  resource, including the StatefulSets and DaemonSets `podTemplate`
-  can't express.
+- [Manifests](/kubernetes/objects/manifests)
 - [How apply works](/kubernetes/guides/how-apply-works#server-side-apply)
-  — how the merged template is applied and what happens on conflicts.
-- [`Deployment` reference](/providers/kubernetes/deployment) — every
-  prop and attribute.
+- [`Deployment` reference](/providers/kubernetes/deployment)

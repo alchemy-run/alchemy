@@ -8,21 +8,12 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-Most cluster software ships as Helm charts. Install one with
-`Kubernetes.HelmChart`, tune it from TypeScript, and see what it
-means for Alchemy to own the chart's objects. Continue from the
-[Part 3](/kubernetes/tutorial/part-3) file with its stack deployed.
-
-## Prerequisites
-
-`helm` must be on your `PATH`. `HelmChart` shells out to
-`helm template` on the deploying machine, the way image builds shell
-out to Docker (see [Setup](/kubernetes/setup#install)). No
-`helm repo add` is needed. The `repo` prop is passed on every render.
+Install a Helm chart with `Kubernetes.HelmChart`, tune its values, and
+watch Alchemy prune objects the chart stops rendering. Continue from
+[Part 3](/kubernetes/tutorial/part-3) with its stack deployed. `helm`
+must be on your `PATH` ([Setup](/kubernetes/setup#install)).
 
 ## Install podinfo
-
-Declare the chart after `Hello` and expose its release name:
 
 ```diff lang="typescript"
 const hello = yield* Kubernetes.Job("Hello", { /* ... */ });
@@ -44,18 +35,10 @@ return {
 };
 ```
 
-`chart` names the chart inside the repository at `repo`. OCI and
-local charts are on [Chart sources](/kubernetes/objects/helm#chart-sources).
-Pin `version`, or helm resolves the latest on every deploy and the
-objects drift. `namespace` is where the objects land. It doesn't
-exist yet, and the next step fixes that. `releaseName` defaults to a
-name from stack, stage, and logical id, and is the chart's
-`.Release.Name`. Full props are on the
-[`HelmChart` reference](/providers/kubernetes/helmchart).
+Pin `version` or helm resolves the latest on every deploy
+([full props](/providers/kubernetes/helmchart)).
 
 ## Own the namespace with createNamespace
-
-Have the chart resource create its own namespace:
 
 ```diff lang="typescript"
 const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
@@ -68,10 +51,8 @@ const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
 });
 ```
 
-A Namespace Manifest like Part 3 works too. `createNamespace` has the
-chart resource emit and [own](/kubernetes/objects/helm#lifecycle) the
-`podinfo` Namespace as its first object, applied before the rendered
-objects and deleted with them. It is a no-op for `namespace: "default"`.
+The chart emits and [owns](/kubernetes/objects/helm#lifecycle) the
+`podinfo` Namespace, applied first and deleted with the rest.
 
 ## Deploy
 
@@ -107,32 +88,22 @@ Proceed?
 [s2]podinfoRelease: "myapp-podinfo-dev-alex-q2w3e4r5t6y7u2i3",
 }`} />
 
-The render ran on your machine with `helm template --no-hooks`. The
-three objects, the Namespace plus the chart's Service and Deployment,
-were [server-side applied](/kubernetes/guides/how-apply-works#server-side-apply)
-like Manifests. Their refs are recorded on the `objects` attribute,
-which is what pruning and destroy work from. See what landed:
+The three rendered objects were
+[server-side applied](/kubernetes/guides/how-apply-works#server-side-apply)
+like Manifests.
 
 ```sh
 kubectl get all -n podinfo
 ```
 
-podinfo's Service is ClusterIP and named after the release, the
-`podinfoRelease` output. Port-forward to it:
+Port-forward to the Service, named after the release:
 
 ```sh
 kubectl port-forward -n podinfo svc/myapp-podinfo-dev-alex-q2w3e4r5t6y7u2i3 9898:9898
 curl localhost:9898
 ```
 
-podinfo answers with JSON describing itself. With a long stack or
-stage name the release name is capped at Helm's 53 characters and
-may drop `podinfo`, and the chart then names the Service
-`<release>-podinfo`. `kubectl get svc -n podinfo` shows it either way.
-
 ## Tune it with values
-
-Set the chart's values from TypeScript:
 
 ```diff lang="typescript"
 const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
@@ -150,15 +121,12 @@ const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
 ```
 
 [`values`](/kubernetes/objects/helm#values) is the chart's
-`values.yaml` as a TypeScript object. Deploy and the plan is
-`1 to update` because the chart's hash changed.
-`kubectl get deploy -n podinfo` shows `2/2`, and the port-forwarded
-JSON carries the new message. Unchanged objects are re-applied as
-no-ops.
+`values.yaml`. Deploy: the plan is `1 to update` and
+`kubectl get deploy -n podinfo` shows `2/2`.
 
 ## Turn an object off and watch it get pruned
 
-Stop the port-forward, then switch the chart's Service off:
+Stop the port-forward, then switch the Service off:
 
 ```diff lang="typescript"
 values: {
@@ -178,15 +146,13 @@ Proceed?
 [d]Applying 2 objects from podinfo...[/d]
 [g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [y]updated[/y]`} />
 
-`service.enabled` makes podinfo stop rendering its Service. The
-`Applying` note drops from 3 objects to 2, and
-`kubectl get svc -n podinfo` is empty. Objects that leave the render
-are [pruned](/kubernetes/guides/how-apply-works#pruning-and-drift),
-unlike `kubectl apply -f`.
+Objects that leave the render are
+[pruned](/kubernetes/guides/how-apply-works#pruning-and-drift);
+`kubectl get svc -n podinfo` is now empty.
 
 ## Put it back
 
-Delete the `service` line again:
+Delete the `service` line:
 
 ```diff lang="typescript"
 values: {
@@ -206,22 +172,13 @@ Proceed?
 [d]Applying 3 objects from podinfo...[/d]
 [g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [y]updated[/y]`} />
 
-Back to 3 objects, and `kubectl get svc -n podinfo` lists the Service
-again. An object that re-enters the render is added back to the
-managed set.
+The Service re-enters the managed set.
 
 ## What you didn't get from Helm
 
-`helm list -n podinfo` shows nothing. Helm only rendered, so there is
-no release record in the cluster. The chart's `templates/tests/` Pod
-never appeared in the object counts either, because the render runs
-with `--no-hooks`.
-
-:::note[Hooks and release records]
-Hook-annotated objects are never applied or executed. Charts that
-depend on lifecycle hooks should be installed with Helm directly. See
+`helm list -n podinfo` shows nothing: Helm only rendered, and hooks
+never run. See
 [What Helm does that Alchemy doesn't](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt).
-:::
 
 ## Clean up
 
@@ -260,26 +217,10 @@ Proceed?
 [r]✗[/r] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]
 [r]✗[/r] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]`} />
 
-Within a resource, objects go in reverse apply order: the chart's
-Deployment and Service before its Namespace. Across resources,
-dependents go first, so the `tutorial` Namespace is last. `destroy`
-returns once the API server accepts the deletes, so `kubectl get ns`
-shows both namespaces `Terminating` for a while. Part 5 is optional
-and moves this program to a different cluster.
-
-## Recap
-
-One file deploys a Deployment, a CronJob, four Manifests, and a Helm
-chart, with values edits as ordinary updates and dropped objects
-pruned. Part 5 is optional: the same file on EKS, with `Echo` replaced
-by your own Effect code and an AWS binding.
+Dependents delete first, so the `tutorial` Namespace goes last.
 
 ## Where next
 
-- [Part 5: The Same Program on EKS](/kubernetes/tutorial/part-5) —
-  optional: the same program on EKS with `main:` and a DynamoDB
-  binding.
-- [Helm charts](/kubernetes/objects/helm) — OCI and local charts,
-  `includeCrds`, the full lifecycle.
-- [How apply works](/kubernetes/guides/how-apply-works) —
-  server-side apply, drift, pruning, conflicts, debugging.
+- [Part 5: The Same Program on EKS](/kubernetes/tutorial/part-5) — optional
+- [Helm charts](/kubernetes/objects/helm)
+- [How apply works](/kubernetes/guides/how-apply-works)
