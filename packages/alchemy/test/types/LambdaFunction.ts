@@ -184,18 +184,7 @@ class DurableNoUrl extends DurableFn<DurableNoUrl>()(
   durableImpl,
 ) {}
 
-class DurablePrebuiltImage extends DurableFn<DurablePrebuiltImage>()(
-  "durable-image-rejected",
-  // @ts-expect-error A prebuilt image has no `main` for the orchestrator
-  // body to be bundled into.
-  {
-    image: { context: "./l", dockerfile: "Dockerfile" },
-    architecture: "x86_64",
-  },
-  durableImpl,
-) {}
-
-export type { DurableZip, DurableNoUrl, DurablePrebuiltImage };
+export type { DurableZip, DurableNoUrl };
 
 const imageProps: FunctionImageProps = {
   image: { context: "./lambda", dockerfile: "Dockerfile" },

@@ -1,5 +1,5 @@
 import * as Bundle from "@/Bundle/Bundle";
-import type { FunctionProps } from "@/AWS/Lambda/Function";
+import type { FunctionZipProps } from "@/AWS/Lambda/Function";
 import { makeFunctionBundler } from "@/AWS/Lambda/FunctionBundle";
 import { exec } from "@/Util/exec.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -68,7 +68,7 @@ layer(NodeServices.layer)("Bundle namespace initialization", (it) => {
             main: entry,
             isExternal: true,
             build: { external: ["cloudflare:workers"] },
-          } as FunctionProps);
+          } as FunctionZipProps);
           const bundle = yield* Bundle.build(
             plan.inputOptions,
             plan.outputOptions,
