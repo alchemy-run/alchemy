@@ -3,7 +3,6 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
-import type { Resource } from "../Resource.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import {
   ConnectMongo,
@@ -11,19 +10,12 @@ import {
   connectEnvKeys,
   type ConnectMongoClient,
 } from "./ConnectMongo.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
+import { isRailwayHost } from "./MountVolume.ts";
 import {
   MONGO_URL_SECRET,
   MONGO_PUBLIC_URL_SECRET,
   type Mongo,
 } from "./Mongo.ts";
-
-const isRailwayHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { Type?: string }).Type === "Railway.Service";
 
 const runtimeOutput = <A>(
   key: string,

@@ -9,15 +9,6 @@ export const SECRET_NAME = "RAILWAY_EXAMPLE_MARKER";
 export const OBJECT_KEY = "example.txt";
 export const REDIS_KEY = "example-marker";
 
-const PING_SOURCE = `Bun.serve({
-  hostname: "0.0.0.0",
-  port: Number(process.env.PORT ?? 3000),
-  fetch() {
-    return new Response("ok");
-  },
-});
-`;
-
 /**
  * Parent Project every other resource shares. Name is generated.
  * Production is `Site.environmentId` — do not recreate it as an
@@ -79,12 +70,13 @@ export const DatabaseUrl = Railway.Variable("DatabaseUrl", {
 });
 
 /**
- * Canvas Function: one TypeScript file on the Bun function runtime.
- * No Docker, no GitHub. Distinct from Effect-native {@link Api}.
+ * Canvas cron Function: inline TypeScript on the Bun function runtime.
+ * No HTTP domain. Distinct from the Effect-native Ping class.
  */
-export const Ping = Railway.Function("Ping", {
+export const Cleanup = Railway.Function("Cleanup", {
   project: Site,
-  source: PING_SOURCE,
+  source: `console.log("tick");`,
+  cronSchedule: "0 * * * *",
 });
 
 /**

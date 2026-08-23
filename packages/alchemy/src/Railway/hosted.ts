@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -17,17 +18,64 @@ import {
 } from "../Bundle/TempRoot.ts";
 import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
+import { safeHttpEffect } from "../Http.ts";
 import { Self } from "../Self.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
 } from "../Server/Process.ts";
-import { sha256Object } from "../Util/sha256.ts";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
 
 export type RailwayHostRuntimeContext = HostRuntimeContext;
 
 export const createRailwayHostRuntimeContext = createContainerRuntimeContext;
+
+/**
+ * Function runtime: register the fetch handler on `globalThis` instead of
+ * booting an HTTP server. The canvas wrapper `Bun.serve`s first so a
+ * failed Effect import cannot 502 before the process is bound.
+ */
+export const createRailwayFunctionRuntimeContext =
+  (type: string) =>
+  (id: string): HostRuntimeContext => {
+    const base = createContainerRuntimeContext(type)(id);
+    return {
+      ...base,
+      serve: ((handler) =>
+        Effect.sync(() => {
+          if (!globalThis.__ALCHEMY_RUNTIME__) return;
+          const run = safeHttpEffect(handler);
+          (
+            globalThis as typeof globalThis & {
+              __ALCHEMY_FUNCTION_FETCH__?: (
+                request: Request,
+              ) => Promise<Response>;
+            }
+          ).__ALCHEMY_FUNCTION_FETCH__ = async (request: Request) => {
+            try {
+              const response = await Effect.runPromise(
+                run.pipe(
+                  Effect.provideService(
+                    HttpServerRequest.HttpServerRequest,
+                    HttpServerRequest.fromWeb(request),
+                  ),
+                  Effect.scoped,
+                ),
+              );
+              return HttpServerResponse.toWeb(response);
+            } catch (error) {
+              return new Response(String(error), { status: 500 });
+            }
+          };
+        })) as HostRuntimeContext["serve"],
+      exports: Effect.sync(() => ({
+        program: Effect.void,
+      })),
+    } as HostRuntimeContext;
+  };
 
 export const DEFAULT_BASE_IMAGE = "oven/bun:1";
 export const DEFAULT_PORT = 3000;
@@ -166,6 +214,65 @@ await Effect.runPromise(program).catch((err) => {
 });
 `;
 
+/**
+ * Inner Function module: builds the class layer so `serve` registers
+ * `globalThis.__ALCHEMY_FUNCTION_FETCH__`. The canvas wrapper listens
+ * first, then import()s this file.
+ */
+const makeFunctionBootstrap =
+  (handler: string) =>
+  (importPath: string): string =>
+    `
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { Stack } from "alchemy/Stack";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+globalThis.__ALCHEMY_RUNTIME__ = true;
+const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
+const tag = Context.Service(${JSON.stringify(Self.key)});
+const layer = makeEntrypointLayer(tag, entrypoint);
+const platform = Layer.mergeAll(
+  FetchHttpClient.layer,
+  Logger.layer([Logger.consolePretty()]),
+);
+const stack = Layer.effect(
+  Stack,
+  Effect.all([
+    Config.string("ALCHEMY_STACK_NAME"),
+    Config.string("ALCHEMY_STAGE")
+  ]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {}
+    }))
+  )
+);
+await Effect.runPromise(
+  tag.pipe(
+    Effect.provide(
+      layer.pipe(
+        Layer.provideMerge(stack),
+        Layer.provideMerge(platform),
+        Layer.provideMerge(
+          Layer.succeed(
+            ConfigProvider.ConfigProvider,
+            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
+          )
+        ),
+      )
+    )
+  )
+);
+`;
+
 /** Flatten a binding/env leaf into an env string. Unwraps Redacted. */
 export const plainEnvValue = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
@@ -240,6 +347,266 @@ export const collectBindingState = (
   return { env, mounts };
 };
 
+export class FunctionBundleNotSingleFile extends Data.TaggedError(
+  "Railway.FunctionBundleNotSingleFile",
+)<{
+  files: readonly string[];
+}> {}
+
+const decodeBundleText = (content: string | Uint8Array): string =>
+  typeof content === "string" ? content : new TextDecoder().decode(content);
+
+const wrapCanvasListener = (inner: string) =>
+  Effect.sync(() => {
+    const req = createRequire(import.meta.url);
+    const effectVersion = (req("effect/package.json") as { version: string })
+      .version;
+    const bunVersion = (
+      req("@effect/platform-bun/package.json") as { version: string }
+    ).version;
+    return `import ${JSON.stringify(`effect@${effectVersion}`)};
+import ${JSON.stringify(`@effect/platform-bun@${bunVersion}`)};
+
+const port = Number(process.env.PORT ?? 3000);
+globalThis.__ALCHEMY_FUNCTION_FETCH__ =
+  globalThis.__ALCHEMY_FUNCTION_FETCH__ ??
+  (async () => new Response("booting"));
+Bun.serve({
+  hostname: "0.0.0.0",
+  port,
+  fetch: async (request) => {
+    try {
+      return await globalThis.__ALCHEMY_FUNCTION_FETCH__(request);
+    } catch (error) {
+      return new Response(String(error), { status: 500 });
+    }
+  },
+});
+console.log("Railway function listening on " + port);
+
+try {
+  const innerUrl = new URL("./alchemy-inner.mjs", import.meta.url);
+  await Bun.write(innerUrl, ${JSON.stringify(inner)});
+  await import(innerUrl.href);
+} catch (error) {
+  console.error("Railway function module failed:", error);
+  globalThis.__ALCHEMY_FUNCTION_FETCH__ = async () =>
+    new Response(String(error), { status: 500 });
+}
+
+await new Promise(() => {});
+`;
+  });
+
+const isCanvasFunctionExternal = (moduleId: string): boolean => {
+  if (moduleId.startsWith("@effect/platform-node")) return false;
+  if (moduleId === "node:os") return false;
+  return (
+    moduleId === "effect" ||
+    moduleId.startsWith("effect/") ||
+    moduleId.startsWith("@effect/") ||
+    moduleId.startsWith("node:") ||
+    moduleId === "bun" ||
+    moduleId.startsWith("bun:")
+  );
+};
+
+const STUB_PLATFORM_NODE = "virtual:alchemy-stub-platform-node";
+
+/** Functions run on Bun. Drop `@effect/platform-node` so Railway does not install it. */
+const stubPlatformNodePlugin = (): rolldown.Plugin => ({
+  name: "alchemy:stub-platform-node",
+  resolveId: {
+    filter: { id: /^@effect\/platform-node/ },
+    handler() {
+      return { id: STUB_PLATFORM_NODE, moduleSideEffects: false };
+    },
+  },
+  load: {
+    filter: { id: /^virtual:alchemy-stub-platform-node$/ },
+    handler() {
+      return { code: "export default {};\n", moduleType: "js" };
+    },
+  },
+});
+
+const STUB_NODE_OS = "virtual:alchemy-stub-node-os";
+
+const stubNodeOsPlugin = (): rolldown.Plugin => ({
+  name: "alchemy:stub-node-os",
+  resolveId: {
+    filter: { id: /^node:os$/ },
+    handler() {
+      return { id: STUB_NODE_OS, moduleSideEffects: false };
+    },
+  },
+  load: {
+    filter: { id: /^virtual:alchemy-stub-node-os$/ },
+    handler() {
+      return {
+        code: [
+          "export const homedir = () => '/';",
+          "export const cpus = () => [];",
+          "export const platform = () => 'linux';",
+          "export const arch = () => 'x64';",
+          "export const tmpdir = () => '/tmp';",
+          "export const hostname = () => 'railway';",
+          "export const type = () => 'Linux';",
+          "export const release = () => '';",
+          "export const endianness = () => 'LE';",
+          "export default { homedir, cpus, platform, arch, tmpdir, hostname, type, release, endianness };",
+          "",
+        ].join("\n"),
+        moduleType: "js",
+      };
+    },
+  },
+});
+
+const createBundleProgram = (
+  virtualEntryPlugin: (
+    content: (importPath: string) => string,
+  ) => rolldown.Plugin,
+  options?: {
+    output?: Partial<rolldown.OutputOptions>;
+    /**
+     * Extra unresolved specifiers to leave as imports. Canvas Functions
+     * auto-install npm packages; leaving `effect` external keeps the
+     * encoded start command under 96KB.
+     */
+    canvasExternals?: boolean;
+    bootstrap?: (handler: string) => (importPath: string) => string;
+  },
+) =>
+  Effect.fn(function* (props: HostedProgramProps) {
+    const handler = props.handler ?? "default";
+    const realMain = yield* resolveMainPath(props.main);
+    const cwd = yield* findCwdForBundle(realMain);
+    const bootstrap = (options?.bootstrap ?? makeBunBootstrap)(handler);
+    const requested = yield* normalizeInstallTargets(props.build?.install);
+    const installRoots = new Set(Object.keys(requested));
+    const configuredExternal = props.build?.input?.external;
+    const output = options?.output;
+    const canvasExternals = options?.canvasExternals === true;
+
+    const buildBundle = Effect.fn(function* (
+      entry: string,
+      plugins?: rolldown.RolldownPluginOption,
+    ) {
+      return yield* Bundle.build(
+        {
+          ...props.build?.input,
+          input: entry,
+          cwd,
+          platform: "node",
+          external: (moduleId, parentId, isResolved) => {
+            if (moduleId === "bun" || moduleId.startsWith("bun:")) return true;
+            if (canvasExternals && isCanvasFunctionExternal(moduleId)) {
+              return true;
+            }
+            for (const root of installRoots) {
+              if (matchesPackageRoot(moduleId, root)) return true;
+            }
+            return matchesConfiguredExternal(
+              configuredExternal,
+              moduleId,
+              parentId,
+              isResolved,
+            );
+          },
+          resolve: {
+            conditionNames: ["bun", "import", "module", "default"],
+            ...props.build?.input?.resolve,
+          },
+          plugins: [
+            canvasExternals ? stubPlatformNodePlugin() : undefined,
+            canvasExternals ? stubNodeOsPlugin() : undefined,
+            props.build?.input?.plugins,
+            plugins,
+          ],
+        },
+        {
+          ...props.build?.output,
+          ...output,
+          format: "esm",
+          sourcemap:
+            output?.sourcemap ?? props.build?.output?.sourcemap ?? false,
+          entryFileNames: "index.mjs",
+          strictExecutionOrder: true,
+          keepNames: true,
+        },
+        props.build,
+      );
+    });
+
+    const bundleOutput = props.isExternal
+      ? yield* buildBundle(realMain)
+      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
+
+    const files = bundleOutput.files.map((file) => ({
+      path: file.path,
+      content:
+        typeof file.content === "string"
+          ? new TextEncoder().encode(file.content)
+          : file.content,
+    }));
+
+    return { files, hash: bundleOutput.hash };
+  });
+
+/**
+ * Bundle an Effect-native Railway.Function into a single TypeScript/JS
+ * file for the canvas function runtime. No Docker. No registry.
+ */
+export const createRailwayFunctionSupport = ({
+  stackName,
+  stage,
+  virtualEntryPlugin,
+}: {
+  stackName: string;
+  stage: string;
+  virtualEntryPlugin: (
+    content: (importPath: string) => string,
+  ) => rolldown.Plugin;
+}) => {
+  const alchemyEnv = {
+    ALCHEMY_STACK_NAME: stackName,
+    ALCHEMY_STAGE: stage,
+    ALCHEMY_PHASE: "runtime",
+  };
+
+  const bundleProgram = createBundleProgram(virtualEntryPlugin, {
+    canvasExternals: true,
+    bootstrap: makeFunctionBootstrap,
+    output: {
+      // dce-only (Bundle.build default) keeps `import … from "effect/…"`
+      // readable so Railway's AST installer sees Effect 4 pins. Full
+      // minify still 502s: npm `effect` is 3.x without those subpaths.
+      codeSplitting: false,
+    },
+  });
+
+  const bundleToSource = Effect.fn(function* (props: HostedProgramProps) {
+    const bundled = yield* bundleProgram(props);
+    if (bundled.files.length !== 1) {
+      return yield* new FunctionBundleNotSingleFile({
+        files: bundled.files.map((file) => file.path),
+      });
+    }
+    const inner = decodeBundleText(bundled.files[0]!.content);
+    const source = yield* wrapCanvasListener(inner);
+    const hash = yield* sha256(source);
+    return { source, hash };
+  });
+
+  const hash = Effect.fn(function* (props: HostedProgramProps) {
+    const bundled = yield* bundleToSource(props);
+    return bundled.hash;
+  });
+
+  return { alchemyEnv, bundleProgram, bundleToSource, hash };
+};
+
 const sanitizeImageRepo = (id: string): string => {
   const lowered = id
     .toLowerCase()
@@ -311,69 +678,7 @@ export const createRailwayHostedSupport = ({
     ALCHEMY_PHASE: "runtime",
   };
 
-  const bundleProgram = Effect.fn(function* (props: HostedProgramProps) {
-    const handler = props.handler ?? "default";
-    const realMain = yield* resolveMainPath(props.main);
-    const cwd = yield* findCwdForBundle(realMain);
-    const bootstrap = makeBunBootstrap(handler);
-    const requested = yield* normalizeInstallTargets(props.build?.install);
-    const installRoots = new Set(Object.keys(requested));
-    const configuredExternal = props.build?.input?.external;
-
-    const buildBundle = Effect.fn(function* (
-      entry: string,
-      plugins?: rolldown.RolldownPluginOption,
-    ) {
-      return yield* Bundle.build(
-        {
-          ...props.build?.input,
-          input: entry,
-          cwd,
-          platform: "node",
-          external: (moduleId, parentId, isResolved) => {
-            if (moduleId === "bun" || moduleId.startsWith("bun:")) return true;
-            for (const root of installRoots) {
-              if (matchesPackageRoot(moduleId, root)) return true;
-            }
-            return matchesConfiguredExternal(
-              configuredExternal,
-              moduleId,
-              parentId,
-              isResolved,
-            );
-          },
-          resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
-            ...props.build?.input?.resolve,
-          },
-          plugins: [props.build?.input?.plugins, plugins],
-        },
-        {
-          ...props.build?.output,
-          format: "esm",
-          sourcemap: props.build?.output?.sourcemap ?? false,
-          entryFileNames: "index.mjs",
-          strictExecutionOrder: true,
-          keepNames: true,
-        },
-        props.build,
-      );
-    });
-
-    const bundleOutput = props.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
-
-    const files = bundleOutput.files.map((file) => ({
-      path: file.path,
-      content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
-    }));
-
-    return { files, hash: bundleOutput.hash };
-  });
+  const bundleProgram = createBundleProgram(virtualEntryPlugin);
 
   const computeCodeHash = Effect.fn(function* (props: HostedProgramProps) {
     const bundled = yield* bundleProgram(props);

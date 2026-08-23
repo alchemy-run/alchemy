@@ -1,23 +1,56 @@
 ---
 title: Functions, templates & VMs
-description: Canvas Functions, marketplace templates, sandboxes, and cloud agents on Railway.
+description: Effect-native canvas Functions, marketplace templates, sandboxes, and cloud agents on Railway.
 ---
 
-A [`Railway.Function`](/providers/railway/function) is a canvas
-Function: a Service that runs a **single TypeScript file** on the
-Bun function runtime. No GitHub repo. No Docker build. Distinct from
-Effect-native [`Service({ main })`](/railway/compute/services).
+A [`Railway.Function`](/providers/railway/function) is an Effect
+program on Railway's canvas Function runtime: a **single TypeScript
+file** on Bun. No GitHub repo. No Docker. No registry. Distinct from
+Effect-native [`Service({ main, registry })`](/railway/compute/services),
+which pushes a Docker image. Cap is 96KB once encoded.
 
 Marketplace [`Template`](/providers/railway/template)s deploy a
 serialized config into a Project. [`Sandbox`](/providers/railway/sandbox)
 is an ephemeral Linux VM. [`CloudAgent`](/providers/railway/cloudagent)
 is a coding-agent VM.
 
-## HTTP Function
+## Declare an Effect-native Function
 
-Pass inline `source` (or `path` to a `.ts` file). Alchemy generates
-a `*.up.railway.app` domain unless `http: false` or a cron schedule
-is set. Cap is 96KB once base64-encoded into the start command.
+A Function is a class. Props describe the canvas Function. The Effect
+is the program that runs in it.
+
+```typescript
+// src/ping.ts
+import * as Railway from "alchemy/Railway";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Site } from "./project.ts";
+
+export default class Ping extends Railway.Function<Ping>()(
+  "Ping",
+  {
+    project: Site,
+    main: import.meta.url,
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }),
+) {}
+```
+
+`main: import.meta.url` is the bundle entrypoint. Alchemy bundles
+this file with Rolldown into one JS file and writes it as the
+Function's `startCommand`. Railway does **not** pull a registry
+image.
+
+## Inline source
+
+Pass inline `source` (or `path` to a `.ts` file) instead of `main`
+when the Function is not an Effect class. Alchemy generates a
+`*.up.railway.app` domain unless `http: false` or a cron schedule is
+set.
 
 ```typescript
 const site = yield* Railway.Project("Site");
@@ -51,7 +84,7 @@ HTTP domains are skipped unless `http: true` is set explicitly.
 ```typescript
 const job = yield* Railway.Function("Cleanup", {
   project: site,
-  source: `console.log("tick", new Date().toISOString());`,
+  source: `console.log("tick");`,
   cronSchedule: "0 * * * *",
 });
 ```
@@ -104,8 +137,8 @@ const agent = yield* Railway.CloudAgent("Coder", {
 
 ## Where next
 
-[Services](/railway/compute/services) is the container for
-Effect-native programs (`main` + `registry`).
+[Services](/railway/compute/services) is the container when you need
+Docker (`main` + `registry`). Functions stay on the canvas runtime.
 The [`Function`](/providers/railway/function),
 [`Template`](/providers/railway/template),
 [`Sandbox`](/providers/railway/sandbox), and

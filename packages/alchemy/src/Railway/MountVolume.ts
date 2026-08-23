@@ -13,8 +13,8 @@ export interface MountVolumeOptions {
 }
 
 /**
- * Runtime view of a Volume mounted into a {@link Service}: the path
- * inside the container.
+ * Runtime view of a Volume mounted into a {@link Service} or
+ * `Railway.Function`: the path inside the container.
  */
 export interface MountedVolume {
   /** Mount path inside the container (same value as {@link MountVolumeOptions.path}). */
@@ -37,16 +37,25 @@ const volumeIdOf = (volume: Volume): string => {
   return typeof value === "string" ? value : "";
 };
 
-const isBindHost = (
+const RAILWAY_BIND_HOST_TYPES = new Set([
+  "Railway.Service",
+  "Railway.Function",
+]);
+
+/**
+ * True for a Railway compute host that accepts {@link ServiceBinding}
+ * (`Railway.Service` or {@link Function}).
+ */
+export const isRailwayHost = (
   value: unknown,
 ): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
-  (value as { Type?: string }).Type === "Railway.Service";
+  RAILWAY_BIND_HOST_TYPES.has((value as { Type?: string }).Type ?? "");
 
 /**
- * Binding contract accepted by {@link Service} for mounted volumes and
- * injected env.
+ * Binding contract accepted by {@link Service} and
+ * `Railway.Function` for mounted volumes and injected env.
  */
 export interface ServiceBinding {
   env?: Record<string, any>;
@@ -54,11 +63,11 @@ export interface ServiceBinding {
 }
 
 /**
- * Mount a Railway.Volume into a {@link Service}.
+ * Mount a Railway.Volume into a {@link Service} or `Railway.Function`.
  *
  * `yield* Railway.MountVolume(volume, { path: "/data" })` inside a
- * Service impl registers `{ mounts: [{ volumeId, path }] }` on the host.
- * Service reconcile attaches the volume via `volumeInstanceUpdate`.
+ * Service/Function impl registers `{ mounts: [{ volumeId, path }] }` on
+ * the host. Reconcile attaches the volume via `volumeInstanceUpdate`.
  *
  * @binding
  *
@@ -98,7 +107,7 @@ export const MountVolumeLive = Layer.effect(
     Effect.fn(function* (volume: Volume, options: MountVolumeOptions) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isBindHost(host)) {
+        if (isRailwayHost(host)) {
           yield* host.bind`Railway.MountVolume(${options.path})`({
             mounts: [{ volumeId: volumeIdOf(volume), path: options.path }],
           });

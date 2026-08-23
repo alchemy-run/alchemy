@@ -3,7 +3,6 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
-import type { Resource } from "../Resource.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import {
   ConnectPostgres,
@@ -11,19 +10,12 @@ import {
   connectEnvKeys,
   type ConnectPostgresClient,
 } from "./ConnectPostgres.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
+import { isRailwayHost } from "./MountVolume.ts";
 import {
   DATABASE_URL_SECRET,
   DATABASE_PUBLIC_URL_SECRET,
   type Postgres,
 } from "./Postgres.ts";
-
-const isRailwayHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { Type?: string }).Type === "Railway.Service";
 
 const runtimeOutput = <A>(
   key: string,

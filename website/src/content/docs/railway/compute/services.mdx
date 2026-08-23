@@ -7,8 +7,8 @@ A [`Service`](/providers/railway/service) is a container in a
 Railway [Project](/railway/compute/projects). Point it at a public
 image (`hashicorp/http-echo`), an Effect program (`main` +
 `registry`), or a GitHub repo (`repo` + `branch`). Several Services
-share one Project. Canvas Functions — one TypeScript file, no
-Docker — are [`Railway.Function`](/railway/compute/functions).
+share one Project. Canvas Functions — Effect-native or one TypeScript file, no
+Docker, no registry — are [`Railway.Function`](/railway/compute/functions).
 
 ## Image service
 
@@ -323,7 +323,8 @@ Service logs live in the Railway dashboard. `alchemy logs` /
 ## Where next
 
 The [tutorial](/railway/tutorial/part-2) builds a Service step by
-step. [Functions](/railway/compute/functions) covers canvas Functions.
+step. [Functions](/railway/compute/functions) covers Effect-native
+and canvas Functions.
 [Volumes](/railway/data/volumes) covers `MountVolume`.
 [Postgres](/railway/data/postgres) binds with `ConnectPostgres`.
 [MySQL](/railway/data/mysql) and [Mongo](/railway/data/mongo) are the
@@ -337,5 +338,5 @@ prop.
 [Example: railway-project](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-project)
 is an image Service.
 [Example: railway-service](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service)
-is an Effect-native Service bound to Postgres, MySQL, Redis, a
-canvas Function, and a Group.
+is an Effect-native Service bound to Postgres, MySQL, Redis, an
+Effect Function, and a Group.

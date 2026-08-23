@@ -2,9 +2,8 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
-import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
+import { isRailwayHost } from "./MountVolume.ts";
 import {
   REDIS_URL_ENV,
   RedisUrlMissing,
@@ -22,13 +21,6 @@ import {
  *
  * NOT exported from `index.ts`.
  */
-
-const isRailwayHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { Type?: string }).Type === "Railway.Service";
 
 const asPlain = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;

@@ -12,7 +12,8 @@
  * - `CacheProxy` — TcpProxy so Redis is reachable from a laptop
  * - `Data` — Bucket + Put/Get/Head/List/Delete
  * - `Echo` — image Service (`hashicorp/http-echo`, healthcheck + replicas)
- * - `Ping` — canvas Function (single TypeScript file, Bun runtime)
+ * - `Ping` — Effect-native Function (`src/ping.ts`, no registry)
+ * - `Cleanup` — canvas cron Function (`console.log("tick")`)
  * - `Api` — Effect HTTP Service (`src/api.ts`, healthcheck + replicas)
  * - `Worker` — Effect background Service that writes the volume
  *   (`src/worker.ts`)
@@ -32,16 +33,17 @@ import * as Railway from "alchemy/Railway";
 import * as Effect from "effect/Effect";
 import Api from "./src/api.ts";
 import { Echo } from "./src/echo.ts";
+import Ping from "./src/ping.ts";
 import {
   Cache,
   CacheProxy,
+  Cleanup,
   Data,
   DatabaseUrl,
   Db,
   Disk,
   Marker,
   Mysql,
-  Ping,
   Site,
   Staging,
 } from "./src/shared.ts";
@@ -66,6 +68,7 @@ export default Alchemy.Stack(
     const data = yield* Data;
     const echo = yield* Echo;
     const ping = yield* Ping;
+    const cleanup = yield* Cleanup;
     const worker = yield* Worker;
     const api = yield* Api;
     const backend = yield* Railway.Group("Backend", {
@@ -103,8 +106,9 @@ export default Alchemy.Stack(
       mysqlName: mysql.name,
       databaseUrlName: databaseUrl.name,
       pingUrl: ping.url,
+      cleanupId: cleanup.serviceId,
       groupId: backend.groupId,
-      redisServiceId: cache.serviceId;
+      redisServiceId: cache.serviceId,
       redisProxy: `${cacheProxy.domain}:${cacheProxy.proxyPort}`,
       bucketId: data.bucketId,
       echoUrl: echo.url,

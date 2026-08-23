@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import Ping from "./fixtures/ping.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -68,7 +69,12 @@ test.provider(
             project,
             source: HTTP_SOURCE,
           });
-          return { project, ping };
+          const job = yield* Railway.Function("Cleanup", {
+            project,
+            source: `console.log("tick");`,
+            cronSchedule: "0 * * * *",
+          });
+          return { project, ping, job };
         }),
       );
 
@@ -137,6 +143,17 @@ test.provider(
       );
       expect(body).toEqual("ok");
 
+      expect(created.job.serviceId).toEqual(expect.any(String));
+      expect(created.job.cronSchedule).toEqual("0 * * * *");
+      expect(created.job.url).toBeUndefined();
+      expect(created.job.domain).toBeUndefined();
+      const jobInstance = yield* railway.serviceInstance({
+        environmentId: created.job.environmentId,
+        serviceId: created.job.serviceId,
+      });
+      expect(jobInstance.cronSchedule).toEqual("0 * * * *");
+      expect(Railway.isFunctionImage(jobInstance.source?.image)).toEqual(true);
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.ping.serviceId);
@@ -147,4 +164,62 @@ test.provider(
       expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 480_000 },
+);
+
+test.provider(
+  "create, serve, and delete an Effect-native Function",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const ping = yield* Ping;
+          return { ping };
+        }),
+      );
+
+      expect(created.ping.serviceId).toEqual(expect.any(String));
+      expect(created.ping.runtime).toEqual("bun");
+      expect(Railway.isFunctionImage(created.ping.image)).toEqual(true);
+      expect(created.ping.code.hash).toEqual(expect.any(String));
+      expect(created.ping.domain).toContain("up.railway.app");
+      expect(created.ping.url).toEqual(`https://${created.ping.domain}`);
+
+      const instance = yield* railway.serviceInstance({
+        environmentId: created.ping.environmentId,
+        serviceId: created.ping.serviceId,
+      });
+      expect(Railway.isFunctionImage(instance.source?.image)).toEqual(true);
+      expect(instance.startCommand).toEqual(
+        expect.stringMatching(/^\.\/run\.sh /),
+      );
+
+      const client = yield* HttpClient.HttpClient;
+      const body = yield* client.get(created.ping.url!).pipe(
+        Effect.timeout("10 seconds"),
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.text
+            : res.text.pipe(
+                Effect.flatMap((text) =>
+                  Effect.fail(
+                    new Error(`function returned ${res.status}: ${text}`),
+                  ),
+                ),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.spaced("3 seconds"),
+          times: 5,
+        }),
+      );
+      expect(body).toEqual("ok");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.ping.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
