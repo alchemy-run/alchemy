@@ -17,6 +17,7 @@ import { createInternalTags, diffTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Assets } from "../Assets.ts";
 import {
+  type ArtifactFile,
   buildMicrovmDockerfile,
   bundleMicrovmProgram,
   DEFAULT_MICROVM_PORT,
@@ -82,6 +83,13 @@ const buildPropsIdentity = (news: MicrovmImageProps) =>
     additionalOsCapabilities: [...(news.additionalOsCapabilities ?? [])].sort(),
     hooks: news.hooks ?? null,
     env: news.env ?? {},
+    // Fingerprints only — the directory contents are hashed into the
+    // artifact at apply time; the fingerprint is the cheap plan-time
+    // identity that triggers the rebuild.
+    contextInclude: (news.contextInclude ?? []).map((include) => ({
+      to: include.to,
+      fingerprint: include.fingerprint ?? null,
+    })),
   });
 
 interface ResolvedArtifact {
@@ -169,6 +177,9 @@ const hasHostStatements = (news: MicrovmImageProps): boolean =>
 const resolveArtifact = Effect.fn(function* (
   news: MicrovmImageProps,
   session: ScopedPlanStatusSession,
+  /** The last deployed artifact — when the computed identity matches
+   *  its hash, packaging and upload are skipped entirely. */
+  existing?: { uri?: string; hash?: string },
 ) {
   const propsId = buildPropsIdentity(news);
 
@@ -201,10 +212,54 @@ const resolveArtifact = Effect.fn(function* (
       port,
       hostStatementsFor(news, yield* resolveImageArchitecture(news)),
     );
-    const hash = yield* sha256(`${bundleHash}:${dockerfile}:${propsId}`);
+    // `contextInclude` directories ride the artifact under their `to`
+    // prefixes. Their identity rides the artifact hash: when EVERY
+    // include declares a fingerprint, the fingerprints ARE the identity
+    // — computed without touching the filesystem, so an unchanged
+    // artifact skips the (potentially huge) read + zip + upload
+    // entirely. Only a fingerprint-less include falls back to reading
+    // the directory to derive a content id.
+    const includes = news.contextInclude ?? [];
+    const fingerprinted = includes.every((i) => i.fingerprint !== undefined);
+    const readIncludes = Effect.gen(function* () {
+      const includeFiles: ArtifactFile[] = [];
+      for (const include of includes) {
+        const entries = yield* readContextDirectory(include.from);
+        for (const entry of entries) {
+          includeFiles.push({
+            path: `${include.to}/${entry.path}`,
+            content: entry.content,
+          });
+        }
+      }
+      return includeFiles;
+    });
+
+    let includeFiles: ArtifactFile[] | undefined;
+    let includeId: string;
+    if (fingerprinted) {
+      includeId = includes
+        .map((i) => `${i.to}:${i.fingerprint}`)
+        .sort()
+        .join("|");
+    } else {
+      includeFiles = yield* readIncludes;
+      includeId = includeFiles
+        .map((f) => `${f.path}:${(f.content as Uint8Array).byteLength}`)
+        .sort()
+        .join("|");
+    }
+    const hash = yield* sha256(
+      `${bundleHash}:${dockerfile}:${propsId}:${includeId}`,
+    );
+    if (existing?.hash === hash && existing.uri !== undefined) {
+      return { uri: existing.uri, hash };
+    }
+    yield* session.note("Packaging MicroVM code artifact...");
     const archive = yield* zipFiles([
       { path: "Dockerfile", content: dockerfile },
       ...files,
+      ...(includeFiles ?? (yield* readIncludes)),
     ]);
     const assets = yield* Assets;
     const key = yield* assets.uploadAsset(hash, archive);
@@ -408,8 +463,13 @@ export const MicrovmImageProvider = () =>
       const baseImageArn =
         resolveBaseImageArn(news) ?? (yield* defaultBaseImageArn());
 
-      // Resolve + upload the artifact and compute its build identity.
-      const artifact = yield* resolveArtifact(news, session);
+      // Resolve the artifact's build identity — packaging + upload are
+      // skipped when it matches the deployed artifact.
+      const artifact = yield* resolveArtifact(
+        news,
+        session,
+        output?.codeArtifact,
+      );
 
       // Observe — prefer the cached ARN; otherwise look up by name (a name
       // is not a valid `getMicrovmImage` identifier).
@@ -607,9 +667,13 @@ const waitForReady = (imageArn: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ImageBuilding",
+      // 30 minutes: image builds run a full Dockerfile server-side — an
+      // image that BAKES a repository (clone + install + type-check,
+      // e.g. the org sandbox) legitimately needs far more than a slim
+      // tools-only image.
       schedule: Schedule.max([
         Schedule.fixed(10_000),
-        Schedule.recurs(72),
+        Schedule.recurs(180),
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session.note(`Waiting for MicroVM image build... (${attempt * 10}s)`),

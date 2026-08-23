@@ -72,6 +72,22 @@ export interface MicrovmImageProps {
   dockerfile?: string;
 
   /**
+   * **Effectful mode.** Extra directories copied VERBATIM into the
+   * generated build context, each mounted under its `to` prefix
+   * alongside the Dockerfile and bundled program — reference them from
+   * {@link dockerfile} with `COPY <to>/ ...`. `fingerprint` is an
+   * opaque content identity for the directory (e.g. a git commit): it
+   * participates in the props diff and the artifact hash, so a changed
+   * fingerprint rebuilds the image without the planner having to hash
+   * the directory's contents on every plan.
+   */
+  contextInclude?: Array<{
+    from: string;
+    to: string;
+    fingerprint?: string;
+  }>;
+
+  /**
    * The port the in-VM HTTP server listens on (effectful mode).
    * @default 8080
    */
