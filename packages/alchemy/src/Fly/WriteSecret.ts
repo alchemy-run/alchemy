@@ -20,13 +20,12 @@ import type { Secret } from "./Secret.ts";
  * mints an App deploy token. Inside an Action, the ambient
  * `FLY_API_TOKEN` is used.
  *
- * @binding
  *
- * @section Create
+ * ### Create
  * Bind the client in init. Provide {@link WriteSecretHttp}. Wrap
  * values with `Redacted.make`.
  *
- * @example Create a secret
+ * **Example:** Create a secret
  * ```typescript
  * const Seed = Alchemy.Action(
  *   "Seed",
@@ -40,21 +39,23 @@ import type { Secret } from "./Secret.ts";
  * );
  * ```
  *
- * @section Update
+ * ### Update
  * `update` rotates by name (batch of one).
  *
- * @example Rotate
+ * **Example:** Rotate
  * ```typescript
  * yield* secrets.update("API_KEY", Redacted.make("sk_live_rotated"));
  * ```
  *
- * @section Delete
+ * ### Delete
  * `delete` removes a secret by name.
  *
- * @example Delete
+ * **Example:** Delete
  * ```typescript
  * yield* secrets.delete("API_KEY");
  * ```
+ *
+ * @binding
  */
 export interface WriteSecret extends Binding.Service<
   WriteSecret,

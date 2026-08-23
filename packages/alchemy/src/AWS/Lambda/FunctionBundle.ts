@@ -29,7 +29,7 @@ import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { Self } from "../../Self.ts";
 import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { zipCode, zipFiles, type ZipFile } from "../../Util/zip.ts";
-import type { FunctionArchitecture, FunctionProps } from "./Function.ts";
+import type { FunctionArchitecture, FunctionZipProps } from "./Function.ts";
 
 /**
  * Evaluates a user-supplied Rolldown `external` option (string, RegExp, array,
@@ -137,9 +137,9 @@ export const makeFunctionBundler = Effect.gen(function* () {
   });
 
   const resolveBundlePlan: (
-    props: FunctionProps,
+    props: FunctionZipProps,
   ) => Effect.Effect<FunctionBundlePlan, any, any> = Effect.fn(function* (
-    props: FunctionProps,
+    props: FunctionZipProps,
   ) {
     const {
       output: buildOutput,
@@ -416,10 +416,10 @@ export default handler;
 
   const bundleCode: (
     id: string,
-    props: FunctionProps,
+    props: FunctionZipProps,
   ) => Effect.Effect<FunctionBundleResult, any, any> = Effect.fn(function* (
     _id: string,
-    props: FunctionProps,
+    props: FunctionZipProps,
   ) {
     if (props.bundle === false) {
       const realMain = yield* TempRoot.resolveMainPath(props.main);

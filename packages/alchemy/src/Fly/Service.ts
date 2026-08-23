@@ -39,6 +39,7 @@ import {
   toEnvRecord,
   type FlyBuildOptions,
   type FlyHostRuntimeContext,
+  type HostedProgramProps,
 } from "./hosted.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
@@ -192,10 +193,9 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * A Service is an Effect program running in a Fly.io Machine. Set
  * `count` to scale it up or down. Several Services share one {@link App}.
  *
- * @resource
  * @see https://fly.io/docs/machines/api/machines-resource/
  *
- * @section Declare a Service
+ * ### Declare a Service
  * A Service is a class. Props describe the Machine. The Effect is the
  * program that runs on it.
  *
@@ -205,7 +205,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * Docker image (default `oven/bun:1`), and pushes it to
  * `registry.fly.io/{app}:{id}-{hash}`.
  *
- * @example Class + App + main
+ * **Example:** Class + App + main
  * ```typescript
  * // src/api.ts
  * import * as Fly from "alchemy/Fly";
@@ -225,11 +225,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * The new App gets a new replica set. The old Machines are deleted.
  * :::
  *
- * @section Serve HTTP with fetch
+ * ### Serve HTTP with fetch
  * Return `fetch` from the init Effect to boot an HTTP server. Omit
  * `fetch` for a background service.
  *
- * @example Hello
+ * **Example:** Hello
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -242,11 +242,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Pin a region
+ * ### Pin a region
  * Fly Machines live in a region. Default is `iad`. See
  * [Regions](/fly/compute/regions) for the list of codes.
  *
- * @example Region
+ * **Example:** Region
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -264,11 +264,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * deleted.
  * :::
  *
- * @section Set the port
+ * ### Set the port
  * `port` is the port the process listens on inside the Machine.
  * Alchemy writes it to `PORT`. Default is `3000`.
  *
- * @example Port 3000
+ * **Example:** Port 3000
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -281,13 +281,13 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section The public URL
+ * ### The public URL
  * Yield the Service in the Stack. `api.url` is
  * `https://{appName}.fly.dev`. Alchemy does not create this hostname.
  * It is the parent {@link App}'s fly.dev name. The Service does not
  * get its own URL.
  *
- * @example Stack output
+ * **Example:** Stack output
  * ```typescript
  * export default Alchemy.Stack(
  *   "MyApp",
@@ -307,11 +307,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * one public Service on an App. Use `services: []` for workers.
  * :::
  *
- * @section Fly's proxy is the load balancer
+ * ### Fly's proxy is the load balancer
  * There is no LoadBalancer resource. Fly runs an Anycast proxy at
  * the edge.
  *
- * @example Published ports
+ * **Example:** Published ports
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -331,12 +331,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * TLS on 443, picks one started Machine that published this service,
  * and forwards to `port` where `fetch` runs.
  *
- * @section An address so it answers
+ * ### An address so it answers
  * `{app}.fly.dev` does not answer over IPv4 until the App has an
  * {@link IpAssignment}. Allocate a shared Anycast IPv4 on the same
  * App and yield it next to the Service.
  *
- * @example shared_v4
+ * **Example:** shared_v4
  * ```typescript
  * export const PublicIp = Fly.IpAssignment("Shared", {
  *   app: Site,
@@ -352,13 +352,13 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * });
  * ```
  *
- * @section Scale with count
+ * ### Scale with count
  * `count` is how many Machines to keep running. Default is `1`. They
  * all publish the same proxy service, so they all sit behind
  * `{app}.fly.dev`. Fly's proxy picks one Machine per request. Each
  * replica gets its own Volume from every {@link MountVolume} binding.
  *
- * @example Three replicas
+ * **Example:** Three replicas
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -371,7 +371,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Config
+ * ### Config
  * Yield `Config` in init. Alchemy reads the value from the env of
  * whoever deploys and writes it onto the Machine. Do not pass
  * `env: { ... }` on a Service.
@@ -383,7 +383,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * For a secret Fly should own and inject into every Machine on the
  * App, use {@link Secret}.
  *
- * @example Config.redacted
+ * **Example:** Config.redacted
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as Redacted from "effect/Redacted";
@@ -404,12 +404,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Mount a disk
+ * ### Mount a disk
  * Bind {@link MountVolume} inside init. App and region come from the
  * Service. `count: 3` creates three Volumes, one per replica. Provide
  * {@link MountVolumeLive}.
  *
- * @example Per-replica disk
+ * **Example:** Per-replica disk
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -427,12 +427,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Guest size
+ * ### Guest size
  * `guest` is CPU kind, CPU count, and memory. Default is shared-cpu,
  * 1 CPU, 256 MB. Set `gpuKind` and `gpus` for a GPU. Guest updates in
  * place.
  *
- * @example Bigger guest
+ * **Example:** Bigger guest
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -451,11 +451,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section A stable name
+ * ### A stable name
  * Machine names are unique per App. Omit `name` and Alchemy generates
  * one from the stack, stage, and logical ID.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -473,11 +473,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * deletes the old replica set.
  * :::
  *
- * @section Named export
+ * ### Named export
  * `handler` is the named export to load from `main`. Default is
  * `"default"`.
  *
- * @example Custom handler
+ * **Example:** Custom handler
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -490,12 +490,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Base image
+ * ### Base image
  * `image` is the generated Dockerfile's `FROM`. Default is
  * `oven/bun:1`. It must still run bun. A content-hash change of
  * `main` updates the Machine in place.
  *
- * @example Override FROM
+ * **Example:** Override FROM
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -513,12 +513,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Custom proxy services
+ * ### Custom proxy services
  * `services` defaults to HTTP 80 + HTTPS 443 toward `port`. Pass a
  * custom list to change handlers or autostop. Pass `[]` so Fly does
  * not publish a proxy.
  *
- * @example Unpublished process
+ * **Example:** Unpublished process
  * ```typescript
  * export default class Worker extends Fly.Service<Worker>()(
  *   "Worker",
@@ -529,11 +529,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Background services
+ * ### Background services
  * Omit `port` and `fetch`. Pass `services: []`. Use `ServerHost.run`
  * for a long-running loop. If the process exits, Fly restarts it.
  *
- * @example ServerHost.run
+ * **Example:** ServerHost.run
  * ```typescript
  * import { ServerHost } from "alchemy/Server";
  *
@@ -552,12 +552,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Bundle config
+ * ### Bundle config
  * `build` is Rolldown `input` / `output` overrides plus
  * pure-annotation options. Use it when `main` needs extra entry
  * points or externals.
  *
- * @example Externals
+ * **Example:** Externals
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -575,7 +575,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @example Install `pg` unbundled
+ * **Example:** Install `pg` unbundled
  * `pg` is CommonJS. Rolldown's interop turns `Client` into a namespace.
  * Install it into the image so `@effect/sql-pg` / `Drizzle.Postgres` load
  * it with Node's CJS semantics — same `build.install` as Lambda.
@@ -601,11 +601,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Multiple Services, one App
+ * ### Multiple Services, one App
  * Each Service has its own Machines, image, and lifecycle. Point
  * several at the same `app`.
  *
- * @example API and worker
+ * **Example:** API and worker
  * ```typescript
  * class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -625,6 +625,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   }),
  * ) {}
  * ```
+ *
+ * @resource
  */
 export const Service: Platform<
   Service,
@@ -870,27 +872,48 @@ export const ServiceProvider = () =>
         nuke: { dependsOn: ["Fly.App"] },
 
         diff: Effect.fn(function* ({ id, news, output }) {
-          if (news === undefined || !isResolved(news)) return undefined;
-          if (output === undefined) return undefined;
-          const desiredAppName = appNameOf(news.app);
-          const appChanged =
-            desiredAppName !== undefined && desiredAppName !== output.appName;
-          const desiredName =
-            news.name !== undefined
-              ? sanitizeFlyAppName(news.name)
-              : output.name;
-          const nameChanged = desiredName !== output.name;
-          const desiredRegion = news.region ?? DEFAULT_REGION;
-          const regionChanged = desiredRegion !== output.region;
-          if (appChanged || nameChanged || regionChanged) {
-            return {
-              action: "replace" as const,
-              deleteFirst: nameChanged === false && appChanged === false,
-            };
+          if (news === undefined || output === undefined) return undefined;
+          if (isResolved(news)) {
+            const desiredAppName = appNameOf(news.app);
+            const appChanged =
+              desiredAppName !== undefined && desiredAppName !== output.appName;
+            const desiredName =
+              news.name !== undefined
+                ? sanitizeFlyAppName(news.name)
+                : output.name;
+            const nameChanged = desiredName !== output.name;
+            const desiredRegion = news.region ?? DEFAULT_REGION;
+            const regionChanged = desiredRegion !== output.region;
+            if (appChanged || nameChanged || regionChanged) {
+              return {
+                action: "replace" as const,
+                deleteFirst: nameChanged === false && appChanged === false,
+              };
+            }
           }
-          const hash = yield* hosted.hash(news);
-          if (hash !== output.code.hash) {
-            return { action: "update" as const };
+          // The code hash depends only on statically-known props (`main`,
+          // `build`, `image`, `port`). Never gate it on the WHOLE props
+          // being resolved: `app` is a resource reference that stays
+          // unresolved at diff time, so a whole-props guard makes
+          // code-only changes silently noop. By diff time the
+          // effect-config form has been evaluated, so the object view is
+          // safe to read.
+          const statics = news as Partial<
+            Pick<ServiceProps, "main" | "build" | "image" | "port">
+          >;
+          if (
+            isResolved({
+              main: statics.main,
+              build: statics.build,
+              image: statics.image,
+              port: statics.port,
+            }) &&
+            statics.main !== undefined
+          ) {
+            const hash = yield* hosted.hash(statics as HostedProgramProps);
+            if (hash !== output.code.hash) {
+              return { action: "update" as const };
+            }
           }
           return undefined;
         }),

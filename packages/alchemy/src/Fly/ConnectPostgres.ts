@@ -13,7 +13,7 @@ import type { Postgres } from "./Postgres.ts";
  * `ConnectPostgres` is the Context tag, the type, and the callable —
  * `yield* Fly.ConnectPostgres(Db)`. Provide {@link ConnectPostgresHttp}.
  *
- * @example Bind Postgres in a Service
+ * **Example:** Bind Postgres in a Service
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Postgres";
  *
@@ -26,8 +26,6 @@ import type { Postgres } from "./Postgres.ts";
  * ```
  *
  * @binding
- * @product Fly
- * @category Storage & Databases
  */
 export interface ConnectPostgres extends Binding.Service<
   ConnectPostgres,

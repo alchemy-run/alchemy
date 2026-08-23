@@ -69,17 +69,18 @@ const firstUrl = (
  * runtime the client reads `process.env` (`FLY_POSTGRES_*`, then
  * Fly's `DATABASE_URL` secret).
  *
- * @layer
- * @provides Fly.ConnectPostgres
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const conn = yield* Fly.ConnectPostgres(Db);
  *   const db = yield* Drizzle.Postgres(conn.connectionString);
  * }).pipe(Effect.provide(Fly.ConnectPostgresHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.ConnectPostgres
  */
 export const ConnectPostgresHttp = Layer.effect(
   ConnectPostgres,

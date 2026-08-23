@@ -10,15 +10,16 @@ import type { WriteRedisClient } from "./WriteRedis.ts";
  * `ReadWriteRedis` is the Context tag, the type, and the callable —
  * `yield* Fly.ReadWriteRedis(Cache)`. Provide {@link ReadWriteRedisHttp}.
  *
- * @binding
  *
- * @section Read and write
- * @example Round-trip a key
+ * ### Read and write
+ * **Example:** Round-trip a key
  * ```typescript
  * const cache = yield* Fly.ReadWriteRedis(Cache);
  * yield* cache.set("marker", "hello");
  * const value = yield* cache.get("marker");
  * ```
+ *
+ * @binding
  */
 export interface ReadWriteRedis extends Binding.Service<
   ReadWriteRedis,

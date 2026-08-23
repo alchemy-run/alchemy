@@ -108,14 +108,13 @@ export type Certificate = Resource<
  * ports. Fly's proxy terminates TLS on 443 once the certificate is
  * `configured`.
  *
- * @resource
  * @see https://fly.io/docs/machines/api/certificates-resource/
  *
- * @section ACME certificates
+ * ### ACME certificates
  * Request Let's Encrypt for a hostname. The Service does not change.
  * Yield the certificate in the Stack. Point DNS at the App.
  *
- * @example Let's Encrypt
+ * **Example:** Let's Encrypt
  * ```typescript
  * export const Www = Fly.Certificate("Www", {
  *   app: Site,
@@ -132,7 +131,7 @@ export type Certificate = Resource<
  * The certificate is created on the new App or with the new issuer.
  * :::
  *
- * @section DNS
+ * ### DNS
  * Point an A record at a `shared_v4` {@link IpAssignment} and an AAAA
  * at `v6`. Plus whatever `dnsRequirements` lists for the ACME
  * challenge. Alchemy re-checks via `checkAppCertificate` while
@@ -141,7 +140,7 @@ export type Certificate = Resource<
  * Observed attrs include `status`, `configured`, `acmeRequested`,
  * `dnsRequirements`, and `validation`.
  *
- * @example Yield next to a Service
+ * **Example:** Yield next to a Service
  * ```typescript
  * export default Alchemy.Stack(
  *   "MyApp",
@@ -161,12 +160,12 @@ export type Certificate = Resource<
  * );
  * ```
  *
- * @section Custom certificates
+ * ### Custom certificates
  * `"custom"` uploads `fullchain` and `privateKey`. Wrap the key with
  * `Redacted.make` so it never logs. Never stored in attributes.
  * Updating the PEM re-uploads in place.
  *
- * @example Upload a PEM
+ * **Example:** Upload a PEM
  * ```typescript
  * export const Www = Fly.Certificate("Www", {
  *   app: Site,
@@ -176,6 +175,8 @@ export type Certificate = Resource<
  *   privateKey: Redacted.make(key),
  * });
  * ```
+ *
+ * @resource
  */
 export const Certificate = Resource<Certificate>("Fly.Certificate");
 

@@ -119,7 +119,10 @@ await writeFile(
 );
 
 await $`pnpm install --lockfile-only`.cwd(root).quiet();
-await $`bun validate:publish-packages`.cwd(root);
+// stdout is piped into $GITHUB_OUTPUT by the workflow, so keep subcommand
+// logs on stderr — only the key=value lines below may reach stdout.
+const validation = await $`bun validate:publish-packages`.cwd(root).quiet();
+console.error(validation.stdout.toString().trimEnd());
 
 const tag = forceLatest
   ? "latest"

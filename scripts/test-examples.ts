@@ -9,6 +9,7 @@ const examples = [
   "./examples/cloudflare-vue",
   "./examples/cloudflare-solidstart",
   "./examples/cloudflare-foldkit",
+  "./examples/cloudflare-foldkit-ssr",
   "./examples/cloudflare-octane",
   "./examples/cloudflare-website-astro",
   "./examples/cloudflare-website-nextjs",

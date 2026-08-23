@@ -66,14 +66,13 @@ export type VolumeSnapshot = Resource<
  * subsequent list. Destroy is a no-op. Snapshots follow Volume
  * retention. `nuke` skips this type.
  *
- * @resource
  * @see https://fly.io/docs/machines/api/volumes-resource/
  *
- * @section Create a snapshot
+ * ### Create a snapshot
  * Point it at a Volume id from the parent {@link Machine} or
  * {@link Service} (`mounts[0].volumeId`).
  *
- * @example Snapshot a mounted disk
+ * **Example:** Snapshot a mounted disk
  * ```typescript
  * const box = yield* Fly.Machine("Box", {
  *   app: Site,
@@ -93,11 +92,11 @@ export type VolumeSnapshot = Resource<
  * It follows Volume `snapshot_retention`.
  * :::
  *
- * @section Restore
+ * ### Restore
  * Restore into a new disk with `snapshotId` on the mount. Create-only.
  * The new Machine gets a copy. The original Volume is unchanged.
  *
- * @example Restore onto a Machine
+ * **Example:** Restore onto a Machine
  * ```typescript
  * const restored = yield* Fly.Machine("Restored", {
  *   app: Site,
@@ -107,10 +106,10 @@ export type VolumeSnapshot = Resource<
  * });
  * ```
  *
- * @section Restore into a Service
+ * ### Restore into a Service
  * Pass `snapshotId` on {@link MountVolume}. Same create-only rule.
  *
- * @example Restore onto a Service
+ * **Example:** Restore onto a Service
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -127,6 +126,8 @@ export type VolumeSnapshot = Resource<
  *   }).pipe(Effect.provide(Fly.MountVolumeLive)),
  * ) {}
  * ```
+ *
+ * @resource
  */
 export const VolumeSnapshot = Resource<VolumeSnapshot>("Fly.VolumeSnapshot");
 

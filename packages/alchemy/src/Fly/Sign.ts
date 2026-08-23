@@ -1,4 +1,5 @@
 import type { SignSecretKeyError } from "@distilled.cloud/fly-io/machines";
+import type { FlyKmsError } from "./Errors.ts";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -17,19 +18,20 @@ export interface SignResult {
  * Sign with a Fly {@link SecretKey} (`nacl_sign`, `hs256`, `es256`,
  * …). The private key never leaves Fly KMS.
  *
- * @binding
  *
- * @section Sign a payload
+ * ### Sign a payload
  * The App and key name are fixed by `Sign(key)`. Provide
  * {@link SignHttp} on the Action or Service Effect.
  *
- * @example Sign
+ * **Example:** Sign
  * ```typescript
  * const sign = yield* Fly.Sign(Signing);
  * const { signature } = yield* sign({
  *   plaintext: new TextEncoder().encode("release-manifest-v1"),
  * });
  * ```
+ *
+ * @binding
  */
 export interface Sign extends Binding.Service<
   Sign,
@@ -39,7 +41,11 @@ export interface Sign extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SignRequest,
-    ) => Effect.Effect<SignResult, SignSecretKeyError, RuntimeContext>
+    ) => Effect.Effect<
+      SignResult,
+      SignSecretKeyError | FlyKmsError,
+      RuntimeContext
+    >
   >
 > {}
 

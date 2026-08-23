@@ -58,8 +58,8 @@ export const makeHttpSecretBinding = <
       if (globalThis.__ALCHEMY_RUNTIME__) {
         return options.makeClient(
           auth,
-          Config.string("FLY_APP_NAME"),
-          Config.string(secretNameKey),
+          envName("FLY_APP_NAME"),
+          envName(secretNameKey),
         );
       }
 
@@ -106,7 +106,7 @@ export const makeHttpAppBinding = <Client>(options: {
       if (globalThis.__ALCHEMY_RUNTIME__) {
         return options.makeClient(
           makeSecretAuth(context),
-          Config.string("FLY_APP_NAME"),
+          envName("FLY_APP_NAME"),
         );
       }
 
@@ -142,7 +142,9 @@ export interface SecretAuth {
 export const makeSecretAuth = (
   ambient: Context.Context<Credentials | HttpClient.HttpClient>,
 ): SecretAuth => ({
-  authorize: (eff) => {
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return eff.pipe(
         Effect.provide(CredentialsFromEnv),
@@ -150,7 +152,11 @@ export const makeSecretAuth = (
         Effect.timeout("8 seconds"),
       ) as Effect.Effect<A, E, RuntimeContext>;
     }
-    return eff.pipe(Effect.provideContext(ambient));
+    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<
+      A,
+      E,
+      RuntimeContext
+    >;
   },
 });
 
@@ -184,7 +190,9 @@ const flyMachineFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 export const makeKmsAuth = (
   ambient: Context.Context<Credentials | HttpClient.HttpClient>,
 ): SecretAuth => ({
-  authorize: (eff) => {
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return eff.pipe(
         Effect.provide(FetchHttpClient.layer),
@@ -198,9 +206,21 @@ export const makeKmsAuth = (
         Effect.timeout("8 seconds"),
       ) as Effect.Effect<A, E, RuntimeContext>;
     }
-    return eff.pipe(Effect.provideContext(ambient));
+    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<
+      A,
+      E,
+      RuntimeContext
+    >;
   },
 });
+
+/**
+ * Read a required env var inside a deployed host. The binding writes it
+ * during reconcile, so a missing value is a defect, not a recoverable
+ * error — keep the client's error channel free of `ConfigError`.
+ */
+const envName = (key: string): Effect.Effect<string> =>
+  Config.string(key).pipe(Effect.orDie);
 
 const toNameEffect = (value: unknown): Effect.Effect<string> => {
   if (typeof value === "string") return Effect.succeed(value);

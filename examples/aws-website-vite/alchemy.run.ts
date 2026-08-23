@@ -51,25 +51,16 @@ export default Alchemy.Stack(
           }
         : undefined;
 
-    const router = yield* AWS.Website.Router("FrontendRouter", {
+    // A standalone site: it owns its own CloudFront distribution. To serve
+    // several sites from one front door, see `examples/aws-router`.
+    //
+    // `alchemy deploy` runs `vite build` and serves the output from S3;
+    // `alchemy dev` runs Vite's own dev server (HMR included) and the site's
+    // url is the local server — no cloud resources are created.
+    const site = yield* AWS.Website.Vite("FrontendSite", {
       domain: websiteDomain,
       invalidation: {
         paths: "all",
-      },
-      tags: {
-        Example: "aws-website-vite",
-        Surface: "website",
-        Mode: "router",
-      },
-    });
-
-    // `alchemy deploy` runs `vite build` and serves the output from S3
-    // through the Router; `alchemy dev` runs Vite's own dev server (HMR
-    // included) and the site's url is the local server — no cloud
-    // resources are created.
-    const site = yield* AWS.Website.Vite("FrontendSite", {
-      domain: {
-        router,
       },
       tags: {
         Example: "aws-website-vite",
@@ -79,14 +70,13 @@ export default Alchemy.Stack(
 
     return {
       url: site.url,
-      cloudFrontDomain: router.distribution.domainName,
-      distributionId: router.distribution.distributionId,
+      cloudFrontDomain: site.distribution?.domainName,
+      distributionId: site.distribution?.distributionId,
       bucketName: site.bucket?.bucketName,
       buildHash: site.build?.hash,
       assetVersion: site.files?.version,
-      certificateArn: router.certificate?.certificateArn as any,
+      certificateArn: site.certificate?.certificateArn as any,
       customDomain: websiteDomain?.name,
-      aliasRecordNames: router.records.map((record) => record.name),
     };
   }),
 );

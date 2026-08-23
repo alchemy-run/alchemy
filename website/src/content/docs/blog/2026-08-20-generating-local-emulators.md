@@ -29,7 +29,7 @@ and every red test is a fidelity bug that arrives with its own
 reproduction. This is how `alchemy dev` for AWS works. Your
 stack runs on your machine with no AWS account and no
 credentials. It shipped in
-[2.0.0-beta.73](/blog/2026-08-20-beta-73).
+[2.0.0-beta.74](/blog/2026-08-21-beta-74).
 
 ## We forked floci
 
@@ -128,7 +128,7 @@ built on workerd itself and held to the same live suites. AWS
 now joins it. The next provider the factory brings up will ship
 all three artifacts together.
 
-- [2.0.0-beta.73 — the release AWS local dev shipped in](/blog/2026-08-20-beta-73)
+- [2.0.0-beta.74 — the release AWS local dev shipped in](/blog/2026-08-21-beta-74)
 - [AWS local development](/aws/local-development)
 - [Looping the Generation of IaC and SDKs — the first post in this series](/blog/2026-07-02-cloudflare-resource-factory)
 - [alchemy-run/floci — the fork](https://github.com/alchemy-run/floci)

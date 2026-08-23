@@ -2,7 +2,6 @@ import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -11,6 +10,7 @@ import * as Binding from "../Binding.ts";
 import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import { TigrisCredentialsMissing } from "./Errors.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 
 /**
@@ -24,12 +24,6 @@ import type { ServiceBinding } from "./MountVolume.ts";
  *
  * NOT exported from `index.ts`.
  */
-export class TigrisCredentialsMissing extends Data.TaggedError(
-  "Fly.TigrisCredentialsMissing",
-)<{
-  name: string;
-}> {}
-
 export interface TigrisS3Scope {
   bucketName: string;
   accessKeyId: string;
@@ -106,7 +100,7 @@ const scopeFromEnv = Effect.gen(function* () {
     endpoint,
     region: region as RegionName,
   } satisfies TigrisS3Scope;
-});
+}).pipe(Effect.orDie);
 
 const authorizeS3 = <A, E>(
   scope: TigrisS3Scope,

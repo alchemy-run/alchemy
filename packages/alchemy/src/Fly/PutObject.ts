@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./Errors.ts";
 
 export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
 
@@ -13,10 +14,9 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  * bucket name, endpoint, and credentials are injected automatically.
  * Provide {@link PutObjectHttp}.
  *
- * @binding
  *
- * @section Writing Objects
- * @example Put an Object
+ * ### Writing Objects
+ * **Example:** Put an Object
  * ```typescript
  * const putObject = yield* Fly.PutObject(Data);
  *
@@ -26,6 +26,8 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  *   ContentType: "text/plain",
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutObject extends Binding.Service<
   PutObject,
@@ -35,7 +37,11 @@ export interface PutObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutObjectRequest,
-    ) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError, RuntimeContext>
+    ) => Effect.Effect<
+      S3.PutObjectOutput,
+      S3.PutObjectError | TigrisCredentialsMissing,
+      RuntimeContext
+    >
   >
 > {}
 

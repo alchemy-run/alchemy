@@ -114,15 +114,14 @@ export type Redis = Resource<
  * uses it internally. Redis is not reachable from CI — drive it over
  * HTTP.
  *
- * @resource
  * @see https://fly.io/docs/upstash/redis/
  *
- * @section Create Redis
+ * ### Create Redis
  * Alchemy generates a unique name unless you pass one. Default region is
  * `iad`. Default plan is the cheapest `addOnPlans` row (free or
  * pay-as-you-go).
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const cache = yield* Fly.Redis("Cache");
  * ```
@@ -132,10 +131,10 @@ export type Redis = Resource<
  * reclaimable.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you want a stable Upstash database name.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const cache = yield* Fly.Redis("Cache", {
  *   name: "my-cache",
@@ -153,11 +152,11 @@ export type Redis = Resource<
  * because the name cannot exist twice.
  * :::
  *
- * @section Bind from a Service
+ * ### Bind from a Service
  * Yield {@link ReadWriteRedis} (or {@link ReadRedis} / {@link WriteRedis})
  * in Service init. Provide the matching `*Http` layer.
  *
- * @example Read and write
+ * **Example:** Read and write
  * ```typescript
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
@@ -179,20 +178,20 @@ export type Redis = Resource<
  * ) {}
  * ```
  *
- * @section Eviction
+ * ### Eviction
  * Enable eviction for cache workloads. Updated in place.
  *
- * @example Eviction
+ * **Example:** Eviction
  * ```typescript
  * const cache = yield* Fly.Redis("Cache", {
  *   eviction: true,
  * });
  * ```
  *
- * @section Read replicas
+ * ### Read replicas
  * `readRegions` are extra replica regions. Updated in place.
  *
- * @example Replica region
+ * **Example:** Replica region
  * ```typescript
  * const cache = yield* Fly.Redis("Cache", {
  *   primaryRegion: "iad",
@@ -200,11 +199,11 @@ export type Redis = Resource<
  * });
  * ```
  *
- * @section Plan
+ * ### Plan
  * Omit `plan` for the cheapest listed plan. Pass a plan id or display
  * name to pin one. Fixed plans are billed.
  *
- * @example Pin pay-as-you-go
+ * **Example:** Pin pay-as-you-go
  * ```typescript
  * const cache = yield* Fly.Redis("Cache", {
  *   plan: "Pay-as-you-go",
@@ -215,6 +214,8 @@ export type Redis = Resource<
  * Fixed plans are billed monthly. Prefer omitting `plan` unless you
  * need a specific size.
  * :::
+ *
+ * @resource
  */
 export const Redis = Resource<Redis>("Fly.Redis");
 
@@ -481,30 +482,37 @@ const ensureTos = (orgSlug: string, organizationId: string) =>
 
 const waitUntilReady = (id: string, name: string) =>
   findRedisAddOn({ id, name }).pipe(
-    Effect.flatMap((row) => {
-      if (row === undefined) {
-        return Effect.fail(
-          new RedisPending({ redisId: id, status: "missing" }),
-        );
-      }
-      if (failedStatus(row.status)) {
-        return Effect.fail(
-          new RedisNotCreated({
-            name: row.name ?? name,
-            errorMessage: row.errorMessage ?? row.status ?? undefined,
-          }),
-        );
-      }
-      if (pendingStatus(row.status)) {
-        return Effect.fail(
-          new RedisPending({
-            redisId: id,
-            status: row.status ?? "provisioning",
-          }),
-        );
-      }
-      return Effect.succeed(row);
-    }),
+    Effect.flatMap(
+      (
+        row,
+      ): Effect.Effect<
+        AddOnsResponseEdgesItemNode,
+        RedisPending | RedisNotCreated
+      > => {
+        if (row === undefined) {
+          return Effect.fail(
+            new RedisPending({ redisId: id, status: "missing" }),
+          );
+        }
+        if (failedStatus(row.status)) {
+          return Effect.fail(
+            new RedisNotCreated({
+              name: row.name ?? name,
+              errorMessage: row.errorMessage ?? row.status ?? undefined,
+            }),
+          );
+        }
+        if (pendingStatus(row.status)) {
+          return Effect.fail(
+            new RedisPending({
+              redisId: id,
+              status: row.status ?? "provisioning",
+            }),
+          );
+        }
+        return Effect.succeed(row);
+      },
+    ),
     Effect.retry({
       while: (error) => error._tag === "Fly.RedisPending",
       times: 10,
@@ -667,7 +675,7 @@ export const RedisProvider = () =>
         return yield* new RedisOrgMissing({ orgSlug });
       }
 
-      let current =
+      let current: ObservedRedis | undefined =
         output?.redisId !== undefined
           ? yield* findRedisAddOn({
               id: output.redisId,

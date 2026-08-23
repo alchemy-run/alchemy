@@ -10,17 +10,18 @@ import { makeHttpSpriteBinding } from "./SpriteHttp.ts";
  * HTTP implementation of {@link Exec}. Provide it on the
  * {@link Sprite}, {@link Service}, or Action Effect.
  *
- * @layer
- * @provides Fly.Exec
  *
- * @section Provide the layer
- * @example On a Sprite
+ * ### Provide the layer
+ * **Example:** On a Sprite
  * ```typescript
  * Effect.gen(function* () {
  *   const exec = yield* Fly.Exec(Box);
  *   // ...
  * }).pipe(Effect.provide(Fly.ExecHttp))
  * ```
+ *
+ * @layer
+ * @provides Fly.Exec
  */
 export const ExecHttp = Layer.effect(
   Exec,

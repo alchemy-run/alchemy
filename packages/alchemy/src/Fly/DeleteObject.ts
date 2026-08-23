@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./Errors.ts";
 
 export interface DeleteObjectRequest extends Omit<
   S3.DeleteObjectRequest,
@@ -15,14 +16,15 @@ export interface DeleteObjectRequest extends Omit<
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link DeleteObjectHttp}.
  *
- * @binding
  *
- * @section Deleting Objects
- * @example Delete an Object
+ * ### Deleting Objects
+ * **Example:** Delete an Object
  * ```typescript
  * const deleteObject = yield* Fly.DeleteObject(Data);
  * yield* deleteObject({ Key: "hello.txt" });
  * ```
+ *
+ * @binding
  */
 export interface DeleteObject extends Binding.Service<
   DeleteObject,
@@ -34,7 +36,7 @@ export interface DeleteObject extends Binding.Service<
       request: DeleteObjectRequest,
     ) => Effect.Effect<
       S3.DeleteObjectOutput,
-      S3.DeleteObjectError,
+      S3.DeleteObjectError | TigrisCredentialsMissing,
       RuntimeContext
     >
   >

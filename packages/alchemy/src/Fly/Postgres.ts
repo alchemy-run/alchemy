@@ -160,14 +160,13 @@ export type Postgres = Resource<
  * A Fly.Postgres is a Managed Postgres (MPG) cluster. It is billed.
  * Do not wrap unmanaged `fly postgres`.
  *
- * @resource
  * @see https://fly.io/docs/mpg/create-and-connect/
  *
- * @section Create a cluster
+ * ### Create a cluster
  * `region` is required. Alchemy generates a unique name unless you
  * pass one. Omit `name` in tests and CI.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -178,11 +177,11 @@ export type Postgres = Resource<
  * Managed Postgres is billed. Basic is about $38 per month.
  * :::
  *
- * @section Plan
+ * ### Plan
  * `plan` is the hardware size: `basic`, `starter`, `launch`,
  * `scale`, `performance`. Default is `basic`.
  *
- * @example Starter
+ * **Example:** Starter
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -194,11 +193,11 @@ export type Postgres = Resource<
  * Changing `plan` later is ignored. Fly has no cluster update API.
  * :::
  *
- * @section Region
+ * ### Region
  * The cluster is regional. An {@link App} is global. Pass `region`
  * on the cluster, not on the App.
  *
- * @example Pin a region
+ * **Example:** Pin a region
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "lhr",
@@ -210,10 +209,10 @@ export type Postgres = Resource<
  * deleted. Data is not copied.
  * :::
  *
- * @section Volume size
+ * ### Volume size
  * `volumeSizeGb` is the initial disk. Fly defaults to 10 GB.
  *
- * @example 20 GB
+ * **Example:** 20 GB
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -225,10 +224,10 @@ export type Postgres = Resource<
  * Changing `volumeSizeGb` later is ignored.
  * :::
  *
- * @section PostGIS
+ * ### PostGIS
  * `postgis: true` enables PostGIS at create.
  *
- * @example Enable PostGIS
+ * **Example:** Enable PostGIS
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -240,12 +239,12 @@ export type Postgres = Resource<
  * Flipping `postgis` later is ignored.
  * :::
  *
- * @section Connect from a Service
+ * ### Connect from a Service
  * Yield `ConnectPostgres` inside init. Provide
  * {@link ConnectPostgresHttp}. Pass `conn.connectionString` to
  * `Drizzle.Postgres` or `SQL.Postgres`.
  *
- * @example Bind and query
+ * **Example:** Bind and query
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Postgres";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -266,11 +265,11 @@ export type Postgres = Resource<
  * ) {}
  * ```
  *
- * @section Migrations
+ * ### Migrations
  * Pass a directory, `{ dir, table? }`, or a `Drizzle.Schema` resource.
  * Alchemy applies pending files on deploy over the direct URI.
  *
- * @example Directory
+ * **Example:** Directory
  * ```typescript
  * const db = yield* Fly.Postgres("Db", {
  *   region: "iad",
@@ -278,7 +277,7 @@ export type Postgres = Resource<
  * });
  * ```
  *
- * @example Drizzle.Schema
+ * **Example:** Drizzle.Schema
  * ```typescript
  * const schema = yield* Drizzle.Schema("app-schema", {
  *   schema: "./src/schema.ts",
@@ -290,6 +289,8 @@ export type Postgres = Resource<
  *   migrations: schema,
  * });
  * ```
+ *
+ * @resource
  */
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 
@@ -417,28 +418,35 @@ const findByName = (orgSlug: string, name: string) =>
 
 const waitUntilReady = (clusterId: string) =>
   getLiveCluster(clusterId).pipe(
-    Effect.flatMap((cluster) => {
-      if (cluster === undefined) {
+    Effect.flatMap(
+      (
+        cluster,
+      ): Effect.Effect<
+        ManagedCluster,
+        PostgresPending | PostgresCreateFailed
+      > => {
+        if (cluster === undefined) {
+          return Effect.fail(
+            new PostgresPending({ clusterId, status: "missing" }),
+          );
+        }
+        if (cluster.status === "ready") return Effect.succeed(cluster);
+        if (cluster.status === "error") {
+          return Effect.fail(
+            new PostgresCreateFailed({
+              clusterId,
+              status: cluster.status,
+            }),
+          );
+        }
         return Effect.fail(
-          new PostgresPending({ clusterId, status: "missing" }),
-        );
-      }
-      if (cluster.status === "ready") return Effect.succeed(cluster);
-      if (cluster.status === "error") {
-        return Effect.fail(
-          new PostgresCreateFailed({
+          new PostgresPending({
             clusterId,
-            status: cluster.status,
+            status: cluster.status ?? "creating",
           }),
         );
-      }
-      return Effect.fail(
-        new PostgresPending({
-          clusterId,
-          status: cluster.status ?? "creating",
-        }),
-      );
-    }),
+      },
+    ),
     Effect.retry({
       while: (e) => e._tag === "Fly.PostgresPending",
       times: 10,
@@ -493,26 +501,25 @@ export const credentialsUri = (
 ): string | undefined => unwrapSensitive(credentials?.pgbouncer_uri);
 
 export const directUri = (
-  cluster: ManagedCluster | undefined,
+  _cluster: ManagedCluster | undefined,
   credentials: ClusterCredentials | undefined,
 ): string | undefined => {
-  const user = credentials?.user;
-  const password = unwrapSensitive(credentials?.password);
-  const dbname = credentials?.dbname;
-  const hash = cluster?.mpgd_cluster_id;
-  if (
-    user === undefined ||
-    user.length === 0 ||
-    password === undefined ||
-    password.length === 0 ||
-    dbname === undefined ||
-    dbname.length === 0 ||
-    hash === undefined ||
-    hash.length === 0
-  ) {
+  // Derive the direct host from the server-provided PgBouncer URI:
+  // `pgbouncer.<hash>.flympg.net` → `direct.<hash>.flympg.net`. The `<hash>`
+  // is the cluster's DNS hash, which is NOT any id the cluster API returns —
+  // `mpgd_cluster_id` is the `fly-mpg-…` cluster id, and a host synthesized
+  // from it does not resolve. Rewriting the observed pooled host is the only
+  // reliable derivation.
+  const pooled = unwrapSensitive(credentials?.pgbouncer_uri);
+  if (pooled === undefined || pooled.length === 0) return undefined;
+  try {
+    const url = new URL(pooled);
+    if (!url.hostname.startsWith("pgbouncer.")) return undefined;
+    url.hostname = url.hostname.replace(/^pgbouncer\./, "direct.");
+    return url.toString();
+  } catch {
     return undefined;
   }
-  return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@direct.${hash}.flympg.net/${dbname}`;
 };
 
 const secretVersion = (
@@ -734,22 +741,24 @@ export const PostgresProvider = () =>
       if (current === undefined || current.id === undefined) {
         return yield* new PostgresNotCreated({ name, orgSlug });
       }
+      // `current` is reassigned below; the id is stable across the waits.
+      const clusterId = current.id;
 
       if (current.status !== "ready") {
         current =
-          (yield* waitUntilReady(current.id)) ??
-          (yield* getLiveCluster(current.id)) ??
+          (yield* waitUntilReady(clusterId)) ??
+          (yield* getLiveCluster(clusterId)) ??
           current;
       }
 
       if (current.status === "error") {
         return yield* new PostgresCreateFailed({
-          clusterId: current.id ?? "",
+          clusterId,
           status: current.status,
         });
       }
 
-      const observed = yield* waitForCredentials(current.id);
+      const observed = yield* waitForCredentials(clusterId);
       const cluster = observed?.data ?? current;
       const credentials = observed?.credentials;
       const migrationUri =
@@ -760,9 +769,7 @@ export const PostgresProvider = () =>
         migrationsInput &&
         (migrationUri === undefined || migrationUri.length === 0)
       ) {
-        return yield* new PostgresCredentialsMissing({
-          clusterId: current.id,
-        });
+        return yield* new PostgresCredentialsMissing({ clusterId });
       }
       const connectionUri =
         migrationUri !== undefined ? Redacted.make(migrationUri) : undefined;

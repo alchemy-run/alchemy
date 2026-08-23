@@ -259,14 +259,13 @@ export type Machine = Resource<
  * effectful, supports bindings, and scales with `count`. Alchemy builds
  * and pushes the image. Use `Fly.Machine` when you already have an image.
  *
- * @resource
  * @see https://fly.io/docs/machines/api/machines-resource/
  *
- * @section Prefer a Service
+ * ### Prefer a Service
  * Declare a {@link Service} when you own the program. Alchemy bundles
  * `main`, builds `linux/amd64`, and pushes to `registry.fly.io`.
  *
- * @example Effect HTTP service
+ * **Example:** Effect HTTP service
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
@@ -279,11 +278,11 @@ export type Machine = Resource<
  * ) {}
  * ```
  *
- * @section Launch a Machine
+ * ### Launch a Machine
  * The parent is an {@link App}. Pin a region and an image. Guest
  * defaults to shared-cpu 1× / 256 MB. `image` updates in place.
  *
- * @example Nginx
+ * **Example:** Nginx
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -296,11 +295,11 @@ export type Machine = Resource<
  * The new App gets a new Machine. The old one is deleted.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Machine names are unique per App. Omit `name` and Alchemy generates
  * one from the stack, stage, and logical ID.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -315,11 +314,11 @@ export type Machine = Resource<
  * deletes the old one.
  * :::
  *
- * @section Region
+ * ### Region
  * Fly Machines live in a region. Default is `iad`. See
  * [Regions](/fly/compute/regions) for the list of codes.
  *
- * @example Pin a region
+ * **Example:** Pin a region
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -332,11 +331,11 @@ export type Machine = Resource<
  * The Machine is created in the new region. The old one is deleted.
  * :::
  *
- * @section Guest size
+ * ### Guest size
  * `guest` is CPU kind, CPU count, and memory. Default is shared-cpu,
  * 1 CPU, 256 MB. Guest updates in place.
  *
- * @example Shared CPU
+ * **Example:** Shared CPU
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -346,11 +345,11 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section GPU
+ * ### GPU
  * Set `gpuKind` and `gpus` on `guest` when the Machine should have a
  * GPU.
  *
- * @example GPU guest
+ * **Example:** GPU guest
  * ```typescript
  * const worker = yield* Fly.Machine("Worker", {
  *   app: Site,
@@ -366,11 +365,11 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Environment variables
+ * ### Environment variables
  * `env` is merged onto the Machine. Fly also injects App
  * {@link Secret} values as env vars unless the Machine skips secrets.
  *
- * @example Set env
+ * **Example:** Set env
  * ```typescript
  * const worker = yield* Fly.Machine("Worker", {
  *   app: Site,
@@ -380,7 +379,7 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Publish a proxy service
+ * ### Publish a proxy service
  * `services` publishes ports on Fly's proxy. `{app}.fly.dev` over IPv4
  * still needs an {@link IpAssignment} on the parent App. `url` is
  * `https://{appName}.fly.dev` when a proxy service is configured.
@@ -392,7 +391,7 @@ export type Machine = Resource<
  * Omit `services` (or pass `[]`) for a process that should not be
  * reachable from the internet.
  *
- * @example HTTP on port 80
+ * **Example:** HTTP on port 80
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -411,7 +410,7 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Autostart and autostop
+ * ### Autostart and autostop
  * `autostart` starts the Machine when a request arrives. `autostop` is
  * `"off"`, `"stop"`, `"suspend"`, or a boolean. `minMachinesRunning`
  * keeps that many Machines up for the service.
@@ -419,7 +418,7 @@ export type Machine = Resource<
  * Autostop only stops Machines that already exist. It does not mint
  * new ones. Yield more Machine resources to size the pool.
  *
- * @example Stop when idle
+ * **Example:** Stop when idle
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -438,7 +437,7 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Scale up
+ * ### Scale up
  * Each Machine resource is one VM. Yield another Machine to add
  * capacity. Fly's proxy load-balances published `services` across
  * them.
@@ -446,7 +445,7 @@ export type Machine = Resource<
  * A {@link Service} still scales with `count`. That is one program,
  * many Machines.
  *
- * @example Two Machines
+ * **Example:** Two Machines
  * ```typescript
  * const web1 = yield* Fly.Machine("Web1", {
  *   app: Site,
@@ -475,10 +474,10 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Scale down
+ * ### Scale down
  * Remove a Machine from the stack. The next deploy deletes it.
  *
- * @example Drop Web2
+ * **Example:** Drop Web2
  * ```diff
  *   const web1 = yield* Fly.Machine("Web1", {
  *     app: Site,
@@ -493,7 +492,7 @@ export type Machine = Resource<
  * - });
  * ```
  *
- * @section Attach a disk
+ * ### Attach a disk
  * Pass disks as `mounts`. Alchemy creates a Volume in the Machine's
  * app and region. A Volume attaches to one Machine. There is no
  * standalone Volume resource.
@@ -503,7 +502,7 @@ export type Machine = Resource<
  * See {@link MountVolume} for the full disk spec. From a Service,
  * prefer `MountVolume` so the path is part of the binding graph.
  *
- * @example Mount `/data`
+ * **Example:** Mount `/data`
  * ```typescript
  * const box = yield* Fly.Machine("Box", {
  *   app: Site,
@@ -513,11 +512,11 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Init
+ * ### Init
  * `init` overrides `cmd`, `entrypoint`, `exec`, swap, and TTY. Updates
  * in place.
  *
- * @example Custom command
+ * **Example:** Custom command
  * ```typescript
  * const box = yield* Fly.Machine("Box", {
  *   app: Site,
@@ -527,12 +526,12 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Restart policy
+ * ### Restart policy
  * `restart.policy` is `"no"`, `"always"`, `"on-failure"`, or
  * `"spot-price"`. `maxRetries` applies when the policy is
  * `"on-failure"`. Updates in place.
  *
- * @example Always restart
+ * **Example:** Always restart
  * ```typescript
  * const worker = yield* Fly.Machine("Worker", {
  *   app: Site,
@@ -542,11 +541,11 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Destroy on exit
+ * ### Destroy on exit
  * `autoDestroy: true` tears the Machine down when its main process
  * exits. Default is `false`.
  *
- * @example One-shot Machine
+ * **Example:** One-shot Machine
  * ```typescript
  * const job = yield* Fly.Machine("Job", {
  *   app: Site,
@@ -557,12 +556,12 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Skip launch
+ * ### Skip launch
  * `skipLaunch: true` creates or updates the config without starting
  * the Machine. Default is `false`. Reconcile otherwise waits until
  * the Machine is `started`.
  *
- * @example Config only
+ * **Example:** Config only
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -572,13 +571,13 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Metadata
+ * ### Metadata
  * User keys on `metadata` merge with Alchemy ownership keys
  * (`alchemy.stack`, `alchemy.stage`, `alchemy.id`, `alchemy.type`,
  * `alchemy.replica`). Those ownership keys are always written so
  * `list()` can find owned Machines. Fly Apps have no labels.
  *
- * @example User metadata
+ * **Example:** User metadata
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -588,12 +587,12 @@ export type Machine = Resource<
  * });
  * ```
  *
- * @section Secrets version
+ * ### Secrets version
  * `minSecretsVersion` waits until the Machine has seen at least that
  * App secrets version. Use it after rotating a {@link Secret} if the
  * process must start with the new value.
  *
- * @example Wait for secrets
+ * **Example:** Wait for secrets
  * ```typescript
  * const web = yield* Fly.Machine("Web", {
  *   app: Site,
@@ -602,6 +601,8 @@ export type Machine = Resource<
  *   minSecretsVersion: 2,
  * });
  * ```
+ *
+ * @resource
  */
 export const Machine = Resource<Machine>("Fly.Machine");
 

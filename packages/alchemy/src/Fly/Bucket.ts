@@ -139,21 +139,20 @@ export type Bucket = Resource<
  * A Fly.Bucket is Tigris S3-compatible object storage, billed through
  * Fly. It is an org-scoped GraphQL add-on (`AddOnType` `tigris`).
  *
- * @resource
  * @see https://fly.io/docs/tigris/
  *
- * @section Create a Bucket
+ * ### Create a Bucket
  * Alchemy generates a unique name unless you pass one.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const data = yield* Fly.Bucket("Data");
  * ```
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you need a stable Tigris bucket name.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const data = yield* Fly.Bucket("Data", {
  *   name: "my-bucket",
@@ -165,10 +164,10 @@ export type Bucket = Resource<
  * deletes the old one.
  * :::
  *
- * @section Organization
+ * ### Organization
  * Org defaults to the current token. Pass `orgSlug` to pin it.
  *
- * @example Pin an org
+ * **Example:** Pin an org
  * ```typescript
  * const data = yield* Fly.Bucket("Data", {
  *   orgSlug: "my-org",
@@ -179,22 +178,22 @@ export type Bucket = Resource<
  * The bucket is created in the new org. The old bucket is deleted.
  * :::
  *
- * @section Public access
+ * ### Public access
  * Buckets are private by default. `public: true` serves objects
  * without credentials.
  *
- * @example Public bucket
+ * **Example:** Public bucket
  * ```typescript
  * const assets = yield* Fly.Bucket("Assets", {
  *   public: true,
  * });
  * ```
  *
- * @section Custom domain
+ * ### Custom domain
  * `domainName` sets `website.domain_name` on the add-on. Point a
  * CNAME at `{name}.t3.tigrisbucket.io`.
  *
- * @example Custom domain
+ * **Example:** Custom domain
  * ```typescript
  * const assets = yield* Fly.Bucket("Assets", {
  *   public: true,
@@ -202,12 +201,12 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * @section Put and get objects
+ * ### Put and get objects
  * Tigris speaks the S3 API. Bind {@link PutObject} / {@link GetObject}
  * (and the other S3 object ops) in Service init. Alchemy injects the
  * Tigris endpoint and credentials; you never read `AWS_*` yourself.
  *
- * @example Put an object from a Service
+ * **Example:** Put an object from a Service
  * ```typescript
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
@@ -233,10 +232,10 @@ export type Bucket = Resource<
  * ) {}
  * ```
  *
- * @section Fly.Secret
+ * ### Fly.Secret
  * You can also set each key yourself with {@link Secret}.
  *
- * @example Manual secrets
+ * **Example:** Manual secrets
  * ```typescript
  * yield* Fly.Secret("BucketName", {
  *   app: Site,
@@ -244,6 +243,8 @@ export type Bucket = Resource<
  *   value: Data.bucketName,
  * });
  * ```
+ *
+ * @resource
  */
 export const Bucket = Resource<Bucket>("Fly.Bucket");
 
@@ -488,25 +489,34 @@ const pendingStatus = (status: string | undefined) =>
 
 const waitUntilReady = (name: string, addOnId: string) =>
   findById(addOnId).pipe(
-    Effect.flatMap((addOn) => {
-      if (addOn === undefined) {
-        return Effect.fail(new BucketPending({ name, status: "missing" }));
-      }
-      const status = addOn.status ?? undefined;
-      if (failedStatus(status)) {
-        return new BucketProvisionFailed({
-          name,
-          status,
-          errorMessage: addOn.errorMessage ?? undefined,
-        });
-      }
-      if (pendingStatus(status)) {
-        return Effect.fail(
-          new BucketPending({ name, status: status ?? "creating" }),
-        );
-      }
-      return Effect.succeed(addOn);
-    }),
+    Effect.flatMap(
+      (
+        addOn,
+      ): Effect.Effect<
+        AddOnsResponseEdgesItemNode,
+        BucketPending | BucketProvisionFailed
+      > => {
+        if (addOn === undefined) {
+          return Effect.fail(new BucketPending({ name, status: "missing" }));
+        }
+        const status = addOn.status ?? undefined;
+        if (failedStatus(status)) {
+          return Effect.fail(
+            new BucketProvisionFailed({
+              name,
+              status,
+              errorMessage: addOn.errorMessage ?? undefined,
+            }),
+          );
+        }
+        if (pendingStatus(status)) {
+          return Effect.fail(
+            new BucketPending({ name, status: status ?? "creating" }),
+          );
+        }
+        return Effect.succeed(addOn);
+      },
+    ),
     Effect.retry({
       while: (e) => e._tag === "Fly.BucketPending",
       times: 8,

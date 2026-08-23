@@ -135,11 +135,11 @@ export const PublicIp = Fly.IpAssignment("Shared", {
 ```
 
 ```diff lang="typescript"
-  Effect.gen(function* () {
-    const api = yield* Api;
-+    const ip = yield* PublicIp;
-    return { url: api.url, ip: ip.ip };
-  }),
+Effect.gen(function* () {
+  const api = yield* Api;
++  const ip = yield* PublicIp;
+  return { url: api.url, ip: ip.ip };
+}),
 ```
 
 ## Scale with `count`

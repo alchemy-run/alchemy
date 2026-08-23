@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { TigrisCredentialsMissing } from "./Errors.ts";
 
 export interface HeadObjectRequest extends Omit<
   S3.HeadObjectRequest,
@@ -15,14 +16,15 @@ export interface HeadObjectRequest extends Omit<
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link HeadObjectHttp}.
  *
- * @binding
  *
- * @section Inspecting Objects
- * @example Check an Object's Metadata
+ * ### Inspecting Objects
+ * **Example:** Check an Object's Metadata
  * ```typescript
  * const headObject = yield* Fly.HeadObject(Data);
  * const head = yield* headObject({ Key: "hello.txt" });
  * ```
+ *
+ * @binding
  */
 export interface HeadObject extends Binding.Service<
   HeadObject,
@@ -32,7 +34,11 @@ export interface HeadObject extends Binding.Service<
   ) => Effect.Effect<
     (
       request: HeadObjectRequest,
-    ) => Effect.Effect<S3.HeadObjectOutput, S3.HeadObjectError, RuntimeContext>
+    ) => Effect.Effect<
+      S3.HeadObjectOutput,
+      S3.HeadObjectError | TigrisCredentialsMissing,
+      RuntimeContext
+    >
   >
 > {}
 

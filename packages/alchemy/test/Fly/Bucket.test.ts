@@ -226,7 +226,7 @@ test.provider(
       expect(names.has("BUCKET_NAME")).toEqual(true);
       expect(names.has("AWS_ACCESS_KEY_ID")).toEqual(true);
 
-      const untilOk = <A, E>(effect: Effect.Effect<A, E>) =>
+      const untilOk = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.retry({
             schedule: Schedule.spaced("4 seconds"),

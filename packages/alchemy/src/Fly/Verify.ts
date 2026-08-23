@@ -1,4 +1,5 @@
 import type { VerifySecretKeyError } from "@distilled.cloud/fly-io/machines";
+import type { FlyKmsError } from "./Errors.ts";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -20,17 +21,18 @@ export interface VerifyResult {
  * Verify a signature with a Fly {@link SecretKey}. The App and key
  * name are fixed by `Verify(key)`.
  *
- * @binding
  *
- * @section Verify a signature
+ * ### Verify a signature
  * Provide {@link VerifyHttp}. A bad signature is a typed error from
  * the Machines API, not `valid: false`.
  *
- * @example Verify
+ * **Example:** Verify
  * ```typescript
  * const verify = yield* Fly.Verify(Signing);
  * const { valid } = yield* verify({ plaintext, signature });
  * ```
+ *
+ * @binding
  */
 export interface Verify extends Binding.Service<
   Verify,
@@ -40,7 +42,11 @@ export interface Verify extends Binding.Service<
   ) => Effect.Effect<
     (
       request: VerifyRequest,
-    ) => Effect.Effect<VerifyResult, VerifySecretKeyError, RuntimeContext>
+    ) => Effect.Effect<
+      VerifyResult,
+      VerifySecretKeyError | FlyKmsError,
+      RuntimeContext
+    >
   >
 > {}
 
