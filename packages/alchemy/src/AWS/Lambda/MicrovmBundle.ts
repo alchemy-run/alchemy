@@ -104,8 +104,8 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
         resolve: {
           conditionNames:
             runtime === "bun"
-              ? ["bun", "import", "module", "default"]
-              : ["node", "import", "module", "default"],
+              ? [...Bundle.BUN_CONDITION_NAMES]
+              : [...Bundle.NODE_CONDITION_NAMES],
           ...build?.input?.resolve,
         },
         plugins: [build?.input?.plugins, plugins],

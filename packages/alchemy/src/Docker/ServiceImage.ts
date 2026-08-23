@@ -104,7 +104,7 @@ export const makeServiceImage = Effect.gen(function* () {
             ...((source.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...source.build?.input?.resolve,
           },
           plugins: [source.build?.input?.plugins, plugins],

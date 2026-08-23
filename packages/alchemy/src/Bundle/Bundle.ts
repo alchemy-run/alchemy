@@ -14,6 +14,32 @@ import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 
 /**
+ * `resolve.conditionNames` for a bundle that runs on bun / node.
+ *
+ * Rolldown's DEFAULT conditions are import-kind specific: `import` for
+ * `import` statements and `require` for `require()` calls. An explicit
+ * `conditionNames` list is applied as one set to BOTH kinds, and rolldown
+ * adds only the current kind on top. Listing `"import"` here therefore
+ * made every `require()` also match a package's `"import"` export — and
+ * `exports` maps are matched in the PACKAGE's key order, so for `pg-pool`
+ * (`{ import, require }`) a `require("pg-pool")` received the ESM namespace
+ * and `pg` died with `TypeError: The superclass is not a constructor`.
+ *
+ * So: never put `import` or `require` in these lists. Only the runtime
+ * condition and the kind-agnostic ones; rolldown supplies the kind.
+ */
+export const BUN_CONDITION_NAMES: readonly string[] = [
+  "bun",
+  "module",
+  "default",
+];
+export const NODE_CONDITION_NAMES: readonly string[] = [
+  "node",
+  "module",
+  "default",
+];
+
+/**
  * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
  * merely importing alchemy — the CLI command tree, the Cloudflare provider
  * barrel — never loads `@rolldown/binding-*`. A stack that bundles

@@ -24,6 +24,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as net from "node:net";
@@ -343,7 +344,22 @@ const resolvePublishablePorts = Effect.fn(function* (
  * container if needed. Idempotent and cheap when already up (one HTTP
  * probe); see the module doc for the resolution order.
  */
+/**
+ * One `ensureFloci` at a time per process. Callers memoize per stack
+ * build, but separate builds (concurrent tests, parallel dev commands) can
+ * ensure at the same moment: when the managed container needs recreating,
+ * two callers would both `docker rm -f` it ("removal of container … is
+ * already in progress") and then race `docker run` on the name. Under the
+ * mutex the second caller observes the container the first one started.
+ */
+const ensureMutex = Semaphore.makeUnsafe(1);
+
 export const ensureFloci = (
+  config?: FlociConfig,
+): Effect.Effect<FlociInstance, FlociError> =>
+  ensureMutex.withPermits(1)(ensureFlociUnsynchronized(config));
+
+const ensureFlociUnsynchronized = (
   config?: FlociConfig,
 ): Effect.Effect<FlociInstance, FlociError> =>
   Effect.gen(function* () {

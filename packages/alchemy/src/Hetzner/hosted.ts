@@ -127,7 +127,7 @@ export const createHetznerHostedSupport = ({
             ...((props.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],

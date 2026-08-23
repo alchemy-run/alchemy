@@ -922,7 +922,7 @@ export const JobDefinitionProvider = () =>
                   []),
               ],
               resolve: {
-                conditionNames: ["bun", "import", "module", "default"],
+                conditionNames: [...Bundle.BUN_CONDITION_NAMES],
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],

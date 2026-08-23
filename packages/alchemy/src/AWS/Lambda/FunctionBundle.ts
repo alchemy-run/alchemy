@@ -206,12 +206,8 @@ export default await bootstrap(entrypoint);
           conditionNames: [
             "bun",
             ...(
-              inputOptions.resolve?.conditionNames ?? [
-                "node",
-                "import",
-                "module",
-                "default",
-              ]
+              inputOptions.resolve?.conditionNames ??
+              Bundle.NODE_CONDITION_NAMES
             ).filter((condition) => condition !== "bun"),
           ],
         },
