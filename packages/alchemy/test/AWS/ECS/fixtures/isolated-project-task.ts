@@ -1,37 +1,21 @@
-import * as Effect from "effect/Effect";
-import { tmpdir } from "node:os";
 import { Task } from "@/AWS/ECS/Task.ts";
+import * as Effect from "effect/Effect";
+import { isolatedProject } from "../../../IsolatedProject.ts";
 
 /**
- * The "isolated project": a directory outside the repository tree that the
- * test materialises before deploying — a `package.json` plus a `main.ts`
- * that re-exports this module's default export by absolute path.
- *
- * Pointing the task's `main` there makes the bundle's `cwd` (the nearest
- * `package.json`) a directory from which NONE of alchemy's dependencies
- * resolve — the same situation as a consumer project installed with bun's
- * isolated linker (or pnpm), where `@distilled.cloud/aws` and friends live
- * beside `alchemy` rather than in the project's `node_modules`.
- *
- * The module-scope path is deliberately deterministic (no nonce): it has to
- * be known when this module is evaluated — at test collection, before any
- * hook runs — because `main` is a prop of the task declaration below.
+ * The isolated consumer project this task is bundled from (see
+ * `test/IsolatedProject.ts`): `main` lives outside the repository, so the
+ * bundle `cwd` resolves none of alchemy's dependencies — the bun bootstrap's
+ * own imports (`@distilled.cloud/aws/*`, `@effect/platform-bun`, …) must be
+ * anchored by the bundler, not found by accident from the project root.
  */
-export const isolatedProjectDir = `${tmpdir()}/alchemy-test-ecs-isolated-project`;
-export const isolatedProjectMain = `${isolatedProjectDir}/main.ts`;
-
-/** Absolute path of this fixture, for the isolated project's re-export. */
-export const fixturePath = import.meta.filename;
+export const project = isolatedProject("ecs-task", import.meta.filename);
 
 /**
- * Regression fixture for the generated bun bootstrap's imports: the
- * virtual entry `AWS.ECS.Task` wraps around `main` imports
- * `@distilled.cloud/aws/*`, `@effect/platform-bun`, `alchemy/*` and
- * `effect/*`. A virtual module has no location on disk, so rolldown used to
- * resolve those from the build `cwd` — and from an isolated project it
- * cannot, reported `[UNRESOLVED_IMPORT]`, left them external, and the
- * container died at boot with `Cannot find module …`. The plugin now anchors
- * them on the wrapped entry and on alchemy's own installation.
+ * Regression fixture for the generated bun bootstrap's imports: before the
+ * virtual-entry plugin anchored them, an isolated project left them
+ * `[UNRESOLVED_IMPORT]` / external and the container died at boot with
+ * `Cannot find module …`.
  *
  * The `{ run }` impl logs a marker and completes, so a successful boot is
  * observable as the Fargate task stopping with container exit code 0.
@@ -42,7 +26,7 @@ export class IsolatedProjectTask extends Task<IsolatedProjectTask>()(
 
 export default IsolatedProjectTask.make(
   {
-    main: isolatedProjectMain,
+    main: project.main,
     // Docker Hub's `oven/bun`; the public.ecr.aws default mirror rate-limits
     // anonymous pulls during local builds (see fixtures/task.ts).
     image: "oven/bun:1",
