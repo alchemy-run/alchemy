@@ -845,7 +845,7 @@ if (el) {
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
     // Container image pull + push + rollout comfortably exceeds the plain
-    // Vite deploy budget (mirrors AsyncContainer.test.ts).
+    // Vite deploy budget (mirrors Container.test.ts).
     { timeout: 600_000 },
   );
 
@@ -1452,7 +1452,7 @@ const fetchJsonReady = <T>(url: string) =>
 // Retry a container-backed route until it answers 200 with a body containing
 // `expected` — the container's first request rides through image provisioning
 // and instance cold start, which comfortably outlasts fetchJsonReady's budget
-// (mirrors AsyncContainer.test.ts's readiness poll).
+// (mirrors Container.test.ts's readiness poll).
 const fetchContainerReady = (url: string, expected: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
