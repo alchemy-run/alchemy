@@ -253,7 +253,14 @@ const resolveArtifact = Effect.fn(function* (
       `${bundleHash}:${dockerfile}:${propsId}:${includeId}`,
     );
     if (existing?.hash === hash && existing.uri !== undefined) {
-      return { uri: existing.uri, hash };
+      // Trust the hash for identity, but VERIFY the artifact still
+      // exists before skipping the upload: a local emulator's S3 is
+      // ephemeral (recreating the container wipes it), and handing the
+      // builder a dangling URI fails the build far from the cause.
+      const assets = yield* Assets;
+      if (yield* assets.hasAsset(hash)) {
+        return { uri: existing.uri, hash };
+      }
     }
     yield* session.note("Packaging MicroVM code artifact...");
     const archive = yield* zipFiles([
