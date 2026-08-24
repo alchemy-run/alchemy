@@ -16,5 +16,6 @@ export const RetrieveShippingRateHttp = Layer.effect(
     tag: "Stripe.RetrieveShippingRate",
     operation: GetShippingRatesShippingRateToken,
     idField: "shipping_rate_token",
+    permissions: ["shipping_rates_read"],
   }),
 );

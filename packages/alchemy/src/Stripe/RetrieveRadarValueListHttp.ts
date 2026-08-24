@@ -15,5 +15,6 @@ export const RetrieveRadarValueListHttp = Layer.effect(
     tag: "Stripe.RetrieveRadarValueList",
     operation: GetRadarValueListsValueList,
     idField: "value_list",
+    permissions: ["radar_read"],
   }),
 );

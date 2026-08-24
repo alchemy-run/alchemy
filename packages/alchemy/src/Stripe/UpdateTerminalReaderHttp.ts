@@ -16,5 +16,6 @@ export const UpdateTerminalReaderHttp = Layer.effect(
     tag: "Stripe.UpdateTerminalReader",
     operation: PostTerminalReadersReader,
     idField: "reader",
+    permissions: ["terminal_write"],
   }),
 );

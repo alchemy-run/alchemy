@@ -15,5 +15,6 @@ export const RetrieveAlertHttp = Layer.effect(
     tag: "Stripe.RetrieveAlert",
     operation: GetBillingAlertsId,
     idField: "id",
+    permissions: ["billing_meters_read"],
   }),
 );

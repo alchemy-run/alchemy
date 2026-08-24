@@ -16,5 +16,6 @@ export const RetrieveTerminalReaderHttp = Layer.effect(
     tag: "Stripe.RetrieveTerminalReader",
     operation: GetTerminalReadersReader,
     idField: "reader",
+    permissions: ["terminal_read"],
   }),
 );

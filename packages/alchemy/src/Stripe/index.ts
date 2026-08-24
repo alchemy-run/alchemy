@@ -46,6 +46,7 @@ export * from "./PromotionCode.ts";
 export * from "./Providers.ts";
 export * from "./RadarValueList.ts";
 export * from "./RadarValueListItem.ts";
+export * from "./RestrictedApiKey.ts";
 export * from "./RetrieveAccount.ts";
 export * from "./RetrieveAccountExternalAccount.ts";
 export * from "./RetrieveAccountExternalAccountHttp.ts";

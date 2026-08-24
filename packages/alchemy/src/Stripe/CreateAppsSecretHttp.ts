@@ -15,5 +15,6 @@ export const CreateAppsSecretHttp = Layer.effect(
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateAppsSecret",
     operation: PostAppsSecrets,
+    permissions: ["apps_secrets_write"],
   }),
 );

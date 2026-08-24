@@ -16,5 +16,6 @@ export const RetrieveTerminalLocationHttp = Layer.effect(
     tag: "Stripe.RetrieveTerminalLocation",
     operation: GetTerminalLocationsLocation,
     idField: "location",
+    permissions: ["terminal_read"],
   }),
 );
