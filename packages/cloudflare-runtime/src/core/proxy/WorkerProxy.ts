@@ -198,6 +198,11 @@ export const WorkerProxyLive = Layer.effect(
       serve: Effect.fn("WorkerProxy.serve")(function* (options = {}) {
         const resolved = yield* normalizeOptions(options);
         const url = yield* serveWithRetry(resolved);
+        // The reservation taken while probing outlives the listener by its
+        // TTL — release it when the proxy's scope closes so the same port
+        // can be re-requested immediately (a deleted-and-recreated dev
+        // worker would otherwise silently drift to the next port).
+        yield* Effect.addFinalizer(() => ports.release(Number(url.port)));
         if (
           options.port !== undefined &&
           options.port !== 0 &&

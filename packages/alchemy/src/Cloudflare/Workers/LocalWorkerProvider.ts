@@ -15,7 +15,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
-import type * as FileSystem from "effect/FileSystem";
+import * as FileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -61,10 +61,14 @@ import {
 import { startViteChild } from "./ViteChild.ts";
 import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 
-/** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
-type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
-  port: number;
-};
+/**
+ * Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`).
+ * `port` stays `undefined` when the user didn't configure one — the sticky
+ * port assignment (see `startProxy`) resolves the effective port at serve
+ * time, so an implicit port never participates in config hashing or proxy
+ * reuse comparisons.
+ */
+type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }>;
 
 // Hosts that bind every interface — the dev server is then reachable at
 // `localhost` *and* at each LAN address, like Vite's `--host` output.
@@ -109,6 +113,7 @@ export const LocalWorkerProvider = () =>
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
       const path = yield* Path.Path;
+      const fs = yield* FileSystem.FileSystem;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
       const cloudflareEnv = yield* CloudflareEnvironment;
@@ -192,15 +197,71 @@ export const LocalWorkerProvider = () =>
         return consumers;
       });
 
+      // Worker → dev-proxy port assignments from previous dev sessions,
+      // persisted one file per physical worker name under
+      // `.alchemy/local/worker-ports/` (the name is stable across sessions
+      // and unique across stacks/stages sharing the project's `.alchemy`;
+      // one file per worker keeps concurrent sessions from clobbering each
+      // other's assignments). Without a record, every worker without an
+      // explicit `dev.port` hunts up from `DEFAULT_DEV_PORT` in whatever
+      // order the workers happen to start — so a multi-worker stack
+      // reshuffles its worker↔port mapping on every `alchemy dev` session,
+      // breaking clients that hold on to a worker's URL. Recording each
+      // worker's actual port and preferring it on the next start keeps the
+      // mapping stable. Explicit `dev.port` (including `0` for a
+      // deliberately ephemeral port) always wins and is never recorded.
+      const portAssignmentsDirectory = path.join(
+        storageDirectory,
+        "worker-ports",
+      );
+      const portAssignmentFile = (workerName: string) =>
+        path.join(portAssignmentsDirectory, encodeURIComponent(workerName));
+      const recordedPort = Effect.fn(function* (workerName: string) {
+        const port = yield* fs
+          .readFileString(portAssignmentFile(workerName))
+          .pipe(
+            Effect.map((content) => Number(content.trim())),
+            Effect.orElseSucceed(() => Number.NaN),
+          );
+        return Number.isInteger(port) && port > 0 && port <= 65535
+          ? port
+          : undefined;
+      });
+      const recordPort = (workerName: string, port: number) =>
+        fs.makeDirectory(portAssignmentsDirectory, { recursive: true }).pipe(
+          Effect.andThen(
+            fs.writeFileString(portAssignmentFile(workerName), `${port}`),
+          ),
+          // Best-effort: a failed write only costs next session's port
+          // stability, it must not fail the serve.
+          Effect.catchCause((cause) =>
+            Effect.logDebug(
+              `Failed to record dev port assignment for ${workerName}`,
+              Cause.squash(cause),
+            ),
+          ),
+        );
+
       const startProxy = Effect.fn(function* (
         id: string,
+        workerName: string,
         serverOptions: DevServerOptions,
       ) {
         const scope = yield* Scope.fork(rootScope);
+        // Implicit port: prefer the port this worker served on in the
+        // previous dev session (recorded below); only a first-ever start
+        // hunts up from the default.
+        const port =
+          serverOptions.port ??
+          (yield* recordedPort(workerName)) ??
+          DEFAULT_DEV_PORT;
         const instance = yield* workerProxy
-          .serve(serverOptions)
+          .serve({ ...serverOptions, port })
           .pipe(Scope.provide(scope));
         proxyInstances.set(id, { serverOptions, instance, scope });
+        if (serverOptions.port === undefined) {
+          yield* recordPort(workerName, Number(instance.url.port));
+        }
         return instance;
       });
 
@@ -214,16 +275,20 @@ export const LocalWorkerProvider = () =>
 
       const maybeStartProxy = Effect.fn(function* (
         id: string,
+        workerName: string,
         serverOptions: DevServerOptions,
       ) {
         const existing = proxyInstances.get(id);
         if (existing) {
+          // Compared on the *requested* options — an implicit port is
+          // `undefined` on both sides regardless of which port the running
+          // proxy landed on, so sticky assignment never restarts a proxy.
           if (Equal.equals(existing.serverOptions, serverOptions)) {
             return existing.instance;
           }
           yield* stopProxy(id);
         }
-        return yield* startProxy(id, serverOptions);
+        return yield* startProxy(id, workerName, serverOptions);
       });
 
       const toRuntimeModules = Effect.fn(function* (
@@ -410,9 +475,11 @@ export const LocalWorkerProvider = () =>
             : {
                 ...props.dev,
                 mode: "worker" as const,
-                // This is the default. Vite and cloudflare-runtime will retry
-                // if unavailable, unless `strictPort` is true.
-                port: props.dev?.port ?? DEFAULT_DEV_PORT,
+                // Deliberately no port default here: an implicit port is
+                // resolved at serve time (`startProxy`) from the recorded
+                // assignment of the previous dev session, and must stay out
+                // of the hashed config so sticky assignment never restarts
+                // the instance.
               };
         return {
           id,
@@ -835,7 +902,11 @@ export const LocalWorkerProvider = () =>
 
       const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(
+          worker.id,
+          worker.name,
+          worker.dev,
+        );
         // Inline `script` workers bypass the bundler entirely — the string
         // IS the module (mirroring the deploy path, which uploads it as a
         // single `main.js`). There is nothing to watch: script changes flow
@@ -901,7 +972,11 @@ export const LocalWorkerProvider = () =>
 
       const runAssetsOnly = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(
+          worker.id,
+          worker.name,
+          worker.dev,
+        );
         yield* serveWith(worker, assetsOnlyBundle, proxy);
         yield* Effect.log(
           `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
@@ -1075,7 +1150,11 @@ export const LocalWorkerProvider = () =>
         invalidate: Effect.Effect<void>,
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(
+          worker.id,
+          worker.name,
+          worker.dev,
+        );
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
         return proxy.url;
       });
@@ -1088,7 +1167,11 @@ export const LocalWorkerProvider = () =>
       //   bundle is served through the same make-before-break `serveWith`
       //   path the built-in bundler uses.
       const runSource = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(
+          worker.id,
+          worker.name,
+          worker.dev,
+        );
         // Queue requests until the source's first output is served —
         // whether that's the first workerd serve (bundle mode) or the dev
         // server URL (server mode).
@@ -1165,10 +1248,9 @@ export const LocalWorkerProvider = () =>
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
                 []
-              : yield* maybeStartProxy(id, {
+              : yield* maybeStartProxy(id, name, {
                   ...news.dev,
                   mode: "worker" as const,
-                  port: news.dev?.port ?? DEFAULT_DEV_PORT,
                 }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
             // No cloud script exists in dev — fabricate a `dev:`-marked
@@ -1232,7 +1314,7 @@ export const LocalWorkerProvider = () =>
             config.bindingDescriptors.some((b) => b.type === "self_url") ||
             Object.values(config.env ?? {}).some(isSelfUrl);
           const selfUrl = needsSelfUrl
-            ? (yield* maybeStartProxy(id, config.dev)).url
+            ? (yield* maybeStartProxy(id, config.name, config.dev)).url
                 .toString()
                 .replace(/\/$/, "")
             : undefined;
