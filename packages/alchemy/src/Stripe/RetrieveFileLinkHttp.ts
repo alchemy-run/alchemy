@@ -16,5 +16,6 @@ export const RetrieveFileLinkHttp = Layer.effect(
     tag: "Stripe.RetrieveFileLink",
     operation: GetFileLinksLink,
     idField: "link",
+    permissions: ["files_read"],
   }),
 );

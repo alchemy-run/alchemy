@@ -15,5 +15,6 @@ export const RetrieveBillingPortalConfigurationHttp = Layer.effect(
     tag: "Stripe.RetrieveBillingPortalConfiguration",
     operation: GetBillingPortalConfigurationsConfiguration,
     idField: "configuration",
+    permissions: ["billing_portal_read"],
   }),
 );

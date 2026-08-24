@@ -3,31 +3,22 @@ import { GetProductsProductFeaturesId } from "@distilled.cloud/stripe/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
 import { sanitizeKey } from "../RuntimeContext.ts";
-import { STRIPE_API_KEY_ENV } from "./AuthProvider.ts";
 import type { ProductFeature } from "./ProductFeature.ts";
 import { RetrieveProductFeature } from "./RetrieveProductFeature.ts";
 import {
-  bindStripeEnv,
+  asStringEffect,
+  attachStripeToken,
   idEnvKey,
   makeStripeAuth,
-  stripeApiKey,
 } from "./StripeHttp.ts";
 
 const productEnvKey = (resource: { readonly LogicalId: string }): string =>
   `STRIPE_PRODUCT_${sanitizeKey(resource.LogicalId)}`;
 
 const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
-
-const toIdEffect = (value: unknown): Effect.Effect<string> => {
-  if (typeof value === "string") return Effect.succeed(value);
-  if (Effect.isEffect(value)) return value as Effect.Effect<string>;
-  return Effect.die("Stripe binding expected a resolved id");
-};
 
 /**
  * HTTP implementation of {@link RetrieveProductFeature}. The list-item
@@ -47,32 +38,24 @@ export const RetrieveProductFeatureHttp = Layer.effect(
     return Effect.fn(function* (feature: ProductFeature) {
       const idKey = idEnvKey(feature);
       const productKey = productEnvKey(feature);
-      if (globalThis.__ALCHEMY_RUNTIME__) {
-        return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
-          function* (request?: { expand?: string[] }) {
-            return yield* auth.authorize(
-              GetProductsProductFeaturesId({
-                ...(request ?? {}),
-                id: yield* envName(idKey),
-                product: yield* envName(productKey),
-              }),
-            );
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* attachStripeToken(
+          feature as unknown as ResourceLike,
+          {
+            [idKey]: feature.id,
+            [productKey]: feature.product,
           },
+          ["products_read"],
+          "Stripe.RetrieveProductFeature",
         );
       }
 
-      const host = yield* Binding.Host;
-      if (host !== undefined) {
-        const token = yield* stripeApiKey(context);
-        yield* bindStripeEnv(host, feature as unknown as ResourceLike, {
-          [STRIPE_API_KEY_ENV]: Redacted.make(token),
-          [idKey]: feature.id,
-          [productKey]: feature.product,
-        });
-      }
-
-      const id = toIdEffect(feature.id);
-      const product = toIdEffect(feature.product);
+      const id = globalThis.__ALCHEMY_RUNTIME__
+        ? envName(idKey)
+        : asStringEffect(feature.id);
+      const product = globalThis.__ALCHEMY_RUNTIME__
+        ? envName(productKey)
+        : asStringEffect(feature.product);
 
       return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
         function* (request?: { expand?: string[] }) {

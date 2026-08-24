@@ -16,5 +16,6 @@ export const RetrieveTerminalConfigurationHttp = Layer.effect(
     tag: "Stripe.RetrieveTerminalConfiguration",
     operation: GetTerminalConfigurationsConfiguration,
     idField: "configuration",
+    permissions: ["terminal_read"],
   }),
 );

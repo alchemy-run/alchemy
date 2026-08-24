@@ -16,5 +16,6 @@ export const RetrieveIssuingCardholderHttp = Layer.effect(
     tag: "Stripe.RetrieveIssuingCardholder",
     operation: GetIssuingCardholdersCardholder,
     idField: "cardholder",
+    permissions: ["issuing_read"],
   }),
 );

@@ -15,5 +15,6 @@ export const CreateFileLinkHttp = Layer.effect(
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateFileLink",
     operation: PostFileLinks,
+    permissions: ["files_write"],
   }),
 );

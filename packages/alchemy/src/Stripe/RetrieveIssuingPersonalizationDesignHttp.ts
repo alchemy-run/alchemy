@@ -16,5 +16,6 @@ export const RetrieveIssuingPersonalizationDesignHttp = Layer.effect(
     tag: "Stripe.RetrieveIssuingPersonalizationDesign",
     operation: GetIssuingPersonalizationDesignsPersonalizationDesign,
     idField: "personalization_design",
+    permissions: ["issuing_read"],
   }),
 );

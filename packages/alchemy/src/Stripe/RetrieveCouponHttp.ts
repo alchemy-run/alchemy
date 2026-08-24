@@ -16,5 +16,6 @@ export const RetrieveCouponHttp = Layer.effect(
     tag: "Stripe.RetrieveCoupon",
     operation: GetCouponsCoupon,
     idField: "coupon",
+    permissions: ["coupons_read"],
   }),
 );

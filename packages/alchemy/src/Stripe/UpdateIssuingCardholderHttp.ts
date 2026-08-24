@@ -16,5 +16,6 @@ export const UpdateIssuingCardholderHttp = Layer.effect(
     tag: "Stripe.UpdateIssuingCardholder",
     operation: PostIssuingCardholdersCardholder,
     idField: "cardholder",
+    permissions: ["issuing_write"],
   }),
 );

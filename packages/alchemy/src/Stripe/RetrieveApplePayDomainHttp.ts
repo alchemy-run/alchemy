@@ -16,5 +16,6 @@ export const RetrieveApplePayDomainHttp = Layer.effect(
     tag: "Stripe.RetrieveApplePayDomain",
     operation: GetApplePayDomainsDomain,
     idField: "domain",
+    permissions: ["apple_pay_domains_read"],
   }),
 );

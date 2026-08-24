@@ -16,5 +16,6 @@ export const RetrievePriceHttp = Layer.effect(
     tag: "Stripe.RetrievePrice",
     operation: GetPricesPrice,
     idField: "price",
+    permissions: ["prices_read"],
   }),
 );

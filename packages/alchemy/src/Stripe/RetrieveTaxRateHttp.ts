@@ -16,5 +16,6 @@ export const RetrieveTaxRateHttp = Layer.effect(
     tag: "Stripe.RetrieveTaxRate",
     operation: GetTaxRatesTaxRate,
     idField: "tax_rate",
+    permissions: ["tax_read"],
   }),
 );

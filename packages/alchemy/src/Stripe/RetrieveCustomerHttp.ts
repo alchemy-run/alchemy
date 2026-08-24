@@ -16,5 +16,6 @@ export const RetrieveCustomerHttp = Layer.effect(
     tag: "Stripe.RetrieveCustomer",
     operation: GetCustomersCustomer,
     idField: "customer",
+    permissions: ["customers_read"],
   }),
 );

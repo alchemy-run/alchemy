@@ -15,5 +15,6 @@ export const CreateIssuingCardholderHttp = Layer.effect(
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateIssuingCardholder",
     operation: PostIssuingCardholders,
+    permissions: ["issuing_write"],
   }),
 );

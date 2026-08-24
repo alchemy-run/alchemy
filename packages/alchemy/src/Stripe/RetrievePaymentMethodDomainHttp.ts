@@ -15,5 +15,6 @@ export const RetrievePaymentMethodDomainHttp = Layer.effect(
     tag: "Stripe.RetrievePaymentMethodDomain",
     operation: GetPaymentMethodDomainsPaymentMethodDomain,
     idField: "payment_method_domain",
+    permissions: ["payment_method_domains_read"],
   }),
 );

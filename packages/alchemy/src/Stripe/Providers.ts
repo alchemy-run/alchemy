@@ -64,6 +64,10 @@ import {
   RadarValueListItem,
   RadarValueListItemProvider,
 } from "./RadarValueListItem.ts";
+import {
+  RestrictedApiKey,
+  RestrictedApiKeyProvider,
+} from "./RestrictedApiKey.ts";
 import { RetrieveAccountExternalAccountHttp } from "./RetrieveAccountExternalAccountHttp.ts";
 import { RetrieveAccountHttp } from "./RetrieveAccountHttp.ts";
 import { RetrieveAccountPersonHttp } from "./RetrieveAccountPersonHttp.ts";
@@ -185,6 +189,7 @@ export const providers = () =>
       PromotionCode,
       RadarValueList,
       RadarValueListItem,
+      RestrictedApiKey,
       ShippingRate,
       TaxRate,
       TaxRegistration,
@@ -224,6 +229,7 @@ export const providers = () =>
         PromotionCodeProvider(),
         RadarValueListProvider(),
         RadarValueListItemProvider(),
+        RestrictedApiKeyProvider(),
         ShippingRateProvider(),
         TaxRateProvider(),
         TaxRegistrationProvider(),
