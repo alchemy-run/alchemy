@@ -113,6 +113,21 @@ export interface DevWatchSpec<Props, Attrs> {
    */
   readonly watchConfigOf: (news: Props, attrs: Attrs) => unknown;
   /**
+   * Transform the resolved props before EVERY delegated reconcile —
+   * engine-driven and watcher-driven alike — inside the per-id lock, with
+   * the floci override services provided. This is where a provider swaps a
+   * build-here artifact form for a build-locally one (e.g. the MicroVM dev
+   * provider docker-builds the image on the HOST and hands the live
+   * reconcile a `codeArtifact: { uri: "docker://…" }` instead of `main`/
+   * `context`, so the emulator never zips, uploads, or builds anything).
+   * The untransformed props stay in the watch registry, so restarts and
+   * watch-config comparisons see the user's real inputs.
+   */
+  readonly transformReconcileNews?: (input: {
+    id: string;
+    news: Props;
+  }) => Effect.Effect<Props, unknown, any>;
+  /**
    * Called after EVERY successful reconcile — engine-driven (a prop
    * change, a fresh session's converge) and watcher-driven
    * ({@link DevWatchContext.rerunReconcile}) alike — inside the per-id
@@ -294,9 +309,19 @@ export const makeDevWatchProvider = <
           rerunReconcile: withLock(input.id)(
             Effect.gen(function* () {
               const previous = entry.attrs as Attrs | undefined;
+              const rerunNews =
+                spec.transformReconcileNews !== undefined
+                  ? yield* spec
+                      .transformReconcileNews({
+                        id: input.id,
+                        news: stripEffects(entry.lastInput.news) as Props,
+                      })
+                      .pipe(Effect.provide(services))
+                  : entry.lastInput.news;
               const fresh = yield* wrapped.reconcile(
                 withSafeSession({
                   ...entry.lastInput,
+                  news: rerunNews,
                   olds: entry.lastInput.news,
                   output: entry.attrs,
                 }) as any,
@@ -405,8 +430,17 @@ export const makeDevWatchProvider = <
             Effect.gen(function* () {
               const previous = (input.output ??
                 watches.get(input.id)?.attrs) as Attrs | undefined;
+              const reconcileNews =
+                spec.transformReconcileNews !== undefined
+                  ? yield* spec
+                      .transformReconcileNews({
+                        id: input.id,
+                        news: stripEffects(input.news) as Props,
+                      })
+                      .pipe(Effect.provide(services))
+                  : input.news;
               const attrs = yield* wrapped.reconcile(
-                withSafeSession(input) as any,
+                withSafeSession({ ...input, news: reconcileNews }) as any,
               );
               yield* ensureWatch(input, attrs);
               if (spec.onReconciled !== undefined) {
