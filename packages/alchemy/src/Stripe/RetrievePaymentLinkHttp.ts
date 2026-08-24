@@ -16,5 +16,6 @@ export const RetrievePaymentLinkHttp = Layer.effect(
     tag: "Stripe.RetrievePaymentLink",
     operation: GetPaymentLinksPaymentLink,
     idField: "payment_link",
+    permissions: ["payment_links_read"],
   }),
 );

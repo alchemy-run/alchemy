@@ -15,5 +15,6 @@ export const RetrieveBillingMeterHttp = Layer.effect(
     tag: "Stripe.RetrieveBillingMeter",
     operation: GetBillingMetersId,
     idField: "id",
+    permissions: ["billing_meters_read"],
   }),
 );

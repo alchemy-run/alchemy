@@ -15,5 +15,6 @@ export const RetrieveEntitlementsFeatureHttp = Layer.effect(
     tag: "Stripe.RetrieveEntitlementsFeature",
     operation: GetEntitlementsFeaturesId,
     idField: "id",
+    permissions: ["entitlements_read"],
   }),
 );

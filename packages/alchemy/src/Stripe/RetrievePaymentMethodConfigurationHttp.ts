@@ -15,5 +15,6 @@ export const RetrievePaymentMethodConfigurationHttp = Layer.effect(
     tag: "Stripe.RetrievePaymentMethodConfiguration",
     operation: GetPaymentMethodConfigurationsConfiguration,
     idField: "configuration",
+    permissions: ["payment_method_configurations_read"],
   }),
 );

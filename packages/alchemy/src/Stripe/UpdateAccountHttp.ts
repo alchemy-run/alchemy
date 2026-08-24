@@ -16,5 +16,6 @@ export const UpdateAccountHttp = Layer.effect(
     tag: "Stripe.UpdateAccount",
     operation: PostAccountsAccount,
     idField: "account",
+    permissions: ["accounts_write"],
   }),
 );

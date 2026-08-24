@@ -16,5 +16,6 @@ export const RetrieveWebhookEndpointHttp = Layer.effect(
     tag: "Stripe.RetrieveWebhookEndpoint",
     operation: GetWebhookEndpointsWebhookEndpoint,
     idField: "webhook_endpoint",
+    permissions: ["webhook_endpoints_read"],
   }),
 );

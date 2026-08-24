@@ -16,5 +16,6 @@ export const RetrieveAccountHttp = Layer.effect(
     tag: "Stripe.RetrieveAccount",
     operation: GetAccountsAccount,
     idField: "account",
+    permissions: ["accounts_read"],
   }),
 );

@@ -16,5 +16,6 @@ export const RetrievePlanHttp = Layer.effect(
     tag: "Stripe.RetrievePlan",
     operation: GetPlansPlan,
     idField: "plan",
+    permissions: ["plans_read"],
   }),
 );

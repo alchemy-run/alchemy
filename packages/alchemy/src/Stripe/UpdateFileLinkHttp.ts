@@ -16,5 +16,6 @@ export const UpdateFileLinkHttp = Layer.effect(
     tag: "Stripe.UpdateFileLink",
     operation: PostFileLinksLink,
     idField: "link",
+    permissions: ["files_write"],
   }),
 );

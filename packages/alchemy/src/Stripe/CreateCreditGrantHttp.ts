@@ -15,5 +15,6 @@ export const CreateCreditGrantHttp = Layer.effect(
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateCreditGrant",
     operation: PostBillingCreditGrants,
+    permissions: ["credit_grants_write"],
   }),
 );
