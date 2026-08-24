@@ -23,6 +23,8 @@ export {
 } from "./terminal.ts";
 export {
   Screen,
+  type ApplicationOptions,
+  type ApplicationRoute,
   type Choice,
   type AwaitExternalOptions,
   type ConfirmOptions,

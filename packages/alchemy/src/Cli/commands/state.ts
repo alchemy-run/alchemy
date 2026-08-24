@@ -210,8 +210,18 @@ const stateExplorer = (args: StateArgs) =>
           { concurrency: 32, discard: true },
         ),
     };
+    const screen = stateExplorerScreen(explorer);
     yield* cli
-      .application(cli.prompt.custom(stateExplorerScreen(explorer)))
+      .route({
+        initialPath: "/state",
+        routes: [
+          {
+            path: "/state",
+            render: ({ exit, cancel }) =>
+              screen.render({ submit: exit, cancel }),
+          },
+        ],
+      })
       .pipe(CliKit.Application.alternate)
       .pipe(Effect.catchTag("TerminalCancelled", () => Effect.void));
   });

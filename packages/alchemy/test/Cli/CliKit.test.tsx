@@ -1336,6 +1336,33 @@ it.effect("keeps one renderer alive for an Effect-driven application", () =>
   }),
 );
 
+it.effect("mounts the shared React application at a memory route", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+
+    const result = yield* service.route({
+      initialPath: "/profile",
+      routes: [
+        {
+          path: "/state",
+          render: () => <Status>Wrong route</Status>,
+        },
+        {
+          path: "/profile",
+          render: ({ exit }) => {
+            queueMicrotask(() => exit("done"));
+            return <Status>Profile route</Status>;
+          },
+        },
+      ],
+    });
+
+    expect(result).toBe("done");
+    expect(stripAnsi(stdout.output)).toContain("Profile route");
+    expect(stripAnsi(stdout.output)).not.toContain("Wrong route");
+  }),
+);
+
 it.effect("provides CliKit once as a scoped injectable service", () => {
   const stdout = new CaptureStream();
   return Effect.gen(function* () {

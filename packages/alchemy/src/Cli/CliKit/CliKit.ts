@@ -7,6 +7,7 @@ import type {
   ConfirmOptions,
   CycleSelectOptions,
   AwaitExternalOptions,
+  ApplicationOptions,
   MessageOptions,
   InteractionError,
   LiveViewHandle,
@@ -115,6 +116,11 @@ export class CliKit extends Context.Service<
     readonly application: <A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | NonInteractiveTerminal, R>;
+
+    /** Mount the shared React application at a route until the view exits. */
+    readonly route: <Value>(
+      options: ApplicationOptions<Value>,
+    ) => Effect.Effect<Value, InteractionError | NonInteractiveTerminal>;
 
     readonly live: {
       /**

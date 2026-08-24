@@ -3493,6 +3493,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 5.20260812.1
         version: 5.20260812.1
+      '@effect/atom-react':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(react@19.2.8)(scheduler@0.27.0)
       '@effect/platform-bun':
         specifier: catalog:effect
         version: 4.0.0-rc.111(effect@4.0.0-rc.111)
@@ -7994,6 +7997,7 @@ packages:
 
   '@prisma-next/cli@0.8.0':
     resolution: {integrity: sha512-3tVU24PDPwQFTEcI4K/RC9eC1aEHsSSNCAcg2/zpl3qH1FcjgRLc7XMkzqWnMH35ifPkPrwxuOjlNXp239643w==}
+    deprecated: The @prisma-next scope is retired. Prisma Next continues as Prisma ORM v8, developed in https://github.com/prisma/prisma — install prisma-next@latest instead.
     hasBin: true
 
   '@prisma-next/config@0.8.0':
@@ -8037,6 +8041,7 @@ packages:
   '@prisma-next/postgres@0.8.0':
     resolution: {integrity: sha512-UrUd7SBxgnCGm41+VbeGuYFkWU5ym8IPRO1Uem+M98w4sYk/EYuJCnF/KDpL2scqy3qg22MMc92j1jiz6d2Anw==}
     engines: {node: '>=20'}
+    deprecated: The @prisma-next scope is retired. Prisma Next continues as Prisma ORM v8, published as the prisma package from https://github.com/prisma/prisma — install prisma@next instead.
 
   '@prisma-next/psl-parser@0.8.0':
     resolution: {integrity: sha512-cDsVRqq0SZ3W+du1fFaUOe679dV1Zl35C9wmgSLQQ9LYohiEWsTsWfACDO9oOhLUOzeK6iFJb5WMdEgbvf/6Fg==}
@@ -8084,6 +8089,7 @@ packages:
 
   '@prisma-next/target-postgres@0.8.0':
     resolution: {integrity: sha512-CXkzmyXhtvcfhaBXBDlyb6Aq2wISQuax2pUbK+tq+e9Acz0idDRZk3FtvCkPUkviKv6ZAPA8EpnB9FT3iP3KGw==}
+    deprecated: The @prisma-next scope is retired. Prisma Next continues as Prisma ORM v8, developed in https://github.com/prisma/prisma — install prisma-next@latest instead.
 
   '@prisma-next/ts-render@0.8.0':
     resolution: {integrity: sha512-IYx4NLsTaJxVlUWI+QQyY8LgLEHUOqqxTOwAlhSyXbzbTXiz89DN/I/swtapH3cl1Tk/PAJG9c5vKMl3lfAcng==}
@@ -8096,6 +8102,7 @@ packages:
   '@prisma-next/vite-plugin-contract-emit@0.8.0':
     resolution: {integrity: sha512-93l6N7QEcxpma6JaegFS73zMCfsP1Jjpkj4JrvURLhcD5sYSvyLV2PZArIwBD63lGLYgqL6KRCzRqfkOOUytug==}
     engines: {node: '>=20'}
+    deprecated: The @prisma-next scope is retired. Prisma Next continues as Prisma ORM v8, published as the prisma package from https://github.com/prisma/prisma — install prisma@next instead.
     peerDependencies:
       vite: ^7.0.0 || ^8.0.0
 

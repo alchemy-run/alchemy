@@ -14,6 +14,13 @@ import {
   Static,
   useTitle,
 } from "@alchemy.run/sigil";
+import { RegistryProvider } from "@effect/atom-react";
+import {
+  MemoryRouter,
+  Navigate,
+  Route,
+  Routes,
+} from "@alchemy.run/sigil/router";
 import { type ReactNode, useSyncExternalStore } from "react";
 import { Spinner, Status } from "./components/Feedback.tsx";
 import { CliEnvironment } from "./components/Environment.tsx";
@@ -36,6 +43,7 @@ import { applicationPresentation, CliKit } from "./CliKit.ts";
 import { setNativeProgress } from "./terminal.ts";
 import type {
   ProgressHandle,
+  ApplicationOptions,
   ProgressOptions,
   RenderOptions,
   Screen,
@@ -47,6 +55,43 @@ import type {
   LiveViewOptions,
   View,
 } from "./types.ts";
+
+function RoutedApplication<Value>({
+  options,
+  exit,
+  cancel,
+}: {
+  readonly options: ApplicationOptions<Value>;
+  readonly exit: (value: Value) => void;
+  readonly cancel: () => void;
+}) {
+  return (
+    <RegistryProvider>
+      <MemoryRouter initialEntries={[options.initialPath]}>
+        <ScreenCancelGuard
+          onCancel={() => {
+            options.onCancel?.();
+            cancel();
+          }}
+        >
+          <Routes>
+            {options.routes.map((route) => (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={route.render({ exit, cancel })}
+              />
+            ))}
+            <Route
+              path="*"
+              element={<Navigate to={options.initialPath} replace />}
+            />
+          </Routes>
+        </ScreenCancelGuard>
+      </MemoryRouter>
+    </RegistryProvider>
+  );
+}
 
 const InApplication = Context.Reference<boolean>(
   "Alchemy::CliKit/InApplication",
@@ -692,6 +737,22 @@ export const makeRuntime = (
           );
         });
 
+  const route = <Value,>(
+    routeOptions: ApplicationOptions<Value>,
+  ): Effect.Effect<Value, InteractionError | NonInteractiveTerminal> =>
+    app<Value, InteractionError, never>(
+      run({
+        name: routeOptions.initialPath,
+        render: ({ submit, cancel }) => (
+          <RoutedApplication
+            options={routeOptions}
+            exit={submit}
+            cancel={cancel}
+          />
+        ),
+      }),
+    );
+
   // A wizard owns the renderer when invoked standalone and reuses the
   // current application renderer when nested. Prompt serialization remains
   // centralized in `run`, so nested profile/OAuth flows suspend cleanly.
@@ -872,6 +933,7 @@ export const makeRuntime = (
     },
     wizard,
     application: app,
+    route,
     live: { progress, open: live },
     task: (taskOptions, effect) =>
       Effect.scoped(

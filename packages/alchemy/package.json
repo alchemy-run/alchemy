@@ -440,6 +440,7 @@
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/platform-node-shared": "catalog:effect",
+    "@effect/atom-react": "catalog:effect",
     "@foldkit/vite-plugin": "catalog:frontend",
     "@octanejs/adapter-cloudflare": "catalog:frontend",
     "@octanejs/vite-plugin": "catalog:frontend",

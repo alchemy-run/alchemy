@@ -5,6 +5,20 @@ import type { NonInteractiveTerminal, TerminalCancelled } from "./errors.ts";
 /** A composable CLI layout. Views are inert; only CliKit renders them. */
 export type View = ReactNode;
 
+export interface ApplicationRoute<Value> {
+  readonly path: string;
+  readonly render: (controls: {
+    readonly exit: (value: Value) => void;
+    readonly cancel: () => void;
+  }) => View;
+}
+
+export interface ApplicationOptions<Value> {
+  readonly initialPath: string;
+  readonly routes: ReadonlyArray<ApplicationRoute<Value>>;
+  readonly onCancel?: () => void;
+}
+
 export interface CliKitCapabilities {
   /** Whether this process has usable terminal input for prompts and apps. */
   readonly input: boolean;

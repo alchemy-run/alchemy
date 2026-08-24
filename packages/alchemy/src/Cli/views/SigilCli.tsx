@@ -31,8 +31,17 @@ const approvePlan = Effect.fn(function* <P extends Plan>(
   plan: P,
   options?: import("../Cli.ts").PlanDisplayOptions,
 ) {
-  return yield* cli.prompt
-    .custom(approvePlanScreen(plan, options?.detailed))
+  const screen = approvePlanScreen(plan, options?.detailed);
+  return yield* cli
+    .route<boolean>({
+      initialPath: "/deploy/approve",
+      routes: [
+        {
+          path: "/deploy/approve",
+          render: ({ exit, cancel }) => screen.render({ submit: exit, cancel }),
+        },
+      ],
+    })
     .pipe(
       Effect.catchTag("TerminalCancelled", () => Effect.succeed(false)),
       Effect.orDie,

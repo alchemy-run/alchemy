@@ -613,8 +613,6 @@ export const runProfileDashboardSession = <R,>(
 ): Effect.Effect<void, never, R | CliKit> =>
   Effect.flatMap(CliKit, (cli) =>
     cli.application(
-      // live.open is Scope-bound; the session scope is its release backstop
-      // (the ensuring(live.close) below settles it on the normal path).
       Effect.scoped(
         Effect.gen(function* () {
           const store = new DashStore(options.entries);
@@ -659,10 +657,23 @@ export const runProfileDashboardSession = <R,>(
             ),
           );
 
-          const live = yield* cli.live.open(
-            <Dashboard store={store} initialSelected={initialSelected} />,
-            { placement: "beforeTranscript" },
-          );
+          const application = yield* cli
+            .route<void>({
+              initialPath: "/profile",
+              onCancel: () => store.dispatch({ kind: "exit" }),
+              routes: [
+                {
+                  path: "/profile",
+                  render: () => (
+                    <Dashboard
+                      store={store}
+                      initialSelected={initialSelected}
+                    />
+                  ),
+                },
+              ],
+            })
+            .pipe(Effect.asVoid, Effect.ignore, Effect.forkChild);
 
           // Mount the spinner before starting stack import/provider builds.
           // Forking the loader first allowed synchronous module evaluation to
@@ -761,7 +772,7 @@ export const runProfileDashboardSession = <R,>(
                   : Fiber.interrupt(noticeFiber),
               ),
             ),
-            Effect.ensuring(live.close),
+            Effect.ensuring(Fiber.interrupt(application)),
             Effect.ensuring(Fiber.interrupt(loader)),
           );
         }),
