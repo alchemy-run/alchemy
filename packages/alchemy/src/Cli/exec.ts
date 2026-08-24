@@ -16,7 +16,7 @@ import { selectCli } from "./selectCli.ts";
 
 // `alchemy dev` is a long-running session whose primary output is the log
 // stream (worker starts, cron fires, request logs) interleaved with
-// re-applies on file change. Ink's insertion model stacks inserted lines
+// re-applies on file change. Sigil's insertion model stacks inserted lines
 // ABOVE the animated region, so runtime logs end up above the plan/apply
 // output in scrollback. Append-only chronological rendering is the correct
 // model for a dev server (plan → status → logs, strictly in order), so dev
