@@ -1,8 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import * as NodeNet from "node:net";
 import * as Internet from "../../globals/Internet.ts";
 import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
@@ -251,6 +253,60 @@ layer(services, { excludeTestServices: true })((it) => {
         })),
       );
     }),
+  );
+
+  it.effect(
+    "retries a GET that was in flight when the upstream moved, without waiting for another request",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const instance = yield* proxy.serve();
+
+        // A "slow" first upstream: it answers only after a delay, so the
+        // proxied request is still in flight when the worker restarts.
+        const slowScope = yield* Scope.make();
+        const slow = yield* serveUpstream(
+          `export default {
+             async fetch() {
+               await new Promise((resolve) => setTimeout(resolve, 1500));
+               return new Response("slow");
+             },
+           };`,
+        ).pipe(Scope.provide(slowScope));
+        const fresh = yield* serveUpstream(
+          `export default { fetch: () => new Response("fresh") };`,
+        );
+
+        yield* instance.set(slow);
+        const pending = yield* Effect.forkChild(
+          Effect.promise(() =>
+            fetch(new URL("/", instance.url)).then((res) => res.text()),
+          ),
+          { startImmediately: true },
+        );
+        // Let the request reach the slow upstream…
+        yield* Effect.promise(
+          () => new Promise((resolve) => setTimeout(resolve, 300)),
+        );
+        // …then restart the worker the way the dev provider does: the new
+        // target is set BEFORE the old instance is torn down, so the
+        // in-flight fetch fails after the proxy already points elsewhere.
+        yield* instance.set(fresh);
+        yield* Scope.close(slowScope, Exit.void);
+
+        // The in-flight GET is retryable. It must be re-driven against the
+        // new target on its own — a client waiting on THIS response never
+        // sends another request to kick the queue, so parking it until the
+        // next PUT or request would hang the client forever (the runtime's
+        // hang detector then cancels the proxy call without a response).
+        const result = yield* Fiber.join(pending).pipe(
+          Effect.timeoutOrElse({
+            duration: "10 seconds",
+            orElse: () => Effect.succeed("TIMED OUT: parked in retry queue"),
+          }),
+        );
+        expect(result).toBe("fresh");
+      }),
   );
 
   it.effect(

@@ -467,13 +467,21 @@ export const ensureFloci = (
       image,
     ];
     yield* docker(args).pipe(
-      // A concurrent ensureFloci (e.g. the dev sidecar racing the CLI)
-      // may have created the container between our checks and this run —
-      // reuse it instead of failing.
+      // A concurrent ensureFloci (e.g. the dev sidecar racing the CLI's
+      // exec child on a machine where floci is not yet running) may have
+      // created the container between our checks and this run. Docker
+      // reports that as a name conflict — but not reliably: the losing
+      // `docker run` has been observed exiting non-zero with an EMPTY
+      // stderr right after a Docker Desktop restart, so the error text
+      // cannot be trusted. Ask Docker whether the container exists now and
+      // reuse it if so; only a run that left nothing behind is a failure.
       Effect.catch((error) =>
-        error.message.includes("already in use")
-          ? Effect.void
-          : Effect.fail(error),
+        docker(["inspect", "--format", "{{.Id}}", containerName]).pipe(
+          Effect.flatMap(({ stdout }) =>
+            stdout.trim() ? Effect.void : Effect.fail(error),
+          ),
+          Effect.catch(() => Effect.fail(error)),
+        ),
       ),
     );
 

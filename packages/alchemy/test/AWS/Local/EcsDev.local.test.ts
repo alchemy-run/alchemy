@@ -52,6 +52,8 @@ const RELOAD_PORT = 17358;
 const SVC_PORT = 17359;
 /** Must match the default port in fixtures/ecs-reload-main/server.ts. */
 const MAIN_RELOAD_PORT = 17360;
+/** Must match the port baked into fixtures/ecs-env/Dockerfile. */
+const ENV_PORT = 17361;
 
 const FLOCI_REGION = "us-east-1";
 
@@ -169,22 +171,26 @@ const pollMarker = Effect.fn(function* (options: {
   port: number;
   marker: string;
   times?: number;
+  /** Path to poll (default `/`). */
+  path?: string;
 }) {
   const client = yield* HttpClient.HttpClient;
   const times = options.times ?? 60;
-  const body = yield* client.get(`http://localhost:${options.port}/`).pipe(
-    Effect.flatMap((response) => response.text),
-    Effect.retry({
-      while: (): boolean => true,
-      schedule: Schedule.spaced("2 seconds"),
-      times,
-    }),
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (b): boolean => b.includes(options.marker),
-      times,
-    }),
-  );
+  const body = yield* client
+    .get(`http://localhost:${options.port}${options.path ?? "/"}`)
+    .pipe(
+      Effect.flatMap((response) => response.text),
+      Effect.retry({
+        while: (): boolean => true,
+        schedule: Schedule.spaced("2 seconds"),
+        times,
+      }),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (b): boolean => b.includes(options.marker),
+        times,
+      }),
+    );
   expect(body).toContain(options.marker);
 });
 
@@ -611,5 +617,79 @@ describe.sequential("EcsDev", () => {
         expect(activeServices).toEqual([]);
       }),
     { timeout: 300_000 },
+  );
+
+  /**
+   * A PROP-driven update — no file event — must roll the service's running
+   * containers onto the new task-definition revision. Regression: restart
+   * logic lived only in the file-watch trigger, so an engine reconcile
+   * (env change, inline-dockerfile edit) registered a new revision and
+   * `updateService`d onto it while the container kept serving the old one
+   * until the next source edit (`onReconciled` in DevWatchProvider).
+   */
+  test.provider.skipIf(!dockerAvailable)(
+    "rolls a service task on a prop-only env update",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const clone = yield* cloneFixture(
+          `${import.meta.dirname}/fixtures/ecs-env`,
+          { prefix: "ecs-env-" },
+        );
+
+        const declare = (env: string) =>
+          Effect.gen(function* () {
+            const cluster = yield* AWS.ECS.Cluster("EcsEnvCluster");
+            const service = yield* AWS.ECS.Service("EcsEnvService", {
+              cluster,
+              context: clone,
+              port: ENV_PORT,
+              cpu: 256,
+              memory: 512,
+              networkMode: "bridge",
+              requiresCompatibilities: ["EC2"],
+              launchType: "EC2",
+              desiredCount: 1,
+              runtimePlatform: hostRuntimePlatform,
+              deploymentStabilizationTimeout: "3 minutes",
+              env: { ROLL_ENV: env },
+            });
+            return { cluster, service };
+          });
+
+        const outputs = yield* stack.deploy(declare("roll-env-v1"));
+        yield* pollMarker({
+          port: ENV_PORT,
+          marker: "roll-env-v1",
+          path: "/env.txt",
+          times: 90,
+        });
+
+        // The prop change: same fixture bytes, only the env differs. The
+        // engine registers a new revision; the running container must roll.
+        const swapStartedAt = Date.now();
+        const updated = yield* stack.deploy(declare("roll-env-v2"));
+        expect(updated.service.taskDefinitionArn).not.toBe(
+          outputs.service.taskDefinitionArn,
+        );
+        yield* pollMarker({
+          port: ENV_PORT,
+          marker: "roll-env-v2",
+          path: "/env.txt",
+          times: 90,
+        });
+        yield* Effect.log(
+          `prop-only service roll observed in ${Date.now() - swapStartedAt}ms`,
+        );
+
+        yield* stack.destroy();
+        yield* assertFamilyTornDown({
+          clusterName: outputs.cluster.clusterName,
+          taskDefinitionArn: updated.service.taskDefinitionArn,
+          containerName: updated.service.containerName!,
+        });
+      }),
+    { timeout: 600_000 },
   );
 }); // describe.sequential("EcsDev")

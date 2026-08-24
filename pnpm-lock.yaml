@@ -2304,6 +2304,21 @@ importers:
         specifier: 4.0.0-rc.111
         version: 4.0.0-rc.111
 
+  examples/dev-stress:
+    dependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20260812.1
+        version: 5.20260812.1
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+
   examples/docker-postgres:
     dependencies:
       alchemy:

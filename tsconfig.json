@@ -98,6 +98,9 @@
       "path": "./examples/aws-dev/tsconfig.json"
     },
     {
+      "path": "./examples/dev-stress/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-lambda/tsconfig.json"
     },
     {

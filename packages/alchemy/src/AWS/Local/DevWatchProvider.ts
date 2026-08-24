@@ -113,6 +113,27 @@ export interface DevWatchSpec<Props, Attrs> {
    */
   readonly watchConfigOf: (news: Props, attrs: Attrs) => unknown;
   /**
+   * Called after EVERY successful reconcile — engine-driven (a prop
+   * change, a fresh session's converge) and watcher-driven
+   * ({@link DevWatchContext.rerunReconcile}) alike — inside the per-id
+   * lock, with the floci override services provided. This is where a
+   * provider makes the emulator's RUNNING state follow the new revision
+   * (e.g. ECS restarting tasks): the watch trigger only fires for FILE
+   * changes, so restart logic that lives only in the watch loop silently
+   * skips prop-driven updates (an inline dockerfile edit, a new env var)
+   * and running tasks keep serving the old revision until the next source
+   * edit.
+   *
+   * `previous` is the attrs before this reconcile — `undefined` on a
+   * greenfield create.
+   */
+  readonly onReconciled?: (input: {
+    id: string;
+    news: Props;
+    previous: Attrs | undefined;
+    attrs: Attrs;
+  }) => Effect.Effect<void, unknown, any>;
+  /**
    * Resource-specific replacement rules, mirroring the LIVE diff's cheap
    * checks (never bundling/building). Checked before the generic dev policy.
    */
@@ -272,6 +293,7 @@ export const makeDevWatchProvider = <
           currentAttrs: Effect.sync(() => entry.attrs as Attrs),
           rerunReconcile: withLock(input.id)(
             Effect.gen(function* () {
+              const previous = entry.attrs as Attrs | undefined;
               const fresh = yield* wrapped.reconcile(
                 withSafeSession({
                   ...entry.lastInput,
@@ -280,6 +302,16 @@ export const makeDevWatchProvider = <
                 }) as any,
               );
               entry.attrs = fresh;
+              if (spec.onReconciled !== undefined) {
+                yield* spec
+                  .onReconciled({
+                    id: input.id,
+                    news: stripEffects(entry.lastInput.news) as Props,
+                    previous,
+                    attrs: fresh as Attrs,
+                  })
+                  .pipe(Effect.provide(services));
+              }
               return fresh as Attrs;
             }),
           ) as Effect.Effect<Attrs, unknown>,
@@ -349,10 +381,22 @@ export const makeDevWatchProvider = <
         reconcile: Effect.fn(function* (input: any) {
           return yield* withLock(input.id)(
             Effect.gen(function* () {
+              const previous = (input.output ??
+                watches.get(input.id)?.attrs) as Attrs | undefined;
               const attrs = yield* wrapped.reconcile(
                 withSafeSession(input) as any,
               );
               yield* ensureWatch(input, attrs);
+              if (spec.onReconciled !== undefined) {
+                yield* spec
+                  .onReconciled({
+                    id: input.id,
+                    news: stripEffects(input.news) as Props,
+                    previous,
+                    attrs: attrs as Attrs,
+                  })
+                  .pipe(Effect.provide(services));
+              }
               return attrs;
             }),
           );
