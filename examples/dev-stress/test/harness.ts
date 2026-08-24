@@ -188,6 +188,30 @@ export class DevServer {
   }
 
   /**
+   * Resolve once no new plan has appeared for `quietMs`. Phases that edit
+   * a file inside the STACK's import graph leave a re-plan trailing the
+   * hot swap by a few seconds; a later phase that baselines `planCount`
+   * (to assert "this path never re-plans") must absorb that trail first
+   * or the trailing plan lands inside its window and reads as a spurious
+   * re-run.
+   */
+  async settlePlans(quietMs = 8_000, capMs = 60_000): Promise<void> {
+    const deadline = Date.now() + capMs;
+    let last = this.planCount;
+    let quietSince = Date.now();
+    while (Date.now() < deadline) {
+      await Bun.sleep(500);
+      const current = this.planCount;
+      if (current !== last) {
+        last = current;
+        quietSince = Date.now();
+      } else if (Date.now() - quietSince >= quietMs) {
+        return;
+      }
+    }
+  }
+
+  /**
    * Throws (with an output tail) unless the CLI process is still running.
    * The single most important invariant of the whole suite: nothing the
    * suite does to the project may kill the dev server.

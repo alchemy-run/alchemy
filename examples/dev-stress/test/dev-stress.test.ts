@@ -1349,6 +1349,9 @@ test(
 test(
   "rapid-fire bundler edits converge on the last write without re-running the stack",
   async () => {
+    // The previous phase edited stack-graph files (alchemy.run.ts, the
+    // Lambda source); absorb any trailing re-plan before baselining.
+    await server.settlePlans();
     const plansBefore = server.planCount;
     const BURST = 25;
     for (let i = 1; i <= BURST; i++) {
