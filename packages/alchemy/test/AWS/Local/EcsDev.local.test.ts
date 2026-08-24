@@ -54,6 +54,8 @@ const SVC_PORT = 17359;
 const MAIN_RELOAD_PORT = 17360;
 /** Must match the port baked into fixtures/ecs-env/Dockerfile. */
 const ENV_PORT = 17361;
+/** Must match the port baked into fixtures/ecs-ext/Dockerfile.ecs. */
+const EXT_PORT = 17363;
 
 const FLOCI_REGION = "us-east-1";
 
@@ -701,6 +703,99 @@ describe.sequential("EcsDev", () => {
           clusterName: outputs.cluster.clusterName,
           taskDefinitionArn: updated.service.taskDefinitionArn,
           containerName: updated.service.containerName!,
+        });
+      }),
+    { timeout: 600_000 },
+  );
+  /**
+   * A `dockerfile` PATH that lives OUTSIDE the build context: the watcher
+   * must watch the Dockerfile's own directory in addition to the context
+   * (the `imageSourceTrigger` outside-context branch — previously never
+   * exercised by any test), and an edit to the Dockerfile itself must
+   * rebuild + roll with no deploy.
+   */
+  test.provider.skipIf(!dockerAvailable)(
+    "hot reloads a service whose Dockerfile lives outside the build context",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const clone = yield* cloneFixture(
+          `${import.meta.dirname}/fixtures/ecs-ext`,
+          { prefix: "ecs-ext-" },
+        );
+
+        const outputs = yield* stack.deploy(
+          Effect.gen(function* () {
+            const cluster = yield* AWS.ECS.Cluster("EcsExtCluster");
+            const service = yield* AWS.ECS.Service("EcsExtService", {
+              cluster,
+              context: path.join(clone, "site"),
+              dockerfile: path.join(clone, "Dockerfile.ecs"),
+              port: EXT_PORT,
+              cpu: 256,
+              memory: 512,
+              networkMode: "bridge",
+              requiresCompatibilities: ["EC2"],
+              launchType: "EC2",
+              desiredCount: 1,
+              runtimePlatform: hostRuntimePlatform,
+              deploymentStabilizationTimeout: "3 minutes",
+            });
+            return { cluster, service };
+          }),
+        );
+
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-content-v1",
+          times: 90,
+        });
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-baked-v1",
+          path: "/baked.txt",
+          times: 60,
+        });
+
+        // Edit the OUT-OF-CONTEXT Dockerfile — no deploy.
+        const swapStartedAt = Date.now();
+        const dockerfile = yield* fs.readFileString(
+          path.join(clone, "Dockerfile.ecs"),
+        );
+        yield* fs.writeFileString(
+          path.join(clone, "Dockerfile.ecs"),
+          dockerfile.replace("ecs-ext-baked-v1", "ecs-ext-baked-v2"),
+        );
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-baked-v2",
+          path: "/baked.txt",
+          times: 90,
+        });
+        yield* Effect.log(
+          `out-of-context Dockerfile reload observed in ${Date.now() - swapStartedAt}ms`,
+        );
+
+        // A context file edit still reloads too.
+        yield* fs.writeFileString(
+          path.join(clone, "site", "index.html"),
+          "ecs-ext-content-v2\n",
+        );
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-content-v2",
+          times: 90,
+        });
+
+        yield* stack.destroy();
+        yield* assertFamilyTornDown({
+          clusterName: outputs.cluster.clusterName,
+          taskDefinitionArn: outputs.service.taskDefinitionArn,
+          containerName: outputs.service.containerName!,
         });
       }),
     { timeout: 600_000 },

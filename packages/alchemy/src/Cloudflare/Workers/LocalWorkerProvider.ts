@@ -15,6 +15,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import type * as FileSystem from "effect/FileSystem";
 import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
@@ -597,6 +598,26 @@ export const LocalWorkerProvider = () =>
       // serve completes. Ownership is tracked in `workerdScopes`, closed by
       // the next successful serve, by `delete`, or by provider shutdown.
       /**
+       * One container-context watcher per worker id, keyed by the watched
+       * path set. Registry-held (NOT per-serve-scope): a worker restarts
+       * through several code paths that overlap scopes, and a watcher per
+       * serve produced DUPLICATES whose simultaneous restarts storm the
+       * instance until the DO's container link breaks.
+       */
+      const containerWatchers = new Map<
+        string,
+        { key: string; fiber: Fiber.Fiber<void> }
+      >();
+
+      const stopContainerWatcher = (id: string) =>
+        Effect.suspend(() => {
+          const existing = containerWatchers.get(id);
+          if (existing === undefined) return Effect.void;
+          containerWatchers.delete(id);
+          return Fiber.interrupt(existing.fiber).pipe(Effect.asVoid);
+        });
+
+      /**
        * Watch a worker's Build-variant container contexts and restart the
        * instance when their CONTENT changes — the docker build happens at
        * instance start, so a restart IS the image rebuild.
@@ -613,7 +634,7 @@ export const LocalWorkerProvider = () =>
        * (`node_modules`/`.git` skipped), so editor double-saves and
        * metadata-only churn don't bounce the instance.
        */
-      const watchContainerContexts = (
+      const ensureContainerWatcher = (
         worker: RunnableWorkerConfig,
         restart: Effect.Effect<
           void,
@@ -637,6 +658,12 @@ export const LocalWorkerProvider = () =>
                   ? path.resolve(context, image.dockerfile)
                   : undefined,
             });
+          }
+          const key = JSON.stringify([...watched.entries()].sort());
+          const existing = containerWatchers.get(worker.id);
+          if (existing !== undefined) {
+            if (existing.key === key) return; // same watcher keeps running
+            yield* stopContainerWatcher(worker.id);
           }
           if (watched.size === 0) return;
 
@@ -669,7 +696,6 @@ export const LocalWorkerProvider = () =>
             return yield* sha256(hashes.join("\n"));
           }).pipe(Effect.orElseSucceed(() => undefined));
 
-          let last = yield* fingerprint;
           const streams = [...watched.entries()].flatMap(
             ([context, { dockerfile }]) => [
               fs.watch(context, { recursive: true }),
@@ -678,28 +704,43 @@ export const LocalWorkerProvider = () =>
                 : []),
             ],
           );
-          yield* Stream.mergeAll(streams, {
-            concurrency: streams.length,
-          }).pipe(
-            Stream.debounce("500 millis"),
-            Stream.runForEach(() =>
-              Effect.gen(function* () {
-                const next = yield* fingerprint;
-                if (next === undefined || next === last) return;
-                last = next;
-                yield* Effect.logInfo(
-                  `[${worker.id}] Container build context changed, restarting instance`,
-                );
-                yield* restart;
+          const watchLoop = Effect.gen(function* () {
+            let last = yield* fingerprint;
+            yield* Stream.mergeAll(streams, {
+              concurrency: streams.length,
+            }).pipe(
+              Stream.debounce("500 millis"),
+              Stream.runForEach(() =>
+                Effect.gen(function* () {
+                  const next = yield* fingerprint;
+                  if (next === undefined || next === last) return;
+                  last = next;
+                  yield* Effect.logInfo(
+                    `[${worker.id}] Container build context changed, restarting instance`,
+                  );
+                  yield* restart;
+                }),
+              ),
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  `[${worker.id}] Container context watch failed`,
+                  Cause.squash(cause),
+                ),
+              ),
+            );
+          });
+          const fiber = yield* watchLoop.pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                const current = containerWatchers.get(worker.id);
+                if (current?.fiber === fiber) {
+                  containerWatchers.delete(worker.id);
+                }
               }),
             ),
-            Effect.catchCause((cause) =>
-              Effect.logWarning(
-                `[${worker.id}] Container context watch failed`,
-                Cause.squash(cause),
-              ),
-            ),
+            Effect.forkIn(rootScope),
           );
+          containerWatchers.set(worker.id, { key, fiber });
         });
 
       const serveWith = (
@@ -791,13 +832,13 @@ export const LocalWorkerProvider = () =>
                   worker.name,
                   restartWorker(worker.id),
                 );
-                // Container-context watcher, tied to THIS instance's scope
-                // (a restart closes it and the replacement serve forks a
-                // fresh one — never two watchers for one worker).
-                yield* watchContainerContexts(
+                // Idempotent: the registry keeps ONE watcher per worker id
+                // across restarts (a new one only when the watched path set
+                // changed).
+                yield* ensureContainerWatcher(
                   worker,
                   Effect.suspend(() => restartWorker(worker.id)),
-                ).pipe(Effect.forkIn(scope));
+                );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (
                   JSON.stringify(currentConsumers) !==
@@ -884,6 +925,7 @@ export const LocalWorkerProvider = () =>
       // instance replacement does NOT go through this: the previous workerd
       // keeps serving until the replacement's first serve closes it.
       const closeWorkerd = Effect.fn(function* (id: string) {
+        yield* stopContainerWatcher(id);
         const scope = workerdScopes.get(id);
         if (scope) {
           workerdScopes.delete(id);

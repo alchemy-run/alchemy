@@ -148,39 +148,54 @@ export const DockerLive = Layer.effect(
 
     const makeDockerProxyServer = (socketPath: string) =>
       NodeHttp.createServer(async (req, res) => {
-        const isContainerCreateRequest =
-          req.method === "POST" &&
-          req.url?.startsWith("/containers/create") &&
-          !req.url.endsWith("-proxy");
-        if (isContainerCreateRequest) {
+        const isCreateRequest =
+          req.method === "POST" && !!req.url?.startsWith("/containers/create");
+        const isProxyCreateRequest =
+          isCreateRequest && req.url!.endsWith("-proxy");
+        if (isCreateRequest) {
           const original = await extractJsonBody<{
             Image: string;
             Env: Array<string>;
-            HostConfig?: { ExtraHosts?: Array<string> } & Record<
-              string,
-              unknown
-            >;
+            HostConfig?: {
+              ExtraHosts?: Array<string>;
+              NetworkMode?: string;
+            } & Record<string, unknown>;
           }>(req);
-          const image = registeredImages.get(original.Image);
+          // The user container joins the sibling `-proxy` container's
+          // network namespace (`NetworkMode: container:…-proxy`) — Docker
+          // rejects a custom host-to-IP mapping in that mode, and the
+          // joining container inherits the proxy's /etc/hosts anyway. So
+          // the host-gateway mapping goes on the PROXY create (which owns
+          // the namespace); other creates only get it when their network
+          // mode allows one. `host.docker.internal` is built in on Docker
+          // Desktop but not on Linux engines — the mapping makes the
+          // rewritten env values below resolve there too.
+          const networkMode = original.HostConfig?.NetworkMode ?? "";
+          const hostConfig =
+            networkMode.startsWith("container:") || networkMode === "host"
+              ? original.HostConfig
+              : {
+                  ...original.HostConfig,
+                  ExtraHosts: [
+                    ...(original.HostConfig?.ExtraHosts ?? []),
+                    "host.docker.internal:host-gateway",
+                  ],
+                };
+          const image = isProxyCreateRequest
+            ? undefined
+            : registeredImages.get(original.Image);
           const transformed = JSON.stringify({
             ...original,
             Image: image?.tag ?? original.Image,
-            Env: [
-              ...(original.Env ?? []),
-              ...Object.entries(image?.env ?? {}).map(
-                ([name, value]) => `${name}=${value}`,
-              ),
-            ].map(rewriteLoopbackEnv),
-            HostConfig: {
-              ...original.HostConfig,
-              // `host.docker.internal` is built in on Docker Desktop but
-              // not on Linux engines — the host-gateway mapping makes the
-              // rewritten env values resolve there too.
-              ExtraHosts: [
-                ...(original.HostConfig?.ExtraHosts ?? []),
-                "host.docker.internal:host-gateway",
-              ],
-            },
+            Env: isProxyCreateRequest
+              ? original.Env
+              : [
+                  ...(original.Env ?? []),
+                  ...Object.entries(image?.env ?? {}).map(
+                    ([name, value]) => `${name}=${value}`,
+                  ),
+                ].map(rewriteLoopbackEnv),
+            HostConfig: hostConfig,
           });
           const proxy = sendProxyRequest({
             socketPath,

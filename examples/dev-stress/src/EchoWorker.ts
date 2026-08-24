@@ -81,7 +81,7 @@ export default class EchoWorker extends Cloudflare.Worker<EchoWorker>()(
           return yield* HttpServerResponse.json({ count });
         }
 
-        if (url.pathname === "/sandbox") {
+        if (url.pathname.startsWith("/sandbox")) {
           return yield* sandbox
             .getByName("stress")
             .fetch(request)

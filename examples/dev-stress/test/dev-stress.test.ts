@@ -260,13 +260,25 @@ test(
     expect(second.count).toBe(first.count + 1);
 
     // ── Cloudflare Container (docker), reached through the DO ──
-    const sandbox = await fetchJson<{ greeting: string }>(
+    const sandbox = await fetchJson<{ greeting: string; marker: string }>(
       echo("/sandbox"),
       undefined,
       // The image may still be pulling/starting on the first request.
       { tries: 180, delayMs: 1_000 },
     );
     expect(sandbox.greeting).toBe("hello-from-container");
+    expect(sandbox.marker).toBe("sandbox-v1");
+
+    // ── #1334: the container reaches a service on the HOST through an env
+    // var written as `http://localhost:…` (the dev runtime rewrites the
+    // loopback host to `host.docker.internal`) ──
+    const hostFetch = await fetchJson<{ target: string; body: string }>(
+      echo("/sandbox/host-fetch"),
+      undefined,
+      { tries: 60, delayMs: 1_000 },
+    );
+    expect(hostFetch.target).toBe("http://host.docker.internal:8793");
+    expect(hostFetch.body).toContain("aws-site-env-v1");
 
     // ── Cloudflare, path-`main` worker ──
     expect(
@@ -1041,6 +1053,40 @@ test(
 );
 
 test(
+  "Cloudflare Container hot reload: editing the container's program rebuilds the image and restarts it",
+  async () => {
+    // The container module is imported by the stack, so this edit replans;
+    // the reload rides the image content hash in the worker's restart
+    // config (regression: the sidecar-lifetime artifact memo made the diff
+    // compare the first run's hash forever, and the config only carried
+    // the image's stable paths — the running container served stale code
+    // until a full dev-session restart).
+    server.patchRegion(
+      "src/SandboxContainer.ts",
+      "SANDBOX_MARKER",
+      '          marker: "sandbox-v2",\n',
+    );
+    await waitForJson<{ marker: string }>(
+      "the sandbox container to serve the rebuilt program",
+      echo("/sandbox"),
+      (body) => body.marker === "sandbox-v2",
+      { tries: 300, delayMs: 1_000, server },
+    );
+    server.assertAlive("container hot reload");
+
+    // The #1334 loopback rewrite still holds on the rebuilt container.
+    const hostFetch = await fetchJson<{ body: string }>(
+      echo("/sandbox/host-fetch"),
+      undefined,
+      { tries: 60, delayMs: 1_000 },
+    );
+    expect(hostFetch.body).toContain("aws-site-env-v1");
+    cleanCursor = server.mark();
+  },
+  PHASE_TIMEOUT,
+);
+
+test(
   "graph churn: a replacement-forcing prop change swaps a DynamoDB table under a running Lambda",
   async () => {
     const source = server.read("src/ApiFunction.ts");
@@ -1424,12 +1470,13 @@ test(
     expect(
       (await fetchJson<{ count: number }>(echo("/counter"))).count,
     ).toBeGreaterThan(0);
-    expect(
-      (await fetchJson<{ greeting: string }>(echo("/sandbox"), undefined, {
-        tries: 60,
-        delayMs: 1_000,
-      })).greeting,
-    ).toBe("hello-from-container");
+    const finalSandbox = await fetchJson<{ greeting: string; marker: string }>(
+      echo("/sandbox"),
+      undefined,
+      { tries: 60, delayMs: 1_000 },
+    );
+    expect(finalSandbox.greeting).toBe("hello-from-container");
+    expect(finalSandbox.marker).toBe("sandbox-v2");
 
     // AWS, through the cross-cloud hop
     expect((await fetchJson<{ text: string }>(api("/aws/dynamo"))).text).toBe(

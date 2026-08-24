@@ -89,23 +89,28 @@ The suite tells them apart by counting `Plan:` renders in the CLI's output
     the Dockerfile itself, an env *prop* (no file event — the engine path),
     and an inline-Dockerfile *prop*. All four must roll the running
     containers.
-11. **A replacement** — DynamoDB's partition key is immutable, so changing
+11. **Cloudflare Container hot reload** — editing the container's program
+    rebuilds the image and restarts the running container; and the
+    container reaches a service on the HOST through an env var written as
+    `http://localhost:…` (the dev runtime rewrites loopback hosts to
+    `host.docker.internal` — the #1334 database shape).
+12. **A replacement** — DynamoDB's partition key is immutable, so changing
     it swaps the table under the running Lambda; then swaps it back.
-12. **A second MicroVM image** built, bound to the running Worker, booted,
+13. **A second MicroVM image** built, bound to the running Worker, booted,
     and removed — while the first image keeps working.
-13. **The entire AWS Lambda subsystem** deleted in one edit (Function,
+14. **The entire AWS Lambda subsystem** deleted in one edit (Function,
     bucket, table, queue, event source, and the cross-cloud binding that
     named it) while Cloudflare keeps serving — then restored.
-14. **Binding churn** — a changed binding value, a binding that appears and
+15. **Binding churn** — a changed binding value, a binding that appears and
     disappears, and a `Command.Dev` config change that must restart the
     child (new pid).
 
 **Load and final state**
 
-15. **Rapid fire** — 25 bundler-path saves and 15 stack-path saves in
+16. **Rapid fire** — 25 bundler-path saves and 15 stack-path saves in
     bursts, asserting convergence on the last write and that the watchers
     coalesce (measured: 15 saves in ~1s produce a single re-apply).
-16. **Simultaneous cross-cloud edits**, then a full health re-probe and a
+17. **Simultaneous cross-cloud edits**, then a full health re-probe and a
     clean Ctrl-C shutdown.
 
 Nothing is skipped: Docker is a hard requirement, and a machine without it
@@ -132,6 +137,23 @@ focused regression test closer to the code:
   eventually cancelled the stalled proxy call, and the client got nothing.
   The proxy now re-drives its queue immediately after parking
   (`packages/cloudflare-runtime/src/core/test/proxy/WorkerProxy.test.ts`).
+- **Cloudflare Containers never hot reloaded, at all.** Three stacked
+  causes: the local provider's image hash was memoized in the RPC sidecar,
+  whose artifact store outlives every run — so the diff compared the FIRST
+  run's hash forever and reported noop; the worker's restart config only
+  carried the image's stable paths, so even a detected change never
+  restarted the instance; and user Dockerfile/context files are not
+  imported by the stack, so `bun --watch` never replanned for them. Fixed
+  by per-plan cache eviction, the content hash riding the container
+  binding into the worker's hashed config, and a context watcher in the
+  local worker runner (`test/Cloudflare/Container/LocalContainerReload.test.ts`).
+- **Dev containers couldn't reach services on the host**
+  ([#1334](https://github.com/alchemy-run/alchemy/issues/1334)): env
+  values injected into a dev container carry loopback URLs (locally
+  emulated databases, dev servers) that dangle inside the container. The
+  workerd docker proxy now rewrites loopback hosts in URL-shaped env
+  values to `host.docker.internal` (with the `host-gateway` ExtraHosts
+  mapping on the proxy container for Linux engines).
 - **ECS tasks never rolled on prop-driven updates.** Restart/roll logic
   lived only in the file-watch trigger, so a prop change — an inline
   `dockerfile` edit, a new env var — registered a new task-definition

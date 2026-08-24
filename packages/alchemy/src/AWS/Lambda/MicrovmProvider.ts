@@ -250,10 +250,12 @@ const artifactContent = (
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
         if (content) files.push({ path: "Dockerfile", content });
       }
-      const contentId = files
-        .map((f) => `${f.path}:${f.content.byteLength}`)
-        .sort()
-        .join("|");
+      // Hash the BYTES, not `path:byteLength` — a same-length edit (a
+      // flipped version string, a swapped constant) must count as a change.
+      const contentId = (yield* Effect.forEach(
+        [...files].sort((a, b) => (a.path < b.path ? -1 : 1)),
+        (f) => Effect.map(sha256(f.content), (hash) => `${f.path}:${hash}`),
+      )).join("|");
       const archive = yield* zipFiles(files);
       return {
         contentHash: yield* sha256(contentId),

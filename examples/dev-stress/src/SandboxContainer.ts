@@ -39,7 +39,7 @@ export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://container");
-        if (url.pathname === "/host-fetch") {
+        if (url.pathname.endsWith("/host-fetch")) {
           // Reach a service on the DEVELOPER'S machine through an env var
           // that was written as `http://localhost:…` — the database shape
           // of #1334, minus the database.
