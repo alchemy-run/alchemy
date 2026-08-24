@@ -742,7 +742,7 @@ export const normalizeFunctionUrl = (
  * ) {}
  * ```
  *
- * @section Sandbox-Scoped Initialization
+ * ### Sandbox-Scoped Initialization
  * Returning a `fetch` shape covers the common case. When a handler needs
  * services that are expensive to construct — a database pool, a fetched
  * config, an SDK client — register a *deferred listener* instead: pass
@@ -753,7 +753,7 @@ export const normalizeFunctionUrl = (
  * Wrap an `HttpEffect` in `makeFunctionHttpHandler` to keep Effect HTTP
  * semantics on a Function URL.
  *
- * @example Build a layer once per sandbox
+ * **Example:** Build a layer once per sandbox
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
@@ -780,7 +780,7 @@ export const normalizeFunctionUrl = (
  * ) {}
  * ```
  *
- * @example Requirements Lambda already provides
+ * **Example:** Requirements Lambda already provides
  * ```typescript
  * // Lambda declares what it supplies at each phase, so neither `Scope` nor
  * // `HandlerContext` leaks into the Function's requirements — only genuine
@@ -799,8 +799,8 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
- * @section Configuration
- * @example Function with URL
+ * ### Configuration
+ * **Example:** Function with URL
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
