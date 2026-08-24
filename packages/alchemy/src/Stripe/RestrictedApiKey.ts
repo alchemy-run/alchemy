@@ -203,6 +203,12 @@ export const RestrictedApiKeyProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const name = yield* resolveName(id, news.name);
       const permissions = collectPermissions(news.permissions, bindings);
+      // TODO: Mint a real restricted key once Stripe publishes a public
+      // create-key API. `POST /v2/iam/api_keys` (Stripe Apps IAM preview)
+      // 404s as of 2026-08. Pass `permissions` (props + bindings) as the
+      // key's scopes, persist the returned `rk_…` as `value`, and teach
+      // list/delete to enumerate/revoke it. Until then this is a logical
+      // token: Dashboard `news.value` or the account secret.
       const value =
         news.value !== undefined
           ? Redacted.make(news.value)
