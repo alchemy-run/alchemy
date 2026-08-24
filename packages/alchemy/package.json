@@ -227,6 +227,18 @@
       "worker": "./src/Hetzner/*.ts",
       "import": "./lib/Hetzner/*.js"
     },
+    "./GCP": {
+      "types": "./lib/GCP/index.d.ts",
+      "bun": "./src/GCP/index.ts",
+      "worker": "./src/GCP/index.ts",
+      "import": "./lib/GCP/index.js"
+    },
+    "./GCP/*": {
+      "types": "./lib/GCP/*/index.d.ts",
+      "bun": "./src/GCP/*/index.ts",
+      "worker": "./src/GCP/*/index.ts",
+      "import": "./lib/GCP/*/index.js"
+    },
     "./Fly": {
       "types": "./lib/Fly/index.d.ts",
       "bun": "./src/Fly/index.ts",
@@ -397,6 +409,7 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
+    "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",

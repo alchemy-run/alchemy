@@ -51,6 +51,7 @@
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
     "logs:otel:prod": "bun logs:otel --profile prod --stage prod",
     "nuke": "bash scripts/nuke.sh",
+    "nuke:gcp": "bash scripts/nuke-gcp.sh",
     "nuke:local": "bash scripts/nuke-local.sh",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
     "prepare": "husky && effect-tsgo patch && bun build:cloudflare-packages",
