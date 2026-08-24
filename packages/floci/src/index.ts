@@ -37,7 +37,7 @@ import * as path from "node:path";
  * workflow. Bumping this pin (with a new `x.y.z-alchemy.N` tag) is how an
  * emulator change reaches users.
  */
-export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.7";
+export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.8";
 
 /** Default gateway port (LocalStack-compatible). */
 export const DEFAULT_FLOCI_PORT = 4566;
@@ -385,28 +385,34 @@ const ensureFlociUnsynchronized = (
       published ?? new Set(),
     );
 
-    // Converge the managed container's published ports: an older container
-    // that predates the ELB listener / CloudFront edge mappings can't serve
-    // emulated load balancers or distributions, so it is recreated (emulated
-    // state is ephemeral by design — the next apply reconciles it). An
-    // UNMANAGED server (a dev-mode JVM, a hand-run container) is never
-    // touched.
+    // Converge the managed container's published ports AND image: an older
+    // container that predates the ELB listener / CloudFront edge mappings
+    // can't serve emulated load balancers or distributions, and one running
+    // a superseded emulator image (a floci release bump, or a switch of
+    // `ALCHEMY_FLOCI_IMAGE`) would silently miss emulator features the
+    // providers now rely on — so either is recreated (emulated state is
+    // ephemeral by design; the next apply reconciles it). An UNMANAGED
+    // server (a dev-mode JVM, a hand-run container) is never touched. To
+    // keep running a hand-built image under the managed name, keep
+    // `ALCHEMY_FLOCI_IMAGE` set — the resolution order is the contract.
     const publishPorts = [...elbPorts, ...edgePorts];
+    const image = yield* resolveImage(config);
+    const runningImage =
+      published !== undefined
+        ? yield* docker([
+            "inspect",
+            "--format",
+            "{{.Config.Image}}",
+            containerName,
+          ]).pipe(
+            Effect.map(({ stdout }) => stdout.trim() || undefined),
+            Effect.orElseSucceed(() => undefined),
+          )
+        : undefined;
     const needsRecreate =
-      published !== undefined && publishPorts.some((p) => !published.has(p));
-    // Preserve the existing container's image across a recreate (it may be
-    // a locally-built dev image rather than the pinned release).
-    const existingImage = needsRecreate
-      ? yield* docker([
-          "inspect",
-          "--format",
-          "{{.Config.Image}}",
-          containerName,
-        ]).pipe(
-          Effect.map(({ stdout }) => stdout.trim() || undefined),
-          Effect.orElseSucceed(() => undefined),
-        )
-      : undefined;
+      published !== undefined &&
+      (publishPorts.some((p) => !published.has(p)) ||
+        (runningImage !== undefined && runningImage !== image));
 
     if (yield* isServing(endpoint)) {
       if (!needsRecreate) {
@@ -421,12 +427,12 @@ const ensureFlociUnsynchronized = (
       // Only recreate when the server IS our managed container (otherwise
       // removing the container would not free the endpoint anyway).
       yield* Effect.logInfo(
-        `floci: recreating ${containerName} to publish ports [${publishPorts.join(", ")}]`,
+        `floci: recreating ${containerName} (image ${runningImage} -> ${image}, ports [${publishPorts.join(", ")}])`,
       );
       yield* docker(["rm", "-f", containerName]);
     } else if (needsRecreate) {
       yield* Effect.logInfo(
-        `floci: recreating ${containerName} to publish ports [${publishPorts.join(", ")}]`,
+        `floci: recreating ${containerName} (image ${runningImage} -> ${image}, ports [${publishPorts.join(", ")}])`,
       );
       yield* docker(["rm", "-f", containerName]);
     } else {
@@ -442,7 +448,6 @@ const ensureFlociUnsynchronized = (
       }
     }
 
-    const image = existingImage ?? (yield* resolveImage(config));
     const args = [
       "run",
       "-d",
