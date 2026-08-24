@@ -63,6 +63,9 @@
       "path": "../../submodules/distilled/packages/railway/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/gcp/tsconfig.json"
+    },
+    {
       "path": "../cloudflare-runtime/tsconfig.json"
     }
   ]

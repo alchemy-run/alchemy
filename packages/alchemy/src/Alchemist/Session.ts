@@ -23,6 +23,7 @@ import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
 import { FlyAuth } from "../Fly/AuthProvider.ts";
+import { GcpAuth } from "../GCP/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
@@ -370,6 +371,7 @@ const builtinAuth = Layer.mergeAll(
   AxiomAuth,
   CloudflareAuth,
   FlyAuth,
+  GcpAuth,
   GitHubAuth,
   HetznerAuth,
   NeonAuth,
