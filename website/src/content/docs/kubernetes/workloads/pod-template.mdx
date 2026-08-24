@@ -1,0 +1,308 @@
+---
+title: Pod template
+description: Customize the pod spec of a Kubernetes Deployment or Job with podTemplate, including merge rules, container overrides, and recipes for common settings.
+---
+
+`podTemplate` is a partial `PodTemplateSpec` merged onto the default
+one for a Deployment or Job. Objects merge, arrays and primitives
+replace.
+
+## The default pod template
+
+`command`, `args`, `resources`, `env`, and `port` already set the
+container, so use the prop when one exists.
+
+```typescript
+// The pod template your `podTemplate` is merged onto.
+{
+  metadata: { labels: { "app.kubernetes.io/name": <name>, ...labels } },
+  spec: {
+    serviceAccountName: <name>,          // Job also: restartPolicy: "Never" | "OnFailure"
+    containers: [
+      {
+        name: <name>,
+        image: <imageUri>,                // ECR URI on EKS; your `image` elsewhere
+        command, args,                    // from props
+        ports: [{ containerPort: port }], // Deployment only
+        env: [ /* ALCHEMY_*, PORT, your env */ ],
+        resources,                        // from props
+      },
+    ],
+  },
+}
+```
+
+The default has no `volumes`, `initContainers`, `tolerations`,
+`affinity`, `securityContext`, or `imagePullSecrets`.
+
+## Merge rules
+
+Objects merge recursively; arrays and primitives replace. `containers`
+is the one array the default already fills. Don't set
+`spec.serviceAccountName`: on EKS it breaks
+[Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks).
+
+```typescript
+// ❌ Adding a readiness probe like this replaces `containers` with this
+// ONE object: no name, no image, no env. The deploy fails because a
+// container needs `name` and `image`.
+podTemplate: {
+  spec: {
+    containers: [
+      { readinessProbe: { httpGet: { path: "/health", port: 3000 } } },
+    ],
+  },
+},
+```
+
+```typescript
+// What reaches the cluster for that override:
+spec: {
+  serviceAccountName: "api-…",
+  containers: [{ readinessProbe: { httpGet: { path: "/health", port: 3000 } } }],
+}
+```
+
+Changing `podTemplate` updates the workload
+[in place](/kubernetes/guides/how-apply-works#server-side-apply).
+
+## Container-level fields
+
+Anything on the container that is not a prop (probes, `volumeMounts`,
+`envFrom`, `valueFrom`, `imagePullPolicy`, container `securityContext`)
+needs the full container override. Works with `image:` only.
+
+```typescript
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  podTemplate: {
+    spec: {
+      containers: [
+        {
+          name: "api",
+          image: "ghcr.io/acme/api:v3", // same string as `image`
+          ports: [{ containerPort: 8080 }],
+          env: [{ name: "PORT", value: "8080" }], // restate anything you need
+          readinessProbe: { httpGet: { path: "/health", port: 8080 }, periodSeconds: 5 },
+          livenessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 10 },
+        },
+      ],
+    },
+  },
+});
+```
+
+A `main:` Effect server gets no probe, so answer `/` quickly.
+
+:::tip
+If the override grows beyond a few lines, or you need container-level fields on `main:`, write a [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object) instead.
+:::
+
+## Recipes
+
+### Tolerations and nodeSelector
+
+Match `kubernetes.io/arch` to the
+[`architecture`](/kubernetes/workloads/image-sources#architecture) prop.
+
+```typescript
+podTemplate: {
+  spec: {
+    tolerations: [{ key: "nvidia.com/gpu", operator: "Exists", effect: "NoSchedule" }],
+    nodeSelector: { "kubernetes.io/arch": "arm64", pool: "gpu" },
+  },
+},
+```
+
+### Affinity and spread
+
+`podAntiAffinity` needs a literal label, so add one with `labels`.
+
+```typescript
+labels: { app: "api" },
+podTemplate: {
+  spec: {
+    affinity: {
+      podAntiAffinity: {
+        preferredDuringSchedulingIgnoredDuringExecution: [{
+          weight: 100,
+          podAffinityTerm: {
+            labelSelector: { matchLabels: { app: "api" } },
+            topologyKey: "kubernetes.io/hostname",
+          },
+        }],
+      },
+    },
+  },
+},
+```
+
+### Pod securityContext
+
+Container-level `securityContext` (`capabilities`,
+`readOnlyRootFilesystem`) needs the
+[container override](#container-level-fields).
+
+```typescript
+podTemplate: {
+  spec: {
+    securityContext: {
+      runAsNonRoot: true,
+      runAsUser: 1000,
+      fsGroup: 1000,
+      seccompProfile: { type: "RuntimeDefault" },
+    },
+  },
+},
+```
+
+### imagePullSecrets
+
+Pull a private `image:` on a cluster without a registry (EKS doesn't
+need this). Create the Secret as a
+[Manifest](/kubernetes/objects/manifests#secrets).
+
+```typescript
+import * as Config from "effect/Config";
+
+const pull = yield* Kubernetes.Manifest("GhcrPull", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: "ghcr-pull", namespace: "default" },
+    type: "kubernetes.io/dockerconfigjson",
+    // The contents of ~/.docker/config.json for the registry, read from the env.
+    stringData: { ".dockerconfigjson": Config.string("GHCR_DOCKER_CONFIG_JSON") },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/private-api:v3",
+  port: 8080,
+  podTemplate: { spec: { imagePullSecrets: [{ name: pull.name }] } },
+});
+```
+
+### Volumes: emptyDir and a PVC from a Manifest
+
+`spec.volumes` merges in; `volumeMounts` needs the container override.
+The PVC is a [Manifest](/kubernetes/objects/manifests#any-object).
+
+```typescript
+const data = yield* Kubernetes.Manifest("ApiData", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "PersistentVolumeClaim",
+    metadata: { name: "api-data", namespace: "default" },
+    spec: { accessModes: ["ReadWriteOnce"], resources: { requests: { storage: "10Gi" } } },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  podTemplate: {
+    spec: {
+      volumes: [
+        { name: "scratch", emptyDir: {} },
+        { name: "data", persistentVolumeClaim: { claimName: data.name } },
+      ],
+      containers: [{ // full override: mounts are container-level
+        name: "api",
+        image: "ghcr.io/acme/api:v3",
+        ports: [{ containerPort: 8080 }],
+        volumeMounts: [
+          { name: "scratch", mountPath: "/tmp/scratch" },
+          { name: "data", mountPath: "/var/lib/api" },
+        ],
+      }],
+    },
+  },
+});
+```
+
+### Sidecar container
+
+A native sidecar (Kubernetes 1.29+) leaves the main container
+untouched, so it works with `main:` and `context:` too.
+
+```typescript
+podTemplate: {
+  spec: {
+    initContainers: [{
+      name: "log-shipper",
+      image: "fluent/fluent-bit:3.1",
+      restartPolicy: "Always", // native sidecar: starts before the app, stops after it
+      volumeMounts: [{ name: "scratch", mountPath: "/var/log/app" }],
+    }],
+    volumes: [{ name: "scratch", emptyDir: {} }],
+  },
+},
+```
+
+### imagePullPolicy
+
+For a local cluster re-tagging the same `image:` string
+([Using your own images](/kubernetes/clusters/local#using-your-own-images)).
+
+```typescript
+podTemplate: {
+  spec: {
+    containers: [{
+      name: "api",
+      image: "my-api:dev", // same string as `image`
+      imagePullPolicy: "IfNotPresent", // pull only if the node doesn't have it
+      ports: [{ containerPort: 8080 }],
+      env: [{ name: "PORT", value: "8080" }],
+    }],
+  },
+},
+```
+
+### envFrom a ConfigMap or Secret
+
+Every key of a ConfigMap or
+[Secret Manifest](/kubernetes/objects/manifests#secrets) becomes an
+env var.
+
+```typescript
+podTemplate: {
+  spec: {
+    containers: [{
+      name: "api",
+      image: "ghcr.io/acme/api:v3",
+      ports: [{ containerPort: 8080 }],
+      env: [{ name: "PORT", value: "8080" }],
+      envFrom: [
+        { configMapRef: { name: config.name } },
+        { secretRef: { name: dbSecret.name } },
+      ],
+    }],
+  },
+},
+```
+
+### Annotations and grace period
+
+Both merge in.
+
+```typescript
+podTemplate: {
+  metadata: {
+    annotations: { "prometheus.io/scrape": "true", "prometheus.io/port": "3000" },
+  },
+  spec: { terminationGracePeriodSeconds: 30 },
+},
+```
+
+## Where next
+
+- [Manifests](/kubernetes/objects/manifests)
+- [How apply works](/kubernetes/guides/how-apply-works#server-side-apply)
+- [`Deployment` reference](/providers/kubernetes/deployment)

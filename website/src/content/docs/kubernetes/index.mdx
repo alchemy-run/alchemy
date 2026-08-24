@@ -1,0 +1,84 @@
+---
+title: Kubernetes
+description: Deploy servers, jobs, manifests, and Helm charts to any Kubernetes cluster with Alchemy.
+---
+
+[`Kubernetes.Deployment`](/providers/kubernetes/deployment) runs a
+server, `Kubernetes.Job` runs a container to completion,
+`Kubernetes.Manifest` applies any object, and `Kubernetes.HelmChart`
+installs a chart. Point each at a cluster with its
+[`cluster` prop](/kubernetes/clusters/connecting#what-cluster-accepts).
+
+```typescript
+// alchemy.run.ts — inside the Stack's Effect.gen body
+const local = Kubernetes.KubeConfig({ context: "docker-desktop" }); // any context in your kubeconfig
+// const cluster = yield* AWS.EKS.Cluster("Cluster", { compute: "auto", /* … */ }); // …or an EKS cluster
+
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster: local,                 // swap this to target another cluster
+  image: "nginx:1.27",
+  port: 80,
+  replicas: 2,
+});
+
+return { url: web.url };          // the LoadBalancer hostname, once the cluster assigns one
+```
+
+## What each cluster supports
+
+Any cluster runs pre-built images. EKS also builds your own and gives
+Pods AWS access; add `AWS.providers()` beside `Kubernetes.providers()`.
+
+| | Any other cluster | [EKS](/kubernetes/clusters/eks#what-eks-adds) |
+| --- | --- | --- |
+| Auth | Kubeconfig, [token, cert, or exec](/kubernetes/clusters/connecting#token-client-certificate-and-exec) | Your AWS credentials |
+| `image:` | Used as-is | Copied to ECR |
+| `main:` / `context:` | [Not available](/kubernetes/workloads/image-sources#registry-requirement) | Built and pushed to ECR |
+| Bindings | [Env vars](/kubernetes/workloads/bindings#bind-a-resource) | Env vars + [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) |
+
+:::note
+Create the EKS cluster on the [AWS tab](/aws/compute/eks).
+:::
+
+## Clusters
+
+- [Connecting](/kubernetes/clusters/connecting)
+- [Local clusters](/kubernetes/clusters/local)
+- [EKS](/kubernetes/clusters/eks)
+
+## Workloads
+
+- [Deployments](/kubernetes/workloads/deployments)
+- [Jobs](/kubernetes/workloads/jobs)
+- [Image sources](/kubernetes/workloads/image-sources)
+- [Bindings](/kubernetes/workloads/bindings)
+- [Pod template](/kubernetes/workloads/pod-template)
+
+## Objects
+
+- [Manifests](/kubernetes/objects/manifests)
+- [Helm charts](/kubernetes/objects/helm)
+
+## Guides
+
+- [Exposing services](/kubernetes/guides/exposing-services)
+- [How apply works](/kubernetes/guides/how-apply-works)
+- [Cluster adapters](/kubernetes/guides/cluster-adapters)
+
+## What are you building?
+
+| Building | Use |
+| --- | --- |
+| A server from a pre-built image | [Deployment](/kubernetes/workloads/deployments#what-gets-created) with `image:` |
+| An Effect server | [Deployment](/kubernetes/workloads/deployments#effect-servers) with `main:` (EKS only) |
+| A one-off or scheduled task | [Job](/kubernetes/workloads/jobs#jobs) / [CronJob](/kubernetes/workloads/jobs#cronjobs) |
+| Any other object | [Manifest](/kubernetes/objects/manifests#any-object) |
+| An off-the-shelf chart | [HelmChart](/kubernetes/objects/helm#chart-sources) |
+| AWS access from a Pod | [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks) |
+| A public URL | [Exposing services](/kubernetes/guides/exposing-services#service-types) |
+
+## Where next
+
+- [Setup](/kubernetes/setup)
+- [Tutorial](/kubernetes/tutorial/part-1)
+- [Providers reference](/providers)

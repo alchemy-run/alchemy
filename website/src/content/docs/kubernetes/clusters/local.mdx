@@ -1,0 +1,138 @@
+---
+title: Local clusters
+description: Deploy Kubernetes workloads to Docker Desktop, OrbStack, kind, k3s, or minikube, reach a Service from your laptop, and use images you build locally.
+---
+
+Connect with
+[`KubeConfig()`](/kubernetes/clusters/connecting#kubeconfig).
+Everything works except `main:` and `context:`; use `image:`.
+
+## Which local cluster
+
+Docker Desktop (`docker-desktop`), OrbStack (`orbstack`), and k3s/k3d
+(`default` / `k3d-dev`) give `LoadBalancer` Services an address, so
+`api.url` works. kind (`kind-dev`) and minikube (`minikube`) don't: a
+default Deployment waits about 3 minutes and returns
+`url: undefined`, so set `serviceType: "ClusterIP"` there.
+
+```typescript
+Effect.gen(function* () {
+  // Pin the context so a teammate's `current-context` never retargets a deploy.
+  const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+  // kind:     Kubernetes.KubeConfig({ context: "kind-dev" })
+  // OrbStack: Kubernetes.KubeConfig({ context: "orbstack" })
+
+  const api = yield* Kubernetes.Deployment("Api", {
+    cluster,
+    image: "ghcr.io/acme/api:v3",
+    port: 8080,
+    // default LoadBalancer → url is http://localhost:8080 on Docker Desktop
+  });
+  return { url: api.url };
+});
+```
+
+## Reaching a Service
+
+`LoadBalancer` (the default) gives you `api.url` where supported.
+`NodePort` works everywhere, but you must look up the assigned port
+yourself. On kind and minikube use `ClusterIP` and port-forward
+([Service types](/kubernetes/guides/exposing-services#service-types)).
+
+```typescript
+Effect.gen(function* () {
+  const cluster = Kubernetes.KubeConfig({ context: "kind-dev" });
+
+  const api = yield* Kubernetes.Deployment("Api", {
+    cluster,
+    image: "ghcr.io/acme/api:v3",
+    port: 8080,
+    serviceType: "ClusterIP", // no LB on kind: skip the 3-minute wait, url stays undefined
+  });
+
+  // port-forward to api.serviceName in api.namespace:
+  return { service: api.serviceName, namespace: api.namespace };
+});
+```
+
+```sh
+kubectl port-forward -n default svc/myapp-api-dev-alex-k3m7p2q6r4s5t2v6 8080:8080   # svc/<api.serviceName>
+curl http://localhost:8080/
+```
+
+Port-forward to `api.serviceName`: unless you pass `name`, the
+Service name is generated.
+
+## Limits without a registry
+
+`main:` and `context:` fail on kubeconfig clusters; use `image:`.
+Bindings are [env only](/kubernetes/workloads/bindings#env-only-bindings).
+
+## Using your own images
+
+Build the image, make sure the node can pull it, and pass the
+reference as `image:`.
+
+### Docker Desktop and OrbStack
+
+An image you build with `Docker.Image` is already on the node.
+Rebuilding it rolls the Deployment.
+
+```typescript
+// alchemy.run.ts
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Docker.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
+    // docker build ./api -t my-api:dev, through your active Docker context
+    const image = yield* Docker.Image("ApiImage", {
+      name: "my-api",
+      tag: "dev",
+      build: { context: "./api" },
+    });
+
+    const api = yield* Kubernetes.Deployment("Api", {
+      cluster,
+      image: image.imageRef, // "my-api:dev" — already in the node's image store
+      port: 8080,
+      // use a real tag, not :latest
+    });
+    return { url: api.url };
+  }),
+);
+```
+
+Use a real tag; `:latest` fails with `ErrImagePull`.
+
+### kind, minikube, and k3d
+
+Load the image into the cluster before you deploy, and again after
+every rebuild.
+
+```sh
+kind load docker-image my-api:dev --name dev
+minikube image load my-api:dev
+k3d image import my-api:dev -c dev
+```
+
+### A local registry
+
+Or run a registry container, push to it, and pass the
+`localhost:5001/...` reference as `image:`.
+
+```sh
+docker run -d -p 5001:5000 --name registry registry:2
+docker tag my-api:dev localhost:5001/my-api:dev
+docker push localhost:5001/my-api:dev
+```
+
+## Where next
+
+- [EKS](/kubernetes/clusters/eks) — `main:` with no registry setup
+- [Deployments](/kubernetes/workloads/deployments)
+- [Exposing services](/kubernetes/guides/exposing-services)

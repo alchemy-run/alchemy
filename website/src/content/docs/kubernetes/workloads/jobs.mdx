@@ -1,0 +1,139 @@
+---
+title: Jobs
+description: Run a container to completion or on a cron schedule on any Kubernetes cluster with Kubernetes.Job.
+---
+
+[`Kubernetes.Job`](/providers/kubernetes/job) runs a container to
+completion. It takes the same `cluster`,
+[image sources](/kubernetes/workloads/image-sources#three-sources),
+and bindings as a Deployment, but has no Service and no `url`.
+
+```typescript
+// inside the Stack body
+const migrate = yield* Kubernetes.Job("DbMigrate", {
+  cluster,
+  image: "ghcr.io/acme/migrator:v3",
+  args: ["migrate", "--to", "latest"],
+  backoffLimit: 2,
+});
+
+migrate.jobName; // generated; changes with every edit to the Job
+migrate.kind;    // "Job"
+```
+
+## Jobs
+
+A Job creates a `ServiceAccount` and a `batch/v1 Job`, named
+[like a Deployment](/kubernetes/workloads/deployments#what-gets-created)
+with the same [props](/kubernetes/workloads/deployments#props-by-group).
+The Job starts on deploy. Deploy doesn't wait for it to finish.
+
+Redeploying with nothing changed does nothing. Any change deletes the
+old Job and runs a new one (bump an env var to force a re-run). Set
+`ttlSecondsAfterFinished` on anything you deploy repeatedly.
+
+```typescript
+const backfill = yield* Kubernetes.Job("Backfill", {
+  cluster,
+  image: "ghcr.io/acme/tools:v3",
+  command: ["node", "backfill.js"],
+  args: ["--since", "2026-01-01"],
+  // each failed attempt is a fresh pod; the failed pod stays for `kubectl logs`
+  restartPolicy: "Never",
+  // give up after 3 retries (Kubernetes default is 6)
+  backoffLimit: 3,
+  // clean up the finished Job (and its pods) an hour after it ends
+  ttlSecondsAfterFinished: 3600,
+  resources: { requests: { cpu: "250m", memory: "512Mi" } },
+});
+```
+
+:::caution
+A failed Job does not fail the deploy; see
+[Debugging](/kubernetes/guides/how-apply-works#debugging).
+:::
+
+## CronJobs
+
+Set `schedule` to a 5-field cron expression to get a `batch/v1 CronJob`
+instead. It updates in place and never runs on deploy. For fields
+without props (`concurrencyPolicy`, `timeZone`) write a
+[`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object).
+
+```typescript
+const nightly = yield* Kubernetes.Job("NightlyReport", {
+  cluster,
+  image: "ghcr.io/acme/tools:v3",
+  args: ["report", "--yesterday"],
+  // 5-field cron → a CronJob; runs at 03:00 cluster time
+  schedule: "0 3 * * *",
+  // these apply to each run's Job
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 86400,
+});
+
+nightly.kind;     // "CronJob"
+nightly.schedule; // "0 3 * * *"
+```
+
+## Effect jobs
+
+To run your own code, pass `main: import.meta.url` and an Effect that
+returns `{ run }`. When `run` finishes the pod exits 0; a failure exits
+1 and counts against `backoffLimit`. Bindings work as in
+[Effect servers](/kubernetes/workloads/deployments#effect-servers).
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+// inside the Stack body (EKS only)
+const seed = yield* Kubernetes.Job(
+  "SeedData",
+  { cluster, main: import.meta.url, backoffLimit: 2, ttlSecondsAfterFinished: 600 },
+  Effect.gen(function* () {
+    // runs once at startup: bindings and clients
+    const putItem = yield* AWS.DynamoDB.PutItem(table);
+    return {
+      // run: executes to completion, then the pod exits 0
+      run: Effect.gen(function* () {
+        yield* putItem({ Item: { pk: { S: "seed#1" }, message: { S: "hello" } } });
+        yield* Effect.log("seeded");
+      }).pipe(Effect.orDie), // a failure exits 1 → counts against backoffLimit
+    };
+  }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+);
+```
+
+The [tagged form](/kubernetes/workloads/deployments#the-tagged-form)
+works too, and `schedule` works with `main`.
+
+```typescript
+// src/backfill.ts — the tagged form (same shape as a tagged Deployment)
+export class Backfill extends Kubernetes.Job<Backfill, {
+  progress: () => Effect.Effect<number>;
+}>()("Backfill") {}
+
+export default Backfill.make(
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    return { cluster, main: import.meta.url, schedule: "0 3 * * *" }; // an Effect CronJob
+  }),
+  Effect.gen(function* () {
+    return {
+      run: Effect.log("backfilling…"),
+      progress: () => Effect.succeed(0),
+    };
+  }),
+);
+```
+
+`main` works on [EKS only](/kubernetes/workloads/image-sources#registry-requirement).
+On other clusters use `image:` with `command` / `args`.
+
+## Where next
+
+- [Image sources](/kubernetes/workloads/image-sources)
+- [Bindings](/kubernetes/workloads/bindings)
+- [`Job` reference](/providers/kubernetes/job)

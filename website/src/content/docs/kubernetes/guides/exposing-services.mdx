@@ -1,0 +1,220 @@
+---
+title: Exposing services
+description: Put a Kubernetes Deployment behind a cloud load balancer, an Ingress controller, or a Cloudflare Tunnel.
+---
+
+Every `Kubernetes.Deployment` gets a Service. Choose what fronts it: a
+cloud load balancer, an Ingress controller, or a Cloudflare Tunnel.
+
+## Service types
+
+Set `serviceType` to `LoadBalancer` (default, a cloud load balancer and
+a `url`), `ClusterIP` (in-cluster only, no `url`), or `NodePort`. See
+[Exposing it: serviceType and url](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url).
+
+On `LoadBalancer`, your `serviceAnnotations` override the cluster's
+[defaults](/kubernetes/clusters/eks#what-eks-adds) key by key:
+
+```typescript
+// One public Deployment. On EKS you get these defaults:
+//   metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"] = "internet-facing"
+//   spec.loadBalancerClass = "eks.amazonaws.com/nlb"   (Auto Mode clusters)
+// Your serviceAnnotations override them key by key.
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  serviceAnnotations: {
+    // keep the NLB private to the VPC instead of the internet-facing default
+    "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+    // route straight to pod IPs instead of node ports
+    "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
+  },
+});
+
+api.url; // "http://<nlb-hostname>:8080"
+```
+
+Behind an Ingress or a Tunnel, use `ClusterIP`:
+
+```typescript
+// Internal only: no cloud LB, no url. Reach it inside the cluster at
+//   http://<api.serviceName>.<api.namespace>.svc.cluster.local:<api.port>
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  serviceType: "ClusterIP",
+});
+```
+
+## Ingress
+
+Install one Ingress controller with `Kubernetes.HelmChart` and put
+many `ClusterIP` Services behind it. On EKS Auto Mode, set the load
+balancer class and scheme in `values`:
+
+```typescript
+const ingressNginx = yield* Kubernetes.HelmChart("IngressNginx", {
+  cluster,
+  chart: "ingress-nginx",
+  repo: "https://kubernetes.github.io/ingress-nginx",
+  version: "4.13.9", // pin the version
+  releaseName: "ingress-nginx", // names the objects ingress-nginx-*
+  namespace: "ingress-nginx",
+  createNamespace: true,
+  values: {
+    controller: {
+      // EKS Auto Mode only: the chart's Service gets no EKS defaults
+      service: {
+        loadBalancerClass: "eks.amazonaws.com/nlb",
+        annotations: {
+          "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+        },
+      },
+    },
+  },
+});
+```
+
+Add the route, with the Deployment's `serviceName` and `port` as the
+backend:
+
+```typescript
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  serviceType: "ClusterIP", // the Ingress controller is the only public entry point
+});
+
+yield* Kubernetes.Manifest("ApiIngress", {
+  cluster,
+  manifest: {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "Ingress",
+    metadata: { name: "api", namespace: api.namespace },
+    spec: {
+      ingressClassName: "nginx",
+      rules: [
+        {
+          host: "api.example.com",
+          http: {
+            paths: [
+              {
+                path: "/",
+                pathType: "Prefix",
+                backend: {
+                  service: {
+                    name: api.serviceName, // Output: the Ingress deploys after the Deployment
+                    port: { number: api.port },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  },
+});
+```
+
+Point DNS at the controller's Service:
+
+```sh
+kubectl -n ingress-nginx get svc ingress-nginx-controller
+```
+
+## Cloudflare Tunnel
+
+A [Tunnel](/cloudflare/networking/tunnel) needs no inbound path:
+`cloudflared` runs as a pod and dials out. Build the upstream URL with
+[`Output.interpolate`](/infrastructure-as-code/outputs#interpolate)
+and store the token in a
+[Secret](/kubernetes/objects/manifests#secrets) as a plain string with
+`Output.map(tunnel.token, Redacted.value)`.
+
+```typescript
+import * as Output from "alchemy/Output";
+import * as Redacted from "effect/Redacted";
+
+// Cloudflare side. See /cloudflare/networking/tunnel for the full setup.
+const tunnel = yield* Cloudflare.Tunnel.Tunnel("ClusterTunnel");
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  serviceType: "ClusterIP", // nothing public: the tunnel dials out
+});
+
+// Route a hostname to the in-cluster Service DNS name. serviceName, namespace
+// and port are Outputs, so build the string with Output.interpolate; a plain
+// template literal won't resolve.
+yield* Cloudflare.Tunnel.Configuration("ClusterIngress", {
+  tunnelId: tunnel.tunnelId,
+  ingress: [
+    {
+      hostname: "api.example.com",
+      service: Output.interpolate`http://${api.serviceName}.${api.namespace}.svc.cluster.local:${api.port}`,
+    },
+  ],
+});
+
+// Kubernetes side: the token as a Secret, the connector as a Deployment.
+const tunnelSecret = yield* Kubernetes.Manifest("TunnelToken", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: "cloudflared-token", namespace: "default" },
+    stringData: {
+      // unwrap the token; it is saved in state, so use a remote state store
+      TUNNEL_TOKEN: Output.map(tunnel.token, Redacted.value),
+    },
+  },
+});
+
+yield* Kubernetes.Manifest("Cloudflared", {
+  cluster,
+  manifest: {
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "cloudflared", namespace: "default" },
+    spec: {
+      replicas: 2, // two connectors: no single point of failure
+      selector: { matchLabels: { app: "cloudflared" } },
+      template: {
+        metadata: { labels: { app: "cloudflared" } },
+        spec: {
+          containers: [
+            {
+              name: "cloudflared",
+              image: "cloudflare/cloudflared:2026.8.2",
+              args: ["tunnel", "--no-autoupdate", "run"],
+              envFrom: [{ secretRef: { name: tunnelSecret.name } }], // Output: deploys after the Secret
+            },
+          ],
+        },
+      },
+    },
+  },
+});
+```
+
+Finish with a
+[proxied CNAME](/cloudflare/networking/tunnel#point-dns-at-the-tunnel).
+Add `Cloudflare.providers()` beside `Kubernetes.providers()` in the
+Stack.
+
+:::caution
+The unwrapped token shows in `alchemy plan` diffs and is saved in state, so use a remote state store.
+:::
+
+## Where next
+
+- [How apply works](/kubernetes/guides/how-apply-works)
+- [Helm charts](/kubernetes/objects/helm)
+- [Tunnel](/cloudflare/networking/tunnel)

@@ -1,0 +1,186 @@
+---
+title: Connecting to a cluster
+description: Point a Kubernetes workload at a cluster using a kubeconfig context, a token, a client certificate, an exec plugin, or an EKS cluster.
+---
+
+Every `Kubernetes.*` resource takes a `cluster` prop: which cluster to
+deploy to and how to authenticate. Pass a kubeconfig context, a token,
+a client certificate, an exec plugin, or an EKS cluster.
+
+## What `cluster` accepts
+
+`cluster` is a `Connection`: the API server plus one `auth` kind.
+
+```typescript
+// What `cluster` accepts (alchemy/Kubernetes):
+interface Connection {
+  endpoint?: string;                 // API server URL; not needed for kubeconfig or aws-eks
+  certificateAuthorityData?: string; // base64 PEM bundle
+  insecureSkipTlsVerify?: boolean;   // self-signed local clusters
+  auth:                              // pick one
+    | { kind: "kubeconfig"; path?: string; context?: string }
+    | { kind: "token"; token: string }
+    | { kind: "client-cert"; certificate: string; key: string }
+    | { kind: "exec"; command: string; args?: string[]; env?: Record<string, string> }
+    | { kind: "aws-eks"; clusterName: string; region?: string }; // from alchemy/AWS
+}
+```
+
+You can also pass an [`AWS.EKS.Cluster`](/providers/aws/eks/cluster) directly.
+
+```typescript
+// Both of these are a valid `cluster`:
+Effect.gen(function* () {
+  // 1. a kubeconfig context
+  const local = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
+  // 2. an EKS cluster
+  const eks = yield* AWS.EKS.Cluster("Cluster", { compute: "auto", /* ... */ });
+
+  yield* Kubernetes.Deployment("Api", { cluster: local, image: "ghcr.io/acme/api:v3" });
+  yield* Kubernetes.Deployment("ApiProd", { cluster: eks, image: "ghcr.io/acme/api:v3" });
+});
+```
+
+## KubeConfig
+
+`Kubernetes.KubeConfig()` connects to any cluster in your kubeconfig.
+
+```typescript
+Effect.gen(function* () {
+  // default file + current-context: fine on a laptop, risky in a checked-in stack
+  const cluster = Kubernetes.KubeConfig();
+
+  // pin the context; the file still comes from $KUBECONFIG or ~/.kube/config
+  const staging = Kubernetes.KubeConfig({ context: "staging-eu" });
+
+  // a dedicated file, e.g. one CI writes from a secret
+  const ci = Kubernetes.KubeConfig({ path: "./.kube/ci-config", context: "ci" });
+
+  yield* Kubernetes.Manifest("Namespace", {
+    cluster: staging,
+    manifest: { apiVersion: "v1", kind: "Namespace", metadata: { name: "demo" } },
+  });
+});
+```
+
+Without `path`, the file is the first entry of `$KUBECONFIG`, else
+`~/.kube/config`. Without `context`, it is the file's
+`current-context`. Always pass `context` in a checked-in stack so a
+teammate's current context never retargets a deploy.
+
+```typescript
+// Exec plugins in the file just work (GKE, AKS, EKS), with no extra configuration:
+const gke = Kubernetes.KubeConfig({ context: "gke_my-project_europe-west1_prod" });
+```
+
+An `aws eks update-kubeconfig` context only authenticates. For Pod
+Identity and ECR,
+[target the EKS cluster itself](/kubernetes/clusters/eks#targeting-an-eks-cluster).
+
+## Token, client certificate, and exec
+
+These connect without a kubeconfig file. Set `endpoint`, plus either
+`certificateAuthorityData` (base64 PEM) or, for a
+[self-signed local cluster](/kubernetes/clusters/local#which-local-cluster),
+`insecureSkipTlsVerify: true`.
+
+### token
+
+Sends a bearer token. Read it from config, never paste a literal.
+
+```typescript
+Effect.gen(function* () {
+  const token = yield* Config.string("KUBE_TOKEN");
+  const ca = yield* Config.string("KUBE_CA_DATA"); // base64 PEM, as in a kubeconfig
+
+  const cluster: Kubernetes.Connection = {
+    endpoint: "https://10.0.0.10:6443",
+    certificateAuthorityData: ca,
+    auth: { kind: "token", token },
+  };
+
+  yield* Kubernetes.Deployment("Api", { cluster, image: "ghcr.io/acme/api:v3", port: 8080 });
+});
+```
+
+### client-cert
+
+Pass the certificate and key as PEM text, not base64.
+
+```typescript
+Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const cluster: Kubernetes.Connection = {
+    endpoint: "https://k3s.lan:6443",
+    insecureSkipTlsVerify: true, // self-signed server cert
+    auth: {
+      kind: "client-cert",
+      certificate: yield* fs.readFileString("./certs/client.crt"), // PEM
+      key: yield* fs.readFileString("./certs/client.key"),         // PEM
+    },
+  };
+  yield* Kubernetes.Job("Migrate", { cluster, image: "ghcr.io/acme/migrator:v3" });
+});
+```
+
+### exec
+
+Runs a credential plugin, the same way kubectl does. If the plugin
+fails you'll see `Kubernetes.ExecCredentialError`.
+
+```typescript
+// EKS through exec: auth only, no Pod Identity or ECR.
+const cluster: Kubernetes.Connection = {
+  endpoint: "https://ABC123.gr7.us-east-1.eks.amazonaws.com",
+  certificateAuthorityData: "LS0tLS1CRUdJTi...",
+  auth: {
+    kind: "exec",
+    command: "aws",
+    args: ["eks", "get-token", "--cluster-name", "prod", "--region", "us-east-1"],
+    env: { AWS_PROFILE: "prod" },
+  },
+};
+```
+
+:::caution[Credentials are persisted in state]
+A `token` or client `key` is stored in state. Use a remote state store, or prefer `exec` and `kubeconfig`.
+:::
+
+## Deploying to EKS
+
+`Kubernetes.providers()` handles `kubeconfig`, `token`, `client-cert`,
+and `exec`. To deploy to EKS (`aws-eks`), add `AWS.providers()` next
+to it.
+
+```typescript
+// alchemy.run.ts
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    // local / kubeconfig / token / client-cert / exec clusters:
+    providers: Kubernetes.providers(),
+    // to also target an AWS.EKS.Cluster (auth kind "aws-eks"):
+    // providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () { /* ... */ }),
+);
+```
+
+If you forget `AWS.providers()`, an EKS deploy fails with:
+
+```text
+No Kubernetes cluster adapter is registered for auth kind 'aws-eks'.
+Add the provider layer that contributes it to the stack's providers —
+e.g. 'aws-eks' ships with `AWS.providers()`; the built-in kinds
+(kubeconfig, token, client-cert, exec) ship with
+`Kubernetes.providers()`. Compose multiple provider layers with
+`Layer.mergeAll(AWS.providers(), Kubernetes.providers())`.
+```
+
+## Where next
+
+- [Local clusters](/kubernetes/clusters/local)
+- [EKS](/kubernetes/clusters/eks)
+- [Cluster adapters](/kubernetes/guides/cluster-adapters) — add a cluster type of your own

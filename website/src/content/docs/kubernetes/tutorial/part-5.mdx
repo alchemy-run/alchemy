@@ -1,0 +1,417 @@
+---
+title: "Part 5: The Same Program on EKS"
+description: Deploy the tutorial stack to an EKS cluster, replace the pre-built image with your own Effect server, and bind a DynamoDB table with Pod Identity.
+sidebar:
+  order: 5
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Deploy the same stack to EKS, where Alchemy builds your image and
+grants AWS permissions to your pods. Start from
+[Part 4](/kubernetes/tutorial/part-4) with the stack destroyed. You
+need AWS credentials ([AWS Setup](/aws/setup)), Docker, and `helm`.
+
+:::caution[Costs]
+EKS, load balancers, and NAT bill hourly; cluster create and destroy
+each take 10–15 minutes.
+:::
+
+## Add the AWS providers
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
++import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+-    providers: Kubernetes.providers(),
++    providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+```
+
+To deploy to EKS, add `AWS.providers()` next to
+`Kubernetes.providers()`.
+
+## Move shared infrastructure to a module
+
+Create `src/infra.ts`:
+
+```typescript
+// src/infra.ts
+import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+export const Network = AWS.EC2.Network("Network", {
+  cidrBlock: "10.42.0.0/16",
+  availabilityZones: 2,
+  nat: "single",
+});
+
+export const Cluster = Effect.gen(function* () {
+  const network = yield* Network;
+  return yield* AWS.EKS.Cluster("Cluster", {
+    compute: "auto",
+    resourcesVpcConfig: {
+      subnetIds: network.privateSubnetIds,
+      endpointPublicAccess: true,
+      endpointPrivateAccess: true,
+    },
+  });
+});
+
+// Shared with src/api.ts.
+export const Namespace = Effect.gen(function* () {
+  const cluster = yield* Cluster;
+  return yield* Kubernetes.Manifest("Namespace", {
+    cluster,
+    manifest: {
+      apiVersion: "v1",
+      kind: "Namespace",
+      metadata: { name: "tutorial" },
+    },
+  });
+});
+```
+
+Then use it in `alchemy.run.ts`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
++import { Namespace } from "./src/infra.ts";
+
+// ...
+  Effect.gen(function* () {
+    const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
+-    const ns = yield* Kubernetes.Manifest("Namespace", {
+-      cluster,
+-      manifest: {
+-        apiVersion: "v1",
+-        kind: "Namespace",
+-        metadata: { name: "tutorial" },
+-      },
+-    });
++    const ns = yield* Namespace;
+```
+
+Both files share one `Namespace`. Cluster props:
+[AWS EKS](/aws/compute/eks#create-an-auto-mode-cluster).
+
+## Swap the cluster
+
+```diff lang="typescript"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+-import { Namespace } from "./src/infra.ts";
++import { Cluster, Namespace } from "./src/infra.ts";
+
+// ...
+  Effect.gen(function* () {
+-    const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
++    const cluster = yield* Cluster;
+```
+
+Every resource that takes `cluster` now deploys to EKS.
+
+## Write your own server
+
+Create `src/api.ts`:
+
+```typescript
+// src/api.ts
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Cluster, Namespace } from "./infra.ts";
+
+export default Kubernetes.Deployment(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    const ns = yield* Namespace;
+    return { cluster, namespace: ns.name, main: import.meta.url, port: 3000 };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from EKS")),
+    };
+  }),
+);
+```
+
+`main: import.meta.url` makes this file the entrypoint. Alchemy
+[bundles it](/kubernetes/workloads/image-sources#bundling-and-tree-shaking),
+builds an image, and pushes it to
+[ECR](/kubernetes/workloads/image-sources#registry-requirement).
+[`fetch`](/kubernetes/workloads/deployments#effect-servers) answers
+every request on `port`.
+
+## Add a DynamoDB table
+
+Append to `src/infra.ts`:
+
+```diff lang="typescript"
+// src/infra.ts
+export const Cluster = Effect.gen(function* () { /* ... */ });
+
++export const Entries = AWS.DynamoDB.Table("Entries", {
++  partitionKey: "pk",
++  attributes: { pk: "S" },
++});
+```
+
+## Bind the table
+
+```diff lang="typescript"
+// src/api.ts
++import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+-import { Cluster, Namespace } from "./infra.ts";
++import { Cluster, Entries, Namespace } from "./infra.ts";
+
+export default Kubernetes.Deployment(
+  "Api",
+  Effect.gen(function* () { /* ... */ }),
+  Effect.gen(function* () {
++    const putItem = yield* AWS.DynamoDB.PutItem(Entries);
++    const scan = yield* AWS.DynamoDB.Scan(Entries);
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from EKS")),
+    };
+-  }),
++  }).pipe(
++    Effect.provide(
++      Layer.mergeAll(AWS.DynamoDB.PutItemHttp, AWS.DynamoDB.ScanHttp),
++    ),
++  ),
+);
+```
+
+Each binding sets the table name in
+[env and grants IAM permissions](/kubernetes/workloads/bindings#bind-a-resource)
+through a [Pod Identity](/kubernetes/workloads/bindings#pod-identity-on-eks)
+role.
+
+## Use it in fetch
+
+```diff lang="typescript"
+// src/api.ts
+import * as Layer from "effect/Layer";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+// ...
+    const putItem = yield* AWS.DynamoDB.PutItem(Entries);
+    const scan = yield* AWS.DynamoDB.Scan(Entries);
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("hello from EKS")),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        if (request.method === "POST") {
++          const id = yield* Effect.sync(() => crypto.randomUUID());
++          yield* putItem({ Item: { pk: { S: id } } });
++          return HttpServerResponse.json({ id });
++        }
++        const result = yield* scan({});
++        return HttpServerResponse.json({ count: result.Count ?? 0 });
++      }).pipe(Effect.orDie),
+    };
+```
+
+`putItem` and `scan` use the pod's AWS credentials.
+
+## Replace Echo with Api
+
+In `alchemy.run.ts`:
+
+```diff lang="typescript"
+-import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cluster, Namespace } from "./src/infra.ts";
++import Api from "./src/api.ts";
+
+// ...
+-    const echo = yield* Kubernetes.Deployment("Echo", {
+-      cluster,
+-      namespace: ns.name,
+-      image: "mendhak/http-https-echo:33",
+-      port: 8080,
+-      serviceType: "LoadBalancer",
+-      replicas: 3,
+-      env: {
+-        ...settings,
+-        CONFIG_MAP: config.name,
+-        REDIS_URL: Output.interpolate`redis://${redisService.name}:6379`,
+-      },
+-    });
++    const api = yield* Api;
+
+    return {
+-      url: echo.url,
+-      deployment: echo.deploymentName,
++      url: api.url,
++      identity: api.identity,
++      registry: api.registry,
+      job: hello.jobName,
+      kind: hello.kind,
+      podinfoRelease: podinfo.releaseName,
+    };
+```
+
+`Hello`, the Manifests, and `Podinfo` need no changes. `identity` and
+`registry` are only set on EKS.
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]10 to create[/g]
+
+[g]+[/g] [b]Api[/b] [d](Kubernetes.Deployment)[/d]
+[g]+[/g] [b]Cluster[/b] [d](AWS.EKS.Cluster)[/d]
+[g]+[/g] [b]Config[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]Entries[/b] [d](AWS.DynamoDB.Table)[/d]
+[g]+[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+[g]+[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]Network[/b] [d](AWS.EC2.Network)[/d]
+[g]+[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d]
+[g]+[/g] [b]Redis[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Network[/b] [d](AWS.EC2.Network)[/d] [g]created[/g]
+[g]✓[/g] [b]Entries[/b] [d](AWS.DynamoDB.Table)[/d] [g]created[/g]
+[g]✓[/g] [b]Cluster[/b] [d](AWS.EKS.Cluster)[/d] [g]created[/g]
+[g]✓[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+...
+[d]Bundling Api program...[/d]
+[d]Building container image 123456789012.dkr.ecr.us-east-1.amazonaws.com/myapp-api-dev-alex-…[/d]
+[g]✓[/g] [b]Api[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+{
+[s2]url: "http://k8s-tutorial-myappapi-….elb.us-east-1.amazonaws.com:3000",
+[s2]identity: {
+[s2][s2]kind: "aws-pod-identity",
+[s2][s2]roleArn: "arn:aws:iam::123456789012:role/myapp-api-dev-alex-…",
+[s2][s2]roleName: "myapp-api-dev-alex-…",
+[s2][s2]associationArn: "arn:aws:eks:us-east-1:123456789012:podidentityassociation/…",
+[s2][s2]associationId: "a-…",
+[s2]},
+[s2]registry: {
+[s2][s2]kind: "aws-ecr",
+[s2][s2]repositoryName: "myapp-api-dev-alex-…",
+[s2][s2]repositoryUri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/myapp-api-dev-alex-…",
+[s2]},
+[s2]job: "myapp-hello-dev-alex-…",
+[s2]kind: "CronJob",
+[s2]podinfoRelease: "myapp-podinfo-dev-alex-…",
+}`} />
+
+`Api` also created an IAM role, a Pod Identity association, and an
+ECR repository. They are deleted with the Deployment
+([what EKS adds](/kubernetes/clusters/eks#what-eks-adds)).
+
+## Try it out
+
+Write two items, then count them:
+
+```sh
+curl -X POST http://k8s-tutorial-myappapi-….elb.us-east-1.amazonaws.com:3000
+curl -X POST http://k8s-tutorial-myappapi-….elb.us-east-1.amazonaws.com:3000
+curl http://k8s-tutorial-myappapi-….elb.us-east-1.amazonaws.com:3000
+# → {"count":2}
+```
+
+Retry if the first request times out.
+
+## Ship a change
+
+Edit the response and deploy again:
+
+```diff lang="typescript"
+// src/api.ts
+        const result = yield* scan({});
+-        return HttpServerResponse.json({ count: result.Count ?? 0 });
++        return HttpServerResponse.json({ count: result.Count ?? 0, source: "eks" });
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Api[/b] [d](Kubernetes.Deployment)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](Kubernetes.Deployment)[/d] [y]updated[/y]`} />
+
+Alchemy rebuilds the image, pushes a new tag, and rolls out the
+Deployment.
+
+## Destroy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [r]10 to delete[/r]
+
+[r]-[/r] [b]Api[/b] [d](Kubernetes.Deployment)[/d]
+[r]-[/r] [b]Cluster[/b] [d](AWS.EKS.Cluster)[/d]
+[r]-[/r] [b]Config[/b] [d](Kubernetes.Manifest)[/d]
+[r]-[/r] [b]Entries[/b] [d](AWS.DynamoDB.Table)[/d]
+[r]-[/r] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+[r]-[/r] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d]
+[r]-[/r] [b]Network[/b] [d](AWS.EC2.Network)[/d]
+[r]-[/r] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d]
+[r]-[/r] [b]Redis[/b] [d](Kubernetes.Manifest)[/d]
+[r]-[/r] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d]
+
+Proceed?
+◉ Yes ○ No`} />
+
+Deleting the cluster takes ten minutes or more.
+
+## Where next
+
+- [Connecting to clusters](/kubernetes/clusters/connecting)
+- [Bindings](/kubernetes/workloads/bindings)
+- [EKS clusters](/kubernetes/clusters/eks)

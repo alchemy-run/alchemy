@@ -1,0 +1,270 @@
+---
+title: Deployments
+description: Run a replicated server on any Kubernetes cluster with Kubernetes.Deployment and reach it through its url.
+---
+
+[`Kubernetes.Deployment`](/providers/kubernetes/deployment) runs a
+replicated server. Give it a cluster, an image, and a port.
+
+```typescript
+import * as Kubernetes from "alchemy/Kubernetes";
+
+// inside the Stack's Effect.gen body
+const local = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster: local,
+  image: "nginx:1.27", // pre-built image; local clusters can't build one
+  port: 80,
+  replicas: 2,
+});
+
+web.url;            // LoadBalancer address once assigned (string | undefined)
+web.deploymentName; // also serviceName and serviceAccountName
+```
+
+`image` is
+[one of three image sources](/kubernetes/workloads/image-sources#three-sources).
+
+## What gets created
+
+This creates a `ServiceAccount`, a `Service`, and a `Deployment`. All
+three share one name (`name`, or a generated one) and the
+`app.kubernetes.io/name` label plus your `labels`. Your `env` wins over
+anything set for you (`ALCHEMY_*`, `PORT`, binding env).
+
+```yaml
+# What `Kubernetes.Deployment("Web", { image: "nginx:1.27", port: 80, replicas: 2 })` applies
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: myapp-web-dev-alex-a1b2c3d4e5f6g7h8, namespace: default, labels: { app.kubernetes.io/name: myapp-web-dev-alex-a1b2c3d4e5f6g7h8 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: myapp-web-dev-alex-…, namespace: default, labels: { app.kubernetes.io/name: myapp-web-dev-alex-… } }
+spec:
+  type: LoadBalancer
+  selector: { app.kubernetes.io/name: myapp-web-dev-alex-… }
+  ports: [{ port: 80, targetPort: 80, protocol: TCP }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: myapp-web-dev-alex-…, namespace: default, labels: { app.kubernetes.io/name: myapp-web-dev-alex-… } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: myapp-web-dev-alex-… } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: myapp-web-dev-alex-… } }
+    spec:
+      serviceAccountName: myapp-web-dev-alex-…
+      containers:
+        - name: myapp-web-dev-alex-…
+          image: nginx:1.27
+          ports: [{ containerPort: 80 }]
+          env:
+            - { name: ALCHEMY_STACK_NAME, value: MyApp }
+            - { name: ALCHEMY_STAGE, value: dev_alex }
+            - { name: ALCHEMY_PHASE, value: runtime }
+            - { name: PORT, value: "80" }
+```
+
+On EKS you also get an IAM role and an ECR repository, shown in
+`identity` and `registry` ([What EKS adds](/kubernetes/clusters/eks#what-eks-adds)).
+
+## Props by group
+
+Every prop is in the [reference](/providers/kubernetes/deployment).
+Sizing: `replicas`, `resources`. Container: `command`, `args`, `env`,
+`port` (default `3000`). Placement: `namespace` (create it first with
+a [Namespace manifest](/kubernetes/objects/manifests#namespaces) and
+pass its `name`), `labels`,
+[`podTemplate`](/kubernetes/workloads/pod-template#merge-rules).
+Cloud: `architecture`, `identity`, `tags`, `name`.
+
+```typescript
+const ns = yield* Kubernetes.Manifest("AppNamespace", {
+  cluster,
+  manifest: { apiVersion: "v1", kind: "Namespace", metadata: { name: "app" } },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  // sizing
+  replicas: 3,
+  resources: {
+    requests: { cpu: "100m", memory: "128Mi" },
+    limits: { cpu: "500m", memory: "256Mi" },
+  },
+  // the container
+  port: 8080,
+  args: ["--log-level", "info"],
+  env: { LOG_FORMAT: "json" },
+  // placement — pass `ns.name`, not "app", so the namespace is created first
+  namespace: ns.name,
+  labels: { "app.kubernetes.io/part-of": "acme" },
+});
+```
+
+## Exposing it: serviceType and url
+
+`serviceType` defaults to `"LoadBalancer"`, which gives you `url`.
+With `"ClusterIP"` or `"NodePort"` it is `undefined`. If no address
+arrives within about 3 minutes, `url` stays `undefined` until your
+next deploy. Your `serviceAnnotations` win over the cluster's defaults.
+
+```typescript
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  // default — provisions the cluster's cloud load balancer
+  serviceType: "LoadBalancer",
+  // yours win over the cluster's defaults (EKS: internet-facing NLB)
+  serviceAnnotations: {
+    "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+  },
+});
+
+// http://<lb-hostname>:8080, or undefined until the address arrives
+return { url: api.url };
+
+// In-cluster only: no load balancer, `url` is always undefined.
+const worker = yield* Kubernetes.Deployment("Internal", {
+  cluster,
+  image: "ghcr.io/acme/worker:v3",
+  serviceType: "ClusterIP",
+});
+// Reach it from other pods as http://<serviceName>.<namespace>.svc:<port>
+```
+
+For Ingress and per-cloud annotations, see
+[Service types](/kubernetes/guides/exposing-services#service-types).
+
+## Effect servers
+
+To run your own code, pass `main: import.meta.url` and an Effect that
+returns `{ fetch }`. The outer Effect runs once per pod; `fetch` serves
+every request on `PORT` and must never fail, so end it with
+`Effect.orDie`.
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+// inside the Stack body (EKS only)
+const api = yield* Kubernetes.Deployment(
+  "Api",
+  { cluster, main: import.meta.url, port: 3000, replicas: 2 },
+  // runs once per pod at startup — resolve bindings, build clients
+  Effect.gen(function* () {
+    const getItem = yield* AWS.DynamoDB.GetItem(table);
+    return {
+      // fetch: runs per request on PORT
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
+        if (url.pathname === "/health") {
+          return HttpServerResponse.text("ok");
+        }
+        const item = yield* getItem({ Key: { pk: { S: url.pathname } } });
+        return yield* HttpServerResponse.json(item.Item ?? null);
+      }).pipe(Effect.orDie), // fetch must never fail
+    };
+  }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+);
+```
+
+You can also put the Deployment in its own module and `export default`
+it, with `props` as an Effect.
+
+```typescript
+// src/api.ts — the same call as a module default export.
+// `props` is an Effect so it can reference resources declared in other modules.
+export default Kubernetes.Deployment(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;          // from ./infra.ts
+    const ns = yield* AppNamespace;
+    return { cluster, main: import.meta.url, namespace: ns.name, port: 3000 };
+  }),
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }),
+);
+
+// alchemy.run.ts — `import Api from "./src/api.ts"` then, in the Stack body:
+const api = yield* Api;
+```
+
+To bind AWS resources, see [Bindings](/kubernetes/workloads/bindings).
+
+:::caution[`main` works on EKS only]
+On other clusters use `image:` ([Registry requirement](/kubernetes/workloads/image-sources#registry-requirement)).
+:::
+
+## The tagged form
+
+Declare a class with `Kubernetes.Deployment<Api, Shape>()("Api")`,
+build its Layer with `Api.make(props, impl)`, then provide the Layer in
+the Stack and `yield*` the class.
+
+```typescript
+// src/api.ts
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Cluster, AppNamespace } from "./infra.ts";
+
+export class Api extends Kubernetes.Deployment<Api, {
+  health: () => Effect.Effect<string>;
+}>()("Api") {}
+
+export default Api.make(
+  // props can be an Effect so they can reference resources from other modules
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    const ns = yield* AppNamespace;
+    return { cluster, main: import.meta.url, namespace: ns.name, port: 3000 };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+      health: () => Effect.succeed("ok"),
+    };
+  }),
+);
+```
+
+```typescript
+// alchemy.run.ts — provide the Layer, yield the class
+import ApiLive, { Api } from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }).pipe(Effect.provide(ApiLive)),
+);
+```
+
+The same form works for a
+[`Kubernetes.Job`](/kubernetes/workloads/jobs#effect-jobs).
+
+## Updates and replacement
+
+Changing `cluster` or `namespace` replaces the Deployment. Anything
+else updates in place, rolling pods when the pod template changes.
+`labels` can't change after create; put labels you'll edit later in
+`podTemplate.metadata.labels`.
+
+## Where next
+
+- [Jobs](/kubernetes/workloads/jobs)
+- [Image sources](/kubernetes/workloads/image-sources)
+- [`Deployment` reference](/providers/kubernetes/deployment)

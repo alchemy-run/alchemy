@@ -1,0 +1,216 @@
+---
+title: Manifests
+description: Apply any Kubernetes object, including Namespaces, ConfigMaps, Secrets, and custom resources, with Kubernetes.Manifest.
+---
+
+Use [`Kubernetes.Manifest`](/providers/kubernetes/manifest) for any
+object that isn't a `Deployment` or a `Job`. Write it exactly as you
+would in YAML.
+
+## Any object
+
+```typescript
+// Inside the Stack's Effect.gen body; `cluster` is a
+// Kubernetes.KubeConfig(...) or a managed cluster resource.
+const redis = yield* Kubernetes.Manifest("Redis", {
+  cluster,
+  manifest: {
+    // Exactly what you'd write in YAML, as an object literal.
+    apiVersion: "apps/v1",
+    kind: "StatefulSet",
+    metadata: { name: "redis", namespace: "default" }, // name is REQUIRED
+    spec: {
+      serviceName: "redis",
+      replicas: 1,
+      selector: { matchLabels: { app: "redis" } },
+      template: {
+        metadata: { labels: { app: "redis" } },
+        spec: { containers: [{ name: "redis", image: "redis:7" }] },
+      },
+    },
+  },
+});
+
+redis.ref; // { apiVersion: "apps/v1", kind: "StatefulSet", name: "redis", namespace: "default" }
+redis.uid; // server-assigned UID (string | undefined)
+```
+
+Set `metadata.name`; `generateName` isn't supported. Changing
+`apiVersion`, `kind`, `metadata.name`, or `metadata.namespace` replaces
+the object. `alchemy destroy` deletes it.
+
+:::caution[Existing objects are taken over]
+If the cluster already has an object with this name, Alchemy takes it
+over and `alchemy destroy` deletes it. See
+[conflicts](/kubernetes/guides/how-apply-works#conflicts).
+:::
+
+Add the StatefulSet's headless Service as a second Manifest.
+
+```typescript
+const redisService = yield* Kubernetes.Manifest("RedisService", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Service",
+    metadata: { name: "redis", namespace: "default" },
+    spec: {
+      clusterIP: "None", // headless: one DNS entry per pod
+      selector: { app: "redis" },
+      ports: [{ port: 6379 }],
+    },
+  },
+});
+```
+
+## Namespaces
+
+Create a Namespace as a Manifest. A `Deployment`, `Job`, or namespaced
+Manifest needs its namespace to exist before it deploys, and a
+namespaced Manifest must set `metadata.namespace`.
+
+To deploy something after the Namespace, reference `ns.name` in it. A
+plain `"apps"` string doesn't order them. If no field needs the value,
+put it in a label.
+
+```typescript
+const ns = yield* Kubernetes.Manifest("AppsNamespace", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Namespace", // cluster-scoped: no metadata.namespace
+    metadata: {
+      name: "apps",
+      labels: { "app.kubernetes.io/part-of": "my-app" },
+    },
+  },
+});
+
+ns.namespace; // undefined — cluster-scoped kinds have no namespace
+ns.name; // "apps"
+
+const config = yield* Kubernetes.Manifest("AppConfig", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "ConfigMap",
+    metadata: { name: "app-config", namespace: ns.name }, // deploys after the Namespace
+    data: { LOG_LEVEL: "info" },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:1.4.0",
+  namespace: ns.name, // deploys after the Namespace exists; destroyed before it
+  env: { APP_CONFIG: config.name }, // any attribute orders the Deployment after the ConfigMap
+});
+```
+
+Deleting a Namespace deletes everything inside it.
+
+## Custom resources
+
+Reference the CRD's output from the custom resource so the CRD applies
+first; otherwise the deploy fails with a 404.
+
+```typescript
+const widgetCrd = yield* Kubernetes.Manifest("WidgetCrd", {
+  cluster,
+  manifest: {
+    apiVersion: "apiextensions.k8s.io/v1",
+    kind: "CustomResourceDefinition",
+    metadata: { name: "widgets.example.com" }, // cluster-scoped
+    spec: {
+      group: "example.com",
+      names: { kind: "Widget", plural: "widgets", singular: "widget" },
+      scope: "Namespaced",
+      versions: [
+        {
+          name: "v1",
+          served: true,
+          storage: true,
+          schema: {
+            openAPIV3Schema: {
+              type: "object",
+              properties: {
+                spec: {
+                  type: "object",
+                  properties: { size: { type: "integer" } },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  },
+});
+
+const widget = yield* Kubernetes.Manifest("Widget", {
+  cluster,
+  manifest: {
+    apiVersion: "example.com/v1", // any kind the cluster serves works
+    kind: "Widget",
+    metadata: {
+      name: "demo",
+      namespace: ns.name,
+      // Reference the CRD so this applies after it
+      // (and is removed before it on destroy).
+      labels: { "example.com/definition": widgetCrd.name },
+    },
+    spec: { size: 3 },
+  },
+});
+```
+
+Deleting a CRD deletes every custom resource of that kind in the
+cluster. If a custom resource hits a 404 right after its CRD is
+created, run `alchemy deploy` again. Install operators with a
+[Helm chart](/kubernetes/objects/helm#values).
+
+## Secrets
+
+Write a `Secret` with `stringData` and read each value from your
+environment with `Config.string`. Don't use `Config.redacted` or
+`Redacted.make` inside `manifest` or Helm `values`: the cluster would
+receive the text `<redacted>`.
+
+```typescript
+import * as Config from "effect/Config";
+
+const dbSecret = yield* Kubernetes.Manifest("DbSecret", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: "db-credentials", namespace: ns.name },
+    type: "Opaque",
+    // stringData: Kubernetes base64-encodes it into `data` for you.
+    stringData: {
+      // Read from your environment at deploy time; don't paste the value.
+      // Use Config.string, not Config.redacted.
+      DB_PASSWORD: Config.string("DB_PASSWORD"),
+    },
+  },
+});
+
+// Reference `dbSecret.name` from the workload so the Secret is applied first.
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:1.4.0",
+  namespace: ns.name,
+  env: { DB_SECRET_NAME: dbSecret.name },
+});
+```
+
+The secret values are stored in plaintext in your state, so use a
+remote [state store](/state-store). To mount the Secret with `envFrom`
+or a volume, see
+[container-level fields](/kubernetes/workloads/pod-template#container-level-fields).
+
+## Where next
+
+- [Helm charts](/kubernetes/objects/helm)
+- [How apply works](/kubernetes/guides/how-apply-works#server-side-apply)
+- [`Manifest` reference](/providers/kubernetes/manifest)

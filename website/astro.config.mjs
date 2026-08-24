@@ -27,6 +27,7 @@ function providersSidebarEntry() {
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
+      { label: "Kubernetes", link: "/kubernetes" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
@@ -1020,6 +1021,72 @@ export default defineConfig({
               items: [{ label: "IPs & certificates", link: "/fly/networking" }],
             },
             providerResourcesEntry("Fly"),
+          ],
+        },
+        {
+          label: "Kubernetes",
+          items: [
+            { label: "Overview", link: "/kubernetes" },
+            { label: "Setup", link: "/kubernetes/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "kubernetes/tutorial" } }],
+            },
+            {
+              label: "Clusters",
+              items: [
+                {
+                  label: "Connecting",
+                  link: "/kubernetes/clusters/connecting",
+                },
+                { label: "Local clusters", link: "/kubernetes/clusters/local" },
+                { label: "Amazon EKS", link: "/kubernetes/clusters/eks" },
+              ],
+            },
+            {
+              label: "Workloads",
+              items: [
+                {
+                  label: "Deployments",
+                  link: "/kubernetes/workloads/deployments",
+                },
+                { label: "Jobs", link: "/kubernetes/workloads/jobs" },
+                {
+                  label: "Image sources",
+                  link: "/kubernetes/workloads/image-sources",
+                },
+                { label: "Bindings", link: "/kubernetes/workloads/bindings" },
+                {
+                  label: "Pod template",
+                  link: "/kubernetes/workloads/pod-template",
+                },
+              ],
+            },
+            {
+              label: "Objects",
+              items: [
+                { label: "Manifests", link: "/kubernetes/objects/manifests" },
+                { label: "Helm charts", link: "/kubernetes/objects/helm" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Exposing services",
+                  link: "/kubernetes/guides/exposing-services",
+                },
+                {
+                  label: "How apply works",
+                  link: "/kubernetes/guides/how-apply-works",
+                },
+                {
+                  label: "Cluster adapters",
+                  link: "/kubernetes/guides/cluster-adapters",
+                },
+              ],
+            },
+            providerResourcesEntry("Kubernetes"),
           ],
         },
         {

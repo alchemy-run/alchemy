@@ -1,0 +1,242 @@
+---
+title: "Part 1: Your First Deployment"
+description: Deploy a pre-built image to your local cluster with Kubernetes.Deployment, reach it, scale it, and tear it down.
+sidebar:
+  order: 1
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Deploy a pre-built image to your local cluster, reach it from your
+laptop, scale it, and tear it down.
+
+## Prerequisites
+
+- [Alchemy installed](/kubernetes/setup#install)
+- A [local cluster](/kubernetes/setup#pick-a-cluster) in
+  `kubectl config get-contexts`
+
+Replace `docker-desktop` with your context name. On kind or minikube,
+also set `serviceType` (see
+[Choose how to reach it](#choose-how-to-reach-it)).
+
+## Create a project
+
+Keep using the Setup project, or start a new one and
+[install Alchemy](/kubernetes/setup#install):
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Create the Stack
+
+Start with an empty Stack:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Kubernetes.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // resources go here
+  }),
+);
+```
+
+## Point at your cluster
+
+```diff lang="typescript"
+Effect.gen(function* () {
++  const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+}),
+```
+
+[`KubeConfig`](/kubernetes/clusters/connecting#kubeconfig) connects to
+any cluster in your kubeconfig.
+
+## Add a Deployment
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
++  const echo = yield* Kubernetes.Deployment("Echo", {
++    cluster,
++    image: "mendhak/http-https-echo:33",
++    port: 8080,
++  });
+}),
+```
+
+This creates a Deployment, a Service, and a
+[ServiceAccount](/kubernetes/workloads/deployments#what-gets-created).
+Use a pre-built image; local clusters
+[can't build images](/kubernetes/workloads/image-sources#registry-requirement).
+
+## Choose how to reach it
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
++  serviceType: "LoadBalancer",
+});
+```
+
+`LoadBalancer` is the default and gives the Deployment a
+[`url`](/kubernetes/workloads/deployments#exposing-it-servicetype-and-url).
+
+:::note[No LoadBalancer on your cluster?]
+On kind or minikube, set `serviceType: "NodePort"` and use
+`kubectl port-forward` instead of `url`
+([Reaching a service](/kubernetes/clusters/local#reaching-a-service)).
+:::
+
+## Return Stack outputs
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+});
+
++return {
++  url: echo.url,
++  deployment: echo.deploymentName,
++};
+```
+
+`deploymentName` is the name you pass to `kubectl`.
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+
+Proceed?
+◉ Yes ○ No
+[d]Applied Kubernetes Deployment default/myapp-echo-dev-alex-k3m7p2q6r4s5t2v6[/d]
+[g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+}`} />
+
+## Try it out
+
+```sh
+curl http://localhost:8080
+```
+
+The pod's hostname is under `os.hostname`. List the objects Alchemy
+created:
+
+```sh
+kubectl get deployment,service,serviceaccount \
+  -l app.kubernetes.io/name=myapp-echo-dev-alex-k3m7p2q6r4s5t2v6
+```
+
+## Scale it
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
++  replicas: 3,
+});
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+
+Proceed?
+◉ Yes ○ No
+[d]Applied Kubernetes Deployment default/myapp-echo-dev-alex-k3m7p2q6r4s5t2v6[/d]
+[g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [y]updated[/y]`} />
+
+The Deployment updates in place; repeated curls now return different
+hostnames.
+
+## Deploy again
+
+Deploy again without editing anything:
+
+<Terminal content={`[u]Plan[/u]: [d]no changes[/d]
+
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+}`} />
+
+## Destroy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [r]1 to delete[/r]
+
+[r]-[/r] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+
+Proceed?
+◉ Yes ○ No
+[r]✗[/r] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [r]deleted[/r]`} />
+
+## Where next
+
+- [Part 2: Jobs and CronJobs](/kubernetes/tutorial/part-2)
+- [Deployments](/kubernetes/workloads/deployments)
+- [Local clusters](/kubernetes/clusters/local)

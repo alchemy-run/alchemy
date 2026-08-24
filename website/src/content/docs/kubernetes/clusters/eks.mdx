@@ -1,0 +1,133 @@
+---
+title: EKS
+description: Deploy Kubernetes workloads to an AWS EKS cluster with IAM auth, a Pod Identity role per workload, and an ECR repository so you can deploy your own code.
+---
+
+Pass an `AWS.EKS.Cluster` as `cluster` to get IAM auth, a Pod
+Identity role per workload, and an ECR repository for your images. To
+create one, see the AWS tab's [EKS page](/aws/compute/eks).
+
+## Targeting an EKS cluster
+
+Add `AWS.providers()` next to `Kubernetes.providers()`.
+Pass the cluster resource, or an `aws-eks` connection for a cluster
+created elsewhere.
+
+```typescript
+// alchemy.run.ts
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()), // both: EKS needs AWS.providers()
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    // (a) the cluster resource — see /aws/compute/eks for the Network + Cluster props
+    const network = yield* AWS.EC2.Network("Network", { /* see the AWS tab */ });
+    const cluster = yield* AWS.EKS.Cluster("Cluster", {
+      compute: "auto",
+      resourcesVpcConfig: { subnetIds: network.privateSubnetIds },
+    });
+
+    // (b) a cluster created elsewhere: name + region is enough
+    const shared: Kubernetes.Connection = {
+      auth: { kind: "aws-eks", clusterName: "platform-prod", region: "eu-west-1" },
+    };
+
+    yield* Kubernetes.Deployment("Api", { cluster, main: import.meta.url, port: 3000 });
+    yield* Kubernetes.Job("Nightly", { cluster: shared, image: "ghcr.io/acme/report:v3", schedule: "0 3 * * *" });
+  }),
+);
+```
+
+Your AWS credentials need cluster API access plus IAM, EKS, and ECR
+permissions. An `aws eks update-kubeconfig` context through
+[`KubeConfig()`](/kubernetes/clusters/connecting#kubeconfig) only
+authenticates, with no Pod Identity or ECR.
+
+## What EKS adds
+
+On EKS you also get:
+
+### Auth
+
+Your ambient AWS credentials sign you in, like `aws eks get-token`,
+with no kubeconfig. If the cluster is gone or `DELETING`, the deploy
+fails with `Kubernetes.ClusterNotFoundError`.
+
+### Identity
+
+Each workload gets an IAM role, an inline policy built from its
+bindings, and a Pod Identity association to its ServiceAccount
+([Pod Identity on EKS](/kubernetes/workloads/bindings#pod-identity-on-eks)).
+
+```typescript
+Effect.gen(function* () {
+  const table = yield* AWS.DynamoDB.Table("Entries", { /* ... */ });
+
+  const api = yield* Kubernetes.Deployment(
+    "Api",
+    {
+      cluster,
+      main: import.meta.url,
+      port: 3000,
+      identity: { managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess"] }, // extra managed policies on the pod's role
+    },
+    Effect.gen(function* () {
+      const putItem = yield* AWS.DynamoDB.PutItem(table); // grants PutItem on the pod's role
+      return { fetch: /* ... */ };
+    }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+  );
+
+  // the role and association, once deployed:
+  api.identity; // { kind: "aws-pod-identity", roleArn, roleName, associationArn, associationId } | undefined
+});
+```
+
+### Registry
+
+Each workload gets a private ECR repository. `main` is bundled,
+`context` is built, and `image:` is copied into it. Install Docker
+where you deploy from.
+
+```typescript
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  image: "public.ecr.aws/nginx/nginx:1.27", // copied into the workload's ECR repo; nodes pull from there
+  port: 80,
+});
+web.imageUri;  // "<account>.dkr.ecr.<region>.amazonaws.com/<web-repo>:<tag>"
+web.registry;  // { kind: "aws-ecr", repositoryName, repositoryUri } | undefined
+```
+
+### Load balancer defaults
+
+On Auto Mode, `LoadBalancer` Services get
+`loadBalancerClass: eks.amazonaws.com/nlb` and an `internet-facing`
+scheme. Your `serviceAnnotations` override either.
+
+```typescript
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  main: import.meta.url,
+  port: 3000,
+  serviceType: "LoadBalancer", // default
+  serviceAnnotations: {
+    // make it private instead of internet-facing:
+    "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+  },
+});
+api.url; // "http://k8s-….elb.amazonaws.com:3000" once the NLB exists
+```
+
+## Destroy and a missing cluster
+
+If the cluster is gone or `DELETING`, `alchemy destroy` skips the
+in-cluster objects but still removes the IAM role and ECR repository;
+the next deploy re-creates the workloads.
+
+## Where next
+
+- [Deployments](/kubernetes/workloads/deployments)
+- [Pod Identity on EKS](/kubernetes/workloads/bindings#pod-identity-on-eks)
+- [EKS on the AWS tab](/aws/compute/eks)

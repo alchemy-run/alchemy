@@ -1,0 +1,205 @@
+---
+title: Setup
+description: Install Alchemy, connect it to a Kubernetes cluster, and plan your first manifest.
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../versions";
+import Terminal from "../../../components/Terminal.astro";
+
+export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+You need [Bun](https://bun.sh) or Node.js 22+ and a cluster `kubectl`
+can reach. Alchemy uses the same kubeconfig as `kubectl`; there is
+nothing to log in to.
+
+## Create a project directory
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="mkdir my-app && cd my-app && pnpm init" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="mkdir my-app && cd my-app && yarn init -y" lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+To deploy [Helm charts](/providers/kubernetes/helmchart), install
+`helm` (on `PATH`, or set `HELM_BIN`). To deploy to
+[EKS](/kubernetes/clusters/eks#what-eks-adds), install Docker.
+
+```sh
+brew install helm   # macOS; other platforms: https://helm.sh/docs/intro/install/
+```
+
+## Pick a cluster
+
+Any cluster `kubectl` can reach works. Use pre-built images (`image:`)
+everywhere except EKS, which can also build your own.
+
+<Tabs syncKey="cluster">
+  <TabItem label="Local">
+
+The easiest is Docker Desktop (Settings → Kubernetes → Enable; context
+`docker-desktop`) or OrbStack (context `orbstack`). `kind` and `k3s`
+also work ([compare them](/kubernetes/clusters/local#which-local-cluster)).
+
+```sh
+kubectl config current-context   # e.g. docker-desktop
+kubectl get nodes                 # one Ready node
+```
+
+  </TabItem>
+  <TabItem label="EKS">
+
+Pass an `AWS.EKS.Cluster` as `cluster` to get image builds and Pod
+Identity; create it on the [AWS tab](/aws/compute/eks). A context from
+`aws eks update-kubeconfig` gives auth only, no image builds or Pod
+Identity.
+
+```typescript
+// an EKS cluster resource: image builds, ECR, and Pod Identity
+const cluster = yield* AWS.EKS.Cluster("Cluster", {
+  compute: "auto",
+  resourcesVpcConfig: { subnetIds: network.privateSubnetIds },
+});
+
+// auth only: an existing context from `aws eks update-kubeconfig`
+const existing = Kubernetes.KubeConfig({ context: "arn:aws:eks:us-east-1:123456789012:cluster/prod" });
+```
+
+  </TabItem>
+  <TabItem label="Other managed cluster">
+
+Create a context with your provider's CLI
+(`gcloud container clusters get-credentials …`,
+`az aks get-credentials …`), then pass its name to
+`Kubernetes.KubeConfig` ([kubeconfig](/kubernetes/clusters/connecting#kubeconfig)).
+
+```typescript
+const gke = Kubernetes.KubeConfig({ context: "gke_my-proj_us-central1_prod" });
+```
+
+  </TabItem>
+</Tabs>
+
+## Create alchemy.run.ts
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Kubernetes.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // resources go here
+  }),
+);
+```
+
+To deploy to EKS, add `AWS.providers()` as well:
+
+```diff lang="typescript"
+import * as Alchemy from "alchemy";
++import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+-    providers: Kubernetes.providers(),
++    providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+```
+
+## Verify
+
+Add a [Namespace](/kubernetes/objects/manifests#namespaces) manifest
+and plan it.
+
+```diff lang="typescript"
+Effect.gen(function* () {
++  const cluster = Kubernetes.KubeConfig();   // your current context; pass { context: "..." } for another
++
++  const ns = yield* Kubernetes.Manifest("DemoNamespace", {
++    cluster,
++    manifest: {
++      apiVersion: "v1",
++      kind: "Namespace",
++      metadata: { name: "demo" },
++    },
++  });
++
++  return { namespace: ns.name };
+}),
+```
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy plan" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy plan" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy plan" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy plan" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]DemoNamespace[/b] [d](Kubernetes.Manifest)[/d]`} />
+
+A wrong context fails on `deploy`, not on `plan`.
+
+:::tip[Round-trip it]
+
+```sh
+bun alchemy deploy
+kubectl get namespace demo        # STATUS Active
+bun alchemy destroy
+```
+
+Then remove the `DemoNamespace` block before you start the tutorial.
+:::
+
+## Where next
+
+- [Tutorial part 1](/kubernetes/tutorial/part-1)
+- [Connecting to clusters](/kubernetes/clusters/connecting)
+- [State Store](/state-store)

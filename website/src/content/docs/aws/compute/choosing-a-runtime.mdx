@@ -77,15 +77,20 @@ load-balancer integration. Alchemy models it with:
 
 - [`Cluster`](/providers/aws/eks/cluster) — the control plane;
   `compute: "auto"` turns on Auto Mode with sensible defaults.
-- [`Deployment`](/providers/kubernetes/deployment) — a replicated
+- [`Deployment`](/kubernetes/workloads/deployments) — a replicated
   Kubernetes server (the Kubernetes analog of `AWS.ECS.Service`)
   with the same three image sources as ECS: a registry `image`, a
   Dockerfile `context`, or an inline Effect program via `main`.
-- [`Job`](/providers/kubernetes/job) — run-to-completion work, or a
+- [`Job`](/kubernetes/workloads/jobs) — run-to-completion work, or a
   `CronJob` when you set `schedule`.
-- [`Manifest`](/providers/kubernetes/manifest) and
-  [`HelmChart`](/providers/kubernetes/helmchart) — any raw Kubernetes
+- [`Manifest`](/kubernetes/objects/manifests) and
+  [`HelmChart`](/kubernetes/objects/helm) — any raw Kubernetes
   object or a rendered Helm chart, applied via server-side apply.
+
+The workloads are cluster-agnostic — the same program runs on any
+cluster your kubeconfig can reach; see the
+[Kubernetes hub](/kubernetes) for the workloads themselves and
+[Amazon EKS](/kubernetes/clusters/eks) for what the EKS adapter adds.
 
 Bindings work the same as on Lambda and ECS — env vars plus IAM
 policy statements, delivered through an EKS Pod Identity role —

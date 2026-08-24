@@ -83,6 +83,9 @@
       "path": "./examples/aws-eks/tsconfig.json"
     },
     {
+      "path": "./examples/kubernetes-local/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-bedrock-ai/tsconfig.json"
     },
     {

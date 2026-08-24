@@ -1,0 +1,196 @@
+---
+title: Image sources
+description: Choose where a Deployment or Job gets its container image, from a pre-built image, your own Dockerfile, or a bundled Effect program.
+---
+
+Every workload needs a container image. Set exactly one of `image`
+(pre-built), `context` (your Dockerfile), or `main` (an Effect program
+Alchemy bundles).
+
+```typescript
+// 1. a pre-built image, run as-is
+yield* Kubernetes.Deployment("Web", { cluster, image: "nginx:1.27", port: 80 });
+
+// 2. your own Dockerfile — built from ./legacy, runs its CMD/ENTRYPOINT
+yield* Kubernetes.Deployment("Legacy", { cluster, context: "./legacy", port: 8080 });
+
+// 3. an Effect program, bundled into an image and served on PORT
+yield* Kubernetes.Deployment(
+  "Api",
+  { cluster, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }),
+);
+```
+
+`main` returns `{ fetch }` for a
+[Deployment](/kubernetes/workloads/deployments#effect-servers) and
+`{ run }` for a [Job](/kubernetes/workloads/jobs#effect-jobs).
+
+## Three sources
+
+If you set `main`, the other keys describe its base image.
+
+**`image`** is a registry reference. On EKS it is copied into ECR;
+elsewhere the nodes pull it as written, so a private registry needs an
+`imagePullSecrets` [recipe](/kubernetes/workloads/pod-template#recipes).
+
+**`context` + `dockerfile`** runs `docker build` in your context.
+`dockerfile` is a path relative to the cwd (default
+`${context}/Dockerfile`) or `Docker.Dockerfile.inline` content, which
+has no context and can't `COPY`. Your Dockerfile supplies `CMD` /
+`ENTRYPOINT`. Never interpolate secrets into it.
+
+**`main`** is bundled into a generated image. `image` is the `FROM`
+base (default `oven/bun:1`; must run bun). `dockerfile` + `context`
+builds your Dockerfile first and uses it as the base. An inline
+`dockerfile` replaces the opening lines.
+
+```dockerfile
+# base: `FROM <image>` (default oven/bun:1), your inline
+# `dockerfile`, or `FROM` your built Dockerfile
+FROM oven/bun:1
+WORKDIR /app
+COPY index.mjs /app/index.mjs
+# extra bundle chunks
+COPY *.js /app/
+# Deployments only — Jobs get neither line
+ENV PORT=3000
+EXPOSE 3000
+ENTRYPOINT ["bun", "/app/index.mjs"]
+```
+
+```typescript
+import * as Docker from "alchemy/Docker"; // Docker.Dockerfile.inline (used below)
+
+// `main` on a different base image: Debian-based bun
+const api = yield* Kubernetes.Deployment(
+  "Api",
+  { cluster, main: import.meta.url, image: "oven/bun:1-debian", port: 3000 },
+  Effect.gen(function* () { /* ... */ }),
+);
+
+// `main` on your own Dockerfile: ./env/Dockerfile is built first,
+// then the bundle is added on top
+const worker = yield* Kubernetes.Job(
+  "Render",
+  { cluster, main: import.meta.url, context: "./env", dockerfile: "./env/Dockerfile" },
+  Effect.gen(function* () { /* ... */ }),
+);
+
+// inline base image (no local files, so no COPY)
+const tools = yield* Kubernetes.Job(
+  "Tools",
+  {
+    cluster,
+    main: import.meta.url,
+    dockerfile: Docker.Dockerfile.inline`
+      FROM oven/bun:1
+      RUN apt-get update && apt-get install -y ffmpeg
+    `,
+  },
+  Effect.gen(function* () { /* ... */ }),
+);
+```
+
+Full prop list: [Deployment](/providers/kubernetes/deployment),
+[Job](/providers/kubernetes/job).
+
+:::caution[Mutable tags]
+`acme/api:latest` is copied into ECR once; pin a version tag or digest.
+:::
+
+## Registry requirement
+
+`main` and `context` build an image and push it to a registry, so they
+need a cluster with one (EKS). On EKS every source, `image` included,
+is pushed to ECR. On other clusters only `image` works, as written;
+`main` or `context` fail the deploy:
+
+> `'<id>': this cluster has no managed image registry, so 'main' and 'context' image sources cannot be built and pushed. …`
+
+```typescript
+// Local cluster: only `image`, used as written.
+const local = Kubernetes.KubeConfig({ context: "docker-desktop" });
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster: local,
+  image: "ghcr.io/acme/web:1.4.2", // appears in the pod spec exactly like this
+  port: 8080,
+});
+web.imageUri;  // "ghcr.io/acme/web:1.4.2"
+web.registry;  // undefined
+
+// EKS: the same image is copied into ECR.
+const eks = yield* AWS.EKS.Cluster("Cluster", { compute: "auto", /* ... */ });
+const web2 = yield* Kubernetes.Deployment("Web", {
+  cluster: eks,
+  image: "ghcr.io/acme/web:1.4.2",
+  port: 8080,
+});
+web2.imageUri;  // the ECR copy, not the ghcr ref
+web2.registry;  // { kind: "aws-ecr", repositoryName, repositoryUri }
+```
+
+On EKS every source, `image` included, needs Docker running where you
+deploy. On other clusters `image:` needs no Docker.
+
+## Architecture
+
+Set `architecture: "amd64" | "arm64"` (default `"amd64"`) to match
+your nodes. A mismatch fails at pod start with `exec format error`.
+
+```typescript
+const api = yield* Kubernetes.Deployment(
+  "Api",
+  {
+    cluster,
+    main: import.meta.url,
+    architecture: "arm64", // build + push a linux/arm64 image
+    podTemplate: { spec: { nodeSelector: { "kubernetes.io/arch": "arm64" } } },
+  },
+  Effect.gen(function* () { /* ... */ }),
+);
+```
+
+On other clusters, nodes pull `image` for their own architecture.
+
+## Bundling and tree-shaking
+
+`main` is bundled with rolldown; `build.input` and `build.output`
+pass through to it. Minify and sourcemaps are off by default.
+
+Unused code from `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
+and `@distilled.cloud/*` is dropped. Add your own packages with
+`build.pure.packages` (`replaceDefaults: true` drops the defaults);
+`build: { pure: false }` turns it off. `build.bundleAnalyzer: true`
+writes a report.
+
+```typescript
+const api = yield* Kubernetes.Deployment(
+  "Api",
+  {
+    cluster,
+    main: import.meta.url,
+    build: {
+      // also drop unused code from your own packages
+      pure: { packages: ["@acme/*", "my-router"] },
+      // rolldown passthrough
+      output: { minify: true },
+      input: { external: ["sharp"] },
+    },
+  },
+  Effect.gen(function* () { /* ... */ }),
+);
+
+// keep all code (when a side effect goes missing)
+{ main: import.meta.url, build: { pure: false } }
+```
+
+Only add a package whose top-level calls really are side-effect free.
+
+## Where next
+
+- [Bindings](/kubernetes/workloads/bindings)
+- [Using your own images](/kubernetes/clusters/local#using-your-own-images)
+- [What EKS adds](/kubernetes/clusters/eks#what-eks-adds)

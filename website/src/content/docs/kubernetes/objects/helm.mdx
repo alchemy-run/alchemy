@@ -1,0 +1,146 @@
+---
+title: Helm charts
+description: Install a Helm chart from a repository, an OCI registry, or a local directory with Kubernetes.HelmChart.
+---
+
+[`Kubernetes.HelmChart`](/providers/kubernetes/helmchart) renders a
+chart with the `helm` CLI on your machine and applies the objects like
+a [Manifest](/kubernetes/objects/manifests#any-object).
+[Install helm](/kubernetes/setup#install) first; set `HELM_BIN` to use
+a specific binary.
+
+## Chart sources
+
+Set `chart` to a chart name with `repo`, an `oci://` reference, or a
+local directory. Edits to a local chart show as an update in
+`alchemy plan`.
+
+```typescript
+// 1. Repository chart: no `helm repo add` needed.
+const ingress = yield* Kubernetes.HelmChart("IngressNginx", {
+  cluster,
+  chart: "ingress-nginx",
+  repo: "https://kubernetes.github.io/ingress-nginx",
+  version: "4.11.2", // pin it
+  namespace: "ingress-nginx",
+  createNamespace: true,
+});
+
+// 2. OCI reference — no `repo`.
+const karpenter = yield* Kubernetes.HelmChart("Karpenter", {
+  cluster,
+  chart: "oci://public.ecr.aws/karpenter/karpenter",
+  version: "1.0.6",
+  namespace: "kube-system",
+});
+
+// 3. Local chart directory: template edits show in `alchemy plan`.
+const app = yield* Kubernetes.HelmChart("App", {
+  cluster,
+  chart: "./charts/app",
+  values: { image: { tag: "v1.2.3" } },
+});
+
+ingress.releaseName; // generated from stack, stage, and id unless you set releaseName
+ingress.objects; // KubernetesObjectRef[] — every applied object
+```
+
+Changing `releaseName` or `namespace` (default `"default"`) replaces
+the release. Set `releaseName` when the chart names objects after
+`.Release.Name` and you care about those names.
+
+## Values
+
+`values` has the same shape as `values.yaml`. Put
+[outputs](/infrastructure-as-code/outputs) anywhere inside it and the
+chart deploys after the resource they come from, like
+[`namespace: ns.name`](/kubernetes/objects/manifests#namespaces). For
+secrets use `Config.string`, never `Redacted`
+([Secrets](/kubernetes/objects/manifests#secrets)).
+
+Pin `version`. Without it, an unrelated edit can pull a newer chart.
+
+```typescript
+const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
+  cluster,
+  chart: "podinfo",
+  repo: "https://stefanprodan.github.io/podinfo",
+  version: "6.14.1", // bump this to upgrade; never leave it off
+  namespace: ns.name, // deploys after the Namespace
+  releaseName: "podinfo", // .Release.Name; default derives from stack/stage/id
+  values: {
+    // same keys as values.yaml
+    replicaCount: 2,
+    ui: { color: "#34577c", message: "Deployed by Alchemy" },
+    service: { type: "ClusterIP" },
+    // Outputs are fine anywhere: e.g. backend: { url: api.url }
+  },
+});
+```
+
+## Lifecycle
+
+Each deploy runs
+`helm template <releaseName> <chart> --namespace <ns> --no-hooks` on
+your machine, sets `metadata.namespace` on objects that omit it,
+deletes objects that are no longer rendered, then
+[applies](/kubernetes/guides/how-apply-works#server-side-apply) the
+rest. If the template fails, you see helm's error output.
+
+`alchemy destroy` deletes every object in `objects`. With
+`createNamespace: true` it also deletes the Namespace and everything
+in it, so if other resources share the namespace, create it with a
+[Namespace Manifest](/kubernetes/objects/manifests#namespaces) instead.
+Any input change, or `alchemy deploy --force`, re-applies the whole
+chart and [corrects drift](/kubernetes/guides/how-apply-works#pruning-and-drift).
+
+:::caution[CRDs are deleted on destroy]
+By default `alchemy destroy` deletes the chart's CRDs and every
+[custom resource](/kubernetes/objects/manifests#custom-resources) of
+those kinds. Set `includeCrds: false` if other stacks depend on them.
+:::
+
+```typescript
+const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
+  cluster,
+  chart: "podinfo",
+  repo: "https://stefanprodan.github.io/podinfo",
+  version: "6.14.1",
+  namespace: ns.name,
+  includeCrds: false, // don't apply or delete the chart's CRDs
+  // Disabling the Service removes it from the render. The next deploy
+  // deletes it first, then re-applies the rest and logs
+  // `Applying 2 objects from podinfo...`.
+  values: { service: { enabled: false } },
+});
+```
+
+## What Helm does that Alchemy doesn't
+
+There is no Helm release in the cluster: `helm ls`, `helm rollback`,
+and `helm test` don't see it, deploy doesn't `--wait`, and hooks
+(`helm.sh/hook`) are neither applied nor run. Replace a hook with a
+[`Kubernetes.Job`](/kubernetes/workloads/jobs#jobs).
+
+```typescript
+// The chart's pre-upgrade migration hook won't run. Run the migration as
+// a Job and reference its output from `values` so the chart deploys after it.
+const migrate = yield* Kubernetes.Job("Migrate", {
+  cluster,
+  image: "ghcr.io/acme/migrator:v3",
+  namespace: ns.name,
+});
+
+const app = yield* Kubernetes.HelmChart("App", {
+  cluster,
+  chart: "./charts/app",
+  namespace: ns.name,
+  values: { migratedBy: migrate.jobName }, // chart deploys after the Job
+});
+```
+
+## Where next
+
+- [Exposing services](/kubernetes/guides/exposing-services)
+- [How apply works](/kubernetes/guides/how-apply-works#pruning-and-drift)
+- [`HelmChart` reference](/providers/kubernetes/helmchart)

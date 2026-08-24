@@ -1,0 +1,224 @@
+---
+title: "Part 4: Helm Charts"
+description: Install the podinfo Helm chart, pin its version, set values, and see objects removed when the chart stops rendering them.
+sidebar:
+  order: 4
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Install a Helm chart, change its values, and remove objects by turning
+them off in the chart. Continue from
+[Part 3](/kubernetes/tutorial/part-3) with its stack deployed. You need
+`helm` on your `PATH` ([Setup](/kubernetes/setup#install)).
+
+## Install podinfo
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", { /* ... */ });
+
++const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
++  cluster,
++  chart: "podinfo",
++  repo: "https://stefanprodan.github.io/podinfo",
++  version: "6.14.1",
++  namespace: "podinfo",
++});
+
+return {
+  url: echo.url,
+  deployment: echo.deploymentName,
+  job: hello.jobName,
+  kind: hello.kind,
++  podinfoRelease: podinfo.releaseName,
+};
+```
+
+Pin `version`, or every deploy picks up the newest release
+([all props](/providers/kubernetes/helmchart)).
+
+## Create the namespace
+
+```diff lang="typescript"
+const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
+  cluster,
+  chart: "podinfo",
+  repo: "https://stefanprodan.github.io/podinfo",
+  version: "6.14.1",
+  namespace: "podinfo",
++  createNamespace: true,
+});
+```
+
+The chart creates the `podinfo` Namespace first and deletes it on
+destroy ([lifecycle](/kubernetes/objects/helm#lifecycle)).
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d]
+
+Proceed?
+◉ Yes ○ No
+[d]Rendering Helm chart podinfo@6.14.1...[/d]
+[d]Applying 3 objects from podinfo...[/d]
+[g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [g]created[/g]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4",
+[s2]kind: "CronJob",
+[s2]podinfoRelease: "myapp-podinfo-dev-alex-q2w3e4r5t6y7u2i3",
+}`} />
+
+See the three objects:
+
+```sh
+kubectl get all -n podinfo
+```
+
+Port-forward to the Service (named after the release) and call it:
+
+```sh
+kubectl port-forward -n podinfo svc/myapp-podinfo-dev-alex-q2w3e4r5t6y7u2i3 9898:9898
+curl localhost:9898
+```
+
+## Tune it with values
+
+```diff lang="typescript"
+const podinfo = yield* Kubernetes.HelmChart("Podinfo", {
+  cluster,
+  chart: "podinfo",
+  repo: "https://stefanprodan.github.io/podinfo",
+  version: "6.14.1",
+  namespace: "podinfo",
+  createNamespace: true,
++  values: {
++    replicaCount: 2,
++    ui: { message: "hello from alchemy" },
++  },
+});
+```
+
+[`values`](/kubernetes/objects/helm#values) replaces the chart's
+`values.yaml`. Deploy again: the plan says `1 to update`, and
+`kubectl get deploy -n podinfo` shows `2/2`.
+
+## Turn the Service off
+
+Stop the port-forward, then disable the Service:
+
+```diff lang="typescript"
+values: {
+  replicaCount: 2,
+  ui: { message: "hello from alchemy" },
++  service: { enabled: false },
+},
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d]
+
+Proceed?
+◉ Yes ○ No
+[d]Rendering Helm chart podinfo@6.14.1...[/d]
+[d]Applying 2 objects from podinfo...[/d]
+[g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [y]updated[/y]`} />
+
+The chart no longer renders the Service, so it gets
+[deleted](/kubernetes/guides/how-apply-works#pruning-and-drift).
+`kubectl get svc -n podinfo` is now empty.
+
+## Put it back
+
+Remove the `service` line and deploy:
+
+```diff lang="typescript"
+values: {
+  replicaCount: 2,
+  ui: { message: "hello from alchemy" },
+-  service: { enabled: false },
+},
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d]
+
+Proceed?
+◉ Yes ○ No
+[d]Rendering Helm chart podinfo@6.14.1...[/d]
+[d]Applying 3 objects from podinfo...[/d]
+[g]✓[/g] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [y]updated[/y]`} />
+
+The Service is back.
+
+## No Helm release
+
+`helm list -n podinfo` shows nothing: there is no Helm release, and
+chart hooks don't run
+([details](/kubernetes/objects/helm#what-helm-does-that-alchemy-doesnt)).
+
+## Clean up
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [r]7 to delete[/r]
+
+[r]-[/r] [b]Config[/b] [d](Kubernetes.Manifest)[/d]
+[r]-[/r] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+[r]-[/r] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+[r]-[/r] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d]
+[r]-[/r] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d]
+[r]-[/r] [b]Redis[/b] [d](Kubernetes.Manifest)[/d]
+[r]-[/r] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d]
+
+Proceed?
+◉ Yes ○ No
+[r]✗[/r] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Hello[/b] [d](Kubernetes.Job)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Podinfo[/b] [d](Kubernetes.HelmChart)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Config[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Redis[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]
+[r]✗[/r] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]
+[r]✗[/r] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [r]deleted[/r]`} />
+
+The `tutorial` Namespace goes last, after everything inside it.
+
+## Where next
+
+- [Part 5: The Same Program on EKS](/kubernetes/tutorial/part-5) — optional
+- [Helm charts](/kubernetes/objects/helm)
+- [How apply works](/kubernetes/guides/how-apply-works)

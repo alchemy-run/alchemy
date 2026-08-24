@@ -1,0 +1,333 @@
+---
+title: Cluster adapters
+description: Write a cluster adapter so Kubernetes workloads can target a new platform such as GKE or AKS.
+---
+
+A [`Connection`](/kubernetes/clusters/connecting#what-cluster-accepts)'s
+`auth.kind`
+[picks](/kubernetes/clusters/connecting#deploying-to-eks)
+the `ClusterAdapterService` that talks to the API server and,
+optionally, gives workloads an identity and an image registry. Write
+one to support a new platform (GKE, AKS, a corporate OIDC proxy).
+
+## The interface
+
+```typescript
+import type * as Kubernetes from "alchemy/Kubernetes";
+
+interface ClusterAdapterService {
+  readonly kind: "Kubernetes.ClusterAdapter";
+
+  // REQUIRED: resolve endpoint/CA and mint headers per request.
+  readonly connect: (
+    connection: Kubernetes.Connection,
+  ) => Effect.Effect<Kubernetes.ClusterTransport, Kubernetes.ClusterNotFoundError | Error>;
+
+  // OPTIONAL: workload identity (EKS Pod Identity).
+  readonly identity?: {
+    readonly reconcile: (o: WorkloadIdentityReconcileOptions) => Effect.Effect<WorkloadIdentityResult, any, AdapterLifecycleServices>;
+    readonly delete: (o: WorkloadIdentityDeleteOptions) => Effect.Effect<void, any, AdapterLifecycleServices>;
+  };
+
+  // OPTIONAL: managed image registry (ECR).
+  readonly registry?: {
+    readonly resolve: (o: ImageRegistryResolveOptions) => Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
+    readonly hash: (o: ImageRegistryHashOptions) => Effect.Effect<string | undefined, any, AdapterLifecycleServices>;
+    readonly delete: (o: ImageRegistryDeleteOptions) => Effect.Effect<void, any, AdapterLifecycleServices>;
+  };
+
+  // OPTIONAL: platform-specific entry files for `main` workloads.
+  readonly bootstrap?: {
+    readonly server?: (handler: string) => (importPath: string) => string;
+    readonly job?: (handler: string) => (importPath: string) => string;
+  };
+
+  // OPTIONAL: defaults for `serviceType: "LoadBalancer"` Services.
+  readonly loadBalancerDefaults?: (o: { connection: Kubernetes.Connection }) => Effect.Effect<
+    { loadBalancerClass?: string | undefined; annotations?: Record<string, string> },
+    any,
+    AdapterLifecycleServices
+  >;
+}
+```
+
+Implement `connect`. Its `ClusterTransport.headers` Effect runs on
+every API request, so mint short-lived tokens there. Fail with
+`ClusterNotFoundError` only when the cluster is gone for good; any
+other error is treated as transient.
+
+Add `identity` to give workloads a cloud identity: it receives the
+workload's bindings and returns
+`{ env, serviceAccountAnnotations?, state }`. Without it, bindings are
+[env-only](/kubernetes/workloads/bindings#env-only-bindings) and
+`policyStatements` fail the deploy. Add `registry` to support `main`
+and `context`: `resolve` turns any image source into
+`{ imageUri, codeHash, state }`. Without it, only `image` works,
+[verbatim](/kubernetes/workloads/image-sources#registry-requirement).
+`bootstrap` replaces the generated entry file for `main` workloads.
+`loadBalancerDefaults` go under the user's `serviceAnnotations`
+([Service types](/kubernetes/guides/exposing-services#service-types)).
+
+`AdapterLifecycleServices` (`InstanceId | Stack | Stage`) are
+per-resource: don't capture them when you build the layer. Capture
+everything else once with `Effect.context` inside `Layer.effect`. An
+adapter with only `connect` supports every resource; you lose only
+`main`/`context` images and cloud-grant bindings.
+
+## Registering an auth kind
+
+Add your kind to `AuthRegistry` in `alchemy/Kubernetes/Connection`
+with module augmentation. `{ auth: { kind: "gke", … } }` then
+type-checks on every workload's `cluster` prop.
+
+### Augment `AuthRegistry`
+
+Put only what identifies the cluster in the descriptor, never
+credentials: it is
+[saved on every workload](/kubernetes/clusters/connecting#what-cluster-accepts),
+and changing it replaces the workload.
+
+```typescript
+// In your package:
+declare module "alchemy/Kubernetes/Connection" {
+  interface AuthRegistry {
+    /** Authenticate against a GKE cluster with gke-gcloud-auth-plugin. */
+    gke: {
+      project: string;
+      location: string; // region or zone
+      clusterName: string;
+    };
+  }
+}
+```
+
+### Augment the state registries
+
+Only if you add `identity` or `registry`. Copy the EKS block:
+
+```typescript
+// What the built-in EKS adapter declares
+declare module "../../Kubernetes/ClusterAdapter.ts" {
+  interface IdentityStateRegistry {
+    "aws-pod-identity": {
+      roleArn: string;
+      roleName: string;
+      associationArn: string;
+      associationId: string;
+    };
+  }
+  interface RegistryStateRegistry {
+    "aws-ecr": {
+      repositoryName: string;
+      repositoryUri: string;
+    };
+  }
+  interface WorkloadIdentityOptions {
+    managedPolicyArns?: string[];
+  }
+  interface WorkloadBindingContract {
+    policyStatements?: PolicyStatement[];
+  }
+  interface WorkloadServicesRegistry {
+    aws: Credentials | Region | AWSEnvironment;
+  }
+}
+```
+
+### Build the layer
+
+Build a `Layer.effect` for `Kubernetes.ClusterAdapter("gke")`.
+Return an object that `satisfies ClusterAdapterService`, and die if
+`connection.auth.kind` isn't yours.
+
+### Provide it into the Stack
+
+Merge the layer beside `Kubernetes.providers()`:
+
+```typescript
+export default Alchemy.Stack(
+  "my-app",
+  {
+    providers: Layer.mergeAll(Kubernetes.providers(), GkeKubernetesAdapter()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Kubernetes.Deployment("Api", {
+      cluster: {
+        auth: {
+          kind: "gke",
+          project: "acme-prod",
+          location: "us-central1",
+          clusterName: "main",
+        },
+      },
+      image: "ghcr.io/acme/api:v3",
+      port: 8080,
+    });
+    return { url: api.url };
+  }),
+);
+```
+
+To let users pass a cluster resource as `cluster` directly, give it
+a `connection` attribute, as
+[`AWS.EKS.Cluster`](/kubernetes/clusters/eks#what-eks-adds)
+does.
+
+:::caution
+`auth` is saved in plain state. Never put a secret in an `AuthRegistry` member.
+:::
+
+## A GKE adapter sketch
+
+An auth-only adapter. It looks up the endpoint and CA from the GKE
+API, then hands token minting to the built-in
+[`exec` adapter](/kubernetes/clusters/connecting#token-client-certificate-and-exec)
+with `gke-gcloud-auth-plugin`:
+
+```typescript
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+
+declare module "alchemy/Kubernetes/Connection" {
+  interface AuthRegistry {
+    gke: { project: string; location: string; clusterName: string };
+  }
+}
+
+/** An access token for the GKE API from the gcloud CLI you're already logged into. */
+const gcloudAccessToken = Effect.gen(function* () {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const { exitCode, stdout, stderr } = yield* ChildProcess.make(
+    "gcloud",
+    ["auth", "print-access-token"],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      detached: false,
+      extendEnv: true,
+    },
+  ).pipe(
+    spawner.spawn,
+    Effect.flatMap((child) =>
+      Effect.all(
+        {
+          exitCode: child.exitCode,
+          stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
+          stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
+        },
+        { concurrency: "unbounded" },
+      ),
+    ),
+    Effect.scoped,
+  );
+  if (exitCode !== 0) {
+    return yield* Effect.fail(
+      new Error(
+        `gcloud auth print-access-token exited with ${String(exitCode)}: ${stderr.trim()}`,
+      ),
+    );
+  }
+  return stdout.trim();
+});
+
+/** Look up the cluster in the GKE API; a 404 means it is gone. */
+const describeGkeCluster = Effect.fn(function* (auth: {
+  project: string;
+  location: string;
+  clusterName: string;
+}) {
+  const http = yield* HttpClient.HttpClient;
+  const accessToken = yield* gcloudAccessToken;
+  const res = yield* http.execute(
+    HttpClientRequest.get(
+      `https://container.googleapis.com/v1/projects/${auth.project}/locations/${auth.location}/clusters/${auth.clusterName}`,
+    ).pipe(HttpClientRequest.bearerToken(accessToken)),
+  );
+  if (res.status === 404) {
+    return yield* Effect.fail(
+      new Kubernetes.ClusterNotFoundError({
+        message: `GKE cluster '${auth.clusterName}' no longer exists`,
+      }),
+    );
+  }
+  const body = (yield* res.json) as {
+    endpoint?: string;
+    masterAuth?: { clusterCaCertificate?: string };
+  };
+  return {
+    endpoint: body.endpoint,
+    certificateAuthorityData: body.masterAuth?.clusterCaCertificate,
+  };
+});
+
+export const GkeKubernetesAdapter = () =>
+  Layer.effect(
+    Kubernetes.ClusterAdapter("gke"),
+    Effect.gen(function* () {
+      // Capture dependencies once when the layer is built.
+      const context = yield* Effect.context<
+        HttpClient.HttpClient | ChildProcessSpawner.ChildProcessSpawner
+      >();
+
+      const connect = Effect.fn(function* (connection: Kubernetes.Connection) {
+        if (connection.auth.kind !== "gke") {
+          return yield* Effect.die(
+            new Error(`gke adapter received auth kind '${connection.auth.kind}'`),
+          );
+        }
+        const auth = connection.auth;
+
+        // 1. Look up endpoint and CA unless the connection already has them.
+        let { endpoint, certificateAuthorityData } = connection;
+        if (!endpoint || !certificateAuthorityData) {
+          const described = yield* describeGkeCluster(auth).pipe(
+            Effect.provideContext(context),
+          );
+          endpoint = described.endpoint ? `https://${described.endpoint}` : undefined;
+          certificateAuthorityData = described.certificateAuthorityData;
+          if (!endpoint || !certificateAuthorityData) {
+            return yield* Effect.fail(
+              new Error(
+                `GKE cluster '${auth.clusterName}' has no endpoint yet (still creating?)`,
+              ),
+            );
+          }
+        }
+
+        // 2. Let the built-in `exec` adapter mint tokens per request
+        //    (cached until expirationTimestamp).
+        const exec = yield* Kubernetes.findClusterAdapter("exec");
+        return yield* exec.connect({
+          endpoint,
+          certificateAuthorityData,
+          auth: { kind: "exec", command: "gke-gcloud-auth-plugin" },
+        });
+      });
+
+      return {
+        kind: "Kubernetes.ClusterAdapter" as const,
+        connect,
+      } satisfies Kubernetes.ClusterAdapterService;
+    }),
+  );
+```
+
+You now get every `Kubernetes.*` resource on GKE with `image:`
+sources and env-only bindings. Add `identity` (Workload Identity
+Federation via `serviceAccountAnnotations`) and `registry` (Artifact
+Registry) to unlock `main:` and cloud-grant bindings without changing
+any workload.
+
+## Where next
+
+- [EKS](/kubernetes/clusters/eks)
+- [Connecting to a cluster](/kubernetes/clusters/connecting)
+- [Custom providers](/infrastructure-as-code/custom-provider)

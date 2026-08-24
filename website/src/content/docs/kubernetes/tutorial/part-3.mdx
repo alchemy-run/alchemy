@@ -1,0 +1,264 @@
+---
+title: "Part 3: Manifests"
+description: Add a Namespace, a ConfigMap, and a Redis StatefulSet with Kubernetes.Manifest and pass their names into your Deployment.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Add a Namespace, a ConfigMap, and a Redis StatefulSet with
+`Kubernetes.Manifest`, and pass their names into `Echo`. Start from
+the [Part 2](/kubernetes/tutorial/part-2) file.
+
+## Start clean
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy destroy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy destroy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+Changing a workload's namespace replaces it.
+
+## Add a Namespace
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
++  const ns = yield* Kubernetes.Manifest("Namespace", {
++    cluster,
++    manifest: {
++      apiVersion: "v1",
++      kind: "Namespace",
++      metadata: { name: "tutorial" },
++    },
++  });
+```
+
+A [`Kubernetes.Manifest`](/kubernetes/objects/manifests#any-object)
+applies any Kubernetes object you write as a literal.
+
+## Move the workloads into it
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
++  namespace: ns.name,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  replicas: 3,
+});
+
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
++  namespace: ns.name,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 60,
+  schedule: "*/2 * * * *",
+});
+```
+
+Pass `ns.name` (an [Output](/infrastructure-as-code/outputs)) rather
+than `"tutorial"` so the Namespace is created first.
+
+## Add a ConfigMap
+
+```diff lang="typescript"
++const settings = {
++  LOG_LEVEL: "debug",
++  GREETING: "hello from part 3",
++};
+
+export default Alchemy.Stack(
+  // ...
+  Effect.gen(function* () {
+    const cluster = Kubernetes.KubeConfig({ context: "docker-desktop" });
+
+    const ns = yield* Kubernetes.Manifest("Namespace", { /* ... */ });
+
++    const config = yield* Kubernetes.Manifest("Config", {
++      cluster,
++      manifest: {
++        apiVersion: "v1",
++        kind: "ConfigMap",
++        metadata: { name: "app-config", namespace: ns.name },
++        data: settings,
++      },
++    });
+```
+
+You can use Outputs anywhere in the manifest.
+
+## Feed it into the Deployment
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  namespace: ns.name,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  replicas: 3,
++  env: {
++    ...settings,
++    CONFIG_MAP: config.name,
++  },
+});
+```
+
+`config.name` is `"app-config"`. Reuse `settings` for the values; a
+Manifest only exposes the object's name.
+
+## Add Redis as a StatefulSet
+
+```diff lang="typescript"
+const config = yield* Kubernetes.Manifest("Config", { /* ... */ });
+
++const redis = yield* Kubernetes.Manifest("Redis", {
++  cluster,
++  manifest: {
++    apiVersion: "apps/v1",
++    kind: "StatefulSet",
++    metadata: { name: "redis", namespace: ns.name },
++    spec: {
++      serviceName: "redis",
++      replicas: 1,
++      selector: { matchLabels: { app: "redis" } },
++      template: {
++        metadata: { labels: { app: "redis" } },
++        spec: {
++          containers: [
++            { name: "redis", image: "redis:7", ports: [{ containerPort: 6379 }] },
++          ],
++        },
++      },
++    },
++  },
++});
+
+const echo = yield* Kubernetes.Deployment("Echo", { /* ... */ });
+```
+
+Use a Manifest for any object `Deployment` and `Job` don't cover.
+
+## Give it a stable address
+
+```diff lang="typescript"
+const redis = yield* Kubernetes.Manifest("Redis", { /* ... */ });
+
++const redisService = yield* Kubernetes.Manifest("RedisService", {
++  cluster,
++  manifest: {
++    apiVersion: "v1",
++    kind: "Service",
++    metadata: { name: "redis", namespace: ns.name },
++    spec: {
++      type: "ClusterIP",
++      selector: { app: "redis" },
++      ports: [{ port: 6379, targetPort: 6379 }],
++    },
++  },
++});
+
+const echo = yield* Kubernetes.Deployment("Echo", { /* ... */ });
+```
+
+A [ClusterIP](/kubernetes/guides/exposing-services#service-types)
+Service makes Redis reachable inside the cluster as `redis`.
+
+## Hand the address to the Deployment
+
+```diff lang="typescript"
+import * as Alchemy from "alchemy";
+import * as Kubernetes from "alchemy/Kubernetes";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+
+// ...
+  env: {
+    ...settings,
+    CONFIG_MAP: config.name,
++    REDIS_URL: Output.interpolate`redis://${redisService.name}:6379`,
+  },
+```
+
+[`Output.interpolate`](/infrastructure-as-code/outputs#interpolate)
+builds the URL from the Service name, so the Service is created
+before `Echo`.
+
+## Deploy
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]6 to create[/g]
+
+[g]+[/g] [b]Config[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+[g]+[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+[g]+[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]Redis[/b] [d](Kubernetes.Manifest)[/d]
+[g]+[/g] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Namespace[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]Config[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]Redis[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]RedisService[/b] [d](Kubernetes.Manifest)[/d] [g]created[/g]
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [g]created[/g]
+[g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4",
+[s2]kind: "CronJob",
+}`} />
+
+Resources are created in the order your references require:
+Namespace first, `Echo` last.
+
+```sh
+kubectl get all,configmap -n tutorial
+```
+
+Check the environment `Echo`'s container received:
+
+```sh
+kubectl get deploy -n tutorial myapp-echo-dev-alex-k3m7p2q6r4s5t2v6 \
+  -o jsonpath='{.spec.template.spec.containers[0].env}'
+```
+
+## Where next
+
+- [Part 4: Helm Charts](/kubernetes/tutorial/part-4)
+- [Manifests](/kubernetes/objects/manifests)
+- [Pod template](/kubernetes/workloads/pod-template)

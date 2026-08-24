@@ -1,0 +1,209 @@
+---
+title: Bindings
+description: Give a Kubernetes Deployment or Job access to other resources with bindings, Pod Identity on EKS, or plain env vars on local clusters.
+---
+
+Bind a `Kubernetes.Deployment` or `Kubernetes.Job` to other resources.
+One
+`yield* AWS.DynamoDB.PutItem(table)` in the init Effect sets an env var
+on the pod and, on EKS, grants the permission to the pod's IAM role.
+
+## Bind a resource
+
+A binding sets env vars on the pod. On
+[EKS](/kubernetes/clusters/eks#what-eks-adds) it also grants
+IAM permissions, so every AWS binding works unchanged.
+
+```typescript
+// Inside the Stack's Effect.gen body.
+// providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers())
+const table = yield* AWS.DynamoDB.Table("Entries", {
+  partitionKey: "pk",
+  attributes: { pk: "S" },
+});
+const uploads = yield* AWS.S3.Bucket("Uploads", {});
+
+const api = yield* Kubernetes.Deployment(
+  "Api",
+  { cluster, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    // Each yield* grants one permission and returns a client to call
+    // inside fetch.
+    const putItem = yield* AWS.DynamoDB.PutItem(table); // dynamodb:PutItem on the table
+    const getObject = yield* AWS.S3.GetObject(uploads); // s3:GetObject on the bucket's objects (+ s3:ListBucket)
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putItem({ Item: { pk: { S: "hello" } } });
+        const object = yield* getObject({ Key: "banner.png" });
+        return HttpServerResponse.text(
+          `banner is ${object.ContentLength} bytes`,
+        );
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(AWS.DynamoDB.PutItemHttp, AWS.S3.GetObjectHttp),
+    ),
+  ),
+);
+```
+
+Reach a bound resource through its client, not by reading its name
+from the environment. If your `env` prop sets the same key as a
+binding, your value wins.
+
+## Pod Identity on EKS
+
+On EKS every workload gets an IAM role, `<id>-pod-role`, bound to its
+ServiceAccount, with or without bindings. Binding permissions go in
+the role's inline policy, `<id>-pod-policy`. AWS credentials and
+`AWS_REGION` are available inside the container; add nothing to
+`podTemplate`. Changing
+`namespace` replaces the workload. Off EKS, `identity` is `undefined`.
+
+For an `image:` workload, grant permissions with
+`identity.managedPolicyArns`:
+
+```typescript
+// Pre-built image: grant through managed policies.
+const worker = yield* Kubernetes.Deployment("Worker", {
+  cluster,
+  image: "ghcr.io/acme/worker:1.4",
+  port: 8080,
+  serviceType: "ClusterIP",
+  identity: {
+    managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"],
+  },
+});
+
+worker.identity; // { kind: "aws-pod-identity", roleArn, roleName, associationArn, associationId }
+worker.serviceAccountName; // the ServiceAccount the role is bound to
+```
+
+:::caution[managedPolicyArns is applied on first create only]
+Changing the ARNs once the role exists is ignored; bind instead, or replace the workload.
+:::
+
+## Env-only bindings
+
+On clusters other than EKS, pass values from other resources through
+the `env` prop of an `image:` workload. Numbers and objects are
+JSON-stringified.
+
+```typescript
+import * as Output from "alchemy/Output";
+
+const redis = yield* Kubernetes.Manifest("Redis", {
+  cluster,
+  manifest: {
+    apiVersion: "apps/v1",
+    kind: "StatefulSet",
+    metadata: { name: "redis", namespace: "default" },
+    spec: {
+      serviceName: "redis",
+      selector: { matchLabels: { app: "redis" } },
+      template: {
+        metadata: { labels: { app: "redis" } },
+        spec: { containers: [{ name: "redis", image: "redis:7-alpine" }] },
+      },
+    },
+  },
+});
+const redisSvc = yield* Kubernetes.Manifest("RedisService", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Service",
+    metadata: { name: "redis", namespace: "default" },
+    spec: { selector: { app: "redis" }, ports: [{ port: 6379 }] },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3", // pre-built image
+  port: 8080,
+  env: {
+    REDIS_HOST: Output.interpolate`${redisSvc.name}.${redisSvc.namespace}.svc.cluster.local`,
+    REDIS_PORT: 6379, // lands as the string "6379"
+    LOG_LEVEL: "info",
+  },
+});
+```
+
+Never put secrets in `env`. Put them in a
+[Secret Manifest](/kubernetes/objects/manifests#secrets) and reference
+it with `valueFrom.secretKeyRef`. That is a
+[container-level field](/kubernetes/workloads/pod-template#container-level-fields),
+and [arrays replace](/kubernetes/workloads/pod-template#merge-rules),
+so restate the whole container.
+
+```typescript
+import * as Config from "effect/Config";
+
+const dbSecret = yield* Kubernetes.Manifest("DbSecret", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: "db-credentials", namespace: "default" },
+    // Read from the shell that runs `alchemy deploy`;
+    // never a literal in alchemy.run.ts.
+    stringData: { password: Config.string("DB_PASSWORD") },
+  },
+});
+
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: "ghcr.io/acme/api:v3",
+  port: 8080,
+  env: { DB_HOST: "postgres.default.svc.cluster.local" },
+  podTemplate: {
+    spec: {
+      // Restate the whole container.
+      containers: [
+        {
+          name: "api",
+          image: "ghcr.io/acme/api:v3",
+          ports: [{ containerPort: 8080 }],
+          env: [
+            { name: "PORT", value: "8080" },
+            { name: "DB_HOST", value: "postgres.default.svc.cluster.local" },
+            {
+              name: "DB_PASSWORD",
+              valueFrom: {
+                secretKeyRef: { name: dbSecret.name, key: "password" },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+});
+```
+
+## Calling a binding
+
+Call a binding client inside `fetch` or `run`, not in the init Effect;
+at init it is a type error.
+
+```typescript
+Effect.gen(function* () {
+  const putItem = yield* AWS.DynamoDB.PutItem(table);
+  // yield* putItem({ ... })   ✗ not at init
+  return {
+    fetch: Effect.gen(function* () {
+      yield* putItem({ Item: { pk: { S: "1" } } }); // ✓
+      return HttpServerResponse.text("ok");
+    }),
+  };
+});
+```
+
+## Where next
+
+- [Pod template](/kubernetes/workloads/pod-template)
+- [Secrets](/kubernetes/objects/manifests#secrets)
+- [Bindings](/infrastructure-as-effects/binding)

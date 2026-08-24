@@ -1,0 +1,187 @@
+---
+title: "Part 2: Jobs and CronJobs"
+description: Run a container to completion with Kubernetes.Job, then turn it into a CronJob with a schedule.
+sidebar:
+  order: 2
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Add a `Kubernetes.Job` to the [Part 1](/kubernetes/tutorial/part-1)
+file, then limit retries, clean up, and schedule it.
+
+## Add a Job
+
+```diff lang="typescript"
+const echo = yield* Kubernetes.Deployment("Echo", {
+  cluster,
+  image: "mendhak/http-https-echo:33",
+  port: 8080,
+  serviceType: "LoadBalancer",
+  replicas: 3,
+});
+
++const hello = yield* Kubernetes.Job("Hello", {
++  cluster,
++  image: "busybox:1.36",
++  command: ["sh", "-c"],
++  args: ["echo hello from alchemy; date"],
++});
+```
+
+A [`Kubernetes.Job`](/kubernetes/workloads/jobs#jobs) runs a container
+to completion. It starts as soon as you deploy.
+
+## Expose the Job name
+
+```diff lang="typescript"
+return {
+  url: echo.url,
+  deployment: echo.deploymentName,
++  job: hello.jobName,
+};
+```
+
+Each change to the Job gets a new name.
+
+## Deploy and watch it run
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
+
+<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d]
+[g]+[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Echo[/b] [d](Kubernetes.Deployment)[/d] [g]created[/g]
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [g]created[/g]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4-3f9a1c2e",
+}`} />
+
+```sh
+kubectl get jobs
+```
+
+After a few seconds `COMPLETIONS` reads `1/1`:
+
+```sh
+kubectl logs job/myapp-hello-dev-alex-h6g5f4e3d2c7b2a4-3f9a1c2e
+```
+
+Deploy doesn't wait for the Job to finish.
+
+## Change the command and run it again
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+-  args: ["echo hello from alchemy; date"],
++  args: ["echo hello again; date"],
+});
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [y]updated[/y]`} />
+
+A new Job runs under the new name. The old one is
+[removed](/kubernetes/guides/how-apply-works#pruning-and-drift).
+
+## Limit retries with backoffLimit
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
++  backoffLimit: 1,
+});
+```
+
+Retries before the Job is marked failed; the default is 6.
+
+## Clean up finished Jobs with ttlSecondsAfterFinished
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
+  backoffLimit: 1,
++  ttlSecondsAfterFinished: 60,
+});
+```
+
+Finished Jobs and their pods are deleted this many seconds after
+completion. A later deploy still reports `no changes`.
+
+## Put it on a schedule
+
+```diff lang="typescript"
+const hello = yield* Kubernetes.Job("Hello", {
+  cluster,
+  image: "busybox:1.36",
+  command: ["sh", "-c"],
+  args: ["echo hello again; date"],
+  backoffLimit: 1,
+  ttlSecondsAfterFinished: 60,
++  schedule: "*/2 * * * *",
+});
+
+return {
+  url: echo.url,
+  deployment: echo.deploymentName,
+  job: hello.jobName,
++  kind: hello.kind,
+};
+```
+
+<Terminal content={`[u]Plan[/u]: [y]1 to update[/y]
+
+[y]~[/y] [b]Hello[/b] [d](Kubernetes.Job)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Hello[/b] [d](Kubernetes.Job)[/d] [y]updated[/y]
+{
+[s2]url: "http://localhost:8080",
+[s2]deployment: "myapp-echo-dev-alex-k3m7p2q6r4s5t2v6",
+[s2]job: "myapp-hello-dev-alex-h6g5f4e3d2c7b2a4",
+[s2]kind: "CronJob",
+}`} />
+
+Adding a `schedule` turns the Job into a
+[`CronJob`](/kubernetes/workloads/jobs#cronjobs). Within two minutes
+`kubectl get jobs` shows the first run.
+
+## Where next
+
+- [Part 3: Manifests](/kubernetes/tutorial/part-3)
+- [Jobs](/kubernetes/workloads/jobs)
