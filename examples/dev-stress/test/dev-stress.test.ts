@@ -1539,9 +1539,12 @@ test(
       ).marker,
     ).toBe("vm-v1");
 
-    // Now change the program that runs INSIDE the VM. This is the most
-    // expensive reload in the stack: rebuild the image, then boot a VM
-    // from it.
+    // Now change the program that runs INSIDE the VM. The dev provider
+    // builds the new image with a HOST-side cached `docker build` and hands
+    // floci a pre-built `docker://` reference, so the rebuild itself is
+    // seconds — the wait below is dominated by the roundtrip's own
+    // boot-a-VM-per-request cost.
+    const rebuildStartedAt = Date.now();
     server.write("src/vm/marker.ts", markerModule("VM_MARKER", "vm-v2"));
     await waitForJson<{ marker: string }>(
       "the rebuilt MicroVM image to serve vm-v2",
@@ -1549,6 +1552,12 @@ test(
       (body) => body.marker === "vm-v2",
       { tries: 600, delayMs: 1_000, server },
     );
+    const rebuildMs = Date.now() - rebuildStartedAt;
+    console.log(`microvm image rebuild -> serving vm-v2 in ${rebuildMs}ms`);
+    // Pre-docker:// this took minutes (zip upload + cold server-side
+    // build); the cached host build must keep the whole edit-to-serving
+    // path within a couple of VM boots.
+    expect(rebuildMs).toBeLessThan(120_000);
     server.assertAlive("microvm image rebuild");
   },
   PHASE_TIMEOUT,
