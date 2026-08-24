@@ -71,7 +71,6 @@ const SECTIONS: Section[] = [
         "cli/dev",
         "cli/tail",
         "cli/logs",
-        "cli/login",
         "cli/profile",
         "cli/state",
         "cli/inspecting-state",

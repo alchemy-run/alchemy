@@ -36,3 +36,30 @@ export const isNonInteractive = (): boolean => {
     return true;
   return false;
 };
+
+export interface InteractionCapabilities {
+  readonly input: boolean;
+}
+
+/** Process capabilities as an Effect so callers can replace them in tests. */
+export const processInteractionCapabilities: Effect.Effect<InteractionCapabilities> =
+  Effect.sync(() => ({ input: !isNonInteractive() }));
+
+/** Select user-facing copy from an injected capability Effect. */
+export const messageForCapabilities = <E, R>(
+  capabilities: Effect.Effect<InteractionCapabilities, E, R>,
+  interactive: string,
+  nonInteractive: string,
+): Effect.Effect<string, E, R> =>
+  Effect.map(capabilities, ({ input }) =>
+    input ? interactive : nonInteractive,
+  );
+
+/** Prefer the profile dashboard when this process can own a TUI screen. */
+export const profileCommandHint = (nonInteractiveCommand: string) =>
+  messageForCapabilities(
+    processInteractionCapabilities,
+    "alchemy profile",
+    nonInteractiveCommand,
+  );
+import * as Effect from "effect/Effect";

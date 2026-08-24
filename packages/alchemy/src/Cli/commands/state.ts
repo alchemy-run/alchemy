@@ -61,14 +61,14 @@ const fqnFlag = Flag.string("fqn").pipe(
  * state operations address (stack, stage) explicitly, so a placeholder
  * value (same as `alchemy unsafe nuke`) is sufficient.
  */
-const withStateService = <A, E>(
+const withStateService = <A, E, R>(
   args: {
     main: string;
     envFile: Option.Option<string>;
-    profile: string;
+    profile: string | undefined;
     local: boolean;
   },
-  body: (state: State.StateService) => Effect.Effect<A, E, never>,
+  body: (state: State.StateService) => Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
     const stackEffect = yield* importStack(args.main);

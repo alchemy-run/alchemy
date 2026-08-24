@@ -56,7 +56,12 @@ export const logsCommand = Command.make(
   },
   instrumentCommand(
     "logs",
-    (a: { main: string; stage: string; profile: string; limit: number }) => ({
+    (a: {
+      main: string;
+      stage: string;
+      profile: string | undefined;
+      limit: number;
+    }) => ({
       "alchemy.stage": a.stage,
       "alchemy.profile": a.profile,
       "alchemy.main": a.main,

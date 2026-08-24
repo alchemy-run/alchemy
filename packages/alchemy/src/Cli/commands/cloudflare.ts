@@ -44,7 +44,7 @@ import {
  */
 const cloudflareLayers = (
   envFileOpt: Option.Option<string>,
-  profileName: string,
+  profileName: string | undefined,
 ) =>
   Effect.gen(function* () {
     const authProviders: AuthProviders["Service"] = {};
@@ -99,7 +99,7 @@ const bootstrapCommand = Command.make(
   instrumentCommand(
     "cloudflare.bootstrap",
     (a: {
-      profile: string;
+      profile: string | undefined;
       force: boolean;
       workerName: string | undefined;
     }) => ({
@@ -128,7 +128,7 @@ const teardownCommand = Command.make(
   },
   instrumentCommand(
     "cloudflare.teardown",
-    (a: { profile: string; workerName: string | undefined }) => ({
+    (a: { profile: string | undefined; workerName: string | undefined }) => ({
       "alchemy.profile": a.profile,
       "alchemy.worker_name": a.workerName ?? "",
     }),
@@ -571,7 +571,7 @@ const stateLogsCommand = Command.make(
   instrumentCommand(
     "cloudflare.state.logs",
     (a: {
-      profile: string;
+      profile: string | undefined;
       workerName: string | undefined;
       tail: boolean;
       limit: number;
