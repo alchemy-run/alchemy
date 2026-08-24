@@ -1,4 +1,5 @@
 import { applyEnvRegionOverride } from "@/AWS/AuthProvider.ts";
+import { withDotEnvFallback } from "@/Util/ConfigProvider.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -33,5 +34,25 @@ describe("applyEnvRegionOverride", () => {
       const creds = yield* applyEnvRegionOverride(profileCreds);
       expect(creds.region).toBe("us-west-2");
     }).pipe(withEnv({})),
+  );
+
+  it.effect("selected environment overrides the default dotenv region", () =>
+    Effect.gen(function* () {
+      const creds = yield* applyEnvRegionOverride({
+        accountId: "654654387918",
+        region: "us-west-2",
+      });
+      expect(creds.region).toBe("us-east-1");
+      expect(creds.accountId).toBe("654654387918");
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          withDotEnvFallback(
+            ConfigProvider.fromEnv({ env: { AWS_REGION: "us-east-1" } }),
+            ConfigProvider.fromEnv({ env: { AWS_REGION: "ap-south-1" } }),
+          ),
+        ),
+      ),
+    ),
   );
 });

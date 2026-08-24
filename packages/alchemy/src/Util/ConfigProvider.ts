@@ -3,6 +3,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 
+export const withDotEnvFallback = (
+  environment: ConfigProvider.ConfigProvider,
+  dotEnv: ConfigProvider.ConfigProvider,
+) => ConfigProvider.orElse(environment, dotEnv);
+
 export const loadConfigProvider = (envFile: Option.Option<string>) => {
   if (Option.isSome(envFile)) {
     return ConfigProvider.fromDotEnv({ path: envFile.value }).pipe(
@@ -17,9 +22,9 @@ export const loadConfigProvider = (envFile: Option.Option<string>) => {
     if (!exists) {
       return ConfigProvider.fromEnv();
     }
-    return ConfigProvider.orElse(
-      yield* ConfigProvider.fromDotEnv({ path: ".env" }),
+    return withDotEnvFallback(
       ConfigProvider.fromEnv(),
+      yield* ConfigProvider.fromDotEnv({ path: ".env" }),
     );
   });
 };
