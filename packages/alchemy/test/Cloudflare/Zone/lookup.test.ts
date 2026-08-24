@@ -269,10 +269,8 @@ describe("inferZoneIdForHostname", () => {
               { concurrency: "unbounded" },
             );
             expect(resolved).toEqual(Array(8).fill(zoneId("example")));
-            // The map holds the lookup *effect*, installed inside
-            // `Effect.suspend` with no yield point between get and set, so
-            // eight fibers share one in-flight walk rather than each
-            // starting their own.
+            // The map holds the cached lookup effect, so once installed the
+            // overlapping fibers share its in-flight hierarchy walk.
             expect(stub.queried).toEqual(["app.example.com", "example.com"]);
           }),
         // Real latency on every request, so the fibers genuinely overlap.
