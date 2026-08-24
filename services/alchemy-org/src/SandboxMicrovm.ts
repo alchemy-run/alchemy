@@ -75,17 +75,31 @@ RUN bun tsc -b || true
 export const SandboxMicrovmRuntime = AWS.AI.SandboxMicrovmImage.make(
   Effect.gen(function* () {
     const buildRole = yield* AWS.AI.SandboxMicrovmBuildRole;
-    // stage the LOCAL repo (committed tree + depth-1 .git) into the
+    // Stage the LOCAL repo (committed tree + depth-1 .git) into the
     // build context; the fingerprint (HEAD commits) drives the diff,
-    // so the image rebuilds per COMMIT, never per file save
-    const bake = yield* stageBake;
+    // so the image rebuilds per COMMIT, never per file save.
+    //
+    // DEPLOY-SIDE ONLY: the platform re-evaluates this props effect
+    // inside the deployed guest (where resource constructors resolve
+    // from bound context) — running the stager there crashes the VM
+    // at boot (its module-relative repo root doesn't exist in the
+    // image), so guard it exactly like bindings guard `host.bind`.
+    const contextInclude = globalThis.__ALCHEMY_RUNTIME__
+      ? []
+      : [
+          yield* stageBake.pipe(
+            Effect.map((bake) => ({
+              from: bake.dir,
+              to: "alchemy",
+              fingerprint: bake.fingerprint,
+            })),
+          ),
+        ];
     return {
       main: import.meta.url,
       runtime: "bun" as const,
       dockerfile: SANDBOX_DOCKERFILE,
-      contextInclude: [
-        { from: bake.dir, to: "alchemy", fingerprint: bake.fingerprint },
-      ],
+      contextInclude,
       buildRole,
       cpuConfigurations: [{ architecture: "ARM_64" as const }],
       // a dev tree, not a stub: sessions run installs, tests, and
