@@ -38,7 +38,7 @@ catalogs:
     aws4fetch: ^1.0.20
   build:
     "@vercel/nft": ^1.10.2
-    rolldown: 1.1.5
+    rolldown: 1.2.5
     tsdown: ^0.22.4
     typescript: ^7.0.2
     vite: ^8.0.7
@@ -163,7 +163,7 @@ overrides:
   "@effect/platform-browser": 4.0.0-rc.111
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
-  rolldown: 1.1.5
+  rolldown: 1.2.5
 patchedDependencies:
   "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
   starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch

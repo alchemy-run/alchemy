@@ -194,7 +194,7 @@ export const createEc2HostedSupport = ({
             ...((props.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -216,79 +216,10 @@ export const createEc2HostedSupport = ({
           realMain,
           virtualEntryPlugin(
             (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
-import { provideProcessTelemetry } from "alchemy/Telemetry";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Ec2";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
-// handler is actually served and host.run loops stay alive.
-const program = handler.pipe(
-  // Process-lifetime telemetry: built once into the root scope; exporters
-  // batch on their intervals and flush when the scope closes on graceful
-  // shutdown.
-  Effect.flatMap((instance) =>
-    instance.RuntimeContext.exports.pipe(
-      Effect.flatMap((exports) => exports.program),
-      provideProcessTelemetry(instance.RuntimeContext),
-    ),
-  ),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      // The instance authenticates via its instance profile (IMDS), which
-      // only the full provider chain resolves — env-only credentials never
-      // exist on a hosted EC2 box.
-      Layer.provideMerge(Credentials.fromChain()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Instance bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Instance bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `,
           ),
         );

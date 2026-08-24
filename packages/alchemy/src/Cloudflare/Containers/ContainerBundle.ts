@@ -13,7 +13,6 @@ import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
@@ -322,8 +321,8 @@ export const bundleContainerProgram = Effect.fn(function* ({
         resolve: {
           conditionNames:
             runtime === "bun"
-              ? ["bun", "import", "module", "default"]
-              : ["node", "import", "module", "default"],
+              ? [...Bundle.BUN_CONDITION_NAMES]
+              : [...Bundle.NODE_CONDITION_NAMES],
           ...build?.input?.resolve,
         },
         plugins: [build?.input?.plugins, plugins],
@@ -347,104 +346,17 @@ export const bundleContainerProgram = Effect.fn(function* ({
         realMain,
         virtualEntryPlugin(
           (importPath) => `
-${
-  runtime === "bun"
-    ? `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-const HttpServer = BunHttpServer;
-`
-    : `
-import { NodeServices } from "@effect/platform-node";
-import { NodeHttpServer } from "alchemy/Http";
-const HttpServer = NodeHttpServer;
-`
-}
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import { provideProcessTelemetry } from "alchemy/Telemetry";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import { MinimumLogLevel } from "effect/References";
-
+import { bootstrap } from ${JSON.stringify(
+            runtime === "bun"
+              ? "alchemy/Runtime/Bootstrap/CloudflareContainerBun"
+              : "alchemy/Runtime/Bootstrap/CloudflareContainerNode",
+          )};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(Stack, {
-  name: ${JSON.stringify(stack.name)},
-  stage: ${JSON.stringify(stack.stage)},
-  bindings: {},
-  resources: {}
-});
-
-const serverEffect = tag.pipe(
-  // Process-lifetime telemetry: built once into the root scope; exporters
-  // batch on their intervals and flush when the scope closes on graceful
-  // shutdown.
-  Effect.flatMap((func) =>
-    func.RuntimeContext.exports.pipe(
-      Effect.flatMap((exports) => exports.default),
-      provideProcessTelemetry(func.RuntimeContext),
-    ),
-  ),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(HttpServer()),
-      // Capability bindings that talk to Cloudflare's HTTP API from inside the
-      // container (e.g. R2/KV/Queue \`*Http\` bindings) resolve their account via
-      // \`CloudflareEnvironment\` at runtime, exactly like the Worker bridge does
-      // (the service value is an \`Effect\` of the resolved credentials). The
-      // per-operation account/token are read from the container's env (the bound
-      // token outputs), so an absent account id here is harmless.
-      Layer.provideMerge(
-        Layer.succeed(
-          CloudflareEnvironment,
-          Effect.succeed({
-            account: process.env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
-          }),
-        )
-      ),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          // Auto-bound \`Config\` values arrive in the env as
-          // \`{"_tag":"Redacted","value":...}\` markers; reify them so a
-          // \`Config\` re-read inside a handler decodes the raw source value.
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Container bootstrap starting...");
-await Effect.runPromise(serverEffect).catch((err) => {
-  console.error("Container bootstrap failed:", err);
-  process.exit(1);
-})`,
+await bootstrap(entrypoint, ${JSON.stringify({
+            stack: { name: stack.name, stage: stack.stage },
+          })});
+`,
         ),
       );
 

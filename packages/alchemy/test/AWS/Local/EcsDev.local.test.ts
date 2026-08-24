@@ -473,24 +473,23 @@ describe.sequential("EcsDev", () => {
         );
         const mainPath = path.join(clone, "server.ts");
 
-        const outputs = yield* stack.deploy(
-          Effect.gen(function* () {
-            const cluster = yield* AWS.ECS.Cluster("EcsReloadMainCluster");
-            // Declared WITHOUT an inline impl — the platform marks it
-            // external and the bundle runs as-is (a plain Bun server).
-            const task = yield* AWS.ECS.Task("EcsReloadMainTask", {
-              main: mainPath,
-              image: "oven/bun:1",
-              port: MAIN_RELOAD_PORT,
-              cpu: 256,
-              memory: 512,
-              networkMode: "bridge",
-              requiresCompatibilities: ["EC2"],
-              runtimePlatform: hostRuntimePlatform,
-            });
-            return { cluster, task };
-          }),
-        );
+        const program = Effect.gen(function* () {
+          const cluster = yield* AWS.ECS.Cluster("EcsReloadMainCluster");
+          // Declared WITHOUT an inline impl — the platform marks it
+          // external and the bundle runs as-is (a plain Bun server).
+          const task = yield* AWS.ECS.Task("EcsReloadMainTask", {
+            main: mainPath,
+            image: "oven/bun:1",
+            port: MAIN_RELOAD_PORT,
+            cpu: 256,
+            memory: 512,
+            networkMode: "bridge",
+            requiresCompatibilities: ["EC2"],
+            runtimePlatform: hostRuntimePlatform,
+          });
+          return { cluster, task };
+        });
+        const outputs = yield* stack.deploy(program);
         expect(outputs.task.taskDefinitionArn).toContain(":000000000000:");
         expect(outputs.task.repositoryUri).toContain(".localhost:");
 
@@ -518,6 +517,20 @@ describe.sequential("EcsDev", () => {
         yield* Effect.log(
           `bundled-main task hot reload observed in ${Date.now() - swapStartedAt}ms`,
         );
+
+        // A REPLAN after the watcher's swap must surface it. Persisted state
+        // still carries v1's code hash (the watcher updates the emulator and
+        // the sidecar's in-memory attrs, not the state store), so the dev
+        // diff plans an update — not a noop — and the fresh attrs flow to
+        // stack outputs. The reported bug had this replan noop, so
+        // `task.code.hash` never advanced and Actions keyed on it stayed
+        // skipped after a transitive-import change.
+        const replanned = yield* stack.deploy(program);
+        expect(replanned.task.code.hash).not.toBe(outputs.task.code.hash);
+        // And a second replan with nothing new IS a noop-equivalent: the
+        // attrs are settled, the hash stable.
+        const settled = yield* stack.deploy(program);
+        expect(settled.task.code.hash).toBe(replanned.task.code.hash);
 
         yield* stack.destroy();
         yield* assertFamilyTornDown({
