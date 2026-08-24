@@ -6,6 +6,7 @@ import * as Scope from "effect/Scope";
 import {
   afterAll as vitestAfterAll,
   afterEach as vitestAfterEach,
+  aroundAll as vitestAroundAll,
   beforeAll as vitestBeforeAll,
   beforeEach as vitestBeforeEach,
 } from "vitest";
@@ -227,18 +228,19 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
-  // child process leaks past the test process. Register an `afterAll` that
-  // closes it (and the RPC sidecar, which lives in its own scope so that
-  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
-  // registration to a microtask so it runs AFTER any user-registered
-  // `afterAll` (including `destroy(Stack)`); vitest runs afterAll hooks in
-  // registration order.
+  // child process leaks past the test process. `aroundAll` owns the complete
+  // suite lifecycle, so cleanup runs after suite hooks and their cleanups even
+  // when setup, a test, or teardown fails. Hook ordering does not affect it.
   const closeAll = sidecar
     ? Effect.andThen(closeScope, sidecar.close)
     : closeScope;
-  queueMicrotask(() => {
-    vitestAfterAll(() => Effect.runPromise(closeAll), DEFAULT_TIMEOUT);
-  });
+  vitestAroundAll(async (runSuite) => {
+    try {
+      await runSuite();
+    } finally {
+      await Effect.runPromise(closeAll);
+    }
+  }, DEFAULT_TIMEOUT);
 
   return {
     test,
