@@ -67,7 +67,6 @@ layer(NodeServices.layer)("Bundle namespace initialization", (it) => {
           const plan = yield* bundler.resolveBundlePlan({
             main: entry,
             isExternal: true,
-            build: { external: ["cloudflare:workers"] },
           } as FunctionZipProps);
           const bundle = yield* Bundle.build(
             plan.inputOptions,
