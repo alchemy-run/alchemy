@@ -52,7 +52,11 @@ const bootstrapCommand = Command.make(
   },
   instrumentCommand(
     "aws.bootstrap",
-    (a: { profile: string; region: string | undefined; destroy: boolean }) => ({
+    (a: {
+      profile: string | undefined;
+      region: string | undefined;
+      destroy: boolean;
+    }) => ({
       "alchemy.profile": a.profile,
       "alchemy.region": a.region ?? "",
       "alchemy.destroy": a.destroy,

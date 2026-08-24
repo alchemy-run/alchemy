@@ -1,7 +1,7 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as Cloudflare from "@/Cloudflare";
-import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthProvider.ts";
+import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { InstanceId } from "@/InstanceId.ts";

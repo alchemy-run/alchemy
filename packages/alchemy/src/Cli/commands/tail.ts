@@ -40,7 +40,7 @@ export const tailCommand = Command.make(
   },
   instrumentCommand(
     "tail",
-    (a: { main: string; stage: string; profile: string }) => ({
+    (a: { main: string; stage: string; profile: string | undefined }) => ({
       "alchemy.stage": a.stage,
       "alchemy.profile": a.profile,
       "alchemy.main": a.main,
