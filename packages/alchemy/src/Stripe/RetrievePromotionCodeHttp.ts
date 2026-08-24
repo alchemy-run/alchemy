@@ -16,5 +16,6 @@ export const RetrievePromotionCodeHttp = Layer.effect(
     tag: "Stripe.RetrievePromotionCode",
     operation: GetPromotionCodesPromotionCode,
     idField: "promotion_code",
+    permissions: ["promotion_codes_read"],
   }),
 );

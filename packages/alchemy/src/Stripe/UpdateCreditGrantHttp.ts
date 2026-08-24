@@ -16,5 +16,6 @@ export const UpdateCreditGrantHttp = Layer.effect(
     tag: "Stripe.UpdateCreditGrant",
     operation: PostBillingCreditGrantsId,
     idField: "id",
+    permissions: ["credit_grants_write"],
   }),
 );

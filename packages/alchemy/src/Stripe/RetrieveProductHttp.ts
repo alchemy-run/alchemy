@@ -16,5 +16,6 @@ export const RetrieveProductHttp = Layer.effect(
     tag: "Stripe.RetrieveProduct",
     operation: GetProductsId,
     idField: "id",
+    permissions: ["products_read"],
   }),
 );

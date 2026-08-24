@@ -15,5 +15,6 @@ export const CreateCustomerHttp = Layer.effect(
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateCustomer",
     operation: PostCustomers,
+    permissions: ["customers_write"],
   }),
 );

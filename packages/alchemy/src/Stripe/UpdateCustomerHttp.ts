@@ -16,5 +16,6 @@ export const UpdateCustomerHttp = Layer.effect(
     tag: "Stripe.UpdateCustomer",
     operation: PostCustomersCustomer,
     idField: "customer",
+    permissions: ["customers_write"],
   }),
 );

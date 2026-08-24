@@ -15,5 +15,6 @@ export const CreateTerminalReaderHttp = Layer.effect(
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateTerminalReader",
     operation: PostTerminalReaders,
+    permissions: ["terminal_write"],
   }),
 );

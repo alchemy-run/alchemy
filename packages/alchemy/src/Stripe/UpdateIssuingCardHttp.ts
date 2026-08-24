@@ -16,5 +16,6 @@ export const UpdateIssuingCardHttp = Layer.effect(
     tag: "Stripe.UpdateIssuingCard",
     operation: PostIssuingCardsCard,
     idField: "card",
+    permissions: ["issuing_write"],
   }),
 );
