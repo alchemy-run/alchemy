@@ -156,6 +156,10 @@ export const DockerLive = Layer.effect(
           const original = await extractJsonBody<{
             Image: string;
             Env: Array<string>;
+            HostConfig?: { ExtraHosts?: Array<string> } & Record<
+              string,
+              unknown
+            >;
           }>(req);
           const image = registeredImages.get(original.Image);
           const transformed = JSON.stringify({
@@ -166,7 +170,17 @@ export const DockerLive = Layer.effect(
               ...Object.entries(image?.env ?? {}).map(
                 ([name, value]) => `${name}=${value}`,
               ),
-            ],
+            ].map(rewriteLoopbackEnv),
+            HostConfig: {
+              ...original.HostConfig,
+              // `host.docker.internal` is built in on Docker Desktop but
+              // not on Linux engines — the host-gateway mapping makes the
+              // rewritten env values resolve there too.
+              ExtraHosts: [
+                ...(original.HostConfig?.ExtraHosts ?? []),
+                "host.docker.internal:host-gateway",
+              ],
+            },
           });
           const proxy = sendProxyRequest({
             socketPath,
@@ -483,6 +497,39 @@ const sendProxyRequest = (input: {
     input.res.end(`Proxy error: ${(err && err.message) || err}`);
   });
   return req;
+};
+
+/**
+ * Loopback hosts in a URL-ish position within an env value. Matches the
+ * host token only when it is delimited like a URL authority — after
+ * `scheme://` or `user:pass@`, or standing alone before `:port` / a path —
+ * so ordinary prose values are left untouched.
+ */
+const LOOPBACK_HOST_REGEX =
+  /(?<=^|[=@/\s]|:\/\/)(localhost|127\.0\.0\.1|\[::1\])(?=$|[:/?#])/g;
+
+/**
+ * Rewrite loopback hosts in a dev container's env to `host.docker.internal`.
+ *
+ * A local dev session injects env values that point at services on the
+ * DEVELOPER'S machine — locally emulated databases
+ * (`postgres://…@localhost:55432/…`), dev servers, the floci gateway.
+ * Inside the container, `localhost` is the container itself, so every such
+ * value dangles (alchemy-run/alchemy#1334). In dev, "localhost" means the
+ * developer's machine — `host.docker.internal` is that machine's address
+ * from inside the container (see the ExtraHosts mapping above for Linux).
+ *
+ * Values that embed loopback addresses in non-URL positions (prose, JSON
+ * blobs without URL shapes) are untouched; a container that deliberately
+ * targets a service inside ITSELF should address it by its own hostname or
+ * `0.0.0.0` rather than a loopback literal.
+ */
+const rewriteLoopbackEnv = (entry: string): string => {
+  const separator = entry.indexOf("=");
+  if (separator === -1) return entry;
+  const name = entry.slice(0, separator);
+  const value = entry.slice(separator + 1);
+  return `${name}=${value.replace(LOOPBACK_HOST_REGEX, "host.docker.internal")}`;
 };
 
 const extractJsonBody = <T>(req: NodeHttp.IncomingMessage) => {

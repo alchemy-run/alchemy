@@ -198,13 +198,18 @@ export const LocalContainerProvider = () =>
       });
 
       return {
-        // No HMR for containers (yet): bundle once on first reconcile, then
-        // treat the resource as a no-op so subsequent reconciles don't
-        // re-bundle on every change.
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output }) {
           if (!output) return { action: "update" };
           if (!isResolved(news)) return undefined;
+          // Recompute the image fresh on every plan. `prepareImage` is
+          // memoized so a plan's diff→precreate→reconcile chain bundles
+          // once — but this provider runs in the RPC sidecar, whose
+          // `ArtifactStore` outlives every run, so without this eviction
+          // the FIRST run's hash would be compared forever and no content
+          // change (an edited `main` module, a rewritten Dockerfile) could
+          // ever surface as an update.
+          yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
           const input = yield* prepareImage(id, news);
           return input.hash !== output.hash?.image || !output.dev
             ? { action: "update" }

@@ -135,7 +135,13 @@ export const ContainerPlatform: Platform<
       const className = namespace.name;
 
       yield* worker.bind`${container.LogicalId}`({
-        containers: [{ className, dev: container.dev }],
+        containers: [
+          {
+            className,
+            dev: container.dev,
+            hash: container.hash.pipe(Output.map((h) => h?.image)),
+          },
+        ],
       });
 
       // TODO(sam): register this in the Container Execution Context
