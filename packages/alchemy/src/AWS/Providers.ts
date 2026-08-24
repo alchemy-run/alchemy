@@ -1436,7 +1436,15 @@ export const providers = () =>
           }),
           flociDual(Lambda.LayerVersion, () => Lambda.LayerVersionProvider()),
           flociDual(Lambda.Version, () => Lambda.VersionProvider()),
-          flociDual(Lambda.MicrovmImage, () => Lambda.MicrovmImageProvider()),
+          // Dual: dev builds the MicroVM image with a plain host-side
+          // `docker build` (BuildKit layer cache against the user's real
+          // sources) and hands floci a pre-built `docker://` reference —
+          // see FlociMicrovmImageProvider.
+          ProviderLayer.dual(Lambda.MicrovmImage, {
+            live: () => Lambda.MicrovmImageProvider(),
+            local: () => Lambda.FlociMicrovmImageProvider(),
+            dataPlane: flociServices,
+          }),
           flociDual(Lambda.NetworkConnector, () =>
             Lambda.NetworkConnectorProvider(),
           ),
