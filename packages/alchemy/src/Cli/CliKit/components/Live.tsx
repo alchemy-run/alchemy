@@ -5,6 +5,7 @@ import { useGlyphs } from "./Environment.tsx";
 import { ProgressBar, SpinnerGlyph } from "./Feedback.tsx";
 import { Box, Row, Stack } from "./Layout.tsx";
 import { Text } from "./Typography.tsx";
+import { theme } from "../theme.ts";
 
 export interface TaskRowProps {
   /** Status glyph. Ignored while `spinning`; defaults to the bullet glyph. */
@@ -37,7 +38,7 @@ export function TaskRow({
 }: TaskRowProps) {
   const glyphs = useGlyphs();
   return (
-    <Row gap={1} paddingLeft={depth * 2}>
+    <Row gap={1} paddingLeft={depth * theme.space.indent}>
       {spinning ? (
         <SpinnerGlyph color={iconColor} />
       ) : (

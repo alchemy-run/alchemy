@@ -1,7 +1,7 @@
 /**
  * Local-vs-live mode indicators in the plan/deploy renderers.
  *
- * The rule (shared by the Ink TUI and the non-interactive LoggingCli via
+ * The rule (shared by the Sigil TUI and the non-interactive LoggingCli via
  * `formatModeNote`): dev tags EVERY mode-stamped row; deploy tags only the
  * local exceptions —
  *   - dev (default local): local rows get a `local` tag, live rows get a
@@ -14,6 +14,7 @@
  */
 import { formatModeNote, modeLabel } from "@/Cli/ModeTag.ts";
 import { formatPlanLines } from "@/Cli/LoggingCli.ts";
+import { buildProgressRows } from "@/Cli/views/PlanProgress.tsx";
 import type { CRUD, Plan } from "@/Plan.ts";
 import type { ProviderMode } from "@/ProviderMode.ts";
 import { describe, expect, test } from "alchemy-test";
@@ -151,6 +152,49 @@ describe("formatPlanLines rename tags", () => {
       }),
     );
     expect(lineFor(lines, "Assets")).toContain("(renamed from Bucket)");
+  });
+});
+
+describe("compact plan output", () => {
+  test("keeps unchanged resources available in review and progress context", () => {
+    const plan = makePlan({
+      defaultMode: "live",
+      resources: {
+        Stable: crud({ id: "Stable", action: "noop", mode: "live" }),
+        Changed: crud({ id: "Changed", action: "update", mode: "live" }),
+      },
+    });
+
+    const lines = formatPlanLines(plan);
+    expect(lineFor(lines, "Stable")).toContain("noop");
+    expect(lineFor(lines, "Changed")).toContain("update");
+    expect(lines).not.toContain("1 unchanged hidden");
+    const rows = buildProgressRows(plan);
+    expect(
+      rows.some((row) => row.type === "resource" && row.id === "Stable"),
+    ).toBe(true);
+    expect(
+      rows.some((row) => row.type === "resource" && row.id === "Changed"),
+    ).toBe(true);
+  });
+
+  test("an all-noop plan keeps typed resource rows", () => {
+    const rows = buildProgressRows(
+      makePlan({
+        defaultMode: "live",
+        resources: {
+          Stable: crud({ id: "Stable", action: "noop", mode: "live" }),
+        },
+      }),
+    );
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        type: "resource",
+        id: "Stable",
+        resourceType: "Test.Resource",
+        action: "noop",
+      }),
+    );
   });
 });
 

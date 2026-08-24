@@ -316,7 +316,7 @@ const platform = Layer.mergeAll(
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = (overrides?: { dev?: boolean }) =>
   Layer.mergeAll(
-    // CLI.inkCLI(),
+    // CLI.sigilCli(),
     // optional
     overrides?.dev
       ? Layer.provide(

@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 /**
- * GUI-style dashboard behind bare `alchemy profile`. One Ink app stays
+ * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
  * mounted for the whole session and screens replace each other in place:
  *
  *   overview — chip tabs (default profile first), selected profile's
@@ -547,13 +547,10 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           </>
         )}
       </Stack>
-      {/* Reserved toast area: notice, busy status, or blank — the key bar below never
-          jumps when a toast dismisses or a non-inline action starts. */}
-      <Box minHeight={3}>
+      {/* Keep one stable status row so notices do not push the controls around. */}
+      <Box minHeight={1}>
         {busy && flow === undefined ? (
-          <Box paddingY={1}>
-            <Spinner label="working…" />
-          </Box>
+          <Spinner label="working…" />
         ) : notice !== undefined ? (
           <Toast variant={notice.ok ? "info" : "error"}>{notice.message}</Toast>
         ) : null}
@@ -650,7 +647,7 @@ export const runProfileDashboardSession = <R,>(
                 ),
               ),
               // Provider discovery can build very large Layers. Yield often
-              // enough for Ink's 80ms animation clock to keep painting while
+              // enough for Sigil's 80ms animation clock to keep painting while
               // that CPU-heavy Effect graph is evaluated.
               Effect.provideService(Scheduler.MaxOpsBeforeYield, 64),
             );

@@ -17,7 +17,6 @@ import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -48,7 +47,6 @@ import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
-  type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
@@ -2251,6 +2249,7 @@ export const LiveWorkerProvider = () =>
         );
 
       const viteBuild = Effect.fn(function* (
+        id: string,
         props: WorkerProps,
         selfUrl?: string,
       ) {
@@ -2313,6 +2312,7 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               viteEnvironments: props.vite?.viteEnvironments,
             },
+            id,
           );
         const [assets, bundle, input] = yield* Effect.all(
           [
@@ -2420,7 +2420,7 @@ export const LiveWorkerProvider = () =>
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props, opts.selfUrl);
+            return yield* viteBuild(id, props, opts.selfUrl);
           }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset

@@ -99,14 +99,9 @@ export function Heading({ children, glyph = true }: HeadingProps) {
   const glyphs = useGlyphs();
   return (
     <Box>
-      <Text
-        bold
-        color={theme.color.onAccent}
-        backgroundColor={theme.color.accent}
-      >
-        {" "}
+      <Text bold color={theme.color.brand}>
         {glyph ? `${glyphs.section} ` : null}
-        {children}{" "}
+        {children}
       </Text>
     </Box>
   );
@@ -120,13 +115,8 @@ type SectionHeadingProps = {
 export function SectionHeading({ children, annotation }: SectionHeadingProps) {
   return (
     <Text>
-      <Text
-        bold
-        color={theme.color.onAccent}
-        backgroundColor={theme.color.accent}
-      >
-        {" "}
-        {children}{" "}
+      <Text bold color={theme.color.brand}>
+        {children}
       </Text>
       {annotation === undefined ? null : (
         <Text tone="muted"> · {annotation}</Text>
@@ -142,7 +132,7 @@ type GutterProps = {
 
 export function Gutter({ depth = 1, children }: GutterProps) {
   return (
-    <Box paddingLeft={Math.max(0, depth) * 2}>
+    <Box paddingLeft={Math.max(0, depth) * theme.space.indent}>
       <Box flexDirection="column" flexGrow={1}>
         {children}
       </Box>

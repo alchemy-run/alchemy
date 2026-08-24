@@ -12,6 +12,7 @@ import {
 import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
+import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
@@ -26,6 +27,8 @@ import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import { makeResourceLogger, makeResourceOutput } from "../../Cli/Output.ts";
+import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
 import * as LocalProvider from "../../Local/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
@@ -108,6 +111,9 @@ export const LocalWorkerProvider = () =>
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
+      const openDevLog = yield* makeDevLogOpener;
+      const devLogDir = yield* makeDevLogDirectory;
+      const baseConsole = yield* ConsoleService.Console;
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
@@ -608,10 +614,37 @@ export const LocalWorkerProvider = () =>
               while (true) {
                 const queueConsumers = yield* getQueueConsumers(worker.name);
                 scope = yield* Scope.fork(rootScope);
+                // One log file per workerd generation, closed with its scope:
+                // log/{stage}/{logicalId}/{timestamp}.log. `logging.onOutput`
+                // REPLACES workerd's stdio inheritance, so this is the only
+                // path its output takes: raw chunks go to the file, complete
+                // lines go to the console with the worker's pnpm-style prefix.
+                const devLog = yield* openDevLog(stack.stage, worker.id).pipe(
+                  Scope.provide(scope),
+                );
+                // One splitter per channel: a shared buffer would splice a
+                // partial stdout line onto the next stderr chunk, and stderr
+                // would lose its severity on the way to the console.
+                const splitters = makeResourceOutput(worker.id, baseConsole);
+                yield* Scope.addFinalizer(
+                  scope,
+                  Effect.sync(() => {
+                    splitters.stdout.flush();
+                    splitters.stderr.flush();
+                  }),
+                );
                 url = yield* restore(
                   runtime
                     .start({
                       name: worker.name,
+                      logging: {
+                        // `(chunk, stream)` — chunk first; the stream name
+                        // indexes the splitters directly.
+                        onOutput: (chunk, stream) => {
+                          devLog.write(chunk);
+                          splitters[stream].push(chunk);
+                        },
+                      },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
                       bindings: worker.workerBindings as never,
@@ -814,8 +847,14 @@ export const LocalWorkerProvider = () =>
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
+                  // URL on first start only — vite-banner style; rebuild
+                  // lines stay compact.
                   const message = Effect.log(
-                    `[${worker.id}] ${status === "update" ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
+                    `[${worker.id}] ${
+                      status === "update"
+                        ? `Updated in ${Math.round(Date.now() - start)}ms`
+                        : `Started in ${Math.round(Date.now() - start)}ms → ${proxy.url} (logs: ${devLogDir(stack.stage, worker.id)})`
+                    }`,
                   );
                   status = "update";
                   return message;
@@ -850,7 +889,7 @@ export const LocalWorkerProvider = () =>
             proxy,
           );
           yield* Effect.log(
-            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url}`,
+            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url} (logs: ${devLogDir(stack.stage, worker.id)})`,
           );
           return proxy.url;
         }
@@ -904,7 +943,7 @@ export const LocalWorkerProvider = () =>
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
         yield* Effect.log(
-          `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
+          `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url} (logs: ${devLogDir(stack.stage, worker.id)})`,
         );
         return proxy.url;
       });
@@ -980,6 +1019,10 @@ export const LocalWorkerProvider = () =>
                 // from the previous loop iteration).
                 yield* closeWorkerd(worker.id);
                 const scope = yield* Scope.fork(rootScope);
+                const devLog = yield* openDevLog(stack.stage, worker.id).pipe(
+                  Scope.provide(scope),
+                );
+                const logResourceOutput = makeResourceLogger(worker.id);
                 const child = yield* restore(
                   startViteChild(
                     {
@@ -1010,9 +1053,12 @@ export const LocalWorkerProvider = () =>
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
-                    (channel, line) => {
-                      process[channel].write(`${worker.id} | ${line}\n`);
-                    },
+                    (channel, line) =>
+                      logResourceOutput(channel, line).pipe(
+                        Effect.andThen(
+                          Effect.sync(() => devLog.writeLine(line)),
+                        ),
+                      ),
                   ).pipe(Scope.provide(scope)),
                 ).pipe(
                   // The scope hangs off `rootScope`, so a failed or
@@ -1075,8 +1121,15 @@ export const LocalWorkerProvider = () =>
         invalidate: Effect.Effect<void>,
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
+        const start = Date.now();
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
+        // The programmatic vite API never prints the CLI's URL banner — and
+        // vite's own URL is the internal (port-shuffled) server behind the
+        // stable proxy, so advertise the proxy instead.
+        yield* Effect.log(
+          `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url} (logs: ${devLogDir(stack.stage, worker.id)})`,
+        );
         return proxy.url;
       });
 

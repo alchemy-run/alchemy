@@ -169,6 +169,24 @@ credentials your CI needs — a scoped Cloudflare API token, an AWS
 IAM role for OIDC, etc. — and write them straight into the repo as
 encrypted secrets.
 
+## Preflight: verify the environment
+
+Every auth provider declares the environment variables its CI resolution
+consumes, and `alchemy provider check-env` validates them against that
+contract. It prints one line per registered provider and exits with code 1
+when a required variable is missing:
+
+```sh
+$ bun alchemy provider check-env
+ok Cloudflare
+MISSING AWS: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION | AWS_DEFAULT_REGION
+```
+
+Run it as the first step of a deploy job to fail fast with a list of
+missing secrets instead of failing minutes later inside a provider API
+call. `--provider <name>` (repeatable) checks a subset; `--env-file`
+includes a dotenv file in resolution.
+
 ## How PR previews work
 
 Open a PR. Alchemy does the rest.
@@ -329,7 +347,7 @@ After creating the file, deploy it once locally under the admin
 profile:
 
 ```sh
-alchemy deploy stacks/github.ts --profile admin
+alchemy deploy --config stacks/github.ts --profile admin
 ```
 
 You only need to re-run this stack when you want to rotate

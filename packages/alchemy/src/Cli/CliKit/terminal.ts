@@ -4,6 +4,12 @@ import {
   detectColorLevel,
   detectUnicodeSupport,
 } from "@alchemy.run/sigil/capabilities";
+import {
+  setClipboard,
+  setTerminalProgress,
+  tmuxPassthrough,
+  type TerminalProgressState,
+} from "@alchemy.run/sigil/ansi";
 import stringWidth from "string-width";
 import { glyphsFor, theme } from "./theme.ts";
 
@@ -76,11 +82,21 @@ export const copyToClipboard = (
   text: string,
   stdout: Pick<NodeJS.WriteStream, "write"> = process.stdout,
 ): void => {
-  const payload = Buffer.from(text).toString("base64");
-  let sequence = `\u001B]52;c;${payload}\u0007`;
+  let sequence = setClipboard(text);
   if (process.env.TMUX !== undefined) {
-    sequence = `\u001BPtmux;${sequence.replaceAll("\u001B", "\u001B\u001B")}\u001B\\`;
+    sequence = tmuxPassthrough(sequence);
   }
+  stdout.write(sequence);
+};
+
+export const setNativeProgress = (
+  state: TerminalProgressState,
+  value?: number,
+  stdout: Pick<NodeJS.WriteStream, "write" | "isTTY"> = process.stdout,
+): void => {
+  if (stdout.isTTY !== true) return;
+  let sequence = setTerminalProgress(state, value);
+  if (process.env.TMUX !== undefined) sequence = tmuxPassthrough(sequence);
   stdout.write(sequence);
 };
 

@@ -6,14 +6,22 @@ import type {
   ActionDelete,
 } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
-
-export interface TreeBinding {
-  sid: string;
-  action: BindingAction;
-}
+import {
+  formatDeclaredPropertyYaml,
+  type DeclaredPropertyYaml,
+} from "./PropertyDiff.ts";
 
 export type ActionTreeItem = ActionApply | ActionDelete;
 export type ActionVerb = ActionTreeItem["action"]; // "run" | "noop" | "delete"
+
+/** A resource belongs in a review/progress view only when it or a binding changes. */
+export const resourceHasPlannedWork = (item: CRUD): boolean =>
+  item.action !== "noop" ||
+  item.bindings.some((binding) => binding.action !== "noop");
+
+/** No-op actions are dependency markers, not work the user needs to review. */
+export const actionHasPlannedWork = (item: ActionTreeItem): boolean =>
+  item.action !== "noop";
 
 /**
  * A tree node representing a namespace.
@@ -78,7 +86,7 @@ export function buildNamespaceTree(
   return root;
 }
 
-export function deriveNamespaceAction(node: TreeNode): DerivedAction {
+function deriveNamespaceAction(node: TreeNode): DerivedAction {
   const actions = new Set<BindingAction | CRUD["action"] | DerivedAction>();
 
   for (const resource of node.resources) {
@@ -128,14 +136,20 @@ export interface FlattenedItem {
    * old generation was created with (always differs from `providerMode`).
    */
   fromProviderMode?: ProviderMode;
+  /** Safe YAML detail attached only when the caller opts into detailed view. */
+  propertyYaml?: DeclaredPropertyYaml;
+}
+
+export interface FlattenTreeOptions {
+  includePropertyYaml?: boolean;
 }
 
 export function flattenTree(
   node: TreeNode,
-  depth = 0,
-  result: FlattenedItem[] = [],
+  options: FlattenTreeOptions = {},
 ): FlattenedItem[] {
-  flattenNamespace(node, depth, result);
+  const result: FlattenedItem[] = [];
+  flattenNamespace(node, 0, result, options);
   return result;
 }
 
@@ -143,6 +157,7 @@ const flattenNamespace = (
   node: TreeNode,
   depth: number,
   result: FlattenedItem[],
+  options: FlattenTreeOptions,
 ) => {
   const sortedResources = [...node.resources].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
@@ -166,7 +181,7 @@ const flattenNamespace = (
       action: deriveNamespaceAction(child),
       hasChildren: true,
     });
-    flattenNamespace(child, depth + 1, result);
+    flattenNamespace(child, depth + 1, result, options);
   }
 
   for (const resource of sortedResources) {
@@ -187,6 +202,17 @@ const flattenNamespace = (
         resource.state.providerMode !== resource.mode
           ? resource.state.providerMode
           : undefined,
+      propertyYaml:
+        options.includePropertyYaml &&
+        (resource.action === "create" ||
+          resource.action === "update" ||
+          resource.action === "replace")
+          ? formatDeclaredPropertyYaml(
+              resource.action === "create" ? {} : resource.state.props,
+              resource.props,
+              resource.action,
+            )
+          : undefined,
     });
     for (const binding of [...resource.bindings].sort((a, b) =>
       a.sid.localeCompare(b.sid),
@@ -201,7 +227,7 @@ const flattenNamespace = (
       });
     }
     if (childNamespace) {
-      flattenNamespace(childNamespace, depth + 1, result);
+      flattenNamespace(childNamespace, depth + 1, result, options);
     }
   }
 
@@ -225,16 +251,6 @@ const isEmpty = (node: TreeNode) =>
   node.resources.length === 0 &&
   node.actions.length === 0 &&
   Array.from(node.children.values()).every(isEmpty);
-
-const countVisibleChildren = (node: TreeNode) => {
-  const resourceIds = new Set(
-    node.resources.map((resource) => resource.resource.LogicalId),
-  );
-  return (
-    node.resources.length +
-    Array.from(node.children.keys()).filter((id) => !resourceIds.has(id)).length
-  );
-};
 
 const deriveResourceChildrenAction = (
   resource: CRUD,

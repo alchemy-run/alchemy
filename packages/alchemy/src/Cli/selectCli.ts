@@ -1,20 +1,29 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { isNonInteractive } from "../Util/interactive.ts";
-import type { Cli } from "./Cli.ts";
+import * as CliOutput from "effect/unstable/cli/CliOutput";
+import { CliKit } from "./CliKit/CliKit.ts";
 import { LoggingCli } from "./LoggingCli.ts";
+import { plainCliFormatter } from "./PlainCliFormatter.ts";
 
-export { isNonInteractive } from "../Util/interactive.ts";
+/** Select the root CLI UI services through one lazy Sigil import boundary. */
+export const selectCliServices = () =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const cli = yield* CliKit;
+      if (!cli.terminal.input) {
+        return Layer.mergeAll(
+          LoggingCli,
+          CliOutput.layer(plainCliFormatter({ columns: cli.terminal.columns })),
+        );
+      }
 
-export const selectCli = (): Layer.Layer<Cli> =>
-  isNonInteractive()
-    ? LoggingCli
-    : // Defer importing the Ink/React TUI (`./tui/InkCLI.tsx` pulls in `ink`)
-      // until we actually need the interactive renderer. Non-interactive runs
-      // (agents, CI, piped output) take the cheap `LoggingCli` branch and never
-      // pay the TUI import cost.
-      Layer.unwrap(
-        Effect.promise(() =>
-          import("./tui/InkCLI.tsx").then((m) => m.inkCLI()),
-        ),
-      );
+      return yield* Effect.promise(async () => {
+        const { sigilCli } = await import("./views/SigilCli.tsx");
+        const { brandedCliFormatter } = await import("./views/Help.tsx");
+        return Layer.mergeAll(
+          sigilCli(),
+          CliOutput.layer(brandedCliFormatter(cli)),
+        );
+      });
+    }),
+  );

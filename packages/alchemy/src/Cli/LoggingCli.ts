@@ -1,30 +1,42 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { CRUD, Plan } from "../Plan.ts";
-import { Cli } from "./Cli.ts";
+import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
+import { Cli, type PlanDisplayOptions } from "./Cli.ts";
+import { NonInteractiveTerminal } from "./CliKit/errors.ts";
+import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
+import { actionStyle } from "./views/statusStyle.ts";
 import type { ApplyEvent, ApplyStatus } from "./Event.ts";
 import { formatModeNote } from "./ModeTag.ts";
+import { formatDeclaredPropertyYaml } from "./PropertyDiff.ts";
+import {
+  actionHasPlannedWork,
+  resourceHasPlannedWork,
+} from "./NamespaceTree.ts";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
-const useColor = process.stdout.hasColors?.() ?? !!process.stdout.isTTY;
+// Shared with every other non-ink output path — notably it honors
+// FORCE_COLOR, so lines emitted from the piped dev sidecar keep their color.
+const useColor = colorsEnabled();
 const c = (code: string, s: string) =>
   useColor ? `${ESC}${code}m${s}${RESET}` : s;
+const hex = (color: string) => (s: string) =>
+  useColor ? `${ansiFg(color)}${s}${RESET}` : s;
 const dim = (s: string) => c("2", s);
 const bold = (s: string) => c("1", s);
-const red = (s: string) => c("31", s);
-const green = (s: string) => c("32", s);
-const yellow = (s: string) => c("33", s);
-const blue = (s: string) => c("34", s);
-const magenta = (s: string) => c("35", s);
-const cyan = (s: string) => c("36", s);
+const red = hex(theme.color.danger);
+const green = hex(theme.color.success);
+const yellow = hex(theme.color.warning);
+const blue = hex(theme.color.accent);
+const cyan = hex(theme.color.info);
 
+// noop stays terminal-dim rather than brand-muted so it recedes in plain logs
 const actionColor: Record<CRUD["action"], (s: string) => string> = {
-  create: green,
-  update: yellow,
-  replace: magenta,
-  delete: red,
+  create: hex(actionStyle.create.color),
+  update: hex(actionStyle.update.color),
+  replace: hex(actionStyle.replace.color),
+  delete: hex(actionStyle.delete.color),
   noop: dim,
 };
 
@@ -56,6 +68,7 @@ const isTerminal = (status: ApplyStatus): boolean =>
   status === "deleted" ||
   status === "retained" ||
   status === "replaced" ||
+  status === "ran" ||
   status === "fail";
 
 /**
@@ -69,27 +82,56 @@ const modeSuffix = (options: Parameters<typeof formatModeNote>[0]): string => {
 };
 
 /** Exported for unit tests — pure plan-preview rendering. */
-export const formatPlanLines = (plan: Plan): string[] => {
-  const items = [
+export const formatPlanLines = (
+  plan: Plan,
+  options: PlanDisplayOptions = {},
+): string[] => {
+  const allItems = [
     ...Object.values(plan.resources),
     ...Object.values(plan.deletions),
   ] as CRUD[];
-  if (items.length === 0) return [bold("Plan:") + " no changes"];
+  const workItems = allItems.filter(resourceHasPlannedWork);
+  const tasks = [
+    ...Object.values(plan.actions ?? {}),
+    ...Object.values(plan.actionDeletions ?? {}),
+  ]
+    .filter((task): task is ActionApply | ActionDelete => task !== undefined)
+    .filter(actionHasPlannedWork);
+  if (allItems.length === 0 && tasks.length === 0) {
+    return [`${bold("Plan:")} ${dim("no resources")}`];
+  }
 
-  const counts = items.reduce(
+  const counts = workItems.reduce(
     (acc, item) => ((acc[item.action] = (acc[item.action] ?? 0) + 1), acc),
     {} as Record<CRUD["action"], number>,
   );
-  const summary = (["create", "update", "replace", "delete", "noop"] as const)
+  const bindingChanges = workItems.reduce(
+    (count, item) =>
+      count +
+      item.bindings.filter((binding) => binding.action !== "noop").length,
+    0,
+  );
+  const summaryParts = (["create", "update", "replace", "delete"] as const)
     .filter((a) => counts[a])
-    .map((a) => actionColor[a](`${counts[a]} to ${a}`))
-    .join(dim(", "));
+    .map((a) => actionColor[a](`${counts[a]} to ${a}`));
+  if (bindingChanges > 0) {
+    summaryParts.push(cyan(`${bindingChanges} binding changes`));
+  }
+  if (tasks.length > 0) {
+    summaryParts.push(cyan(`${tasks.length} tasks`));
+  }
+  const summary =
+    summaryParts.length === 0
+      ? dim("no changes")
+      : summaryParts.join(dim(", "));
 
-  const sorted = [...items].sort((a, b) =>
+  const sorted = [...allItems].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
   );
   const lines = [`${bold("Plan:")} ${summary}`];
-  for (const item of sorted) {
+  if (options.detailed && sorted.length > 0) lines.push("");
+  for (const [index, item] of sorted.entries()) {
+    if (options.detailed && index > 0) lines.push("");
     const action = actionColor[item.action](item.action);
     const mode = modeSuffix({
       mode: item.mode,
@@ -107,6 +149,27 @@ export const formatPlanLines = (plan: Plan): string[] => {
         ? ` ${dim(`(renamed from ${item.renamedFrom.join(", ")})`)}`
         : "";
     lines.push(`${tag(item.resource.LogicalId)} ${action}${mode}${renamed}`);
+    if (
+      options.detailed &&
+      (item.action === "create" ||
+        item.action === "update" ||
+        item.action === "replace")
+    ) {
+      const document = formatDeclaredPropertyYaml(
+        item.action === "create" ? {} : item.state.props,
+        item.props,
+        item.action,
+      );
+      if (document === undefined) {
+        lines.push(`  ${dim("no declared property changes")}`);
+      } else {
+        lines.push(
+          ...document.lines.map(
+            (line) => `  ${colorYamlLine(line, document.kind)}`,
+          ),
+        );
+      }
+    }
     for (const binding of item.bindings) {
       if (binding.action === "noop") continue;
       const bindingAction = actionColor[binding.action](binding.action);
@@ -115,30 +178,86 @@ export const formatPlanLines = (plan: Plan): string[] => {
       );
     }
   }
+  for (const task of tasks.sort((a, b) =>
+    a.def.LogicalId.localeCompare(b.def.LogicalId),
+  )) {
+    lines.push(
+      `${tag(task.def.LogicalId)} ${cyan(task.action === "delete" ? "drop" : "run")} ${dim("[action]")}`,
+    );
+  }
   return lines;
+};
+
+const colorYamlLine = (line: string, kind: "create" | "change"): string => {
+  const key = line.match(/^(\s*)([A-Za-z_][\w .-]*:)(.*)$/);
+  if (key === null) return line;
+  const color =
+    kind === "create"
+      ? green
+      : key[2] === "before:"
+        ? red
+        : key[2] === "after:"
+          ? green
+          : cyan;
+  return `${key[1]}${color(key[2]!)}${key[3]}`;
 };
 
 export const LoggingCli = Layer.succeed(
   Cli,
   Cli.of({
-    approvePlan: (plan) =>
+    startPlanningSession: (label, detail) =>
       Effect.gen(function* () {
-        for (const line of formatPlanLines(plan)) yield* Console.log(line);
         yield* Console.log(
-          `\n${yellow("Non-interactive terminal detected.")} Pass ${bold("--yes")} to approve, or set ${bold("ALCHEMY_TUI=1")} for the interactive UI.`,
+          detail === undefined ? label : `${label}: ${detail}`,
         );
-        return false;
+        let closed = false;
+        const write = (nextLabel: string, nextDetail?: string) =>
+          Effect.suspend(() => {
+            if (closed) return Effect.void;
+            return Console.log(
+              nextDetail === undefined
+                ? nextLabel
+                : `${nextLabel}: ${nextDetail}`,
+            );
+          });
+        const finish = (message: string) =>
+          write(message).pipe(
+            Effect.tap(() => Effect.sync(() => (closed = true))),
+          );
+        return {
+          update: write,
+          succeed: (message = "Plan ready") => finish(message),
+          fail: (message = "Planning failed") => finish(message),
+          close: Effect.sync(() => {
+            closed = true;
+          }),
+        };
       }),
-    displayPlan: (plan) =>
+    approvePlan: (plan, options) =>
       Effect.gen(function* () {
-        for (const line of formatPlanLines(plan)) yield* Console.log(line);
+        for (const line of formatPlanLines(plan, options))
+          yield* Console.log(line);
+        return yield* Effect.die(
+          new NonInteractiveTerminal({
+            operation: "approve deployment plan",
+            message:
+              "Cannot approve this operation without terminal input. Pass --yes to continue.",
+          }),
+        );
       }),
-    startApplySession: (plan) =>
+    displayPlan: (plan, options) =>
       Effect.gen(function* () {
-        for (const line of formatPlanLines(plan)) yield* Console.log(line);
+        for (const line of formatPlanLines(plan, options))
+          yield* Console.log(line);
+      }),
+    startApplySession: (plan, options) =>
+      Effect.gen(function* () {
+        for (const line of formatPlanLines(plan, options))
+          yield* Console.log(line);
         yield* Console.log("");
 
-        const counts = { ok: 0, fail: 0 };
+        const terminal = new Map<string, ApplyStatus>();
+        const notes = new Map<string, string>();
         return {
           // Write through the Effect Console SERVICE (not the global
           // `console`) so environments that override it — e.g. the
@@ -147,7 +266,10 @@ export const LoggingCli = Layer.succeed(
           emit: (event: ApplyEvent) =>
             Effect.suspend(() => {
               if (event.kind === "annotate") {
-                return Console.log(`${tag(event.id)} ${blue(event.message)}`);
+                notes.set(event.id, event.message);
+                return terminal.has(event.id)
+                  ? Console.log(`${tag(event.id)} ${blue(event.message)}`)
+                  : Effect.void;
               }
               const id = event.bindingId
                 ? `${event.id}/${event.bindingId}`
@@ -158,17 +280,21 @@ export const LoggingCli = Layer.succeed(
                 priorMode: event.fromProviderMode,
                 defaultMode: plan.defaultMode,
               });
-              const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
-              if (isTerminal(event.status)) {
-                if (event.status === "fail") counts.fail++;
-                else counts.ok++;
-              }
+              if (!isTerminal(event.status)) return Effect.void;
+              terminal.set(id, event.status);
+              const message = event.message ?? notes.get(event.id);
+              const msg = message ? ` ${dim("—")} ${message}` : "";
               return Console.log(`${tag(id)} ${status}${mode}${msg}`);
             }),
-          done: () =>
-            Console.log(
-              `\n${bold("Done:")} ${green(`${counts.ok} succeeded`)}${counts.fail ? dim(", ") + red(`${counts.fail} failed`) : ""}`,
-            ),
+          done: (outcome) => {
+            const failed = [...terminal.values()].filter(
+              (status) => status === "fail",
+            ).length;
+            const succeeded = terminal.size - failed;
+            return Console.log(
+              `\n${bold(outcome === "success" ? "Done:" : "Failed:")} ${green(`${succeeded} succeeded`)}${failed ? dim(", ") + red(`${failed} failed`) : ""}`,
+            );
+          },
         };
       }),
   }),

@@ -221,9 +221,11 @@ export function Menu<Value>({
             marginTop={showGroup && index !== visible[0] ? 1 : 0}
           >
             {showGroup ? (
-              <Text bold tone="muted">
-                {choice.group.toUpperCase()}
-              </Text>
+              <Box paddingLeft={theme.space.indent}>
+                <Text bold tone="muted">
+                  {choice.group.toUpperCase()}
+                </Text>
+              </Box>
             ) : null}
             <Box
               gap={1}
@@ -234,7 +236,7 @@ export function Menu<Value>({
               borderRight={false}
               borderTop={false}
               borderBottom={false}
-              borderColor={theme.color.accent}
+              borderColor={theme.paint.focus}
               aria-role="option"
               aria-label={choice.label}
               aria-state={{
@@ -488,9 +490,7 @@ export function TextField({
   const display =
     shownChars.length === 0
       ? (placeholder ?? " ")
-      : `${shownChars.slice(start, end).join("")}${
-          cursor === shownChars.length ? " " : ""
-        }`;
+      : `${shownChars.slice(start, end).join("")}${cursor === shownChars.length ? " " : ""}`;
   // Cursor placement must happen DURING render: useCursor only records the
   // position in a ref and propagates it to the renderer from an insertion
   // effect, which runs BEFORE layout effects in the same commit. Setting the
@@ -585,7 +585,7 @@ export function CycleList<State>({
             borderRight={false}
             borderTop={false}
             borderBottom={false}
-            borderColor={theme.color.accent}
+            borderColor={theme.paint.focus}
           >
             <Text color={color} dimColor={color === undefined}>
               {state?.icon ?? glyphs.bullet}
@@ -696,11 +696,12 @@ export function InlineConfirm({
   const value = useConfirmKeys({ initialValue, active, onSubmit, onCancel });
   return (
     <Box flexDirection="column" gap={1}>
-      <Text bold color={theme.color.accent}>
+      <Text bold color={theme.color.brand}>
         {message}
       </Text>
       <BooleanChoice value={value} />
       <KeyBar
+        marginTop={0}
         keys={[
           [keys.yesNo, "choose"],
           [keys.enter, "confirm"],
@@ -715,25 +716,27 @@ type BooleanChoiceProps = { readonly value: boolean };
 
 export function BooleanChoice({ value }: BooleanChoiceProps) {
   return (
-    <Box gap={1} paddingLeft={1} aria-role="radiogroup">
+    <Box gap={1} paddingLeft={theme.space.indent} aria-role="radiogroup">
       <Box
-        backgroundColor={value ? theme.color.accent : undefined}
+        paddingX={1}
+        backgroundColor={value ? theme.paint.interactive : undefined}
         aria-role="radio"
         aria-label="Yes"
         aria-state={{ checked: value }}
       >
         <Text bold={value} color={value ? theme.color.onAccent : undefined}>
-          {value ? "[Yes]" : "Yes"}
+          Yes
         </Text>
       </Box>
       <Box
-        backgroundColor={!value ? theme.color.accent : undefined}
+        paddingX={1}
+        backgroundColor={!value ? theme.paint.interactive : undefined}
         aria-role="radio"
         aria-label="No"
         aria-state={{ checked: !value }}
       >
         <Text bold={!value} color={!value ? theme.color.onAccent : undefined}>
-          {!value ? "[No]" : "No"}
+          No
         </Text>
       </Box>
     </Box>
@@ -904,16 +907,23 @@ export function PromptFrame({
   const borderStyle = useBorderStyle();
   const heading = (
     <Text>
-      <Text color={theme.color.brand}>{glyphs.active}</Text>{" "}
-      <Text bold>{message}</Text>
+      <Text color={theme.color.accent}>{glyphs.active}</Text>{" "}
+      <Text bold color={theme.color.brand}>
+        {message}
+      </Text>
     </Text>
   );
   return (
     <Box flexDirection="column">
       {layout === "inline" ? (
-        <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column">
           <Box gap={1}>
-            <Text bold>{message}:</Text>
+            <Text>
+              <Text color={theme.color.accent}>{glyphs.active}</Text>{" "}
+              <Text bold color={theme.color.brand}>
+                {message}:
+              </Text>
+            </Text>
             <Box flexGrow={1}>{children}</Box>
           </Box>
           {description === undefined ? null : (
@@ -939,7 +949,7 @@ export function PromptFrame({
             borderRight={false}
             borderTop={false}
             borderBottom={false}
-            borderColor={theme.color.accent}
+            borderColor={theme.paint.focus}
           >
             {children}
           </Box>
@@ -952,11 +962,7 @@ export function PromptFrame({
           </Text>
         </Box>
       )}
-      {keys === undefined ? null : (
-        <Box paddingLeft={1}>
-          <KeyBar keys={keys} />
-        </Box>
-      )}
+      {keys === undefined ? null : <KeyBar keys={keys} />}
     </Box>
   );
 }

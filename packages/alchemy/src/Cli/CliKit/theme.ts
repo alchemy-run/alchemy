@@ -1,26 +1,42 @@
+import type { Paint } from "@alchemy.run/sigil/color";
+
+/**
+ * Alchemy's palette is anchored in terracotta and green. The supporting
+ * amber, olive, sage, and coral tones stay within that warm botanical range.
+ */
+const color = {
+  brand: "#e28a5b",
+  accent: "#9acb69",
+  accentBright: "#c5df8c",
+  accentMuted: "#60764b",
+  success: "#9acb69",
+  warning: "#efb85a",
+  danger: "#d96f52",
+  info: "#b6c77a",
+  sage: "#b8cf83",
+  olive: "#9ea85e",
+  coral: "#ef9a6a",
+  muted: "#8f887c",
+  surface: "#36332e",
+  onSurface: "#f5f0e6",
+  onAccent: "#14110d",
+  emphasis: "#f5f0e6",
+} as const;
+
 export const theme = {
-  color: {
-    /**
-     * Brand terracotta — the yantra bindu (see website/src/brand/yantra.ts,
-     * dark-theme `dot`). Marks brand identity: the logo dot, the wordmark
-     * bullet, active-profile markers. Never used for errors — that is
-     * `danger`'s job.
-     */
-    brand: "#e28a5b",
-    accent: "#acd17b",
-    accentBright: "#c5e49b",
-    accentMuted: "#587044",
-    success: "#9acb69",
-    warning: "#efb85a",
-    danger: "#e1735b",
-    info: "#75bfd0",
-    /** Reserved for non-text decoration (borders, gutter bars, idle glyphs). Muted TEXT uses `tone="muted"`. */
-    muted: "#8f887c",
-    surface: "#36332e",
-    onSurface: "#f5f0e6",
-    onAccent: "#14110d",
-    /** High-emphasis foreground text (headings, command names). */
-    emphasis: "#f5f0e6",
+  color,
+  space: {
+    inline: 1,
+    indent: 2,
+    section: 1,
+  },
+  paint: {
+    focus: color.brand,
+    interactive: color.brand,
+    info: color.info,
+    success: color.success,
+    warning: color.warning,
+    error: color.danger,
   },
   glyph: {
     section: "●",
@@ -35,9 +51,9 @@ export const theme = {
     checked: "✓",
     unchecked: "·",
     add: "+",
-    edit: "✎",
+    edit: "~",
     refresh: "↻",
-    delete: "−",
+    delete: "-",
     replace: "↔",
     run: "▶",
     bar: "┊",
@@ -97,3 +113,6 @@ export type StatusVariant = "info" | "success" | "warning" | "error";
 
 export const statusColor = (variant: StatusVariant): string =>
   variant === "error" ? theme.color.danger : theme.color[variant];
+
+export const statusPaint = (variant: StatusVariant): Paint =>
+  theme.paint[variant];

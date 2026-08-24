@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
+import type { TerminalProgressState } from "@alchemy.run/sigil/ansi";
 import type { NonInteractiveTerminal } from "./errors.ts";
 import type {
   ConfirmOptions,
@@ -28,6 +29,14 @@ export class CliKit extends Context.Service<
   CliKit,
   {
     readonly terminal: CliKitCapabilities;
+
+    /** Terminal-emulator progress displayed outside the rendered TUI. */
+    readonly nativeProgress: {
+      readonly set: (
+        state: TerminalProgressState,
+        value?: number,
+      ) => Effect.Effect<void>;
+    };
 
     readonly output: {
       /** Append a completed layout to terminal scrollback/output. */

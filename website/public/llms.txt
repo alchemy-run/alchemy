@@ -18,13 +18,13 @@ Every command runs through your package manager: bun alchemy <command>. Command 
 - [deploy](https://alchemy.run/cli/deploy) — Compute a plan, ask for approval, and create/update/delete resources to match the desired state.
 - [plan](https://alchemy.run/cli/plan) — Preview what would change without applying anything. Equivalent to alchemy deploy --dry-run.
 - [destroy](https://alchemy.run/cli/destroy) — Delete every resource in a stack — plan all existing resources for deletion, ask for approval, and remove them in dependency order.
+- [drift](https://alchemy.run/cli/drift) — Detect infrastructure drift by re-observing the cloud, and optionally repair it back to the last deployed state.
 - [nuke](https://alchemy.run/cli/nuke) — Enumerate and delete every live resource across the stack's providers.
 - [Adopting Resources](https://alchemy.run/cli/adopting-resources) — How alchemy takes ownership of pre-existing cloud resources — recovery by default, --adopt for foreign resources, and the programmatic AdoptPolicy.
 - [dev](https://alchemy.run/cli/dev) — Run your stack in development mode with hot reloading — resources deploy to the cloud while Workers run in the local dev runtime.
-- [tail](https://alchemy.run/cli/tail) — Stream live logs from deployed resources in real time, interleaved and color-coded by resource.
-- [logs](https://alchemy.run/cli/logs) — Fetch historical logs from deployed resources — a batch of past entries, merged and sorted by timestamp.
+- [logs](https://alchemy.run/cli/logs) — Fetch or follow logs from deployed resources, merged and color-coded by resource.
 - [profile](https://alchemy.run/cli/profile) — Create, refresh, rename, edit, select, inspect, or delete Alchemy authentication profiles.
-- [state](https://alchemy.run/cli/state) — Inspect and manage the state store — list stacks, stages, and resources, print persisted state, and clear entries.
+- [state](https://alchemy.run/cli/state) — Inspect and manage the state store — browse interactively, list stacks, stages, and resources, print persisted state, and delete entries.
 - [Inspecting State](https://alchemy.run/cli/inspecting-state) — See what alchemy thinks is deployed, debug a bad diff, and recover from bad state.
 - [aws](https://alchemy.run/cli/aws) — AWS provider commands — bootstrap the per-account assets bucket that Lambda deployments rely on.
 - [cloudflare](https://alchemy.run/cli/cloudflare) — Cloudflare provider commands — bootstrap the state-store worker, mint API tokens, and inspect state-store logs.

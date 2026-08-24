@@ -4,11 +4,19 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transformTypesFlags } from "../../Util/Node.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
-import { envFile, force, profile, script, stage } from "./_shared.ts";
+import {
+  config,
+  envFile,
+  force,
+  profile,
+  stage,
+  suppressInterruptMessages,
+} from "./_shared.ts";
 import { ExecStackOptions } from "./deploy.ts";
 
 /**
@@ -17,23 +25,30 @@ import { ExecStackOptions } from "./deploy.ts";
  * bound to a local Cloudflare Worker) are reachable from local workerd. workerd
  * reads its trusted certificates from `NODE_EXTRA_CA_CERTS` at runtime init, so
  * this must be present in the env of every spawned child (the exec worker, the
- * RPC sidecar, and the workerd instances they start). `ensureFloci` refreshes
- * the bundle at this stable path; never clobber a value the caller set.
+ * RPC sidecar, and the workerd instances they start). Only inject an existing
+ * bundle: Cloudflare-only dev sessions do not start Floci and therefore do not
+ * create its CA file. Never clobber a value the caller set.
  */
-const NODE_EXTRA_CA_CERTS =
-  process.env.NODE_EXTRA_CA_CERTS ?? Floci.FLOCI_CA_PATH;
+const nodeExtraCaCerts = process.env.NODE_EXTRA_CA_CERTS ?? Floci.FLOCI_CA_PATH;
+const existingNodeExtraCaCerts = existsSync(nodeExtraCaCerts)
+  ? nodeExtraCaCerts
+  : undefined;
 
 export const devCommand = Command.make(
   "dev",
   {
     force,
-    main: script,
+    main: config,
     envFile,
     stage,
     profile,
   },
   Effect.fn(
     function* (args) {
+      // This process is only the exec child's supervisor; the child owns the
+      // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
+      // hits both processes and the interrupt message prints twice.
+      yield* suppressInterruptMessages;
       const options = yield* Schema.encodeEffect(ExecStackOptions)({
         ...args,
         yes: true,
@@ -42,7 +57,9 @@ export const devCommand = Command.make(
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
       // child below.
-      process.env.NODE_EXTRA_CA_CERTS = NODE_EXTRA_CA_CERTS;
+      if (existingNodeExtraCaCerts !== undefined) {
+        process.env.NODE_EXTRA_CA_CERTS = existingNodeExtraCaCerts;
+      }
       const spawner = yield* RpcSpawner.RpcSpawner;
       // We no longer force Bun in development because this prevents us from testing in Node.
       const command =
@@ -70,7 +87,9 @@ export const devCommand = Command.make(
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
           ALCHEMY_DEV: "true",
-          NODE_EXTRA_CA_CERTS,
+          ...(existingNodeExtraCaCerts === undefined
+            ? {}
+            : { NODE_EXTRA_CA_CERTS: existingNodeExtraCaCerts }),
           [SPAWNER_URL_ENV_KEY]: spawner.url,
         },
         extendEnv: true,
@@ -86,4 +105,4 @@ export const devCommand = Command.make(
         }),
       )(effect),
   ),
-);
+).pipe(Command.withDescription("Develop a stack with live reload"));

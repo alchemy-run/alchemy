@@ -161,6 +161,10 @@ export const Screen = {
 export interface ProgressOptions {
   readonly label: string;
   readonly detail?: string;
+  /** Terminal window title while this progress view is active. */
+  readonly title?: string;
+  /** Animate the leading status glyph. @default true */
+  readonly spinning?: boolean;
 }
 
 /**

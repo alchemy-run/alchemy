@@ -3,7 +3,7 @@ import * as Result from "effect/Result";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
 import { describe, expect, test } from "alchemy-test";
-import { importStack } from "../../src/Cli/commands/_shared";
+import { importStack } from "@/AlchemyControl/StackSession.ts";
 import { evalStack } from "../../src/Stack";
 import * as TestCore from "../../src/Test/Core";
 import { TestLayers } from "../test.resources";

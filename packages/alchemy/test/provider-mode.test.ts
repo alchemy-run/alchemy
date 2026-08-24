@@ -384,6 +384,13 @@ describe("provider modes", () => {
         const notes: AnnotateEvent[] = [];
         let planDefaultMode: ProviderMode | undefined;
         const cli = Cli.of({
+          startPlanningSession: () =>
+            Effect.succeed({
+              update: () => Effect.void,
+              succeed: () => Effect.void,
+              fail: () => Effect.void,
+              close: Effect.void,
+            }),
           approvePlan: () => Effect.succeed(true),
           displayPlan: () => Effect.void,
           startApplySession: (plan) =>

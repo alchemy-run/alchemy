@@ -1,7 +1,12 @@
 /** @jsxImportSource react */
 import { useAnimation } from "@alchemy.run/sigil";
 import type { ReactNode } from "react";
-import { statusColor, theme, type StatusVariant } from "../theme.ts";
+import {
+  statusColor,
+  statusPaint,
+  theme,
+  type StatusVariant,
+} from "../theme.ts";
 import {
   useBorderStyle,
   useCliEnvironment,
@@ -31,19 +36,18 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
 
 export type ToastProps = StatusProps;
 
-/** Short-lived application notice with enough space to remain visually distinct. */
+/** Compact application notice, distinguished by its semantic rail. */
 export function Toast({ variant = "info", children, detail }: ToastProps) {
   const borderStyle = useBorderStyle();
   return (
     <Box
-      paddingY={1}
       paddingLeft={1}
       borderStyle={borderStyle}
       borderLeft
       borderRight={false}
       borderTop={false}
       borderBottom={false}
-      borderColor={statusColor(variant)}
+      borderColor={statusPaint(variant)}
     >
       <Status variant={variant} detail={detail}>
         {children}
@@ -63,6 +67,7 @@ export function Alert({
   detail,
 }: AlertProps) {
   const borderStyle = useBorderStyle();
+  const glyphs = useGlyphs();
   return (
     <Box
       flexDirection="column"
@@ -71,16 +76,12 @@ export function Alert({
       borderRight={false}
       borderTop={false}
       borderBottom={false}
-      borderColor={statusColor(variant)}
+      borderColor={statusPaint(variant)}
       paddingLeft={1}
     >
       <Box gap={1} alignItems="center">
-        <Text
-          bold
-          color={theme.color.onAccent}
-          backgroundColor={statusColor(variant)}
-        >
-          {` ${variant.toUpperCase()} `}
+        <Text bold color={statusColor(variant)}>
+          {glyphs[variant]} {variant.toUpperCase()}
         </Text>
         {title === undefined ? null : <Text bold>{title}</Text>}
         {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
@@ -99,12 +100,17 @@ type KeyBarProps = {
 
 export function KeyBar({ keys, marginTop = 1 }: KeyBarProps) {
   return (
-    <Box width="100%" flexWrap="wrap" marginTop={marginTop} paddingLeft={2}>
+    <Box
+      width="100%"
+      flexWrap="wrap"
+      marginTop={marginTop}
+      paddingLeft={theme.space.indent}
+    >
       {keys.map(([key, label], index) => (
         <Box key={`${key}:${label}`}>
           {index === 0 ? null : <Text tone="muted"> • </Text>}
           <Text>
-            <Text bold color={theme.color.success}>
+            <Text bold color={theme.color.brand}>
               {key}
             </Text>
             <Text tone="muted"> {label}</Text>
@@ -191,7 +197,7 @@ export function ProgressBar({
       aria-state={{ busy: ratio < 1 }}
     >
       <Text>
-        <Text color={statusColor(variant)}>
+        <Text color={statusPaint(variant)}>
           {(unicode ? "█" : "#").repeat(filled)}
         </Text>
         <Text tone="muted">{(unicode ? "░" : ".").repeat(cells - filled)}</Text>
@@ -220,7 +226,7 @@ export function Tabs({ tabs, active }: TabsProps) {
     <Box
       width="100%"
       gap={1}
-      paddingLeft={2}
+      paddingLeft={theme.space.indent}
       marginBottom={1}
       aria-role="tablist"
     >
@@ -230,7 +236,7 @@ export function Tabs({ tabs, active }: TabsProps) {
           <Box
             key={tab.id}
             paddingX={1}
-            backgroundColor={selected ? theme.color.accent : undefined}
+            backgroundColor={selected ? theme.paint.interactive : undefined}
             aria-role="tab"
             aria-label={tab.label}
             aria-state={{ selected }}

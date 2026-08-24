@@ -4,7 +4,7 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "alchemy-test";
-import { importStack } from "../../src/Cli/commands/_shared";
+import { importStack } from "@/AlchemyControl/StackSession.ts";
 import { devKeepAlive } from "../../src/Cli/commands/deploy";
 import { PlatformServices } from "../../src/Util/PlatformServices";
 

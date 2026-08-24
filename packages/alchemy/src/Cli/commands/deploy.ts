@@ -1,34 +1,22 @@
 import * as Cause from "effect/Cause";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
-import { AlchemyContext } from "../../AlchemyContext.ts";
-import { apply } from "../../Apply.ts";
-import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
-import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../Auth/Profile.ts";
+import * as Operation from "../../AlchemyControl/Operation.ts";
+import { StackControl } from "../../AlchemyControl/StackLifecycle.ts";
 import * as CLI from "../../Cli/Cli.ts";
-import * as Plan from "../../Plan.ts";
-import { Stage } from "../../Stage.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
+  config,
   dryRun as dryRunFlag,
   envFile,
   force,
-  importStack,
   instrumentCommand,
   profile,
-  script,
   stage,
   yes,
 } from "./_shared.ts";
@@ -44,6 +32,7 @@ export const ExecStackOptions = Schema.Struct({
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
   adopt: Schema.optional(Schema.Boolean),
+  detailed: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
 export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
@@ -57,6 +46,7 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.destroy": !!args.destroy,
   "alchemy.dev": !!args.dev,
   "alchemy.adopt": !!args.adopt,
+  "alchemy.detailed": !!args.detailed,
 });
 
 const adopt = Flag.boolean("adopt").pipe(
@@ -67,128 +57,139 @@ const adopt = Flag.boolean("adopt").pipe(
   Flag.withDefault(false),
 );
 
-const runStack = Effect.fn(function* ({
-  main,
-  stage,
-  envFile,
-  profile,
-  dryRun = false,
-  force = false,
-  yes = false,
-  destroy = false,
-  dev = false,
-  adopt = false,
-}: ExecStackOptions) {
-  const stackEffect = yield* importStack(main);
+const detailed = Flag.boolean("detailed").pipe(
+  Flag.withDescription("Show declared resource properties as YAML"),
+  Flag.withDefault(false),
+);
 
-  const services = Layer.mergeAll(
-    Layer.effect(
-      AlchemyContext,
-      AlchemyContext.pipe(
-        Effect.map((ctx) => ({
-          ...ctx,
-          dev,
-          adopt,
-          // `--yes` also auto-accepts (and performs) an out-of-date state
-          // store upgrade, instead of prompting.
-          updateStateStore: yes,
-        })),
+const routeStack = Effect.fn(function* (options: ExecStackOptions) {
+  const cli = yield* CLI.Cli;
+  const stacks = yield* StackControl;
+  if (options.dev) {
+    const operation = yield* stacks.dev.reconcile({
+      target: {
+        entrypoint: options.main,
+        stage: options.stage,
+        profile: options.profile,
+        envFile: Option.getOrUndefined(options.envFile),
+      },
+      force: options.force,
+    });
+    let session: CLI.PlanStatusSession | undefined;
+    const result = yield* Operation.run(operation, (event) => {
+      if (event._tag === "PlanReady") {
+        const snapshot = event.snapshot;
+        return cli
+          .startApplySession(snapshot.native, {
+            detailed: options.detailed,
+            stage: options.stage,
+          })
+          .pipe(Effect.tap((next) => Effect.sync(() => (session = next))));
+      }
+      return event._tag === "ApplyEvent" && session !== undefined
+        ? session.emit(event.event)
+        : Effect.void;
+    }).pipe(
+      Effect.tapError(() =>
+        session === undefined ? Effect.void : session.done("failure"),
       ),
-    ),
-    // `--adopt` opts the entire deploy in to adoption-on-conflict.
-    // Resource providers that wire `AdoptPolicy` (Worker domains,
-    // Cloudflare.SecretsStore, etc.) will reconcile against
-    // pre-existing cloud resources instead of failing on duplicates.
-    // Default is `false` so an unintentional collision still surfaces
-    // loudly.
-    Layer.succeed(AdoptPolicy, adopt),
-    Layer.succeed(ArtifactStore, createArtifactStore()),
-    Layer.succeed(
-      AuthProviders,
-      yield* Effect.serviceOption(AuthProviders).pipe(
-        Effect.map(Option.getOrElse(() => ({}))),
-      ),
-    ),
-    ConfigProvider.layer(
-      withProfileOverride(yield* loadConfigProvider(envFile), profile),
-    ),
-    Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-    Layer.succeed(Stage, stage),
+    );
+    const devOnce =
+      process.env.ALCHEMY_DEV_ONCE === "1" ||
+      process.env.ALCHEMY_DEV_ONCE === "true";
+    if (session !== undefined) yield* session.done("success");
+    if (result !== undefined) yield* Console.log(result);
+    return devOnce ? undefined : yield* Effect.never;
+  }
+
+  const operation = options.destroy
+    ? "Destroy"
+    : options.dryRun
+      ? "Plan"
+      : "Deploy";
+  const planning = yield* cli.startPlanningSession(
+    "Importing stack module",
+    options.stage,
+    `${operation} · ${options.stage}`,
+  );
+  const planOperation = yield* options.destroy
+    ? stacks.destroy.plan({
+        target: {
+          entrypoint: options.main,
+          stage: options.stage,
+          profile: options.profile,
+          envFile: Option.getOrUndefined(options.envFile),
+        },
+        force: options.force,
+        adopt: options.adopt,
+        updateStateStore: options.yes,
+      })
+    : stacks.plan({
+        target: {
+          entrypoint: options.main,
+          stage: options.stage,
+          profile: options.profile,
+          envFile: Option.getOrUndefined(options.envFile),
+        },
+        operation: "deploy",
+        force: options.force,
+        adopt: options.adopt,
+        updateStateStore: options.yes,
+      });
+  const snapshot = yield* Operation.run(planOperation, (event) =>
+    event.phase === "plan-ready"
+      ? planning.succeed(event.message)
+      : planning.update(event.message, options.stage),
+  ).pipe(
+    Effect.tapError(() => planning.fail("Planning failed")),
+    Effect.onInterrupt(() => planning.close),
   );
 
-  yield* Effect.gen(function* () {
-    const cli = yield* CLI.Cli;
-    const stack = yield* stackEffect;
+  if (options.dryRun) {
+    return yield* cli.displayPlan(snapshot.native, {
+      detailed: options.detailed,
+      stage: options.stage,
+    });
+  }
 
-    yield* Effect.gen(function* () {
-      const updatePlan = destroy
-        ? yield* Plan.destroy(stack)
-        : yield* Plan.make(stack, { force });
-      if (dryRun) {
-        yield* cli.displayPlan(updatePlan);
-      } else {
-        const hasChanges =
-          Object.keys(updatePlan.deletions).length > 0 ||
-          Object.values(updatePlan.resources).some(
-            (node) =>
-              node.action !== "noop" ||
-              node.bindings.some((b) => b.action !== "noop"),
-          );
-        if (!yes && hasChanges) {
-          const approved = yield* cli.approvePlan(updatePlan);
-          if (!approved) {
-            return;
-          }
-        }
-        // Smoke-test kill switch: `ALCHEMY_DEV_ONCE=1 alchemy dev` exits after
-        // the first apply instead of keeping the dev session alive — apply
-        // failures propagate (non-zero exit) instead of being swallowed, so
-        // scripts and CI can assert "dev deploys cleanly" without a timeout.
-        const devOnce =
-          dev &&
-          (process.env.ALCHEMY_DEV_ONCE === "1" ||
-            process.env.ALCHEMY_DEV_ONCE === "true");
-        // In dev, a failed apply must not drain the keep-alive below:
-        // `alchemy dev` runs under `bun --watch`, which cancels watch mode
-        // entirely on a clean exit (oven-sh/bun#10983), so completing here
-        // would tear down every healthy local resource along with the failed
-        // one. Swallow apply failures (logging the full cause, since the TUI
-        // renderer only shows the failure status) so the keep-alive engages
-        // and the rest of the stack keeps serving, but re-propagate a pure
-        // interruption (Ctrl-C / fiber kill) so dev still shuts down cleanly.
-        const applyPlan =
-          dev && !devOnce
-            ? apply(updatePlan).pipe(
-                Effect.catchCause((cause) =>
-                  Cause.hasInterruptsOnly(cause)
-                    ? Effect.failCause(cause)
-                    : Console.error(
-                        `alchemy dev: apply failed; keeping dev alive so healthy resources keep serving.\n${Cause.pretty(cause)}`,
-                      ).pipe(Effect.as(undefined)),
-                ),
-              )
-            : apply(updatePlan);
-        const outputs = yield* applyPlan;
+  const hasChanges =
+    snapshot.summary.create +
+      snapshot.summary.update +
+      snapshot.summary.replace +
+      snapshot.summary.delete >
+    0;
+  if (
+    !options.yes &&
+    hasChanges &&
+    !(yield* cli.approvePlan(snapshot.native, {
+      detailed: options.detailed,
+      stage: options.stage,
+    }))
+  ) {
+    return;
+  }
 
-        if (outputs !== undefined) {
-          yield* Console.log(outputs);
-        }
-
-        if (dev) {
-          if (devOnce) {
-            return;
-          }
-          return yield* Effect.never;
-        }
-      }
-    }).pipe(Effect.provide(stack.services));
-  }).pipe(Effect.provide(services));
+  const session = yield* cli.startApplySession(snapshot.native, {
+    detailed: options.detailed,
+    stage: options.stage,
+  });
+  const applyOperation = yield* (
+    options.destroy ? stacks.destroy.apply : stacks.deploy
+  )({
+    planId: snapshot.id,
+    revision: snapshot.revision,
+  });
+  const result = yield* Operation.run(applyOperation, (event) =>
+    session.emit(event.event),
+  ).pipe(Effect.tapError(() => session.done("failure")));
+  yield* session.done("success");
+  if (result !== undefined) yield* Console.log(result);
 });
 
 // In dev, failures OUTSIDE the apply guard above must not exit the process
 // either: the user saves mid-edit states where importing the stack module
 // itself throws (missing export, module-evaluation crash), or planning fails
-// against the half-edited program. Those failures escape `runStack` before
+// against the half-edited program. Those failures escape the route before
 // the apply-level guard exists, and exiting here kills the `--watch` session
 // (oven-sh/bun#10983), so dev would stop reloading on subsequent saves. Log
 // the cause and park forever; the watcher restarts the run on the next file
@@ -208,19 +209,20 @@ export const devKeepAlive = <A, E, R>(
   );
 
 export const execStack = (options: ExecStackOptions) =>
-  options.dev ? devKeepAlive(runStack(options)) : runStack(options);
+  options.dev ? devKeepAlive(routeStack(options)) : routeStack(options);
 
 export const deployCommand = Command.make(
   "deploy",
   {
     dryRun: dryRunFlag,
     force,
-    main: script,
+    main: config,
     envFile,
     stage,
     yes,
     profile,
     adopt,
+    detailed,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
@@ -229,7 +231,7 @@ export const destroyCommand = Command.make(
   "destroy",
   {
     dryRun: dryRunFlag,
-    main: script,
+    main: config,
     envFile,
     stage,
     yes,
@@ -249,10 +251,11 @@ export const destroyCommand = Command.make(
 export const planCommand = Command.make(
   "plan",
   {
-    main: script,
+    main: config,
     envFile,
     stage,
     profile,
+    detailed,
   },
   instrumentCommand(
     "plan",

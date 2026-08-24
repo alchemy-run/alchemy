@@ -3,6 +3,7 @@ import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import type { Simplify } from "effect/Types";
@@ -24,6 +25,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import {
+  type PlanDisplayOptions,
   type PlanStatusSession,
   type ScopedPlanStatusSession,
   Cli,
@@ -68,18 +70,6 @@ import {
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
-export type ApplyEffect<
-  P extends Plan,
-  Err = never,
-  Req = never,
-> = Effect.Effect<
-  {
-    [k in keyof AppliedPlan<P>]: AppliedPlan<P>[k];
-  },
-  Err,
-  Req
->;
-
 export type AppliedPlan<P extends Plan> = {
   [id in keyof P["resources"]]: P["resources"][id] extends
     | Delete
@@ -88,6 +78,12 @@ export type AppliedPlan<P extends Plan> = {
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
+
+export interface ApplyOptions {
+  planDisplay?: PlanDisplayOptions;
+  /** Structured event sink for non-CLI callers. */
+  session?: PlanStatusSession;
+}
 
 interface ResourceTracker {
   output: any;
@@ -148,6 +144,7 @@ const instrumentLifecycle =
 
 export const apply = <P extends Plan>(
   plan: P,
+  options: ApplyOptions = {},
 ): Effect.Effect<
   Input.Resolve<P["output"]>,
   | Output.InvalidReferenceError
@@ -158,7 +155,7 @@ export const apply = <P extends Plan>(
   | AuthError
   | PlatformError
   | ConfigError,
-  Cli | State | Stack | Stage
+  State | Stack | Stage
 > =>
   Effect.gen(function* () {
     // Credential-free dev: a dev-mode plan that needs the real cloud
@@ -175,148 +172,179 @@ export const apply = <P extends Plan>(
       yield* demandPlanCredentials(plan);
     }
 
-    const cli = yield* Cli;
-    const session = yield* cli.startApplySession(plan);
-    const state = yield* yield* State;
-    const stack = yield* Stack;
-    const stage = yield* Stage;
-    const stackName = stack.name;
-
-    const tracker: Record<string, ResourceTracker> = {};
-    const terminalStatuses = new Map<
-      string,
-      {
-        id: string;
-        type: string;
-        status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
-        providerMode?: ProviderMode;
-      }
-    >();
-
-    // ── FQN migrations (renamedFrom) ──
-    // Persist renames before any lifecycle operation runs: a node whose row
-    // was found under a former FQN carries that row pre-remapped in
-    // `node.state` (see Plan's rename resolution). Commit it at the current
-    // FQN FIRST, then drop the former row — in that order, so an
-    // interruption leaves rows at both FQNs with the same instanceId, which
-    // the next plan recognizes as an in-flight migration (and never as an
-    // orphan to delete).
-    //
-    // In a same-deploy shift (A→B while B→C), C's former FQN `B` is
-    // simultaneously B's migration TARGET. C must NOT delete it: B's own
-    // `state.set` supersedes the stale copy, and the migrations run
-    // concurrently — the delete could land after B's write and destroy the
-    // freshly migrated row.
-    const migrationTargets = new Set(
-      Object.values(plan.resources)
-        .filter((node) => node.renamedFrom?.length && node.state !== undefined)
-        .map((node) => node.resource.FQN),
-    );
-    yield* Effect.forEach(
-      Object.values(plan.resources),
-      (node) => {
-        const { renamedFrom, state: row } = node;
-        return renamedFrom === undefined ||
-          renamedFrom.length === 0 ||
-          row === undefined
-          ? Effect.void
-          : Effect.gen(function* () {
-              yield* state.set({
-                stack: stackName,
-                stage,
-                fqn: node.resource.FQN,
-                value: row,
-              });
-              yield* Effect.forEach(
-                renamedFrom.filter(
-                  (formerFqn) => !migrationTargets.has(formerFqn),
-                ),
-                (formerFqn) =>
-                  state.delete({ stack: stackName, stage, fqn: formerFqn }),
-                { concurrency: "unbounded" },
-              );
-            });
-      },
-      { concurrency: "unbounded" },
-    );
-
-    yield* executePlan(
-      plan,
-      tracker,
-      terminalStatuses,
-      session,
-      state,
-      stackName,
-      stage,
-    );
-
-    // TODO(sam): support roll back to previous state if errors occur during expansion
-    // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
-    // TODO(sam): should pivot be done separately? E.g shift traffic?
-
-    yield* collectGarbage(plan, session);
-
-    yield* converge(
-      plan,
-      tracker,
-      terminalStatuses,
-      session,
-      state,
-      stackName,
-      stage,
-    );
-
-    yield* Effect.forEach(
-      Array.from(terminalStatuses.values()),
-      ({ id, type, status, providerMode }) =>
-        session.emit({ kind: "status-change", id, type, status, providerMode }),
-      { concurrency: "unbounded" },
-    );
-
-    yield* session.done();
-
-    if (plan.destroy) {
-      // The destroy converged: every resource row was deleted above. Drop
-      // the rest of the stage's persisted state — notably the stack output
-      // record written by the last deploy — so `getOutput` returns
-      // undefined and `listStages` no longer reports the stage.
-      // https://github.com/alchemy-run/alchemy/issues/961
-      yield* state.deleteStack({ stack: stackName, stage });
-      // Invariant: a successful destroy leaves the stage EMPTY. If rows
-      // survive, this destroy session could not actually see (or delete)
-      // the stack's state — e.g. its plan listed an empty store while
-      // committed rows existed — and reporting success here would silently
-      // leak every cloud resource those rows track. Fail loudly instead so
-      // the leak surfaces in the run that caused it.
-      const remaining = yield* state.list({ stack: stackName, stage });
-      if (remaining.length > 0) {
-        return yield* Effect.fail(
-          new StateStoreError({
-            message:
-              `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
-              `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
-              `not see the stack's persisted state, so its cloud resources were NOT deleted`,
+    const session =
+      options.session ??
+      (yield* Effect.serviceOption(Cli).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () =>
+              Effect.die(
+                "apply requires either ApplyOptions.session or the Cli service",
+              ),
+            onSome: (cli) => cli.startApplySession(plan, options.planDisplay),
           }),
-        );
+        ),
+      ));
+    // The nested gen exists so `onExit` can settle the session on every
+    // exit path without introducing a scope: local dev providers start
+    // long-running processes in the AMBIENT scope during reconcile, so
+    // wrapping this body in Effect.scoped would kill them when apply
+    // returns.
+    return yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      const stack = yield* Stack;
+      const stage = yield* Stage;
+      const stackName = stack.name;
+
+      const tracker: Record<string, ResourceTracker> = {};
+      const terminalStatuses = new Map<
+        string,
+        {
+          id: string;
+          type: string;
+          status: Extract<
+            ApplyStatus,
+            "created" | "updated" | "ran" | "skipped"
+          >;
+          providerMode?: ProviderMode;
+        }
+      >();
+
+      // ── FQN migrations (renamedFrom) ──
+      // Persist renames before any lifecycle operation runs: a node whose row
+      // was found under a former FQN carries that row pre-remapped in
+      // `node.state` (see Plan's rename resolution). Commit it at the current
+      // FQN FIRST, then drop the former row — in that order, so an
+      // interruption leaves rows at both FQNs with the same instanceId, which
+      // the next plan recognizes as an in-flight migration (and never as an
+      // orphan to delete).
+      //
+      // In a same-deploy shift (A→B while B→C), C's former FQN `B` is
+      // simultaneously B's migration TARGET. C must NOT delete it: B's own
+      // `state.set` supersedes the stale copy, and the migrations run
+      // concurrently — the delete could land after B's write and destroy the
+      // freshly migrated row.
+      const migrationTargets = new Set(
+        Object.values(plan.resources)
+          .filter(
+            (node) => node.renamedFrom?.length && node.state !== undefined,
+          )
+          .map((node) => node.resource.FQN),
+      );
+      yield* Effect.forEach(
+        Object.values(plan.resources),
+        (node) => {
+          const { renamedFrom, state: row } = node;
+          return renamedFrom === undefined ||
+            renamedFrom.length === 0 ||
+            row === undefined
+            ? Effect.void
+            : Effect.gen(function* () {
+                yield* state.set({
+                  stack: stackName,
+                  stage,
+                  fqn: node.resource.FQN,
+                  value: row,
+                });
+                yield* Effect.forEach(
+                  renamedFrom.filter(
+                    (formerFqn) => !migrationTargets.has(formerFqn),
+                  ),
+                  (formerFqn) =>
+                    state.delete({ stack: stackName, stage, fqn: formerFqn }),
+                  { concurrency: "unbounded" },
+                );
+              });
+        },
+        { concurrency: "unbounded" },
+      );
+
+      yield* executePlan(
+        plan,
+        tracker,
+        terminalStatuses,
+        session,
+        state,
+        stackName,
+        stage,
+      );
+
+      // TODO(sam): support roll back to previous state if errors occur during expansion
+      // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+      // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+      yield* collectGarbage(plan, session);
+
+      yield* converge(
+        plan,
+        tracker,
+        terminalStatuses,
+        session,
+        state,
+        stackName,
+        stage,
+      );
+
+      yield* Effect.forEach(
+        Array.from(terminalStatuses.values()),
+        ({ id, type, status, providerMode }) =>
+          session.emit({
+            kind: "status-change",
+            id,
+            type,
+            status,
+            providerMode,
+          }),
+        { concurrency: "unbounded" },
+      );
+
+      if (plan.destroy) {
+        // The destroy converged: every resource row was deleted above. Drop
+        // the rest of the stage's persisted state — notably the stack output
+        // record written by the last deploy — so `getOutput` returns
+        // undefined and `listStages` no longer reports the stage.
+        // https://github.com/alchemy-run/alchemy/issues/961
+        yield* state.deleteStack({ stack: stackName, stage });
+        // Invariant: a successful destroy leaves the stage EMPTY. If rows
+        // survive, this destroy session could not actually see (or delete)
+        // the stack's state — e.g. its plan listed an empty store while
+        // committed rows existed — and reporting success here would silently
+        // leak every cloud resource those rows track. Fail loudly instead so
+        // the leak surfaces in the run that caused it.
+        const remaining = yield* state.list({ stack: stackName, stage });
+        if (remaining.length > 0) {
+          return yield* Effect.fail(
+            new StateStoreError({
+              message:
+                `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
+                `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
+                `not see the stack's persisted state, so its cloud resources were NOT deleted`,
+            }),
+          );
+        }
+        return undefined;
       }
-      return undefined;
-    }
 
-    if (!plan.output) {
-      return undefined;
-    }
+      if (!plan.output) {
+        return undefined;
+      }
 
-    const outputs = Object.fromEntries(
-      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+      const outputs = Object.fromEntries(
+        Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+      );
+      const resolved = yield* Output.evaluate(plan.output, outputs);
+
+      // Persist the stack's evaluated outputs so cross-stack references
+      // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
+      // can read them back out of the state store.
+      yield* state.setOutput({ stack: stackName, stage, value: resolved });
+
+      return resolved;
+    }).pipe(
+      Effect.onExit((exit) =>
+        session.done(Exit.isSuccess(exit) ? "success" : "failure"),
+      ),
     );
-    const resolved = yield* Output.evaluate(plan.output, outputs);
-
-    // Persist the stack's evaluated outputs so cross-stack references
-    // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
-    // can read them back out of the state store.
-    yield* state.setOutput({ stack: stackName, stage, value: resolved });
-
-    return resolved;
   }).pipe(
     ensureArtifactStore,
     Effect.withSpan("apply", {

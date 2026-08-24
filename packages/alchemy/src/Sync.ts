@@ -348,7 +348,7 @@ export const sync = (
       { concurrency: "unbounded" },
     );
 
-    yield* session.done();
+    yield* session.done(failures.length === 0 ? "success" : "failure");
 
     if (failures.length > 0) {
       return yield* Effect.failCause(

@@ -218,6 +218,7 @@ alchemy profile edit --add stripe --set apiKey=env:STRIPE_API_KEY
 op read op://vault/stripe/key | alchemy profile edit --add stripe --set apiKey=-
 
 alchemy profile show       # renders your provider's details
+alchemy provider check-env --provider stripe   # CI preflight for STRIPE_API_KEY
 ```
 
 In CI, profile resolution is bypassed, so setting `STRIPE_API_KEY` is all a

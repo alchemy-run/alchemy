@@ -23,7 +23,7 @@ export interface TextProps extends Omit<
   "color"
 > {
   readonly tone?: TextTone;
-  readonly color?: string;
+  readonly color?: ComponentProps<typeof SigilText>["color"];
 }
 
 /** CliKit typography primitive. Consumers never import Sigil directly. */

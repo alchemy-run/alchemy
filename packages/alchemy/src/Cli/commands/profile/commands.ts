@@ -2,19 +2,18 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Argument from "effect/unstable/cli/Argument";
 import { readFileSync } from "node:fs";
 
 import { AuthError } from "../../../Auth/AuthProvider.ts";
+import * as Operation from "../../../AlchemyControl/Operation.ts";
+import { ProfileControl } from "../../../AlchemyControl/ProfileControl.ts";
 import { getEnv } from "../../../Auth/Env.ts";
-import { ProfileStore, type ProfileManifest } from "../../../Auth/Profile.ts";
 import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
 import * as CliKit from "../../../Cli/CliKit/index.ts";
-import {
-  resolveProfileName,
-  resolveProfileSelection,
-} from "../../../Cli/ProfileSelection.ts";
+import { resolveProfileName } from "../../../Cli/ProfileSelection.ts";
 
 import {
   config,
@@ -29,8 +28,6 @@ import {
 import {
   deleteProfileFlow,
   editProfileFlow,
-  listEntries,
-  refreshProfileFlow,
   renameProfileFlow,
   showProfileFlow,
 } from "./flows.ts";
@@ -97,10 +94,8 @@ const listCommand = Command.make(
   { envFile },
   instrumentCommand("profile.list")(
     Effect.fn(function* ({ envFile }) {
-      const profiles = yield* ProfileStore;
-      const manifest = yield* profiles.readManifest;
-      const activeProfile = yield* resolveProfileName(envFile, undefined);
-      const entries = listEntries(manifest, activeProfile);
+      const profiles = yield* ProfileControl;
+      const entries = yield* profiles.list();
       const cli = yield* CliKit.CliKit;
       if (cli.terminal.input) {
         const { profileListNode } = yield* profileTui;
@@ -129,8 +124,8 @@ const createCommand = Command.make(
     "alchemy.profile": a.name,
   }))(
     Effect.fn(function* ({ name }) {
-      const profiles = yield* ProfileStore;
-      yield* profiles.createProfile(name);
+      const profiles = yield* ProfileControl;
+      yield* profiles.create({ name });
       yield* CliKit.accessors.output.success(
         `Created profile '${name}'. Run \`alchemy profile edit ${name}\` to connect accounts.`,
       );
@@ -149,6 +144,16 @@ const renameCommand = Command.make(
     }),
   )(
     Effect.fn(function* ({ name, newName }) {
+      if (Option.isSome(newName)) {
+        yield* (yield* ProfileControl).rename({
+          name,
+          newName: newName.value.trim(),
+        });
+        yield* CliKit.accessors.output.success(
+          `Renamed profile '${name}' to '${newName.value.trim()}'.`,
+        );
+        return;
+      }
       yield* renameProfileFlow(name, Option.getOrUndefined(newName));
     }),
   ),
@@ -322,6 +327,43 @@ const editCommand = Command.make(
           values: yield* resolveSetValues(set, envFile),
         };
       }
+      const profiles = yield* ProfileControl;
+      if (configureInput !== undefined) {
+        const provider = (add[0] ?? reconfigure[0])!;
+        const operation = yield* profiles.configure({
+          profile: selectedProfile,
+          provider,
+          entrypoint: main,
+          envFile: Option.getOrUndefined(envFile),
+          action: add.length === 1 ? "add" : "reconfigure",
+          method: configureInput.method ?? "",
+          values: Object.fromEntries(
+            Object.entries(configureInput.values).map(([key, value]) => [
+              key,
+              Redacted.make(value),
+            ]),
+          ),
+        });
+        yield* Operation.result(operation);
+        yield* CliKit.accessors.output.success(
+          `${add.length === 1 ? "Added" : "Updated"} '${provider}' in profile '${selectedProfile}'.`,
+        );
+        return;
+      }
+      if (add.length === 0 && reconfigure.length === 0 && remove.length > 0) {
+        for (const provider of remove) {
+          yield* profiles.removeProvider({
+            profile: selectedProfile,
+            provider,
+            entrypoint: main,
+            envFile: Option.getOrUndefined(envFile),
+          });
+          yield* CliKit.accessors.output.success(
+            `Removed '${provider}' from profile '${selectedProfile}'.`,
+          );
+        }
+        return;
+      }
       const outcomes = yield* editProfileFlow({
         selectedProfile,
         add,
@@ -371,12 +413,19 @@ const refreshCommand = Command.make(
       const selectedProfile =
         Option.getOrUndefined(name) ??
         (yield* resolveProfileName(envFile, undefined));
-      yield* refreshProfileFlow({
-        selectedProfile,
+      const profiles = yield* ProfileControl;
+      const operation = yield* profiles.refresh({
+        profile: selectedProfile,
         providers,
-        envFile,
-        main,
+        entrypoint: main,
+        envFile: Option.getOrUndefined(envFile),
       });
+      yield* Operation.run(operation, (event) =>
+        CliKit.accessors.output.info(`Refreshing ${event.provider}`),
+      );
+      yield* CliKit.accessors.output.success(
+        `Refreshed profile '${selectedProfile}'.`,
+      );
     }),
   ),
 ).pipe(
@@ -390,7 +439,7 @@ const currentCommand = Command.make(
   { envFile },
   instrumentCommand("profile.current")(
     Effect.fn(function* ({ envFile }) {
-      const selected = yield* resolveProfileSelection(envFile, undefined);
+      const selected = yield* (yield* ProfileControl).current();
       const source =
         selected.source === "configuration"
           ? "ALCHEMY_PROFILE"

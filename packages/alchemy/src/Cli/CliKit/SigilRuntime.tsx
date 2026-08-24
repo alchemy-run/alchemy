@@ -6,7 +6,14 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
-import { Box, render, renderToString, Static } from "@alchemy.run/sigil";
+import {
+  AnsiText,
+  Box,
+  render,
+  renderToString,
+  Static,
+  useTitle,
+} from "@alchemy.run/sigil";
 import { type ReactNode, useSyncExternalStore } from "react";
 import { Spinner, Status } from "./components/Feedback.tsx";
 import { CliEnvironment } from "./components/Environment.tsx";
@@ -26,6 +33,7 @@ import {
   textScreen,
 } from "./screens.tsx";
 import { applicationPresentation, CliKit } from "./CliKit.ts";
+import { setNativeProgress } from "./terminal.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
@@ -42,7 +50,9 @@ import type {
 
 const InApplication = Context.Reference<boolean>(
   "Alchemy::CliKit/InApplication",
-  { defaultValue: () => false },
+  {
+    defaultValue: () => false,
+  },
 );
 
 /**
@@ -309,12 +319,17 @@ type ProgressViewProps = {
 
 function ProgressView({ store }: ProgressViewProps) {
   const state = useLiveStore(store);
-  return state.final === undefined ? (
-    <Spinner label={state.options.label} detail={state.options.detail} />
-  ) : (
+  useTitle(state.options.title);
+  return state.final !== undefined ? (
     <Status variant={state.final.variant}>
       {state.final.message ?? state.options.label}
     </Status>
+  ) : state.options.spinning === false ? (
+    <Status variant="info" detail={state.options.detail}>
+      {state.options.label}
+    </Status>
+  ) : (
+    <Spinner label={state.options.label} detail={state.options.detail} />
   );
 }
 
@@ -373,7 +388,9 @@ export const makeRuntime = (
     const appendLines = (stream: keyof typeof buffers, data: string) => {
       const parts = `${buffers[stream]}${data}`.split(/\r?\n/);
       buffers[stream] = parts.pop() ?? "";
-      for (const line of parts) store.appendStatic(<Text>{line || " "}</Text>);
+      for (const line of parts) {
+        store.appendStatic(<AnsiText>{line || " "}</AnsiText>);
+      }
     };
     const ink = render(
       <CliEnvironment capabilities={capabilities} observeWindow>
@@ -386,6 +403,7 @@ export const makeRuntime = (
         exitOnCtrlC: false,
         interactive: capabilities.input,
         alternateScreen: alternateScreen,
+        colorProfile: capabilities.colors ? "truecolor" : "none",
         ...(captureDirectStdio
           ? {
               patchConsole: "stdio" as const,
@@ -824,6 +842,13 @@ export const makeRuntime = (
 
   const service: CliKit["Service"] = {
     terminal: capabilities,
+    nativeProgress: {
+      set: (state, value) =>
+        Effect.sync(() => {
+          if (mounted !== undefined) mounted.ink.setProgress(state, value);
+          else setNativeProgress(state, value, stdout);
+        }),
+    },
     output: {
       print,
       format: formatView,
