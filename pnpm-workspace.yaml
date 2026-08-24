@@ -165,6 +165,7 @@ overrides:
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
 patchedDependencies:
+  ink@7.1.1: patches/ink@7.1.1.patch
   "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
   starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
 minimumReleaseAgeExclude:
@@ -180,3 +181,4 @@ minimumReleaseAgeExclude:
   - '@foldkit/vite-plugin@0.16.1'
   - effect@4.0.0-rc.111
   - foldkit@0.148.2
+  - '@alchemy.run/sigil@0.0.0-alpha.5'

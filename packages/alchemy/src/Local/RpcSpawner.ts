@@ -72,7 +72,7 @@ export const make = Effect.fn(function* ({
 
   // Sidecar output hub. During `alchemy dev` this process (the outer dev
   // command) shares the tty with the exec child, and the exec child owns the
-  // repainting progress renderer (Ink patches its `console`). Printing
+  // repainting progress renderer (Sigil patches its `console`). Printing
   // sidecar lines RAW from here interleaves with the renderer's repaints and
   // corrupts the region (stacked/duplicated frames). So: when an exec child
   // is subscribed via the /logs endpoint, hand lines to it and let it print
@@ -192,7 +192,7 @@ export const make = Effect.fn(function* ({
       const request = yield* HttpServerRequest;
       if (request.url.startsWith(LOGS_PATH)) {
         // Long-lived NDJSON stream of sidecar output. The subscriber (exec
-        // child) prints these lines through its own console, which the Ink
+        // child) prints these lines through its own console, which the Sigil
         // renderer patches — inserting them above the progress region
         // instead of tearing it. Client disconnect interrupts the stream
         // and unregisters the subscriber.
@@ -265,7 +265,7 @@ const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => {
 /**
  * Pull sidecar output from the spawner (the outer `alchemy dev` process)
  * into THIS process's Console. The exec child owns the terminal renderer —
- * Ink patches its `console`, so lines printed here are inserted cleanly
+ * Sigil patches its `console`, so lines printed here are inserted cleanly
  * above the repainting progress region instead of racing it on the shared
  * tty. Forks in the ambient scope and never fails: when no spawner is
  * configured (`ALCHEMY_RPC_SPAWNER_URL` absent — plain deploy/destroy) it is
