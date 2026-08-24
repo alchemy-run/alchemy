@@ -1,4 +1,5 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { withHostlessDataPlane } from "../../Provider.ts";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
@@ -414,7 +415,11 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
       );
     }
 
-    const result = yield* ec2.describeAvailabilityZones({});
+    // In an `alchemy dev` run this composition-time lookup targets the
+    // emulator (no real credentials needed); in a deploy it stays live.
+    const result = yield* ec2
+      .describeAvailabilityZones({})
+      .pipe(withHostlessDataPlane("AWS.EC2.DescribeAvailabilityZones"));
     const zones = (result.AvailabilityZones ?? [])
       .filter((zone) => zone.State === "available" && zone.ZoneName)
       .map((zone) => zone.ZoneName!)
