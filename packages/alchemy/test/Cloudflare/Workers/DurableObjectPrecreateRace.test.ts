@@ -28,7 +28,10 @@ const noVersions = () =>
     { status: 404, headers: { "content-type": "application/json" } },
   );
 
-const racingFetch: typeof fetch = async (input, init) => {
+const racingFetch = async (
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) => {
   const request = input instanceof Request ? input : new Request(input, init);
   if (
     request.method !== "GET" ||
@@ -54,7 +57,12 @@ const { test } = Test.make({
   providers: Cloudflare.providers().pipe(
     Layer.provideMerge(
       Layer.fresh(FetchHttpClient.layer).pipe(
-        Layer.provide(Layer.succeed(FetchHttpClient.Fetch, racingFetch)),
+        Layer.provide(
+          Layer.succeed(
+            FetchHttpClient.Fetch,
+            racingFetch as typeof globalThis.fetch,
+          ),
+        ),
       ),
     ),
   ),
