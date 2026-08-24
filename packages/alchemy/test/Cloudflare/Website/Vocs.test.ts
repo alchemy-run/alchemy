@@ -99,10 +99,14 @@ describe.concurrent("Vocs", () => {
             label: "Vocs public asset",
           },
         );
-        yield* expectUrlContains(`${site1.url!}/llms.txt`, "Alchemy Vocs", {
-          timeout: "60 seconds",
-          label: "Vocs generated llms asset",
-        });
+        yield* expectUrlContains(
+          `${site1.url!}/llms.txt`,
+          "Alchemy with Vocs",
+          {
+            timeout: "60 seconds",
+            label: "Vocs generated llms asset",
+          },
+        );
 
         const site2 = yield* deploy();
         expect(site2.hash?.input).toEqual(site1.hash?.input);
