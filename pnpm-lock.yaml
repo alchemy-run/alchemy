@@ -2625,6 +2625,27 @@ importers:
         specifier: catalog:build
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
+  examples/stripe-billing:
+    dependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20260812.1
+        version: 5.20260812.1
+      '@distilled.cloud/stripe':
+        specifier: workspace:*
+        version: link:../../distilled/packages/stripe
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.110(effect@4.0.0-rc.110)
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.110(effect@4.0.0-rc.110)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.110
+        version: 4.0.0-rc.110
+
   fixtures/astro:
     dependencies:
       astro:
@@ -3359,6 +3380,9 @@ importers:
       '@distilled.cloud/planetscale':
         specifier: workspace:*
         version: link:../../distilled/packages/planetscale
+      '@distilled.cloud/stripe':
+        specifier: workspace:*
+        version: link:../../distilled/packages/stripe
       '@effect/sql-d1':
         specifier: catalog:effect
         version: 4.0.0-rc.111(effect@4.0.0-rc.111)
