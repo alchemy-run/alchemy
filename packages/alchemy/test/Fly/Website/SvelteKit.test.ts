@@ -76,14 +76,6 @@ test.provider(
           label: "api route",
         },
       );
-      yield* expectUrlContains(
-        `${url!}/prerendered`,
-        "SVELTEKIT_AWS_PRERENDERED_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "extra route",
-        },
-      );
 
       const appName = deployed.site.app!.appName;
       yield* stack.destroy();

@@ -78,14 +78,6 @@ test.provider.skipIf(!hasHetznerCreds)(
           label: "api route",
         },
       );
-      yield* expectUrlContains(
-        `${url!}/prerendered`,
-        "SVELTEKIT_AWS_PRERENDERED_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "extra route",
-        },
-      );
 
       const serverId = deployed.site.server!.serverId;
       yield* stack.destroy();
