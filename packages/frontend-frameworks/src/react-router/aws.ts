@@ -79,6 +79,11 @@ export interface ReactRouterAwsTargetConfig extends ReactRouterTargetConfig {
   readonly streaming?: boolean | undefined;
 }
 
+/** The AWS {@link ReactRouterTarget}, carrying the AWS-specific config. */
+export interface ReactRouterAwsTarget extends ReactRouterTarget {
+  readonly config: ReactRouterAwsTargetConfig;
+}
+
 const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "aws", message, cause });
 
@@ -200,7 +205,7 @@ const finish = (
  */
 const makeAwsFinishTarget = (
   config: ReactRouterAwsTargetConfig = {},
-): ReactRouterTarget =>
+): ReactRouterAwsTarget =>
   makeDeployTarget({
     platform: "aws",
     config,
@@ -247,7 +252,7 @@ export const buildInChild = (config: ReactRouterAwsBuildChildConfig) =>
  */
 export const makeAwsTarget = (
   config: ReactRouterAwsTargetConfig = {},
-): ReactRouterTarget => ({
+): ReactRouterAwsTarget => ({
   ...makeAwsFinishTarget(config),
   build: (context) =>
     runBuildChild({
