@@ -74,7 +74,13 @@ const wrap = (raw: cf.ForwardableEmailMessage): ForwardableEmailMessage => ({
   headers: raw.headers,
   body: raw.raw,
   bodySize: raw.rawSize,
-  setReject: (reason) => Effect.sync(() => raw.setReject(reason)),
+  // In production `setReject` is synchronous; under the local runtime the
+  // message crosses a JSRPC boundary and the call returns a promise the
+  // reject flag only lands after — await either form.
+  setReject: (reason) =>
+    Effect.promise(async () => {
+      await (raw.setReject(reason) as void | Promise<void>);
+    }),
   forward: (rcptTo, headers) =>
     Effect.tryPromise({
       try: () => raw.forward(rcptTo, headers),
@@ -161,12 +167,9 @@ export interface EmailSubscribeProps {
  * Worker — the event source catches the failure and moves on. Express
  * retry declaratively with `Effect.retry` inside the handler, and log
  * or report errors if you need visibility into failed deliveries.
- * @binding
- * @product Workers
- * @category Workers & Compute
  *
- * @section Subscribing to Inbound Mail
- * @example Catch-all on a zone — auto-creates routing + rule
+ * ### Subscribing to Inbound Mail
+ * **Example:** Catch-all on a zone — auto-creates routing + rule
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
@@ -183,7 +186,7 @@ export interface EmailSubscribeProps {
  * );
  * ```
  *
- * @example Match a specific address
+ * **Example:** Match a specific address
  * ```typescript
  * yield* Cloudflare.email({
  *   zone: "example.com",
@@ -191,14 +194,15 @@ export interface EmailSubscribeProps {
  * }).subscribe((message) => message.forward("ops@example.com"));
  * ```
  *
- * @example Reject (bounce) a message
+ * ### Handling Messages
+ * **Example:** Reject (bounce) a message
  * ```typescript
  * yield* Cloudflare.email({ zone: "example.com" }).subscribe((message) =>
  *   message.setReject("Mailbox closed"),
  * );
  * ```
  *
- * @example Bring-your-own routing — no `zone`, no auto-create
+ * **Example:** Bring-your-own routing — no `zone`, no auto-create
  * ```typescript
  * // Manage `Email.Routing` / `Email.Rule` yourself in alchemy.run.ts.
  * yield* Cloudflare.email().subscribe((message) =>
@@ -207,6 +211,10 @@ export interface EmailSubscribeProps {
  * ```
  *
  * @see https://developers.cloudflare.com/email-routing/email-workers/
+ *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
 export const email = (props: EmailSubscribeProps = {}) => ({
   subscribe: <E = never, Req = never>(

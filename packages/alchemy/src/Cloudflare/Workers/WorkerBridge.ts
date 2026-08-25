@@ -152,23 +152,6 @@ export const makeWorkerBridge = (
     ) {
       super(ctx, env);
 
-      for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          processEvent(
-            (built) =>
-              built.export[methodName](input, this.env, this.ctx) as [
-                Effect.Effect<any>,
-                Context.Context<never>,
-              ],
-            this.ctx,
-            this.env,
-            (exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          );
-      }
-
       return new Proxy(this, {
         get: (target, prop) => {
           if (typeof prop !== "string") return (target as any)[prop];
@@ -213,14 +196,27 @@ export const makeWorkerBridge = (
     }
   }
 
-  // Stub prototype methods so Cloudflare's script-validate detects the
-  // standard handler set; per-instance overrides above are what actually
-  // run.
+  // Handler methods live on the PROTOTYPE, never as instance properties:
+  // Cloudflare's script-validate detects the standard handler set on the
+  // prototype, and workerd's JSRPC — which the local runtime's inbound
+  // email trigger uses to call `userWorker.email(message)` — refuses to
+  // resolve a method that also exists as an own instance property (only
+  // prototype methods are callable over RPC).
   for (const method of ExportedHandlerMethods) {
     Object.defineProperty(WorkerBridge.prototype, method, {
-      value: function () {
-        throw new Error(
-          `Bridge method '${method}' was called before instance setup`,
+      value: function (this: WorkerBridge, input: any) {
+        return processEvent(
+          (built) =>
+            built.export[method](input, this.env, this.ctx) as [
+              Effect.Effect<any>,
+              Context.Context<never>,
+            ],
+          this.ctx,
+          this.env,
+          (exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
         );
       },
       writable: true,

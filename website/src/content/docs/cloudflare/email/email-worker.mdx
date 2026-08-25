@@ -56,12 +56,15 @@ the Worker.
 the Worker's runtime dispatch.
 
 ```diff lang="typescript"
+export default Cloudflare.Worker(
+  "Inbox",
+  { main: import.meta.url },
   Effect.gen(function* () {
     yield* Cloudflare.email({ zone: "example.com" }).subscribe(...);
     return {};
-  }).pipe(
-+   Effect.provide(Cloudflare.EmailEventSourceLive),
-  ),
+- }),
++ }).pipe(Effect.provide(Cloudflare.EmailEventSourceLive)),
+);
 ```
 
 Without the live layer, the subscribe call fails at deploy with
@@ -136,6 +139,25 @@ yield* Cloudflare.email().subscribe((message) =>
   Effect.log(`from ${message.from}`),
 );
 ```
+
+## Local development
+
+Under `alchemy dev` the Worker runs on the local Cloudflare runtime,
+which exposes the same inbound email trigger route as `wrangler dev`.
+POST a raw RFC 5322 message to it to fire your subscribe handler:
+
+```sh
+curl -X POST \
+  'http://localhost:<port>/cdn-cgi/handler/email?from=sender@example.com&to=inbox@example.com' \
+  --data-binary @message.eml
+```
+
+`setReject(reason)` answers the request with a 400 carrying the
+reason, and `reply(...)` persists the reply as an `.eml` file under
+`.alchemy/local/email`. Note the auto-created `Email.Routing` /
+`Email.Rule` are live-only resources — during `alchemy dev` they
+still deploy to the real zone. Call `email()` with no `zone` for a
+fully local loop.
 
 ## What's the difference vs. a native `email()` handler?
 
