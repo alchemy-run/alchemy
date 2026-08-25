@@ -111,22 +111,22 @@ Do not yield it per request.
 The Volume is a directory. Use `fs` from init:
 
 ```diff lang="typescript"
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://service");
-        if (url.pathname === "/health") {
-          return HttpServerResponse.json({ ok: true });
-        }
-+        const file = `${mount.path}${url.pathname}`;
+fetch: Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  const url = new URL(request.url, "http://service");
+  if (url.pathname === "/health") {
+    return HttpServerResponse.json({ ok: true });
+  }
++  const file = `${mount.path}${url.pathname}`;
 +
-+        if (request.method === "PUT") {
-+          const body = yield* request.text;
-+          yield* fs.writeFileString(file, body).pipe(Effect.orDie);
-+          return HttpServerResponse.empty({ status: 204 });
-+        }
++  if (request.method === "PUT") {
++    const body = yield* request.text;
++    yield* fs.writeFileString(file, body).pipe(Effect.orDie);
++    return HttpServerResponse.empty({ status: 204 });
++  }
 +
-        return HttpServerResponse.text("Hello from Railway!");
-      }),
+  return HttpServerResponse.text("Hello from Railway!");
+}),
 ```
 
 ## Read files with `GET /:name`
