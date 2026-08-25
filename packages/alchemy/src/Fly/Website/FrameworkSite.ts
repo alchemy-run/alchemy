@@ -692,6 +692,9 @@ export const makeFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(
       app,
       main,
       port: DEFAULT_PORT,
+      // `main` is a complete bun/node program (generated static server
+      // or the framework `finish` entry), not a Platform class.
+      isExternal: true,
       env: props.env,
       extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
       build:

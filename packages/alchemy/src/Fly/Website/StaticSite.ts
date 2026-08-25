@@ -241,10 +241,12 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       app,
       main,
       port: DEFAULT_PORT,
+      // Generated static-file server is a complete bun/node program.
+      isExternal: true,
       env: props.env,
       extraFiles: [
         {
-          source: build.outdir as unknown as string,
+          source: outdir,
           dest: "dist",
         },
       ],

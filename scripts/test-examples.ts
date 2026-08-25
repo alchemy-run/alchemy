@@ -28,6 +28,7 @@ const examples = [
   "./examples/fly-app",
   "./examples/railway-project",
   "./examples/fly-service",
+  "./examples/fly-website-vite",
   "./examples/railway-service",
   "./examples/fly-sprite",
   "./examples/fly-redis",

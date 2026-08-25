@@ -902,16 +902,16 @@ export const ServiceProvider = () =>
             }
           }
           // The code hash depends only on statically-known props (`main`,
-          // `build`, `image`, `port`, `extraFiles`). Never gate it on the
-          // WHOLE props being resolved: `app` is a resource reference that
-          // stays unresolved at diff time, so a whole-props guard makes
-          // code-only changes silently noop. By diff time the
+          // `build`, `image`, `port`, `extraFiles`, `isExternal`). Never
+          // gate it on the WHOLE props being resolved: `app` is a resource
+          // reference that stays unresolved at diff time, so a whole-props
+          // guard makes code-only changes silently noop. By diff time the
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
             Pick<
               ServiceProps,
-              "main" | "build" | "image" | "port" | "extraFiles"
+              "main" | "build" | "image" | "port" | "extraFiles" | "isExternal"
             >
           >;
           if (
@@ -921,6 +921,7 @@ export const ServiceProvider = () =>
               image: statics.image,
               port: statics.port,
               extraFiles: statics.extraFiles,
+              isExternal: statics.isExternal,
             }) &&
             statics.main !== undefined
           ) {

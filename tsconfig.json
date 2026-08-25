@@ -191,6 +191,9 @@
       "path": "./examples/fly-service/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-vite/tsconfig.json"
+    },
+    {
       "path": "./examples/railway-service/tsconfig.json"
     },
     {
