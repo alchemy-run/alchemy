@@ -542,7 +542,10 @@ export const QueueProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (error) => error._tag === "QueueDeletedRecently",
-                  schedule: Schedule.fixed(1000).pipe(
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(30),
+                  ]).pipe(
                     Schedule.tap(({ attempt }) =>
                       session.note(
                         `Queue was deleted recently, retrying... ${attempt}s`,
