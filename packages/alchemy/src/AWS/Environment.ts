@@ -5,7 +5,6 @@ import type {
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -54,29 +53,19 @@ const ServiceEndpointsInput = Schema.Union([
   ServiceEndpoints,
 ]);
 
-const decodeServiceEndpoints = (raw: unknown) =>
-  Schema.decodeUnknownEffect(ServiceEndpointsInput)(raw).pipe(
-    Effect.mapError(
-      () =>
-        new InvalidAWSServiceEndpoints({
-          message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
-        }),
-    ),
-  );
-
 /** Service-specific AWS endpoints visible inside an application runtime. */
-export const AWS_SERVICE_ENDPOINTS = ConfigProvider.ConfigProvider.pipe(
-  Effect.flatMap((provider) => provider.load([AWS_SERVICE_ENDPOINTS_ENV_VAR])),
-  Effect.flatMap((node) => {
-    if (node === undefined) return Effect.succeed(undefined);
-    return node._tag === "Value"
-      ? decodeServiceEndpoints(node.value)
-      : Effect.fail(
-          new InvalidAWSServiceEndpoints({
-            message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
-          }),
-        );
-  }),
+export const AWS_SERVICE_ENDPOINTS = Config.schema(
+  ServiceEndpointsInput,
+  AWS_SERVICE_ENDPOINTS_ENV_VAR,
+).pipe(
+  Config.option,
+  Effect.mapError(
+    () =>
+      new InvalidAWSServiceEndpoints({
+        message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
+      }),
+  ),
+  Effect.map(Option.getOrUndefined),
 );
 
 export type AccountID = string;

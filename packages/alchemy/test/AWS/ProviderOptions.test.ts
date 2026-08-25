@@ -51,16 +51,11 @@ describe("AWS runtime environment", () => {
         ),
         Effect.provideService(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.make((path) =>
-            Effect.succeed(
-              path[0] === AWS_SERVICE_ENDPOINTS_ENV_VAR
-                ? ({
-                    _tag: "Value",
-                    value: { ses: "http://ses.local" },
-                  } as unknown as ConfigProvider.Node)
-                : undefined,
-            ),
-          ),
+          ConfigProvider.fromUnknown({
+            [AWS_SERVICE_ENDPOINTS_ENV_VAR]: {
+              ses: "http://ses.local",
+            },
+          }),
         ),
       ),
   );
