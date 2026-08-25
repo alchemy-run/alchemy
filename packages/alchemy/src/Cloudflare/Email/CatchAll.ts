@@ -8,6 +8,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { retryWorkerScriptNotFound } from "./retry.ts";
 import type { Action } from "./Rule.ts";
 
 const CatchAllTypeId = "Cloudflare.Email.CatchAll" as const;
@@ -222,17 +223,19 @@ export const CatchAllProvider = () =>
       ) {
         return toAttributes(zoneId, observed, initial);
       }
-      const result = yield* emailRouting.putRuleCatchAll({
-        zoneId,
-        matchers: [{ type: "all" }],
-        actions: news.actions.map((a) =>
-          a.type === "drop"
-            ? { type: a.type }
-            : { type: a.type, value: a.value },
-        ),
-        enabled: desiredEnabled,
-        name: desiredName,
-      });
+      const result = yield* emailRouting
+        .putRuleCatchAll({
+          zoneId,
+          matchers: [{ type: "all" }],
+          actions: news.actions.map((a) =>
+            a.type === "drop"
+              ? { type: a.type }
+              : { type: a.type, value: a.value },
+          ),
+          enabled: desiredEnabled,
+          name: desiredName,
+        })
+        .pipe(retryWorkerScriptNotFound);
       return toAttributes(zoneId, result, initial);
     }),
 
