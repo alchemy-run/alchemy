@@ -10,41 +10,43 @@ const { test } = Test.make({ providers: Railway.providers(), dev: true });
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
-  "../../Cloudflare/Website/vite-spa-fixture",
+  "../../Cloudflare/Website/staticsite-fixture",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = ["index.html", "package.json", "src"];
 
-describe("Railway.Website.Vite local", () => {
+describe("Railway.Website.StaticSite local", () => {
   test.provider(
-    "dev runs Vite's own dev server with no cloud resources",
+    "dev builds and serves outdir locally with no cloud resources",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const rootDir = yield* cloneFixture(fixtureDir, {
-          prefix: "alchemy-vite-railway-local-",
+        const cwd = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-staticsite-railway-local-",
           tempRoot,
-          entries: fixtureEntries,
+          entries: ["src", "build.sh"],
         });
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const site = yield* Railway.Website.Vite("ViteSite", {
-              rootDir,
+            const site = yield* Railway.Website.StaticSite("Blog", {
+              cwd,
+              command: "bash build.sh",
+              shell: true,
+              outdir: "dist",
             });
             return { site };
           }),
         );
 
         const url = deployed.site.url;
-        expect(url).toMatch(/^http:\/\/localhost:\d+\/?$/);
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/?$/);
         expect(deployed.site.service).toBeUndefined();
         expect(deployed.site.project).toBeUndefined();
 
-        yield* expectUrlContains(`${url}/`, "Vite SPA fixture", {
+        yield* expectUrlContains(`${url}/`, "StaticSite fixture v1", {
           timeout: "90 seconds",
-          label: "dev index page",
+          label: "dev staticsite index",
         });
 
         yield* stack.destroy();

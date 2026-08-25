@@ -200,6 +200,9 @@
       "path": "./examples/railway-service/tsconfig.json"
     },
     {
+      "path": "./examples/railway-website-vite/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-sprite/tsconfig.json"
     },
     {

@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -92,6 +93,20 @@ test.provider.skipIf(!canPushRailwayImage)(
           label: "astro api route",
         },
       );
+
+      const client = yield* HttpClient.HttpClient;
+      const health = yield* client.get(`${url!}/health`).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.text
+            : Effect.fail(new Error(`health returned ${res.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
+      expect(health).toContain("ok");
 
       const serviceId = deployed.site.service!.serviceId;
       yield* stack.destroy();

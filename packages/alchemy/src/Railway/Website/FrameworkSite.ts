@@ -714,6 +714,7 @@ export const makeFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(
       registry,
       port: WEBSITE_PORT,
       healthcheck: "/health",
+      isExternal: true,
       env: envRecord(props.env),
       extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
       build:

@@ -169,7 +169,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       } satisfies Website;
     }
 
-    const build = yield* Command.Build("Build", {
+    yield* Command.Build("Build", {
       command: props.command,
       cwd: props.cwd,
       memo: props.memo,
@@ -179,7 +179,8 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       timeout: props.timeout,
     }).pipe(Namespace.push(id));
 
-    const clientAbs = path.resolve(initialCwd, build.outdir);
+    const cwd = path.resolve(initialCwd, props.cwd ?? ".");
+    const clientAbs = path.resolve(cwd, props.outdir);
 
     if (isLocal) {
       const servePath = path.join(path.dirname(clientAbs), "alchemy-serve.mjs");
@@ -191,8 +192,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           errorPage: props.errorPage,
         }),
       );
+      const runtime = yield* Effect.sync(() => process.execPath);
       const dev = yield* Command.Dev("Dev", {
-        command: `node ${JSON.stringify(path.basename(servePath))}`,
+        command: `${runtime} ${servePath}`,
         cwd: path.dirname(servePath),
         env: {
           ...props.env,
@@ -235,6 +237,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       registry,
       port: WEBSITE_PORT,
       healthcheck: "/health",
+      isExternal: true,
       env: envRecord(props.env),
       extraFiles: [{ source: relativeToCwd(clientAbs), dest: "dist" }],
     });

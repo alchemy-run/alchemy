@@ -31,6 +31,7 @@ const examples = [
   "./examples/fly-website-vite",
   "./examples/hetzner-website-vite",
   "./examples/railway-service",
+  "./examples/railway-website-vite",
   "./examples/fly-sprite",
   "./examples/fly-redis",
   "./examples/fly-bucket",
