@@ -189,12 +189,9 @@ export interface EmailSubscribeProps {
  * final inside the handler (`Effect.retry`, `Effect.catchTag`, or
  * `message.setReject(...)` to bounce permanently); anything you let
  * escape becomes a retryable delivery failure.
- * @binding
- * @product Workers
- * @category Workers & Compute
  *
- * @section Subscribing to Inbound Mail
- * @example Catch-all on a zone — auto-creates routing + catch-all
+ * ### Subscribing to Inbound Mail
+ * **Example:** Catch-all on a zone — auto-creates routing + catch-all
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
@@ -211,7 +208,7 @@ export interface EmailSubscribeProps {
  * );
  * ```
  *
- * @example Match a specific address
+ * **Example:** Match a specific address
  * ```typescript
  * yield* Cloudflare.email({
  *   zone: "example.com",
@@ -219,14 +216,14 @@ export interface EmailSubscribeProps {
  * }).subscribe((message) => message.forward("ops@example.com"));
  * ```
  *
- * @example Reject (bounce) a message
+ * **Example:** Reject (bounce) a message
  * ```typescript
  * yield* Cloudflare.email({ zone: "example.com" }).subscribe((message) =>
  *   message.setReject("Mailbox closed"),
  * );
  * ```
  *
- * @example Bring-your-own routing — no `zone`, no auto-create
+ * **Example:** Bring-your-own routing — no `zone`, no auto-create
  * ```typescript
  * // Manage `Email.Routing` / `Email.Rule` yourself in alchemy.run.ts.
  * yield* Cloudflare.email().subscribe((message) =>
@@ -235,6 +232,10 @@ export interface EmailSubscribeProps {
  * ```
  *
  * @see https://developers.cloudflare.com/email-routing/email-workers/
+ *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
 export const email = (props: EmailSubscribeProps = {}) => ({
   subscribe: <E = never, Req = never>(
