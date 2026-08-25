@@ -139,6 +139,42 @@ const skipExtraPath = (relative: string) =>
         segment.startsWith(".alchemy-hetzner"),
     );
 
+/**
+ * Pack files next to an `isExternal` serve entry so relative imports
+ * resolve in the unit. The serve file itself becomes zip `index.mjs`.
+ *
+ * Nitro/kit emit `index.mjs` + `chunks/` beside the serve entry and
+ * resolve `../public` from that file — nest those siblings under
+ * `server/` so that layout survives. Octane's `entry.js` stays at the
+ * zip root (the serve file imports `./entry.js`).
+ */
+const collectSiblingFiles = Effect.fn(function* (entry: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = path.dirname(entry);
+  const entryBase = path.basename(entry);
+  if (!(yield* fs.exists(dir))) return [] as ZipFile[];
+  const names = yield* fs.readDirectory(dir, { recursive: true });
+  const nestUnderServer =
+    entryBase !== "index.mjs" &&
+    names.some((name) => name.replaceAll("\\", "/") === "index.mjs");
+  const files: ZipFile[] = [];
+  for (const name of names) {
+    if (skipExtraPath(name)) continue;
+    const posix = name.replaceAll("\\", "/");
+    const base = posix.split("/").pop() ?? posix;
+    if (base === entryBase || base.startsWith("serve-")) continue;
+    const full = path.join(dir, name);
+    const stat = yield* fs.stat(full);
+    if (stat.type !== "File") continue;
+    files.push({
+      path: nestUnderServer ? `server/${posix}` : posix,
+      content: yield* fs.readFile(full),
+    });
+  }
+  return files;
+});
+
 const resolveExtraSource = (
   source: string,
   path: {
@@ -297,16 +333,8 @@ export const createHetznerHostedSupport = ({
       );
     });
 
-    const bundleOutput = props.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(
-          realMain,
-          virtualEntryPlugin(makeBunBootstrap(handler)),
-        );
-
     const toBytes = (content: string | Uint8Array<ArrayBufferLike>) =>
       typeof content === "string" ? new TextEncoder().encode(content) : content;
-    const [entryFile, ...chunkFiles] = bundleOutput.files;
     const extraFiles = yield* collectExtraFiles(props.extraFiles);
     const identity =
       Object.keys(requested).length > 0
@@ -324,24 +352,63 @@ export const createHetznerHostedSupport = ({
             null,
             2,
           )}\n`;
-    const zipExtras = [
-      ...chunkFiles.map((file) => ({
-        path: file.path,
-        content: toBytes(file.content),
-      })),
-      ...extraFiles,
-      ...(packageJson !== undefined
+    const installFiles =
+      packageJson !== undefined
         ? [
             {
               path: "package.json",
               content: new TextEncoder().encode(packageJson),
             },
           ]
-        : []),
+        : [];
+
+    // `isExternal` mains are already complete bun/node programs (generated
+    // serve entries + nitro/kit/octane siblings). Rolldown-flattening
+    // nitro into one file hangs Vue SSR on bun (Hetzner hits the unit
+    // directly; Fly's proxy hid this). Pack the entry as index.mjs and
+    // keep relative imports on disk.
+    if (props.isExternal) {
+      const fs = yield* FileSystem.FileSystem;
+      const entryBytes = yield* fs.readFile(realMain);
+      const siblings = yield* collectSiblingFiles(realMain);
+      const zipExtras = [
+        ...siblings.filter(
+          (file) =>
+            !(file.path === "package.json" && packageJson !== undefined),
+        ),
+        ...extraFiles,
+        ...installFiles,
+      ];
+      const archive = yield* zipCode(entryBytes, zipExtras);
+      const extraHash = yield* hashExtraFiles(props.extraFiles);
+      const siblingHashes: Record<string, string> = {};
+      for (const file of siblings) {
+        siblingHashes[file.path] = yield* sha256(file.content);
+      }
+      const siblingHash = yield* sha256Object(siblingHashes);
+      const hash = yield* sha256Object({
+        bundle: yield* sha256(entryBytes),
+        siblings: siblingHash,
+        extra: extraHash,
+        packageJson: packageJson ?? "",
+      });
+      return { archive, hash };
+    }
+
+    const bundleOutput = yield* buildBundle(
+      realMain,
+      virtualEntryPlugin(makeBunBootstrap(handler)),
+    );
+    const [entryFile, ...chunkFiles] = bundleOutput.files;
+    const zipExtras = [
+      ...chunkFiles.map((file) => ({
+        path: file.path,
+        content: toBytes(file.content),
+      })),
+      ...extraFiles,
+      ...installFiles,
     ];
     const archive = yield* zipCode(toBytes(entryFile.content), zipExtras);
-    // Extra files are not part of the rolldown bundle hash. Mix their
-    // content hashes so a client-asset-only change still updates the unit.
     const extraHash = yield* hashExtraFiles(props.extraFiles);
     const hash = yield* sha256Object({
       bundle: bundleOutput.hash,

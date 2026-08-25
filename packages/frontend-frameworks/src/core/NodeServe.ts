@@ -301,11 +301,9 @@ const writeResponse = async (res, response) => {
 `
     : "";
 
-  // Bun's node:http IncomingMessage often never emits "end" for GET, so
-  // nitro/h3 toNodeListener can wait forever. Fly's edge proxy completes
-  // the stream; Hetzner hits bun directly. Hand nitro a clone that ends
-  // AFTER the handler has attached listeners (push(null) before on("end")
-  // drops the event).
+  // Bun's node:http IncomingMessage often never emits "end" for GET.
+  // Strip length/chunked so h3 does not wait on a body, and resume the
+  // stream so "end" still fires for consumers that listen.
   const nodeHelpers = handlerIsFetch
     ? ""
     : `
@@ -315,25 +313,7 @@ const endedGet = (req) => {
   delete req.headers["content-length"];
   delete req.headers["transfer-encoding"];
   if (typeof req.resume === "function") req.resume();
-  const clone = new PassThrough();
-  clone.method = req.method;
-  clone.url = req.url;
-  clone.headers = req.headers;
-  clone.rawHeaders = req.rawHeaders;
-  clone.httpVersion = req.httpVersion ?? "1.1";
-  clone.httpVersionMajor = req.httpVersionMajor ?? 1;
-  clone.httpVersionMinor = req.httpVersionMinor ?? 1;
-  clone.socket = req.socket;
-  clone.connection = req.connection ?? req.socket;
-  clone.complete = true;
-  clone.aborted = false;
-  clone.on("newListener", (event) => {
-    if ((event === "end" || event === "close") && clone.readableEnded) {
-      process.nextTick(() => clone.emit(event));
-    }
-  });
-  queueMicrotask(() => clone.end());
-  return clone;
+  return req;
 };
 `;
 
@@ -341,7 +321,7 @@ const endedGet = (req) => {
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
-import { PassThrough, Readable } from "node:stream";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 ${options.handler.imports}
 

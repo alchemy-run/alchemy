@@ -104,10 +104,11 @@ describe("makeNodeServeEntrySource", () => {
     });
     expect(source).toContain("http.createServer(async (req, res) => {");
     expect(source).toContain("endedGet(req)");
-    expect(source).toContain("queueMicrotask(() => clone.end())");
-    expect(source).toContain("newListener");
+    expect(source).toContain('delete req.headers["content-length"]');
+    expect(source).toContain("req.resume()");
     expect(source).not.toContain("void (async () => {");
     expect(source).not.toContain("fetchFromNode");
+    expect(source).not.toContain("PassThrough");
   });
 
   it("does not map GET / onto public/index.html (SSR home stays on the handler)", () => {

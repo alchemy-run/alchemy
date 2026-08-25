@@ -473,13 +473,12 @@ server.listen(PORT, HOST, () => {
 };
 
 /**
- * After rolldown flattens the node serve entry to `index.mjs`, the
- * original `../client/` `import.meta.url` resolution is wrong. Point
- * `CLIENT_DIR` at `./dist/` next to the bundled entry (extraFiles land
- * there).
+ * The unit entry is zip-root `index.mjs`. Point `CLIENT_DIR` at the
+ * extraFiles destination next to it (`./dist/` for Vite/Octane,
+ * `./public/` when nitro/kit siblings are nested under `server/`).
  */
-const CONTAINER_CLIENT_DIR_EXPR =
-  'fileURLToPath(new URL("./dist/", import.meta.url))';
+const containerClientDirExpr = (directory: "dist" | "public") =>
+  `fileURLToPath(new URL(${JSON.stringify(`./${directory}/`)}, import.meta.url))`;
 
 /**
  * Octane's node `entry.js` auto-listens when `import.meta.url` is the
@@ -520,14 +519,27 @@ const neutralizeSiblingAutoListen = Effect.fn(function* (serverDir: string) {
 const rewriteClientDir = Effect.fn(function* (servePath: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const source = yield* fs.readFileString(servePath);
-  if (!source.includes("const CLIENT_DIR =")) return servePath;
-  const rewritten = source.replace(
-    /const CLIENT_DIR = [^;]+;/,
-    `const CLIENT_DIR = ${CONTAINER_CLIENT_DIR_EXPR};`,
-  );
+  let source = yield* fs.readFileString(servePath);
+  const siblingIndex = path.join(path.dirname(servePath), "index.mjs");
+  const nestNitro =
+    path.basename(servePath) !== "index.mjs" &&
+    (yield* fs.exists(siblingIndex));
+  const clientDir = nestNitro ? "public" : "dist";
+  if (source.includes("const CLIENT_DIR =")) {
+    source = source.replace(
+      /const CLIENT_DIR = [^;]+;/,
+      `const CLIENT_DIR = ${containerClientDirExpr(clientDir)};`,
+    );
+  }
+  if (nestNitro) {
+    source = source.replaceAll(
+      `from "./index.mjs"`,
+      `from "./server/index.mjs"`,
+    );
+  }
+  if (source === (yield* fs.readFileString(servePath))) return servePath;
   const out = path.join(path.dirname(servePath), "serve-hetzner.mjs");
-  yield* fs.writeFileString(out, rewritten);
+  yield* fs.writeFileString(out, source);
   return out;
 });
 
@@ -757,7 +769,13 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
 
   const extraFiles: Array<{ source: string; destination: string }> = [];
   if (!config.skipClientAssets && clientDir !== undefined) {
-    extraFiles.push({ source: clientDir, destination: "dist" });
+    const nitroIndex = path.join(path.dirname(main), "index.mjs");
+    const clientDest =
+      path.basename(main) !== "index.mjs" &&
+      (yield* fs.exists(nitroIndex).pipe(Effect.orElseSucceed(() => false)))
+        ? "public"
+        : "dist";
+    extraFiles.push({ source: clientDir, destination: clientDest });
   }
   // Octane SSR reads `join(__dirname, "./index.html")` after rolldown
   // flattens the serve entry to `{unit}/index.mjs`. Bake the template
