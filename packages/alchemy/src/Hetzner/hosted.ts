@@ -139,14 +139,24 @@ const skipExtraPath = (relative: string) =>
         segment.startsWith(".alchemy-hetzner"),
     );
 
+const skipSiblingPath = (relative: string) =>
+  relative
+    .replaceAll("\\", "/")
+    .split("/")
+    .some(
+      (segment) => segment === ".git" || segment.startsWith(".alchemy-hetzner"),
+    );
+
 /**
  * Pack files next to an `isExternal` serve entry so relative imports
  * resolve in the unit. The serve file itself becomes zip `index.mjs`.
  *
- * Nitro/kit emit `index.mjs` + `chunks/` beside the serve entry and
- * resolve `../public` from that file — nest those siblings under
- * `server/` so that layout survives. Octane's `entry.js` stays at the
- * zip root (the serve file imports `./entry.js`).
+ * Nitro/kit emit `index.mjs` + `chunks/` + a trimmed `node_modules`
+ * (Vue SSR) beside the serve entry, and resolve `../public` from that
+ * file — nest those siblings under `server/` so that layout survives.
+ * Octane's `entry.js` stays at the zip root (the serve file imports
+ * `./entry.js`). Do not skip `node_modules` here: nitro's Vue renderer
+ * is not bundled into the chunks.
  */
 const collectSiblingFiles = Effect.fn(function* (entry: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -160,10 +170,11 @@ const collectSiblingFiles = Effect.fn(function* (entry: string) {
     names.some((name) => name.replaceAll("\\", "/") === "index.mjs");
   const files: ZipFile[] = [];
   for (const name of names) {
-    if (skipExtraPath(name)) continue;
+    if (skipSiblingPath(name)) continue;
     const posix = name.replaceAll("\\", "/");
     const base = posix.split("/").pop() ?? posix;
     if (base === entryBase || base.startsWith("serve-")) continue;
+    if (base.endsWith(".map")) continue;
     const full = path.join(dir, name);
     const stat = yield* fs.stat(full);
     if (stat.type !== "File") continue;
