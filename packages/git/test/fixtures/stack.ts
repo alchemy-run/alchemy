@@ -45,7 +45,11 @@ export const TEST_ADMIN_TOKEN: string =
 process.env[ADMIN_TOKEN_CONFIG_KEY] ??= TEST_ADMIN_TOKEN;
 
 /** The suites' bucket — owned by the assembly, like any user's. */
-const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
+  // Test stacks must tear down even with packs/bundles/head snapshots
+  // still in the bucket (the e2e benches leave repos behind by design).
+  forceDestroy: true,
+});
 
 /** One layer graph, one Effect.provide — the RFC assembly, verbatim. */
 const GitLive = ServerLive.pipe(

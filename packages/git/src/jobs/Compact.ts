@@ -248,3 +248,202 @@ export const shouldCompact = (
       row.n >= (options?.countThreshold ?? COMPACT_COUNT_THRESHOLD)
     );
   });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Geometric pack merging (DESIGN.md §21, Continuity learnings)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Merge whenever a pack is smaller than FACTOR × the sum of all packs
+ * smaller than it — the classic geometric invariant. Holding it bounds
+ * pack count at O(log(total bytes)), which bounds the fan-out of ranged
+ * reads on the serving path.
+ */
+export const GEOMETRIC_FACTOR = 2;
+
+/** Per-run ceiling on merged input, keeping a run inside the alarm budget. */
+export const MAX_MERGE_INPUT_BYTES = 96 * 1024 * 1024;
+
+export interface MergeOutcome {
+  /** Source packs merged this run (0 = the invariant already holds). */
+  readonly packs: number;
+  /** Objects now pointing at the merged pack. */
+  readonly moved: number;
+  /** Bytes of merged pack written. */
+  readonly bytes: number;
+  readonly packId: string | undefined;
+  /**
+   * R2 keys of the source packs, now unreferenced. NOT deleted here: an
+   * in-flight read planned before the row flip may still hold spans into
+   * them, so the caller deletes these on a LATER run (grace period).
+   */
+  readonly pendingDelete: ReadonlyArray<string>;
+  /** More merging remains (input cap hit); re-arm the alarm. */
+  readonly more: boolean;
+}
+
+const noMerge: MergeOutcome = {
+  packs: 0,
+  moved: 0,
+  bytes: 0,
+  packId: undefined,
+  pendingDelete: [],
+  more: false,
+};
+
+/**
+ * Restores the geometric invariant over a repo's compacted packs by
+ * merging the smallest run of violating packs into one.
+ *
+ * Merging is pure concatenation — our packs store non-delta entries
+ * (varint header + zdata), so a merged pack is `header(Σcounts) +
+ * body₁ + … + bodyₙ + sha1`, and every row's offset shifts by a single
+ * per-source delta (the bytes of bodies concatenated before it). No
+ * recompression, no delta re-resolution: O(bytes) of blob IO plus one
+ * UPDATE per source pack.
+ *
+ * Ordering matches {@link runCompactJob}: the merged pack is written
+ * before the row flip (a crash between leaves an unreferenced,
+ * content-addressed, GC-able pack), and source packs are only deleted by
+ * the caller on a later run.
+ */
+export const runGeometricMergeJob = (options: {
+  readonly repoId: string;
+  readonly sql: SqlClient;
+  readonly blobs: BlobStoreShape;
+  readonly maxInputBytes?: number | undefined;
+}): Effect.Effect<MergeOutcome, StoreError> =>
+  Effect.gen(function* () {
+    const maxInput = options.maxInputBytes ?? MAX_MERGE_INPUT_BYTES;
+
+    const rows = yield* options.sql.all<{ pack_id: string; n: number }>(
+      `SELECT pack_id, COUNT(*) AS n FROM objects
+        WHERE location = 'pack' AND pack_id IS NOT NULL
+        GROUP BY pack_id`,
+    );
+    if (rows.length < 2) return noMerge;
+
+    // Exact byte sizes from the store (offsets are absolute file offsets,
+    // so the merge math needs real lengths, not row sums).
+    const packs: Array<{ id: string; count: number; size: number }> = [];
+    for (const row of rows) {
+      const meta = yield* runR2(`merge head ${row.pack_id}`)(
+        options.blobs.head(packKey(options.repoId, row.pack_id)),
+      );
+      // A pack R2 lost (or a crash orphaned) cannot be merged; skip it —
+      // reads through it will surface the real error on their own path.
+      if (meta !== null) {
+        packs.push({ id: row.pack_id, count: row.n, size: meta.size });
+      }
+    }
+    if (packs.length < 2) return noMerge;
+    packs.sort((a, b) => a.size - b.size);
+
+    // Geometric scan from the smallest: everything up to the last
+    // violation must merge.
+    let cumulative = 0;
+    let mergeCount = 0;
+    for (let i = 0; i < packs.length; i++) {
+      if (i >= 1 && packs[i]!.size < GEOMETRIC_FACTOR * cumulative) {
+        mergeCount = i + 1;
+      }
+      cumulative += packs[i]!.size;
+    }
+    if (mergeCount < 2) return noMerge;
+
+    // Cap the run's input; ≥2 sources or there is nothing useful to do.
+    let inputBytes = 0;
+    let take = 0;
+    while (take < mergeCount && inputBytes + packs[take]!.size <= maxInput) {
+      inputBytes += packs[take]!.size;
+      take++;
+    }
+    if (take < 2) return noMerge;
+    const sources = packs.slice(0, take);
+    const more = take < mergeCount;
+
+    // Read + validate each source, strip framing, record body deltas.
+    const bodies: Array<Uint8Array> = [];
+    const deltas: Array<{ id: string; delta: number }> = [];
+    let totalCount = 0;
+    let bodyOffset = 0;
+    for (const source of sources) {
+      const object = yield* runR2(`merge get ${source.id}`)(
+        options.blobs.get(packKey(options.repoId, source.id)),
+      );
+      if (object === null) return noMerge; // vanished mid-run: retry later
+      const bytes = yield* runR2(`merge read ${source.id}`)(object.bytes);
+      if (
+        bytes.length < 32 ||
+        bytes[0] !== 0x50 ||
+        bytes[1] !== 0x41 ||
+        bytes[2] !== 0x43 ||
+        bytes[3] !== 0x4b
+      ) {
+        return yield* new StoreError({
+          reason: `merge: pack ${source.id} is not a packfile`,
+        });
+      }
+      const view = new DataView(bytes.buffer, bytes.byteOffset);
+      totalCount += view.getUint32(8);
+      deltas.push({ id: source.id, delta: bodyOffset });
+      const body = bytes.subarray(12, bytes.length - 20);
+      bodies.push(body);
+      bodyOffset += body.length;
+    }
+
+    const header = packHeader(totalCount);
+    const trailer = yield* Effect.sync(() => {
+      const hash = makeSha1();
+      hash.update(header);
+      for (const body of bodies) hash.update(body);
+      return hash.digest();
+    });
+    const packId = yield* Effect.sync(() => bytesToHex(trailer));
+    const merged = yield* Effect.sync(() => {
+      const out = new Uint8Array(12 + bodyOffset + 20);
+      out.set(header, 0);
+      let at = 12;
+      for (const body of bodies) {
+        out.set(body, at);
+        at += body.length;
+      }
+      out.set(trailer, at);
+      return out;
+    });
+
+    const key = packKey(options.repoId, packId);
+    yield* runR2(`merge put ${key}`)(
+      options.blobs.put(key, merged, { contentLength: merged.length }),
+    );
+
+    // One additive UPDATE per source: new_offset = old_offset + delta
+    // (old header and new header are both 12 bytes, so they cancel).
+    let moved = 0;
+    yield* options.sql
+      .transactionSync((raw) => {
+        for (const { id, delta } of deltas) {
+          raw.exec(
+            `UPDATE objects
+                SET pack_id = ?, pack_offset = pack_offset + ?
+              WHERE location = 'pack' AND pack_id = ?`,
+            packId,
+            delta,
+            id,
+          );
+        }
+      })
+      .pipe(Effect.asVoid);
+    moved = sources.reduce((sum, source) => sum + source.count, 0);
+
+    return {
+      packs: sources.length,
+      moved,
+      bytes: merged.length,
+      packId,
+      pendingDelete: sources.map((source) =>
+        packKey(options.repoId, source.id),
+      ),
+      more,
+    };
+  });

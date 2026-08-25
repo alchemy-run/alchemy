@@ -1290,3 +1290,123 @@ client-side by design). `gh` requires https for enterprise hosts, so the
 facade is exercised locally by shape tests replaying gh's exact wire
 requests (verified against `GH_DEBUG=api` output) and by `gh` itself only
 against https deployments.
+
+## 21. Learnings from Cursor's Continuity (git-at-any-scale)
+
+Cursor's Continuity ([blog](https://cursor.com/blog/git-at-any-scale))
+solves the same problem shape — git on object storage with a single
+linearization point — with one structural inversion worth studying: for
+them **object storage is the source of truth** (a WAL of pushed packs +
+a tiny WAL-index object updated by compare-and-swap), and every server
+disk is a disposable warm cache rebuilt from the WAL. For us the Durable
+Object's SQLite *is* the truth and R2 holds derived artifacts. Their
+compute is fungible and their storage is authoritative; ours is the
+opposite. What transfers:
+
+**Adopt — the push WAL (durability + provenance).** Today the DO's
+SQLite is the only representation of refs/index/graph; the received pack
+is exploded into rows and discarded. Appending a small WAL record per
+push to the BlobStore — `{ pushId, refTxn (old→new per ref), packKey,
+subject, timestamp }` plus the self-contained (fattened) pack — makes
+the entire repository reconstructable from blob storage alone: disaster
+recovery independent of DO state, byte-level push provenance ("rewind
+and fast-forward", audit paired with the auth `subject`), backend
+migration, and future read replicas. This composes with the planned
+push-epoch redesign (§19 / RFC): the epoch record *is* the WAL entry —
+make it durable in the BlobStore instead of a SQLite row and both
+designs land in one change. Storage cost is bounded by folding WAL packs
+into compaction epochs (Continuity compacts the WAL too).
+
+**Adopt — geometric pack compaction.** `Compact` currently writes one
+new pack per run and never merges packs, so pack count grows with
+repository age and read fan-out grows with it. Continuity's incremental
+geometric compaction (merge packs whenever sizes violate a geometric
+progression) bounds pack count logarithmically. Directly applicable to
+our Compact job; also the precondition for WAL-pack folding above.
+
+**Adapt — conditional-GET freshness for DO-less reads.** Continuity
+replicas serve reads after a ~10 ms conditional GET on the WAL index
+(304 = current). Mapped onto us: a tiny `head` object in R2 (ref
+snapshot hash + current bundle key), updated at push finalize, would let
+**Workers serve advertisements and clone bundles without waking the DO**
+— the clone-storm path goes fully DO-less while the DO remains the write
+linearization point. The subtlety is commit ordering: SQLite commit is
+our truth, so the head object is written after commit and a crash
+between the two leaves it stale. Either accept bounded staleness with
+repair-on-next-push, or move the commit point into the head-object CAS
+itself (the full Continuity inversion — a much bigger change). Start
+with the former.
+
+**Adapt — repos as cattle (hibernation).** Continuity garbage-collects
+idle replicas and re-materializes from the WAL on access. Our analog:
+once a WAL exists, an idle repo's DO can evict object rows (or all
+state) and re-materialize on next access — DO storage is the expensive
+tier, R2 the cheap one. Matters for the agent-created-repos fleet shape
+(their explicit target, and ours).
+
+**Skip — running upstream git.** Their biggest simplification (normal
+git repos on NVMe, upstream git does the work) is unavailable on
+workerd: no processes, no disk. Our Effect reimplementation is the cost
+of running where we run.
+
+**Note — S3 CAS revives the AWS-parity store story.** Continuity's
+linearization is a compare-and-swap on an S3 object (`If-Match` /
+`If-None-Match` conditional writes) — no DynamoDB, no consensus. That
+replaces the RFC §6 assumption that AWS parity needs DynamoDB
+transactions for ref CAS: a WAL-index CAS on S3 is sufficient, exactly
+as Continuity demonstrates at 120–300 pushes/s (Standard vs Express One
+Zone). The wire-plane hosting problem (Lambda's ~6 MB request cap)
+remains the real blocker; the store problem is now solved on paper.
+
+Benchmarks worth stealing: sustained small-push throughput per repo
+(their 120–300/s number; ours is bounded by one DO — measure it), and
+read-scaling under clone storm with the DO-less head-object path.
+
+### §21.1 Implemented and measured
+
+Both performance adoptions above are now implemented; measured on a
+deployed stack (`test/GitBench.e2e.test.ts --profile testing`, SCALE=1,
+same machine, before/after runs ~1 h apart).
+
+**The head snapshot (DO-less anonymous reads).** The Repo DO rewrites a
+tiny JSON object (`{repoId}/head`: refs, visibility, current bundle)
+after every commit that changes what an anonymous reader can see; the
+Worker serves the `info/refs` advertisement and bundle-covered full
+clones straight from it. Engagement is proven, not inferred: responses
+carry `x-git-served-by: head-snapshot` and the bench asserts it. The
+Auth block still decides anonymous access (the Worker asks it with the
+snapshot's repo context), a presented credential always goes to the DO,
+and `startPurge` deletes the snapshot synchronously so deleted repos
+stop serving immediately.
+
+| anonymous reads on a public repo | before | after |
+| --- | --- | --- |
+| raw full clones, concurrency 32 | 69.4/s · 17.4 MiB/s | **101.0/s · 25.3 MiB/s** |
+| same run, authed clones (DO path) | — | 48.1/s · 24.4 MiB/s |
+| advertisements, concurrency 32 | 201.2/s | 206.5/s |
+| advertisement, serial | — | 87 ms each |
+
+The controlled comparison is the second row: in the same run, on the
+same bytes, anonymous DO-less clones sustain **2.1× the throughput of
+authed clones that plan through the DO** — cloud noise hits both
+equally. The advertisement storm is flat because the *client* is the
+bottleneck there (87 ms serial ≈ the bench machine's RTT; 32-way ≈
+200/s is its ceiling): the assertion proves the DO left the path, but a
+single-machine instrument cannot show the server-side headroom that
+buys. The clone rows, which move real bytes, do.
+
+**Geometric pack merging.** `Compact` now restores the geometric
+invariant (factor 2) after each run: the smallest violating packs merge
+by pure concatenation — our packs store non-delta entries, so a merge
+is `header(Σcounts) + bodies + sha1` and one additive offset UPDATE per
+source pack, no recompression. Unreferenced source packs grace-delete a
+minute later (in-flight ranged reads finish first).
+
+| dynamic fetch, repo compacted in 6 increments | before | after |
+| --- | --- | --- |
+| ms/fetch (serial ×8, 2.3 MiB pack) | 730 | **300–334** |
+
+**2.2–2.4× faster** reads over the aged repo, reproduced across two
+post-change runs. The push path is unchanged by both features (serial
+push 1.3–1.5/s across all runs — the per-ref serialization floor §15
+already names; that ceiling is v3's problem, not this change's).

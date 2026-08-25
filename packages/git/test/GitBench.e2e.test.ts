@@ -138,12 +138,13 @@ const freshRepo = Effect.fn(function* (
   url: string,
   owner: string,
   name: string,
+  options?: { readonly public?: boolean },
 ) {
   const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
   const created = yield* Effect.gen(function* () {
     yield* purgeRepo(url, owner, name);
     return yield* admin.repos
-      .create({ payload: { owner, name } })
+      .create({ payload: { owner, name, public: options?.public } })
       .pipe(edgeRetry);
   }).pipe(
     Effect.retry({
@@ -715,6 +716,228 @@ test.skipIf(skipBench)(
     );
 
     // And the repo still clones cleanly through the same path.
+    yield* mustSh(tmp, `rm -rf verify && git clone -q '${repo.remote}' verify`);
+    yield* mustSh(tmp, `cd verify && git fsck --strict`);
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 8 — the DO on the anonymous read path (Continuity learnings,
+// DESIGN.md §21): every advertisement and bundle-planning hop wakes the
+// repo DO today, so anonymous public reads share one single-threaded
+// object. Baseline for the DO-less head-object fast path.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: anonymous reads on a PUBLIC repo (advertisement + raw clone TPS)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "pubread", { public: true });
+    const tmp = yield* tempDir;
+    const blobKiB = 256 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      head -c ${blobKiB * 1024} /dev/urandom > blob.bin
+      i=1; while [ $i -le 20 ]; do printf 'f %s\n' $i > "f$i.txt"; i=$((i+1)); done
+      git add -A && git commit -q -m payload
+      git push -q origin main
+      `,
+    );
+    const head = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
+    yield* Effect.sleep("6 seconds"); // let the bundle land
+
+    const client = yield* HttpClient.HttpClient;
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+
+    // TOKENLESS advertisement — GET info/refs with no Authorization.
+    const advertise = client
+      .get(`${url}/bench/pubread.git/info/refs?service=git-upload-pack`)
+      .pipe(
+        Effect.flatMap((response) => response.arrayBuffer),
+        Effect.map((buffer) => buffer.byteLength),
+      );
+    // warm + correctness: the advertisement carries the tip AND proves
+    // the DO-less path served it (not an accidental DO fall-through).
+    const warmAdv = yield* client.get(
+      `${url}/bench/pubread.git/info/refs?service=git-upload-pack`,
+    );
+    expect(warmAdv.headers["x-git-served-by"]).toBe("head-snapshot");
+    const advBytes = (yield* warmAdv.arrayBuffer).byteLength;
+    expect(advBytes).toBeGreaterThan(40);
+
+    const SERIAL_N = 20;
+    yield* measure(
+      `${SERIAL_N} serial anonymous advertisements`,
+      Effect.forEach(Array.from({ length: SERIAL_N }), () => advertise),
+      (_, ms) => `${(ms / SERIAL_N).toFixed(0)} ms each`,
+    );
+
+    const ADV_N = 128 * SCALE;
+    yield* measure(
+      `${ADV_N} anonymous advertisements, concurrency 32`,
+      Effect.all(
+        Array.from({ length: ADV_N }, () => advertise),
+        { concurrency: 32 },
+      ),
+      (sizes, ms) => `${perSecond(sizes.length, ms)} advertisements`,
+    );
+
+    // TOKENLESS full clone over raw HTTP (want tip, done — bundle-eligible).
+    const rawClone = client
+      .execute(
+        HttpClientRequest.post(`${url}/bench/pubread.git/git-upload-pack`).pipe(
+          HttpClientRequest.setHeaders({
+            "content-type": "application/x-git-upload-pack-request",
+          }),
+          HttpClientRequest.bodyText(
+            `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
+          ),
+        ),
+      )
+      .pipe(
+        Effect.flatMap((response) => response.arrayBuffer),
+        Effect.map((buffer) => buffer.byteLength),
+      );
+    // warm + prove the bundle was served DO-lessly from the snapshot
+    const warmClone = yield* client.execute(
+      HttpClientRequest.post(`${url}/bench/pubread.git/git-upload-pack`).pipe(
+        HttpClientRequest.setHeaders({
+          "content-type": "application/x-git-upload-pack-request",
+        }),
+        HttpClientRequest.bodyText(
+          `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
+        ),
+      ),
+    );
+    expect(warmClone.headers["x-git-served-by"]).toBe("head-snapshot");
+    const first = (yield* warmClone.arrayBuffer).byteLength;
+    expect(first).toBeGreaterThan(blobKiB * 1024 * 0.5);
+
+    const CLONE_N = 64 * SCALE;
+    yield* measure(
+      `${CLONE_N} anonymous raw clones, concurrency 32`,
+      Effect.all(
+        Array.from({ length: CLONE_N }, () => rawClone),
+        { concurrency: 32 },
+      ),
+      (sizes, ms) => {
+        const total = sizes.reduce((sum, bytes) => sum + bytes, 0);
+        return (
+          `${perSecond(sizes.length, ms)} clones, ` +
+          `${(total / 1024 / 1024 / (ms / 1000)).toFixed(1)} MiB/s`
+        );
+      },
+    );
+
+    // and a real git clone with NO credentials still works
+    const parsed = new URL(url);
+    yield* mustSh(
+      tmp,
+      `rm -rf anon && git clone -q '${parsed.protocol}//${parsed.host}/bench/pubread.git' anon && cd anon && git fsck --strict`,
+    );
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 9 — pack-count growth (Continuity learnings, DESIGN.md §21):
+// each compaction run writes a NEW pack and never merges, so reads over an
+// old repo fan out across ever more packs. Baseline for geometric merging.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: dynamic fetch over a repo compacted in 6 increments (pack fan-out)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "npack");
+    const tmp = yield* tempDir;
+    const ROUNDS = 6;
+
+    yield* mustSh(
+      tmp,
+      `rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work`,
+    );
+
+    // ROUNDS x (push a batch, compact it) => ROUNDS separate packs today.
+    for (let round = 1; round <= ROUNDS; round++) {
+      yield* mustSh(
+        tmp,
+        `
+        cd work
+        i=1; while [ $i -le 12 ]; do head -c ${32 * 1024} /dev/urandom > "r${round}-f$i.bin"; i=$((i+1)); done
+        git add -A && git commit -q -m "round ${round}"
+        git push -q origin main
+        `,
+      );
+      yield* repo.admin.repos
+        .compact({ params: { owner: "bench", repo: "npack" } })
+        .pipe(edgeRetry);
+      // wait until the loose rows have drained into the pack
+      yield* repo.admin.repos
+        .get({ params: { owner: "bench", repo: "npack" } })
+        .pipe(
+          edgeRetry,
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (meta) => meta.objects.loose === 0,
+            times: 45,
+          }),
+        );
+    }
+
+    const after = yield* repo.admin.repos
+      .get({ params: { owner: "bench", repo: "npack" } })
+      .pipe(edgeRetry);
+    results.push(
+      `npack repo: ${after.objects.packed} packed objects after ${ROUNDS} compactions`.padEnd(
+        46,
+      ),
+    );
+
+    const head = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
+    const client = yield* HttpClient.HttpClient;
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+
+    // Unknown have forces the dynamic path (bundle refused): the closure
+    // walk + object reads must range-read across every pack.
+    const unknownHave = "f".repeat(40);
+    const dynamicFetch = client
+      .execute(
+        HttpClientRequest.post(`${url}/bench/npack.git/git-upload-pack`).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${repo.token}`,
+            "content-type": "application/x-git-upload-pack-request",
+          }),
+          HttpClientRequest.bodyText(
+            `${pkt(`want ${head}\n`)}${pkt(`have ${unknownHave}\n`)}0000${pkt("done\n")}`,
+          ),
+        ),
+      )
+      .pipe(
+        Effect.flatMap((response) => response.arrayBuffer),
+        Effect.map((buffer) => buffer.byteLength),
+      );
+
+    const warm = yield* dynamicFetch;
+    expect(warm).toBeGreaterThan(100_000);
+
+    const N = 8;
+    yield* measure(
+      `${N} serial dynamic fetches over ${ROUNDS}-increment repo`,
+      Effect.forEach(Array.from({ length: N }), () => dynamicFetch),
+      (sizes, ms) =>
+        `${(ms / N).toFixed(0)} ms/fetch, ` +
+        `${((sizes[0] ?? 0) / 1024 / 1024).toFixed(1)} MiB pack`,
+    );
+
+    // correctness: clone back clean through the same packs
     yield* mustSh(tmp, `rm -rf verify && git clone -q '${repo.remote}' verify`);
     yield* mustSh(tmp, `cd verify && git fsck --strict`);
   }).pipe(logLevel),

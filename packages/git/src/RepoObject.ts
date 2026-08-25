@@ -125,8 +125,13 @@ import * as Zlib from "./git/Zlib.ts";
 import { runImport, type ImportSource } from "./jobs/Import.ts";
 import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
 import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
-import { runCompactJob, shouldCompact } from "./jobs/Compact.ts";
-import { incomingKey } from "./store/Keys.ts";
+import {
+  runCompactJob,
+  runGeometricMergeJob,
+  shouldCompact,
+} from "./jobs/Compact.ts";
+import { headKey, incomingKey } from "./store/Keys.ts";
+import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
 import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
 import { receiveWireBody } from "./store/IncomingBody.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
@@ -2205,124 +2210,138 @@ export const GitRepoLive = GitRepo.make(
          * flip and the staged-object promotion. MUST be fully synchronous.
          */
         readonly onCommitted?: ((raw: cf.SqlStorage) => void) | undefined;
-      }): Effect.Effect<Array<RefResult>, StoreError> =>
-        sql.transactionSync((raw) => {
-          const currentOf = (name: string): string => {
-            const rows = raw
-              .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, name)
-              .toArray();
-            return rows.length > 0 ? rows[0]!.oid : ZERO_OID;
-          };
-          const results: Array<RefResult> = [];
-          // atomic: verify every CAS before writing anything
-          if (options.atomic && options.unconditional !== true) {
-            const failed = options.commands.some(
-              (cmd) => currentOf(cmd.ref) !== cmd.oldOid,
-            );
-            if (failed) {
-              for (const cmd of options.commands) {
+      }): Effect.Effect<Array<RefResult>, StoreError, RuntimeContext> =>
+        sql
+          .transactionSync((raw) => {
+            const currentOf = (name: string): string => {
+              const rows = raw
+                .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, name)
+                .toArray();
+              return rows.length > 0 ? rows[0]!.oid : ZERO_OID;
+            };
+            const results: Array<RefResult> = [];
+            // atomic: verify every CAS before writing anything
+            if (options.atomic && options.unconditional !== true) {
+              const failed = options.commands.some(
+                (cmd) => currentOf(cmd.ref) !== cmd.oldOid,
+              );
+              if (failed) {
+                for (const cmd of options.commands) {
+                  results.push({
+                    ref: cmd.ref,
+                    ok: false,
+                    reason:
+                      currentOf(cmd.ref) === cmd.oldOid
+                        ? "atomic transaction failed"
+                        : "fetch first",
+                  });
+                }
+                return results;
+              }
+            }
+            let anyOk = false;
+            for (const cmd of options.commands) {
+              if (
+                options.unconditional !== true &&
+                currentOf(cmd.ref) !== cmd.oldOid
+              ) {
                 results.push({
                   ref: cmd.ref,
                   ok: false,
-                  reason:
-                    currentOf(cmd.ref) === cmd.oldOid
-                      ? "atomic transaction failed"
-                      : "fetch first",
+                  reason: "fetch first",
+                });
+                continue;
+              }
+              if (cmd.newOid === ZERO_OID) {
+                raw.exec(`DELETE FROM refs WHERE name = ?`, cmd.ref);
+              } else {
+                raw.exec(
+                  `INSERT INTO refs (name, oid) VALUES (?, ?)
+                 ON CONFLICT (name) DO UPDATE SET oid = excluded.oid`,
+                  cmd.ref,
+                  cmd.newOid,
+                );
+              }
+              results.push({ ref: cmd.ref, ok: true });
+              anyOk = true;
+            }
+            if (anyOk || options.commands.length === 0) {
+              if (options.pushId !== undefined) {
+                raw.exec(
+                  `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`,
+                  options.pushId,
+                );
+                raw.exec(
+                  `UPDATE pushes SET state = 'committed' WHERE push_id = ?`,
+                  options.pushId,
+                );
+              }
+              for (const commit of options.graph) {
+                raw.exec(
+                  `INSERT OR IGNORE INTO commits (oid, tree, gen, commit_time) VALUES (?, ?, ?, ?)`,
+                  commit.oid,
+                  commit.tree,
+                  commit.gen,
+                  commit.commitTime,
+                );
+                commit.parents.forEach((parent, ord) => {
+                  raw.exec(
+                    `INSERT OR IGNORE INTO commit_parents (oid, parent, ord) VALUES (?, ?, ?)`,
+                    commit.oid,
+                    parent,
+                    ord,
+                  );
                 });
               }
-              return results;
-            }
-          }
-          let anyOk = false;
-          for (const cmd of options.commands) {
-            if (
-              options.unconditional !== true &&
-              currentOf(cmd.ref) !== cmd.oldOid
-            ) {
-              results.push({ ref: cmd.ref, ok: false, reason: "fetch first" });
-              continue;
-            }
-            if (cmd.newOid === ZERO_OID) {
-              raw.exec(`DELETE FROM refs WHERE name = ?`, cmd.ref);
-            } else {
-              raw.exec(
-                `INSERT INTO refs (name, oid) VALUES (?, ?)
-                 ON CONFLICT (name) DO UPDATE SET oid = excluded.oid`,
-                cmd.ref,
-                cmd.newOid,
-              );
-            }
-            results.push({ ref: cmd.ref, ok: true });
-            anyOk = true;
-          }
-          if (anyOk || options.commands.length === 0) {
-            if (options.pushId !== undefined) {
-              raw.exec(
-                `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`,
-                options.pushId,
-              );
-              raw.exec(
-                `UPDATE pushes SET state = 'committed' WHERE push_id = ?`,
-                options.pushId,
-              );
-            }
-            for (const commit of options.graph) {
-              raw.exec(
-                `INSERT OR IGNORE INTO commits (oid, tree, gen, commit_time) VALUES (?, ?, ?, ?)`,
-                commit.oid,
-                commit.tree,
-                commit.gen,
-                commit.commitTime,
-              );
-              commit.parents.forEach((parent, ord) => {
-                raw.exec(
-                  `INSERT OR IGNORE INTO commit_parents (oid, parent, ord) VALUES (?, ?, ?)`,
-                  commit.oid,
-                  parent,
-                  ord,
-                );
-              });
-            }
-            if (options.onCommitted !== undefined) {
-              options.onCommitted(raw);
-            }
-            // First-branch-push default branch fixup: if the configured
-            // default branch does not exist but a branch was just created,
-            // repoint the default at it (prefer main/master).
-            const configured = raw
-              .exec<{ value: string }>(
-                `SELECT value FROM config WHERE key = 'default_branch'`,
-              )
-              .toArray()[0]?.value;
-            if (configured !== undefined) {
-              const exists = raw
-                .exec<RefRow>(
-                  `SELECT name, oid FROM refs WHERE name = ?`,
-                  `refs/heads/${configured}`,
+              if (options.onCommitted !== undefined) {
+                options.onCommitted(raw);
+              }
+              // First-branch-push default branch fixup: if the configured
+              // default branch does not exist but a branch was just created,
+              // repoint the default at it (prefer main/master).
+              const configured = raw
+                .exec<{ value: string }>(
+                  `SELECT value FROM config WHERE key = 'default_branch'`,
                 )
-                .toArray();
-              if (exists.length === 0) {
-                const branches = raw
+                .toArray()[0]?.value;
+              if (configured !== undefined) {
+                const exists = raw
                   .exec<RefRow>(
-                    `SELECT name, oid FROM refs WHERE name LIKE 'refs/heads/%' ORDER BY name`,
+                    `SELECT name, oid FROM refs WHERE name = ?`,
+                    `refs/heads/${configured}`,
                   )
-                  .toArray()
-                  .map((row) => row.name.slice("refs/heads/".length));
-                const pick =
-                  branches.find((b) => b === "main") ??
-                  branches.find((b) => b === "master") ??
-                  branches[0];
-                if (pick !== undefined) {
-                  raw.exec(
-                    `UPDATE config SET value = ? WHERE key = 'default_branch'`,
-                    pick,
-                  );
+                  .toArray();
+                if (exists.length === 0) {
+                  const branches = raw
+                    .exec<RefRow>(
+                      `SELECT name, oid FROM refs WHERE name LIKE 'refs/heads/%' ORDER BY name`,
+                    )
+                    .toArray()
+                    .map((row) => row.name.slice("refs/heads/".length));
+                  const pick =
+                    branches.find((b) => b === "main") ??
+                    branches.find((b) => b === "master") ??
+                    branches[0];
+                  if (pick !== undefined) {
+                    raw.exec(
+                      `UPDATE config SET value = ? WHERE key = 'default_branch'`,
+                      pick,
+                    );
+                  }
                 }
               }
             }
-          }
-          return results;
-        });
+            return results;
+          })
+          .pipe(
+            // Any committed ref movement changes what an anonymous reader
+            // can see — republish the head snapshot (DESIGN.md §21).
+            Effect.tap((results) =>
+              results.some((result) => result.ok)
+                ? writeHeadSnapshot
+                : Effect.void,
+            ),
+          );
 
       /** Computes gen/commit_time rows for staged commits (§3.6 step 6). */
       const computeGraphRows = (
@@ -3250,12 +3269,46 @@ export const GitRepoLive = GitRepo.make(
        */
       const runCompactAlarm = Effect.gen(function* () {
         const meta = yield* requireMeta;
+        // Grace-delete packs a PREVIOUS merge unreferenced: only after
+        // a minute, so any read planned before that row flip has long
+        // finished its ranged reads (DESIGN.md §21).
+        const pendingRaw = yield* getConfig("packs_pending_delete");
+        const pending =
+          pendingRaw === undefined || pendingRaw === ""
+            ? undefined
+            : (JSON.parse(pendingRaw) as { keys: Array<string>; at: number });
+        if (pending !== undefined && Date.now() - pending.at > 60_000) {
+          yield* blobs
+            .delete(pending.keys)
+            .pipe(Effect.catch(() => Effect.void));
+          yield* setConfig("packs_pending_delete", "");
+        }
         const outcome = yield* runCompactJob({
           repoId: meta.repoId,
           sql,
           blobs,
         });
-        if (outcome.more) {
+        // Restore the geometric invariant over the repo's packs, so pack
+        // count — and with it read fan-out — stays O(log bytes).
+        const merge = yield* runGeometricMergeJob({
+          repoId: meta.repoId,
+          sql,
+          blobs,
+        });
+        if (merge.pendingDelete.length > 0) {
+          const carried =
+            pending !== undefined && !(Date.now() - pending.at > 60_000)
+              ? pending.keys
+              : [];
+          yield* setConfig(
+            "packs_pending_delete",
+            JSON.stringify({
+              keys: [...carried, ...merge.pendingDelete],
+              at: Date.now(),
+            }),
+          );
+        }
+        if (outcome.more || merge.more) {
           yield* armAlarmAt(Date.now() + 1_000);
           return;
         }
@@ -3298,6 +3351,45 @@ export const GitRepoLive = GitRepo.make(
         );
 
       /**
+       * Republishes the repo's head snapshot (DESIGN.md §21): a tiny
+       * JSON object in the BlobStore from which the Worker serves
+       * anonymous public reads — the upload-pack advertisement and
+       * bundle-covered clones — without waking this DO. Called after
+       * every commit that changes what an anonymous reader can see.
+       *
+       * Best-effort by design: it runs AFTER the SQLite commit (which
+       * stays authoritative), so a failed write only leaves a stale
+       * snapshot that the next mutation — or the post-push bundle
+       * alarm, seconds later — repairs.
+       */
+      const writeHeadSnapshot: Effect.Effect<void, never, RuntimeContext> =
+        Effect.gen(function* () {
+          const meta = yield* requireMeta;
+          const refs = yield* listAllRefs(meta.repoId);
+          const bundle = yield* readBundle;
+          const snapshot: HeadSnapshot = {
+            v: 1,
+            repoId: meta.repoId,
+            owner: meta.owner,
+            name: meta.name,
+            public: meta.public,
+            readOnly: meta.readOnly,
+            defaultBranch: meta.defaultBranch,
+            refs,
+            bundle,
+          };
+          yield* blobs.put(
+            headKey(meta.repoId),
+            utf8Encode(encodeHeadSnapshot(snapshot)),
+          );
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning(`head snapshot write failed: ${String(error)}`),
+          ),
+          Effect.asVoid,
+        );
+
+      /**
        * Cuts a clone bundle for the current refs (DESIGN.md §12.2) so future
        * clones are served as bytes from R2 instead of a fresh closure walk.
        */
@@ -3329,6 +3421,9 @@ export const GitRepoLive = GitRepo.make(
         });
         if (info !== undefined) {
           yield* setConfig("bundle", JSON.stringify(info));
+          // The snapshot now names a bundle covering the current refs —
+          // full anonymous clones go DO-less from here (DESIGN.md §21).
+          yield* writeHeadSnapshot;
         }
         yield* sql.run(`DELETE FROM jobs WHERE kind = 'bundle'`);
       });
@@ -3440,6 +3535,7 @@ export const GitRepoLive = GitRepo.make(
           }
           yield* setConfig("status", "ready");
           yield* refreshSummary;
+          yield* writeHeadSnapshot;
           yield* sql.run(`DELETE FROM jobs WHERE kind = 'import'`);
         });
 
@@ -3481,6 +3577,7 @@ export const GitRepoLive = GitRepo.make(
           }
           yield* setConfig("status", "ready");
           yield* refreshSummary;
+          yield* writeHeadSnapshot;
           yield* sql.run(`DELETE FROM jobs WHERE kind = 'fork'`);
         });
 
@@ -3523,7 +3620,8 @@ export const GitRepoLive = GitRepo.make(
 
       // ── the shape ────────────────────────────────────────────────────────
       const shape: GitRepoShape = {
-        initRepo: (input) => bootstrap(input, "ready"),
+        initRepo: (input) =>
+          bootstrap(input, "ready").pipe(Effect.tap(() => writeHeadSnapshot)),
 
         startImport: Effect.fn(function* (input: StartImportInput) {
           const result = yield* bootstrap(input, "importing");
@@ -3550,9 +3648,14 @@ export const GitRepoLive = GitRepo.make(
         }),
 
         startPurge: Effect.fn(function* (auth: CallerAuth) {
-          yield* requireMeta;
+          const meta = yield* requireMeta;
           yield* authorize(auth, { _tag: "DeleteRepo" });
           yield* setConfig("status", "deleting");
+          // Kill the DO-less fast path NOW — the prefix drain gets the
+          // rest, but anonymous reads must stop serving immediately.
+          yield* blobs
+            .delete(headKey(meta.repoId))
+            .pipe(Effect.catch(() => Effect.void));
           yield* refreshSummary;
           yield* upsertJob("purge", null);
           yield* armAlarmAt(Date.now());
@@ -3602,6 +3705,7 @@ export const GitRepoLive = GitRepo.make(
           const result = updated ?? meta;
           // Keep the Registry's denormalised copy in step (listing reads it).
           yield* syncSummary(result);
+          yield* writeHeadSnapshot;
           return result;
         }),
 
@@ -3626,16 +3730,14 @@ export const GitRepoLive = GitRepo.make(
           );
           return rows
             .filter((row) => isTokenScope(row.scope))
-            .map(
-              (row): TokenData => ({
-                id: row.id,
-                name: row.name,
-                scope: row.scope as TokenScope,
-                createdAt: row.created_at,
-                expiresAt: row.expires_at,
-                lastUsedAt: row.last_used_at,
-              }),
-            );
+            .map((row): TokenData => ({
+              id: row.id,
+              name: row.name,
+              scope: row.scope as TokenScope,
+              createdAt: row.created_at,
+              expiresAt: row.expires_at,
+              lastUsedAt: row.last_used_at,
+            }));
         }),
 
         revokeToken: Effect.fn(function* (auth: CallerAuth, id: string) {
@@ -3736,6 +3838,7 @@ export const GitRepoLive = GitRepo.make(
               input.newOid,
             );
           });
+          yield* writeHeadSnapshot;
           return { name: input.name, oid: input.newOid } satisfies RefData;
         }),
 
@@ -3783,6 +3886,7 @@ export const GitRepoLive = GitRepo.make(
               raw.exec(`DELETE FROM refs WHERE name = ?`, input.name);
             },
           );
+          yield* writeHeadSnapshot;
         }),
 
         readObject: Effect.fn(function* (

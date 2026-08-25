@@ -94,15 +94,30 @@ import {
   Unauthorized,
   type Oid,
 } from "./Api.ts";
-import { Auth, GitAuthLive, type GitAction } from "./Auth.ts";
+import {
+  Auth,
+  GitAuthLive,
+  parseBasicOrBearer,
+  type GitAction,
+} from "./Auth.ts";
 import { githubCompatRoutes } from "./GithubCompat.ts";
 import { BlobStore } from "./BlobStore.ts";
-import { parseCommit, parseTree, treeEntryKind } from "./git/ObjectCodec.ts";
-import { flushPkt, pktText } from "./git/Pkt.ts";
+import { bundleCovers, type BundleInfo } from "./jobs/Bundle.ts";
+import { headKey } from "./store/Keys.ts";
+import { decodeHeadSnapshot } from "./store/HeadSnapshot.ts";
+import {
+  parseCommit,
+  parseTree,
+  treeEntryKind,
+  utf8Decode,
+} from "./git/ObjectCodec.ts";
+import { decodePktLines, flushPkt, pktText } from "./git/Pkt.ts";
 import { progressMessage, wrapSideband } from "./git/Sideband.ts";
 import type { StoreError } from "./git/Store.ts";
 import {
   ADMIN_HEADER,
+  buildAdvertisement,
+  parseUploadPackRequest,
   BUNDLE_COUNT_HEADER,
   BUNDLE_HASH_HEADER,
   BUNDLE_KEY_HEADER,
@@ -1374,6 +1389,152 @@ const make = Effect.gen(function* () {
    * untouched to the Repo DO — which re-verifies owner/name, enforces
    * the token, and runs the protocol (DESIGN.md §2.3).
    */
+  /**
+   * Streams a clone bundle out of the BlobStore as a complete
+   * upload-pack result (NAK + optionally sideband-framed pack).
+   * `undefined` when the bundle bytes are gone (GC raced us).
+   */
+  const serveBundle = Effect.fn(function* (options: {
+    readonly key: string;
+    readonly refsHash: string;
+    readonly objectCount: number;
+    readonly sideband: boolean;
+    /** Which plane produced the plan — observability + bench assertions. */
+    readonly via: "do-bundle" | "head-snapshot";
+  }) {
+    const object = yield* Effect.result(workerBlobs.get(options.key));
+    if (Result.isFailure(object) || object.success === null) {
+      return undefined;
+    }
+    const packBytes = object.success.stream;
+    const nak = pktText("NAK");
+    const body = options.sideband
+      ? Stream.fromArray([
+          nak,
+          progressMessage(`Enumerating objects: ${options.objectCount}, done.`),
+        ]).pipe(
+          Stream.concat(packBytes.pipe(wrapSideband(1))),
+          Stream.concat(Stream.succeed(flushPkt)),
+        )
+      : Stream.fromArray([nak]).pipe(Stream.concat(packBytes));
+    return HttpServerResponse.stream(body, {
+      contentType: "application/x-git-upload-pack-result",
+      headers: {
+        "cache-control": "no-cache",
+        "x-git-served-by": options.via,
+        [BUNDLE_HASH_HEADER]: options.refsHash,
+      },
+    });
+  });
+
+  /**
+   * The DO-less anonymous read path (DESIGN.md §21): the upload-pack
+   * advertisement and bundle-covered full clones served straight from
+   * the repo's head snapshot in the BlobStore — the Repo DO never
+   * wakes, so anonymous public read throughput scales with Workers +
+   * blob storage instead of one single-threaded object.
+   *
+   * `undefined` = not eligible; the caller forwards to the DO. Only
+   * ever entered for requests with NO credential: a presented token
+   * must be verified (and possibly rejected) by the DO, and the Auth
+   * block still gets the decision on anonymous access — this changes
+   * WHERE the answer is computed, never what it is.
+   */
+  const anonymousFastPath = Effect.fn(function* (
+    request: HttpServerRequest.HttpServerRequest,
+    repoId: string,
+  ) {
+    const target = new URL(request.url, "http://wire");
+    const isAdvertisement =
+      request.method === "GET" &&
+      target.pathname.endsWith("/info/refs") &&
+      target.searchParams.get("service") === "git-upload-pack";
+    const isUploadPack =
+      request.method === "POST" && target.pathname.endsWith("/git-upload-pack");
+    if (!isAdvertisement && !isUploadPack) return undefined;
+    // Compressed bodies carry big negotiation rounds — the DO owns
+    // those (and the gunzip) anyway.
+    if (isUploadPack && request.headers["content-encoding"] !== undefined) {
+      return undefined;
+    }
+
+    const object = yield* Effect.result(workerBlobs.get(headKey(repoId)));
+    if (Result.isFailure(object) || object.success === null) {
+      return undefined;
+    }
+    const raw = yield* Effect.result(object.success.bytes);
+    if (Result.isFailure(raw)) return undefined;
+    const snapshot = decodeHeadSnapshot(utf8Decode(raw.success));
+    if (snapshot === undefined) return undefined;
+
+    // The Auth block decides anonymous access — the same question the
+    // DO would ask, answered here from the snapshot's repo context.
+    const allowed = yield* authService.authorize({
+      actor: { kind: "anonymous" },
+      repo: {
+        repoId: snapshot.repoId,
+        owner: snapshot.owner,
+        name: snapshot.name,
+        public: snapshot.public,
+        defaultBranch: snapshot.defaultBranch,
+        readOnly: snapshot.readOnly,
+      },
+      action: { _tag: "Fetch" },
+    });
+    if (!allowed) return undefined;
+
+    if (isAdvertisement) {
+      return HttpServerResponse.uint8Array(
+        buildAdvertisement({
+          service: "git-upload-pack",
+          defaultBranch: snapshot.defaultBranch,
+          refs: snapshot.refs,
+        }),
+        {
+          contentType: "application/x-git-upload-pack-advertisement",
+          headers: {
+            "cache-control": "no-cache",
+            "x-git-served-by": "head-snapshot",
+          },
+        },
+      );
+    }
+
+    const bundle: BundleInfo | undefined = snapshot.bundle;
+    if (bundle === undefined) return undefined;
+    // Read the request body from a CLONE of the platform request so a
+    // fall-through still forwards the original, unconsumed body.
+    const source = request.source;
+    if (!(source instanceof Request)) return undefined;
+    const bodyResult = yield* Effect.result(
+      Effect.tryPromise(() => source.clone().arrayBuffer()),
+    );
+    if (Result.isFailure(bodyResult)) return undefined;
+    const req = yield* decodePktLines(new Uint8Array(bodyResult.success)).pipe(
+      Effect.flatMap(parseUploadPackRequest),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (req === undefined) return undefined;
+    if (
+      !req.done ||
+      !bundleCovers(bundle, {
+        wants: req.wants,
+        haves: req.haves,
+        depth: req.depth,
+        clientShallow: req.clientShallow,
+      })
+    ) {
+      return undefined;
+    }
+    return yield* serveBundle({
+      key: bundle.key,
+      refsHash: bundle.refsHash,
+      objectCount: bundle.objectCount,
+      sideband: req.capabilities.has("side-band-64k"),
+      via: "head-snapshot",
+    });
+  });
+
   const wireProxy = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const params = yield* HttpRouter.params;
@@ -1391,6 +1552,11 @@ const make = Effect.gen(function* () {
     const entry = resolved.success;
     if (entry === undefined) {
       return notFound;
+    }
+
+    if (parseBasicOrBearer(request.headers) === undefined) {
+      const fast = yield* anonymousFastPath(request, entry.repoId);
+      if (fast !== undefined) return fast;
     }
 
     const actor = yield* authService.authenticate(request.headers);
@@ -1413,34 +1579,17 @@ const make = Effect.gen(function* () {
     if (bundleKeyHeader === undefined) {
       return response;
     }
-    const object = yield* Effect.result(workerBlobs.get(bundleKeyHeader));
-    if (Result.isFailure(object) || object.success === null) {
-      // The bundle vanished (GC raced us): fall back to a plain 500 —
-      // git retries, and the next attempt re-plans against a fresh
-      // bundle or the dynamic path.
-      return internalError;
-    }
-    const packBytes = object.success.stream;
-    const nak = pktText("NAK");
-    const count = response.headers[BUNDLE_COUNT_HEADER] ?? "0";
-    const body =
-      response.headers[BUNDLE_SIDEBAND_HEADER] === "1"
-        ? Stream.fromArray([
-            nak,
-            progressMessage(`Enumerating objects: ${count}, done.`),
-          ]).pipe(
-            Stream.concat(packBytes.pipe(wrapSideband(1))),
-            Stream.concat(Stream.succeed(flushPkt)),
-          )
-        : Stream.fromArray([nak]).pipe(Stream.concat(packBytes));
-    return HttpServerResponse.stream(body, {
-      contentType: "application/x-git-upload-pack-result",
-      headers: {
-        "cache-control": "no-cache",
-        // Kept for observability; the internal marker headers are not.
-        [BUNDLE_HASH_HEADER]: response.headers[BUNDLE_HASH_HEADER] ?? "",
-      },
+    const served = yield* serveBundle({
+      key: bundleKeyHeader,
+      refsHash: response.headers[BUNDLE_HASH_HEADER] ?? "",
+      objectCount: Number(response.headers[BUNDLE_COUNT_HEADER] ?? "0"),
+      sideband: response.headers[BUNDLE_SIDEBAND_HEADER] === "1",
+      via: "do-bundle",
     });
+    // The bundle vanished (GC raced us): fall back to a plain 500 — git
+    // retries, and the next attempt re-plans against a fresh bundle or
+    // the dynamic path.
+    return served ?? internalError;
   });
 
   /** Auth + resolve for the raw REST reads; `undefined` = already replied. */

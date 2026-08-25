@@ -86,3 +86,12 @@ export const incomingPrefix = (repoId: string): string => `${repoId}/incoming/`;
  * Prefix of all LFS objects for a repo (reserved): `{repoId}/lfs/`.
  */
 export const lfsPrefix = (repoId: string): string => `${repoId}/lfs/`;
+
+/**
+ * R2 key of a repo's head snapshot (DESIGN.md §21): a small JSON object
+ * describing the current refs, visibility, and clone bundle, written by
+ * the Repo DO after every mutation commit. Lets the Worker serve
+ * anonymous public reads (advertisement + bundle clones) without waking
+ * the DO. Lives under the repo prefix so purge drains it.
+ */
+export const headKey = (repoId: string): string => `${repoId}/head`;
