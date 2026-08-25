@@ -38,6 +38,7 @@ import {
   rawS3GetBucket,
   regionOfArn,
 } from "./fixtures/raw.ts";
+import { liveContext } from "./fixtures/live.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -280,7 +281,7 @@ test.provider.skipIf(!dockerAvailable)(
       // must be there with its value.
       const live = yield* SSM.getParameter({
         Name: outputs.liveParam.parameterName,
-      }).pipe(Effect.provide(AWS.liveEnvironment()));
+      }).pipe(Effect.provide(liveContext));
       const liveValue = live.Parameter?.Value;
       expect(
         typeof liveValue === "string" ? liveValue : Redacted.value(liveValue!),
@@ -296,7 +297,7 @@ test.provider.skipIf(!dockerAvailable)(
       }).pipe(
         Effect.as(false),
         Effect.catchTag("ParameterNotFound", () => Effect.succeed(true)),
-        Effect.provide(AWS.liveEnvironment()),
+        Effect.provide(liveContext),
       );
       expect(gone).toBe(true);
     }),

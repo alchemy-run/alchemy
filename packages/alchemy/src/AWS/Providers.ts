@@ -235,26 +235,6 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
   "AWS",
 ) {}
 
-/**
- * The LIVE AWS environment chain — profile/SSO credentials, env-var
- * region/endpoint overrides — independent of the run mode. In an
- * `alchemy dev` run the ambient environment is the emulator (see the note
- * at the bottom of {@link providers}); provide THIS layer around code that
- * must talk to the REAL cloud regardless — e.g. a dev test's out-of-band
- * verification that a resource does (or does not) exist on the live cloud.
- */
-export const liveEnvironment = () =>
-  Layer.mergeAll(
-    Region.fromEnvironment,
-    Credentials.fromEnvironment,
-    Endpoint.fromEnvironment,
-  ).pipe(
-    Layer.provideMerge(DefaultEnvironment),
-    Layer.provideMerge(AwsAuth),
-    Layer.provideMerge(CredentialsStoreLive),
-    Layer.orDie,
-  );
-
 export const providers = () =>
   Layer.effect(
     Providers,
