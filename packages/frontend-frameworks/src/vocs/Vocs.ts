@@ -346,6 +346,15 @@ export const make = (
         build: Effect.fn(function* (buildOptions) {
           const root = yield* resolveRoot(buildOptions?.root);
           const target = yield* resolveTarget(root);
+          if (target.build !== undefined) {
+            return yield* target
+              .build({ root, framework: "vocs" })
+              .pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Path.Path, path),
+                Effect.mapError(fail("The deploy target's build failed")),
+              );
+          }
           const { adapterPath, plugins } = yield* prepareTarget(
             target,
             root,

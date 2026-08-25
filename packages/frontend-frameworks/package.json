@@ -151,6 +151,12 @@
       "worker": "./dist/astro/aws.js",
       "import": "./dist/astro/aws.js"
     },
+    "./astro/node": {
+      "types": "./dist/astro/node.d.ts",
+      "bun": "./dist/astro/node.js",
+      "worker": "./dist/astro/node.js",
+      "import": "./dist/astro/node.js"
+    },
     "./astro/cloudflare": {
       "types": "./dist/astro/cloudflare.d.ts",
       "bun": "./dist/astro/cloudflare.js",
@@ -168,6 +174,12 @@
       "bun": "./dist/astro/entrypoints/aws-server.js",
       "worker": "./dist/astro/entrypoints/aws-server.js",
       "import": "./dist/astro/entrypoints/aws-server.js"
+    },
+    "./astro/entrypoints/node-server": {
+      "types": "./dist/astro/entrypoints/node-server.d.ts",
+      "bun": "./dist/astro/entrypoints/node-server.js",
+      "worker": "./dist/astro/entrypoints/node-server.js",
+      "import": "./dist/astro/entrypoints/node-server.js"
     },
     "./astro/entrypoints/server": {
       "types": "./dist/astro/runtime/entrypoints/server.d.ts",
@@ -200,6 +212,12 @@
       "worker": "./dist/nextjs/aws.js",
       "import": "./dist/nextjs/aws.js"
     },
+    "./nextjs/node": {
+      "types": "./dist/nextjs/node.d.ts",
+      "bun": "./dist/nextjs/node.js",
+      "worker": "./dist/nextjs/node.js",
+      "import": "./dist/nextjs/node.js"
+    },
     "./nextjs/source": {
       "types": "./dist/nextjs/source.d.ts",
       "bun": "./dist/nextjs/source.js",
@@ -217,6 +235,12 @@
       "bun": "./dist/nuxt/aws.js",
       "worker": "./dist/nuxt/aws.js",
       "import": "./dist/nuxt/aws.js"
+    },
+    "./nuxt/node": {
+      "types": "./dist/nuxt/node.d.ts",
+      "bun": "./dist/nuxt/node.js",
+      "worker": "./dist/nuxt/node.js",
+      "import": "./dist/nuxt/node.js"
     },
     "./nuxt/cloudflare": {
       "types": "./dist/nuxt/cloudflare.d.ts",
@@ -248,6 +272,18 @@
       "worker": "./dist/octane/aws-adapter.js",
       "import": "./dist/octane/aws-adapter.js"
     },
+    "./octane/node": {
+      "types": "./dist/octane/node.d.ts",
+      "bun": "./dist/octane/node.js",
+      "worker": "./dist/octane/node.js",
+      "import": "./dist/octane/node.js"
+    },
+    "./octane/node-adapter": {
+      "types": "./dist/octane/node-adapter.d.ts",
+      "bun": "./dist/octane/node-adapter.js",
+      "worker": "./dist/octane/node-adapter.js",
+      "import": "./dist/octane/node-adapter.js"
+    },
     "./octane/cloudflare": {
       "types": "./dist/octane/cloudflare.d.ts",
       "bun": "./dist/octane/cloudflare.js",
@@ -271,6 +307,12 @@
       "bun": "./dist/sveltekit/aws.js",
       "worker": "./dist/sveltekit/aws.js",
       "import": "./dist/sveltekit/aws.js"
+    },
+    "./sveltekit/node": {
+      "types": "./dist/sveltekit/node.d.ts",
+      "bun": "./dist/sveltekit/node.js",
+      "worker": "./dist/sveltekit/node.js",
+      "import": "./dist/sveltekit/node.js"
     },
     "./sveltekit/cloudflare": {
       "types": "./dist/sveltekit/cloudflare.d.ts",
@@ -296,6 +338,12 @@
       "worker": "./dist/vite/aws.js",
       "import": "./dist/vite/aws.js"
     },
+    "./vite/node": {
+      "types": "./dist/vite/node.d.ts",
+      "bun": "./dist/vite/node.js",
+      "worker": "./dist/vite/node.js",
+      "import": "./dist/vite/node.js"
+    },
     "./waku": {
       "types": "./dist/waku/index.d.ts",
       "bun": "./dist/waku/index.js",
@@ -313,6 +361,12 @@
       "bun": "./dist/waku/aws.js",
       "worker": "./dist/waku/aws.js",
       "import": "./dist/waku/aws.js"
+    },
+    "./waku/node": {
+      "types": "./dist/waku/node.d.ts",
+      "bun": "./dist/waku/node.js",
+      "worker": "./dist/waku/node.js",
+      "import": "./dist/waku/node.js"
     },
     "./waku/aws-adapter": {
       "types": "./dist/waku/aws-adapter.d.ts",
@@ -349,6 +403,12 @@
       "bun": "./dist/vocs/cloudflare.js",
       "worker": "./dist/vocs/cloudflare.js",
       "import": "./dist/vocs/cloudflare.js"
+    },
+    "./vocs/node": {
+      "types": "./dist/vocs/node.d.ts",
+      "bun": "./dist/vocs/node.js",
+      "worker": "./dist/vocs/node.js",
+      "import": "./dist/vocs/node.js"
     },
     "./package.json": "./package.json"
   }
