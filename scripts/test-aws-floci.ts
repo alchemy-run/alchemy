@@ -25,6 +25,16 @@ const extraDirs: Record<string, ReadonlyArray<string>> = {
   Route53: ["Route53Domains"],
   SageMaker: ["SageMakerRuntime"],
   SecretsManager: ["Secret"],
+  Lambda: [
+    "AICapabilities",
+    "Comprehend",
+    "ComprehendMedical",
+    "Pricing",
+    "Rekognition",
+    "Smoke",
+    "Transcribe",
+  ],
+  S3: ["StateStore"],
 };
 
 const dualizedServices = (): string[] => {
