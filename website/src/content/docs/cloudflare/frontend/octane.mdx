@@ -187,7 +187,9 @@ plugin, so deploy it with
 
 ```typescript
 export const OctaneApp = Cloudflare.Website.Vite("Octane", {
-  spa: true,
+  assets: {
+    notFoundHandling: "single-page-application",
+  },
 });
 ```
 

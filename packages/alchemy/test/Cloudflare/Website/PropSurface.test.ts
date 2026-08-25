@@ -179,12 +179,16 @@ describe("Website prop surfaces", () => {
         distDir: "build",
       }),
     () => Cloudflare.Website.Waku("W", { outDir: "build" }),
-    () => Cloudflare.Website.Vite("V", { spa: true }),
-    () => Cloudflare.Website.Vite("V", { errorPage: "404.html" }),
     () =>
       Cloudflare.Website.Vite("V", {
-        // @ts-expect-error Cloudflare serves the nearest `404.html` — the name is fixed
-        errorPage: "custom.html",
+        // No spa/errorPage sugar on CF Vite: Workers Assets' own
+        // notFoundHandling is the platform-native surface.
+        assets: { notFoundHandling: "single-page-application" },
+      }),
+    () =>
+      Cloudflare.Website.Vite("V", {
+        // @ts-expect-error spa sugar deliberately not offered on CF Vite
+        spa: true,
       }),
     () => Cloudflare.Website.Foldkit("F", { spa: false }),
     () => Cloudflare.Website.Foldkit("F", { errorPage: "404.html" }),

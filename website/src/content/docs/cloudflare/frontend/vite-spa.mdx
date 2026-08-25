@@ -169,16 +169,18 @@ router handles the path on the client:
 // alchemy.run.ts
 -const web = yield* Cloudflare.Website.Vite("Website");
 +const web = yield* Cloudflare.Website.Vite("Website", {
-+  spa: true,
++  assets: {
++    notFoundHandling: "single-page-application",
++  },
 +});
 ```
 
-`spa: true` is sugar for
-`assets.notFoundHandling: "single-page-application"`. A site that
-ships a real error page sets `errorPage: "404.html"` instead, and
-`assets` still accepts the standard Cloudflare Worker
-static-assets config for everything else — an explicit
-`assets.notFoundHandling` wins over the sugar.
+`assets` accepts the standard Cloudflare Worker static-assets
+config; `single-page-application` not-found handling serves
+`index.html` for unmatched paths so the client router takes over.
+A site that ships a real error page uses
+`notFoundHandling: "404-page"` instead (Cloudflare serves the
+built `404.html`).
 
 ### Inject the Worker URL at build time
 

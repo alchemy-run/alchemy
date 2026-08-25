@@ -82,14 +82,15 @@ asset layer to fall back to `index.html`:
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Cloudflare.Website.Vite("Vue", {
-+  spa: true,
++  assets: {
++    notFoundHandling: "single-page-application",
++  },
 });
 ```
 
-With `spa: true`, unmatched paths return `index.html` instead of
-a 404, and vue-router resolves the route on the client. It is
-sugar for `assets.notFoundHandling: "single-page-application"` —
-an explicit `assets` config wins.
+With `single-page-application` not-found handling, unmatched paths
+return `index.html` instead of a 404, and vue-router resolves the
+route on the client.
 
 ## Add environment variables
 

@@ -1,7 +1,6 @@
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -55,6 +54,18 @@ const looksLikeCloudflarePlaceholder = (body: string) =>
   // The blue 522 / 1xxx error page family.
   /Error\s+\d{3,4}/i.test(body);
 
+/**
+ * Hard settlement bound for a single attempt, applied at the PROMISE level
+ * (`Promise.race`), not via fiber interruption: bun's fetch can wedge on a
+ * pooled connection the server closed after an error response — the
+ * request's promise neither settles nor honors its abort signal, and any
+ * Effect timeout that interrupts `tryPromise` then awaits that settlement
+ * forever. The race settles regardless and simply abandons the wedged
+ * promise. Generous on purpose: a cold dev server's first SSR/MDX compile
+ * can legitimately take tens of seconds.
+ */
+const ATTEMPT_SETTLEMENT_CAP_MS = 60_000;
+
 const fetchOnce = (url: string, marker: string) =>
   Effect.tryPromise({
     try: async (signal) => {
@@ -62,21 +73,36 @@ const fetchOnce = (url: string, marker: string) =>
       // intermediate proxy that ignores `cache-control: no-cache`.
       const u = new URL(url);
       u.searchParams.set("__alchemy_cb", String(Date.now()));
-      const res = await fetch(u, {
-        signal,
-        cache: "no-store",
-        headers: {
-          "cache-control": "no-cache",
-          pragma: "no-cache",
-          accept: "*/*",
-          // No keep-alive reuse: bun's fetch can wedge on a pooled
-          // connection the server closed after an error response — the
-          // reused request's promise neither settles nor honors its abort
-          // signal, pinning any timeout that awaits its interruption.
-          connection: "close",
-        },
+      const attempt = async () => {
+        const res = await fetch(u, {
+          signal,
+          cache: "no-store",
+          headers: {
+            "cache-control": "no-cache",
+            pragma: "no-cache",
+            accept: "*/*",
+            // No keep-alive reuse: the wedge above starts with a reused
+            // connection the server already closed.
+            connection: "close",
+          },
+        });
+        return { res, body: await res.text() };
+      };
+      let capTimer: ReturnType<typeof setTimeout> | undefined;
+      const cap = new Promise<never>((_, reject) => {
+        capTimer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `attempt did not settle within ${ATTEMPT_SETTLEMENT_CAP_MS}ms — abandoned`,
+              ),
+            ),
+          ATTEMPT_SETTLEMENT_CAP_MS,
+        );
       });
-      const body = await res.text();
+      const { res, body } = await Promise.race([attempt(), cap]).finally(() =>
+        clearTimeout(capTimer),
+      );
       if (
         !res.ok ||
         looksLikeCloudflarePlaceholder(body) ||
@@ -129,34 +155,7 @@ export const expectUrlContains = (
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
-  // Bound each *attempt* independently of the fetch's own abort support:
-  // the fetch runs on a daemon fiber joined under a hard cap, and a capped
-  // attempt is ABANDONED (fire-and-forget interrupt) rather than awaited.
-  // A wedged fetch whose promise never settles and ignores its abort
-  // signal (observed with bun keep-alive reuse against CloudFront error
-  // responses) would otherwise pin `Effect.timeoutOrElse` forever — the
-  // timeout interrupts the losing fiber and then AWAITS that interruption.
-  const attemptOnce = Effect.forkDetach(fetchOnce(url, marker)).pipe(
-    Effect.flatMap((fiber) =>
-      Fiber.join(fiber).pipe(
-        Effect.timeoutOrElse({
-          duration: "15 seconds",
-          orElse: () =>
-            Effect.suspend(() => {
-              Effect.runFork(Fiber.interrupt(fiber));
-              return Effect.fail(
-                new HttpFetchFailed({
-                  url,
-                  message: "attempt exceeded 15s without settling — abandoned",
-                }),
-              );
-            }),
-        }),
-      ),
-    ),
-  );
-
-  return attemptOnce.pipe(
+  return fetchOnce(url, marker).pipe(
     Effect.retry({
       // Cap individual sleeps at 8s so very long timeouts still
       // sample at a reasonable rate near the end of the budget.
