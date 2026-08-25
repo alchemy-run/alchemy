@@ -148,32 +148,12 @@ describe.skipIf(!runLive)("AWS.Website.TanStackStart", () => {
           }),
         );
 
-        // TEMP DEBUG — DO NOT COMMIT
-        yield* Effect.sync(() => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require("node:fs").appendFileSync(
-              "/tmp/tanstack-body.log",
-              `${new Date().toISOString()} deploy returned url=${JSON.stringify(deployed.router.url)} siteDistribution=${JSON.stringify(deployed.site.distribution)?.slice(0, 200)}\n`,
-            );
-          } catch {}
-        });
         const url = deployed.router.url as string;
         expect(url).toMatch(/^https:\/\//);
 
         // SSR through the ROUTER's distribution (the site registered itself
         // in the router's KV store — no site-owned distribution).
         expect(deployed.site.distribution).toBeUndefined();
-        // TEMP DEBUG — DO NOT COMMIT
-        yield* Effect.sync(() => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require("node:fs").appendFileSync(
-              "/tmp/tanstack-body.log",
-              `${new Date().toISOString()} expects passed — starting HTTP asserts\n`,
-            );
-          } catch {}
-        });
         // Generous budget: a fresh router distribution's KVS association +
         // function propagation can lag past 180s on first serve.
         yield* expectUrlContains(`${url}/`, "TANSTACK_AWS_PAGE_MARKER", {

@@ -14,18 +14,6 @@ import {
   withKvsRegionFn,
 } from "./common.ts";
 
-// TEMP TRACE — DO NOT COMMIT
-const TRACE = (m: string) =>
-  Effect.sync(() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require("node:fs").appendFileSync(
-        "/tmp/kvs-trace.log",
-        `${new Date().toISOString()} ${m}\n`,
-      );
-    } catch {}
-  });
-
 export interface KvEntriesProps {
   /** ARN of the CloudFront KeyValueStore. */
   store: string;
@@ -125,9 +113,6 @@ export const KvEntriesProvider = () =>
         puts: kvs.PutKeyRequestListItem[],
         deletes: kvs.DeleteKeyRequestListItem[],
       ) {
-        yield* TRACE(
-          `KE sendBatch store=…${store.slice(-12)} etag=${etag} puts=${JSON.stringify(puts.map((x) => x.Key))} deletes=${JSON.stringify(deletes.map((x) => x.Key))}`,
-        );
         return yield* kvs.updateKeys({
           KvsARN: store,
           IfMatch: etag,

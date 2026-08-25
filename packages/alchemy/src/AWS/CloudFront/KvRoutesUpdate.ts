@@ -16,18 +16,6 @@ import {
   withKvsRegionFn,
 } from "./common.ts";
 
-// TEMP TRACE — DO NOT COMMIT
-const TRACE = (m: string) =>
-  Effect.sync(() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require("node:fs").appendFileSync(
-        "/tmp/kvs-trace.log",
-        `${new Date().toISOString()} ${m}\n`,
-      );
-    } catch {}
-  });
-
 export interface KvRoutesUpdateProps {
   /** ARN of the CloudFront KeyValueStore. */
   store: string;
@@ -164,26 +152,12 @@ export const KvRoutesUpdateProvider = () =>
           }
         }
 
-        yield* TRACE(
-          `RU setRoutes store=…${store.slice(-12)} etag=${etag} puts=${JSON.stringify(puts.map((x) => x.Key))} deletes=${JSON.stringify(deletes.map((x) => x.Key))}`,
-        );
-        yield* kvs
-          .updateKeys({
-            KvsARN: store,
-            IfMatch: etag,
-            Puts: puts.length > 0 ? puts : undefined,
-            Deletes: deletes.length > 0 ? deletes : undefined,
-          })
-          .pipe(
-            Effect.tap((r) =>
-              TRACE(`RU setRoutes OK newEtag=${(r as any)?.ETag}`),
-            ),
-            Effect.tapError((e) =>
-              TRACE(
-                `RU setRoutes ERR ${(e as any)._tag}: ${String((e as any).message).slice(0, 120)}`,
-              ),
-            ),
-          );
+        yield* kvs.updateKeys({
+          KvsARN: store,
+          IfMatch: etag,
+          Puts: puts.length > 0 ? puts : undefined,
+          Deletes: deletes.length > 0 ? deletes : undefined,
+        });
       });
 
       const deleteKey = Effect.fn(function* (
@@ -198,21 +172,11 @@ export const KvRoutesUpdateProvider = () =>
             deletes.push({ Key: `${fullKey}:${i}` });
           }
         }
-        yield* TRACE(
-          `RU deleteKey store=…${store.slice(-12)} etag=${etag} deletes=${JSON.stringify(deletes.map((x) => x.Key))}`,
-        );
-        yield* kvs
-          .updateKeys({
-            KvsARN: store,
-            IfMatch: etag,
-            Deletes: deletes,
-          })
-          .pipe(
-            Effect.tap(() => TRACE("RU deleteKey OK")),
-            Effect.tapError((e) =>
-              TRACE(`RU deleteKey ERR ${(e as any)._tag}`),
-            ),
-          );
+        yield* kvs.updateKeys({
+          KvsARN: store,
+          IfMatch: etag,
+          Deletes: deletes,
+        });
       });
 
       const deleteOp = (
@@ -254,9 +218,6 @@ export const KvRoutesUpdateProvider = () =>
         Effect.gen(function* () {
           const etag = yield* getKvsEtag(store);
           const { routes, chunkNum } = yield* getRoutes(store, fullKey);
-          yield* TRACE(
-            `RU upsertEntry store=…${store.slice(-12)} key=${fullKey} etag=${etag} existingRoutes=${JSON.stringify(routes)} add=${entryToAdd} remove=${entryToRemove ?? "-"}`,
-          );
           const filtered =
             entryToRemove !== undefined
               ? routes.filter((r) => r !== entryToRemove)
@@ -287,9 +248,6 @@ export const KvRoutesUpdateProvider = () =>
         ),
         reconcile: withKvsRegionFn(
           Effect.fn(function* ({ news, output }) {
-            yield* TRACE(
-              `RU reconcile ENTER store=…${String(news.store).slice(-12)} ns=${news.namespace} key=${news.key} entry=${news.entry} hasOutput=${output !== undefined}`,
-            );
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
                 // Observe — figure out whether the prior entry lived at a
@@ -324,7 +282,6 @@ export const KvRoutesUpdateProvider = () =>
                   previousEntry,
                 );
 
-                yield* TRACE("RU reconcile EXIT ok");
                 return {
                   store: news.store,
                   namespace: news.namespace,
@@ -337,9 +294,6 @@ export const KvRoutesUpdateProvider = () =>
         ),
         delete: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
-            yield* TRACE(
-              `RU DELETE-OP ENTER store=…${String(output.store).slice(-12)} ns=${output.namespace} entry=${output.entry}`,
-            );
             yield* retryForKvsReadiness(
               deleteOp({
                 store: output.store,
