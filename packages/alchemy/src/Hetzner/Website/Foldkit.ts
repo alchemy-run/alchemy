@@ -1,21 +1,6 @@
-import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
-import {
-  VITE_FRAMEWORK_SPECIFIER,
-  VITE_NODE_TARGET_SPECIFIER,
-} from "./Vite.ts";
+import { Vite, type ViteProps } from "./Vite.ts";
 
-export interface FoldkitProps extends FrameworkSiteProps {
-  /**
-   * Serializable Vite config merged OVER the project's own `vite.config.*`.
-   */
-  vite?: {
-    /** Build output directory, relative to `rootDir`. */
-    outDir?: string;
-    /** Public base path the site deploys under (vite's `base`). */
-    base?: string;
-  };
-}
+export interface FoldkitProps extends ViteProps {}
 
 /**
  * Deploy a [Foldkit](https://foldkit.dev) app to a Hetzner Cloud Server.
@@ -38,14 +23,20 @@ export interface FoldkitProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * ### Single-Page Application Routing
+ * **Example:** Serving a real 404 page
+ * ```typescript
+ * const site = yield* Hetzner.Website.Foldkit("Website", {
+ *   spa: false,
+ *   errorPage: "404.html",
+ * });
+ * ```
+ *
  * @resource
  * @product Website
  */
 export const Foldkit = (id: string, props: FoldkitProps = {}) =>
-  makeFrameworkSite(id, props, {
-    name: "Foldkit",
-    framework: VITE_FRAMEWORK_SPECIFIER,
-    target: VITE_NODE_TARGET_SPECIFIER,
-    options: props.vite !== undefined ? { vite: props.vite } : undefined,
-    static: { spa: true },
-  }).pipe(Namespace.push(id));
+  Vite(id, {
+    ...props,
+    spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
+  });

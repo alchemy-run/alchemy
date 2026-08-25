@@ -162,15 +162,19 @@ A Foldkit app that uses URL routing (`Runtime.makeApplication` with
 client, so a deep link like `/counter/42` arrives as a request for a
 file that doesn't exist.
 
-`Foldkit` falls back to `index.html` (200) unless you pass
-`errorPage`, which serves that file with status 404 instead:
+`Foldkit` defaults `spa` on, which returns `index.html` (200) for
+unmatched paths so the Foldkit runtime can resolve the route. Pass
+`errorPage` to serve a real 404 instead:
 
 ```typescript
 export const Website = Railway.Website.Foldkit("Website", {
+  spa: false,
   errorPage: "404.html",
   registry: "ghcr.io/acme",
 });
 ```
+
+`spa` and `errorPage` are mutually exclusive.
 
 ## Local dev
 

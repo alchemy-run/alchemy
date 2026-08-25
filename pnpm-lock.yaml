@@ -238,6 +238,9 @@ catalogs:
     '@types/react':
       specifier: ^19.2.17
       version: 19.2.18
+    '@types/react-dom':
+      specifier: ^19.2.4
+      version: 19.2.4
     '@vitejs/plugin-react':
       specifier: ^6.0.2
       version: 6.0.5
@@ -2537,6 +2540,9 @@ importers:
       '@types/react':
         specifier: catalog:frontend
         version: 19.2.18
+      '@types/react-dom':
+        specifier: catalog:frontend
+        version: 19.2.4(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -2622,6 +2628,9 @@ importers:
       '@types/react':
         specifier: catalog:frontend
         version: 19.2.18
+      '@types/react-dom':
+        specifier: catalog:frontend
+        version: 19.2.4(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -2896,6 +2905,9 @@ importers:
       '@types/react':
         specifier: catalog:frontend
         version: 19.2.18
+      '@types/react-dom':
+        specifier: catalog:frontend
+        version: 19.2.4(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))

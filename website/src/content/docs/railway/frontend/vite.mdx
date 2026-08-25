@@ -180,17 +180,15 @@ export const Website = Railway.Website.Vite("Docs", {
 `rootDir` is the project root (the directory containing
 `package.json`). Default `"."`.
 
-The `vite` prop exposes serializable overrides merged *over* the
+`outDir` and `base` are serializable overrides merged *over* the
 config file:
 
 ```typescript
 export const Website = Railway.Website.Vite("Website", {
   rootDir: "./app",
   registry: "ghcr.io/acme",
-  vite: {
-    outDir: "build",
-    base: "/docs/",
-  },
+  outDir: "build",
+  base: "/docs/",
 });
 ```
 

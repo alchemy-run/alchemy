@@ -8,20 +8,28 @@ export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
 export const VITE_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/vite/node";
 
+const viteOptions = (props: ViteProps) =>
+  props.outDir !== undefined || props.base !== undefined
+    ? {
+        vite: {
+          ...(props.outDir !== undefined ? { outDir: props.outDir } : {}),
+          ...(props.base !== undefined ? { base: props.base } : {}),
+        },
+      }
+    : undefined;
+
 export interface ViteProps extends FrameworkSiteProps {
   /**
-   * Serializable Vite config merged OVER the project's own `vite.config.*`
-   * (which loads natively, plugins included).
+   * Vite build output directory, relative to {@link rootDir}. Setting this
+   * overrides `build.outDir` in the project's `vite.config.*`.
+   * @default the project config's `build.outDir` (vite's default: "dist")
    */
-  vite?: {
-    /**
-     * Build output directory, relative to `rootDir`.
-     * @default the project config's `build.outDir` (vite's default: "dist")
-     */
-    outDir?: string;
-    /** Public base path the site deploys under (vite's `base`). */
-    base?: string;
-  };
+  outDir?: string;
+  /**
+   * Public base path the site deploys under (vite's `base`). Setting this
+   * overrides `base` in the project's `vite.config.*`.
+   */
+  base?: string;
   /**
    * Answer misses with the index page (200) instead of a 404, so
    * client-side routes deep-link correctly. Plain Vite apps are typically
@@ -99,10 +107,8 @@ export interface ViteProps extends FrameworkSiteProps {
  * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* Railway.Website.Vite("Docs", {
- *   vite: {
- *     outDir: "build",
- *     base: "/docs/",
- *   },
+ *   outDir: "build",
+ *   base: "/docs/",
  *   registry: "ghcr.io/acme",
  * });
  * ```
@@ -123,7 +129,7 @@ export const Vite = (id: string, props: ViteProps = {}) =>
     name: "Vite",
     framework: VITE_FRAMEWORK_SPECIFIER,
     target: VITE_NODE_TARGET_SPECIFIER,
-    options: props.vite !== undefined ? { vite: props.vite } : undefined,
+    options: viteOptions(props),
     static: {
       spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
       errorPage: props.errorPage,

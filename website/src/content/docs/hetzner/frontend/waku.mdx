@@ -62,10 +62,10 @@ export default defineConfig({
 });
 ```
 
-Options set on the resource's `waku` prop (`srcDir`, `distDir`,
-`basePath`, ...) merge over the file, per key. The one key Alchemy
-owns is `unstable_adapter` — the Node deploy target sets it. Setting
-it fails the build with an actionable error.
+Options set on the resource (`srcDir`, `distDir`, `basePath`) merge
+over the file, per key. The one key Alchemy owns is
+`unstable_adapter` — the Node deploy target sets it. Setting it
+fails the build with an actionable error.
 
 :::note
 Vite configuration must live in `waku.config.ts`'s `vite` field —

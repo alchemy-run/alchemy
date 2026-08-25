@@ -8,23 +8,36 @@ export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 export const WAKU_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/waku/node";
 
+const wakuOptions = (props: WakuProps) => {
+  const waku = {
+    ...(props.srcDir !== undefined ? { srcDir: props.srcDir } : {}),
+    ...(props.distDir !== undefined ? { distDir: props.distDir } : {}),
+    ...(props.basePath !== undefined ? { basePath: props.basePath } : {}),
+  };
+  return Object.keys(waku).length > 0 ? { waku } : undefined;
+};
+
 export interface WakuProps extends FrameworkSiteProps {
   /**
-   * Waku config overrides (`srcDir`, `distDir`, `basePath`, `vite`, ...)
-   * merged over the project's own `waku.config.ts`. `unstable_adapter` is
-   * owned by the Node deploy target and may not be set here.
-   */
-  waku?: Record<string, unknown>;
-  /**
-   * Waku source directory, relative to {@link rootDir}.
+   * Waku source directory, relative to {@link rootDir}. Setting this
+   * overrides a `srcDir` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"src"`)
    */
   srcDir?: string;
   /**
-   * Waku build output directory, relative to {@link rootDir}.
+   * Waku build output directory, relative to {@link rootDir}. The server
+   * bundle is read from `<distDir>/server` and the client assets from
+   * `<distDir>/public`. Setting this overrides a `distDir` in the
+   * project's `waku.config.*` — if your config file customizes `distDir`,
+   * mirror it here (or exclude it via `memo`) so the build output doesn't
+   * pollute the rebuild hash.
+   * @default the project's `waku.config.*` value, or waku's own default (`"dist"`)
    */
   distDir?: string;
   /**
-   * Base path the app is served under.
+   * Base path the app is served under. Setting this overrides a
+   * `basePath` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"/"`)
    */
   basePath?: string;
 }
@@ -63,17 +76,10 @@ export interface WakuProps extends FrameworkSiteProps {
  * @resource
  * @product Website
  */
-export const Waku = (id: string, props: WakuProps = {}) => {
-  const waku = {
-    ...props.waku,
-    ...(props.srcDir !== undefined ? { srcDir: props.srcDir } : {}),
-    ...(props.distDir !== undefined ? { distDir: props.distDir } : {}),
-    ...(props.basePath !== undefined ? { basePath: props.basePath } : {}),
-  };
-  return makeFrameworkSite(id, props, {
+export const Waku = (id: string, props: WakuProps = {}) =>
+  makeFrameworkSite(id, props, {
     name: "Waku",
     framework: WAKU_FRAMEWORK_SPECIFIER,
     target: WAKU_NODE_TARGET_SPECIFIER,
-    options: Object.keys(waku).length > 0 ? { waku } : undefined,
+    options: wakuOptions(props),
   }).pipe(Namespace.push(id));
-};

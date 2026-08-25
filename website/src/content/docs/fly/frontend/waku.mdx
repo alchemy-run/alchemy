@@ -61,9 +61,9 @@ export default defineConfig({
 });
 ```
 
-Options set on the resource (`srcDir`, `distDir`, `basePath`) or its
-`waku` prop merge over the file, per key. The one key Alchemy owns
-is `unstable_adapter` — the Node deploy target sets it. Setting it
+Options set on the resource (`srcDir`, `distDir`, `basePath`) merge
+over the file, per key. The one key Alchemy owns is
+`unstable_adapter` — the Node deploy target sets it. Setting it
 fails the build with an actionable error.
 
 :::note

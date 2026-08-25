@@ -9,14 +9,7 @@ export const OCTANE_FRAMEWORK_SPECIFIER =
 export const OCTANE_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/octane/node";
 
-export interface OctaneProps extends FrameworkSiteProps {
-  /**
-   * Project root directory (the directory containing `vite.config.ts` and
-   * `octane.config.ts`).
-   * @default "."
-   */
-  rootDir?: string;
-}
+export interface OctaneProps extends FrameworkSiteProps {}
 
 /**
  * Deploy an [OctaneJS](https://octanejs.dev) application to a Hetzner

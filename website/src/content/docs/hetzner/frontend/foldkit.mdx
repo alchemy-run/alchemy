@@ -156,11 +156,18 @@ A Foldkit app that uses URL routing (`Runtime.makeApplication` with
 client, so a deep link like `/counter/42` arrives as a request for a
 file that doesn't exist.
 
-`Foldkit` always answers misses with `index.html` (200) so the
-Foldkit runtime can resolve the route. This resource does not take
-`spa` or `errorPage` — use
-[`Hetzner.Website.Vite`](/hetzner/frontend/vite) when you need a
-real 404 page.
+`Foldkit` defaults `spa` on, which returns `index.html` (200) for
+unmatched paths so the Foldkit runtime can resolve the route. Pass
+`errorPage` to serve a real 404 instead:
+
+```typescript
+export const Website = Hetzner.Website.Foldkit("Website", {
+  spa: false,
+  errorPage: "404.html",
+});
+```
+
+`spa` and `errorPage` are mutually exclusive.
 
 ## Local dev
 

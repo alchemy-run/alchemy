@@ -34,6 +34,7 @@
     "@tailwindcss/vite": "catalog:frontend",
     "@types/pg": "catalog:database",
     "@types/react": "catalog:frontend",
+    "@types/react-dom": "catalog:frontend",
     "@vitejs/plugin-react": "catalog:frontend",
     "tailwindcss": "catalog:frontend",
     "typescript": "catalog:build",

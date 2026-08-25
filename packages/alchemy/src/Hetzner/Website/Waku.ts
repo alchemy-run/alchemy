@@ -8,13 +8,38 @@ export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 export const WAKU_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/waku/node";
 
+const wakuOptions = (props: WakuProps) => {
+  const waku = {
+    ...(props.srcDir !== undefined ? { srcDir: props.srcDir } : {}),
+    ...(props.distDir !== undefined ? { distDir: props.distDir } : {}),
+    ...(props.basePath !== undefined ? { basePath: props.basePath } : {}),
+  };
+  return Object.keys(waku).length > 0 ? { waku } : undefined;
+};
+
 export interface WakuProps extends FrameworkSiteProps {
   /**
-   * Waku config overrides (`srcDir`, `distDir`, `basePath`, `vite`, ...)
-   * merged over the project's own `waku.config.ts`. `unstable_adapter` is
-   * owned by the Node deploy target and may not be set here.
+   * Waku source directory, relative to {@link rootDir}. Setting this
+   * overrides a `srcDir` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"src"`)
    */
-  waku?: Record<string, unknown>;
+  srcDir?: string;
+  /**
+   * Waku build output directory, relative to {@link rootDir}. The server
+   * bundle is read from `<distDir>/server` and the client assets from
+   * `<distDir>/public`. Setting this overrides a `distDir` in the
+   * project's `waku.config.*` — if your config file customizes `distDir`,
+   * mirror it here (or exclude it via `memo`) so the build output doesn't
+   * pollute the rebuild hash.
+   * @default the project's `waku.config.*` value, or waku's own default (`"dist"`)
+   */
+  distDir?: string;
+  /**
+   * Base path the app is served under. Setting this overrides a
+   * `basePath` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"/"`)
+   */
+  basePath?: string;
 }
 
 /**
@@ -49,6 +74,6 @@ export const Waku = (id: string, props: WakuProps = {}) =>
     name: "Waku",
     framework: WAKU_FRAMEWORK_SPECIFIER,
     target: WAKU_NODE_TARGET_SPECIFIER,
-    options: props.waku ? { waku: props.waku } : undefined,
+    options: wakuOptions(props),
     htmlHandling: "drop-trailing-slash",
   }).pipe(Namespace.push(id));
