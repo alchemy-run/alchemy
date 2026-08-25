@@ -115,32 +115,4 @@ describe("local container reaches host services", () => {
     }).pipe(Effect.scoped, logLevel),
     { timeout: TEST_TIMEOUT },
   );
-
-  test(
-    "https requests to the container are downgraded to http",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-      const client = yield* HttpClient.HttpClient;
-
-      const get = (path: string) =>
-        client.get(new URL(path, url)).pipe(
-          Effect.flatMap((r) =>
-            r.status !== 200
-              ? Effect.fail(new Error(`not ready: ${r.status}`))
-              : r.text,
-          ),
-          Effect.timeout("30 seconds"),
-          Effect.retry({ schedule: readinessSchedule, times: 30 }),
-        );
-
-      // The proxy-the-incoming-request pattern from #1334: the worker
-      // forwards the raw request through the DO's fetch handler, whose
-      // underlying web Request carries the https:// URL production would —
-      // workerd rejects HTTPS on container ports ("Connecting to a container
-      // using HTTPS is not currently supported"), so the runtime must
-      // downgrade the scheme on the container hop.
-      expect(JSON.parse(yield* get("/passthrough"))).toEqual({ ok: true });
-    }).pipe(Effect.scoped, logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
 });

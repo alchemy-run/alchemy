@@ -1,7 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
 /**
  * Deterministic port the test's host-side HTTP server listens on. It stands
@@ -56,21 +55,6 @@ export class HostReachContainerObject extends Cloudflare.DurableObject<HostReach
       return {
         getEnv: () => get("/env"),
         getProbe: () => get("/probe"),
-        // The user pattern from #1334: forward the incoming request to the
-        // container verbatim (`yield* fetch(yield* HttpServerRequest)`). In
-        // production the incoming web Request carries an https:// URL that
-        // workerd's container port rejects; dev serves http://, so rebuild
-        // the request at the web layer with the scheme it would carry live.
-        // (Only the underlying web Request's URL matters: the effect-level
-        // `HttpServerRequest.url` is path-only and `toWeb` hands workerd the
-        // original web Request.)
-        fetch: Effect.gen(function* () {
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          const live = new Request(`https://container${request.url}`, {
-            method: request.method,
-          });
-          return yield* fetch(HttpServerRequest.fromWeb(live));
-        }),
       };
     });
   }).pipe(

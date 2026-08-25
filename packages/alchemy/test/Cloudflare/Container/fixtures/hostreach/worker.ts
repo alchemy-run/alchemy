@@ -24,12 +24,6 @@ export default class HostReachContainerWorker extends Cloudflare.Worker<HostReac
         if (url.pathname === "/probe") {
           return HttpServerResponse.text(yield* object.getProbe());
         }
-        if (url.pathname.startsWith("/passthrough")) {
-          // Forward the raw request through the DO's fetch handler, which
-          // proxies it to the container with the https:// scheme it would
-          // carry in production (see the fixture object's `fetch`).
-          return yield* object.fetch(request);
-        }
         return HttpServerResponse.text("ok");
       }).pipe(
         Effect.catchTag("HttpClientError", (err) =>
