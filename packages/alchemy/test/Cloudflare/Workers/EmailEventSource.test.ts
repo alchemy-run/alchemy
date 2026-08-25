@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import EmailCatchAllWorker from "./fixtures/email-catchall-worker.ts";
 import EmailTestWorker from "./fixtures/email-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -169,4 +170,53 @@ test.skipIf(skipRoundTrip)(
     }
   }).pipe(logLevel),
   { timeout: 360_000 },
+);
+
+// The catch-all form: `email({ zone })` with no matchers. Cloudflare
+// rejects a lone `{ type: "all" }` matcher on `createRule` with
+// "Invalid rule operation", so this stack only deploys at all if the
+// event source provisions `Email.CatchAll` instead of `Email.Rule`.
+const CatchAllStack = Alchemy.Stack(
+  "EmailEventSourceCatchAllStack",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const worker = yield* EmailCatchAllWorker;
+    return { workerName: worker.workerName };
+  }),
+);
+
+const catchAllStack = beforeAll(deploy(CatchAllStack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(CatchAllStack));
+
+test.provider(
+  "a catch-all subscription provisions Email.CatchAll, not an Email.Rule",
+  () =>
+    Effect.gen(function* () {
+      const { workerName } = yield* catchAllStack;
+      const zoneId = yield* resolveZoneId;
+
+      // The zone's catch-all singleton now points at the worker.
+      const catchAll = yield* rideOutAuth(
+        emailRouting.getRuleCatchAll({ zoneId }),
+      );
+      expect(catchAll.enabled).toBe(true);
+      expect(catchAll.actions?.[0]?.type).toEqual("worker");
+      expect(catchAll.actions?.[0]?.value).toEqual([workerName]);
+
+      // ...and no ordinary rule was created for it. `listRules` surfaces
+      // the catch-all too, so exclude it by id rather than by matcher.
+      const rules = yield* rideOutAuth(emailRouting.listRules({ zoneId }));
+      const strays = (rules.result ?? [])
+        .filter((r) => r.id !== catchAll.id)
+        .filter((r) =>
+          (r.actions ?? []).some(
+            (a) => a.type === "worker" && (a.value ?? []).includes(workerName),
+          ),
+        );
+      expect(strays).toEqual([]);
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
