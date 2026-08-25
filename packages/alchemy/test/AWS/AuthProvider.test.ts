@@ -1,5 +1,4 @@
 import { applyEnvRegionOverride } from "@/AWS/AuthProvider.ts";
-import { withDotEnvFallback } from "@/Util/ConfigProvider.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -47,7 +46,7 @@ describe("applyEnvRegionOverride", () => {
     }).pipe(
       Effect.provide(
         ConfigProvider.layer(
-          withDotEnvFallback(
+          ConfigProvider.orElse(
             ConfigProvider.fromEnv({ env: { AWS_REGION: "us-east-1" } }),
             ConfigProvider.fromEnv({ env: { AWS_REGION: "ap-south-1" } }),
           ),
