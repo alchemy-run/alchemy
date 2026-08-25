@@ -1,5 +1,5 @@
 import * as Railway from "alchemy/Railway";
-import { ServerHost } from "alchemy/Server";
+import { Host } from "alchemy/Local";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { Disk, MARKER, MARKER_FILE, Site, VOLUME_PATH } from "./shared.ts";
@@ -18,7 +18,7 @@ export default class Worker extends Railway.Service<Worker>()(
   },
   Effect.gen(function* () {
     const mount = yield* Railway.MountVolume(Disk, { path: VOLUME_PATH });
-    const host = yield* ServerHost;
+    const host = yield* Host;
     const fs = yield* FileSystem.FileSystem;
 
     yield* host.run(
