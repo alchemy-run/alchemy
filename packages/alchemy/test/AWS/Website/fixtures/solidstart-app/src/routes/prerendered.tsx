@@ -1,7 +1,7 @@
 /**
- * Prerendered at build time by nitro (the test passes
- * `nitro: { prerender: { routes: ["/prerendered"] } }`), so it lands in
- * `.output/public` and is served from S3 by exact match at the edge.
+ * Prerendered at build time via the test's
+ * `nitro: { prerender: { routes: ["/prerendered"] } }` prop — the page
+ * lands in `.output/public` and is served from S3, not the Lambda.
  */
 export default function Prerendered() {
   return (

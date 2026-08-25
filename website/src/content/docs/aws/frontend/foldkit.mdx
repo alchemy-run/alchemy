@@ -176,21 +176,28 @@ with [`AWS.Website.StaticSite`](/aws/frontend/static-site) instead —
 it runs the build as a command and passes `environment` to it, so an
 Output can be inlined at build time.
 
-## Build output
+## Deploy-time overrides
 
-`outDir` is the build output directory (relative to `rootDir`) and
-`base` is the public path the site deploys under; both are merged
-*over* your `vite.config.*`:
+Vite configuration — the Foldkit plugin included — lives in your
+project's own `vite.config.*`. The `vite` bag is for deploy-time
+overrides merged *over* that file, for values decided by the
+deployment (config files can't consume alchemy `Output`s):
 
 ```typescript
 export const Website = AWS.Website.Foldkit("Docs", {
-  outDir: "build",
-  base: "/docs/",
+  vite: {
+    base: "/docs/",
+    outDir: "build",
+  },
 });
 ```
 
-Leave them unset and the resolved `build.outDir` from your
-`vite.config.*` is used — Vite's own default is `dist`.
+`base` is the public path the site deploys under (it also applies to
+the dev server under `alchemy dev`); `outDir` is the build output
+directory, relative to `rootDir`. Leave the bag unset and the resolved
+values from your `vite.config.*` are used — Vite's own `outDir`
+default is `dist`. `config` selects an alternate config file, relative
+to `rootDir`.
 
 ## Local dev
 

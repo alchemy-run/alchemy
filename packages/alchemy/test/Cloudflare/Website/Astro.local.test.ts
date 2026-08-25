@@ -256,8 +256,8 @@ describe.concurrent("Astro dev", () => {
               memo: {
                 include: ["src/**", "public/**", "package.json"],
               },
-              output: "static",
-              errorPage: "404.html",
+              astro: { output: "static" },
+              assets: { notFoundHandling: "404-page" },
             });
           }),
         );

@@ -190,14 +190,16 @@ invocation:
 
 ```typescript
 export const Website = AWS.Website.SolidStart("Website", {
-  prerender: { routes: ["/", "/about"] },
+  nitro: { prerender: { routes: ["/", "/about"] } },
 });
 ```
 
 `prerender` takes the routes to render (`routes`) and can crawl links
-from prerendered pages to prerender them too (`crawlLinks`). Other
-nitro options belong in your project's own config; `preset` is owned
-by the AWS deploy target, and a foreign preset is a hard error.
+from prerendered pages to prerender them too (`crawlLinks`). The
+`nitro` prop is the home for all nitro options (route rules, storage,
+...) — the integration owns the plugin instance, so they cannot live
+in `vite.config.ts`. Values must be JSON-serializable; `preset` is
+owned by the AWS deploy target, and a foreign preset is a hard error.
 
 ## Local dev
 

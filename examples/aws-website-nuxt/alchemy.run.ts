@@ -11,10 +11,8 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const site = yield* AWS.Website.Nuxt("NuxtSite", {
       forceDestroy: true,
-      server: {
-        environment: {
-          GREETING: "Hello from alchemy",
-        },
+      env: {
+        GREETING: "Hello from alchemy",
       },
     });
 

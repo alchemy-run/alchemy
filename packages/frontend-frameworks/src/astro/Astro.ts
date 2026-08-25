@@ -51,6 +51,14 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
    * actionable error.
    */
   readonly astro?: AstroInlineConfig | undefined;
+  /**
+   * Path to an alternate Astro config file, resolved against {@link root}
+   * when relative (astro itself resolves a relative `configFile` against
+   * the process cwd, so this module anchors it to the project root before
+   * handing it over). Defaults to astro's own config discovery
+   * (`astro.config.*` in the project root).
+   */
+  readonly config?: string | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
 }
@@ -82,8 +90,9 @@ export interface AstroConfigInputs {
 /**
  * Build the in-memory `AstroInlineConfig` — the overlay astro merges OVER
  * the project's own `astro.config.*` (which loads natively; `configFile`
- * is left undiscovered-default, so a project without a config file falls
- * back to a purely programmatic config). Astro's `resolveConfig` merge
+ * is left undiscovered-default unless the user overlay carries one, so a
+ * project without a config file falls back to a purely programmatic
+ * config). Astro's `resolveConfig` merge
  * gives this inline config precedence: arrays (`integrations`,
  * `vite.plugins`) concatenate after the file's, scalars override.
  *
@@ -185,6 +194,16 @@ export const make = <TargetConfig = unknown>(
         path.resolve(override ?? options?.root ?? process.cwd()),
       );
 
+    /**
+     * The user's inline Astro overlay with `config` resolved into
+     * `configFile`, anchored to the project root (astro resolves a
+     * relative `configFile` against the process cwd, not `root`).
+     */
+    const resolveUserAstro = (root: string): AstroInlineConfig | undefined =>
+      options?.config === undefined
+        ? options?.astro
+        : { ...options?.astro, configFile: path.resolve(root, options.config) };
+
     const resolveTarget = (
       root: string,
     ): Effect.Effect<AstroTarget, FrameworkCore.FrameworkError> =>
@@ -225,7 +244,7 @@ export const make = <TargetConfig = unknown>(
       makeAstroInlineConfig({
         root,
         integration: target.integration(),
-        userConfig: options?.astro,
+        userConfig: resolveUserAstro(root),
         ...overrides,
       });
 
@@ -236,10 +255,11 @@ export const make = <TargetConfig = unknown>(
         if (target.build !== undefined) {
           // Wholesale build takeover: the target owns the entire
           // production build (the OpenNext-style case). The inline Astro
-          // overlay rides along so a child-process build can reconstruct
-          // the framework with the same options.
+          // overlay rides along (with `config` already resolved into an
+          // absolute `configFile`) so a child-process build can
+          // reconstruct the framework with the same options.
           return yield* target
-            .build({ root, framework: "astro", astro: options?.astro })
+            .build({ root, framework: "astro", astro: resolveUserAstro(root) })
             .pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),

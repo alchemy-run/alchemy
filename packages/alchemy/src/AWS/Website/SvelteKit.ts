@@ -12,11 +12,12 @@ export const SVELTEKIT_AWS_TARGET_SPECIFIER =
 
 export interface SvelteKitProps extends FrameworkSiteProps {
   /**
-   * SvelteKit's `kit` config (svelte.config's own top-level key), passed
-   * to the `sveltekit(config)` Vite plugin — kit v3 takes its config in
-   * memory; a `svelte.config.js` on disk is an upstream error. The
-   * `adapter` field is injected by the AWS deploy target and may not be
-   * set here. Must be JSON-serializable (it persists in state).
+   * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
+   * over the options of the user's own call (these win). JSON-serializable
+   * only — no `preprocess`/`vitePlugin`/functions; construction-time options
+   * (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`) can only
+   * apply when no user `vite.config.*` exists. The `adapter` field is
+   * always owned by alchemy.
    */
   kit?: Record<string, unknown>;
 }
@@ -63,6 +64,22 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * ### Kit Overrides
+ * Kit options live in the `sveltekit(...)` call in your `vite.config.ts`,
+ * which loads natively. The `kit` prop is a deploy-time override bag
+ * merged over your own options (the prop wins) — useful for per-stage
+ * values the config file can't compute. JSON-serializable values only.
+ *
+ * **Example:** Deploy-time kit overrides
+ * ```typescript
+ * const site = yield* AWS.Website.SvelteKit("Web", {
+ *   rootDir: "./app",
+ *   kit: {
+ *     paths: { base: "/docs" },
+ *   },
+ * });
+ * ```
+ *
  * @resource
  */
 export const SvelteKit = (
@@ -74,6 +91,6 @@ export const SvelteKit = (
     name: "SvelteKit",
     framework: SVELTEKIT_FRAMEWORK_SPECIFIER,
     target: SVELTEKIT_AWS_TARGET_SPECIFIER,
-    options: p.kit ? { kit: p.kit } : undefined,
+    options: { kit: p.kit },
   }).pipe(Namespace.push(id));
 };

@@ -63,33 +63,13 @@ export interface FoldkitProps<
     workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
   };
   /**
-   * Serve `index.html` for unmatched request paths so the Foldkit
-   * router can take over (maps to
-   * `assets.notFoundHandling: "single-page-application"`). This is the
-   * Foldkit default; set `spa: false` to opt out (unmatched paths 404),
-   * or set `errorPage` to serve a real 404 page instead. An explicit
-   * `assets.notFoundHandling` wins over this sugar.
-   * @default true
-   */
-  spa?: boolean;
-  /**
-   * Serve the built `404.html` for unmatched request paths (maps to
-   * `assets.notFoundHandling: "404-page"`), replacing the SPA fallback
-   * default. Cloudflare's asset layer serves the nearest `404.html` —
-   * the file name is fixed by the platform, so the only accepted value
-   * is `"404.html"`. An explicit `assets.notFoundHandling` wins over
-   * this sugar, and `spa: true` wins over `errorPage` when both are
-   * set.
-   */
-  errorPage?: "404.html";
-  /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    *
    * Foldkit apps route on the client, so `notFoundHandling` defaults to
    * `"single-page-application"` — unmatched paths serve `index.html` and
-   * the app's router takes over. Set `spa`/`errorPage` (or
-   * `notFoundHandling` explicitly) to override.
+   * the app's router takes over. Set `notFoundHandling` explicitly to
+   * override (e.g. `"404-page"` to serve the built `404.html`).
    *
    * @default { notFoundHandling: "single-page-application" }
    */
@@ -132,13 +112,14 @@ export interface FoldkitProps<
  * ### Single-Page Application Routing
  * Unmatched paths serve `index.html` by default so deep links boot the
  * app and the Foldkit router resolves the route. A site that ships real
- * 404 content sets `errorPage: "404.html"` instead, and `spa: false`
- * turns the fallback off entirely.
+ * 404 content overrides the default with `notFoundHandling: "404-page"`.
  *
  * **Example:** Serving a real 404 page
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
- *   errorPage: "404.html",
+ *   assets: {
+ *     notFoundHandling: "404-page",
+ *   },
  * });
  * ```
  *
@@ -233,18 +214,10 @@ export const Foldkit: {
           (props) => ({
             ...props,
             // Foldkit routes on the client; serve index.html for unmatched
-            // paths so deep links boot the app instead of 404ing. `spa` /
-            // `errorPage` are sugar over the same knob: `spa: false` opts
-            // out entirely, `errorPage` swaps the fallback for the built
-            // `404.html` (unless `spa: true` is explicit). An explicit
-            // `assets.notFoundHandling` wins over all of them.
+            // paths so deep links boot the app instead of 404ing. An
+            // explicit `assets.notFoundHandling` wins over the default.
             assets: {
-              notFoundHandling:
-                props?.spa === false
-                  ? ("none" as const)
-                  : props?.errorPage !== undefined && props?.spa !== true
-                    ? ("404-page" as const)
-                    : ("single-page-application" as const),
+              notFoundHandling: "single-page-application" as const,
               ...props?.assets,
             },
             main: undefined!,

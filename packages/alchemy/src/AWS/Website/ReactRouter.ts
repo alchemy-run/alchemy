@@ -10,15 +10,7 @@ export const REACT_ROUTER_FRAMEWORK_SPECIFIER =
 export const REACT_ROUTER_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/react-router/aws";
 
-export interface ReactRouterProps extends FrameworkSiteProps {
-  /**
-   * Build output directory relative to `rootDir` — the parent of
-   * `client/` and `server/`. Must match `react-router.config.ts` when it
-   * sets `buildDirectory`.
-   * @default "build"
-   */
-  outDir?: string;
-}
+export interface ReactRouterProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [React Router](https://reactrouter.com) v7 app (framework mode)
@@ -93,26 +85,14 @@ export interface ReactRouterProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * ### Build Output
- * **Example:** Custom Build Directory
- * ```typescript
- * const site = yield* AWS.Website.ReactRouter("Web", {
- *   rootDir: "./app",
- *   outDir: "dist",
- * });
- * ```
- *
  * @resource
  */
 export const ReactRouter = (
   id: string,
   props: InputProps<ReactRouterProps> = {},
-) => {
-  const p = props as ReactRouterProps;
-  return makeFrameworkSite(id, props, {
+) =>
+  makeFrameworkSite(id, props, {
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,
     target: REACT_ROUTER_AWS_TARGET_SPECIFIER,
-    options: p.outDir ? { buildDirectory: p.outDir } : undefined,
   }).pipe(Namespace.push(id));
-};

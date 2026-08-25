@@ -10,15 +10,7 @@ export const TANSTACK_START_FRAMEWORK_SPECIFIER =
 export const TANSTACK_START_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/tanstack-start/aws";
 
-export interface TanStackStartProps extends FrameworkSiteProps {
-  /**
-   * Build output directory relative to `rootDir` — the parent of
-   * `client/` and `server/`. Must match your `vite.config.ts` when it
-   * sets `build.outDir`.
-   * @default "dist"
-   */
-  outDir?: string;
-}
+export interface TanStackStartProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [TanStack Start](https://tanstack.com/start) application to AWS:
@@ -87,26 +79,14 @@ export interface TanStackStartProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * ### Build Output
- * **Example:** Custom Build Directory
- * ```typescript
- * const site = yield* AWS.Website.TanStackStart("Web", {
- *   rootDir: "./app",
- *   outDir: "build",
- * });
- * ```
- *
  * @resource
  */
 export const TanStackStart = (
   id: string,
   props: InputProps<TanStackStartProps> = {},
-) => {
-  const p = props as TanStackStartProps;
-  return makeFrameworkSite(id, props, {
+) =>
+  makeFrameworkSite(id, props, {
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,
     target: TANSTACK_START_AWS_TARGET_SPECIFIER,
-    options: p.outDir ? { outDir: p.outDir } : undefined,
   }).pipe(Namespace.push(id));
-};

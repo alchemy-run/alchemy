@@ -238,16 +238,12 @@ const readObject = createServerFn({ method: "GET" }).handler(async () => {
 See [Effect HTTP API](/aws/apis/effect-http-api) for building that
 Lambda and binding it to the resources it reads.
 
-## Custom build directory
+## Build configuration
 
-If your `vite.config.ts` sets `build.outDir`, tell the resource the same
-path so it finds `client/` and `server/`:
-
-```typescript
-export const Website = AWS.Website.TanStackStart("Website", {
-  outDir: "build",
-});
-```
+The build runs through your project's own `vite.config.ts` — the
+`tanstackStart()` plugin and everything else in it apply as-is. Keep
+vite's default `build.outDir` (`dist`); the integration reads the
+server and client output from `dist/server` and `dist/client`.
 
 ## Local dev
 

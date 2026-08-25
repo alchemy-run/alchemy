@@ -681,8 +681,8 @@ describe.concurrent("Astro", () => {
                 workersDev: { enabled: true, previewsEnabled: true },
                 compatibility: { date: "2026-03-10" },
                 memo,
-                output: "static",
-                errorPage: "404.html",
+                astro: { output: "static" },
+                assets: { notFoundHandling: "404-page" },
               });
             }),
           );
@@ -800,8 +800,8 @@ describe.concurrent("Astro", () => {
                 include: ["src/**", "public/**", "package.json"],
                 workspaces: [],
               },
-              output: "static",
-              spa: true,
+              astro: { output: "static" },
+              assets: { notFoundHandling: "single-page-application" },
             });
           }),
         );

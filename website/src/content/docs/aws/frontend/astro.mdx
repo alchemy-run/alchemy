@@ -46,9 +46,9 @@ plugins, and any other non-serializable options work exactly as they
 do outside Alchemy. Alchemy merges a programmatic config *over* it:
 the AWS Lambda adapter is injected for you (don't declare an
 `adapter` in your config — that fails the build with an actionable
-error), and Astro options set on the resource (`site`, `base`,
-`output`, ...) override the file's — see
-[Astro configuration](#astro-configuration) below for the details.
+error), and options passed via the `astro` prop override the file's —
+see [Astro configuration](#astro-configuration) below for the
+details.
 
 ## Declare the Website
 
@@ -127,13 +127,13 @@ const greeting = process.env.GREETING ?? "hello";
 
 ## Fully static sites
 
-With `output: "static"` every page is prerendered at
+With `astro: { output: "static" }` every page is prerendered at
 build time and the deploy is assets-only — no Lambda is created, and
 the S3 + CloudFront asset layer answers every request:
 
 ```typescript
 export const Website = AWS.Website.Astro("Website", {
-  output: "static",
+  astro: { output: "static" },
   errorPage: "404.html",
 });
 ```
@@ -162,16 +162,36 @@ export default defineConfig({
 });
 ```
 
-The resource exposes common serializable options (`site`, `base`,
-`srcDir`, `publicDir`, `outDir`, `trailingSlash`) as flat props for
-deploy-specific overrides; Astro merges them *over* the config
-file (scalars override, arrays like `integrations` and
-`vite.plugins` concatenate after the file's):
+A config file can't consume Alchemy `Output`s or vary by stage. For
+those values the `astro` prop is a deploy-time override bag — a
+serializable subset (`site`, `base`, `output`, `srcDir`, `publicDir`,
+`outDir`, `trailingSlash`) merged *over* the config file, so a value
+set here wins:
 
 ```typescript
 // alchemy.run.ts
+import { Stack } from "alchemy/Stack";
+
+Effect.gen(function* () {
+  const { stage } = yield* Stack;
+
+  const site = yield* AWS.Website.Astro("Website", {
+    astro: {
+      site:
+        stage === "prod"
+          ? "https://blog.example.com"
+          : `https://${stage}.example.com`,
+    },
+  });
+});
+```
+
+Use `config` to load an alternate config file (relative to
+`rootDir`) instead of astro's own `astro.config.*` discovery:
+
+```typescript
 export const Website = AWS.Website.Astro("Website", {
-  site: "https://preview.example.com",
+  config: "astro.deploy.config.ts",
 });
 ```
 
@@ -182,7 +202,7 @@ Two options are managed for you regardless of the config file:
   actionable error.
 - `output` — Alchemy defaults it to `"server"` (superseding a
   file-level `output`), so pages render on demand in the Lambda.
-  Opt into a fully prerendered site with `output: "static"`
+  Opt into a fully prerendered site with `astro: { output: "static" }`
   on the resource.
 
 ## Local dev

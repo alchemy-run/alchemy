@@ -233,7 +233,7 @@ so a value that only exists after another resource deploys — an API's
 Function URL, a bucket name — can't be passed to the build through
 the composite. Deploy those apps with
 [`AWS.Website.StaticSite`](/aws/frontend/static-site) instead, which
-runs the build as a command and passes `environment` to it:
+runs the build as a command and passes `build.env` to it:
 
 ```typescript
 // alchemy.run.ts
@@ -245,9 +245,9 @@ Effect.gen(function* () {
     build: {
       command: "npm run build",
       output: "dist",
-    },
-    environment: {
-      VITE_API_URL: api.url,
+      env: {
+        VITE_API_URL: api.url,
+      },
     },
     spa: true,
   });
@@ -325,7 +325,7 @@ with `domain: { router, path: "/app" }` instead.
 ## Where next
 
 - [Vite on AWS](/aws/frontend/vite) — the resource reference: every
-  prop, `vite.outDir`/`base`, invalidation, and Router composition
+  prop, the `vite` override bag, invalidation, and Router composition
 - [Websites on AWS](/aws/frontend/websites) — the full websites
   surface, including server-side rendering
 - [Static sites](/aws/frontend/static-site) — the build-command path

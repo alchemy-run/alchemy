@@ -66,9 +66,9 @@ const site = yield* AWS.Website.StaticSite("Web", {
   build: {
     command: "bun run build",
     output: "dist",
-  },
-  environment: {
-    VITE_API_URL: api.url,
+    env: {
+      VITE_API_URL: api.url,
+    },
   },
 });
 ```
@@ -79,7 +79,7 @@ memoized, so unchanged inputs skip the build
 files under `path` (filtered by your gitignore rules) plus the nearest
 package-manager lockfile. Tune the hash with `build.include`, `build.exclude`, and
 `build.lockfile` — e.g. `include: ["src/**", "package.json"]` to re-run only
-when source files change. `environment` variables are passed to the build
+when source files change. `build.env` variables are passed to the build
 command, so outputs from other resources (like an API URL) flow straight into
 the frontend bundle.
 

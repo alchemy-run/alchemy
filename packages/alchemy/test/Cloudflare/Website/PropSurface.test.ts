@@ -125,23 +125,50 @@ describe("Website prop surfaces", () => {
     // typed props; the shared vocabulary (`outDir`, `spa`, `errorPage`)
     // is identical across composites. These pins fail the build if a bag
     // sneaks back in or a flat prop is dropped.
+    // Astro: framework config lives in `astro.config.*`; the `astro`
+    // prop is the deploy-time override bag merged OVER the file — an
+    // explicit serializable subset, no flat mirror props, no
+    // plugins/functions.
     () =>
       Cloudflare.Website.Astro("A", {
-        // @ts-expect-error the `astro` config bag is dissolved into flat props
-        astro: { output: "static" },
+        astro: {
+          site: "https://example.com",
+          base: "/docs",
+          output: "static",
+          srcDir: "./app",
+          publicDir: "./static",
+          outDir: "./dist",
+          trailingSlash: "always",
+        },
       }),
     () =>
       Cloudflare.Website.Astro("A", {
+        config: "astro.prod.config.mjs",
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        // @ts-expect-error `output` lives in the `astro` override bag
         output: "static",
-        site: "https://example.com",
-        srcDir: "./app",
-        outDir: "./dist",
-        errorPage: "404.html",
       }),
     () =>
       Cloudflare.Website.Astro("A", {
-        // @ts-expect-error Cloudflare serves the nearest `404.html` — the name is fixed
-        errorPage: "not-found.html",
+        // @ts-expect-error `site` belongs in astro.config.* or the `astro` bag
+        site: "https://example.com",
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        astro: {
+          // @ts-expect-error no plugins in the serializable override bag
+          integrations: [],
+        },
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        // @ts-expect-error only "always" | "never" | "ignore" — the value
+        // mismatch surfaces on the containing `astro` assignment
+        astro: {
+          trailingSlash: "sometimes",
+        },
       }),
     () =>
       Cloudflare.Website.Nextjs("X", {
@@ -150,6 +177,8 @@ describe("Website prop surfaces", () => {
       }),
     () =>
       Cloudflare.Website.Nextjs("X", {
+        // @ts-expect-error the OpenNext pipeline knobs are gone — configure
+        // them in open-next.config.ts; dev behavior moved to `dev.mode`
         devMode: "hmr",
         buildCommand: "npx next build",
         minify: true,
@@ -157,28 +186,49 @@ describe("Website prop surfaces", () => {
         configPath: "open-next.config.ts",
         debug: false,
       }),
+    // The `nuxt` bag is the ONE sanctioned override surface: serializable
+    // deploy-time config merged over nuxt.config.ts (highest-priority c12
+    // layer). Pinned positively so an `Omit` can't quietly drop it.
     () =>
       Cloudflare.Website.Nuxt("N", {
-        // @ts-expect-error open `nuxt` passthrough removed — config belongs in nuxt.config.ts
-        nuxt: { routeRules: {} },
+        nuxt: {
+          app: { baseURL: "/docs/" },
+          runtimeConfig: { public: { apiBase: "https://example.com" } },
+        },
       }),
     () =>
       Cloudflare.Website.SvelteKit("S", {
-        // @ts-expect-error open `kit` passthrough removed — config belongs in the sveltekit() call
-        kit: { alias: {} },
-      }),
-    // `adapter` survives — a cohesive single-feature object, not a junk
-    // drawer.
-    () =>
-      Cloudflare.Website.SvelteKit("S", {
+        // @ts-expect-error `adapter` removed — fallback generation is derived
+        // from the platform-native `assets.notFoundHandling` knob
         adapter: { notFoundHandling: "404-page", fallback: "spa" },
+      }),
+    // The `kit` bag is the deploy-time override seam: JSON-serializable
+    // config merged over the user's own `sveltekit(...)` call (the prop
+    // wins). Pinned positively so an `Omit` can't quietly drop it.
+    () =>
+      Cloudflare.Website.SvelteKit("S", {
+        kit: { paths: { base: "/docs" } },
+      }),
+    () =>
+      Cloudflare.Website.SvelteKit("S", {
+        assets: { notFoundHandling: "404-page" },
       }),
     () =>
       Cloudflare.Website.Waku("W", {
-        // @ts-expect-error renamed to the shared flat `outDir`
-        distDir: "build",
+        // @ts-expect-error framework config lives in the `waku` override bag
+        srcDir: "app",
       }),
-    () => Cloudflare.Website.Waku("W", { outDir: "build" }),
+    () =>
+      Cloudflare.Website.Waku("W", {
+        // @ts-expect-error framework config lives in the `waku` override bag
+        outDir: "build",
+      }),
+    // The `waku` bag is the deploy-time override seam, merged over the
+    // project's own `waku.config.*` (per-key; deploy-time values win).
+    () =>
+      Cloudflare.Website.Waku("W", {
+        waku: { srcDir: "app", distDir: "build", basePath: "/docs/" },
+      }),
     () =>
       Cloudflare.Website.Vite("V", {
         // No spa/errorPage sugar on CF Vite: Workers Assets' own
@@ -190,8 +240,49 @@ describe("Website prop surfaces", () => {
         // @ts-expect-error spa sugar deliberately not offered on CF Vite
         spa: true,
       }),
-    () => Cloudflare.Website.Foldkit("F", { spa: false }),
-    () => Cloudflare.Website.Foldkit("F", { errorPage: "404.html" }),
+    // ── CF Vite/Foldkit: config belongs in vite.config.* ─────────────
+    // The CF composites build through the Cloudflare Vite plugin, whose
+    // pipeline has no inline-override or configFile seam — so unlike the
+    // AWS composites there is no `vite` override bag and no `config`
+    // prop; `base`/`outDir` live only in the project's own config file.
+    () =>
+      Cloudflare.Website.Vite("V", {
+        // @ts-expect-error no top-level `base` — set it in vite.config.*
+        base: "/docs/",
+      }),
+    () =>
+      Cloudflare.Website.Vite("V", {
+        // @ts-expect-error no top-level `outDir` — the plugin owns the output layout
+        outDir: "dist",
+      }),
+    () =>
+      Cloudflare.Website.Vite("V", {
+        // @ts-expect-error no `vite` override bag on CF (no seam through the plugin pipeline)
+        vite: { base: "/docs/" },
+      }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error no top-level `base` — set it in vite.config.*
+        base: "/app/",
+      }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error no `vite` override bag on CF (no seam through the plugin pipeline)
+        vite: { base: "/app/" },
+      }),
+    // spa/errorPage sugar was dropped from CF Foldkit with CF Vite's:
+    // Workers Assets' notFoundHandling (defaulted to SPA for Foldkit) is
+    // the platform-native surface.
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error spa sugar removed — use assets.notFoundHandling
+        spa: false,
+      }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error errorPage sugar removed — use assets.notFoundHandling: "404-page"
+        errorPage: "404.html",
+      }),
   ];
 
   it("rejects source-dispatch props at the type level", () => {

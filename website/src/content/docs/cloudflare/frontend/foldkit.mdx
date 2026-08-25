@@ -102,17 +102,19 @@ A Foldkit app that uses URL routing (`Runtime.makeApplication` with
 client, so a deep link like `/counter/42` arrives at the server as a
 request for a file that doesn't exist.
 
-`Foldkit` defaults to SPA fallback (`spa: true`), which returns
-`index.html` for unmatched paths instead of a 404 — the Foldkit
-runtime resolves the route once the app boots.
+`Foldkit` defaults `assets.notFoundHandling` to
+`"single-page-application"`, which returns `index.html` for unmatched
+paths instead of a 404 — the Foldkit runtime resolves the route once
+the app boots.
 
-A Foldkit app that ships a real 404 page serves it with
-`errorPage: "404.html"` instead (and `spa: false` turns the
-fallback off entirely):
+A Foldkit app that ships a real 404 page overrides the default with
+`"404-page"` — Workers Assets serves the nearest `404.html`:
 
 ```typescript
 export const Website = Cloudflare.Website.Foldkit("Foldkit", {
-  errorPage: "404.html",
+  assets: {
+    notFoundHandling: "404-page",
+  },
 });
 ```
 

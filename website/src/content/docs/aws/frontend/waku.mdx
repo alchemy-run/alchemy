@@ -59,10 +59,20 @@ export default defineConfig({
 });
 ```
 
-Options set on the resource (`srcDir`, `outDir`, `basePath`) merge
-over the file, per key. The one key Alchemy owns is
-`unstable_adapter` — setting it fails the build with an actionable
-error.
+`waku.config.*` is the home for static configuration. For deploy-time
+values — anything that varies by stage — the `waku` prop merges
+overrides over the file, per key:
+
+```typescript
+export const Website = AWS.Website.Waku("Website", {
+  waku: {
+    basePath: "/docs/",
+  },
+});
+```
+
+The one key Alchemy owns is `unstable_adapter` — setting it fails the
+build with an actionable error.
 
 :::note
 Vite configuration must live in `waku.config.ts`'s `vite` field —

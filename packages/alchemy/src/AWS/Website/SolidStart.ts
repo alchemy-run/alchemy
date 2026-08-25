@@ -12,15 +12,18 @@ export const SOLIDSTART_AWS_TARGET_SPECIFIER =
 
 export interface SolidStartProps extends FrameworkSiteProps {
   /**
-   * Prerender routes at build time (nitro's `prerender`); the pages land
-   * in the static output and are served from S3 by exact match.
+   * Nitro options forwarded into the nitro plugin the integration appends
+   * (prerendering, route rules, storage, ...). `preset` is owned by the
+   * deploy target and may not be set here. JSON-serializable values only —
+   * no functions or plugin instances.
+   *
+   * This is a prop (rather than project config) because the integration
+   * owns the nitro plugin instance: a `nitroV2Plugin()` in your project's
+   * `vite.config.*` is rejected, so this prop is the one home for nitro
+   * options — and it accepts values derived from other resources' Outputs,
+   * which a config file cannot.
    */
-  prerender?: {
-    /** Routes to prerender. */
-    routes?: string[];
-    /** Crawl links from prerendered pages and prerender them too. */
-    crawlLinks?: boolean;
-  };
+  nitro?: Record<string, unknown>;
 }
 
 /**
@@ -70,11 +73,16 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * ```
  *
  * ### Prerendering
- * **Example:** Prerender Routes Into S3
+ * The integration owns the nitro plugin instance (a `nitroV2Plugin()` in
+ * your `vite.config.*` is rejected), so nitro options — prerendering
+ * included — go on the `nitro` prop. Prerendered pages are uploaded to S3
+ * and served from the edge automatically.
+ *
+ * **Example:** Prerender Routes
  * ```typescript
  * const site = yield* AWS.Website.SolidStart("Web", {
  *   rootDir: "./app",
- *   prerender: { routes: ["/", "/about"] },
+ *   nitro: { prerender: { routes: ["/", "/about"] } },
  * });
  * ```
  *
@@ -89,6 +97,6 @@ export const SolidStart = (
     name: "SolidStart",
     framework: SOLIDSTART_FRAMEWORK_SPECIFIER,
     target: SOLIDSTART_AWS_TARGET_SPECIFIER,
-    options: p.prerender ? { nitro: { prerender: p.prerender } } : undefined,
+    options: { nitro: p.nitro },
   }).pipe(Namespace.push(id));
 };

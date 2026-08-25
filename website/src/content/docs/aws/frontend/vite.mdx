@@ -119,21 +119,36 @@ Vite resolves `index.html` relative to its root, so `index.html` must
 live directly under `rootDir`. See Vite's
 [project structure docs](https://vite.dev/guide/#index-html-and-project-root).
 
-## Override the output directory and base path
+## Deploy-time overrides
 
-`outDir` is the build output directory (relative to `rootDir`) and
-`base` is the public path the site deploys under; both are merged
-*over* your config file:
+Your `vite.config.*` is the home for Vite configuration. The `vite`
+bag is for the exception: a value decided by the deployment rather
+than the project — config files can't consume alchemy `Output`s.
+Overrides merge *over* the config file, so the deploy-time value wins:
 
 ```typescript
 export const Website = AWS.Website.Vite("Docs", {
-  outDir: "build",
-  base: "/docs/",
+  vite: {
+    base: "/docs/",
+    outDir: "build",
+  },
 });
 ```
 
-Leave them unset and the resolved `build.outDir` from your
-`vite.config.*` is used — Vite's own default is `dist`.
+`base` is the public path the site deploys under; `outDir` is the
+build output directory, relative to `rootDir`. Leave the bag unset and
+the resolved values from your `vite.config.*` are used — Vite's own
+`outDir` default is `dist`. `base` also applies to the dev server
+under `alchemy dev`.
+
+To load a different config file entirely, pass `config` (relative to
+`rootDir`):
+
+```typescript
+export const Website = AWS.Website.Vite("Web", {
+  config: "vite.deploy.config.ts",
+});
+```
 
 ## SPA fallback and 404 pages
 

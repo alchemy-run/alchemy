@@ -53,8 +53,8 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
               forceDestroy: true,
               invalidation: { paths: "all", wait: true },
               // Forwarded into the nitro plugin the integration appends —
-              // proves the prerender option reaches the build.
-              prerender: { routes: ["/prerendered"] },
+              // proves nitro options reach the build.
+              nitro: { prerender: { routes: ["/prerendered"] } },
             });
             return { site };
           }),
@@ -106,12 +106,13 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
           "solidstart-aws-robots-marker",
           { label: "public asset from S3" },
         );
-        // Prerendered page (nitro wrote it into .output/public at build
-        // time; the edge router serves it from S3 by exact match).
+        // Prerendered into `.output/public` at build time (via the `nitro`
+        // prop's `prerender.routes`) and served from S3 by exact match at
+        // the edge — no Lambda invocation.
         yield* expectUrlContains(
           `${url}/prerendered`,
           "SOLIDSTART_AWS_PRERENDERED_MARKER",
-          { label: "prerendered page" },
+          { label: "prerendered page from S3" },
         );
 
         const distributionId = deployed.site.distribution!.distributionId;

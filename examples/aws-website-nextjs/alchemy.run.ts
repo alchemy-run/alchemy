@@ -24,10 +24,8 @@ export default Alchemy.Stack(
         ],
       },
       forceDestroy: true,
-      server: {
-        environment: {
-          GREETING: "Hello from Alchemy!",
-        },
+      env: {
+        GREETING: "Hello from Alchemy!",
       },
     });
 

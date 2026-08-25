@@ -4,6 +4,7 @@ import { makeFrameworkSite } from "./FrameworkSite.ts";
 import {
   VITE_AWS_TARGET_SPECIFIER,
   VITE_FRAMEWORK_SPECIFIER,
+  viteFrameworkOptions,
   type ViteProps,
 } from "./Vite.ts";
 
@@ -73,21 +74,25 @@ export interface FoldkitProps extends ViteProps {}
  * });
  * ```
  *
- * ### Build Configuration
- * **Example:** Custom Output Directory and Base Path
- * ```typescript
- * const site = yield* AWS.Website.Foldkit("Docs", {
- *   outDir: "build",
- *   base: "/docs/",
- * });
- * ```
- *
  * ### Sharing a Router
  * **Example:** Serve Through an Existing AWS.Website.Router
  * ```typescript
  * const router = yield* AWS.Website.Router("Router", {});
  * const site = yield* AWS.Website.Foldkit("Web", {
  *   domain: { router },
+ * });
+ * ```
+ *
+ * ### Build Configuration
+ * Vite configuration (the Foldkit plugin included) lives in your
+ * project's own `vite.config.*`. The `vite` bag holds deploy-time
+ * overrides merged over that file, and `config` selects an alternate
+ * config file.
+ *
+ * **Example:** Deploy-Time Base Path Override
+ * ```typescript
+ * const site = yield* AWS.Website.Foldkit("Web", {
+ *   vite: { base: "/app/" },
  * });
  * ```
  *
@@ -108,10 +113,7 @@ export const Foldkit = (id: string, props: InputProps<FoldkitProps> = {}) => {
     name: "Foldkit",
     framework: VITE_FRAMEWORK_SPECIFIER,
     target: VITE_AWS_TARGET_SPECIFIER,
-    options:
-      p.outDir !== undefined || p.base !== undefined
-        ? { vite: { outDir: p.outDir, base: p.base } }
-        : undefined,
+    options: viteFrameworkOptions(p),
     // Foldkit is client-only: the whole deployable output is the client
     // build, so the deploy never creates a server function. Foldkit routes
     // on the client, so `spa` defaults on — but yields to an explicit

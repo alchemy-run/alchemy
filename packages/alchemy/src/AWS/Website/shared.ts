@@ -257,6 +257,10 @@ export interface StaticSiteBuildProps {
    */
   output: string;
   /**
+   * Environment variables exposed to the build command.
+   */
+  env?: Record<string, Input<string>>;
+  /**
    * Glob patterns of files to hash. Paths are relative to `path`.
    * When the hash of matched files changes, the build will re-run.
    *

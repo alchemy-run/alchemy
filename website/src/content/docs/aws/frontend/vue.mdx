@@ -213,7 +213,7 @@ Client code reads it as `import.meta.env.VITE_API_URL`.
 To inline a value that only exists after another resource deploys — an
 API's URL, a bucket name — build the site with
 [`AWS.Website.StaticSite`](/aws/frontend/static-site), whose
-`environment` is passed to the build command:
+`build.env` is passed to the build command:
 
 ```typescript
 // alchemy.run.ts
@@ -230,9 +230,9 @@ export default Alchemy.Stack(
       build: {
         command: "vite build",
         output: "dist",
-      },
-      environment: {
-        VITE_API_URL: api.url,
+        env: {
+          VITE_API_URL: api.url,
+        },
       },
       spa: true,
     });

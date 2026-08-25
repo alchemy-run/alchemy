@@ -251,16 +251,12 @@ export async function loader() {
 See [Effect HTTP API](/aws/apis/effect-http-api) for building that
 Lambda and binding it to the resources it reads.
 
-## Custom build directory
+## Build configuration
 
-If your `react-router.config.ts` sets `buildDirectory`, tell the
-resource the same path so it finds `client/` and `server/`:
-
-```typescript
-export const Website = AWS.Website.ReactRouter("Website", {
-  outDir: "dist",
-});
-```
+The build runs through your project's own `vite.config.ts` and
+`react-router.config.ts`. A custom `buildDirectory` just works — the
+integration observes the directory from the resolved Vite config, so
+there is nothing to mirror on the resource.
 
 ## Local dev
 

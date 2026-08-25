@@ -2,7 +2,7 @@
 
 Deploys a [Waku](https://waku.gg) app to AWS with `AWS.Website.Waku` — no `waku.config.ts` adapter, no CDK.
 
-The resource builds the app with waku's own Vite pipeline and a wrangler-free in-memory AWS adapter: the RSC server bundle deploys on a streaming Lambda Function URL, and the client output (including SSG-prerendered pages and the RSC payloads) deploys to S3 behind CloudFront. Values passed via `server.environment` are readable in server components through waku's `getEnv`.
+The resource builds the app with waku's own Vite pipeline and a wrangler-free in-memory AWS adapter: the RSC server bundle deploys on a streaming Lambda Function URL, and the client output (including SSG-prerendered pages and the RSC payloads) deploys to S3 behind CloudFront. Values passed via `env` are readable in server components through waku's `getEnv`.
 
 ```ts
 const site = yield* AWS.Website.Waku("WakuSite", {

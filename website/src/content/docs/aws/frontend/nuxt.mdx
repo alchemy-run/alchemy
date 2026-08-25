@@ -59,6 +59,28 @@ Don't set `nitro.preset` — the AWS deploy target owns the preset
 (`aws-lambda` with streaming enabled), and a foreign preset is a hard
 error.
 
+## Deploy-time overrides
+
+Config that only exists at deploy time — a stage-dependent base URL, a
+per-environment `runtimeConfig` — goes in the `nuxt` prop. It merges
+over `nuxt.config.ts` as the highest-priority layer, so a value here
+wins:
+
+```typescript
+export const Website = AWS.Website.Nuxt("Website", {
+  nuxt: {
+    app: { baseURL: "/docs/" },
+    runtimeConfig: {
+      public: { apiBase: "https://api.example.com" },
+    },
+  },
+});
+```
+
+The bag must be JSON-serializable — no functions, plugins, or modules;
+those belong in `nuxt.config.ts`. `nitro.preset` stays owned by the
+deploy target.
+
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the

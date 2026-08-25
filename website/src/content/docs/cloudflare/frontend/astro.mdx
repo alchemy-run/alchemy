@@ -193,18 +193,18 @@ export const Website = Cloudflare.Website.Astro("Website", {
 
 ## Fully static sites
 
-With `output: "static"` every page is prerendered at
+With `astro: { output: "static" }` every page is prerendered at
 build time and the deploy is assets-only — no server bundle is
 uploaded, and Cloudflare's asset layer answers every request:
 
 ```typescript
 export const Website = Cloudflare.Website.Astro("Website", {
-  output: "static",
-  errorPage: "404.html",
+  astro: { output: "static" },
+  assets: { notFoundHandling: "404-page" },
 });
 ```
 
-`errorPage: "404.html"` serves the built `404.html` for
+`notFoundHandling: "404-page"` serves the built `404.html` for
 unmatched routes. Session provisioning is skipped for declared-static
 sites, since no Worker code runs at request time.
 
@@ -229,15 +229,35 @@ export default defineConfig({
 });
 ```
 
-The resource exposes common serializable options (`site`, `base`,
-`output`, `srcDir`, `publicDir`, `outDir`, `trailingSlash`) as flat
-props for deploy-specific overrides; Astro merges them *over* the
-config file:
+A config file can't consume Alchemy `Output`s or vary by stage. For
+those values the `astro` prop is a deploy-time override bag — a
+serializable subset (`site`, `base`, `output`, `srcDir`, `publicDir`,
+`outDir`, `trailingSlash`) merged *over* the config file, so a value
+set here wins:
 
 ```typescript
 // alchemy.run.ts
+import { Stack } from "alchemy/Stack";
+
+export const Website = Cloudflare.Website.Astro(
+  "Website",
+  Stack.useSync(({ stage }) => ({
+    astro: {
+      site:
+        stage === "prod"
+          ? "https://blog.example.com"
+          : `https://${stage}.example.com`,
+    },
+  })),
+);
+```
+
+Use `config` to load an alternate config file (relative to
+`rootDir`) instead of astro's own `astro.config.*` discovery:
+
+```typescript
 export const Website = Cloudflare.Website.Astro("Website", {
-  site: "https://preview.example.com",
+  config: "astro.deploy.config.ts",
 });
 ```
 
@@ -248,5 +268,5 @@ Two options are managed for you regardless of the config file:
   actionable error.
 - `output` — Alchemy defaults it to `"server"` (superseding a
   file-level `output`), so pages render on demand in the Worker.
-  Opt into a fully prerendered site with `output: "static"` on the
-  resource.
+  Opt into a fully prerendered site with `astro: { output: "static" }`
+  on the resource.
