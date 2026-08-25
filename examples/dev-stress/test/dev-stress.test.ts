@@ -1079,7 +1079,7 @@ test(
       "the EC2 box to serve its hosted program",
       marker,
       (body) => body.marker === "ec2-v1",
-      { tries: 240, delayMs: 1_000, server },
+      { tries: 90, delayMs: 1_000, server },
     );
 
     // The reload path is the ENGINE's: a content edit re-plans, the
@@ -1091,7 +1091,7 @@ test(
       "the EC2 box to serve ec2-v2 after the in-place update",
       marker,
       (body) => body.marker === "ec2-v2",
-      { tries: 300, delayMs: 1_000, server },
+      { tries: 150, delayMs: 1_000, server },
     );
     console.log(
       `ec2 hosted-program reload -> serving ec2-v2 in ${Date.now() - reloadStartedAt}ms`,
