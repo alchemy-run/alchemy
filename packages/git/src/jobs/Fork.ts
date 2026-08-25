@@ -177,22 +177,20 @@ export const snapshotStream = (
         );
         const chunk: SnapshotChunk = {
           table: "objects",
-          rows: rows.map(
-            (row): SnapshotObjectRow => ({
-              oid: row.oid,
-              type: row.type,
-              size: row.size,
-              zsize: row.zsize,
-              location: row.location,
-              zdata:
-                row.zdata === null
-                  ? null
-                  : Encoding.encodeBase64(new Uint8Array(row.zdata)),
-              r2_key: row.r2_key,
-              pack_id: row.pack_id,
-              pack_offset: row.pack_offset,
-            }),
-          ),
+          rows: rows.map((row): SnapshotObjectRow => ({
+            oid: row.oid,
+            type: row.type,
+            size: row.size,
+            zsize: row.zsize,
+            location: row.location,
+            zdata:
+              row.zdata === null
+                ? null
+                : Encoding.encodeBase64(new Uint8Array(row.zdata)),
+            r2_key: row.r2_key,
+            pack_id: row.pack_id,
+            pack_offset: row.pack_offset,
+          })),
         };
         const next =
           rows.length < OBJECTS_PAGE_SIZE

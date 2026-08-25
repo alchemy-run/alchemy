@@ -204,8 +204,12 @@ export interface MicrovmImage extends Resource<
     createdAt?: string;
     /** When the image was last updated (ISO 8601). */
     updatedAt?: string;
-    /** The resolved code artifact and its build identity hash. */
-    codeArtifact?: { uri?: string; hash?: string };
+    /**
+     * The resolved code artifact and its build identity hash. `contentHash`
+     * covers only the bundled program / packaged context (no props), so a
+     * content-only edit is detectable at plan time before the props resolve.
+     */
+    codeArtifact?: { uri?: string; hash?: string; contentHash?: string };
   },
   {
     env?: Record<string, any>;

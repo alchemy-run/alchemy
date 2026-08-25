@@ -1,7 +1,9 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Fly from "alchemy/Fly";
 import * as Hetzner from "alchemy/Hetzner";
+import * as Railway from "alchemy/Railway";
 import * as Neon from "alchemy/Neon";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Prisma from "alchemy/Prisma";
@@ -15,6 +17,8 @@ export default Alchemy.Stack(
       Cloudflare.providers(),
       AWS.providers(),
       Hetzner.providers(),
+      Fly.providers(),
+      Railway.providers(),
       Neon.providers(),
       Planetscale.providers(),
       // Prisma credentials resolve at layer build like Neon/Planetscale:

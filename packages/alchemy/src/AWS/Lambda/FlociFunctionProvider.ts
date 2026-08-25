@@ -16,7 +16,9 @@
  *   the emulator's assets bucket. The first swap repoints the function's
  *   code at that key with `UpdateFunctionCode`, which enrolls floci's
  *   reactive S3 sync; every later swap is a bare `PutObject` (measured
- *   111–138 ms re-extract, warm containers drained, no stale invoke).
+ *   111–138 ms re-extract, warm containers drained, no stale invoke) —
+ *   until an engine reconcile re-points the function at a content-addressed
+ *   key, after which the next swap re-enrolls it (see `enrolledAttrs`).
  *   `bundle: false` props fs-watch the prebuilt directory instead.
  * - **Replacement rules** — functionName and durableConfig-presence changes
  *   replace, mirroring the live diff.
@@ -43,12 +45,17 @@ import {
   Function,
   FunctionProvider,
   layerVersionArnOf,
+  type FunctionImageProps,
   type FunctionProps,
 } from "./Function.ts";
 import {
   makeFunctionBundler,
   type FunctionBundleResult,
 } from "./FunctionBundle.ts";
+
+const isFunctionImageProps = (
+  props: FunctionProps,
+): props is FunctionImageProps => props.image !== undefined;
 
 export const FlociFunctionProvider = () =>
   makeDevWatchProvider<Function, FunctionProps, Function["Attributes"]>(
@@ -64,17 +71,24 @@ export const FlociFunctionProvider = () =>
       // the watcher builds or WHERE it uploads. `build` may carry plugin
       // closures, which degrade to stable placeholders under canonical
       // hashing.
-      watchConfigOf: (news, attrs) => ({
-        functionName: attrs.functionName,
-        main: news.main,
-        handler: news.handler,
-        bundle: news.bundle,
-        isExternal: news.isExternal,
-        runtime: news.runtime,
-        architecture: news.architecture,
-        uploadSourceMap: news.uploadSourceMap,
-        build: news.build,
-      }),
+      watchConfigOf: (news, attrs) =>
+        isFunctionImageProps(news)
+          ? {
+              functionName: attrs.functionName,
+              image: news.image,
+              architecture: news.architecture,
+            }
+          : {
+              functionName: attrs.functionName,
+              main: news.main,
+              handler: news.handler,
+              bundle: news.bundle,
+              isExternal: news.isExternal,
+              runtime: news.runtime,
+              architecture: news.architecture,
+              uploadSourceMap: news.uploadSourceMap,
+              build: news.build,
+            },
       // Mirrors the live diff's replacement rules.
       replaceOn: ({ olds, news, output }) =>
         Effect.sync(() => {
@@ -82,35 +96,71 @@ export const FlociFunctionProvider = () =>
           if (output.functionName !== newFunctionName) {
             return { action: "replace" as const };
           }
-          if (!!olds.durableConfig !== !!news.durableConfig) {
-            return { action: "replace" as const };
+          if (isFunctionImageProps(olds) !== isFunctionImageProps(news)) {
+            return {
+              action: "replace" as const,
+              deleteFirst: news.functionName !== undefined,
+            };
+          }
+          if (
+            !isFunctionImageProps(olds) &&
+            !isFunctionImageProps(news) &&
+            !!olds.durableConfig !== !!news.durableConfig
+          ) {
+            return {
+              action: "replace" as const,
+              deleteFirst: news.functionName !== undefined,
+            };
           }
           return undefined;
         }),
-      normalizeProps: (props) => ({
-        ...props,
-        layers: (props.layers ?? []).map(layerVersionArnOf),
-      }),
+      normalizeProps: (props) =>
+        isFunctionImageProps(props)
+          ? props
+          : {
+              ...props,
+              layers: (props.layers ?? []).map(layerVersionArnOf),
+            },
       // Floci validates the Handler FILE against the package at
       // CreateFunction (AWS defers that to first invoke). The precreate 503
       // stub ships a single `index.*` module, so a `bundle: false` /
       // custom-handler props set (`handler.handler`) would be rejected — pin
       // the stub's handler-affecting props to the stub's own shape;
       // `reconcile` applies the real Handler together with the real package.
-      transformPrecreateNews: (news) => ({
-        ...news,
-        bundle: undefined,
-        isExternal: undefined,
-        handler: undefined,
-      }),
+      transformPrecreateNews: (news) =>
+        isFunctionImageProps(news)
+          ? news
+          : {
+              ...news,
+              bundle: undefined,
+              isExternal: undefined,
+              handler: undefined,
+            },
       startWatch: (ctx) =>
         Effect.gen(function* () {
           const props = ctx.news;
+          if (isFunctionImageProps(props)) {
+            // Image functions are converged by the delegated live provider.
+            // There is no ZIP module graph to watch or hot-swap.
+            return;
+          }
           const functionName = ctx.attrs.functionName;
           const bundler = yield* makeFunctionBundler;
           const assets = yield* Assets;
           let lastHash = ctx.attrs.code?.hash ?? "";
-          let enrolledKey: string | undefined;
+          // The attributes object that was current when the watch loop
+          // last pointed the function at the stable dev key. Every
+          // engine-driven reconcile (a binding added, an env var changed,
+          // …) re-uploads the bundle to a content-addressed key and
+          // re-points the function THERE, silently detaching it from the
+          // dev key: floci's reactive S3 sync only follows the key the
+          // function is enrolled at, so every later PutObject would be
+          // ignored and hot swap would be dead until the next engine
+          // update. The skeleton hands the watcher a fresh attrs object per
+          // reconcile, so identity (not the code hash — a source edited
+          // back to its original content hashes the same) is the signal
+          // that a re-point happened and the function must be re-enrolled.
+          let enrolledAttrs: Function["Attributes"] | undefined;
           let startedAt = Date.now();
 
           const swap = Effect.fn(function* (result: FunctionBundleResult) {
@@ -124,10 +174,12 @@ export const FlociFunctionProvider = () =>
               Body: archive,
               ContentType: "application/zip",
             });
-            if (enrolledKey !== key) {
-              // First swap: repoint the function's code at the stable dev
-              // key — floci's reactive S3 sync then re-extracts on every
-              // subsequent PutObject with no further Lambda API calls.
+            const current = yield* ctx.currentAttrs;
+            if (enrolledAttrs !== current) {
+              // First swap, or the engine re-pointed the function since the
+              // last one: (re)point its code at the stable dev key — floci's
+              // reactive S3 sync then re-extracts on every subsequent
+              // PutObject with no further Lambda API calls.
               yield* Lambda.updateFunctionCode({
                 FunctionName: functionName,
                 S3Bucket: bucket,
@@ -139,7 +191,7 @@ export const FlociFunctionProvider = () =>
                   times: 8,
                 }),
               );
-              enrolledKey = key;
+              enrolledAttrs = current;
             }
             lastHash = result.identityHash;
             yield* Effect.logInfo(

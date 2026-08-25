@@ -196,9 +196,10 @@ export const makeBlobStoreR2 = (
       bucket.list({ prefix, limit: 1000, cursor }).pipe(
         Effect.mapError(r2Error(`list ${prefix}`)),
         Effect.map((page) => {
-          const metas = page.objects.map(
-            (object): BlobMeta => ({ key: object.key, size: object.size }),
-          );
+          const metas = page.objects.map((object): BlobMeta => ({
+            key: object.key,
+            size: object.size,
+          }));
           return [
             metas,
             page.truncated ? Option.some(page.cursor) : Option.none<string>(),

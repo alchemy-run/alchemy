@@ -185,12 +185,10 @@ export const BlobStoreS3 = (
 
         head: (key) =>
           headObject({ Bucket, Key: key }).pipe(
-            Effect.map(
-              (output): BlobMeta => ({
-                key,
-                size: output.ContentLength ?? 0,
-              }),
-            ),
+            Effect.map((output): BlobMeta => ({
+              key,
+              size: output.ContentLength ?? 0,
+            })),
             Effect.catchTag("NotFound", () => Effect.succeed(null)),
             Effect.mapError(s3Error(`head ${key}`)),
           ),

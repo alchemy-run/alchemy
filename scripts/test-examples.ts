@@ -9,6 +9,7 @@ const examples = [
   "./examples/cloudflare-vue",
   "./examples/cloudflare-solidstart",
   "./examples/cloudflare-foldkit",
+  "./examples/cloudflare-foldkit-ssr",
   "./examples/cloudflare-octane",
   "./examples/cloudflare-website-astro",
   "./examples/cloudflare-website-nextjs",
@@ -24,6 +25,14 @@ const examples = [
   // "./examples/aws-website-nuxt",
   // "./examples/aws-website-sveltekit",
   // "./examples/aws-website-waku",
+  "./examples/fly-app",
+  "./examples/railway-project",
+  "./examples/fly-service",
+  "./examples/railway-service",
+  "./examples/fly-sprite",
+  "./examples/fly-redis",
+  "./examples/fly-bucket",
+  "./examples/fly-postgres",
 ] as const;
 
 type CommandResult = {

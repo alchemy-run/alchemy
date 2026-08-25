@@ -229,13 +229,11 @@ export const diffTrees = (
       }
     }
     const metas = yield* objects.getMetaBatch(Array.from(blobOids));
-    const sized = files.map(
-      (f): DiffEntryData => ({
-        ...f,
-        oldSize: f.oldOid !== undefined ? metas.get(f.oldOid)?.size : undefined,
-        newSize: f.newOid !== undefined ? metas.get(f.newOid)?.size : undefined,
-      }),
-    );
+    const sized = files.map((f): DiffEntryData => ({
+      ...f,
+      oldSize: f.oldOid !== undefined ? metas.get(f.oldOid)?.size : undefined,
+      newSize: f.newOid !== undefined ? metas.get(f.newOid)?.size : undefined,
+    }));
     return { files: sized, truncated };
   });
 

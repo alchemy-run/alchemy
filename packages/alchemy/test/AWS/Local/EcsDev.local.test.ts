@@ -52,6 +52,10 @@ const RELOAD_PORT = 17358;
 const SVC_PORT = 17359;
 /** Must match the default port in fixtures/ecs-reload-main/server.ts. */
 const MAIN_RELOAD_PORT = 17360;
+/** Must match the port baked into fixtures/ecs-env/Dockerfile. */
+const ENV_PORT = 17361;
+/** Must match the port baked into fixtures/ecs-ext/Dockerfile.ecs. */
+const EXT_PORT = 17363;
 
 const FLOCI_REGION = "us-east-1";
 
@@ -169,22 +173,26 @@ const pollMarker = Effect.fn(function* (options: {
   port: number;
   marker: string;
   times?: number;
+  /** Path to poll (default `/`). */
+  path?: string;
 }) {
   const client = yield* HttpClient.HttpClient;
   const times = options.times ?? 60;
-  const body = yield* client.get(`http://localhost:${options.port}/`).pipe(
-    Effect.flatMap((response) => response.text),
-    Effect.retry({
-      while: (): boolean => true,
-      schedule: Schedule.spaced("2 seconds"),
-      times,
-    }),
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (b): boolean => b.includes(options.marker),
-      times,
-    }),
-  );
+  const body = yield* client
+    .get(`http://localhost:${options.port}${options.path ?? "/"}`)
+    .pipe(
+      Effect.flatMap((response) => response.text),
+      Effect.retry({
+        while: (): boolean => true,
+        schedule: Schedule.spaced("2 seconds"),
+        times,
+      }),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (b): boolean => b.includes(options.marker),
+        times,
+      }),
+    );
   expect(body).toContain(options.marker);
 });
 
@@ -467,24 +475,23 @@ describe.sequential("EcsDev", () => {
         );
         const mainPath = path.join(clone, "server.ts");
 
-        const outputs = yield* stack.deploy(
-          Effect.gen(function* () {
-            const cluster = yield* AWS.ECS.Cluster("EcsReloadMainCluster");
-            // Declared WITHOUT an inline impl — the platform marks it
-            // external and the bundle runs as-is (a plain Bun server).
-            const task = yield* AWS.ECS.Task("EcsReloadMainTask", {
-              main: mainPath,
-              image: "oven/bun:1",
-              port: MAIN_RELOAD_PORT,
-              cpu: 256,
-              memory: 512,
-              networkMode: "bridge",
-              requiresCompatibilities: ["EC2"],
-              runtimePlatform: hostRuntimePlatform,
-            });
-            return { cluster, task };
-          }),
-        );
+        const program = Effect.gen(function* () {
+          const cluster = yield* AWS.ECS.Cluster("EcsReloadMainCluster");
+          // Declared WITHOUT an inline impl — the platform marks it
+          // external and the bundle runs as-is (a plain Bun server).
+          const task = yield* AWS.ECS.Task("EcsReloadMainTask", {
+            main: mainPath,
+            image: "oven/bun:1",
+            port: MAIN_RELOAD_PORT,
+            cpu: 256,
+            memory: 512,
+            networkMode: "bridge",
+            requiresCompatibilities: ["EC2"],
+            runtimePlatform: hostRuntimePlatform,
+          });
+          return { cluster, task };
+        });
+        const outputs = yield* stack.deploy(program);
         expect(outputs.task.taskDefinitionArn).toContain(":000000000000:");
         expect(outputs.task.repositoryUri).toContain(".localhost:");
 
@@ -512,6 +519,20 @@ describe.sequential("EcsDev", () => {
         yield* Effect.log(
           `bundled-main task hot reload observed in ${Date.now() - swapStartedAt}ms`,
         );
+
+        // A REPLAN after the watcher's swap must surface it. Persisted state
+        // still carries v1's code hash (the watcher updates the emulator and
+        // the sidecar's in-memory attrs, not the state store), so the dev
+        // diff plans an update — not a noop — and the fresh attrs flow to
+        // stack outputs. The reported bug had this replan noop, so
+        // `task.code.hash` never advanced and Actions keyed on it stayed
+        // skipped after a transitive-import change.
+        const replanned = yield* stack.deploy(program);
+        expect(replanned.task.code.hash).not.toBe(outputs.task.code.hash);
+        // And a second replan with nothing new IS a noop-equivalent: the
+        // attrs are settled, the hash stable.
+        const settled = yield* stack.deploy(program);
+        expect(settled.task.code.hash).toBe(replanned.task.code.hash);
 
         yield* stack.destroy();
         yield* assertFamilyTornDown({
@@ -611,5 +632,172 @@ describe.sequential("EcsDev", () => {
         expect(activeServices).toEqual([]);
       }),
     { timeout: 300_000 },
+  );
+
+  /**
+   * A PROP-driven update — no file event — must roll the service's running
+   * containers onto the new task-definition revision. Regression: restart
+   * logic lived only in the file-watch trigger, so an engine reconcile
+   * (env change, inline-dockerfile edit) registered a new revision and
+   * `updateService`d onto it while the container kept serving the old one
+   * until the next source edit (`onReconciled` in DevWatchProvider).
+   */
+  test.provider.skipIf(!dockerAvailable)(
+    "rolls a service task on a prop-only env update",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const clone = yield* cloneFixture(
+          `${import.meta.dirname}/fixtures/ecs-env`,
+          { prefix: "ecs-env-" },
+        );
+
+        const declare = (env: string) =>
+          Effect.gen(function* () {
+            const cluster = yield* AWS.ECS.Cluster("EcsEnvCluster");
+            const service = yield* AWS.ECS.Service("EcsEnvService", {
+              cluster,
+              context: clone,
+              port: ENV_PORT,
+              cpu: 256,
+              memory: 512,
+              networkMode: "bridge",
+              requiresCompatibilities: ["EC2"],
+              launchType: "EC2",
+              desiredCount: 1,
+              runtimePlatform: hostRuntimePlatform,
+              deploymentStabilizationTimeout: "3 minutes",
+              env: { ROLL_ENV: env },
+            });
+            return { cluster, service };
+          });
+
+        const outputs = yield* stack.deploy(declare("roll-env-v1"));
+        yield* pollMarker({
+          port: ENV_PORT,
+          marker: "roll-env-v1",
+          path: "/env.txt",
+          times: 90,
+        });
+
+        // The prop change: same fixture bytes, only the env differs. The
+        // engine registers a new revision; the running container must roll.
+        const swapStartedAt = Date.now();
+        const updated = yield* stack.deploy(declare("roll-env-v2"));
+        expect(updated.service.taskDefinitionArn).not.toBe(
+          outputs.service.taskDefinitionArn,
+        );
+        yield* pollMarker({
+          port: ENV_PORT,
+          marker: "roll-env-v2",
+          path: "/env.txt",
+          times: 90,
+        });
+        yield* Effect.log(
+          `prop-only service roll observed in ${Date.now() - swapStartedAt}ms`,
+        );
+
+        yield* stack.destroy();
+        yield* assertFamilyTornDown({
+          clusterName: outputs.cluster.clusterName,
+          taskDefinitionArn: updated.service.taskDefinitionArn,
+          containerName: updated.service.containerName!,
+        });
+      }),
+    { timeout: 600_000 },
+  );
+  /**
+   * A `dockerfile` PATH that lives OUTSIDE the build context: the watcher
+   * must watch the Dockerfile's own directory in addition to the context
+   * (the `imageSourceTrigger` outside-context branch — previously never
+   * exercised by any test), and an edit to the Dockerfile itself must
+   * rebuild + roll with no deploy.
+   */
+  test.provider.skipIf(!dockerAvailable)(
+    "hot reloads a service whose Dockerfile lives outside the build context",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const clone = yield* cloneFixture(
+          `${import.meta.dirname}/fixtures/ecs-ext`,
+          { prefix: "ecs-ext-" },
+        );
+
+        const outputs = yield* stack.deploy(
+          Effect.gen(function* () {
+            const cluster = yield* AWS.ECS.Cluster("EcsExtCluster");
+            const service = yield* AWS.ECS.Service("EcsExtService", {
+              cluster,
+              context: path.join(clone, "site"),
+              dockerfile: path.join(clone, "Dockerfile.ecs"),
+              port: EXT_PORT,
+              cpu: 256,
+              memory: 512,
+              networkMode: "bridge",
+              requiresCompatibilities: ["EC2"],
+              launchType: "EC2",
+              desiredCount: 1,
+              runtimePlatform: hostRuntimePlatform,
+              deploymentStabilizationTimeout: "3 minutes",
+            });
+            return { cluster, service };
+          }),
+        );
+
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-content-v1",
+          times: 90,
+        });
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-baked-v1",
+          path: "/baked.txt",
+          times: 60,
+        });
+
+        // Edit the OUT-OF-CONTEXT Dockerfile — no deploy.
+        const swapStartedAt = Date.now();
+        const dockerfile = yield* fs.readFileString(
+          path.join(clone, "Dockerfile.ecs"),
+        );
+        yield* fs.writeFileString(
+          path.join(clone, "Dockerfile.ecs"),
+          dockerfile.replace("ecs-ext-baked-v1", "ecs-ext-baked-v2"),
+        );
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-baked-v2",
+          path: "/baked.txt",
+          times: 90,
+        });
+        yield* Effect.log(
+          `out-of-context Dockerfile reload observed in ${Date.now() - swapStartedAt}ms`,
+        );
+
+        // A context file edit still reloads too.
+        yield* fs.writeFileString(
+          path.join(clone, "site", "index.html"),
+          "ecs-ext-content-v2\n",
+        );
+        yield* pollMarker({
+          port: EXT_PORT,
+          marker: "ecs-ext-content-v2",
+          times: 90,
+        });
+
+        yield* stack.destroy();
+        yield* assertFamilyTornDown({
+          clusterName: outputs.cluster.clusterName,
+          taskDefinitionArn: outputs.service.taskDefinitionArn,
+          containerName: outputs.service.containerName!,
+        });
+      }),
+    { timeout: 600_000 },
   );
 }); // describe.sequential("EcsDev")

@@ -110,6 +110,16 @@ describe("Website prop surfaces", () => {
     // entry (API routes, error reporting, Durable Objects) alongside the
     // client build. Pinned positively so an `Omit` can't quietly drop it.
     () => Cloudflare.Website.Foldkit("F", { main: "src/worker.ts" }),
+    () =>
+      Cloudflare.Website.Vocs("Docs", {
+        // @ts-expect-error `source` is owned by the Vocs integration
+        source: { provider: "x", options: {} },
+      }),
+    () =>
+      Cloudflare.Website.Vocs("Docs", {
+        // @ts-expect-error Vocs owns its Waku/RSC worker entry
+        main: "worker.ts",
+      }),
   ];
 
   it("rejects source-dispatch props at the type level", () => {
