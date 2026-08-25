@@ -1,7 +1,7 @@
 /**
  * Run the live AWS suites for services that have a Floci local provider
  * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
- * `ALCHEMY_TEST_DEV=1`.
+ * `ALCHEMY_TEST_DEV=1`. Invoked as `pnpm test:aws:dev` or `pnpm test:aws:floci`.
  *
  * Dedicated `*.local.test.ts` files are excluded — those already set
  * `Test.make({ dev: true })` and some use `Alchemy.remote()` for out-of-band
@@ -19,6 +19,11 @@ const awsTestRoot = join(alchemyRoot, "test/AWS");
 const providersFile = join(alchemyRoot, "src/AWS/Providers.ts");
 
 const extraDirs: Record<string, ReadonlyArray<string>> = {
+  Location: ["Geo", "GeoMaps", "GeoPlaces", "GeoRoutes"],
+  RDS: ["RDSData"],
+  Redshift: ["RedshiftData"],
+  Route53: ["Route53Domains"],
+  SageMaker: ["SageMakerRuntime"],
   SecretsManager: ["Secret"],
 };
 
