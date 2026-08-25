@@ -11,12 +11,18 @@ export const TANSTACK_START_AWS_TARGET_SPECIFIER =
 
 export interface TanStackStartProps extends FrameworkSiteProps {
   /**
-   * Build output directory relative to `rootDir` — the parent of `client/`
-   * and `server/`. Must match your `vite.config.ts` when it sets
-   * `build.outDir`.
-   * @default "dist"
+   * Serializable Vite config overrides, mirroring the project's own
+   * `vite.config.ts` keys (same shape as {@link Vite | AWS.Website.Vite}).
    */
-  outDir?: string;
+  vite?: {
+    /**
+     * Build output directory relative to `rootDir` — the parent of
+     * `client/` and `server/`. Must match your `vite.config.ts` when it
+     * sets `build.outDir`.
+     * @default "dist"
+     */
+    outDir?: string;
+  };
 }
 
 /**
@@ -93,7 +99,7 @@ export interface TanStackStartProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.TanStackStart("Web", {
  *   rootDir: "./app",
- *   outDir: "build",
+ *   vite: { outDir: "build" },
  * });
  * ```
  *
@@ -104,5 +110,5 @@ export const TanStackStart = (id: string, props: TanStackStartProps = {}) =>
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,
     target: TANSTACK_START_AWS_TARGET_SPECIFIER,
-    options: props.outDir ? { outDir: props.outDir } : undefined,
+    options: props.vite?.outDir ? { outDir: props.vite.outDir } : undefined,
   }).pipe(Namespace.push(id));

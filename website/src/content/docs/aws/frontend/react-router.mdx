@@ -261,7 +261,7 @@ resource the same path so it finds `client/` and `server/`:
 
 ```typescript
 export const Website = AWS.Website.ReactRouter("Website", {
-  buildDirectory: "dist",
+  reactRouter: { buildDirectory: "dist" },
 });
 ```
 

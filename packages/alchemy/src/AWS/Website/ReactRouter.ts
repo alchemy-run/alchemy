@@ -11,12 +11,18 @@ export const REACT_ROUTER_AWS_TARGET_SPECIFIER =
 
 export interface ReactRouterProps extends FrameworkSiteProps {
   /**
-   * Build output directory relative to `rootDir` — the parent of `client/`
-   * and `server/`. Must match `react-router.config.ts` when it sets
-   * `buildDirectory`.
-   * @default "build"
+   * Serializable React Router config overrides, mirroring the project's
+   * own `react-router.config.ts` keys.
    */
-  buildDirectory?: string;
+  reactRouter?: {
+    /**
+     * Build output directory relative to `rootDir` — the parent of
+     * `client/` and `server/`. Must match `react-router.config.ts` when
+     * it sets `buildDirectory`.
+     * @default "build"
+     */
+    buildDirectory?: string;
+  };
 }
 
 /**
@@ -99,7 +105,7 @@ export interface ReactRouterProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.ReactRouter("Web", {
  *   rootDir: "./app",
- *   buildDirectory: "dist",
+ *   reactRouter: { buildDirectory: "dist" },
  * });
  * ```
  *
@@ -110,7 +116,7 @@ export const ReactRouter = (id: string, props: ReactRouterProps = {}) =>
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,
     target: REACT_ROUTER_AWS_TARGET_SPECIFIER,
-    options: props.buildDirectory
-      ? { buildDirectory: props.buildDirectory }
+    options: props.reactRouter?.buildDirectory
+      ? { buildDirectory: props.reactRouter.buildDirectory }
       : undefined,
   }).pipe(Namespace.push(id));

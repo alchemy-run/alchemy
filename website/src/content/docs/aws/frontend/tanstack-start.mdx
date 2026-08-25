@@ -248,7 +248,7 @@ path so it finds `client/` and `server/`:
 
 ```typescript
 export const Website = AWS.Website.TanStackStart("Website", {
-  outDir: "build",
+  vite: { outDir: "build" },
 });
 ```
 
