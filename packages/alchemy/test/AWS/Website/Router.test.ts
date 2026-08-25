@@ -16,9 +16,9 @@ const fixtureDir = fileURLToPath(
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
 // ~5-15 min), so the full Router lifecycle exceeds any sane test budget.
-// Run with ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS=true (same gate as the
+// Skipped under --fast (FAST=1) (same gate as the
 // AWS.CloudFront suites).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 describe.skipIf(!runLive)("AWS.Website.Router", () => {
   test.provider(

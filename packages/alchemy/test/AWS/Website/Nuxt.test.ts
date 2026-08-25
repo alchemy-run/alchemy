@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Gated with the rest of the AWS.Website suites: the CloudFront lifecycle
 // dominates the runtime (create ~5-15 min, destroy ~5-15 min).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 
