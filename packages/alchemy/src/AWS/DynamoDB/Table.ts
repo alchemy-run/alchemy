@@ -252,9 +252,8 @@ export interface Table extends Resource<
  * `Table` owns the lifecycle of the physical table while the binding contract
  * allows runtime-specific integrations such as Lambda table event sources to
  * request stream configuration without forcing a circular input prop.
- * @resource
- * @section Creating Tables
- * @example Basic Table
+ * ### Creating Tables
+ * **Example:** Basic Table
  * ```typescript
  * import * as DynamoDB from "alchemy/AWS/DynamoDB";
  *
@@ -266,7 +265,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Table with Sort Key and TTL
+ * **Example:** Table with Sort Key and TTL
  * ```typescript
  * const table = yield* DynamoDB.Table("SessionsTable", {
  *   partitionKey: "userId",
@@ -283,7 +282,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Table with Global Secondary Index
+ * **Example:** Table with Global Secondary Index
  * ```typescript
  * const table = yield* DynamoDB.Table("OrdersTable", {
  *   partitionKey: "pk",
@@ -303,7 +302,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Multi-Attribute GSI Keys
+ * **Example:** Multi-Attribute GSI Keys
  * GSI partition and sort keys may be composed of up to four attributes each,
  * indexing natural domain attributes directly instead of synthetic
  * concatenated keys. Partition attributes are hashed together (queries must
@@ -344,12 +343,12 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @section Runtime Operations
+ * ### Runtime Operations
  * Bind DynamoDB operations in the init phase and use them in runtime
  * handlers. Bindings inject the table name and grant scoped IAM
  * permissions automatically.
  *
- * @example Read and write items
+ * **Example:** Read and write items
  * ```typescript
  * // init
  * const getItem = yield* AWS.DynamoDB.GetItem(table);
@@ -369,8 +368,8 @@ export interface Table extends Resource<
  * };
  * ```
  *
- * @section Table Features
- * @example Resource Policy
+ * ### Table Features
+ * **Example:** Resource Policy
  * ```typescript
  * const table = yield* DynamoDB.Table("SharedTable", {
  *   partitionKey: "pk",
@@ -387,7 +386,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Kinesis Streaming Destination
+ * **Example:** Kinesis Streaming Destination
  * ```typescript
  * import * as Kinesis from "alchemy/AWS/Kinesis";
  *
@@ -402,7 +401,7 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @example Contributor Insights
+ * **Example:** Contributor Insights
  * ```typescript
  * const table = yield* DynamoDB.Table("HotKeyTable", {
  *   partitionKey: "pk",
@@ -411,12 +410,12 @@ export interface Table extends Resource<
  * });
  * ```
  *
- * @section DynamoDB Streams
+ * ### DynamoDB Streams
  * Process change data capture events from a DynamoDB table using a
  * Lambda event source mapping. The stream is enabled automatically
  * through the binding contract.
  *
- * @example Process table changes
+ * **Example:** Process table changes
  * ```typescript
  * // init
  * yield* DynamoDB.consumeTableChanges(
@@ -427,6 +426,8 @@ export interface Table extends Resource<
  *   }),
  * );
  * ```
+ *
+ * @resource
  */
 export const Table = Resource<Table>("AWS.DynamoDB.Table");
 
@@ -729,11 +730,6 @@ export const TableProvider = () =>
           Effect.catchTag("PolicyNotFoundException", () =>
             Effect.succeed(undefined),
           ),
-          // Local emulators (floci/LocalStack) don't implement resource
-          // policies — treat "operation not supported" as "no policy".
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed(undefined),
-          ),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([
@@ -919,12 +915,6 @@ export const TableProvider = () =>
               ),
             ),
           }),
-          // Local emulators (floci/LocalStack) don't implement Contributor
-          // Insights — "operation not supported" means the feature is
-          // effectively disabled.
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed("DISABLED" as const),
-          ),
         );
 
       // Enabling Contributor Insights makes DynamoDB create CloudWatch rules
@@ -952,11 +942,6 @@ export const TableProvider = () =>
                     name.includes(`-${tableName}-`),
                 ),
             ],
-          ),
-          // Local emulators (floci/LocalStack) don't implement CloudWatch
-          // insight rules — nothing to wait for.
-          Effect.catchTag("UnknownOperationException", () =>
-            Effect.succeed([] as string[]),
           ),
         );
 
@@ -1599,8 +1584,23 @@ export const TableProvider = () =>
                   // we give up), skip it rather than failing the whole
                   // enumeration. Our own table is ACTIVE by the time list()
                   // runs, so it always hydrates via the retry above.
-                  Effect.catchTag("ValidationException", () =>
-                    Effect.succeed(undefined),
+                  //
+                  // `AccessDeniedException` is the same case seen from the
+                  // other side: enumerating an account walks tables we do not
+                  // own, and one can deny the tag read outright (a restrictive
+                  // resource policy live; a peer test's table under the local
+                  // emulator). A table we cannot read is not ours to return.
+                  // `TableNotFoundException` completes the set: a peer can
+                  // delete a table between `listTables` and our describes, and
+                  // that is what DynamoDB raises for a table that vanished.
+                  Effect.catchTag(
+                    [
+                      "ValidationException",
+                      "AccessDeniedException",
+                      "TableNotFoundException",
+                      "ResourceNotFoundException",
+                    ],
+                    () => Effect.succeed(undefined),
                   ),
                 ),
               { concurrency: 8 },

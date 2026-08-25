@@ -102,9 +102,8 @@ export interface Records extends Resource<
  * {@link RecordsBinding} binding contract, which is how composites (e.g. a
  * site attached to an `AWS.Website.Router`) register hostnames on a
  * distribution's DNS without a circular input prop.
- * @resource
- * @section Managing Record Sets
- * @example Alias Records For Several Hostnames
+ * ### Managing Record Sets
+ * **Example:** Alias Records For Several Hostnames
  * ```typescript
  * const records = yield* Records("AliasRecords", {
  *   hostedZoneId: "Z1234567890",
@@ -117,7 +116,7 @@ export interface Records extends Resource<
  * });
  * ```
  *
- * @example Binding Target For Composite-Contributed Names
+ * **Example:** Binding Target For Composite-Contributed Names
  * ```typescript
  * // Names may also arrive through the binding contract — an
  * // `AWS.Website.Router` declares an empty set and attached sites bind
@@ -133,6 +132,8 @@ export interface Records extends Resource<
  * // elsewhere:
  * yield* records.bind`MySite`({ names: ["docs.example.com"] });
  * ```
+ *
+ * @resource
  */
 export const Records = Resource<Records>("AWS.Route53.Records");
 

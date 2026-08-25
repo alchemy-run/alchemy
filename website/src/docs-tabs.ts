@@ -43,6 +43,18 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Hetzner",
+    href: "/hetzner",
+    prefixes: ["/hetzner", "/providers/hetzner"],
+    slot: "primary",
+  },
+  {
+    label: "Fly",
+    href: "/fly",
+    prefixes: ["/fly", "/providers/fly"],
+    slot: "primary",
+  },
+  {
     label: "PlanetScale",
     href: "/planetscale",
     prefixes: ["/planetscale", "/providers/planetscale"],

@@ -42,11 +42,8 @@ export type Address = Resource<
  * Destination addresses are account-scoped (not zone-scoped). They are used
  * as forwarding targets in `Rule` actions and can also serve as the
  * `destinationAddress` on a `send_email` Worker binding.
- * @resource
- * @product Email
- * @category Email
- * @section Registering an Address
- * @example Register a destination address
+ * ### Registering an Address
+ * **Example:** Register a destination address
  * ```typescript
  * const ops = yield* Cloudflare.Email.Address("Ops", {
  *   email: "ops@example.com",
@@ -55,6 +52,10 @@ export type Address = Resource<
  *
  * Cloudflare sends a verification email when the address is first created.
  * The address must be verified before it can receive routed mail.
+ *
+ * @resource
+ * @product Email
+ * @category Email
  */
 export const Address = Resource<Address>("Cloudflare.Email.Address", {
   aliases: ["Cloudflare.EmailAddress"],

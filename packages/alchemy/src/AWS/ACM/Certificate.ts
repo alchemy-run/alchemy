@@ -185,9 +185,8 @@ const resolveEffectiveSans = (
  * region required for CloudFront viewer certificates. When `hostedZoneId` is
  * provided for DNS validation, the provider creates or updates the Route 53
  * validation records and waits for the certificate to be issued.
- * @resource
- * @section Requesting Certificates
- * @example DNS-Validated Certificate
+ * ### Requesting Certificates
+ * **Example:** DNS-Validated Certificate
  * ```typescript
  * const cert = yield* Certificate("WebsiteCertificate", {
  *   domainName: "www.example.com",
@@ -195,7 +194,7 @@ const resolveEffectiveSans = (
  * });
  * ```
  *
- * @example Certificate With SANs
+ * **Example:** Certificate With SANs
  * ```typescript
  * const cert = yield* Certificate("WebsiteCertificate", {
  *   domainName: "example.com",
@@ -204,7 +203,7 @@ const resolveEffectiveSans = (
  * });
  * ```
  *
- * @example Exportable Certificate
+ * **Example:** Exportable Certificate
  * ```typescript
  * // `export: "ENABLED"` lets the ExportCertificate binding retrieve the
  * // certificate together with its (encrypted) private key at runtime.
@@ -215,8 +214,8 @@ const resolveEffectiveSans = (
  * });
  * ```
  *
- * @section Certificate Expiry Events
- * @example React to Approaching Expiration
+ * ### Certificate Expiry Events
+ * **Example:** React to Approaching Expiration
  * ```typescript
  * // ACM emits "ACM Certificate Approaching Expiration" events through
  * // EventBridge — consume them with the ACM expiry event source, scoped
@@ -231,6 +230,8 @@ const resolveEffectiveSans = (
  *     ),
  * );
  * ```
+ *
+ * @resource
  */
 export const Certificate = Resource<Certificate>("AWS.ACM.Certificate");
 

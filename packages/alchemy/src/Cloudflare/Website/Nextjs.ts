@@ -140,11 +140,8 @@ export interface NextjsProps<
  *   Pages-Router `i18n` config are untested/out of scope for now. App
  *   Router i18n via middleware works (middleware is fully supported).
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Next.js App
+ * ### Deploying a Next.js App
  * A single call builds the app with OpenNext and deploys the worker plus
  * its static assets. The project needs an `open-next.config.ts` — the
  * read-only static-assets incremental cache is a good default:
@@ -159,24 +156,24 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @example Basic Next.js site
+ * **Example:** Basic Next.js site
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site");
  * ```
  *
- * @example Explicit project root
+ * **Example:** Explicit project root
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   rootDir: "./apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Resources passed via `env` become Worker bindings, readable in route
  * handlers and server components through OpenNext's
  * `getCloudflareContext()`.
  *
- * @example Binding an R2 bucket
+ * **Example:** Binding an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
@@ -197,7 +194,7 @@ export interface NextjsProps<
  * }
  * ```
  *
- * @section Writable ISR
+ * ### Writable ISR
  * With the KV incremental cache, ISR revalidation actually writes:
  * `revalidatePath` / `revalidateTag` purge entries, and time-based
  * `revalidate` windows regenerate pages in the background through the
@@ -218,7 +215,7 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @example Binding the writable-ISR resources
+ * **Example:** Binding the writable-ISR resources
  * ```typescript
  * const incCache = yield* Cloudflare.KV.Namespace("NextIncCache");
  * const tagCache = yield* Cloudflare.KV.Namespace("NextTagCache");
@@ -236,12 +233,12 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every project file outside build outputs is hashed to decide
  * whether a rebuild is needed. Use `memo` to narrow the scope when the
  * project has large directories that don't affect the build output.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   memo: {
@@ -250,11 +247,11 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @section Build Configuration
+ * ### Build Configuration
  * The `nextjs` prop tunes the OpenNext pipeline: a custom build command,
  * minification, or reusing an existing `.next` build.
  *
- * @example Minified build with a custom command
+ * **Example:** Minified build with a custom command
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   nextjs: {
@@ -264,13 +261,13 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Nextjs` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Site extends Cloudflare.Website.Nextjs<Site>()("Site", {
  *   rootDir: "./apps/web",
@@ -278,6 +275,10 @@ export interface NextjsProps<
  *
  * const site = yield* Site;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Nextjs: {
   <Self>(): {
@@ -348,6 +349,10 @@ export const Nextjs: {
             source: {
               provider: NEXTJS_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
+              // `next dev` (Turbopack) cold-starts broken under bun (every
+              // route 404s until `.next` is warm) — pin the dev child to node.
+              runtime: "node",
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,

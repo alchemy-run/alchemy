@@ -28,16 +28,15 @@ export interface WakuProps extends FrameworkSiteProps {
  * of waku's aws-lambda adapter, streaming enabled) — both must be installed
  * in your project.
  *
- * @resource
- * @section Creating Waku Sites
- * @example Basic Waku App
+ * ### Creating Waku Sites
+ * **Example:** Basic Waku App
  * ```typescript
  * const site = yield* AWS.Website.Waku("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.Waku("Web", {
  *   rootDir: "./app",
@@ -48,8 +47,8 @@ export interface WakuProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Tune The Server Function
+ * ### Server Configuration
+ * **Example:** Tune The Server Function
  * ```typescript
  * const site = yield* AWS.Website.Waku("Web", {
  *   rootDir: "./app",
@@ -61,6 +60,8 @@ export interface WakuProps extends FrameworkSiteProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Waku = (id: string, props: WakuProps = {}) =>
   makeFrameworkSite(id, props, {

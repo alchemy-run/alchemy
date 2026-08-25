@@ -26,7 +26,7 @@
     "alchemy": "workspace:*",
     "effect": "catalog:effect",
     "tailwindcss": "catalog:frontend",
-    "typescript": "catalog:build"
+    "typescript": "catalog:frontend"
   },
   "engines": {
     "node": ">=22"

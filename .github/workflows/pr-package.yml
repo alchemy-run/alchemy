@@ -73,6 +73,7 @@ jobs:
               { "dir": "distilled/packages/aws",         "name": "@distilled.cloud/aws",               "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/axiom",       "name": "@distilled.cloud/axiom",             "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/cloudflare",  "name": "@distilled.cloud/cloudflare",        "group": "Distilled", "submodule": true },
+              { "dir": "distilled/packages/hetzner",     "name": "@distilled.cloud/hetzner",           "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/neon",        "name": "@distilled.cloud/neon",              "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/planetscale", "name": "@distilled.cloud/planetscale",       "group": "Distilled", "submodule": true }
             ]

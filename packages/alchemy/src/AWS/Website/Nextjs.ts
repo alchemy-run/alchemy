@@ -16,13 +16,15 @@ import {
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import { Server, type ServerDevProps } from "./Server.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
-import type {
-  WebsiteAssetsConfig,
-  WebsiteDomainProps,
-  WebsiteEdgeProps,
-  WebsiteInvalidationProps,
+import {
+  normalizeWebsiteDomain,
+  type WebsiteAssetsConfig,
+  type WebsiteDomainProps,
+  type WebsiteEdgeProps,
+  type WebsiteInvalidationProps,
 } from "./shared.ts";
 
 /**
@@ -151,16 +153,15 @@ export interface NextjsProps {
  * no cloud resources are declared; `Alchemy.remote()` opts back into the
  * full live deployment.
  *
- * @resource
- * @section Creating Next.js Sites
- * @example Basic Next.js App
+ * ### Creating Next.js Sites
+ * **Example:** Basic Next.js App
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
@@ -171,8 +172,8 @@ export interface NextjsProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Tune The Server Function
+ * ### Server Configuration
+ * **Example:** Tune The Server Function
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
@@ -184,6 +185,8 @@ export interface NextjsProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
   function* (id: string, props: NextjsProps = {}) {
@@ -204,6 +207,13 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
     });
 
     if (isLocal) {
+      // Router-attached sites register with the Router in dev exactly as they
+      // do live — same resource types and ids — with `next dev` standing in
+      // for the S3 + Lambda origins.
+      const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, build.url)
+        : undefined;
       return {
         bucket: undefined,
         build,
@@ -214,7 +224,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
         imageFunction: undefined,
         imageUrl: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         revalidationFunction: undefined,
         revalidationQueue: undefined,
         server: undefined,

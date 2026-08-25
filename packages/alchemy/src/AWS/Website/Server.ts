@@ -200,9 +200,8 @@ export interface Server extends Resource<
  * build. Build inputs are content-hashed so an unchanged project skips the
  * rebuild entirely.
  *
- * @resource
- * @section Building Frameworks
- * @example Nuxt For AWS Lambda
+ * ### Building Frameworks
+ * **Example:** Nuxt For AWS Lambda
  * ```typescript
  * const server = yield* Server("Server", {
  *   framework: "@alchemy.run/frontend-frameworks/nuxt",
@@ -213,6 +212,8 @@ export interface Server extends Resource<
  * //         server.clientDir   -> .output/public (static assets for the CDN)
  * // dev:    server.url         -> http://localhost:<port> (framework HMR server)
  * ```
+ *
+ * @resource
  */
 export const Server = Resource<Server>("AWS.Website.Server", {
   aliases: ["AWS.Website.FrameworkBuild"],

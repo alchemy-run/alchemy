@@ -35,10 +35,15 @@ export const cloneFixture = Effect.fn(function* (
   if (options.tempRoot) {
     yield* fs.makeDirectory(options.tempRoot, { recursive: true });
   }
-  const dir = yield* fs.makeTempDirectory({
-    prefix: options.prefix,
-    directory: options.tempRoot,
-  });
+  // Realpath the temp dir: macOS temp roots are symlinks (/tmp, /var/folders
+  // → /private/...), and file watchers (Turbopack HMR) report events under
+  // the real path — a symlinked project root never sees invalidations.
+  const dir = yield* fs.realPath(
+    yield* fs.makeTempDirectory({
+      prefix: options.prefix,
+      directory: options.tempRoot,
+    }),
+  );
 
   const entries = options.entries ?? (yield* fs.readDirectory(sourceDir));
 

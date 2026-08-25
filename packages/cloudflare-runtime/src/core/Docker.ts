@@ -92,6 +92,49 @@ const ContainerEgressInterceptorImage = Config.string(
 export const toPullRef = (imageUri: string) =>
   imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
 
+/**
+ * Hostname dev containers use to reach services listening on the developer's
+ * machine. Inside a container, `localhost` is the container itself, so env
+ * values that point at host-side services (a local dev database, another dev
+ * server) are rewritten to this alias, which is mapped to Docker's
+ * `host-gateway` on the container's network (see `makeDockerProxyServer`).
+ *
+ * Deliberately NOT `host.docker.internal`: several dev-oriented clients gate
+ * "insecure local mode" on a localhost-looking hostname — notably Prisma's
+ * client, which flips `prisma+postgres://` URLs to TLS unless the host
+ * contains `localhost`/`127.0.0.1`/`[::1]` — and the local `@prisma/dev`
+ * server only speaks plain HTTP. An alias under `.localhost` keeps those
+ * heuristics intact while `/etc/hosts` (which `getaddrinfo` consults before
+ * DNS) routes it to the host machine.
+ *
+ * Platform note: on Docker Desktop (macOS/Windows) `host-gateway` forwards
+ * into the host's loopback, so services bound to `127.0.0.1` are reachable.
+ * On native Linux Docker it resolves to the bridge gateway IP, so a host
+ * service must listen on `0.0.0.0` (or the bridge address) to be reachable.
+ */
+export const CONTAINER_LOOPBACK_ALIAS = "host.docker.localhost";
+
+/**
+ * Matches a loopback host (`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`)
+ * where it denotes a connection target inside an env value: at the start of
+ * the value, after a `scheme://` (with optional userinfo), after `=` (DSN
+ * keyword form, `host=localhost`), or after whitespace/comma/semicolon
+ * delimiters — and followed by a port, path, delimiter, or the end.
+ */
+const LOOPBACK_HOST =
+  /(^|[\s,;=]|\/\/(?:[^/\s@]*@)?)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/?#]|[\s,;]|$)/g;
+
+/**
+ * Rewrite loopback hosts in a container env value to
+ * {@link CONTAINER_LOOPBACK_ALIAS} so the value keeps meaning "the developer's
+ * machine" from inside the container. Applied to the env the Docker proxy
+ * injects at container create (the deployment-level env registered via
+ * `registerImageEnv`) — in production these values point at real cloud hosts,
+ * so the rewrite only ever fires against local dev emulators.
+ */
+export const rewriteLoopbackHosts = (value: string) =>
+  value.replace(LOOPBACK_HOST, `$1${CONTAINER_LOOPBACK_ALIAS}`);
+
 export const DockerLive = Layer.effect(
   Docker,
   Effect.gen(function* () {
@@ -148,11 +191,15 @@ export const DockerLive = Layer.effect(
 
     const makeDockerProxyServer = (socketPath: string) =>
       NodeHttp.createServer(async (req, res) => {
-        const isContainerCreateRequest =
-          req.method === "POST" &&
-          req.url?.startsWith("/containers/create") &&
-          !req.url.endsWith("-proxy");
-        if (isContainerCreateRequest) {
+        const isCreateRequest =
+          req.method === "POST" && req.url?.startsWith("/containers/create");
+        // workerd creates two containers per instance: the user container and
+        // a `<name>-proxy` networking sidecar whose namespace the user
+        // container joins (`NetworkMode: container:<sidecar>`) — so the
+        // sidecar's /etc/hosts is what the user container resolves against.
+        const isSidecarCreateRequest =
+          isCreateRequest && req.url!.endsWith("-proxy");
+        if (isCreateRequest && !isSidecarCreateRequest) {
           const original = await extractJsonBody<{
             Image: string;
             Env: Array<string>;
@@ -164,9 +211,37 @@ export const DockerLive = Layer.effect(
             Env: [
               ...(original.Env ?? []),
               ...Object.entries(image?.env ?? {}).map(
-                ([name, value]) => `${name}=${value}`,
+                ([name, value]) => `${name}=${rewriteLoopbackHosts(value)}`,
               ),
             ],
+          });
+          const proxy = sendProxyRequest({
+            socketPath,
+            path: req.url,
+            method: req.method,
+            headers: {
+              ...req.headers,
+              "content-length": Buffer.byteLength(transformed).toString(),
+            },
+            res,
+          });
+          proxy.end(transformed);
+        } else if (isSidecarCreateRequest) {
+          // Map the loopback alias to the host machine in the shared network
+          // namespace, alongside the `host.docker.internal:host-gateway`
+          // entry workerd already sets on the sidecar.
+          const original = await extractJsonBody<{
+            HostConfig?: { ExtraHosts?: Array<string> };
+          }>(req);
+          const transformed = JSON.stringify({
+            ...original,
+            HostConfig: {
+              ...original.HostConfig,
+              ExtraHosts: [
+                ...(original.HostConfig?.ExtraHosts ?? []),
+                `${CONTAINER_LOOPBACK_ALIAS}:host-gateway`,
+              ],
+            },
           });
           const proxy = sendProxyRequest({
             socketPath,

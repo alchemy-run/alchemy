@@ -36,10 +36,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: website/node_modules/.astro
-          key: astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}
+          key: website-check-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}
           restore-keys: |
-            astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
-            astro-${{ runner.os }}-main-
+            website-check-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
+            website-check-astro-${{ runner.os }}-main-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -49,6 +49,10 @@ jobs:
 
       - name: Run Typecheck
         run: pnpm tsc -b
+
+      - name: Check API JSDocs
+        run: pnpm docs:check-jsdoc
+
       # An internal PR carrying `deploy-website` gets a full Astro build in
       # website.yml via StaticSite. That build runs the same output validators,
       # so avoid building the site a second time here. Forks still run this

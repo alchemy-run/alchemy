@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.72",
+  "version": "2.0.0-beta.74",
   "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -215,6 +215,30 @@
       "worker": "./src/Neon/*/index.ts",
       "import": "./lib/Neon/*/index.js"
     },
+    "./Hetzner": {
+      "types": "./lib/Hetzner/index.d.ts",
+      "bun": "./src/Hetzner/index.ts",
+      "worker": "./src/Hetzner/index.ts",
+      "import": "./lib/Hetzner/index.js"
+    },
+    "./Hetzner/*": {
+      "types": "./lib/Hetzner/*.d.ts",
+      "bun": "./src/Hetzner/*.ts",
+      "worker": "./src/Hetzner/*.ts",
+      "import": "./lib/Hetzner/*.js"
+    },
+    "./Fly": {
+      "types": "./lib/Fly/index.d.ts",
+      "bun": "./src/Fly/index.ts",
+      "worker": "./src/Fly/index.ts",
+      "import": "./lib/Fly/index.js"
+    },
+    "./Fly/*": {
+      "types": "./lib/Fly/*.d.ts",
+      "bun": "./src/Fly/*.ts",
+      "worker": "./src/Fly/*.ts",
+      "import": "./lib/Fly/*.js"
+    },
     "./Prisma": {
       "types": "./lib/Prisma/index.d.ts",
       "bun": "./src/Prisma/index.ts",
@@ -372,6 +396,8 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/fly-io": "workspace:*",
+    "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:effect",
@@ -400,11 +426,12 @@
     "yaml": "catalog:shared"
   },
   "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@cloudflare/containers": "catalog:cloudflare",
     "@cloudflare/puppeteer": "catalog:cloudflare",
+    "@cloudflare/unenv-preset": "catalog:cloudflare-runtime",
     "@cloudflare/workers-types": "catalog:cloudflare-runtime",
-    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/platform-node-shared": "catalog:effect",
@@ -413,7 +440,7 @@
     "@octanejs/vite-plugin": "catalog:frontend",
     "@opennextjs/aws": "catalog:frontend",
     "@opennextjs/cloudflare": "catalog:frontend",
-    "@oxc-project/types": "^0.139.0",
+    "@oxc-project/types": "^0.146.0",
     "@sveltejs/kit": "catalog:frontend",
     "@sveltejs/vite-plugin-svelte": "catalog:frontend",
     "@tanstack/react-router": "catalog:frontend",
@@ -452,13 +479,16 @@
     "tsdown": "^0.15.4",
     "tsx": "catalog:tooling",
     "typescript": "catalog:build",
+    "unenv": "catalog:cloudflare-runtime",
     "uuid": "catalog:shared",
     "vitest": "catalog:testing",
+    "vocs": "catalog:frontend",
     "waku": "catalog:frontend",
     "wrangler": "catalog:cloudflare",
     "ws": "catalog:shared"
   },
   "peerDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
@@ -475,6 +505,9 @@
     "ws": "catalog:shared"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/frontend-frameworks": {
+      "optional": true
+    },
     "@aws/durable-execution-sdk-js": {
       "optional": true
     },

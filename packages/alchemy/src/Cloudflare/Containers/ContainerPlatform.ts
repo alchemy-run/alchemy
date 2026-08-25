@@ -21,6 +21,34 @@ import type {
   ContainerShape,
 } from "./ContainerApplication.ts";
 
+const toHttpUrl = (url: string) =>
+  url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
+
+/**
+ * workerd container ports reject TLS outright ("Connecting to a container
+ * using HTTPS is not currently supported") — but the common proxy pattern
+ * forwards the incoming Worker request, whose production URL is `https://`,
+ * straight to the port. The hop into the container is already secure, so
+ * downgrade the scheme before forwarding, exactly like Cloudflare's own
+ * `@cloudflare/containers` `containerFetch` does
+ * (`request.url.replace("https:", "http:")`).
+ */
+const httpSchemePort = <
+  P extends {
+    fetch: (...args: any[]) => any;
+    connect: (...args: any[]) => any;
+  },
+>(
+  port: P,
+): P =>
+  ({
+    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+      input instanceof Request
+        ? port.fetch(toHttpUrl(input.url), input)
+        : port.fetch(toHttpUrl(String(input)), init),
+    connect: (address: any, options?: any) => port.connect(address, options),
+  }) as any as P;
+
 export const ContainerPlatform: Platform<
   ContainerApplication,
   ContainerServices,
@@ -151,7 +179,9 @@ export const ContainerPlatform: Platform<
             Effect.sync(() => state.container!.signal(signo)),
           getTcpPort: (port: number) =>
             Effect.sync(() =>
-              fromCloudflareFetcher(state.container!.getTcpPort(port)),
+              fromCloudflareFetcher(
+                httpSchemePort(state.container!.getTcpPort(port)),
+              ),
             ),
           setInactivityTimeout: (durationMs: number | bigint) =>
             Effect.promise(() =>

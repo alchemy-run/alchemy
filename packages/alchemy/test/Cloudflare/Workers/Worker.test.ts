@@ -59,6 +59,7 @@ describe.concurrent("Cloudflare.Worker", () => {
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
           yield* R2.Bucket("Bucket", {
+            forceDestroy: true,
             storageClass: "Standard",
           });
 
@@ -1031,6 +1032,98 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(deployed.caller.workerName, accountId);
         yield* waitForWorkerToBeDeleted(deployed.target.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // #1272 regression, remaining #874 case: an already-yielded Worker is
+  // plain resource attributes rather than an Effect-valued tag. In a binding
+  // chain, plan and apply may materialize different stable/full projections
+  // of those attributes, but both describe the same service binding and must
+  // converge.
+  // Switching the actual target must still update the caller and land in
+  // Cloudflare.
+  test.provider(
+    "nested yielded worker resources in env converge to noop plans",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = (selected: "A" | "B") =>
+          Effect.gen(function* () {
+            const targetB = yield* Cloudflare.Worker("YieldedEnvTargetB", {
+              main,
+            });
+            const targetA = yield* Cloudflare.Worker("YieldedEnvTargetA", {
+              main,
+              env: { UPSTREAM: targetB },
+            });
+            const caller = yield* Cloudflare.Worker("YieldedEnvCaller", {
+              main,
+              env: { TARGET: selected === "A" ? targetA : targetB },
+            });
+            return { targetA, targetB, caller };
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployedA = yield* stack.deploy(program("A"));
+        const bindingTarget = Effect.fn(function* (callerName: string) {
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: callerName,
+          });
+          return settings.bindings?.find(
+            (binding) =>
+              binding.type === "service" && binding.name === "TARGET",
+          );
+        });
+        expect(yield* bindingTarget(deployedA.caller.workerName)).toEqual(
+          expect.objectContaining({
+            type: "service",
+            name: "TARGET",
+            service: deployedA.targetA.workerName,
+          }),
+        );
+
+        const stableA = yield* stack.plan(program("A"));
+        expect(actionOf(stableA, "YieldedEnvTargetA")).toBe("noop");
+        expect(actionOf(stableA, "YieldedEnvTargetB")).toBe("noop");
+        expect(actionOf(stableA, "YieldedEnvCaller")).toBe("noop");
+
+        const switchPlan = yield* stack.plan(program("B"));
+        expect(actionOf(switchPlan, "YieldedEnvTargetA")).toBe("noop");
+        expect(actionOf(switchPlan, "YieldedEnvTargetB")).toBe("noop");
+        expect(actionOf(switchPlan, "YieldedEnvCaller")).toBe("update");
+
+        const deployedB = yield* stack.deploy(program("B"));
+        expect(yield* bindingTarget(deployedB.caller.workerName)).toEqual(
+          expect.objectContaining({
+            type: "service",
+            name: "TARGET",
+            service: deployedB.targetB.workerName,
+          }),
+        );
+
+        const stableB = yield* stack.plan(program("B"));
+        expect(actionOf(stableB, "YieldedEnvTargetA")).toBe("noop");
+        expect(actionOf(stableB, "YieldedEnvTargetB")).toBe("noop");
+        expect(actionOf(stableB, "YieldedEnvCaller")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* Effect.all(
+          [
+            deployedB.caller.workerName,
+            deployedB.targetA.workerName,
+            deployedB.targetB.workerName,
+          ].map((name) => waitForWorkerToBeDeleted(name, accountId)),
+          { concurrency: "unbounded" },
+        );
       }).pipe(logLevel),
     { timeout: 360_000 },
   );

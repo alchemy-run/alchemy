@@ -41,9 +41,8 @@ export interface TenantResourceAssociation extends Resource<
  *
  * This is an existence-only link with no mutable properties: changing either
  * the tenant or the resource replaces the association.
- * @resource
- * @section Associating Resources
- * @example Associate an Email Identity with a Tenant
+ * ### Associating Resources
+ * **Example:** Associate an Email Identity with a Tenant
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -57,7 +56,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * ```
  *
- * @example Associate a Configuration Set
+ * **Example:** Associate a Configuration Set
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("AcmeTracking", {});
  * yield* SES.TenantResourceAssociation("ConfigSetLink", {
@@ -66,7 +65,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * ```
  *
- * @example Associate an Email Template
+ * **Example:** Associate an Email Template
  * ```typescript
  * const template = yield* SES.EmailTemplate("Welcome", {
  *   subject: "Welcome, {{name}}!",
@@ -78,7 +77,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * ```
  *
- * @example Share One Identity Across Two Tenants
+ * **Example:** Share One Identity Across Two Tenants
  * ```typescript
  * // A resource can belong to any number of tenants.
  * const acme = yield* SES.Tenant("Acme", {});
@@ -93,6 +92,8 @@ export interface TenantResourceAssociation extends Resource<
  *   resourceArn: identity.identityArn,
  * });
  * ```
+ *
+ * @resource
  */
 export const TenantResourceAssociation = Resource<TenantResourceAssociation>(
   "AWS.SES.TenantResourceAssociation",

@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/frontend-frameworks",
-  "version": "2.0.0-beta.72",
+  "version": "2.0.0-beta.74",
   "description": "Framework build and development integrations for Alchemy.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -40,7 +40,9 @@
     "test:nuxt": "vitest run src/nuxt/test",
     "test:octane": "vitest run src/octane/test",
     "test:sveltekit": "vitest run src/sveltekit/test",
+    "test:vite": "vitest run src/vite/test",
     "test:waku": "vitest run src/waku/test",
+    "test:vocs": "vitest run src/vocs/test",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
@@ -59,6 +61,7 @@
     "@octanejs/vite-plugin": "catalog:frontend",
     "@opennextjs/cloudflare": "catalog:frontend",
     "@sveltejs/kit": "catalog:frontend",
+    "@vitejs/plugin-react": "catalog:frontend",
     "astro": "catalog:frontend",
     "effect": "catalog:effect",
     "hono": "catalog:frontend",
@@ -67,7 +70,8 @@
     "tsdown": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:testing",
-    "waku": "catalog:frontend"
+    "waku": "catalog:frontend",
+    "vocs": "catalog:frontend"
   },
   "peerDependencies": {
     "@effect/platform-bun": "catalog:effect",
@@ -75,12 +79,14 @@
     "@octanejs/vite-plugin": "catalog:cloudflare-runtime",
     "@opennextjs/cloudflare": "catalog:frontend",
     "@sveltejs/kit": "catalog:cloudflare-runtime",
+    "@vitejs/plugin-react": "catalog:frontend",
     "astro": "catalog:cloudflare-runtime",
     "effect": "catalog:effect",
     "hono": "catalog:frontend",
     "nuxt": "catalog:cloudflare-runtime",
     "vite": "catalog:cloudflare-runtime",
-    "waku": "catalog:frontend"
+    "waku": "catalog:frontend",
+    "vocs": "catalog:frontend"
   },
   "peerDependenciesMeta": {
     "@effect/platform-bun": {
@@ -98,6 +104,9 @@
     "@sveltejs/kit": {
       "optional": true
     },
+    "@vitejs/plugin-react": {
+      "optional": true
+    },
     "astro": {
       "optional": true
     },
@@ -111,6 +120,9 @@
       "optional": true
     },
     "waku": {
+      "optional": true
+    },
+    "vocs": {
       "optional": true
     }
   },
@@ -272,6 +284,18 @@
       "worker": "./dist/sveltekit/source.js",
       "import": "./dist/sveltekit/source.js"
     },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "bun": "./dist/vite/index.js",
+      "worker": "./dist/vite/index.js",
+      "import": "./dist/vite/index.js"
+    },
+    "./vite/aws": {
+      "types": "./dist/vite/aws.d.ts",
+      "bun": "./dist/vite/aws.js",
+      "worker": "./dist/vite/aws.js",
+      "import": "./dist/vite/aws.js"
+    },
     "./waku": {
       "types": "./dist/waku/index.d.ts",
       "bun": "./dist/waku/index.js",
@@ -307,6 +331,24 @@
       "bun": "./dist/waku/source.js",
       "worker": "./dist/waku/source.js",
       "import": "./dist/waku/source.js"
+    },
+    "./vocs": {
+      "types": "./dist/vocs/index.d.ts",
+      "bun": "./dist/vocs/index.js",
+      "worker": "./dist/vocs/index.js",
+      "import": "./dist/vocs/index.js"
+    },
+    "./vocs/source": {
+      "types": "./dist/vocs/source.d.ts",
+      "bun": "./dist/vocs/source.js",
+      "worker": "./dist/vocs/source.js",
+      "import": "./dist/vocs/source.js"
+    },
+    "./vocs/cloudflare": {
+      "types": "./dist/vocs/cloudflare.d.ts",
+      "bun": "./dist/vocs/cloudflare.js",
+      "worker": "./dist/vocs/cloudflare.js",
+      "import": "./dist/vocs/cloudflare.js"
     },
     "./package.json": "./package.json"
   }

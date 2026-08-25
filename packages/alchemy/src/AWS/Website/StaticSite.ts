@@ -29,6 +29,7 @@ import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
   normalizeWebsiteDomain,
   type StaticSiteBuildProps,
@@ -174,17 +175,16 @@ export interface StaticSiteProps {
  * KeyValueStore with a file manifest for edge routing, and optionally builds
  * the site first. Supports standalone distribution or composition with
  * `AWS.Website.Router`.
- * @resource
- * @section Basic Sites
- * @example Simple Static Site
+ * ### Basic Sites
+ * **Example:** Simple Static Site
  * ```typescript
  * const site = yield* StaticSite("Docs", {
  *   path: "./site",
  * });
  * ```
  *
- * @section Built Sites
- * @example Build A Vite App
+ * ### Built Sites
+ * **Example:** Build A Vite App
  * ```typescript
  * const site = yield* StaticSite("Web", {
  *   path: "./frontend",
@@ -198,8 +198,8 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @section Single-Page Applications
- * @example SPA With Client-Side Routing
+ * ### Single-Page Applications
+ * **Example:** SPA With Client-Side Routing
  * ```typescript
  * // Misses fall back to index.html with a 200 so the client router
  * // can handle the path.
@@ -213,8 +213,8 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @section Custom Domains
- * @example Site With A Route 53 Domain
+ * ### Custom Domains
+ * **Example:** Site With A Route 53 Domain
  * ```typescript
  * const site = yield* StaticSite("Web", {
  *   path: "./site",
@@ -226,8 +226,8 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @section Router Composition
- * @example Serve Through A Router
+ * ### Router Composition
+ * **Example:** Serve Through A Router
  * ```typescript
  * const site = yield* StaticSite("Docs", {
  *   path: "./docs",
@@ -238,7 +238,7 @@ export interface StaticSiteProps {
  * });
  * ```
  *
- * @example Host-Matched Router Attachment
+ * **Example:** Host-Matched Router Attachment
  * ```typescript
  * // The site serves for docs.example.com on the router. On a same-stack
  * // router that owns a domain, this declaration alone provisions the
@@ -254,6 +254,8 @@ export interface StaticSiteProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const StaticSite = (id: string, props: StaticSiteProps) =>
   Effect.gen(function* () {
@@ -274,13 +276,20 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         env: props.dev.env,
       });
       const devUrl = Output.map(dev.url, (url) => url ?? props.dev?.url);
+      // A Router-attached site registers with the Router in dev exactly as it
+      // does live — same resource types, same ids, same route entries — with
+      // the local dev server standing in for the S3 origin.
+      const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+      const kvNamespace = routerDomain
+        ? yield* registerDevRouterRoute(routerDomain, devUrl)
+        : undefined;
       return {
         bucket: undefined,
         build: undefined,
         files: undefined,
         distribution: undefined,
         invalidation: undefined,
-        kvNamespace: undefined,
+        kvNamespace,
         url: devUrl,
         urls: [devUrl],
       };

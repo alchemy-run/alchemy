@@ -5,7 +5,13 @@ import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { Docker, DockerLive, toPullRef } from "../Docker.ts";
+import {
+  CONTAINER_LOOPBACK_ALIAS,
+  Docker,
+  DockerLive,
+  rewriteLoopbackHosts,
+  toPullRef,
+} from "../Docker.ts";
 
 const PINNED =
   "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8";
@@ -30,6 +36,93 @@ describe("Docker", () => {
       expect(toPullRef("registry.example.com:5000/repo:v1@sha256:abc")).toBe(
         "registry.example.com:5000/repo@sha256:abc",
       );
+    });
+  });
+
+  describe("rewriteLoopbackHosts", () => {
+    it("keeps the alias localhost-looking (Prisma's http/https gate)", () => {
+      expect(CONTAINER_LOOPBACK_ALIAS).toContain("localhost");
+    });
+
+    it("rewrites URL hosts for every loopback form", () => {
+      expect(rewriteLoopbackHosts("http://localhost:3000/path?q=1")).toBe(
+        `http://${CONTAINER_LOOPBACK_ALIAS}:3000/path?q=1`,
+      );
+      expect(
+        rewriteLoopbackHosts("postgres://user:pass@127.0.0.1:5432/db"),
+      ).toBe(`postgres://user:pass@${CONTAINER_LOOPBACK_ALIAS}:5432/db`);
+      expect(rewriteLoopbackHosts("http://0.0.0.0:8080")).toBe(
+        `http://${CONTAINER_LOOPBACK_ALIAS}:8080`,
+      );
+      expect(rewriteLoopbackHosts("http://[::1]:8080")).toBe(
+        `http://${CONTAINER_LOOPBACK_ALIAS}:8080`,
+      );
+    });
+
+    it("rewrites the local Prisma Postgres URL but not the api_key payload", () => {
+      const apiKey = "eyJkYXRhYmFzZVVybCI6InBvc3RncmVzOi8vbG9jYWxob3N0In0";
+      expect(
+        rewriteLoopbackHosts(
+          `prisma+postgres://localhost:51216/?api_key=${apiKey}`,
+        ),
+      ).toBe(
+        `prisma+postgres://${CONTAINER_LOOPBACK_ALIAS}:51216/?api_key=${apiKey}`,
+      );
+    });
+
+    it("rewrites every common connection-string shape, not just Prisma's", () => {
+      expect(rewriteLoopbackHosts("mysql://root@127.0.0.1:3306/app")).toBe(
+        `mysql://root@${CONTAINER_LOOPBACK_ALIAS}:3306/app`,
+      );
+      expect(rewriteLoopbackHosts("redis://localhost:6379/0")).toBe(
+        `redis://${CONTAINER_LOOPBACK_ALIAS}:6379/0`,
+      );
+      expect(rewriteLoopbackHosts("amqp://guest:guest@localhost:5672")).toBe(
+        `amqp://guest:guest@${CONTAINER_LOOPBACK_ALIAS}:5672`,
+      );
+      // multi-host URI (every host is rewritten)
+      expect(
+        rewriteLoopbackHosts(
+          "mongodb://user:pass@localhost:27017,localhost:27018/db?replicaSet=rs0",
+        ),
+      ).toBe(
+        `mongodb://user:pass@${CONTAINER_LOOPBACK_ALIAS}:27017,${CONTAINER_LOOPBACK_ALIAS}:27018/db?replicaSet=rs0`,
+      );
+      // JDBC-style compound scheme
+      expect(rewriteLoopbackHosts("jdbc:postgresql://localhost:5432/db")).toBe(
+        `jdbc:postgresql://${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+      );
+      // Kafka-style broker list
+      expect(rewriteLoopbackHosts("localhost:9092,localhost:9093")).toBe(
+        `${CONTAINER_LOOPBACK_ALIAS}:9092,${CONTAINER_LOOPBACK_ALIAS}:9093`,
+      );
+      // websocket + URL embedded in a JSON env value
+      expect(rewriteLoopbackHosts('{"ws":"ws://localhost:8080/socket"}')).toBe(
+        `{"ws":"ws://${CONTAINER_LOOPBACK_ALIAS}:8080/socket"}`,
+      );
+    });
+
+    it("rewrites bare host values and DSN keyword form", () => {
+      expect(rewriteLoopbackHosts("localhost:5432")).toBe(
+        `${CONTAINER_LOOPBACK_ALIAS}:5432`,
+      );
+      expect(rewriteLoopbackHosts("localhost")).toBe(CONTAINER_LOOPBACK_ALIAS);
+      expect(
+        rewriteLoopbackHosts("host=127.0.0.1 port=5432 sslmode=disable"),
+      ).toBe(`host=${CONTAINER_LOOPBACK_ALIAS} port=5432 sslmode=disable`);
+    });
+
+    it("leaves non-loopback hosts and lookalike substrings alone", () => {
+      expect(rewriteLoopbackHosts("https://db.example.com:5432")).toBe(
+        "https://db.example.com:5432",
+      );
+      expect(rewriteLoopbackHosts("http://localhost.example.com/")).toBe(
+        "http://localhost.example.com/",
+      );
+      expect(rewriteLoopbackHosts("http://notlocalhost:3000")).toBe(
+        "http://notlocalhost:3000",
+      );
+      expect(rewriteLoopbackHosts("8080")).toBe("8080");
     });
   });
 });

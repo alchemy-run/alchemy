@@ -34,6 +34,13 @@ export const AWS_AUTH_PROVIDER_NAME = "AWS";
 /** Default endpoint of a local AWS emulator (floci / LocalStack). */
 export const DEFAULT_LOCAL_ENDPOINT = `http://localhost:${Floci.DEFAULT_FLOCI_PORT}`;
 
+/**
+ * Dummy account stamped on every floci / `{ method: "local" }` environment.
+ * A custom `AWS_ENDPOINT_URL` on env/sso credentials does NOT use this —
+ * those keep the real account from STS / `AWS_ACCOUNT_ID`.
+ */
+export const LOCAL_ACCOUNT_ID = "000000000000";
+
 export type AwsAuthConfig =
   | { method: "sso"; ssoProfile: string }
   | { method: "stored" }
@@ -400,7 +407,7 @@ export const AwsAuth = AuthProviderLayer<
               return {
                 // Fixed dummy account — emulators accept any non-empty
                 // credentials, and calling STS here would be pure overhead.
-                accountId: config.accountId ?? "000000000000",
+                accountId: config.accountId ?? LOCAL_ACCOUNT_ID,
                 credentials: Effect.succeed({
                   accessKeyId: Redacted.make("test"),
                   secretAccessKey: Redacted.make("test"),

@@ -274,9 +274,8 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
  * a bundled long-lived Effect program directly on the machine.
- * @resource
- * @section Launching Instances
- * @example Basic Instance
+ * ### Launching Instances
+ * **Example:** Basic Instance
  * ```typescript
  * const instance = yield* AWS.EC2.Instance("AppInstance", {
  *   imageId: AWS.EC2.amazonLinux2023(),
@@ -285,8 +284,8 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * });
  * ```
  *
- * @section Hosting Processes
- * @example HTTP Server on an Instance
+ * ### Hosting Processes
+ * **Example:** HTTP Server on an Instance
  * ```typescript
  * const api = yield* Effect.gen(function* () {
  *   yield* Http.serve(
@@ -308,7 +307,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -316,7 +315,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -339,13 +338,15 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
  *   build: { pure: false },
  * }
  * ```
+ *
+ * @resource
  */
 export const Instance: Platform<
   Instance,

@@ -134,9 +134,8 @@ export interface Project extends Resource<
  * contained data. Set `createDatabase: false` when you want standalone
  * `Prisma.Database` resources with independent lifecycles.
  *
- * @resource
- * @section Creating a Project
- * @example Project with a default database
+ * ### Creating a Project
+ * **Example:** Project with a default database
  * ```typescript
  * const project = yield* Prisma.Project("app", {
  *   name: "app",
@@ -144,12 +143,14 @@ export interface Project extends Resource<
  * });
  * ```
  *
- * @example Project only
+ * **Example:** Project only
  * ```typescript
  * const project = yield* Prisma.Project("control-plane", {
  *   createDatabase: false,
  * });
  * ```
+ *
+ * @resource
  */
 export const Project = Resource<Project>("Prisma.Project");
 

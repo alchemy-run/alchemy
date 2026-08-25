@@ -324,11 +324,8 @@ export type Application = Resource<
  *
  * Access policies are authored as standalone {@link Policy} resources
  * and referenced here by id — there is no inline-policy support.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating an Application
- * @example Self-hosted application gated by a reusable Access policy
+ * ### Creating an Application
+ * **Example:** Self-hosted application gated by a reusable Access policy
  * ```typescript
  * const allowMyOrg = yield* Cloudflare.Access.Policy("AllowMyOrg", {
  *   name: "Allow example.com via Google",
@@ -344,7 +341,7 @@ export type Application = Resource<
  * });
  * ```
  *
- * @example Managed OAuth for an MCP server
+ * **Example:** Managed OAuth for an MCP server
  * ```typescript
  * const app = yield* Cloudflare.Access.Application("McpServer", {
  *   type: "self_hosted",
@@ -364,8 +361,8 @@ export type Application = Resource<
  * });
  * ```
  *
- * @section Protecting Cloudflare Workers
- * @example Require Access on a specific Worker
+ * ### Protecting Cloudflare Workers
+ * **Example:** Require Access on a specific Worker
  * ```typescript
  * // The application owns the policies (inline here — no separate Policy
  * // resource needed); the Worker enrolls itself via its `access` prop,
@@ -384,7 +381,7 @@ export type Application = Resource<
  * }, /* ... *​/) {}
  * ```
  *
- * @example Require Access on every Worker in the account
+ * **Example:** Require Access on every Worker in the account
  * ```typescript
  * // Covers all current AND future Workers. Hostname-level policies beat
  * // Worker-level policies, which beat this account-level policy — so an
@@ -401,8 +398,8 @@ export type Application = Resource<
  * });
  * ```
  *
- * @section Device-enrollment (warp)
- * @example WARP device-enrollment application
+ * ### Device-enrollment (warp)
+ * **Example:** WARP device-enrollment application
  * ```typescript
  * // There can only be ONE warp app per account; Cloudflare auto-derives the
  * // domain (`${authDomain}/warp`) so do not pass `domain` for this type.
@@ -421,8 +418,8 @@ export type Application = Resource<
  * });
  * ```
  *
- * @section Self-hosted with Google IdP
- * @example Self-hosted application restricted to a Google Workspace group
+ * ### Self-hosted with Google IdP
+ * **Example:** Self-hosted application restricted to a Google Workspace group
  * ```typescript
  * const admins = yield* Cloudflare.Access.Policy("AdminsOnly", {
  *   name: "Admins only",
@@ -445,6 +442,10 @@ export type Application = Resource<
  *   policies: [admins],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Application = Resource<Application>(
   "Cloudflare.Access.Application",
