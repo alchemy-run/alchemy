@@ -112,12 +112,12 @@ export interface StaticSiteProps {
   /**
    * Optional deterministic S3 bucket name for newly created buckets.
    */
-  bucketName?: string;
+  bucketName?: Input<string | undefined>;
   /**
    * Whether to delete uploaded objects before destroying created buckets.
    * @default false
    */
-  forceDestroy?: boolean;
+  forceDestroy?: Input<boolean | undefined>;
   /**
    * CloudFront invalidation behavior.
    * @default { paths: "all", wait: false }
@@ -126,7 +126,7 @@ export interface StaticSiteProps {
   /**
    * User-defined tags applied to created resources.
    */
-  tags?: Record<string, string>;
+  tags?: Input<Record<string, string> | undefined>;
   /**
    * Local dev configuration. When `alchemy dev` runs, the build/upload is
    * skipped and `command` is spawned as a long-lived child process tied to

@@ -1,5 +1,10 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteProps,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Nuxt build. */
 export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
@@ -62,7 +67,10 @@ export interface NuxtProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Nuxt = (id: string, props: NuxtProps = {}) =>
+export const Nuxt = (
+  id: string,
+  props: InputProps<NuxtProps, FrameworkSiteStaticProps | "nuxt"> = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "Nuxt",
     framework: NUXT_FRAMEWORK_SPECIFIER,

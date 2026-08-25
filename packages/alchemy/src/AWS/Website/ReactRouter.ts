@@ -1,5 +1,10 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteProps,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the React Router build. */
 export const REACT_ROUTER_FRAMEWORK_SPECIFIER =
@@ -111,7 +116,13 @@ export interface ReactRouterProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const ReactRouter = (id: string, props: ReactRouterProps = {}) =>
+export const ReactRouter = (
+  id: string,
+  props: InputProps<
+    ReactRouterProps,
+    FrameworkSiteStaticProps | "reactRouter"
+  > = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,

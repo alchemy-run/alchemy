@@ -1,5 +1,10 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteProps,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SvelteKit build. */
 export const SVELTEKIT_FRAMEWORK_SPECIFIER =
@@ -66,7 +71,10 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
+export const SvelteKit = (
+  id: string,
+  props: InputProps<SvelteKitProps, FrameworkSiteStaticProps | "kit"> = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "SvelteKit",
     framework: SVELTEKIT_FRAMEWORK_SPECIFIER,

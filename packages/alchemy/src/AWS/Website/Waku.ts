@@ -1,5 +1,10 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteProps,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Waku build. */
 export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
@@ -63,7 +68,10 @@ export interface WakuProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Waku = (id: string, props: WakuProps = {}) =>
+export const Waku = (
+  id: string,
+  props: InputProps<WakuProps, FrameworkSiteStaticProps | "waku"> = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "Waku",
     framework: WAKU_FRAMEWORK_SPECIFIER,

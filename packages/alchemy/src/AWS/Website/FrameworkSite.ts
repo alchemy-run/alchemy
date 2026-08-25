@@ -2,7 +2,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
-import type { Input } from "../../Input.ts";
+import type { Input, InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import {
@@ -29,26 +29,27 @@ export interface FrameworkServerProps {
    * Memory allocated to the server function, in MB.
    * @default 1024
    */
-  memorySize?: number;
+  memorySize?: Input<number>;
   /**
    * Maximum request duration.
    * @default 30 seconds
    */
-  timeout?: Duration.Duration;
+  timeout?: Input<Duration.Duration>;
   /**
-   * Environment variables for the server function.
+   * Environment variables for the server function. Values accept
+   * `Output`s (e.g. `API_URL: api.url`).
    */
   environment?: Record<string, any>;
   /**
    * Instruction set architecture.
    * @default "x86_64"
    */
-  architecture?: "x86_64" | "arm64";
+  architecture?: Input<"x86_64" | "arm64">;
   /**
    * Lambda runtime for the server function.
    * @default "nodejs24.x"
    */
-  runtime?: FunctionProps["runtime"];
+  runtime?: Input<FunctionProps["runtime"]>;
 }
 
 /**
@@ -120,6 +121,25 @@ export interface FrameworkSiteProps {
   tags?: Record<string, string>;
 }
 
+/**
+ * The {@link FrameworkSiteProps} keys consumed at composite time (build
+ * wiring, memo hashing, dev-server setup, domain-shape branching) — they
+ * must be concrete values, never `Output`s. Every other prop accepts
+ * `Input<T>` and resolves inside the resources it flows into. Composites
+ * add their framework-specific config key (`vite`, `astro`, ...) to this
+ * set, since it drives the build the same way.
+ */
+export type FrameworkSiteStaticProps =
+  | "rootDir"
+  | "memo"
+  | "dev"
+  | "domain"
+  | "server"
+  | "assets"
+  | "edge"
+  | "cloudfrontUrl"
+  | "invalidation";
+
 /** Per-framework wiring for {@link makeFrameworkSite}. */
 export interface FrameworkSiteConfig {
   /** Display name used in error messages (e.g. `"SvelteKit"`). */
@@ -159,7 +179,7 @@ export interface FrameworkSiteConfig {
 export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(
   function* (
     id: string,
-    props: FrameworkSiteProps,
+    props: InputProps<FrameworkSiteProps, FrameworkSiteStaticProps>,
     config: FrameworkSiteConfig,
   ) {
     const ctx = yield* AlchemyContext;

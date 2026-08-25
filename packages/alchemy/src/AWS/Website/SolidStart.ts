@@ -1,5 +1,10 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteProps,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SolidStart build. */
 export const SOLIDSTART_FRAMEWORK_SPECIFIER =
@@ -79,7 +84,10 @@ export interface SolidStartProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SolidStart = (id: string, props: SolidStartProps = {}) =>
+export const SolidStart = (
+  id: string,
+  props: InputProps<SolidStartProps, FrameworkSiteStaticProps | "nitro"> = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "SolidStart",
     framework: SOLIDSTART_FRAMEWORK_SPECIFIER,

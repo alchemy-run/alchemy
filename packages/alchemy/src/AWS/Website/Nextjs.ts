@@ -1,3 +1,4 @@
+import type { InputProps } from "../../Input.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -188,8 +189,28 @@ export interface NextjsProps {
  *
  * @resource
  */
+
+/**
+ * {@link NextjsProps} keys consumed at composite time — concrete values
+ * only. Everything else accepts `Input<T>`.
+ */
+export type NextjsStaticProps =
+  | "rootDir"
+  | "memo"
+  | "dev"
+  | "domain"
+  | "server"
+  | "imageOptimization"
+  | "assets"
+  | "edge"
+  | "cloudfrontUrl"
+  | "invalidation";
+
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
-  function* (id: string, props: NextjsProps = {}) {
+  function* (
+    id: string,
+    props: InputProps<NextjsProps, NextjsStaticProps> = {},
+  ) {
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     // Mirrors the other Website composites: during `alchemy dev` the site

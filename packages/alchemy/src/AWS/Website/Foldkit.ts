@@ -1,5 +1,9 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 import {
   VITE_AWS_TARGET_SPECIFIER,
   VITE_FRAMEWORK_SPECIFIER,
@@ -103,7 +107,13 @@ export interface FoldkitProps extends ViteProps {}
  *
  * @resource
  */
-export const Foldkit = (id: string, props: FoldkitProps = {}) =>
+export const Foldkit = (
+  id: string,
+  props: InputProps<
+    FoldkitProps,
+    Exclude<FrameworkSiteStaticProps, "server"> | "vite" | "spa" | "errorPage"
+  > = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "Foldkit",
     framework: VITE_FRAMEWORK_SPECIFIER,

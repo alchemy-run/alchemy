@@ -1,5 +1,10 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  type FrameworkSiteProps,
+  type FrameworkSiteStaticProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the TanStack Start build. */
 export const TANSTACK_START_FRAMEWORK_SPECIFIER =
@@ -105,7 +110,10 @@ export interface TanStackStartProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const TanStackStart = (id: string, props: TanStackStartProps = {}) =>
+export const TanStackStart = (
+  id: string,
+  props: InputProps<TanStackStartProps, FrameworkSiteStaticProps | "vite"> = {},
+) =>
   makeFrameworkSite(id, props, {
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,
