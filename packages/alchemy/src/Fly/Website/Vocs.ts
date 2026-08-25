@@ -18,9 +18,9 @@ export interface VocsProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a [Vocs](https://vocs.dev) documentation site to Fly. Vocs docs
- * are prerendered static HTML; the node target drops server modules and
- * the Service serves extensionless pages (`/about` → `about/index.html`).
+ * Deploy a [Vocs](https://vocs.dev) documentation site to Fly. The node
+ * target serves static assets first, then Vocs' Waku RSC handler
+ * (`/about` → `about/index.html`, otherwise SSR).
  *
  *
  * ### Creating Vocs Sites
@@ -48,6 +48,5 @@ export const Vocs = (id: string, props: VocsProps = {}) =>
     framework: VOCS_FRAMEWORK_SPECIFIER,
     target: VOCS_NODE_TARGET_SPECIFIER,
     options: props.outDir !== undefined ? { outDir: props.outDir } : undefined,
-    static: {},
     htmlHandling: "drop-trailing-slash",
   });

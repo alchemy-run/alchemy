@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as NodePath from "node:path";
 import type * as ViteModule from "vite";
@@ -896,14 +897,29 @@ export const make = (
           ),
           (server) => Effect.promise(async () => await server.close()),
         );
-        const url = server.resolvedUrls?.local[0];
-        if (url === undefined) {
+        const resolved = server.resolvedUrls?.local[0];
+        if (resolved === undefined) {
           return yield* Effect.fail(
             fail("Could not determine the URL of the waku dev server")(
               undefined,
             ),
           );
         }
+        // Vite's `resolvedUrls.local[0]` is `http://host:port/` — strip
+        // the trailing slash so callers can concatenate paths (`${url}/`)
+        // without producing `//`, which waku's router does not match.
+        const url = resolved.replace(/\/+$/, "");
+        // Bounded readiness probe: any HTTP response counts (waku's
+        // first RSC compile is lazy; we only need the listener to answer).
+        yield* Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(`${url}/`, { redirect: "manual" });
+            await response.arrayBuffer().catch(() => {});
+          },
+          catch: fail("The waku dev server did not become reachable"),
+        }).pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+        );
         return { url };
       }),
     });

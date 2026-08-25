@@ -21,7 +21,7 @@ import {
 } from "../Server/Process.ts";
 import { hashDirectory } from "../Command/Memo.ts";
 import { initialCwd } from "../Util/Node.ts";
-import { sha256Object } from "../Util/sha256.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import { zipCode, type ZipFile } from "../Util/zip.ts";
 import { waitForAction } from "./actions.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
@@ -159,12 +159,18 @@ const hashExtraFiles = Effect.fn(function* (
     const exists = yield* fs
       .exists(source)
       .pipe(Effect.orElseSucceed(() => false));
-    hashes[dest] = exists
-      ? yield* hashDirectory({
-          cwd: source,
-          memo: { exclude: [], lockfile: false },
-        }).pipe(Effect.orElseSucceed(() => ""))
-      : "";
+    if (!exists) {
+      hashes[dest] = "";
+      continue;
+    }
+    const stat = yield* fs.stat(source);
+    hashes[dest] =
+      stat.type === "Directory"
+        ? yield* hashDirectory({
+            cwd: source,
+            memo: { exclude: [], lockfile: false },
+          }).pipe(Effect.orElseSucceed(() => ""))
+        : yield* sha256(yield* fs.readFile(source));
   }
   return hashes;
 });
@@ -511,11 +517,14 @@ WantedBy=multi-user.target
     );
     yield* input.ssh.exec(
       [
-        `set -uo pipefail`,
+        `set -euo pipefail`,
+        `export HOME=/root`,
+        `export BUN_INSTALL=/root/.bun`,
+        `export PATH="/root/.bun/bin:$PATH"`,
         `if [ ! -x /root/.bun/bin/bun ]; then echo "bun missing at start" >&2; exit 1; fi`,
         `unzip -o ${JSON.stringify(`${appDir}/bundle.zip`)} -d ${JSON.stringify(appDir)}`,
         `if [ -f ${JSON.stringify(`${appDir}/package.json`)} ]; then`,
-        `  (cd ${JSON.stringify(appDir)} && bun install --production)`,
+        `  (cd ${JSON.stringify(appDir)} && /root/.bun/bin/bun install --production)`,
         `fi`,
         `systemctl daemon-reload`,
         `systemctl enable --now ${input.unitName}.service`,

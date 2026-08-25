@@ -20,9 +20,9 @@ export interface VocsProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a [Vocs](https://vocs.dev) documentation project to Railway: Vocs
- * prerenders static HTML, and a Node static-file server serves extensionless
- * pages (`/about` not `/about/`) from one `Railway.Service`.
+ * Deploy a [Vocs](https://vocs.dev) documentation project to Railway: static
+ * assets first, then Vocs' Waku RSC handler (`/about` not `/about/`) from
+ * one `Railway.Service`.
  *
  * Requires `@alchemy.run/frontend-frameworks`, `vocs`, and Vocs' Waku peer
  * dependencies in the project.
@@ -60,7 +60,4 @@ export const Vocs = (id: string, props: VocsProps = {}) =>
     framework: VOCS_FRAMEWORK_SPECIFIER,
     target: VOCS_NODE_TARGET_SPECIFIER,
     options: props.outDir !== undefined ? { outDir: props.outDir } : undefined,
-    static: {
-      htmlHandling: "drop-trailing-slash",
-    },
   }).pipe(Namespace.push(id));

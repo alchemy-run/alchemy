@@ -21,8 +21,8 @@ export interface VocsProps extends FrameworkSiteProps {
 
 /**
  * Deploy a [Vocs](https://vocs.dev) documentation project to a Hetzner
- * Cloud Server. Vocs prerenders static HTML; unmatched paths serve
- * extensionless pages (`/about` → `about/index.html`).
+ * Cloud Server. Static assets first, then Vocs' Waku RSC handler
+ * (`/about` → `about/index.html`, otherwise SSR).
  *
  *
  * ### Creating Vocs Sites
@@ -51,5 +51,4 @@ export const Vocs = (id: string, props: VocsProps = {}) =>
     target: VOCS_NODE_TARGET_SPECIFIER,
     options: props.outDir !== undefined ? { outDir: props.outDir } : undefined,
     htmlHandling: "drop-trailing-slash",
-    static: { htmlHandling: "drop-trailing-slash" },
   }).pipe(Namespace.push(id));

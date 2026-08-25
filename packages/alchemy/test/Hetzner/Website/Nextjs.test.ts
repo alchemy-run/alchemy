@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
@@ -22,7 +23,6 @@ const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../AWS/Website/fixtures/nextjs-app",
 );
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
   "package.json",
@@ -49,11 +49,14 @@ test.provider.skipIf(!hasHetznerCreds)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // Clone OUTSIDE the repo (OS temp dir): an in-workspace clone makes
+      // Next treat the alchemy monorepo as the workspace root and look up
+      // the root's typescript (catalog:build = tsgo, which has no JS compiler).
       const rootDir = yield* cloneFixture(fixtureDir, {
         prefix: "alchemy-nextjs-hetzner-",
-        tempRoot,
         entries: fixtureEntries,
       });
+      yield* prepareNextjsFixture(rootDir);
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {

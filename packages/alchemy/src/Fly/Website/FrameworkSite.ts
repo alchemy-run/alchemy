@@ -491,6 +491,43 @@ export const writeStaticServeEntry = Effect.fn(function* (options: {
   return options.filePath;
 });
 
+/**
+ * Octane's node `entry.js` auto-listens when `import.meta.url` is the
+ * process entry. Rolldown flattening into `/app/index.mjs` would start
+ * a second HTTP server on `PORT`. Neutralize the guard in sibling JS
+ * so only the generated serve entry binds the port. Harmless for
+ * frameworks that don't emit that pattern.
+ */
+const neutralizeSiblingAutoListen = Effect.fn(function* (serverDir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const names = yield* fs
+    .readDirectory(serverDir)
+    .pipe(Effect.orElseSucceed(() => [] as string[]));
+  for (const name of names) {
+    if (name.startsWith("serve-")) continue;
+    if (!name.endsWith(".js") && !name.endsWith(".mjs")) continue;
+    const file = path.join(serverDir, name);
+    const info = yield* fs
+      .stat(file)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    if (info?.type !== "File") continue;
+    const source = yield* fs.readFileString(file);
+    const patched = source
+      .replaceAll(
+        "fileURLToPath(import.meta.url) === resolve(process.argv[1])",
+        "false",
+      )
+      .replaceAll(
+        "fileURLToPath(import.meta.url)===resolve(process.argv[1])",
+        "false",
+      );
+    if (patched !== source) {
+      yield* fs.writeFileString(file, patched);
+    }
+  }
+});
+
 const rewriteClientDir = Effect.fn(function* (servePath: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -626,11 +663,25 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
       );
     }
     main = yield* rewriteClientDir(servePath);
+    yield* neutralizeSiblingAutoListen(path.dirname(main));
   }
 
   const extraFiles: Array<{ source: string; dest: string }> = [];
   if (!config.skipClientAssets && clientDir !== undefined) {
     extraFiles.push({ source: clientDir, dest: "dist" });
+  }
+  // Octane SSR reads `join(__dirname, "./index.html")` after rolldown
+  // flattens the serve entry to `/app/index.mjs`. Bake the template next
+  // to that entry — not into `dist/`, or NodeServe would serve the
+  // unrendered shell at GET /.
+  if (!assetsOnly && entryName !== undefined) {
+    const ssrTemplate = path.join(
+      path.dirname(path.resolve(distDir, entryName)),
+      "index.html",
+    );
+    if (yield* fs.exists(ssrTemplate).pipe(Effect.orElseSucceed(() => false))) {
+      extraFiles.push({ source: ssrTemplate, dest: "index.html" });
+    }
   }
   if (config.skipClientAssets) {
     const nextDir = path.join(distDir, ".next");

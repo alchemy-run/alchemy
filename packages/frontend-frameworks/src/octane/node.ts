@@ -10,7 +10,14 @@
  * self-contained Node ESM bundle exporting a web-standard fetch `handler`.
  * The finishing pass writes a Node HTTP program that serves
  * `clientDirectory` first, then falls through to that handler on `PORT`
- * (default 3000), and answers `GET /health`.
+ * (default 3000), and answers `GET /health`. It re-reads `dist/server`
+ * so runtime inputs — notably the SSR `index.html` the entry reads via
+ * `join(__dirname, "./index.html")` — stay in the output. Container
+ * FrameworkSites extraFile that template to dest `"index.html"` next to
+ * the bundled `index.mjs` (not into `dist/`, or NodeServe would serve
+ * the unrendered shell at `GET /`). The finish pass also disables
+ * Octane's `isMainModule` auto-listen so rolldown flattening `entry.js`
+ * into `index.mjs` cannot bind `PORT` before the generated serve entry.
  *
  * - **`adapterName` / `adapterPackage`** — the project's `octane.config.ts`
  *   must select `adapter: node()` from
@@ -28,7 +35,12 @@ import {
   relativeClientDirExpression,
   writeNodeServeEntry,
 } from "../core/NodeServe.ts";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
+import {
+  DeployTargetError,
+  makeDeployTarget,
+  readServerModulesFromDisk,
+  sortServerModules,
+} from "../core/index.ts";
 import { make, type OctaneTarget, type OctaneTargetConfig } from "./Octane.ts";
 
 /** The `adapter.name` the Node marker adapter declares. */
@@ -45,6 +57,24 @@ export interface OctaneNodeTargetConfig extends OctaneTargetConfig {}
 
 const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "node", message, cause });
+
+/**
+ * Octane's node `entry.js` auto-listens when `import.meta.url` is the
+ * process entry. Container hosts rolldown that file into `index.mjs`,
+ * which would start a second HTTP server on `PORT` (EADDRINUSE) and
+ * crash. Replace the guard with `false` so only the generated serve
+ * entry binds the port.
+ */
+const neutralizeAutoListen = (source: string): string =>
+  source
+    .replaceAll(
+      "fileURLToPath(import.meta.url) === resolve(process.argv[1])",
+      "false",
+    )
+    .replaceAll(
+      "fileURLToPath(import.meta.url)===resolve(process.argv[1])",
+      "false",
+    );
 
 const makeNodeAdapterTarget = (
   config: OctaneNodeTargetConfig = {},
@@ -75,6 +105,26 @@ const makeNodeAdapterTarget = (
           );
         }
         const serverDir = path.dirname(context.entry);
+        const entrySource = yield* fs
+          .readFileString(context.entry)
+          .pipe(
+            Effect.mapError((error) =>
+              fail("Failed to read dist/server/entry.js", error),
+            ),
+          );
+        const neutralized = neutralizeAutoListen(entrySource);
+        if (neutralized !== entrySource) {
+          yield* fs
+            .writeFileString(context.entry, neutralized)
+            .pipe(
+              Effect.mapError((error) =>
+                fail(
+                  "Failed to disable Octane auto-listen in dist/server/entry.js",
+                  error,
+                ),
+              ),
+            );
+        }
         yield* fs
           .writeFileString(
             path.join(serverDir, "package.json"),
@@ -86,12 +136,13 @@ const makeNodeAdapterTarget = (
             ),
           );
         const servePath = path.join(serverDir, NODE_SERVE_ENTRY_FILE_NAME);
-        return yield* writeNodeServeEntry({
+        const serveModuleName = path
+          .join("server", NODE_SERVE_ENTRY_FILE_NAME)
+          .replaceAll("\\", "/");
+        const withServe = yield* writeNodeServeEntry({
           output,
           servePath,
-          serveModuleName: path
-            .join("server", NODE_SERVE_ENTRY_FILE_NAME)
-            .replaceAll("\\", "/"),
+          serveModuleName,
           clientDirExpression: relativeClientDirExpression(
             servePath,
             output.clientDirectory,
@@ -103,6 +154,16 @@ const makeNodeAdapterTarget = (
           },
           platform: "node",
         });
+        // Re-read so the SSR `index.html` the entry reads beside itself is
+        // part of the output (same as the AWS finishing pass).
+        const modules = yield* readServerModulesFromDisk({
+          directory: serverDir,
+          prefix: "server",
+        }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
+        return {
+          ...withServe,
+          serverModules: sortServerModules(modules, serveModuleName),
+        };
       }),
   });
 

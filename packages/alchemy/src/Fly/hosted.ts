@@ -27,7 +27,7 @@ import {
   type HostRuntimeContext,
 } from "../Server/Process.ts";
 import { initialCwd } from "../Util/Node.ts";
-import { sha256Object } from "../Util/sha256.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { DiskSpec, ServiceBinding } from "./MountVolume.ts";
 
 export type FlyHostRuntimeContext = HostRuntimeContext;
@@ -342,12 +342,18 @@ const hashExtraFiles = Effect.fn(function* (
     const exists = yield* fs
       .exists(source)
       .pipe(Effect.orElseSucceed(() => false));
-    hashes[dest] = exists
-      ? yield* hashDirectory({
-          cwd: source,
-          memo: { exclude: [], lockfile: false },
-        }).pipe(Effect.orElseSucceed(() => ""))
-      : "";
+    if (!exists) {
+      hashes[dest] = "";
+      continue;
+    }
+    const stat = yield* fs.stat(source);
+    hashes[dest] =
+      stat.type === "Directory"
+        ? yield* hashDirectory({
+            cwd: source,
+            memo: { exclude: [], lockfile: false },
+          }).pipe(Effect.orElseSucceed(() => ""))
+        : yield* sha256(yield* fs.readFile(source));
   }
   return hashes;
 });

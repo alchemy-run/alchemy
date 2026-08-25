@@ -44,7 +44,7 @@ describe("makeNodeServeEntrySource", () => {
     });
     expect(source).toContain("/health");
     expect(source).toContain("process.env.PORT");
-    expect(source).toContain("http.createServer");
+    expect(source).toContain("http.createServer(async (req, res) => {");
     expect(source).toContain("server.listen");
     expect(source).toContain("lookupStatic");
     expect(source).toContain(`import { handler } from "./index.mjs";`);
@@ -93,7 +93,7 @@ describe("makeNodeServeEntrySource", () => {
     expect(source).toContain('base + ".html"');
   });
 
-  it("dispatches a Node (req, res) listener without Request conversion", () => {
+  it("awaits a Node (req, res) listener from an async createServer callback", () => {
     const source = makeNodeServeEntrySource({
       clientDirExpression: `" /assets "`,
       handler: {
@@ -102,7 +102,11 @@ describe("makeNodeServeEntrySource", () => {
         expr: "handler",
       },
     });
-    expect(source).toContain("(handler)(req, res)");
+    expect(source).toContain("http.createServer(async (req, res) => {");
+    expect(source).toContain("await (handler)(endedGet(req), res)");
+    expect(source).toContain("new PassThrough()");
+    expect(source).toContain("clone.complete = true");
+    expect(source).not.toContain("void (async () => {");
     expect(source).not.toContain("toRequest");
   });
 });

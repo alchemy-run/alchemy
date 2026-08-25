@@ -79,6 +79,10 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(deployed.site.service).toBeDefined();
       expect(deployed.site.server).toBeDefined();
 
+      yield* expectUrlContains(`${url!}/health`, "ok", {
+        timeout: "30 seconds",
+        label: "health",
+      });
       yield* expectUrlContains(`${url!}/`, "NUXT_AWS_PAGE_MARKER", {
         timeout: "90 seconds",
         label: "home page",
@@ -110,5 +114,5 @@ test.provider.skipIf(!hasHetznerCreds)(
         Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
       ),
     ),
-  { timeout: 180000, exclusive: true },
+  { timeout: 240000, exclusive: true },
 );

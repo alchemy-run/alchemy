@@ -518,6 +518,42 @@ server.listen(PORT, HOST, () => {
 
 const CLIENT_DIR_RE = /const CLIENT_DIR = [\s\S]*?;/;
 
+/**
+ * Octane's node `entry.js` auto-listens when `import.meta.url` is the
+ * process entry. Rolldown flattening into `/app/index.mjs` would start
+ * a second HTTP server on `PORT`. Neutralize the guard in sibling JS
+ * so only the generated serve entry binds the port.
+ */
+const neutralizeSiblingAutoListen = Effect.fn(function* (serverDir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const names = yield* fs
+    .readDirectory(serverDir)
+    .pipe(Effect.orElseSucceed(() => [] as string[]));
+  for (const name of names) {
+    if (name.startsWith("serve-") || name.startsWith("alchemy-")) continue;
+    if (!name.endsWith(".js") && !name.endsWith(".mjs")) continue;
+    const file = path.join(serverDir, name);
+    const info = yield* fs
+      .stat(file)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    if (info?.type !== "File") continue;
+    const source = yield* fs.readFileString(file);
+    const patched = source
+      .replaceAll(
+        "fileURLToPath(import.meta.url) === resolve(process.argv[1])",
+        "false",
+      )
+      .replaceAll(
+        "fileURLToPath(import.meta.url)===resolve(process.argv[1])",
+        "false",
+      );
+    if (patched !== source) {
+      yield* fs.writeFileString(file, patched);
+    }
+  }
+});
+
 const rewriteClientDir = (source: string): string | undefined => {
   if (!CLIENT_DIR_RE.test(source)) return undefined;
   return source.replace(
@@ -626,6 +662,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   const remoted = yield* ProviderModePolicy;
   const isLocal = ctx.dev && remoted !== true;
   const path = yield* Path.Path;
+  const fs = yield* FileSystem.FileSystem;
   const root = path.resolve(initialCwd, props.rootDir ?? ".");
   const bake = config.bake ?? "client";
 
@@ -701,7 +738,25 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
     bake,
     static: config.static,
   });
-  const extraFiles = yield* collectBakeFiles(root, built.clientDirectory, bake);
+  const extraFiles: ExtraFile[] = [
+    ...(yield* collectBakeFiles(root, built.clientDirectory, bake)),
+  ];
+  if (bake !== "next" && serverEntry !== undefined) {
+    yield* neutralizeSiblingAutoListen(path.dirname(serverEntry));
+  }
+  // Octane SSR reads `join(__dirname, "./index.html")` after rolldown
+  // flattens the serve entry to `/app/index.mjs`. Bake the template next
+  // to that entry — not into `dist/`, or NodeServe would serve the
+  // unrendered shell at GET /.
+  if (bake !== "next" && serverEntry !== undefined) {
+    const ssrTemplate = path.join(path.dirname(serverEntry), "index.html");
+    if (yield* fs.exists(ssrTemplate)) {
+      extraFiles.push({
+        source: relativeToCwd(ssrTemplate),
+        dest: "index.html",
+      });
+    }
+  }
 
   const project = yield* asEffect(props.project ?? Project("Project"));
   const service = yield* Service("Service", {

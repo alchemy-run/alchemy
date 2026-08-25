@@ -256,7 +256,35 @@ ${
     await writeResponse(res, response);
 `
     : `
-    (${options.handler.expr})(req, res);
+    await (${options.handler.expr})(endedGet(req), res);
+`;
+
+  const nodeHelpers = handlerIsFetch
+    ? ""
+    : `
+const endedGet = (req) => {
+  const method = (req.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return req;
+  if (req.readableEnded || req.complete) return req;
+  // Bun's node:http IncomingMessage often never emits "end" for GET, so
+  // nitro/h3 toNodeListener waits forever. Fly's edge proxy completes the
+  // stream; Hetzner hits bun directly. Hand nitro an already-ended clone.
+  const clone = new PassThrough();
+  clone.method = req.method;
+  clone.url = req.url;
+  clone.headers = req.headers;
+  clone.rawHeaders = req.rawHeaders;
+  clone.httpVersion = req.httpVersion ?? "1.1";
+  clone.httpVersionMajor = req.httpVersionMajor ?? 1;
+  clone.httpVersionMinor = req.httpVersionMinor ?? 1;
+  clone.socket = req.socket;
+  clone.connection = req.connection ?? req.socket;
+  clone.complete = true;
+  clone.aborted = false;
+  clone.push(null);
+  req.resume();
+  return clone;
+};
 `;
 
   const fetchHelpers = handlerIsFetch
@@ -301,13 +329,13 @@ const writeResponse = async (res, response) => {
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 ${options.handler.imports}
 
 const PORT = Number.parseInt(process.env.PORT ?? "${String(port)}", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
-${staticBlock}${fetchHelpers}
+${staticBlock}${fetchHelpers}${nodeHelpers}
 const pathnameOf = (url) => {
   try {
     return decodeURIComponent(new URL(url, "http://127.0.0.1").pathname);
@@ -316,8 +344,8 @@ const pathnameOf = (url) => {
   }
 };
 
-const server = http.createServer((req, res) => {
-  void (async () => {
+const server = http.createServer(async (req, res) => {
+  try {
     const urlPath = pathnameOf(req.url ?? "/");
     if (
       (req.method === "GET" || req.method === "HEAD") &&
@@ -327,12 +355,12 @@ const server = http.createServer((req, res) => {
       res.end("ok");
       return;
     }
-${staticDispatch}${handlerDispatch}  })().catch((error) => {
+${staticDispatch}${handlerDispatch}  } catch (error) {
     if (!res.headersSent) {
       res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
     }
     res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
-  });
+  }
 });
 
 server.listen(PORT, HOST);

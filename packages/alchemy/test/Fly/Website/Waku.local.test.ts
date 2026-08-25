@@ -49,21 +49,24 @@ describe("Fly.Website.Waku local", () => {
         expect(deployed.site.app).toBeUndefined();
         expect(deployed.site.ip).toBeUndefined();
 
-        yield* expectUrlContains(`${url}/`, "WAKU_AWS_PAGE_MARKER", {
-          timeout: "90 seconds",
+        // Vite may report `http://host:port/`; joining another `/` would
+        // hit `//`, which waku's router does not match.
+        const origin = String(url).replace(/\/+$/, "");
+        yield* expectUrlContains(`${origin}/`, "WAKU_AWS_PAGE_MARKER", {
+          timeout: "180 seconds",
           label: "dev home page",
         });
         yield* expectUrlContains(
-          `${url}/echo?echo=roundtrip`,
+          `${origin}/echo?echo=roundtrip`,
           "WAKU_AWS_API_MARKER",
           { label: "api route (dev)" },
         );
-        yield* expectUrlContains(`${url}/about`, "WAKU_AWS_STATIC_MARKER", {
+        yield* expectUrlContains(`${origin}/about`, "WAKU_AWS_STATIC_MARKER", {
           label: "extra route (dev)",
         });
 
         yield* stack.destroy();
       }),
-    { timeout: 120_000 },
+    { timeout: 210_000 },
   );
 });

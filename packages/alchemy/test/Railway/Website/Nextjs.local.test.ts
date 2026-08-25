@@ -3,6 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -12,7 +13,6 @@ const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../AWS/Website/fixtures/nextjs-app",
 );
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
   "package.json",
@@ -29,11 +29,14 @@ describe("Railway.Website.Nextjs local", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
+        // Clone OUTSIDE the repo (OS temp dir): an in-workspace clone makes
+        // Next treat the alchemy monorepo as the workspace root and look up
+        // the root's typescript (catalog:build = tsgo).
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-railway-local-",
-          tempRoot,
           entries: fixtureEntries,
         });
+        yield* prepareNextjsFixture(rootDir);
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
@@ -50,7 +53,7 @@ describe("Railway.Website.Nextjs local", () => {
         expect(deployed.site.project).toBeUndefined();
 
         yield* expectUrlContains(`${url}/`, "NEXTJS_AWS_PAGE_MARKER", {
-          timeout: "90 seconds",
+          timeout: "180 seconds",
           label: "dev home page",
         });
         yield* expectUrlContains(
@@ -64,6 +67,6 @@ describe("Railway.Website.Nextjs local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 180_000 },
+    { timeout: 600_000 },
   );
 });

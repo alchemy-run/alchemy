@@ -123,11 +123,16 @@ const runNextBuild = (options: {
 }) =>
   Effect.scoped(
     Effect.gen(function* () {
+      const env = yield* Effect.sync(() => ({
+        ...process.env,
+        NODE_ENV: "production",
+      }));
       const child = yield* ChildProcess.make("node", [options.cli, "build"], {
         cwd: options.root,
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
+        env,
       }).pipe(
         Effect.mapError(
           failFramework(
@@ -357,11 +362,23 @@ const spawnNextDev = (options: {
       }),
   ).pipe(Effect.map(({ handle }) => handle));
 
+/**
+ * Poll until the allocated port accepts a TCP connection. Next 16 prints
+ * Ready and binds before loading next.config / compiling App Router, so a
+ * GET / probe with a 2s abort restarts the first compile and never
+ * converges.
+ */
 const awaitNextDevReady = (options: {
   readonly url: string;
   readonly child: NextDevChild;
 }): Effect.Effect<void, FrameworkCore.FrameworkError> =>
   Effect.gen(function* () {
+    const parsed = yield* Effect.try({
+      try: () => new URL(options.url),
+      catch: failFramework(`Invalid next dev URL: ${options.url}`),
+    });
+    const port = Number(parsed.port);
+    const hostname = parsed.hostname;
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
         return yield* Effect.fail(
@@ -370,15 +387,31 @@ const awaitNextDevReady = (options: {
           )(undefined),
         );
       }
-      const ready = yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(options.url, {
-            signal: AbortSignal.timeout(2000),
-          });
-          return response.status < 600;
-        },
-        catch: () => "not-ready" as const,
-      }).pipe(Effect.orElseSucceed(() => false));
+      const ready = yield* Effect.callback<boolean>((resume) => {
+        const net = createRequire(import.meta.url)("net") as typeof NodeNet;
+        let settled = false;
+        const finish = (value: boolean) => {
+          if (settled) return;
+          settled = true;
+          resume(Effect.succeed(value));
+        };
+        const socket = net.connect({ host: hostname, port }, () => {
+          socket.destroy();
+          finish(true);
+        });
+        socket.setTimeout(2000, () => {
+          socket.destroy();
+          finish(false);
+        });
+        socket.once("error", () => {
+          socket.destroy();
+          finish(false);
+        });
+        return Effect.sync(() => {
+          settled = true;
+          socket.destroy();
+        });
+      });
       if (ready) return;
       yield* Effect.sleep(500);
     }
@@ -450,9 +483,9 @@ export const make: (
     const root = yield* resolveRoot(devOptions?.root);
     const port = devOptions?.port ?? (yield* pickEphemeralPort);
     const cli = yield* resolveNextCli(root);
-    const host = devOptions?.host;
+    const host = devOptions?.host ?? "127.0.0.1";
     const child = yield* spawnNextDev({ root, cli, port, host });
-    const url = `http://${host ?? "localhost"}:${port}`;
+    const url = `http://${host}:${port}`;
     yield* awaitNextDevReady({ url, child });
     return { url };
   });
