@@ -61,6 +61,45 @@ describe.skipIf(!!process.env.FAST)("celld engine conformance", () => {
     capabilities: { sql: true, alarms: true },
   });
 
+  // ── any-node forwarding: cell affinity under DNS round-robin ──────────
+  //
+  // The fleet runs THREE nodes behind one round-robin Cloud Map name, and
+  // the Lambda's `/affinity` route performs sequential increments on ONE
+  // cell over a FRESH connection each (`connection: close`), so requests
+  // land on arbitrary nodes. celld's design claim is that any node
+  // forwards a cell's request to its single lease owner — if that holds,
+  // the returned values are strictly consecutive with no resets or
+  // duplicates; a second cell instance on another node would fork the
+  // counter and break the sequence.
+  test(
+    "affinity: sequential increments on one cell stay strictly consecutive across a 3-node fleet",
+    Effect.gen(function* () {
+      const collect = (n: number) =>
+        HttpClient.get(`${baseUrl}/affinity/affinity-probe?n=${n}`).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? response.json
+              : Effect.fail(
+                  new Error(`affinity route answered ${response.status}`),
+                ),
+          ),
+          Effect.map((value) => (value as { values: number[] }).values),
+        );
+      // Two batches (two Lambda invocations) with a pause longer than the
+      // Cloud Map record TTL between them, so the second batch re-resolves
+      // and has every chance of starting on a different node.
+      const first = yield* collect(10);
+      yield* Effect.sleep("12 seconds");
+      const second = yield* collect(10);
+      const values = [...first, ...second];
+      expect(values).toHaveLength(20);
+      for (let i = 1; i < values.length; i++) {
+        expect(values[i]).toBe(values[i - 1] + 1);
+      }
+    }),
+    { timeout: 180_000 },
+  );
+
   // ── binding security: the gateway's RPC guard ─────────────────────────
   const probe = (kind: string) =>
     HttpClient.get(`${baseUrl}/probe-unauth/${kind}`).pipe(

@@ -58,6 +58,44 @@ export default class ConformanceApi extends AWS.Lambda.Function<ConformanceApi>(
         return { status: response.status, body };
       });
 
+    // Affinity probe: n SEQUENTIAL increments on one cell, each over a
+    // FRESH connection (`connection: close` defeats keep-alive, so every
+    // request re-resolves the fleet's round-robin DNS and lands on an
+    // arbitrary node). Values must come back strictly consecutive — proof
+    // that every node forwards the cell to its single lease owner.
+    const affinity = (cell: string, n: number) =>
+      Effect.gen(function* () {
+        const fleetUrl = yield* Config.string(
+          "ALCHEMY_WORKER_ConformanceWorker_URL",
+        ).pipe(Effect.orDie);
+        const secret = yield* Config.string(
+          "ALCHEMY_WORKER_ConformanceWorker_SECRET",
+        ).pipe(Effect.orDie);
+        const client = yield* HttpClient.HttpClient;
+        const values: number[] = [];
+        for (let i = 0; i < n; i++) {
+          const response = yield* client
+            .execute(
+              HttpClientRequest.post(
+                `${fleetUrl}/Counter/${encodeURIComponent(cell)}/__rpc__/increment`,
+              ).pipe(
+                HttpClientRequest.bodyText("[]", "application/json"),
+                HttpClientRequest.setHeader("x-alchemy-fleet-secret", secret),
+                HttpClientRequest.setHeader("connection", "close"),
+              ),
+            )
+            .pipe(Effect.orDie);
+          const body = yield* response.text.pipe(Effect.orDie);
+          if (response.status !== 200) {
+            return yield* Effect.die(
+              new Error(`increment ${i} answered ${response.status}: ${body}`),
+            );
+          }
+          values.push(Number(JSON.parse(body)));
+        }
+        return { values };
+      });
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -65,6 +103,10 @@ export default class ConformanceApi extends AWS.Lambda.Function<ConformanceApi>(
         const [root, kind] = url.pathname
           .split("/")
           .filter((s) => s.length > 0);
+        if (root === "affinity" && kind !== undefined) {
+          const n = Number(url.searchParams.get("n") ?? "20");
+          return yield* HttpServerResponse.json(yield* affinity(kind, n));
+        }
         if (root === "probe-unauth") {
           switch (kind) {
             case "missing":
