@@ -147,11 +147,13 @@ test.provider(
       }).pipe(Effect.provide(flociServices()));
       expect(received.Messages?.[0]?.Body).toBe("uploads/hello.txt");
 
-      // …and the bucket never existed on the real cloud (the test body's
-      // ambient SDK is the live `testing` environment).
+      // …and the bucket never existed on the real cloud. The ambient
+      // environment in a dev run is the emulator, so the real cloud is
+      // reached EXPLICITLY via the live environment chain.
       const live = yield* S3.headBucket({ Bucket: outputs.bucketName }).pipe(
         Effect.map(() => "found" as const),
         Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
+        Effect.provide(AWS.liveEnvironment()),
       );
       expect(live).toBe("not-found");
 

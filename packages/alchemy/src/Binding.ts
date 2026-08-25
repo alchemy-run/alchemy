@@ -4,11 +4,7 @@ import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
-import {
-  describeDataPlane,
-  describeHostlessDataPlane,
-  type DataPlaneResolution,
-} from "./Provider.ts";
+import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
 import { isResource, type ResourceLike } from "./Resource.ts";
 import { Self } from "./Self.ts";
 import { taggedFunction } from "./Util/effect.ts";
@@ -139,9 +135,7 @@ export const Service = <
             // emulator, so invoking its client against the ambient (live)
             // cloud environment would miss it — or worse, mutate the real
             // cloud. See {@link routeClientDataPlane}.
-            Effect.flatMap((client) =>
-              routeClientDataPlane(id, resolved, client),
-            ),
+            Effect.flatMap((client) => routeClientDataPlane(resolved, client)),
           ),
         ),
       ),
@@ -182,7 +176,6 @@ export const Service = <
  * is no registry and no engine — the wrapper is skipped entirely.
  */
 const routeClientDataPlane = (
-  bindingId: string,
   resolvedArgs: readonly unknown[],
   client: unknown,
 ): Effect.Effect<any> =>
@@ -198,18 +191,10 @@ const routeClientDataPlane = (
           ? [arg]
           : [],
     );
-    if (resources.length === 0) {
-      // Account-scoped client — no resource to anchor on; the run default
-      // decides (an `alchemy dev` run routes to the cloud's emulator so
-      // e.g. an AMI lookup needs no real credentials in dev).
-      return describeHostlessDataPlane(bindingId).pipe(
-        Effect.map((plane) =>
-          plane.kind === "local"
-            ? wrapClientInvocations(client, plane.layer)
-            : client,
-        ),
-      );
-    }
+    // Account-scoped clients (no resource among the args) need no routing:
+    // the ambient environment is already mode-aware — a dev run's ambient IS
+    // the emulator (see AWS/Providers.ts), a deploy's is the live chain.
+    if (resources.length === 0) return Effect.succeed(client);
     return Effect.gen(function* () {
       const planes: DataPlaneResolution[] = [];
       for (const resource of resources) {

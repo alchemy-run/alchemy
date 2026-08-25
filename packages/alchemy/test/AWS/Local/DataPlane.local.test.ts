@@ -275,11 +275,12 @@ test.provider.skipIf(!dockerAvailable)(
       expect((yield* getState("MixedLocalParam"))?.providerMode).toBe("local");
       expect((yield* getState("MixedLiveParam"))?.providerMode).toBe("live");
 
-      // Out-of-band: the ambient (testing-profile) distilled client reads
-      // the real cloud — the remote() parameter must be there with its value.
+      // Out-of-band: read the REAL cloud explicitly (the ambient
+      // environment in a dev run is the emulator) — the remote() parameter
+      // must be there with its value.
       const live = yield* SSM.getParameter({
         Name: outputs.liveParam.parameterName,
-      });
+      }).pipe(Effect.provide(AWS.liveEnvironment()));
       const liveValue = live.Parameter?.Value;
       expect(
         typeof liveValue === "string" ? liveValue : Redacted.value(liveValue!),
@@ -295,6 +296,7 @@ test.provider.skipIf(!dockerAvailable)(
       }).pipe(
         Effect.as(false),
         Effect.catchTag("ParameterNotFound", () => Effect.succeed(true)),
+        Effect.provide(AWS.liveEnvironment()),
       );
       expect(gone).toBe(true);
     }),
