@@ -230,7 +230,7 @@ const defaultBaseImageArn = Effect.fn(function* () {
  * architecture from ONE Dockerfile — so binding-contributed statements
  * (which are rendered per-arch) require the config to pin exactly one.
  */
-const resolveImageArchitecture = (
+export const resolveImageArchitecture = (
   news: ContentInputs,
 ): Effect.Effect<Host.Architecture> => {
   const arches = [

@@ -52,6 +52,7 @@ import {
 } from "../Local/DevWatchProvider.ts";
 import { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
 import type { ImageSourceLike } from "../ECR/ImageSource.ts";
+import { hostStatementsFor } from "../../Docker/Host.ts";
 import {
   buildMicrovmDockerfile,
   bundleMicrovmProgram,
@@ -59,7 +60,10 @@ import {
   MICROVM_BASE_DOCKER_IMAGE,
 } from "./MicrovmBundle.ts";
 import { MicrovmImage, type MicrovmImageProps } from "./MicrovmImage.ts";
-import { MicrovmImageProvider } from "./MicrovmProvider.ts";
+import {
+  MicrovmImageProvider,
+  resolveImageArchitecture,
+} from "./MicrovmProvider.ts";
 
 /**
  * The AWS-managed MicroVM base is not publicly pullable; the floci fork
@@ -118,9 +122,36 @@ const buildLocalImage = Effect.fn(function* (
         ? (news.dockerfile.content as string)
         : news.dockerfile;
     const dockerfile = rewriteBaseImage(
-      buildMicrovmDockerfile(userDockerfile, runtime, port),
+      buildMicrovmDockerfile(
+        userDockerfile,
+        runtime,
+        port,
+        hostStatementsFor(news, yield* resolveImageArchitecture(news)),
+      ),
     );
-    const contentHash = yield* sha256(`${bundleHash}:${dockerfile}`);
+    // `contextInclude` directories ride the build context under their `to`
+    // prefixes, exactly as the live artifact carries them. A declared
+    // fingerprint IS the include's identity (no directory read); a
+    // fingerprint-less include hashes the directory.
+    const includes = yield* Effect.forEach(
+      news.contextInclude ?? [],
+      (include) =>
+        Effect.map(
+          include.fingerprint !== undefined
+            ? Effect.succeed(include.fingerprint)
+            : hashDirectory({ cwd: include.from }),
+          (fingerprint) => ({ ...include, fingerprint }),
+        ),
+    );
+    const includeId = includes
+      .map((i) => `${i.to}:${i.fingerprint}`)
+      .sort()
+      .join("|");
+    const contentHash = yield* sha256(
+      includes.length === 0
+        ? `${bundleHash}:${dockerfile}`
+        : `${bundleHash}:${dockerfile}:${includeId}`,
+    );
     const context = yield* getStableContextDir(
       process.cwd(),
       dotAlchemy,
@@ -131,6 +162,23 @@ const buildLocalImage = Effect.fn(function* (
       dockerfile,
       files: files.map((f) => ({ path: f.path, content: f.content })),
     });
+    // Sync each include into the staging context, guarded by a fingerprint
+    // marker — a baked repo include can be ~1GB, so only a changed
+    // fingerprint pays the copy.
+    for (const include of includes) {
+      const dest = path.join(context, include.to);
+      const marker = path.join(
+        context,
+        `.alchemy-include-${include.to.replaceAll("/", "__")}`,
+      );
+      const have = yield* fs
+        .readFileString(marker)
+        .pipe(Effect.orElseSucceed(() => ""));
+      if (have === include.fingerprint && (yield* fs.exists(dest))) continue;
+      yield* fs.remove(dest, { recursive: true, force: true });
+      yield* fs.copy(include.from, dest);
+      yield* fs.writeFileString(marker, include.fingerprint);
+    }
     const tag = `alchemy-dev/microvm-${id.toLowerCase()}:${contentHash.slice(0, 16)}`;
     yield* docker.image.build({ context, tag });
     return tag;
@@ -186,6 +234,10 @@ export const FlociMicrovmImageProvider = () =>
         isExternal: news.isExternal,
         external: news.external,
         build: news.build,
+        contextInclude: (news.contextInclude ?? []).map((include) => ({
+          to: include.to,
+          fingerprint: include.fingerprint ?? null,
+        })),
       };
     },
     // Mirrors the live diff: the image name is the identity.
