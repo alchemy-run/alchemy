@@ -83,6 +83,18 @@ test.provider.skipIf(!hasHetznerCreds)(
         timeout: "30 seconds",
         label: "health",
       });
+      yield* expectUrlContains(`${url!}/robots.txt`, "User-agent", {
+        timeout: "30 seconds",
+        label: "static robots",
+      });
+      yield* expectUrlContains(
+        `${url!}/prerendered`,
+        "NUXT_AWS_PRERENDERED_MARKER",
+        {
+          timeout: "30 seconds",
+          label: "extra route",
+        },
+      );
       yield* expectUrlContains(`${url!}/`, "NUXT_AWS_PAGE_MARKER", {
         timeout: "90 seconds",
         label: "home page",
@@ -93,14 +105,6 @@ test.provider.skipIf(!hasHetznerCreds)(
         {
           timeout: "30 seconds",
           label: "api route",
-        },
-      );
-      yield* expectUrlContains(
-        `${url!}/prerendered`,
-        "NUXT_AWS_PRERENDERED_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "extra route",
         },
       );
 

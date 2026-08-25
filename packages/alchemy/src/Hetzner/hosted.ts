@@ -289,6 +289,9 @@ export const createHetznerHostedSupport = ({
           sourcemap: props.build?.output?.sourcemap ?? false,
           minify: props.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
+          // Match Fly: nitro/vue hang on bun without preserved init order.
+          strictExecutionOrder: true,
+          keepNames: true,
         },
         props.build,
       );

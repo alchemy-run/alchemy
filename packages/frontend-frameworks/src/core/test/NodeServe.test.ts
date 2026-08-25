@@ -103,11 +103,26 @@ describe("makeNodeServeEntrySource", () => {
       },
     });
     expect(source).toContain("http.createServer(async (req, res) => {");
-    expect(source).toContain("await (handler)(endedGet(req), res)");
-    expect(source).toContain("new PassThrough()");
-    expect(source).toContain("clone.complete = true");
+    expect(source).toContain("endedGet(req)");
+    expect(source).toContain("queueMicrotask(() => clone.end())");
+    expect(source).toContain("newListener");
     expect(source).not.toContain("void (async () => {");
-    expect(source).not.toContain("toRequest");
+    expect(source).not.toContain("fetchFromNode");
+  });
+
+  it("does not map GET / onto public/index.html (SSR home stays on the handler)", () => {
+    const source = makeNodeServeEntrySource({
+      clientDirExpression: `fileURLToPath(new URL("../client/", import.meta.url))`,
+      handler: {
+        kind: "node",
+        imports: `import { handler } from "./index.mjs";`,
+        expr: "handler",
+      },
+    });
+    expect(source).toContain(
+      'const isRoot = urlPath === "/" || urlPath === ""',
+    );
+    expect(source).toContain("existingFile(base, !isRoot)");
   });
 });
 
