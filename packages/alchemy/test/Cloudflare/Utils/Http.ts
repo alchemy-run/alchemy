@@ -155,6 +155,27 @@ export const expectUrlContains = (
   );
 };
 
+/**
+ * Bounded readiness probe: the server behind `url` answers HTTP at all
+ * (any 2xx). Used by the local/dev suites, where there is no CDN to
+ * propagate through — only a dev server that needs a moment to listen.
+ */
+export const expectUrlOk = (url: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const response = await fetch(url, { signal, cache: "no-store" });
+      await response.arrayBuffer().catch(() => {});
+      if (!response.ok) {
+        throw new Error(`${url} responded ${response.status}`);
+      }
+      return response.status;
+    },
+    catch: (error) => new Error(String(error)),
+  }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+    Effect.timeout("60 seconds"),
+  );
+
 export class HttpResponseMismatch extends Data.TaggedError(
   "HttpResponseMismatch",
 )<{
