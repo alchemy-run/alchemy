@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
 /**
  * A sibling resource whose output is threaded into the container's `env`,
@@ -55,6 +56,14 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
             );
             return yield* response.text;
           }),
+        // The proxy pattern from #1334: forward the incoming request to the
+        // container verbatim. In production the incoming web Request carries
+        // an https:// URL, which workerd's container ports reject — the
+        // runtime must downgrade the scheme on the container hop.
+        fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          return yield* fetch(request);
+        }),
       };
     });
   }).pipe(

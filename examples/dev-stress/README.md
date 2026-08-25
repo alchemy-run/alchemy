@@ -101,7 +101,7 @@ The suite tells them apart by counting `Plan:` renders in the CLI's output
     rebuilds the image and restarts the running container; and the
     container reaches a service on the HOST through an env var written as
     `http://localhost:…` (the dev runtime rewrites loopback hosts to
-    `host.docker.internal` — the #1334 database shape).
+    `host.docker.localhost` — the #1334 database shape).
 13. **A replacement** — DynamoDB's partition key is immutable, so changing
     it swaps the table under the running Lambda; then swaps it back.
 14. **A second MicroVM image** built, bound to the running Worker, booted,
@@ -160,7 +160,7 @@ focused regression test closer to the code:
   values injected into a dev container carry loopback URLs (locally
   emulated databases, dev servers) that dangle inside the container. The
   workerd docker proxy now rewrites loopback hosts in URL-shaped env
-  values to `host.docker.internal` (with the `host-gateway` ExtraHosts
+  values to `host.docker.localhost` (with the `host-gateway` ExtraHosts
   mapping on the proxy container for Linux engines).
 - **ECS tasks never rolled on prop-driven updates.** Restart/roll logic
   lived only in the file-watch trigger, so a prop change — an inline

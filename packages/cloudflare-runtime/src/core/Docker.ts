@@ -92,6 +92,49 @@ const ContainerEgressInterceptorImage = Config.string(
 export const toPullRef = (imageUri: string) =>
   imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
 
+/**
+ * Hostname dev containers use to reach services listening on the developer's
+ * machine. Inside a container, `localhost` is the container itself, so env
+ * values that point at host-side services (a local dev database, another dev
+ * server) are rewritten to this alias, which is mapped to Docker's
+ * `host-gateway` on the container's network (see `makeDockerProxyServer`).
+ *
+ * Deliberately NOT `host.docker.internal`: several dev-oriented clients gate
+ * "insecure local mode" on a localhost-looking hostname — notably Prisma's
+ * client, which flips `prisma+postgres://` URLs to TLS unless the host
+ * contains `localhost`/`127.0.0.1`/`[::1]` — and the local `@prisma/dev`
+ * server only speaks plain HTTP. An alias under `.localhost` keeps those
+ * heuristics intact while `/etc/hosts` (which `getaddrinfo` consults before
+ * DNS) routes it to the host machine.
+ *
+ * Platform note: on Docker Desktop (macOS/Windows) `host-gateway` forwards
+ * into the host's loopback, so services bound to `127.0.0.1` are reachable.
+ * On native Linux Docker it resolves to the bridge gateway IP, so a host
+ * service must listen on `0.0.0.0` (or the bridge address) to be reachable.
+ */
+export const CONTAINER_LOOPBACK_ALIAS = "host.docker.localhost";
+
+/**
+ * Matches a loopback host (`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`)
+ * where it denotes a connection target inside an env value: at the start of
+ * the value, after a `scheme://` (with optional userinfo), after `=` (DSN
+ * keyword form, `host=localhost`), or after whitespace/comma/semicolon
+ * delimiters — and followed by a port, path, delimiter, or the end.
+ */
+const LOOPBACK_HOST =
+  /(^|[\s,;=]|\/\/(?:[^/\s@]*@)?)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/?#]|[\s,;]|$)/g;
+
+/**
+ * Rewrite loopback hosts in a container env value to
+ * {@link CONTAINER_LOOPBACK_ALIAS} so the value keeps meaning "the developer's
+ * machine" from inside the container. Applied to the env the Docker proxy
+ * injects at container create (the deployment-level env registered via
+ * `registerImageEnv`) — in production these values point at real cloud hosts,
+ * so the rewrite only ever fires against local dev emulators.
+ */
+export const rewriteLoopbackHosts = (value: string) =>
+  value.replace(LOOPBACK_HOST, `$1${CONTAINER_LOOPBACK_ALIAS}`);
+
 export const DockerLive = Layer.effect(
   Docker,
   Effect.gen(function* () {
@@ -149,53 +192,56 @@ export const DockerLive = Layer.effect(
     const makeDockerProxyServer = (socketPath: string) =>
       NodeHttp.createServer(async (req, res) => {
         const isCreateRequest =
-          req.method === "POST" && !!req.url?.startsWith("/containers/create");
-        const isProxyCreateRequest =
+          req.method === "POST" && req.url?.startsWith("/containers/create");
+        // workerd creates two containers per instance: the user container and
+        // a `<name>-proxy` networking sidecar whose namespace the user
+        // container joins (`NetworkMode: container:<sidecar>`) — so the
+        // sidecar's /etc/hosts is what the user container resolves against.
+        const isSidecarCreateRequest =
           isCreateRequest && req.url!.endsWith("-proxy");
-        if (isCreateRequest) {
+        if (isCreateRequest && !isSidecarCreateRequest) {
           const original = await extractJsonBody<{
             Image: string;
             Env: Array<string>;
-            HostConfig?: {
-              ExtraHosts?: Array<string>;
-              NetworkMode?: string;
-            } & Record<string, unknown>;
           }>(req);
-          // The user container joins the sibling `-proxy` container's
-          // network namespace (`NetworkMode: container:…-proxy`) — Docker
-          // rejects a custom host-to-IP mapping in that mode, and the
-          // joining container inherits the proxy's /etc/hosts anyway. So
-          // the host-gateway mapping goes on the PROXY create (which owns
-          // the namespace); other creates only get it when their network
-          // mode allows one. `host.docker.internal` is built in on Docker
-          // Desktop but not on Linux engines — the mapping makes the
-          // rewritten env values below resolve there too.
-          const networkMode = original.HostConfig?.NetworkMode ?? "";
-          const hostConfig =
-            networkMode.startsWith("container:") || networkMode === "host"
-              ? original.HostConfig
-              : {
-                  ...original.HostConfig,
-                  ExtraHosts: [
-                    ...(original.HostConfig?.ExtraHosts ?? []),
-                    "host.docker.internal:host-gateway",
-                  ],
-                };
-          const image = isProxyCreateRequest
-            ? undefined
-            : registeredImages.get(original.Image);
+          const image = registeredImages.get(original.Image);
           const transformed = JSON.stringify({
             ...original,
             Image: image?.tag ?? original.Image,
-            Env: isProxyCreateRequest
-              ? original.Env
-              : [
-                  ...(original.Env ?? []),
-                  ...Object.entries(image?.env ?? {}).map(
-                    ([name, value]) => `${name}=${value}`,
-                  ),
-                ].map(rewriteLoopbackEnv),
-            HostConfig: hostConfig,
+            Env: [
+              ...(original.Env ?? []),
+              ...Object.entries(image?.env ?? {}).map(
+                ([name, value]) => `${name}=${rewriteLoopbackHosts(value)}`,
+              ),
+            ],
+          });
+          const proxy = sendProxyRequest({
+            socketPath,
+            path: req.url,
+            method: req.method,
+            headers: {
+              ...req.headers,
+              "content-length": Buffer.byteLength(transformed).toString(),
+            },
+            res,
+          });
+          proxy.end(transformed);
+        } else if (isSidecarCreateRequest) {
+          // Map the loopback alias to the host machine in the shared network
+          // namespace, alongside the `host.docker.internal:host-gateway`
+          // entry workerd already sets on the sidecar.
+          const original = await extractJsonBody<{
+            HostConfig?: { ExtraHosts?: Array<string> };
+          }>(req);
+          const transformed = JSON.stringify({
+            ...original,
+            HostConfig: {
+              ...original.HostConfig,
+              ExtraHosts: [
+                ...(original.HostConfig?.ExtraHosts ?? []),
+                `${CONTAINER_LOOPBACK_ALIAS}:host-gateway`,
+              ],
+            },
           });
           const proxy = sendProxyRequest({
             socketPath,
@@ -512,39 +558,6 @@ const sendProxyRequest = (input: {
     input.res.end(`Proxy error: ${(err && err.message) || err}`);
   });
   return req;
-};
-
-/**
- * Loopback hosts in a URL-ish position within an env value. Matches the
- * host token only when it is delimited like a URL authority — after
- * `scheme://` or `user:pass@`, or standing alone before `:port` / a path —
- * so ordinary prose values are left untouched.
- */
-const LOOPBACK_HOST_REGEX =
-  /(?<=^|[=@/\s]|:\/\/)(localhost|127\.0\.0\.1|\[::1\])(?=$|[:/?#])/g;
-
-/**
- * Rewrite loopback hosts in a dev container's env to `host.docker.internal`.
- *
- * A local dev session injects env values that point at services on the
- * DEVELOPER'S machine — locally emulated databases
- * (`postgres://…@localhost:55432/…`), dev servers, the floci gateway.
- * Inside the container, `localhost` is the container itself, so every such
- * value dangles (alchemy-run/alchemy#1334). In dev, "localhost" means the
- * developer's machine — `host.docker.internal` is that machine's address
- * from inside the container (see the ExtraHosts mapping above for Linux).
- *
- * Values that embed loopback addresses in non-URL positions (prose, JSON
- * blobs without URL shapes) are untouched; a container that deliberately
- * targets a service inside ITSELF should address it by its own hostname or
- * `0.0.0.0` rather than a loopback literal.
- */
-const rewriteLoopbackEnv = (entry: string): string => {
-  const separator = entry.indexOf("=");
-  if (separator === -1) return entry;
-  const name = entry.slice(0, separator);
-  const value = entry.slice(separator + 1);
-  return `${name}=${value.replace(LOOPBACK_HOST_REGEX, "host.docker.internal")}`;
 };
 
 const extractJsonBody = <T>(req: NodeHttp.IncomingMessage) => {

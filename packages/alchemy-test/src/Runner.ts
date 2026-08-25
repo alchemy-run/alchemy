@@ -670,13 +670,24 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
 const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   if (suite.afterAll.length === 0) return;
   yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "afterAll" });
-  const exit = yield* runHooks(suite.afterAll, ctx.options.timeout).pipe(
-    withCapture(ctx.fileLogs),
-    Effect.exit,
-  );
+  // Unlike beforeAll (where a failure invalidates everything after it),
+  // every teardown hook runs even when an earlier one fails: a failing
+  // teardown assertion must not drop later cleanup — in particular
+  // Test.make's fallback hook that closes the shared scope and local
+  // provider sidecar, which registers last and would otherwise leak the
+  // sidecar for the rest of the process. Failures aggregate.
+  const exits = yield* Effect.forEach(suite.afterAll, (hook) =>
+    Effect.suspend(hook.body).pipe(
+      Effect.timeout(Duration.millis(hook.timeout ?? ctx.options.timeout)),
+      Effect.exit,
+    ),
+  ).pipe(withCapture(ctx.fileLogs));
   yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "afterAll" });
-  if (Exit.isFailure(exit)) {
-    const error = `afterAll hook failed:\n${prettyCause(exit.cause)}`;
+  const failures = exits.filter(Exit.isFailure);
+  if (failures.length > 0) {
+    const error = `afterAll hook failed:\n${failures
+      .map((exit) => prettyCause(exit.cause))
+      .join("\n")}`;
     ctx.fileErrors.push(error);
   }
 });

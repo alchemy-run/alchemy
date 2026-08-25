@@ -141,3 +141,53 @@ it("fails the process for every hook kind and preserves hook output", async () =
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("runs every afterAll hook even when an earlier one fails", async () => {
+  // Regression: `runAfterAll` used to short-circuit on the first failing
+  // hook, so a failing teardown assertion silently dropped every later
+  // afterAll — in particular Test.make's fallback hook that closes the
+  // shared scope and local provider sidecar, leaking the sidecar for the
+  // rest of the process. All teardown hooks must run; failures aggregate.
+  const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-afterall-"));
+  try {
+    await writeFile(
+      resolve(root, "teardown-chain.test.ts"),
+      `
+        import { it, registerHook } from ${JSON.stringify(apiUrl)};
+        import * as Effect from ${JSON.stringify(effectUrl)};
+        registerHook("afterAll", { body: () => Effect.gen(function* () {
+          return yield* Effect.fail(new Error("first-teardown-failed"));
+        }) });
+        registerHook("afterAll", { body: () => Effect.gen(function* () {
+          yield* Effect.log("second-teardown-ran");
+        }) });
+        it("body", () => {});
+      `,
+    );
+
+    const child = Bun.spawn(
+      [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
+      {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      },
+    );
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const output = `${stdout}\n${stderr}`;
+
+    // The failure is reported and fails the run…
+    expect(exitCode).toBe(1);
+    expect(output).toContain("afterAll hook failed:");
+    expect(output).toContain("first-teardown-failed");
+    // …and the later teardown hook still ran.
+    expect(output).toContain("second-teardown-ran");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -28,7 +28,7 @@ export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
       // A LOCALHOST url on purpose: it points at the AWS StaticSite dev
       // server running on the HOST machine. Inside the container,
       // `localhost` is the container itself — the dev runtime must rewrite
-      // the host to `host.docker.internal` for this to resolve, which is
+      // the host to the `host.docker.localhost` alias for this to resolve —
       // exactly what breaks database URLs from local containers
       // (alchemy-run/alchemy#1334). `GET /host-fetch` proves it.
       HOST_SERVICE_URL: `http://localhost:${PORTS.awsSite}`,

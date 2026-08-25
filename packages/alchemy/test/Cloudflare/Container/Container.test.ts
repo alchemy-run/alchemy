@@ -208,6 +208,26 @@ describe.concurrent.each([
       }).pipe(logLevel),
       { timeout },
     );
+
+    // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
+    // worker → DO fetch handler → container port, forwarding the raw incoming
+    // request. In the live variant the incoming web Request carries an
+    // https:// URL and workerd rejects TLS on container ports ("Connecting to
+    // a container using HTTPS is not currently supported"), so this pins the
+    // runtime's scheme downgrade on the container hop; dev serves http:// and
+    // just pins the passthrough itself.
+    test(
+      "proxies the raw incoming request through the DO to the container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        // The echo image reflects the request as JSON ("method" only appears
+        // in a real echo response, never in an error page).
+        const body = yield* fetchReady(new URL("/passthrough", url), "method");
+        expect(body).toContain("method");
+      }).pipe(logLevel),
+      { timeout },
+    );
   });
   /**
    * Container bound directly on a plain async Worker's `env` (issue #953),
