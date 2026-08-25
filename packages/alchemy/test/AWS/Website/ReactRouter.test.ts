@@ -141,10 +141,8 @@ describe.skipIf(!runLive)("AWS.Website.ReactRouter", () => {
               rootDir,
               forceDestroy: true,
               domain: { router },
-              server: {
-                environment: {
-                  REACT_ROUTER_ENV_MARKER: "react-router-aws-live-env-marker",
-                },
+              env: {
+                REACT_ROUTER_ENV_MARKER: "react-router-aws-live-env-marker",
               },
             });
             return { router, site };

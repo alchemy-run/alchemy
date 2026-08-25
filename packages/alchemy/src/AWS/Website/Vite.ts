@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Vite build. */
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
@@ -13,20 +9,18 @@ export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
 export const VITE_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/vite/aws";
 
-export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
+export interface ViteProps extends Omit<
+  FrameworkSiteProps,
+  // Assets-only: a plain Vite site never creates a server function.
+  "env" | "memorySize" | "timeout" | "architecture" | "runtime"
+> {
   /**
-   * Serializable Vite config merged OVER the project's own `vite.config.*`
-   * (which loads natively, plugins included).
+   * Build output directory, relative to `rootDir`.
+   * @default the project config's `build.outDir` (vite's default: "dist")
    */
-  vite?: {
-    /**
-     * Build output directory, relative to `rootDir`.
-     * @default the project config's `build.outDir` (vite's default: "dist")
-     */
-    outDir?: string;
-    /** Public base path the site deploys under (vite's `base`). */
-    base?: string;
-  };
+  outDir?: string;
+  /** Public base path the site deploys under (vite's `base`). */
+  base?: string;
   /**
    * Answer misses with the index page (200) instead of a 404, so
    * client-side routes deep-link correctly. Plain Vite apps are typically
@@ -110,10 +104,8 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* AWS.Website.Vite("Docs", {
- *   vite: {
- *     outDir: "build",
- *     base: "/docs/",
- *   },
+ *   outDir: "build",
+ *   base: "/docs/",
  * });
  * ```
  *
@@ -127,24 +119,23 @@ export interface ViteProps extends Omit<FrameworkSiteProps, "server"> {
  *
  * @resource
  */
-export const Vite = (
-  id: string,
-  props: InputProps<
-    ViteProps,
-    Exclude<FrameworkSiteStaticProps, "server"> | "vite" | "spa" | "errorPage"
-  > = {},
-) =>
-  makeFrameworkSite(id, props, {
+export const Vite = (id: string, props: InputProps<ViteProps> = {}) => {
+  const p = props as ViteProps;
+  return makeFrameworkSite(id, props, {
     name: "Vite",
     framework: VITE_FRAMEWORK_SPECIFIER,
     target: VITE_AWS_TARGET_SPECIFIER,
-    options: props.vite !== undefined ? { vite: props.vite } : undefined,
+    options:
+      p.outDir !== undefined || p.base !== undefined
+        ? { vite: { outDir: p.outDir, base: p.base } }
+        : undefined,
     // Plain Vite is assets-only: every page is client-rendered from the
     // uploaded bundle, so the deploy never creates a server function.
     // `spa` defaults on (Vite apps are typically SPAs) but yields to an
     // explicit `errorPage` — the two are mutually exclusive downstream.
     static: {
-      spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
-      errorPage: props.errorPage,
+      spa: p.spa ?? (p.errorPage === undefined ? true : undefined),
+      errorPage: p.errorPage,
     },
   }).pipe(Namespace.push(id));
+};

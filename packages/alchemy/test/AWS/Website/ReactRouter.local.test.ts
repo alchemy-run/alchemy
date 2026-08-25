@@ -49,10 +49,8 @@ describe("AWS.Website.ReactRouter local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.ReactRouter("ReactRouterSite", {
               rootDir,
-              server: {
-                environment: {
-                  REACT_ROUTER_ENV_MARKER: "react-router-aws-dev-env-marker",
-                },
+              env: {
+                REACT_ROUTER_ENV_MARKER: "react-router-aws-dev-env-marker",
               },
             });
             return { site };
@@ -99,10 +97,8 @@ describe("AWS.Website.ReactRouter local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.ReactRouter("ReactRouterSite", {
               rootDir,
-              server: {
-                environment: {
-                  REACT_ROUTER_ENV_MARKER: "react-router-aws-dev-env-marker",
-                },
+              env: {
+                REACT_ROUTER_ENV_MARKER: "react-router-aws-dev-env-marker",
               },
             });
             return { site };

@@ -49,8 +49,8 @@ integration on top.
   sites (or a site plus an API), routed at the edge.
 
 Every resource shares the same surface: `domain` (ACM certificate +
-Route 53 records), `server` configuration (memory, timeout,
-environment), `assets`, `edge` customizations, and `invalidation`.
+Route 53 records), server configuration (`memorySize`, `timeout`,
+`env`), `assets`, `edge` customizations, and `invalidation`.
 All builds are memoized by content-hashing the input files — an
 unchanged project skips the build and deploy entirely. Under
 `alchemy dev`, every resource runs the framework's own dev server

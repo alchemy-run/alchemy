@@ -142,10 +142,8 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
               rootDir,
               forceDestroy: true,
               domain: { router },
-              server: {
-                environment: {
-                  NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker",
-                },
+              env: {
+                NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker",
               },
             });
             return { router, site };

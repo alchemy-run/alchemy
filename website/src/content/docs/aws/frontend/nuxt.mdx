@@ -55,10 +55,6 @@ export default defineNuxtConfig({
 });
 ```
 
-Deploy-specific overrides are merged over it via the `nuxt` prop
-(the override wins) — see [Prerendering](#prerendering) below for an
-example.
-
 Don't set `nitro.preset` — the AWS deploy target owns the preset
 (`aws-lambda` with streaming enabled), and a foreign preset is a hard
 error.
@@ -103,27 +99,23 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Nuxt("Website", {
-+  server: {
-+    memorySize: 2048,
-+    environment: {
-+      NUXT_PUBLIC_API_BASE: api.url,
-+    },
++  memorySize: 2048,
++  env: {
++    NUXT_PUBLIC_API_BASE: api.url,
 +  },
 });
 ```
 
-`environment` values are set on the Lambda on deploy and injected into
+`env` values are set on the Lambda on deploy and injected into
 the dev server's process environment under `alchemy dev`, so server
-code reads the same values in both modes. The other `server` fields
-tune the Lambda itself (`memorySize`, `timeout`, `architecture`,
-`runtime`).
+code reads the same values in both modes. Sibling props tune the
+Lambda itself (`memorySize`, `timeout`, `architecture`, `runtime`).
 
 ## Read the environment in server code
 
@@ -143,14 +135,14 @@ export default defineEventHandler(() => {
 
 Routes marked for prerendering in `routeRules` (or via
 `nitro.prerender`) render at build time into `.output/public` and are
-uploaded to S3, served from the edge with no Lambda invocation:
+uploaded to S3, served from the edge with no Lambda invocation.
+Configure them in your project's `nuxt.config.ts`:
 
 ```typescript
-export const Website = AWS.Website.Nuxt("Website", {
-  nuxt: {
-    routeRules: {
-      "/about": { prerender: true },
-    },
+// nuxt.config.ts
+export default defineNuxtConfig({
+  routeRules: {
+    "/about": { prerender: true },
   },
 });
 ```

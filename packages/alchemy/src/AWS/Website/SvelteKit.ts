@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SvelteKit build. */
 export const SVELTEKIT_FRAMEWORK_SPECIFIER =
@@ -16,11 +12,11 @@ export const SVELTEKIT_AWS_TARGET_SPECIFIER =
 
 export interface SvelteKitProps extends FrameworkSiteProps {
   /**
-   * SvelteKit configuration passed to the `sveltekit(config)` Vite plugin
-   * (kit v3 takes its config in memory — a `svelte.config.js` on disk is an
-   * upstream error). The `adapter` field is injected by the AWS deploy
-   * target and may not be set here. Must be JSON-serializable (it persists
-   * in state).
+   * SvelteKit's `kit` config (svelte.config's own top-level key), passed
+   * to the `sveltekit(config)` Vite plugin — kit v3 takes its config in
+   * memory; a `svelte.config.js` on disk is an upstream error. The
+   * `adapter` field is injected by the AWS deploy target and may not be
+   * set here. Must be JSON-serializable (it persists in state).
    */
   kit?: Record<string, unknown>;
 }
@@ -60,11 +56,9 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.SvelteKit("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
@@ -73,11 +67,13 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  */
 export const SvelteKit = (
   id: string,
-  props: InputProps<SvelteKitProps, FrameworkSiteStaticProps | "kit"> = {},
-) =>
-  makeFrameworkSite(id, props, {
+  props: InputProps<SvelteKitProps> = {},
+) => {
+  const p = props as SvelteKitProps;
+  return makeFrameworkSite(id, props, {
     name: "SvelteKit",
     framework: SVELTEKIT_FRAMEWORK_SPECIFIER,
     target: SVELTEKIT_AWS_TARGET_SPECIFIER,
-    options: props.kit ? { kit: props.kit } : undefined,
+    options: p.kit ? { kit: p.kit } : undefined,
   }).pipe(Namespace.push(id));
+};

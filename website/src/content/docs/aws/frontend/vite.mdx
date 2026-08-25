@@ -121,16 +121,14 @@ live directly under `rootDir`. See Vite's
 
 ## Override the output directory and base path
 
-The `vite` prop carries serializable overrides merged *over* your
-config file. `outDir` is the build output directory (relative to
-`rootDir`) and `base` is the public path the site deploys under:
+`outDir` is the build output directory (relative to `rootDir`) and
+`base` is the public path the site deploys under; both are merged
+*over* your config file:
 
 ```typescript
 export const Website = AWS.Website.Vite("Docs", {
-  vite: {
-    outDir: "build",
-    base: "/docs/",
-  },
+  outDir: "build",
+  base: "/docs/",
 });
 ```
 
@@ -179,7 +177,7 @@ Only `VITE_`-prefixed keys reach the bundle. A committed `.env` is
 hashed with the rest of the project, so editing one re-runs the build
 on the next deploy.
 
-The resource takes no `environment` prop, so a value that only exists
+The resource takes no `env` prop, so a value that only exists
 after another resource deploys — an API's Function URL, a bucket name
 — cannot reach this build. Deploy those apps with
 [`AWS.Website.StaticSite`](/aws/frontend/static-site) instead, which

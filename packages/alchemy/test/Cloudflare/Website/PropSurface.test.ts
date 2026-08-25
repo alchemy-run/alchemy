@@ -120,6 +120,74 @@ describe("Website prop surfaces", () => {
         // @ts-expect-error Vocs owns its Waku/RSC worker entry
         main: "worker.ts",
       }),
+    // ── Flat-props doctrine pins ─────────────────────────────────────
+    // Framework-named config bags are dissolved into flat, explicitly
+    // typed props; the shared vocabulary (`outDir`, `spa`, `errorPage`)
+    // is identical across composites. These pins fail the build if a bag
+    // sneaks back in or a flat prop is dropped.
+    () =>
+      Cloudflare.Website.Astro("A", {
+        // @ts-expect-error the `astro` config bag is dissolved into flat props
+        astro: { output: "static" },
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        output: "static",
+        site: "https://example.com",
+        srcDir: "./app",
+        outDir: "./dist",
+        errorPage: "404.html",
+      }),
+    () =>
+      Cloudflare.Website.Astro("A", {
+        // @ts-expect-error Cloudflare serves the nearest `404.html` — the name is fixed
+        errorPage: "not-found.html",
+      }),
+    () =>
+      Cloudflare.Website.Nextjs("X", {
+        // @ts-expect-error the `nextjs` config bag is dissolved into flat props
+        nextjs: { devMode: "hmr" },
+      }),
+    () =>
+      Cloudflare.Website.Nextjs("X", {
+        devMode: "hmr",
+        buildCommand: "npx next build",
+        minify: true,
+        skipNextBuild: false,
+        configPath: "open-next.config.ts",
+        debug: false,
+      }),
+    () =>
+      Cloudflare.Website.Nuxt("N", {
+        // @ts-expect-error open `nuxt` passthrough removed — config belongs in nuxt.config.ts
+        nuxt: { routeRules: {} },
+      }),
+    () =>
+      Cloudflare.Website.SvelteKit("S", {
+        // @ts-expect-error open `kit` passthrough removed — config belongs in the sveltekit() call
+        kit: { alias: {} },
+      }),
+    // `adapter` survives — a cohesive single-feature object, not a junk
+    // drawer.
+    () =>
+      Cloudflare.Website.SvelteKit("S", {
+        adapter: { notFoundHandling: "404-page", fallback: "spa" },
+      }),
+    () =>
+      Cloudflare.Website.Waku("W", {
+        // @ts-expect-error renamed to the shared flat `outDir`
+        distDir: "build",
+      }),
+    () => Cloudflare.Website.Waku("W", { outDir: "build" }),
+    () => Cloudflare.Website.Vite("V", { spa: true }),
+    () => Cloudflare.Website.Vite("V", { errorPage: "404.html" }),
+    () =>
+      Cloudflare.Website.Vite("V", {
+        // @ts-expect-error Cloudflare serves the nearest `404.html` — the name is fixed
+        errorPage: "custom.html",
+      }),
+    () => Cloudflare.Website.Foldkit("F", { spa: false }),
+    () => Cloudflare.Website.Foldkit("F", { errorPage: "404.html" }),
   ];
 
   it("rejects source-dispatch props at the type level", () => {

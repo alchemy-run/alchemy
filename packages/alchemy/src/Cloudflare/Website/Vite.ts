@@ -12,11 +12,54 @@ import {
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
+/**
+ * Resolves the `spa`/`errorPage` sugar into the assets-layer
+ * `notFoundHandling` knob. Returns `props.assets` untouched (possibly
+ * `undefined`) when no sugar is set so the Worker metadata is unchanged
+ * for existing deployments; an explicit `assets.notFoundHandling` wins,
+ * and `spa` wins over `errorPage` when both are set.
+ *
+ * Module-private (not re-exported) so the generic helper name never
+ * leaks into the flat `Cloudflare.Website` namespace.
+ */
+const notFoundSugar = (
+  props:
+    | { spa?: boolean; errorPage?: "404.html"; assets?: AssetsConfig }
+    | undefined,
+): AssetsConfig | undefined => {
+  const notFoundHandling = props?.spa
+    ? ("single-page-application" as const)
+    : props?.errorPage !== undefined
+      ? ("404-page" as const)
+      : undefined;
+  return notFoundHandling === undefined
+    ? props?.assets
+    : { notFoundHandling, ...props?.assets };
+};
+
 export interface ViteProps<Bindings extends WorkerBindingProps = {}>
   extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
   /**
+   * Serve `index.html` for unmatched request paths so client-side
+   * routing can take over (maps to
+   * `assets.notFoundHandling: "single-page-application"`). Sugar for
+   * SPA deployments; an explicit `assets.notFoundHandling` wins, and
+   * `spa` wins over `errorPage` when both are set.
+   */
+  spa?: boolean;
+  /**
+   * Serve the built `404.html` for unmatched request paths (maps to
+   * `assets.notFoundHandling: "404-page"`). Cloudflare's asset layer
+   * serves the nearest `404.html` — the file name is fixed by the
+   * platform, so the only accepted value is `"404.html"`. An explicit
+   * `assets.notFoundHandling` wins over this sugar.
+   */
+  errorPage?: "404.html";
+  /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   * An explicit `notFoundHandling` here wins over the `spa`/`errorPage`
+   * sugar.
    */
   assets?: AssetsConfig;
 }
@@ -110,16 +153,16 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * ### Single-Page Applications
- * For SPAs (React, Vue, etc.), configure asset handling so all
- * routes fall back to `index.html`.
+ * For SPAs (React, Vue, etc.), set `spa: true` so unmatched routes fall
+ * back to `index.html` and the client router takes over. A site that
+ * ships a real error page instead sets `errorPage: "404.html"` to serve
+ * the built `404.html`. Both are sugar over
+ * `assets.notFoundHandling` — an explicit `assets` config wins.
  *
  * **Example:** Vue SPA
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Vue", {
- *   assets: {
- *     htmlHandling: "auto-trailing-slash",
- *     notFoundHandling: "single-page-application",
- *   },
+ *   spa: true,
  * });
  * ```
  *
@@ -127,12 +170,10 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * [Foldkit](https://foldkit.dev) apps are client-only Vite projects, so a
  * single call deploys them — the Foldkit Vite plugin in the app's own
  * `vite.config.ts` composes with the injected Cloudflare plugin. Enable
- * `single-page-application` not-found handling so deep links boot the app:
+ * `spa` so deep links boot the app:
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Foldkit", {
- *   assets: {
- *     notFoundHandling: "single-page-application",
- *   },
+ *   spa: true,
  * });
  * ```
  * {@link Foldkit | Cloudflare.Website.Foldkit} is the same thing with that
@@ -144,9 +185,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * own `vite.config.ts` composes with the injected Cloudflare plugin:
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Octane", {
- *   assets: {
- *     notFoundHandling: "single-page-application",
- *   },
+ *   spa: true,
  * });
  * ```
  * Fullstack Octane apps (routes + SSR in `octane.config.ts`) run their own
@@ -262,6 +301,10 @@ export const Vite: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
+            // `spa` / `errorPage` are sugar over the assets-layer
+            // not-found knob; an explicit `assets.notFoundHandling`
+            // wins, and `spa` wins over `errorPage` when both are set.
+            assets: notFoundSugar(props),
             main: undefined!,
             vite: {
               main: props?.main,

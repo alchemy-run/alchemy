@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Nuxt build. */
 export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
@@ -13,14 +9,7 @@ export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
 export const NUXT_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/nuxt/aws";
 
-export interface NuxtProps extends FrameworkSiteProps {
-  /**
-   * Nuxt config overrides merged over the project's own `nuxt.config.ts`
-   * (highest-priority layer). `nitro.preset` is owned by the AWS deploy
-   * target and may not be set here.
-   */
-  nuxt?: Record<string, unknown>;
-}
+export interface NuxtProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a Nuxt application to AWS: the nitro server on a streaming Lambda
@@ -56,24 +45,18 @@ export interface NuxtProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.Nuxt("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       NUXT_PUBLIC_API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     NUXT_PUBLIC_API_BASE: api.url,
  *   },
  * });
  * ```
  *
  * @resource
  */
-export const Nuxt = (
-  id: string,
-  props: InputProps<NuxtProps, FrameworkSiteStaticProps | "nuxt"> = {},
-) =>
+export const Nuxt = (id: string, props: InputProps<NuxtProps> = {}) =>
   makeFrameworkSite(id, props, {
     name: "Nuxt",
     framework: NUXT_FRAMEWORK_SPECIFIER,
     target: NUXT_AWS_TARGET_SPECIFIER,
-    options: props.nuxt ? { nuxt: props.nuxt } : undefined,
   }).pipe(Namespace.push(id));

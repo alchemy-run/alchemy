@@ -1,9 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite } from "./FrameworkSite.ts";
 import {
   VITE_AWS_TARGET_SPECIFIER,
   VITE_FRAMEWORK_SPECIFIER,
@@ -80,10 +77,8 @@ export interface FoldkitProps extends ViteProps {}
  * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* AWS.Website.Foldkit("Docs", {
- *   vite: {
- *     outDir: "build",
- *     base: "/docs/",
- *   },
+ *   outDir: "build",
+ *   base: "/docs/",
  * });
  * ```
  *
@@ -107,24 +102,23 @@ export interface FoldkitProps extends ViteProps {}
  *
  * @resource
  */
-export const Foldkit = (
-  id: string,
-  props: InputProps<
-    FoldkitProps,
-    Exclude<FrameworkSiteStaticProps, "server"> | "vite" | "spa" | "errorPage"
-  > = {},
-) =>
-  makeFrameworkSite(id, props, {
+export const Foldkit = (id: string, props: InputProps<FoldkitProps> = {}) => {
+  const p = props as FoldkitProps;
+  return makeFrameworkSite(id, props, {
     name: "Foldkit",
     framework: VITE_FRAMEWORK_SPECIFIER,
     target: VITE_AWS_TARGET_SPECIFIER,
-    options: props.vite !== undefined ? { vite: props.vite } : undefined,
+    options:
+      p.outDir !== undefined || p.base !== undefined
+        ? { vite: { outDir: p.outDir, base: p.base } }
+        : undefined,
     // Foldkit is client-only: the whole deployable output is the client
     // build, so the deploy never creates a server function. Foldkit routes
     // on the client, so `spa` defaults on — but yields to an explicit
     // `errorPage` (the two are mutually exclusive downstream).
     static: {
-      spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
-      errorPage: props.errorPage,
+      spa: p.spa ?? (p.errorPage === undefined ? true : undefined),
+      errorPage: p.errorPage,
     },
   }).pipe(Namespace.push(id));
+};

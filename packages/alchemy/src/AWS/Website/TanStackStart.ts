@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the TanStack Start build. */
 export const TANSTACK_START_FRAMEWORK_SPECIFIER =
@@ -16,18 +12,12 @@ export const TANSTACK_START_AWS_TARGET_SPECIFIER =
 
 export interface TanStackStartProps extends FrameworkSiteProps {
   /**
-   * Serializable Vite config overrides, mirroring the project's own
-   * `vite.config.ts` keys (same shape as {@link Vite | AWS.Website.Vite}).
+   * Build output directory relative to `rootDir` — the parent of
+   * `client/` and `server/`. Must match your `vite.config.ts` when it
+   * sets `build.outDir`.
+   * @default "dist"
    */
-  vite?: {
-    /**
-     * Build output directory relative to `rootDir` — the parent of
-     * `client/` and `server/`. Must match your `vite.config.ts` when it
-     * sets `build.outDir`.
-     * @default "dist"
-     */
-    outDir?: string;
-  };
+  outDir?: string;
 }
 
 /**
@@ -71,11 +61,9 @@ export interface TanStackStartProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.TanStackStart("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
@@ -104,7 +92,7 @@ export interface TanStackStartProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.TanStackStart("Web", {
  *   rootDir: "./app",
- *   vite: { outDir: "build" },
+ *   outDir: "build",
  * });
  * ```
  *
@@ -112,11 +100,13 @@ export interface TanStackStartProps extends FrameworkSiteProps {
  */
 export const TanStackStart = (
   id: string,
-  props: InputProps<TanStackStartProps, FrameworkSiteStaticProps | "vite"> = {},
-) =>
-  makeFrameworkSite(id, props, {
+  props: InputProps<TanStackStartProps> = {},
+) => {
+  const p = props as TanStackStartProps;
+  return makeFrameworkSite(id, props, {
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,
     target: TANSTACK_START_AWS_TARGET_SPECIFIER,
-    options: props.vite?.outDir ? { outDir: props.vite.outDir } : undefined,
+    options: p.outDir ? { outDir: p.outDir } : undefined,
   }).pipe(Namespace.push(id));
+};

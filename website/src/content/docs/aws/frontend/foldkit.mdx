@@ -170,7 +170,7 @@ Client code reads it as `import.meta.env.VITE_API_URL`, e.g. from a
 
 A value produced by another resource in the Stack (a Function URL, a
 table name) is not known when this build runs, and the resource takes no
-`environment` prop. Either serve it from an
+`env` prop. Either serve it from an
 [API](/aws/apis/effect-http-api) the app fetches at runtime, or deploy
 with [`AWS.Website.StaticSite`](/aws/frontend/static-site) instead —
 it runs the build as a command and passes `environment` to it, so an
@@ -178,16 +178,14 @@ Output can be inlined at build time.
 
 ## Build output
 
-The `vite` prop carries serializable overrides merged *over* your
-`vite.config.*`. `outDir` is the build output directory (relative to
-`rootDir`) and `base` is the public path the site deploys under:
+`outDir` is the build output directory (relative to `rootDir`) and
+`base` is the public path the site deploys under; both are merged
+*over* your `vite.config.*`:
 
 ```typescript
 export const Website = AWS.Website.Foldkit("Docs", {
-  vite: {
-    outDir: "build",
-    base: "/docs/",
-  },
+  outDir: "build",
+  base: "/docs/",
 });
 ```
 

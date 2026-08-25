@@ -48,10 +48,8 @@ describe("AWS.Website.TanStackStart local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.TanStackStart("TanStackStartSite", {
               rootDir,
-              server: {
-                environment: {
-                  TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker",
-                },
+              env: {
+                TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker",
               },
             });
             return { site };
@@ -98,10 +96,8 @@ describe("AWS.Website.TanStackStart local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.TanStackStart("TanStackStartSite", {
               rootDir,
-              server: {
-                environment: {
-                  TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker",
-                },
+              env: {
+                TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker",
               },
             });
             return { site };

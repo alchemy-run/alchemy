@@ -174,14 +174,14 @@ way.
 
 Routes marked for prerendering in `routeRules` (or via
 `nitro.prerender`) render at build time into `.output/public` and are
-served as static assets, with no Worker invocation:
+served as static assets, with no Worker invocation. Configure them in
+your `nuxt.config.ts`, which loads natively:
 
 ```typescript
-export const Website = Cloudflare.Website.Nuxt("Website", {
-  nuxt: {
-    routeRules: {
-      "/about": { prerender: true },
-    },
+// nuxt.config.ts
+export default defineNuxtConfig({
+  routeRules: {
+    "/about": { prerender: true },
   },
 });
 ```

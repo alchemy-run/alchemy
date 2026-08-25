@@ -331,7 +331,7 @@ describe("AWS.Website.Router local", () => {
               // the prefix. `base` is what makes Vite do that, for both the
               // module URLs it writes into the HTML and the requests it then
               // has to answer.
-              vite: { base: "/app/" },
+              base: "/app/",
               domain: { router, path: "/app" },
             });
             return {

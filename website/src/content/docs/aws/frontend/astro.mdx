@@ -46,9 +46,9 @@ plugins, and any other non-serializable options work exactly as they
 do outside Alchemy. Alchemy merges a programmatic config *over* it:
 the AWS Lambda adapter is injected for you (don't declare an
 `adapter` in your config — that fails the build with an actionable
-error), and options passed via the `astro` prop override the file's —
-see [Astro configuration](#astro-configuration) below for the
-details.
+error), and Astro options set on the resource (`site`, `base`,
+`output`, ...) override the file's — see
+[Astro configuration](#astro-configuration) below for the details.
 
 ## Declare the Website
 
@@ -94,18 +94,15 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Astro("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from Alchemy!",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from Alchemy!",
++    API_BASE: api.url,
 +  },
 });
 ```
@@ -130,13 +127,13 @@ const greeting = process.env.GREETING ?? "hello";
 
 ## Fully static sites
 
-With `astro: { output: "static" }` every page is prerendered at
+With `output: "static"` every page is prerendered at
 build time and the deploy is assets-only — no Lambda is created, and
 the S3 + CloudFront asset layer answers every request:
 
 ```typescript
 export const Website = AWS.Website.Astro("Website", {
-  astro: { output: "static" },
+  output: "static",
   errorPage: "404.html",
 });
 ```
@@ -165,17 +162,16 @@ export default defineConfig({
 });
 ```
 
-The `astro` prop on the resource exposes common serializable options
-for deploy-specific overrides; Astro merges them *over* the config
+The resource exposes common serializable options (`site`, `base`,
+`srcDir`, `publicDir`, `outDir`, `trailingSlash`) as flat props for
+deploy-specific overrides; Astro merges them *over* the config
 file (scalars override, arrays like `integrations` and
 `vite.plugins` concatenate after the file's):
 
 ```typescript
 // alchemy.run.ts
 export const Website = AWS.Website.Astro("Website", {
-  astro: {
-    site: "https://preview.example.com",
-  },
+  site: "https://preview.example.com",
 });
 ```
 
@@ -186,7 +182,7 @@ Two options are managed for you regardless of the config file:
   actionable error.
 - `output` — Alchemy defaults it to `"server"` (superseding a
   file-level `output`), so pages render on demand in the Lambda.
-  Opt into a fully prerendered site with `astro: { output: "static" }`
+  Opt into a fully prerendered site with `output: "static"`
   on the resource.
 
 ## Local dev

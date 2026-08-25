@@ -57,15 +57,15 @@ export interface WakuProps<
    */
   srcDir?: string;
   /**
-   * Waku build output directory, relative to {@link rootDir}. The server
-   * bundle is read from `<distDir>/server` and the client assets from
-   * `<distDir>/public`. Setting this overrides a `distDir` in the
-   * project's `waku.config.*` — if your config file customizes `distDir`,
-   * mirror it here (or exclude it via `memo`) so the build output doesn't
-   * pollute the rebuild hash.
+   * Waku build output directory (waku's `distDir`), relative to
+   * {@link rootDir}. The server bundle is read from `<outDir>/server`
+   * and the client assets from `<outDir>/public`. Setting this
+   * overrides a `distDir` in the project's `waku.config.*` — if your
+   * config file customizes `distDir`, mirror it here (or exclude it via
+   * `memo`) so the build output doesn't pollute the rebuild hash.
    * @default the project's `waku.config.*` value, or waku's own default (`"dist"`)
    */
-  distDir?: string;
+  outDir?: string;
   /**
    * Base path the app is served under. Setting this overrides a
    * `basePath` in the project's `waku.config.*`.
@@ -99,7 +99,7 @@ export interface WakuProps<
  * `Waku` builds the project programmatically — no `waku.config.ts` edits,
  * no Wrangler configuration, and no build command required. A project's
  * `waku.config.*` loads natively (same as waku's CLI) as the base config,
- * with `srcDir`/`distDir`/`basePath` from this resource winning per key;
+ * with `srcDir`/`outDir`/`basePath` from this resource winning per key;
  * `unstable_adapter` is owned by Alchemy and must not be set. Note that a
  * standalone `vite.config.ts` is NOT loaded (same as waku's CLI) — Vite
  * config belongs in `waku.config.*`'s `vite` field. The RSC server
@@ -275,7 +275,9 @@ export const Waku: {
                 // by the source provider.
                 main: props?.main,
                 srcDir: props?.srcDir,
-                distDir: props?.distDir,
+                // The flat alchemy vocabulary is `outDir`; waku's own
+                // option name is `distDir`.
+                distDir: props?.outDir,
                 basePath: props?.basePath,
                 memo: props?.memo,
               },

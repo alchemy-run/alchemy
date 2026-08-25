@@ -315,9 +315,7 @@ export default Alchemy.Stack(
     const backend = yield* Backend;
 
     const site = yield* AWS.Website.TanStackStart("Website", {
-      server: {
-        environment: { BACKEND_URL: backend.functionUrl },
-      },
+      env: { BACKEND_URL: backend.functionUrl },
     });
 
     return {
@@ -364,7 +362,7 @@ export const Route = createFileRoute("/rpc")({
 ```
 
 Server routes run on the site's own Lambda, so they read `process.env` directly
-— the same `BACKEND_URL` the Stack set under `server.environment`.
+— the same `BACKEND_URL` the Stack set under `env`.
 
 ## 7. The atom RPC client
 

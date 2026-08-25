@@ -88,8 +88,8 @@ export default defineConfig({
 // an SPA whose Worker serves the /api/* routes
 const site = yield* Cloudflare.Website.Vite("Website", {
   rootDir: "./web",
+  spa: true,
   assets: {
-    notFoundHandling: "single-page-application",
     runWorkerFirst: ["/api/*"],
   },
 });
@@ -101,6 +101,15 @@ const site = yield* Cloudflare.Website.Vite("Website", {
 - **`viteEnvironments`** — for frameworks that build more than one
   server environment (see
   [Multiple server environments](#multiple-server-environments-rsc)).
+- **`spa`** — serve `index.html` for unmatched paths so client-side
+  routing takes over; sugar for
+  `assets.notFoundHandling: "single-page-application"`.
+- **`errorPage`** — serve the built `404.html` for unmatched paths;
+  sugar for `assets.notFoundHandling: "404-page"`. Cloudflare's
+  asset layer serves the nearest `404.html` — the name is fixed by
+  the platform, so `"404.html"` is the only accepted value. An
+  explicit `assets.notFoundHandling` wins over both sugars, and
+  `spa` wins over `errorPage` when both are set.
 - **`assets`** — a flat `AssetsConfig` for routing behavior:
   `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc. SSR
   apps need none of it: server routes and API paths match no built

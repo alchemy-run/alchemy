@@ -71,10 +71,8 @@ describe("AWS.Website.SolidStart local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.SolidStart("SolidStartSite", {
               rootDir,
-              server: {
-                environment: {
-                  SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker",
-                },
+              env: {
+                SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker",
               },
             });
             return { site };
@@ -124,10 +122,8 @@ describe("AWS.Website.SolidStart local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.SolidStart("SolidStartSite", {
               rootDir,
-              server: {
-                environment: {
-                  SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker",
-                },
+              env: {
+                SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker",
               },
             });
             return { site };

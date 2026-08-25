@@ -207,7 +207,7 @@ describe.concurrent("Nextjs dev", () => {
               rootDir,
               dev: { port: 0 },
               memo: { include: memoInclude },
-              nextjs: { devMode: "hmr" },
+              devMode: "hmr",
               env: {
                 TEST_TEXT: bindingMarker,
               },

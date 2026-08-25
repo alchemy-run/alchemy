@@ -33,18 +33,6 @@ export interface SvelteKitProps<
    */
   memo?: MemoOptions;
   /**
-   * SvelteKit configuration overrides. A project-owned `vite.config.*`
-   * loads natively — its `sveltekit(...)` call is the primary config
-   * source — and these options are merged OVER it (the override wins).
-   * Without a config file, this is the whole kit config. Construction-time
-   * options (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`)
-   * only apply in the no-config-file case — put them in your own
-   * `sveltekit(...)` call otherwise. The `adapter` field is injected by
-   * Alchemy's wrangler-free Cloudflare adapter — do not set it here. Must
-   * be JSON-serializable (it persists in state).
-   */
-  kit?: Record<string, unknown>;
-  /**
    * Options for the wrangler-free Cloudflare adapter.
    */
   adapter?: {
@@ -132,10 +120,9 @@ export interface SvelteKitProps<
  * ```
  *
  * ### Kit and Adapter Options
- * Kit options normally live in the `sveltekit(...)` call in your
- * `vite.config.ts`, which loads natively; `kit` is a deploy-time
- * override layer merged over them (the override wins). The generated
- * Cloudflare adapter is configured via `adapter`.
+ * Kit options live in the `sveltekit(...)` call in your
+ * `vite.config.ts`, which loads natively. The generated Cloudflare
+ * adapter is configured via `adapter`.
  *
  * **Example:** SPA-style 404 fallback
  * ```typescript
@@ -244,7 +231,6 @@ export const SvelteKit: {
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,
-                kit: props?.kit,
                 adapter: props?.adapter,
               },
             },

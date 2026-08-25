@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Waku build. */
 export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
@@ -14,12 +10,15 @@ export const WAKU_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/waku/aws";
 
 export interface WakuProps extends FrameworkSiteProps {
-  /**
-   * Waku config overrides (`srcDir`, `distDir`, `basePath`, `vite`, ...)
-   * merged over the project's own `waku.config.ts`. `unstable_adapter` is
-   * owned by the AWS deploy target and may not be set here.
-   */
-  waku?: Record<string, unknown>;
+  // Waku config overrides, merged over the project's own `waku.config.ts`.
+  // Flat — the composite IS Waku. `unstable_adapter` is owned by the AWS
+  // deploy target.
+  /** Source directory, relative to `rootDir` (waku's `srcDir`). @default "./src" */
+  srcDir?: string;
+  /** Build output directory (waku's `distDir`). @default "./dist" */
+  outDir?: string;
+  /** Public base path the site deploys under (waku's `basePath`). */
+  basePath?: string;
 }
 
 /**
@@ -68,13 +67,22 @@ export interface WakuProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Waku = (
-  id: string,
-  props: InputProps<WakuProps, FrameworkSiteStaticProps | "waku"> = {},
-) =>
-  makeFrameworkSite(id, props, {
+export const Waku = (id: string, props: InputProps<WakuProps> = {}) => {
+  const p = props as WakuProps;
+  const waku = {
+    srcDir: p.srcDir,
+    distDir: p.outDir,
+    basePath: p.basePath,
+  };
+  return makeFrameworkSite(id, props, {
     name: "Waku",
     framework: WAKU_FRAMEWORK_SPECIFIER,
     target: WAKU_AWS_TARGET_SPECIFIER,
-    options: props.waku ? { waku: props.waku } : undefined,
+    options:
+      p.srcDir !== undefined ||
+      p.outDir !== undefined ||
+      p.basePath !== undefined
+        ? { waku }
+        : undefined,
   }).pipe(Namespace.push(id));
+};

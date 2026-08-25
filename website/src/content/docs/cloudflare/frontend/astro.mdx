@@ -193,18 +193,18 @@ export const Website = Cloudflare.Website.Astro("Website", {
 
 ## Fully static sites
 
-With `astro: { output: "static" }` every page is prerendered at
+With `output: "static"` every page is prerendered at
 build time and the deploy is assets-only — no server bundle is
 uploaded, and Cloudflare's asset layer answers every request:
 
 ```typescript
 export const Website = Cloudflare.Website.Astro("Website", {
-  astro: { output: "static" },
-  assets: { notFoundHandling: "404-page" },
+  output: "static",
+  errorPage: "404.html",
 });
 ```
 
-`notFoundHandling: "404-page"` serves the built `404.html` for
+`errorPage: "404.html"` serves the built `404.html` for
 unmatched routes. Session provisioning is skipped for declared-static
 sites, since no Worker code runs at request time.
 
@@ -229,17 +229,15 @@ export default defineConfig({
 });
 ```
 
-The `astro` prop on the resource exposes common serializable options
-for deploy-specific overrides; Astro merges them *over* the config
-file (scalars override, arrays like `integrations` and
-`vite.plugins` concatenate after the file's):
+The resource exposes common serializable options (`site`, `base`,
+`output`, `srcDir`, `publicDir`, `outDir`, `trailingSlash`) as flat
+props for deploy-specific overrides; Astro merges them *over* the
+config file:
 
 ```typescript
 // alchemy.run.ts
 export const Website = Cloudflare.Website.Astro("Website", {
-  astro: {
-    site: "https://preview.example.com",
-  },
+  site: "https://preview.example.com",
 });
 ```
 
@@ -250,5 +248,5 @@ Two options are managed for you regardless of the config file:
   actionable error.
 - `output` — Alchemy defaults it to `"server"` (superseding a
   file-level `output`), so pages render on demand in the Worker.
-  Opt into a fully prerendered site with `astro: { output: "static" }`
-  on the resource.
+  Opt into a fully prerendered site with `output: "static"` on the
+  resource.

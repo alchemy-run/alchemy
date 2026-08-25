@@ -58,16 +58,6 @@ export interface NuxtProps<
    */
   memo?: MemoOptions;
   /**
-   * Nuxt configuration overrides merged over the project's own
-   * `nuxt.config.ts` (the override wins). The project's config file is
-   * loaded natively — modules, layers, and all — so this is for
-   * deploy-specific tweaks (`routeRules`, `runtimeConfig`, ...). Must be
-   * JSON-serializable (it persists in state). Do not set `nitro.preset`
-   * here — the Cloudflare deploy target owns the preset and a foreign
-   * preset is a hard error.
-   */
-  nuxt?: Record<string, unknown>;
-  /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
@@ -155,15 +145,15 @@ export interface NuxtProps<
  * ### Prerendering
  * Routes marked for prerendering in `routeRules` (or via
  * `nitro.prerender`) render at build time into `.output/public` and are
- * served as static assets — no Worker invocation.
+ * served as static assets — no Worker invocation. Configure them in
+ * your `nuxt.config.ts`, which loads natively:
  *
- * **Example:** Prerendering a route
+ * **Example:** Prerendering a route (nuxt.config.ts)
  * ```typescript
- * const site = yield* Cloudflare.Website.Nuxt("Website", {
- *   nuxt: {
- *     routeRules: {
- *       "/about": { prerender: true },
- *     },
+ * // nuxt.config.ts
+ * export default defineNuxtConfig({
+ *   routeRules: {
+ *     "/about": { prerender: true },
  *   },
  * });
  * ```
@@ -303,7 +293,6 @@ export const Nuxt: {
                 rootDir: props?.rootDir,
                 main: props?.main,
                 memo: props?.memo,
-                nuxt: props?.nuxt,
               },
             },
           }),

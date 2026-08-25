@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Octane build. */
 export const OCTANE_FRAMEWORK_SPECIFIER =
@@ -70,21 +66,16 @@ export interface OctaneProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.Octane("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
  *
  * @resource
  */
-export const Octane = (
-  id: string,
-  props: InputProps<OctaneProps, FrameworkSiteStaticProps> = {},
-) =>
+export const Octane = (id: string, props: InputProps<OctaneProps> = {}) =>
   makeFrameworkSite(id, props, {
     name: "Octane",
     framework: OCTANE_FRAMEWORK_SPECIFIER,

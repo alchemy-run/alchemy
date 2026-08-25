@@ -97,18 +97,15 @@ export default Alchemy.Stack(
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Octane("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from alchemy",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from alchemy",
++    API_BASE: api.url,
 +  },
 });
 ```

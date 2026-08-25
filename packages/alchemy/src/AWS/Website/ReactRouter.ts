@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the React Router build. */
 export const REACT_ROUTER_FRAMEWORK_SPECIFIER =
@@ -16,18 +12,12 @@ export const REACT_ROUTER_AWS_TARGET_SPECIFIER =
 
 export interface ReactRouterProps extends FrameworkSiteProps {
   /**
-   * Serializable React Router config overrides, mirroring the project's
-   * own `react-router.config.ts` keys.
+   * Build output directory relative to `rootDir` — the parent of
+   * `client/` and `server/`. Must match `react-router.config.ts` when it
+   * sets `buildDirectory`.
+   * @default "build"
    */
-  reactRouter?: {
-    /**
-     * Build output directory relative to `rootDir` — the parent of
-     * `client/` and `server/`. Must match `react-router.config.ts` when
-     * it sets `buildDirectory`.
-     * @default "build"
-     */
-    buildDirectory?: string;
-  };
+  outDir?: string;
 }
 
 /**
@@ -77,11 +67,9 @@ export interface ReactRouterProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.ReactRouter("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
@@ -110,7 +98,7 @@ export interface ReactRouterProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.ReactRouter("Web", {
  *   rootDir: "./app",
- *   reactRouter: { buildDirectory: "dist" },
+ *   outDir: "dist",
  * });
  * ```
  *
@@ -118,16 +106,13 @@ export interface ReactRouterProps extends FrameworkSiteProps {
  */
 export const ReactRouter = (
   id: string,
-  props: InputProps<
-    ReactRouterProps,
-    FrameworkSiteStaticProps | "reactRouter"
-  > = {},
-) =>
-  makeFrameworkSite(id, props, {
+  props: InputProps<ReactRouterProps> = {},
+) => {
+  const p = props as ReactRouterProps;
+  return makeFrameworkSite(id, props, {
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,
     target: REACT_ROUTER_AWS_TARGET_SPECIFIER,
-    options: props.reactRouter?.buildDirectory
-      ? { buildDirectory: props.reactRouter.buildDirectory }
-      : undefined,
+    options: p.outDir ? { buildDirectory: p.outDir } : undefined,
   }).pipe(Namespace.push(id));
+};

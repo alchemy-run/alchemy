@@ -133,26 +133,22 @@ export default Alchemy.Stack(
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment`:
+The server function's environment is configured under `env`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.SolidStart("Website", {
-+  server: {
-+    memorySize: 2048,
-+    environment: {
-+      API_BASE: "https://api.example.com",
-+    },
++  memorySize: 2048,
++  env: {
++    API_BASE: "https://api.example.com",
 +  },
 });
 ```
 
-`environment` values are set on the Lambda on deploy and injected into
+`env` values are set on the Lambda on deploy and injected into
 the dev server's process environment under `alchemy dev`, so server
-code reads the same values in both modes. The other `server` fields
-tune the Lambda itself (`memorySize`, `timeout`, `architecture`,
-`runtime`).
+code reads the same values in both modes. Sibling props tune the
+Lambda itself (`memorySize`, `timeout`, `architecture`, `runtime`).
 
 An output from another resource only exists once that resource is
 yielded, so declare the site inside the Stack generator instead:
@@ -163,7 +159,7 @@ Effect.gen(function* () {
   const api = yield* Api;
 
   const site = yield* AWS.Website.SolidStart("Website", {
-    server: { environment: { API_BASE: api.url } },
+    env: { API_BASE: api.url },
   });
 
   return { url: site.url };
@@ -184,7 +180,7 @@ export function GET() {
 
 Values prefixed `VITE_` are inlined into the client bundle at build
 time instead, as `import.meta.env.VITE_*` — set those in the shell
-that runs `alchemy deploy`, not in `server.environment`.
+that runs `alchemy deploy`, not in `env`.
 
 ## Prerendering
 
@@ -194,16 +190,14 @@ invocation:
 
 ```typescript
 export const Website = AWS.Website.SolidStart("Website", {
-  nitro: {
-    prerender: { routes: ["/", "/about"] },
-  },
+  prerender: { routes: ["/", "/about"] },
 });
 ```
 
-Everything on the `nitro` prop is forwarded to the appended nitro
-plugin — `prerender`, `routeRules`, `storage`, and the rest. The one
-exception is `preset`: the AWS deploy target owns it, and a foreign
-preset is a hard error.
+`prerender` takes the routes to render (`routes`) and can crawl links
+from prerendered pages to prerender them too (`crawlLinks`). Other
+nitro options belong in your project's own config; `preset` is owned
+by the AWS deploy target, and a foreign preset is a hard error.
 
 ## Local dev
 

@@ -53,8 +53,8 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
               forceDestroy: true,
               invalidation: { paths: "all", wait: true },
               // Forwarded into the nitro plugin the integration appends —
-              // proves the `nitro` option reaches the build.
-              nitro: { prerender: { routes: ["/prerendered"] } },
+              // proves the prerender option reaches the build.
+              prerender: { routes: ["/prerendered"] },
             });
             return { site };
           }),
@@ -145,10 +145,8 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
               rootDir,
               forceDestroy: true,
               domain: { router },
-              server: {
-                environment: {
-                  SOLIDSTART_ENV_MARKER: "solidstart-aws-live-env-marker",
-                },
+              env: {
+                SOLIDSTART_ENV_MARKER: "solidstart-aws-live-env-marker",
               },
             });
             return { router, site };

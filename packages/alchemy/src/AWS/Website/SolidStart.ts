@@ -1,10 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import {
-  makeFrameworkSite,
-  type FrameworkSiteProps,
-  type FrameworkSiteStaticProps,
-} from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SolidStart build. */
 export const SOLIDSTART_FRAMEWORK_SPECIFIER =
@@ -16,11 +12,15 @@ export const SOLIDSTART_AWS_TARGET_SPECIFIER =
 
 export interface SolidStartProps extends FrameworkSiteProps {
   /**
-   * Nitro options forwarded to the SolidStart nitro plugin (prerendering,
-   * route rules, storage, ...). `preset` is owned by the AWS deploy target
-   * and may not be set here.
+   * Prerender routes at build time (nitro's `prerender`); the pages land
+   * in the static output and are served from S3 by exact match.
    */
-  nitro?: Record<string, unknown>;
+  prerender?: {
+    /** Routes to prerender. */
+    routes?: string[];
+    /** Crawl links from prerendered pages and prerender them too. */
+    crawlLinks?: boolean;
+  };
 }
 
 /**
@@ -62,11 +62,9 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.SolidStart("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
@@ -76,9 +74,7 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.SolidStart("Web", {
  *   rootDir: "./app",
- *   nitro: {
- *     prerender: { routes: ["/", "/about"] },
- *   },
+ *   prerender: { routes: ["/", "/about"] },
  * });
  * ```
  *
@@ -86,11 +82,13 @@ export interface SolidStartProps extends FrameworkSiteProps {
  */
 export const SolidStart = (
   id: string,
-  props: InputProps<SolidStartProps, FrameworkSiteStaticProps | "nitro"> = {},
-) =>
-  makeFrameworkSite(id, props, {
+  props: InputProps<SolidStartProps> = {},
+) => {
+  const p = props as SolidStartProps;
+  return makeFrameworkSite(id, props, {
     name: "SolidStart",
     framework: SOLIDSTART_FRAMEWORK_SPECIFIER,
     target: SOLIDSTART_AWS_TARGET_SPECIFIER,
-    options: props.nitro ? { nitro: props.nitro } : undefined,
+    options: p.prerender ? { nitro: { prerender: p.prerender } } : undefined,
   }).pipe(Namespace.push(id));
+};

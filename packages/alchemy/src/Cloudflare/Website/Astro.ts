@@ -57,36 +57,52 @@ export interface AstroProps<
    */
   prerenderEnvironment?: "workerd" | "node";
   /**
-   * Serializable Astro config merged into the in-memory configuration.
-   * The project's `astro.config.*` file loads natively; astro merges
-   * these options OVER it (scalars override the file). The Cloudflare
-   * adapter, output target, and Vite environments are managed for you —
-   * do not declare an `adapter` in the config file.
+   * The full URL the site deploys to (`Astro.site`). Merged over a
+   * `site` in the project's `astro.config.*`.
    */
-  astro?: {
-    /** The full URL the site deploys to (`Astro.site`). */
-    site?: string;
-    /** Base path the site deploys under. */
-    base?: string;
-    /**
-     * Astro output target. `"server"` renders pages on demand in the
-     * Worker; individual pages opt into prerendering with
-     * `export const prerender = true`.
-     * @default "server"
-     */
-    output?: "server" | "static";
-    /** Source directory, relative to `rootDir`. @default "./src" */
-    srcDir?: string;
-    /** Public (static passthrough) directory. @default "./public" */
-    publicDir?: string;
-    /** Build output directory. @default "./dist" */
-    outDir?: string;
-    /** Trailing-slash handling for routes. */
-    trailingSlash?: "always" | "never" | "ignore";
-  };
+  site?: string;
+  /**
+   * Base path the site deploys under. Merged over a `base` in the
+   * project's `astro.config.*`.
+   */
+  base?: string;
+  /**
+   * Astro output target. `"server"` renders pages on demand in the
+   * Worker; individual pages opt into prerendering with
+   * `export const prerender = true`. `"static"` prerenders every page
+   * at build time and deploys assets-only.
+   * @default "server"
+   */
+  output?: "server" | "static";
+  /** Source directory, relative to `rootDir`. @default "./src" */
+  srcDir?: string;
+  /** Public (static passthrough) directory. @default "./public" */
+  publicDir?: string;
+  /** Build output directory, relative to `rootDir`. @default "./dist" */
+  outDir?: string;
+  /** Trailing-slash handling for routes. */
+  trailingSlash?: "always" | "never" | "ignore";
+  /**
+   * Serve `index.html` for unmatched request paths so client-side
+   * routing can take over (maps to
+   * `assets.notFoundHandling: "single-page-application"`). Sugar for
+   * app-shell deployments; an explicit `assets.notFoundHandling` wins,
+   * and `spa` wins over `errorPage` when both are set.
+   */
+  spa?: boolean;
+  /**
+   * Serve the built `404.html` for unmatched request paths (maps to
+   * `assets.notFoundHandling: "404-page"`). Cloudflare's asset layer
+   * serves the nearest `404.html` — the file name is fixed by the
+   * platform, so the only accepted value is `"404.html"`. An explicit
+   * `assets.notFoundHandling` wins over this sugar.
+   */
+  errorPage?: "404.html";
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   * An explicit `notFoundHandling` here wins over the `spa`/`errorPage`
+   * sugar.
    */
   assets?: AssetsConfig;
 }
@@ -125,18 +141,18 @@ export interface AstroProps<
  * ```
  *
  * ### Static Sites
- * With `astro: { output: "static" }` every page is prerendered at build
- * time and the deploy is **assets-only**: no server bundle is uploaded —
+ * With `output: "static"` every page is prerendered at build time and
+ * the deploy is **assets-only**: no server bundle is uploaded —
  * Cloudflare's asset layer answers every request (including the built
- * `404.html` via `assets.notFoundHandling: "404-page"`). Session
- * provisioning is skipped for declared-static sites since no Worker code
- * runs at request time.
+ * `404.html` via `errorPage: "404.html"`). Session provisioning is
+ * skipped for declared-static sites since no Worker code runs at
+ * request time.
  *
  * **Example:** Fully static Astro site
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Docs", {
- *   astro: { output: "static" },
- *   assets: { notFoundHandling: "404-page" },
+ *   output: "static",
+ *   errorPage: "404.html",
  * });
  * ```
  *
@@ -200,21 +216,19 @@ export interface AstroProps<
  * ### Astro Configuration
  * Your `astro.config.*` file loads natively — integrations, Vite
  * plugins, and other non-serializable options work as usual. Common
- * serializable options are exposed under `astro` for deploy-specific
- * overrides; astro merges them OVER the config file (scalars override,
- * arrays like `integrations` concatenate). The Cloudflare adapter is
- * injected for you — declaring an `adapter` in the config file fails
- * the build. `output` defaults to `"server"`, superseding a file-level
- * `output`; opt into a fully prerendered site with
- * `astro: { output: "static" }`.
+ * serializable options (`site`, `base`, `output`, `srcDir`,
+ * `publicDir`, `outDir`, `trailingSlash`) are exposed as flat props for
+ * deploy-specific overrides; astro merges them OVER the config file.
+ * The Cloudflare adapter is injected for you — declaring an `adapter`
+ * in the config file fails the build. `output` defaults to `"server"`,
+ * superseding a file-level `output`; opt into a fully prerendered site
+ * with `output: "static"`.
  *
  * **Example:** Setting the site URL and source directory
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Blog", {
- *   astro: {
- *     site: "https://blog.example.com",
- *     srcDir: "./app",
- *   },
+ *   site: "https://blog.example.com",
+ *   srcDir: "./app",
  * });
  * ```
  *
@@ -285,15 +299,29 @@ export const Astro: {
           // logical id, so re-evaluating this props effect is safe.
           if (
             session !== false &&
-            props.astro?.output !== "static" &&
+            props.output !== "static" &&
             env?.[sessionBindingName] === undefined
           ) {
             const sessions = yield* Namespace(`${id}Session`);
             env = { ...env, [sessionBindingName]: sessions };
           }
+          // `spa` / `errorPage` are sugar over the assets-layer not-found
+          // knob; an explicit `assets.notFoundHandling` wins, and `spa`
+          // wins over `errorPage` when both are set. When no sugar is set,
+          // `props.assets` passes through untouched (possibly undefined)
+          // so the Worker metadata is unchanged for existing deployments.
+          const notFoundHandling = props.spa
+            ? ("single-page-application" as const)
+            : props.errorPage !== undefined
+              ? ("404-page" as const)
+              : undefined;
           return {
             ...props,
             env,
+            assets:
+              notFoundHandling === undefined
+                ? props.assets
+                : { notFoundHandling, ...props.assets },
             // Astro's vendored server runtime is built against Node APIs
             // and needs `nodejs_compat`; `getCompatibility` already adds it
             // to every non-python Worker (honoring an explicit
@@ -317,8 +345,27 @@ export const Astro: {
                 // Worker's bindings don't exist. The inline config merges
                 // OVER a project's `astro.config.*`, so an explicit
                 // file-level `output` is superseded; opt into a fully
-                // prerendered site with `astro: { output: "static" }`.
-                astro: { output: "server", ...props.astro },
+                // prerendered site with `output: "static"`. The flat
+                // alchemy props are re-nested into the astro inline-config
+                // shape the source provider expects, omitting unset keys
+                // so the persisted descriptor (and its hash) stays stable.
+                astro: {
+                  output: props.output ?? "server",
+                  ...(props.site !== undefined ? { site: props.site } : {}),
+                  ...(props.base !== undefined ? { base: props.base } : {}),
+                  ...(props.srcDir !== undefined
+                    ? { srcDir: props.srcDir }
+                    : {}),
+                  ...(props.publicDir !== undefined
+                    ? { publicDir: props.publicDir }
+                    : {}),
+                  ...(props.outDir !== undefined
+                    ? { outDir: props.outDir }
+                    : {}),
+                  ...(props.trailingSlash !== undefined
+                    ? { trailingSlash: props.trailingSlash }
+                    : {}),
+                },
               },
             },
           };

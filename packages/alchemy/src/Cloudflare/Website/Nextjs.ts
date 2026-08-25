@@ -28,8 +28,25 @@ const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
  */
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
 
-/** Next.js/OpenNext-specific build knobs, forwarded to the source provider. */
-export interface NextjsBuildOptions {
+export interface NextjsProps<
+  Bindings extends WorkerBindingProps = {},
+> extends Omit<
+  WorkerProps<Bindings>,
+  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
+> {
+  /**
+   * The Next.js project root (the directory containing `next.config.*` and
+   * `open-next.config.ts`). Defaults to the process working directory.
+   */
+  rootDir?: string;
+  /**
+   * Controls which files are content-hashed to decide whether the OpenNext
+   * build needs to re-run. By default every project file outside build
+   * outputs (`.next`, `.open-next`, `dist`) and `node_modules` is hashed,
+   * plus the nearest package-manager lockfile. Narrow the scope with
+   * `include`/`exclude` globs when the default is too broad.
+   */
+  memo?: MemoOptions;
   /**
    * Path of the OpenNext config, relative to the project root.
    * @default "open-next.config.ts"
@@ -70,29 +87,6 @@ export interface NextjsBuildOptions {
    * @default "preview"
    */
   devMode?: "preview" | "hmr";
-}
-
-export interface NextjsProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
-> {
-  /**
-   * The Next.js project root (the directory containing `next.config.*` and
-   * `open-next.config.ts`). Defaults to the process working directory.
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are content-hashed to decide whether the OpenNext
-   * build needs to re-run. By default every project file outside build
-   * outputs (`.next`, `.open-next`, `dist`) and `node_modules` is hashed,
-   * plus the nearest package-manager lockfile. Narrow the scope with
-   * `include`/`exclude` globs when the default is too broad.
-   */
-  memo?: MemoOptions;
-  /** Next.js/OpenNext-specific build and dev configuration. */
-  nextjs?: NextjsBuildOptions;
   /**
    * Optional configuration for static asset routing behavior.
    * Defaults to `runWorkerFirst: true` with `htmlHandling`/`notFoundHandling`
@@ -119,8 +113,8 @@ export interface NextjsProps<
  * `import()`.
  *
  * Local dev (`alchemy dev`) defaults to preview parity — the built worker
- * served under workerd. Set `nextjs: { devMode: "hmr" }` for the real
- * `next dev` (Turbopack HMR) with the Worker's bindings proxied onto
+ * served under workerd. Set `devMode: "hmr"` for the real `next dev`
+ * (Turbopack HMR) with the Worker's bindings proxied onto
  * `getCloudflareContext()`.
  *
  * ISR comes in two flavors, chosen by the project's `open-next.config.ts`:
@@ -248,16 +242,15 @@ export interface NextjsProps<
  * ```
  *
  * ### Build Configuration
- * The `nextjs` prop tunes the OpenNext pipeline: a custom build command,
- * minification, or reusing an existing `.next` build.
+ * Flat props tune the OpenNext pipeline: a custom `buildCommand`,
+ * `minify`, `configPath`, or reusing an existing `.next` build with
+ * `skipNextBuild`.
  *
  * **Example:** Minified build with a custom command
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
- *   nextjs: {
- *     buildCommand: "npx next build --no-lint",
- *     minify: true,
- *   },
+ *   buildCommand: "npx next build --no-lint",
+ *   minify: true,
  * });
  * ```
  *
@@ -356,13 +349,21 @@ export const Nextjs: {
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,
-                ...(props?.nextjs !== undefined
-                  ? (({ devMode, ...build }) => ({
-                      ...build,
-                      ...(devMode !== undefined
-                        ? { dev: { mode: devMode } }
-                        : {}),
-                    }))(props.nextjs)
+                ...(props?.configPath !== undefined
+                  ? { configPath: props.configPath }
+                  : {}),
+                ...(props?.buildCommand !== undefined
+                  ? { buildCommand: props.buildCommand }
+                  : {}),
+                ...(props?.skipNextBuild !== undefined
+                  ? { skipNextBuild: props.skipNextBuild }
+                  : {}),
+                ...(props?.minify !== undefined
+                  ? { minify: props.minify }
+                  : {}),
+                ...(props?.debug !== undefined ? { debug: props.debug } : {}),
+                ...(props?.devMode !== undefined
+                  ? { dev: { mode: props.devMode } }
                   : {}),
               },
             },
