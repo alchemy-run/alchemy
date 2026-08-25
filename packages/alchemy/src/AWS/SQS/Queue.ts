@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -417,6 +418,136 @@ export const QueueProvider = () =>
 
         return baseAttributes;
       };
+      const resolveQueueIdentity = Effect.fn(function* (
+        id: string,
+        props: {
+          queueName?: string | undefined;
+          fifo?: boolean | undefined;
+        },
+      ) {
+        const identity = {
+          queueName: props.queueName,
+          fifo: props.fifo,
+        };
+        if (!isResolved(identity)) {
+          return yield* Effect.die(
+            new Error(
+              `SQS Queue '${id}' cannot be pre-created because queueName or fifo depends on an unresolved resource output`,
+            ),
+          );
+        }
+
+        const { accountId, region } = yield* AWSEnvironment.current;
+        const queueName = yield* createQueueName(id, identity);
+        return {
+          queueName,
+          fifo: identity.fifo ?? false,
+          queueArn: `arn:aws:sqs:${region}:${accountId}:${queueName}` as const,
+        };
+      });
+      const getQueueUrl = (queueName: string) =>
+        sqs.getQueueUrl({ QueueName: queueName }).pipe(
+          Effect.map((result) => result.QueueUrl),
+          Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+        );
+      const createQueueShell = Effect.fn(function* ({
+        queueName,
+        attributes,
+        tags,
+        session,
+        retryInvalidParameter,
+      }: {
+        queueName: string;
+        attributes: Record<string, string>;
+        tags: Record<string, string>;
+        session: Pick<ScopedPlanStatusSession, "note">;
+        retryInvalidParameter?: boolean;
+      }) {
+        const create = sqs
+          .createQueue({
+            QueueName: queueName,
+            Attributes: attributes,
+            tags,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "QueueDeletedRecently",
+              schedule: Schedule.max([
+                Schedule.fixed(1000),
+                Schedule.recurs(30),
+              ]).pipe(
+                Schedule.tap(({ attempt }) =>
+                  session.note(
+                    `Queue was deleted recently, retrying... ${attempt}s`,
+                  ),
+                ),
+              ),
+            }),
+          );
+        const createEffect = retryInvalidParameter
+          ? create.pipe(
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "InvalidParameterValueException",
+                schedule: Schedule.max([
+                  Schedule.fixed(1000),
+                  Schedule.recurs(30),
+                ]),
+              }),
+            )
+          : create;
+        return yield* createEffect.pipe(
+          Effect.map((result) => ({
+            queueUrl: result.QueueUrl!,
+            raced: false,
+          })),
+          Effect.catchTag("QueueNameExists", () =>
+            sqs.getQueueUrl({ QueueName: queueName }).pipe(
+              Effect.map((result) => ({
+                queueUrl: result.QueueUrl!,
+                raced: true,
+              })),
+            ),
+          ),
+        );
+      });
+      const verifyQueueOwnership = Effect.fn(function* ({
+        id,
+        queueName,
+        queueUrl,
+        fifo,
+      }: {
+        id: string;
+        queueName: string;
+        queueUrl: string;
+        fifo: boolean;
+      }) {
+        const [tags, attributes] = yield* Effect.all([
+          sqs
+            .listQueueTags({ QueueUrl: queueUrl })
+            .pipe(Effect.map((result) => result.Tags ?? {})),
+          sqs.getQueueAttributes({
+            QueueUrl: queueUrl,
+            AttributeNames: ["FifoQueue"],
+          }),
+        ]);
+        if (!(yield* hasAlchemyTags(id, tags))) {
+          return yield* new QueuePrecreateConflict({
+            id,
+            queueName,
+            reason:
+              "an existing queue with that name is not owned by this stack",
+          });
+        }
+        const observedFifo = attributes.Attributes?.FifoQueue === "true";
+        if (observedFifo !== fifo) {
+          return yield* new QueuePrecreateConflict({
+            id,
+            queueName,
+            reason: `the existing queue is ${observedFifo ? "FIFO" : "standard"}, but the desired queue is ${fifo ? "FIFO" : "standard"}`,
+          });
+        }
+      });
       return Queue.Provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
         // Enumerate every queue in the ambient account/region. `listQueues`
@@ -507,98 +638,29 @@ export const QueueProvider = () =>
           // Create only the stable physical shell here. Reconcile remains the
           // single authority for mutable attributes, user tags, and binding-
           // contributed policy once every dependency can be evaluated.
-          const identity = {
-            queueName: news.queueName,
-            fifo: news.fifo,
-          };
-          if (!isResolved(identity)) {
-            return yield* Effect.die(
-              new Error(
-                `SQS Queue '${id}' cannot be pre-created because queueName or fifo depends on an unresolved resource output`,
-              ),
-            );
-          }
-
-          const { accountId, region } = yield* AWSEnvironment.current;
-          const queueName = yield* createQueueName(id, identity);
-          const queueArn =
-            `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+          const identity = yield* resolveQueueIdentity(id, news);
+          const { queueName, queueArn } = identity;
           const internalTags = yield* createInternalTags(id);
-          let queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
-            Effect.map((result) => result.QueueUrl),
-            Effect.catchTag("QueueDoesNotExist", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-          let requiresOwnershipCheck = queueUrl !== undefined;
-
-          if (queueUrl === undefined) {
-            const observed = yield* sqs
-              .createQueue({
-                QueueName: queueName,
-                ...(identity.fifo ? { Attributes: { FifoQueue: "true" } } : {}),
-                tags: internalTags,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (error) => error._tag === "QueueDeletedRecently",
-                  schedule: Schedule.max([
-                    Schedule.fixed(1000),
-                    Schedule.recurs(30),
-                  ]).pipe(
-                    Schedule.tap(({ attempt }) =>
-                      session.note(
-                        `Queue was deleted recently, retrying... ${attempt}s`,
-                      ),
-                    ),
-                  ),
-                }),
-                Effect.map((result) => ({
-                  queueUrl: result.QueueUrl!,
-                  raced: false,
-                })),
-                Effect.catchTag("QueueNameExists", () =>
-                  sqs.getQueueUrl({ QueueName: queueName }).pipe(
-                    Effect.map((result) => ({
-                      queueUrl: result.QueueUrl!,
-                      raced: true,
-                    })),
-                  ),
-                ),
-              );
-            queueUrl = observed.queueUrl;
-            requiresOwnershipCheck = observed.raced;
+          const existingUrl = yield* getQueueUrl(queueName);
+          const observed =
+            existingUrl !== undefined
+              ? { queueUrl: existingUrl, raced: true }
+              : yield* createQueueShell({
+                  queueName,
+                  attributes: identity.fifo ? { FifoQueue: "true" } : {},
+                  tags: internalTags,
+                  session,
+                });
+          if (observed.raced) {
+            yield* verifyQueueOwnership({
+              id,
+              queueName,
+              queueUrl: observed.queueUrl,
+              fifo: identity.fifo,
+            });
           }
 
-          if (requiresOwnershipCheck) {
-            const [tags, attributes] = yield* Effect.all([
-              sqs
-                .listQueueTags({ QueueUrl: queueUrl })
-                .pipe(Effect.map((result) => result.Tags ?? {})),
-              sqs.getQueueAttributes({
-                QueueUrl: queueUrl,
-                AttributeNames: ["FifoQueue"],
-              }),
-            ]);
-            if (!(yield* hasAlchemyTags(id, tags))) {
-              return yield* new QueuePrecreateConflict({
-                id,
-                queueName,
-                reason:
-                  "an existing queue with that name is not owned by this stack",
-              });
-            }
-            const observedFifo = attributes.Attributes?.FifoQueue === "true";
-            if (observedFifo !== (identity.fifo ?? false)) {
-              return yield* new QueuePrecreateConflict({
-                id,
-                queueName,
-                reason: `the existing queue is ${observedFifo ? "FIFO" : "standard"}, but the desired queue is ${identity.fifo ? "FIFO" : "standard"}`,
-              });
-            }
-          }
-
-          return { queueName, queueUrl, queueArn };
+          return { queueName, queueUrl: observed.queueUrl, queueArn };
         }),
         reconcile: Effect.fn(function* ({
           id,
@@ -608,12 +670,11 @@ export const QueueProvider = () =>
           bindings,
         }) {
           yield* validateEncryption(news);
-          const { accountId, region } = yield* AWSEnvironment.current;
-          const queueName =
-            output?.queueName ?? (yield* createQueueName(id, news));
-          const queueArn =
-            output?.queueArn ??
-            (`arn:aws:sqs:${region}:${accountId}:${queueName}` as const);
+          const identity = output
+            ? output
+            : yield* resolveQueueIdentity(id, news);
+          const queueName = identity.queueName;
+          const queueArn = identity.queueArn;
           const desiredAttributes = createAttributes(news, bindings);
           const internalTags = yield* createInternalTags(id);
 
@@ -623,12 +684,7 @@ export const QueueProvider = () =>
           // deleted out-of-band, downstream API calls fail with
           // `QueueDoesNotExist` and we recreate. This keeps the reconciler
           // convergent regardless of the starting cloud state.
-          let queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
-            Effect.map((r) => r.QueueUrl!),
-            Effect.catchTag("QueueDoesNotExist", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          let queueUrl = yield* getQueueUrl(queueName);
 
           if (queueUrl === undefined) {
             // `createQueue` is idempotent for identical params; with different
@@ -643,40 +699,19 @@ export const QueueProvider = () =>
               if (value === undefined || value === "") continue;
               createAttrs[key] = value;
             }
-            queueUrl = yield* sqs
-              .createQueue({
-                QueueName: queueName,
-                Attributes: createAttrs,
-                tags: { ...internalTags, ...news.tags },
-              })
-              .pipe(
-                Effect.retry({
-                  while: (e) => e._tag === "QueueDeletedRecently",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.tap(({ attempt }) =>
-                      session.note(
-                        `Queue was deleted recently, retrying... ${attempt}s`,
-                      ),
-                    ),
-                  ),
-                }),
-                // A `RedrivePolicy` referencing a just-created dead-letter
-                // queue is transiently rejected with
-                // `InvalidParameterValueException` until that DLQ's ARN is
-                // visible to SQS. It's an eventual-consistency race, not a
-                // genuine validation failure, so retry on a bounded schedule.
-                Effect.retry({
-                  while: (e) => e._tag === "InvalidParameterValueException",
-                  schedule: Schedule.max([
-                    Schedule.fixed(1000),
-                    Schedule.recurs(30),
-                  ]),
-                }),
-                Effect.catchTag("QueueNameExists", () =>
-                  sqs.getQueueUrl({ QueueName: queueName }),
-                ),
-                Effect.map((r) => r.QueueUrl!),
-              );
+            const observed = yield* createQueueShell({
+              queueName,
+              attributes: createAttrs,
+              tags: { ...internalTags, ...news.tags },
+              session,
+              // A `RedrivePolicy` referencing a just-created dead-letter
+              // queue is transiently rejected with
+              // `InvalidParameterValueException` until that DLQ's ARN is
+              // visible to SQS. It's an eventual-consistency race, not a
+              // genuine validation failure, so retry on a bounded schedule.
+              retryInvalidParameter: true,
+            });
+            queueUrl = observed.queueUrl;
           }
 
           // Sync attributes — diff observed cloud state against desired and
