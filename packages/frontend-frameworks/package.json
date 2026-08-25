@@ -40,7 +40,6 @@
     "test:nuxt": "vitest run src/nuxt/test",
     "test:octane": "vitest run src/octane/test",
     "test:react-router": "vitest run src/react-router/test",
-    "test:solidstart": "vitest run src/solidstart/test",
     "test:sveltekit": "vitest run src/sveltekit/test",
     "test:tanstack-start": "vitest run src/tanstack-start/test",
     "test:vite": "vitest run src/vite/test",
@@ -274,18 +273,6 @@
       "bun": "./dist/react-router/aws.js",
       "worker": "./dist/react-router/aws.js",
       "import": "./dist/react-router/aws.js"
-    },
-    "./solidstart": {
-      "types": "./dist/solidstart/index.d.ts",
-      "bun": "./dist/solidstart/index.js",
-      "worker": "./dist/solidstart/index.js",
-      "import": "./dist/solidstart/index.js"
-    },
-    "./solidstart/aws": {
-      "types": "./dist/solidstart/aws.d.ts",
-      "bun": "./dist/solidstart/aws.js",
-      "worker": "./dist/solidstart/aws.js",
-      "import": "./dist/solidstart/aws.js"
     },
     "./sveltekit": {
       "types": "./dist/sveltekit/index.d.ts",

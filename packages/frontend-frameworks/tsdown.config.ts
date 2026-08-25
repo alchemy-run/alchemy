@@ -32,8 +32,6 @@ export default defineConfig([
       "octane/source": "src/octane/source.ts",
       "react-router/index": "src/react-router/index.ts",
       "react-router/aws": "src/react-router/aws.ts",
-      "solidstart/index": "src/solidstart/index.ts",
-      "solidstart/aws": "src/solidstart/aws.ts",
       "tanstack-start/index": "src/tanstack-start/index.ts",
       "tanstack-start/aws": "src/tanstack-start/aws.ts",
       "sveltekit/index": "src/sveltekit/index.ts",

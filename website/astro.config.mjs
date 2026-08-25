@@ -874,10 +874,6 @@ export default defineConfig({
                 },
                 { label: "React SPA", link: "/aws/frontend/vite-spa" },
                 {
-                  label: "SolidStart",
-                  link: "/aws/frontend/solidstart",
-                },
-                {
                   label: "Static sites",
                   link: "/aws/frontend/static-site",
                 },
