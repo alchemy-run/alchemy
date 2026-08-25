@@ -49,6 +49,7 @@ import {
   dockerAvailable,
   fetchJson,
   fetchOk,
+  freePinnedPorts,
   makeScratchProject,
   PollTimeout,
   resetFlociEmulator,
@@ -216,6 +217,7 @@ beforeAll(async () => {
     );
   }
   resetFlociEmulator();
+  freePinnedPorts(Object.values(PORTS));
   const cwd = makeScratchProject(STAGE);
   server = new DevServer({ cwd, stage: STAGE });
 

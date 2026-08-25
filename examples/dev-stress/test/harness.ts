@@ -73,6 +73,31 @@ export const resetFlociEmulator = (): void => {
   }
 };
 
+/**
+ * Free the suite's pinned ports before a run. A KILLED previous run leaves
+ * orphaned workerd / dev-child processes listening on them (they are not
+ * children of the test process, so bun's cleanup never reaches them), and
+ * every `strictPort` worker then fails its first apply. Scoped strictly to
+ * the ports this suite owns.
+ */
+export const freePinnedPorts = (ports: readonly number[]): void => {
+  const pids = new Set<string>();
+  for (const port of ports) {
+    const out = spawnSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+      encoding: "utf8",
+      timeout: 15_000,
+    }).stdout;
+    for (const pid of (out ?? "").trim().split("\n")) {
+      if (pid) pids.add(pid);
+    }
+  }
+  if (pids.size === 0) return;
+  spawnSync("kill", [...pids], { stdio: "ignore", timeout: 15_000 });
+  // Grace, then force anything still holding a port.
+  spawnSync("sleep", ["2"], { stdio: "ignore", timeout: 5_000 });
+  spawnSync("kill", ["-9", ...pids], { stdio: "ignore", timeout: 15_000 });
+};
+
 export const makeScratchProject = (name: string): string => {
   const dir = path.join(EXAMPLE_ROOT, ".stress", name);
   fs.rmSync(dir, { recursive: true, force: true });
