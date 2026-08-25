@@ -8,6 +8,7 @@ import EchoWorker from "./src/EchoWorker.ts";
 import MicrovmWorker from "./src/MicrovmWorker.ts";
 import { PORTS } from "./src/ports.ts";
 import ShellImageLive from "./src/ShellImage.ts";
+import Ec2Box from "./src/Ec2Box.ts";
 import { SandboxLive } from "./src/SandboxContainer.ts";
 import { STACK_NAME } from "./src/stack-config.ts";
 // <<EXTRA_IMPORTS>>
@@ -148,6 +149,12 @@ export default Alchemy.Stack(
       deploymentStabilizationTimeout: "3 minutes",
     });
 
+    // ── AWS EC2: a hosted instance — the fourth floci compute unit. It
+    // runs as a real container in the emulator; edits to its program go
+    // through the ENGINE (re-plan → in-place bundle update → reboot), not
+    // a sidecar hot swap.
+    const ec2Box = yield* Ec2Box;
+
     // <<EXTRA>>
     // <</EXTRA>>
 
@@ -162,6 +169,7 @@ export default Alchemy.Stack(
       microvmUrl: microvmWorker.url,
       ecsServiceArn: ecsService.serviceArn,
       ecsInlineServiceArn: ecsInlineService.serviceArn,
+      ec2Dns: ec2Box.publicDnsName,
       // <<EXTRA_OUTPUTS>>
       // <</EXTRA_OUTPUTS>>
     };

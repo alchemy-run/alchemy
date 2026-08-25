@@ -46,6 +46,33 @@ const SKIP_COPY = new Set([
  * source-controlled tree, and survives a mid-suite failure without leaving
  * the repo dirty.
  */
+/**
+ * Reset the floci emulator to a clean slate before a run. A KILLED previous
+ * run (bun's timeout, Ctrl-C on the test process) never reaches the CLI's
+ * graceful shutdown, so its emulated ECS services stay registered in the
+ * long-lived `alchemy-floci` container — their reconcilers re-spawn task
+ * containers forever and squat the suite's pinned host ports, deadlocking
+ * every subsequent run. The emulator is disposable by design (in-memory
+ * state, local image), so a fresh one per run makes the suite self-healing
+ * regardless of how the previous run died.
+ */
+export const resetFlociEmulator = (): void => {
+  const names = spawnSync(
+    "docker",
+    ["ps", "-aq", "--filter", "name=^(alchemy-floci$|floci-ec2|floci-ecs|floci-microvm)"],
+    { encoding: "utf8", timeout: 30_000 },
+  )
+    .stdout?.trim()
+    .split("\n")
+    .filter(Boolean);
+  if (names && names.length > 0) {
+    spawnSync("docker", ["rm", "-f", ...names], {
+      stdio: "ignore",
+      timeout: 120_000,
+    });
+  }
+};
+
 export const makeScratchProject = (name: string): string => {
   const dir = path.join(EXAMPLE_ROOT, ".stress", name);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -233,6 +260,17 @@ export class DevServer {
   plain(cursor = 0): string {
     // eslint-disable-next-line no-control-regex
     return this.output.slice(cursor).replaceAll(/\x1b\[[0-9;]*m/g, "");
+  }
+
+  /** Extract a plain value for `key` from the stack outputs the CLI printed. */
+  outputValue(key: string): string | undefined {
+    const matches = this.output.match(
+      new RegExp(`${key}:\\s*['\"]?([^\\s'\",]+)`, "g"),
+    );
+    // The newest print wins: outputs are re-printed on every re-apply.
+    return matches
+      ?.at(-1)
+      ?.match(new RegExp(`${key}:\\s*['\"]?([^\\s'\",]+)`))?.[1];
   }
 
   /** Extract a URL for `key` from the stack outputs the CLI printed. */

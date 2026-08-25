@@ -25,6 +25,9 @@ Lambda MicroVM        ◀────────── Worker MicrovmWorker
 ECS Cluster + 2 Services
   EcsService (context build)
   EcsInlineService (inline Dockerfile)
+EC2 Instance (hosted program)
+  StressEc2Box + VPC network
+  (i-….localhost.floci.io:8798)
 Website.StaticSite                Website.StaticSite (build mode)
   (dev-command child)
 ```
@@ -89,28 +92,33 @@ The suite tells them apart by counting `Plan:` renders in the CLI's output
     the Dockerfile itself, an env *prop* (no file event — the engine path),
     and an inline-Dockerfile *prop*. All four must roll the running
     containers.
-11. **Cloudflare Container hot reload** — editing the container's program
+11. **EC2 hot reload** — the hosted instance runs as a real container in
+    the emulator, serves its bundled program through floci's host-routing
+    mux, and a content edit updates it IN PLACE through the engine
+    (re-plan → bundle re-upload → reboot): same instance id, same address,
+    new code.
+12. **Cloudflare Container hot reload** — editing the container's program
     rebuilds the image and restarts the running container; and the
     container reaches a service on the HOST through an env var written as
     `http://localhost:…` (the dev runtime rewrites loopback hosts to
     `host.docker.internal` — the #1334 database shape).
-12. **A replacement** — DynamoDB's partition key is immutable, so changing
+13. **A replacement** — DynamoDB's partition key is immutable, so changing
     it swaps the table under the running Lambda; then swaps it back.
-13. **A second MicroVM image** built, bound to the running Worker, booted,
+14. **A second MicroVM image** built, bound to the running Worker, booted,
     and removed — while the first image keeps working.
-14. **The entire AWS Lambda subsystem** deleted in one edit (Function,
+15. **The entire AWS Lambda subsystem** deleted in one edit (Function,
     bucket, table, queue, event source, and the cross-cloud binding that
     named it) while Cloudflare keeps serving — then restored.
-15. **Binding churn** — a changed binding value, a binding that appears and
+16. **Binding churn** — a changed binding value, a binding that appears and
     disappears, and a `Command.Dev` config change that must restart the
     child (new pid).
 
 **Load and final state**
 
-16. **Rapid fire** — 25 bundler-path saves and 15 stack-path saves in
+17. **Rapid fire** — 25 bundler-path saves and 15 stack-path saves in
     bursts, asserting convergence on the last write and that the watchers
     coalesce (measured: 15 saves in ~1s produce a single re-apply).
-17. **Simultaneous cross-cloud edits**, then a full health re-probe and a
+18. **Simultaneous cross-cloud edits**, then a full health re-probe and a
     clean Ctrl-C shutdown.
 
 Nothing is skipped: Docker is a hard requirement, and a machine without it
@@ -211,5 +219,5 @@ at `.stress/<stage>/dev-stress.log`.
 bun run dev
 ```
 
-`src/ports.ts` pins the local addresses (8790–8794 by default), so the same
-URLs work every time.
+`src/ports.ts` pins the local addresses (8790–8795 by default, plus fixed
+8796–8798 for ECS and EC2), so the same URLs work every time.

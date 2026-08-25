@@ -51,6 +51,7 @@ import {
   fetchOk,
   makeScratchProject,
   PollTimeout,
+  resetFlociEmulator,
   pollUntil,
   waitForJson,
 } from "./harness.ts";
@@ -100,6 +101,10 @@ let server: DevServer;
 let cfSiteUrl: string;
 /** Cursor into the CLI output, advanced past phases that expect errors. */
 let cleanCursor = 0;
+
+/** URL on a floci host-routed address (`*.localhost.floci.io`). */
+const at2 = (host: string, port: number, path: string) =>
+  new URL(path, `http://${host}:${port}`);
 
 const echo = (path: string) => at(PORTS.echo, path);
 const api = (path: string) => at(PORTS.api, path);
@@ -210,6 +215,7 @@ beforeAll(async () => {
         "Start the Docker daemon and re-run.",
     );
   }
+  resetFlociEmulator();
   const cwd = makeScratchProject(STAGE);
   server = new DevServer({ cwd, stage: STAGE });
 
@@ -1048,6 +1054,49 @@ test(
       { tries: 30 },
     );
     cleanCursor = server.mark();
+  },
+  PHASE_TIMEOUT,
+);
+
+test(
+  "EC2 hot reload: the hosted instance serves, and editing its program updates it in place",
+  async () => {
+    // The box's address comes from floci: `i-….localhost.floci.io`
+    // resolves to 127.0.0.1 and the mux publishes the SG app port.
+    const dns = await pollUntil(
+      "ec2Dns in the stack outputs",
+      () => server.outputValue("ec2Dns"),
+      { tries: 240, delayMs: 500, server },
+    );
+    expect(dns).toMatch(/\.localhost\.floci\.io$/);
+    const marker = at2(dns, PORTS.ec2, "/marker");
+
+    // First boot: container start + userData (bundle sync from emulated
+    // S3, runtime install) + the Bun HTTP server binding the app port.
+    await waitForJson<{ marker: string }>(
+      "the EC2 box to serve its hosted program",
+      marker,
+      (body) => body.marker === "ec2-v1",
+      { tries: 240, delayMs: 1_000, server },
+    );
+
+    // The reload path is the ENGINE's: a content edit re-plans, the
+    // provider re-uploads the bundle in place and reboots the instance —
+    // same instance id, same address, new code.
+    const reloadStartedAt = Date.now();
+    server.write("src/ec2/marker.ts", markerModule("EC2_MARKER", "ec2-v2"));
+    await waitForJson<{ marker: string }>(
+      "the EC2 box to serve ec2-v2 after the in-place update",
+      marker,
+      (body) => body.marker === "ec2-v2",
+      { tries: 300, delayMs: 1_000, server },
+    );
+    console.log(
+      `ec2 hosted-program reload -> serving ec2-v2 in ${Date.now() - reloadStartedAt}ms`,
+    );
+    // Same box, same address — the update was in place, not a replacement.
+    expect(server.outputValue("ec2Dns")).toBe(dns);
+    server.assertAlive("ec2 hot reload");
   },
   PHASE_TIMEOUT,
 );

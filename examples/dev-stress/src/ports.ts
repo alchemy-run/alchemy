@@ -39,4 +39,10 @@ export const PORTS = {
   ecs: 8796,
   /** The inline-Dockerfile `EcsInlineService`. */
   ecsInline: 8797,
+  /**
+   * The hosted EC2 instance's app port. Also fixed: floci's host-routing
+   * mux publishes the security-group port LITERALLY, and the suite reaches
+   * the box at `http://<instanceId>.localhost.floci.io:<port>`.
+   */
+  ec2: 8798,
 } as const;
