@@ -50,4 +50,5 @@ export const Waku = (id: string, props: WakuProps = {}) =>
     framework: WAKU_FRAMEWORK_SPECIFIER,
     target: WAKU_NODE_TARGET_SPECIFIER,
     options: props.waku ? { waku: props.waku } : undefined,
+    htmlHandling: "drop-trailing-slash",
   }).pipe(Namespace.push(id));

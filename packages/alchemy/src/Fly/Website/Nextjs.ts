@@ -46,6 +46,6 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
     name: "Next.js",
     framework: NEXTJS_NODE_FRAMEWORK_SPECIFIER,
     target: NEXTJS_NODE_FRAMEWORK_SPECIFIER,
-    install: ["next"],
+    install: ["next", "react", "react-dom"],
     skipClientAssets: true,
   });

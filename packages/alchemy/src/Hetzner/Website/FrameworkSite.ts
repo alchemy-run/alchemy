@@ -150,6 +150,11 @@ export interface FrameworkSiteConfig {
    * from the unit root instead.
    */
   skipClientAssets?: boolean | undefined;
+  /**
+   * Native packages to `bun install` into the unit instead of bundling
+   * (Next.js needs `next` / `react` / `react-dom`).
+   */
+  install?: string[] | undefined;
 }
 
 export interface Website {
@@ -725,6 +730,19 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     if (yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))) {
       extraFiles.push({ source: publicDir, destination: "public" });
     }
+    for (const name of [
+      "next.config.js",
+      "next.config.mjs",
+      "next.config.cjs",
+      "next.config.ts",
+    ] as const) {
+      const configPath = path.join(distDir, name);
+      if (
+        yield* fs.exists(configPath).pipe(Effect.orElseSucceed(() => false))
+      ) {
+        extraFiles.push({ source: configPath, destination: name });
+      }
+    }
   }
 
   const service = yield* Service("Service", {
@@ -736,6 +754,10 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     // `main` is a complete bun/node program (generated static server
     // or the framework `finish` entry), not a Platform class.
     isExternal: true,
+    build:
+      config.install !== undefined && config.install.length > 0
+        ? { install: config.install }
+        : undefined,
   });
 
   if (props.domain !== undefined && props.zone !== undefined) {

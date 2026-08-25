@@ -17,8 +17,8 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * Does **not** use OpenNext (those wrappers are Lambda/workerd).
  *
  * The `.next` output (and `public/` when present) is packed into the
- * unit archive. Hetzner has no `build.install` — `next` is bundled into
- * the serve entry.
+ * unit archive. `next`, `react`, and `react-dom` are installed on the
+ * unit with `bun install` rather than bundled.
  *
  * During `alchemy dev` the site is `next dev` and no cloud resources
  * are declared; `Alchemy.remote()` opts back into the live Service.
@@ -50,4 +50,5 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
     framework: NEXTJS_NODE_FRAMEWORK_SPECIFIER,
     target: NEXTJS_NODE_FRAMEWORK_SPECIFIER,
     skipClientAssets: true,
+    install: ["next", "react", "react-dom"],
   }).pipe(Namespace.push(id));

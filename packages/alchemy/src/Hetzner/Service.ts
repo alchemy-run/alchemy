@@ -18,6 +18,7 @@ import {
   collectBindingState,
   createHetznerHostedSupport,
   createHetznerHostRuntimeContext,
+  type HetznerBuildOptions,
   type HetznerHostRuntimeContext,
 } from "./hosted.ts";
 
@@ -58,9 +59,10 @@ export interface ServiceProps extends PlatformProps {
   env?: Record<string, any>;
   /**
    * Bundler configuration for `main`: rolldown `input`/`output` overrides
-   * plus pure-annotation options (`pure`).
+   * plus pure-annotation options (`pure`) and `install` for packages that
+   * must ship as real `node_modules` (see {@link HetznerBuildOptions}).
    */
-  build?: Bundle.BundleConfig;
+  build?: HetznerBuildOptions;
   /**
    * Extra host directories packed into the unit archive next to the
    * bundled entry (e.g. a website `clientDirectory` at `dist/`). Hashed

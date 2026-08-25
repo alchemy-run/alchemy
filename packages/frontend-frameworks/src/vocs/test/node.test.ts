@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
 import type { BuildOutput } from "../../core/index.ts";
+import { run } from "../../core/test/helpers.ts";
 import { makeNodeTarget, target } from "../node.ts";
 
 const emptyBuild: BuildOutput = {
@@ -23,9 +23,7 @@ describe("makeNodeTarget", () => {
 
   it("drops serverModules in the finishing pass", async () => {
     const node = makeNodeTarget();
-    const output = await Effect.runPromise(
-      node.finish!(emptyBuild, { root: "/project" }),
-    );
+    const output = await run(node.finish!(emptyBuild, { root: "/project" }));
     expect(output.serverModules).toBeUndefined();
     expect(output.clientDirectory).toBe(emptyBuild.clientDirectory);
   });

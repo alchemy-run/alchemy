@@ -638,6 +638,19 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     if (yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))) {
       extraFiles.push({ source: publicDir, dest: "public" });
     }
+    for (const name of [
+      "next.config.js",
+      "next.config.mjs",
+      "next.config.cjs",
+      "next.config.ts",
+    ] as const) {
+      const configPath = path.join(distDir, name);
+      if (
+        yield* fs.exists(configPath).pipe(Effect.orElseSucceed(() => false))
+      ) {
+        extraFiles.push({ source: configPath, dest: name });
+      }
+    }
   }
 
   const app =

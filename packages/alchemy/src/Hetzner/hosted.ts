@@ -7,6 +7,12 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
+import {
+  matchesPackageRoot,
+  normalizeInstallTargets,
+  resolvePackageInstallIdentity,
+  type PackageInstall,
+} from "../Bundle/InstalledPackages.ts";
 import { findCwdForBundle, resolveMainPath } from "../Bundle/TempRoot.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import {
@@ -32,13 +38,21 @@ class VolumeAttachTimeout extends Data.TaggedError(
 
 export const createHetznerHostRuntimeContext = createHostRuntimeContext;
 
+export interface HetznerBuildOptions extends Bundle.BundleConfig {
+  /**
+   * Native or Node-only packages to `bun install` into the unit instead
+   * of bundling them. Same shape as Fly/Lambda `build.install`.
+   */
+  readonly install?: PackageInstall;
+}
+
 export interface HostedProgramProps {
   main: string;
   handler?: string;
   port?: number;
   env?: Record<string, any>;
   isExternal?: boolean;
-  build?: Bundle.BundleConfig;
+  build?: HetznerBuildOptions;
   /**
    * Extra host directories packed into the unit archive (framework
    * client assets, Next.js `.next`, …). Hashed into `code.hash` so
@@ -52,6 +66,22 @@ export interface ExtraFile {
   readonly source: string;
   readonly destination: string;
 }
+
+const matchesConfiguredExternal = (
+  external: rolldown.InputOptions["external"],
+  moduleId: string,
+  parentId: string | undefined,
+  isResolved: boolean,
+): boolean => {
+  if (external === undefined) return false;
+  if (typeof external === "function") {
+    return external(moduleId, parentId, isResolved) === true;
+  }
+  const matchers = Array.isArray(external) ? external : [external];
+  return matchers.some((matcher) =>
+    typeof matcher === "string" ? matcher === moduleId : matcher.test(moduleId),
+  );
+};
 
 /** Normalize a zip destination so it cannot escape the unit root. */
 export const extraFileDestination = (destination: string): string => {
@@ -215,6 +245,10 @@ export const createHetznerHostedSupport = ({
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
 
+    const requested = yield* normalizeInstallTargets(props.build?.install);
+    const installRoots = new Set(Object.keys(requested));
+    const configuredExternal = props.build?.input?.external;
+
     const buildBundle = Effect.fn(function* (
       entry: string,
       plugins?: rolldown.RolldownPluginOption,
@@ -225,11 +259,18 @@ export const createHetznerHostedSupport = ({
           input: entry,
           cwd,
           platform: "node",
-          external: [
-            "bun",
-            "bun:*",
-            ...((props.build?.input?.external as string[] | undefined) ?? []),
-          ],
+          external: (moduleId, parentId, isResolved) => {
+            if (moduleId === "bun" || moduleId.startsWith("bun:")) return true;
+            for (const root of installRoots) {
+              if (matchesPackageRoot(moduleId, root)) return true;
+            }
+            return matchesConfiguredExternal(
+              configuredExternal,
+              moduleId,
+              parentId,
+              isResolved,
+            );
+          },
           resolve: {
             conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...props.build?.input?.resolve,
@@ -258,20 +299,46 @@ export const createHetznerHostedSupport = ({
       typeof content === "string" ? new TextEncoder().encode(content) : content;
     const [entryFile, ...chunkFiles] = bundleOutput.files;
     const extraFiles = yield* collectExtraFiles(props.extraFiles);
-    const archive = yield* zipCode(toBytes(entryFile.content), [
+    const identity =
+      Object.keys(requested).length > 0
+        ? yield* resolvePackageInstallIdentity({ cwd, requested })
+        : undefined;
+    const install =
+      identity !== undefined && Object.keys(identity.resolved).length > 0
+        ? identity.resolved
+        : undefined;
+    const packageJson =
+      install === undefined
+        ? undefined
+        : `${JSON.stringify(
+            { private: true, type: "module", dependencies: install },
+            null,
+            2,
+          )}\n`;
+    const zipExtras = [
       ...chunkFiles.map((file) => ({
         path: file.path,
         content: toBytes(file.content),
       })),
       ...extraFiles,
-    ]);
+      ...(packageJson !== undefined
+        ? [
+            {
+              path: "package.json",
+              content: new TextEncoder().encode(packageJson),
+            },
+          ]
+        : []),
+    ];
+    const archive = yield* zipCode(toBytes(entryFile.content), zipExtras);
     // Extra files are not part of the rolldown bundle hash. Mix their
     // content hashes so a client-asset-only change still updates the unit.
     const extraHash = yield* hashExtraFiles(props.extraFiles);
-    const hash =
-      extraFiles.length === 0
-        ? bundleOutput.hash
-        : yield* sha256Object({ bundle: bundleOutput.hash, extra: extraHash });
+    const hash = yield* sha256Object({
+      bundle: bundleOutput.hash,
+      extra: extraHash,
+      packageJson: packageJson ?? "",
+    });
     return { archive, hash };
   });
 
@@ -447,6 +514,9 @@ WantedBy=multi-user.target
         `set -uo pipefail`,
         `if [ ! -x /root/.bun/bin/bun ]; then echo "bun missing at start" >&2; exit 1; fi`,
         `unzip -o ${JSON.stringify(`${appDir}/bundle.zip`)} -d ${JSON.stringify(appDir)}`,
+        `if [ -f ${JSON.stringify(`${appDir}/package.json`)} ]; then`,
+        `  (cd ${JSON.stringify(appDir)} && bun install --production)`,
+        `fi`,
         `systemctl daemon-reload`,
         `systemctl enable --now ${input.unitName}.service`,
         `systemctl restart ${input.unitName}.service`,
@@ -461,7 +531,7 @@ WantedBy=multi-user.target
     yield* input.ssh.exec(
       [
         `set -uo pipefail`,
-        `for attempt in 1 2 3 4 5 6 7 8 9 10; do`,
+        `for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do`,
         `  if systemctl is-active --quiet ${input.unitName}.service && ${health}; then`,
         `    exit 0`,
         `  fi`,
