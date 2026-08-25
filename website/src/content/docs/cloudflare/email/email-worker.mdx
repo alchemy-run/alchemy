@@ -11,8 +11,9 @@ both halves of the consumer:
 
 - **Runtime**: registers the `email` event listener on the Worker.
 - **Deploy-time**: yields an `Email.Routing` toggle on the zone and
-  an `Email.Rule` whose `actions: [{ type: "worker", … }]` targets
-  this Worker.
+  the routing resource whose `actions: [{ type: "worker", … }]`
+  targets this Worker — `Email.CatchAll` for a catch-all
+  subscription, `Email.Rule` for anything more specific.
 
 Unlike queues there is no batch or stream — the handler runs once
 per message and returns `Effect<void, _, _>`.
@@ -45,9 +46,9 @@ export default Cloudflare.Worker(
 );
 ```
 
-That's it — `alchemy.run.ts` doesn't need any extra `Email.Routing`
-or `Email.Rule` calls; the event source yields them as siblings of
-the Worker.
+That's it — `alchemy.run.ts` doesn't need any extra `Email.Routing`,
+`Email.Rule` or `Email.CatchAll` calls; the event source yields them
+as siblings of the Worker.
 
 ## Provide the runtime layer
 
@@ -103,8 +104,9 @@ yield* Cloudflare.email({ zone: "example.com" }).subscribe((message) =>
 
 ## Match a specific address
 
-By default `email({ zone })` installs a catch-all rule. Pass
-`matchers` to scope the rule to specific recipients:
+By default `email({ zone })` subscribes to the zone's catch-all —
+every envelope no other rule claimed. Pass `matchers` to scope the
+subscription to specific recipients instead:
 
 ```typescript
 yield* Cloudflare.email({
@@ -112,6 +114,17 @@ yield* Cloudflare.email({
   matchers: [{ type: "literal", field: "to", value: "hello@example.com" }],
 }).subscribe((message) => message.forward("ops@example.com"));
 ```
+
+The two forms provision different resources, because Cloudflare
+models them differently. A catch-all is a per-zone **singleton**
+behind its own endpoint (`/rules/catch_all`), so the event source
+yields `Email.CatchAll` and destroy restores whatever the zone had
+before. Specific matchers yield an ordinary `Email.Rule`.
+
+There is exactly one catch-all per zone, so a second Worker
+subscribing to it takes the zone's mail from the first. Use a
+dedicated zone, or `matchers`, if you need more than one inbound
+Worker.
 
 ## Use the raw Cloudflare message
 

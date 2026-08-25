@@ -9,6 +9,7 @@ import * as Namespace from "../../Namespace.ts";
 import * as RemovalPolicy from "../../RemovalPolicy.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { FunctionContext } from "../../Serverless/Function.ts";
+import { CatchAll } from "../Email/CatchAll.ts";
 import { Routing } from "../Email/Routing.ts";
 import { Rule, type Matcher } from "../Email/Rule.ts";
 import type { Reference } from "../Zone/lookup.ts";
@@ -97,45 +98,67 @@ const wrap = (raw: cf.ForwardableEmailMessage): ForwardableEmailMessage => ({
     }),
 });
 
+/**
+ * Whether a subscription's matchers describe the zone's catch-all — either
+ * omitted entirely (the documented default) or a lone `{ type: "all" }`.
+ * Cloudflare models that as a per-zone singleton behind `/rules/catch_all`,
+ * so it maps to `Email.CatchAll` rather than `Email.Rule`.
+ */
+const isCatchAll = (matchers: Matcher[] | undefined): boolean =>
+  matchers === undefined ||
+  (matchers.length === 1 && matchers[0]?.type === "all");
+
 const formatCause = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
 /**
- * Settings for {@link email} — both halves of the consumer in one
- * place. `zone` opts in to the deploy-time setup: an `Email.Routing`
- * toggle on the zone plus an `Email.Rule` whose action routes matched
- * mail to the host Worker. Omit `zone` to manage routing yourself.
+ * Settings for {@link email} — both halves of the consumer in one place.
+ * `zone` opts in to the deploy-time setup: an `Email.Routing` toggle on the
+ * zone plus the routing resource that hands matched mail to the host
+ * Worker. Omit `zone` to manage routing yourself.
+ *
+ * Which routing resource depends on {@link EmailSubscribeProps.matchers}:
+ * a catch-all subscription yields `Email.CatchAll` (Cloudflare models the
+ * zone catch-all as a singleton behind its own endpoint), anything more
+ * specific yields `Email.Rule`.
  */
 export interface EmailSubscribeProps {
   /**
-   * Zone to enable email routing on and attach the routing rule to.
+   * Zone to enable email routing on and attach the routing resource to.
    * Accepts a zone id, a zone name (`example.com`), or a
    * `{ zoneId, name? }` object (a `Cloudflare.Zone` resource works).
    * Required to auto-create routing resources; omit if you're managing
-   * `Email.Routing` and `Email.Rule` yourself.
+   * `Email.Routing` and `Email.Rule`/`Email.CatchAll` yourself.
    */
   zone?: Input<Reference>;
   /**
-   * Matchers for the auto-created `Email.Rule`. Ignored when `zone` is
-   * omitted.
+   * Which envelopes Cloudflare delivers to this Worker. Ignored when
+   * `zone` is omitted.
+   *
+   * Omitting this (or passing a lone `{ type: "all" }`) subscribes to the
+   * zone's catch-all, provisioned as `Email.CatchAll`. There is exactly one
+   * catch-all per zone, so a second Worker subscribing to it takes the
+   * zone's mail from the first.
    *
    * @default [{ type: "all" }]
    */
   matchers?: Matcher[];
   /**
-   * Display name for the auto-created `Email.Rule`.
+   * Display name for the auto-created `Email.Rule` / `Email.CatchAll`.
    *
    * @default the host worker's logical id
    */
   ruleName?: string;
   /**
    * Priority of the auto-created `Email.Rule`. Lower numbers run first.
+   * Ignored for a catch-all subscription — the catch-all is always
+   * evaluated last.
    *
    * @default 0
    */
   priority?: number;
   /**
-   * Whether the auto-created `Email.Rule` is enabled.
+   * Whether the auto-created `Email.Rule` / `Email.CatchAll` is enabled.
    *
    * @default true
    */
@@ -151,9 +174,11 @@ export interface EmailSubscribeProps {
  *   The handler receives a {@link ForwardableEmailMessage} whose
  *   action methods (`forward`, `reply`, `setReject`) return `Effect`s.
  * - **Deploy-time** (when `zone` is set): yields a
- *   `Cloudflare.Email.Routing` toggle on the zone plus a
- *   `Cloudflare.Email.Rule` whose `actions: [{ type: "worker", … }]`
- *   targets this Worker. No manual wiring needed in `alchemy.run.ts`.
+ *   `Cloudflare.Email.Routing` toggle on the zone plus the routing
+ *   resource whose `actions: [{ type: "worker", … }]` targets this
+ *   Worker — `Cloudflare.Email.CatchAll` for a catch-all subscription,
+ *   `Cloudflare.Email.Rule` for anything more specific. No manual
+ *   wiring needed in `alchemy.run.ts`.
  *
  * Requires `EmailEventSourceLive` provided on the Worker's Effect.
  *
@@ -166,7 +191,7 @@ export interface EmailSubscribeProps {
  * @category Workers & Compute
  *
  * @section Subscribing to Inbound Mail
- * @example Catch-all on a zone — auto-creates routing + rule
+ * @example Catch-all on a zone — auto-creates routing + catch-all
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
@@ -234,13 +259,14 @@ export const EmailEventSourceLive = Layer.effect(
         message: ForwardableEmailMessage,
       ) => Effect.Effect<void, E, Req>,
     ) {
-      // Deploy-time: provision the Email.Routing toggle and an Email.Rule
-      // routing matched mail to this Worker. Skipped once running inside
-      // the deployed Worker (the global guard) and when `zone` is omitted
-      // (bring-your-own routing). Namespaced under the host so logical
-      // identity is stable per Worker.
+      // Deploy-time: provision the Email.Routing toggle plus the routing
+      // resource that hands matched mail to this Worker. Skipped once
+      // running inside the deployed Worker (the global guard) and when
+      // `zone` is omitted (bring-your-own routing). Namespaced under the
+      // host so logical identity is stable per Worker.
       if (!globalThis.__ALCHEMY_RUNTIME__ && props.zone !== undefined) {
         const zone = props.zone;
+        const matchers = props.matchers;
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
@@ -251,13 +277,35 @@ export const EmailEventSourceLive = Layer.effect(
               enabled: true,
             }).pipe(RemovalPolicy.retain());
 
+            const action = {
+              type: "worker" as const,
+              value: [host.workerName],
+            };
+
+            // Catch-all is a per-zone SINGLETON living behind
+            // `/rules/catch_all`, not an ordinary rule. Cloudflare surfaces
+            // it in `listRules` but rejects mutating it through the rule
+            // endpoint ("Invalid rule operation"), so creating it as an
+            // `Email.Rule` would produce a row the engine cannot delete.
+            // Route an all-matcher subscription to `Email.CatchAll`
+            // instead — the resource that owns that endpoint.
+            if (isCatchAll(matchers)) {
+              yield* CatchAll("EmailCatchAll", {
+                zone,
+                name: props.ruleName ?? host.LogicalId,
+                enabled: props.enabled ?? true,
+                actions: [action],
+              });
+              return;
+            }
+
             yield* Rule("EmailRule", {
               zone,
               name: props.ruleName ?? host.LogicalId,
               enabled: props.enabled ?? true,
               priority: props.priority ?? 0,
-              matchers: props.matchers ?? [{ type: "all" }],
-              actions: [{ type: "worker", value: [host.workerName] }],
+              matchers: matchers!,
+              actions: [action],
             });
           }),
         );
