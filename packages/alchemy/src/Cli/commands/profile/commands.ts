@@ -1,36 +1,28 @@
+import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Argument from "effect/unstable/cli/Argument";
 import { readFileSync } from "node:fs";
+import { formatElapsed } from "../../Format.ts";
 
-import { AuthError } from "../../../Auth/AuthProvider.ts";
+import { Progress } from "../../../Alchemist/Progress.ts";
+import * as Profiles from "../../../Alchemist/routes/profile.ts";
 import { getEnv } from "../../../Auth/Env.ts";
-import { ProfileStore, type ProfileManifest } from "../../../Auth/Profile.ts";
 import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
 import * as CliKit from "../../../Cli/CliKit/index.ts";
-import {
-  resolveProfileName,
-  resolveProfileSelection,
-} from "../../../Cli/ProfileSelection.ts";
+import { resolveProfileName } from "../../../Auth/Resolve.ts";
 
-import {
-  config,
-  envFile,
-  exitDeclined,
-  failWithHelp,
-  instrumentCommand,
-  profileTui,
-  UserInputError,
-  yes,
-} from "../_shared.ts";
+import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
+import { config, envFile, yes } from "../flags.ts";
+import { instrumentCommand } from "../instrument.ts";
 import {
   deleteProfileFlow,
   editProfileFlow,
-  listEntries,
-  refreshProfileFlow,
+  profileTui,
   renameProfileFlow,
   showProfileFlow,
 } from "./flows.ts";
@@ -96,11 +88,8 @@ const listCommand = Command.make(
   "list",
   { envFile },
   instrumentCommand("profile.list")(
-    Effect.fn(function* ({ envFile }) {
-      const profiles = yield* ProfileStore;
-      const manifest = yield* profiles.readManifest;
-      const activeProfile = yield* resolveProfileName(envFile, undefined);
-      const entries = listEntries(manifest, activeProfile);
+    Effect.fn(function* () {
+      const entries = yield* Profiles.list();
       const cli = yield* CliKit.CliKit;
       if (cli.terminal.input) {
         const { profileListNode } = yield* profileTui;
@@ -129,8 +118,7 @@ const createCommand = Command.make(
     "alchemy.profile": a.name,
   }))(
     Effect.fn(function* ({ name }) {
-      const profiles = yield* ProfileStore;
-      yield* profiles.createProfile(name);
+      yield* Profiles.create({ name });
       yield* CliKit.accessors.output.success(
         `Created profile '${name}'. Run \`alchemy profile edit ${name}\` to connect accounts.`,
       );
@@ -149,7 +137,17 @@ const renameCommand = Command.make(
     }),
   )(
     Effect.fn(function* ({ name, newName }) {
-      yield* renameProfileFlow(name, Option.getOrUndefined(newName));
+      if (Option.isSome(newName)) {
+        yield* Profiles.rename({
+          name,
+          newName: newName.value.trim(),
+        });
+        yield* CliKit.accessors.output.success(
+          `Renamed profile '${name}' to '${newName.value.trim()}'.`,
+        );
+        return;
+      }
+      yield* renameProfileFlow(name, undefined);
     }),
   ),
 ).pipe(
@@ -322,7 +320,42 @@ const editCommand = Command.make(
           values: yield* resolveSetValues(set, envFile),
         };
       }
-      const outcomes = yield* editProfileFlow({
+      if (configureInput !== undefined) {
+        const provider = (add[0] ?? reconfigure[0])!;
+        yield* Profiles.configure({
+          profile: selectedProfile,
+          provider,
+          entrypoint: main,
+          envFile: Option.getOrUndefined(envFile),
+          action: add.length === 1 ? "add" : "reconfigure",
+          method: configureInput.method ?? "",
+          values: Object.fromEntries(
+            Object.entries(configureInput.values).map(([key, value]) => [
+              key,
+              Redacted.make(value),
+            ]),
+          ),
+        });
+        yield* CliKit.accessors.output.success(
+          `${add.length === 1 ? "Added" : "Updated"} '${provider}' in profile '${selectedProfile}'.`,
+        );
+        return;
+      }
+      if (add.length === 0 && reconfigure.length === 0 && remove.length > 0) {
+        for (const provider of remove) {
+          yield* Profiles.removeProvider({
+            profile: selectedProfile,
+            provider,
+            entrypoint: main,
+            envFile: Option.getOrUndefined(envFile),
+          });
+          yield* CliKit.accessors.output.success(
+            `Removed '${provider}' from profile '${selectedProfile}'.`,
+          );
+        }
+        return;
+      }
+      yield* editProfileFlow({
         selectedProfile,
         add,
         reconfigure,
@@ -331,19 +364,6 @@ const editCommand = Command.make(
         main,
         configureInput,
       });
-      // The interactive account menu keeps going past a failed provider so
-      // the rest of the plan still applies; surface the failures in the
-      // exit code once everything has been attempted.
-      const failed = outcomes.filter((o) => o.outcome === "failed");
-      if (failed.length > 0) {
-        return yield* Effect.fail(
-          new AuthError({
-            message: `Failed to configure ${failed
-              .map((o) => `'${o.provider}'`)
-              .join(", ")} (see above).`,
-          }),
-        );
-      }
     }),
   ),
 ).pipe(
@@ -371,12 +391,38 @@ const refreshCommand = Command.make(
       const selectedProfile =
         Option.getOrUndefined(name) ??
         (yield* resolveProfileName(envFile, undefined));
-      yield* refreshProfileFlow({
-        selectedProfile,
+      const refreshStarted = new Map<string, number>();
+      yield* Profiles.refresh({
+        profile: selectedProfile,
         providers,
-        envFile,
-        main,
-      });
+        entrypoint: main,
+        envFile: Option.getOrUndefined(envFile),
+      }).pipe(
+        Effect.provideService(Progress, (event) =>
+          event._tag === "provider.refresh.started"
+            ? Clock.currentTimeMillis.pipe(
+                Effect.tap((now) =>
+                  Effect.sync(() => refreshStarted.set(event.provider, now)),
+                ),
+                Effect.andThen(
+                  CliKit.accessors.output.info(`Refreshing ${event.provider}`),
+                ),
+              )
+            : event._tag === "provider.refresh.completed"
+              ? Clock.currentTimeMillis.pipe(
+                  Effect.flatMap((now) => {
+                    const from = refreshStarted.get(event.provider);
+                    return CliKit.accessors.output.success(
+                      `Refreshed ${event.provider}${from === undefined ? "" : ` (${formatElapsed(now - from)})`}`,
+                    );
+                  }),
+                )
+              : Effect.void,
+        ),
+      );
+      yield* CliKit.accessors.output.success(
+        `Refreshed profile '${selectedProfile}'.`,
+      );
     }),
   ),
 ).pipe(
@@ -389,8 +435,8 @@ const currentCommand = Command.make(
   "current",
   { envFile },
   instrumentCommand("profile.current")(
-    Effect.fn(function* ({ envFile }) {
-      const selected = yield* resolveProfileSelection(envFile, undefined);
+    Effect.fn(function* () {
+      const selected = yield* Profiles.current();
       const source =
         selected.source === "configuration"
           ? "ALCHEMY_PROFILE"

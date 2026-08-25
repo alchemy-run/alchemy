@@ -18,7 +18,6 @@ import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "./Auth/Profile.ts";
-import { Cli } from "./Cli/Cli.ts";
 import { CliKit } from "./Cli/CliKit/CliKit.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
@@ -45,7 +44,6 @@ export type StackServices =
   | ProfileStore
   | ArtifactStore
   | CredentialsStore
-  | Cli
   | CliKit;
 
 export type ProviderServices =
@@ -77,7 +75,6 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   | Scope.Scope
   | AuthProviders
   | AlchemyContext
-  | Cli
   | CliKit
   | ProfileStore
   | CredentialsStore
@@ -316,7 +313,6 @@ const platform = Layer.mergeAll(
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = (overrides?: { dev?: boolean }) =>
   Layer.mergeAll(
-    // CLI.inkCLI(),
     // optional
     overrides?.dev
       ? Layer.provide(

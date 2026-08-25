@@ -7,6 +7,7 @@ import {
 } from "@distilled.cloud/aws/Credentials";
 import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import * as STS from "@distilled.cloud/aws/sts";
+import * as EffectConsole from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -22,13 +23,13 @@ import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import { profileCommandHint } from "../Util/interactive.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeOs from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
   NeedsReauth,
+  reconfigureHint,
   refreshHint,
   type ConfigureField,
   type ConfigureMethod,
@@ -61,6 +62,37 @@ export const DEFAULT_LOCAL_ENDPOINT = `http://localhost:${Floci.DEFAULT_FLOCI_PO
  * those keep the real account from STS / `AWS_ACCOUNT_ID`.
  */
 export const LOCAL_ACCOUNT_ID = "000000000000";
+
+/**
+ * distilled's SSO credential loader `Console.log`s its expired-token
+ * diagnostic in addition to failing with the typed `ExpiredSSOToken`. The
+ * typed error already carries the same message (and the profile UI surfaces
+ * it as a reauth diagnostic), so the raw console write only smears over the
+ * CliKit renderer. Provide this no-op Console on every distilled
+ * `loadProfileCredentials` call so distilled has nowhere to print.
+ */
+const noop = () => {};
+export const silentConsole: EffectConsole.Console = {
+  assert: noop,
+  clear: noop,
+  count: noop,
+  countReset: noop,
+  debug: noop,
+  dir: noop,
+  dirxml: noop,
+  error: noop,
+  group: noop,
+  groupCollapsed: noop,
+  groupEnd: noop,
+  info: noop,
+  log: noop,
+  table: noop,
+  time: noop,
+  timeEnd: noop,
+  timeLog: noop,
+  trace: noop,
+  warn: noop,
+};
 
 /** Manifest-entry schema for {@link AwsAuthConfig}. */
 export const AwsAuthConfigSchema = Schema.Union([
@@ -449,7 +481,7 @@ export const AwsAuth = AuthProviderLayer<
             if (profile == null) {
               return yield* Effect.fail(
                 new AuthError({
-                  message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then run \`${yield* profileCommandHint("alchemy profile refresh")}\` to log in.`,
+                  message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then log in. ${refreshHint(AWS_AUTH_PROVIDER_NAME, profileName)}`,
                 }),
               );
             }
@@ -484,7 +516,7 @@ export const AwsAuth = AuthProviderLayer<
 
     const resolveCredentials = (profileName: string, config: AwsAuthConfig) =>
       Effect.gen(function* () {
-        const reauth = yield* refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
+        const reauth = refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
         return yield* Match.value(config)
           .pipe(
             Match.when(
@@ -609,12 +641,16 @@ export const AwsAuth = AuthProviderLayer<
                   .loadProfile(config.ssoProfile)
                   .pipe(Effect.catch(() => Effect.succeed(undefined)));
                 if (profile?.sso_account_id == null) {
+                  const reconfigure = reconfigureHint(
+                    AWS_AUTH_PROVIDER_NAME,
+                    profileName,
+                  );
                   return yield* Effect.fail(
                     new AuthError({
                       message:
                         profile == null
-                          ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`, or run \`${yield* profileCommandHint("alchemy profile edit --reconfigure AWS")}\`.`
-                          : `AWS SSO profile '${config.ssoProfile}' has no sso_account_id in ~/.aws/config. Add it, or run \`${yield* profileCommandHint("alchemy profile edit --reconfigure AWS")}\`.`,
+                          ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`. ${reconfigure}`
+                          : `AWS SSO profile '${config.ssoProfile}' has no sso_account_id in ~/.aws/config. Add it. ${reconfigure}`,
                     }),
                   );
                 }
@@ -640,6 +676,10 @@ export const AwsAuth = AuthProviderLayer<
                   credentials: auth
                     .loadProfileCredentials(config.ssoProfile)
                     .pipe(
+                      Effect.provideService(
+                        EffectConsole.Console,
+                        silentConsole,
+                      ),
                       Effect.mapError((error) => {
                         if (error._tag === "Alchemy::AWS::ExpiredSSOToken") {
                           return new ExpiredSSOToken({
@@ -709,7 +749,7 @@ export const AwsAuth = AuthProviderLayer<
           } satisfies ProviderDetails;
         }
         const creds = yield* resolveCredentials(profileName, config);
-        const reauth = yield* refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
+        const reauth = refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
         // Resolve the live credentials. An expired/invalid SSO token only
         // surfaces here (the inner effect is lazy), so convert those tags
         // into a typed NeedsReauth instead of a generic error line.

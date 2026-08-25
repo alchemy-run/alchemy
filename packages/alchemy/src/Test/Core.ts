@@ -21,7 +21,9 @@ import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileStoreLive, withProfileOverride } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { withProfileOverride } from "../Auth/Resolve.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -319,7 +321,11 @@ const platformLayer = () =>
     Layer.provide(CredentialsStoreLive, PlatformServices),
   );
 
-const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
+const alchemyLayer = Layer.mergeAll(
+  LoggingCli,
+  CliKit.layer({ input: false }),
+  AlchemyContextLive,
+);
 
 /**
  * Build the per-test runtime and return a self-contained Effect.

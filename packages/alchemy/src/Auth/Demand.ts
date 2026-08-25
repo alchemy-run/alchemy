@@ -23,6 +23,8 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { BindingNode, Plan } from "../Plan.ts";
 import { profileCommandHint } from "../Util/interactive.ts";
 import { AuthProviders } from "./AuthProvider.ts";
@@ -120,6 +122,16 @@ export const credentialsRequired = (
     });
   });
 
+/**
+ * The slice of binding data the demand scan cares about: local runtimes
+ * mark cloud-proxied bindings with a truthy `devRemote` entry.
+ */
+const RemoteBindingData = Schema.Struct({
+  devRemote: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+});
+
+const decodeRemoteBindingData = Schema.decodeUnknownResult(RemoteBindingData);
+
 const bindingDemandsRemote = (
   bindings: readonly BindingNode[] | undefined,
 ): boolean =>
@@ -127,16 +139,12 @@ const bindingDemandsRemote = (
     // A binding being REMOVED needs no runtime proxy — the restarted
     // local instance simply no longer carries it.
     if (binding.action === "delete") return false;
-    const data = binding.data as
-      | { devRemote?: Record<string, boolean> }
-      | null
-      | undefined;
+    const data = decodeRemoteBindingData(binding.data);
     return (
-      data != null &&
-      typeof data === "object" &&
-      data.devRemote != null &&
-      typeof data.devRemote === "object" &&
-      Object.values(data.devRemote).some((remote) => remote === true)
+      Result.isSuccess(data) &&
+      Object.values(data.success.devRemote ?? {}).some(
+        (remote) => remote === true,
+      )
     );
   });
 

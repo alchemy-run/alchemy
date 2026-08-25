@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as CredentialsCache from "../Auth/CredentialsCache.ts";
-import { resolveProviderConfig } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   PLANETSCALE_AUTH_PROVIDER_NAME,
   type PlanetscaleAuthConfig,
@@ -47,9 +47,9 @@ export const fromToken = (input: {
     Credentials,
     Effect.succeed({
       tokenId:
-        typeof input.token === "string"
-          ? Redacted.make(input.token)
-          : input.token,
+        typeof input.tokenId === "string"
+          ? Redacted.make(input.tokenId)
+          : input.tokenId,
       token:
         typeof input.token === "string"
           ? Redacted.make(input.token)

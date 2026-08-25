@@ -23,6 +23,7 @@ import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
 import { RandomProvider } from "../../Random.ts";
 import * as Alchemy from "../../Stack.ts";
+import { Progress } from "../../Report.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
   checkHttpStateStoreAuth,
@@ -86,7 +87,7 @@ export const state = () =>
               isCI,
               force: false,
             }),
-          );
+          ).pipe(withStateBootstrapEvents(scriptName));
         }
 
         const ensureLatest = ({
@@ -105,6 +106,11 @@ export const state = () =>
                 autoUpdateStateStore ||
                 (yield* CliKit.accessors.prompt.confirm({
                   message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
+                  // Deploying is the constructive happy path, not destructive
+                  // — keep default-yes despite the prompt-wide default-no.
+                  initialValue: true,
+                  confirmLabel: "Deploy",
+                  cancelLabel: "Cancel",
                 }));
               if (shouldDeploy) {
                 return yield* bootstrap({
@@ -138,7 +144,7 @@ export const state = () =>
                   return yield* makeCloudflareStateStore(stateStoreOptions);
                 }),
               );
-            });
+            }).pipe(withStateBootstrapEvents(scriptName));
 
             if (autoUpdateStateStore) {
               // `--yes`: upgrade automatically (also unblocks CI).
@@ -157,6 +163,10 @@ export const state = () =>
                 message:
                   `Cloudflare State Store '${scriptName}' is out of date ` +
                   `(expected v${expected}, observed v${observed ?? "unknown"})`,
+                // Upgrading is the constructive happy path — default-yes.
+                initialValue: true,
+                confirmLabel: "Upgrade",
+                cancelLabel: "Cancel",
               });
               if (shouldDeploy) {
                 return yield* upgrade;
@@ -229,6 +239,8 @@ export const state = () =>
           return yield* confirm({
             message:
               "Cloudflare State Store not found. Do you want to deploy it?",
+            // Deploying is the constructive happy path — default-yes.
+            initialValue: true,
           }).pipe(
             Effect.flatMap((shouldDeploy) =>
               shouldDeploy
@@ -262,102 +274,122 @@ export interface BootstrapOptions {
   profile?: string;
 }
 
-export const bootstrap = (options: BootstrapOptions = {}) =>
-  Effect.gen(function* () {
-    const prompt = yield* CliKit.CliKit;
-    const isCI = yield* CI;
-    const profileName = options.profile ?? (yield* currentProfileName);
-    const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
-    const force = options.force ?? false;
-    const localStage = `${profileName}_${scriptName}`;
-    yield* Effect.annotateCurrentSpan({
-      "alchemy.state_store.script_name": scriptName,
-      "alchemy.state_store.profile": profileName,
-      "alchemy.state_store.force": force,
-      "alchemy.state_store.ci": isCI,
+/**
+ * Report `state.bootstrap.*` progress events around a state-store deploy or
+ * upgrade. Bootstrap runs lazily inside the plan's "loading state" phase,
+ * can take many seconds (it deploys a worker), and would otherwise be
+ * invisible to non-interactive renderers and traces — the CliKit task only
+ * paints the local terminal.
+ */
+const withStateBootstrapEvents =
+  (store: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.gen(function* () {
+      const report = yield* Progress;
+      yield* report({ _tag: "state.bootstrap.started", store });
+      const result = yield* effect;
+      yield* report({ _tag: "state.bootstrap.completed", store });
+      return result;
     });
-    yield* annotateAccountHash();
 
-    if (yield* hasLocalStack(localStage)) {
-      // if there's a local stack still, we can assume we did not finish hoisting it, so finish that
-      // resume deployment
-      return yield* prompt.task(
-        {
-          label: `Resuming Cloudflare State Store '${scriptName}' deployment`,
-        },
-        deployWithLocalState({
-          scriptName,
-          profileName,
-          isCI,
-          force,
-        }),
-      );
-    }
-    const { accountId } =
-      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-    if (yield* isStateStoreServing(accountId)) {
-      // this is a regular update, let's check if it needs an update and refresh credentials
-      if (!force) {
-        yield* CliKit.accessors.output.info(
-          `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
-            `Use --force to redeploy.`,
-        );
-      }
-      const credentials = yield* loginWithCloudflare(
-        profileName,
-        // force refresh during
-        true,
-      );
-      const { url, authToken } = credentials;
-      if (!isCI) {
-        // we don't write credentials in CI because the file system is ephemeral
-        const store = yield* CredentialsStore;
-        yield* store.write(
-          profileName,
-          CREDENTIALS_FILE,
-          StoredStateStoreCredentials,
-          credentials,
-        );
-      }
-      const { matches, expected, observed } =
-        yield* checkStateStoreVersion(url);
-      const httpState = yield* makeCloudflareStateStore({ url, authToken });
-      if (!matches || force) {
+export const bootstrap = (options: BootstrapOptions = {}) =>
+  withStateBootstrapEvents(options.workerName ?? STATE_STORE_SCRIPT_NAME)(
+    Effect.gen(function* () {
+      const prompt = yield* CliKit.CliKit;
+      const isCI = yield* CI;
+      const profileName = options.profile ?? (yield* currentProfileName);
+      const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+      const force = options.force ?? false;
+      const localStage = `${profileName}_${scriptName}`;
+      yield* Effect.annotateCurrentSpan({
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.profile": profileName,
+        "alchemy.state_store.force": force,
+        "alchemy.state_store.ci": isCI,
+      });
+      yield* annotateAccountHash();
+
+      if (yield* hasLocalStack(localStage)) {
+        // if there's a local stack still, we can assume we did not finish hoisting it, so finish that
+        // resume deployment
         return yield* prompt.task(
           {
-            label: `${matches ? "Redeploying" : "Updating"} Cloudflare State Store '${scriptName}'`,
-            detail: matches
-              ? "forced"
-              : `v${observed ?? "unknown"} → v${expected}`,
+            label: `Resuming Cloudflare State Store '${scriptName}' deployment`,
           },
-          deployStateStore({
-            stage: scriptName,
-            state: httpState,
+          deployWithLocalState({
+            scriptName,
+            profileName,
+            isCI,
             force,
-          }).pipe(Effect.flatMap(makeCloudflareStateStore)),
+          }),
         );
-      } else {
-        return httpState;
       }
-    } else {
-      return yield* prompt.task(
-        { label: `Deploying Cloudflare State Store '${scriptName}'` },
-        deployWithLocalState({
-          scriptName,
+      const { accountId } =
+        yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+      if (yield* isStateStoreServing(accountId)) {
+        // this is a regular update, let's check if it needs an update and refresh credentials
+        if (!force) {
+          yield* CliKit.accessors.output.info(
+            `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
+              `Use --force to redeploy.`,
+          );
+        }
+        const credentials = yield* loginWithCloudflare(
           profileName,
-          isCI,
-          force,
-        }),
-      );
-    }
-  }).pipe(
-    Effect.withSpan("state_store.bootstrap", {
-      attributes: {
-        "alchemy.state_store.op": "bootstrap",
-        "alchemy.state_store.script_name":
-          options.workerName ?? STATE_STORE_SCRIPT_NAME,
-      },
-    }),
+          // force refresh during
+          true,
+        );
+        const { url, authToken } = credentials;
+        if (!isCI) {
+          // we don't write credentials in CI because the file system is ephemeral
+          const store = yield* CredentialsStore;
+          yield* store.write(
+            profileName,
+            CREDENTIALS_FILE,
+            StoredStateStoreCredentials,
+            credentials,
+          );
+        }
+        const { matches, expected, observed } =
+          yield* checkStateStoreVersion(url);
+        const httpState = yield* makeCloudflareStateStore({ url, authToken });
+        if (!matches || force) {
+          return yield* prompt.task(
+            {
+              label: `${matches ? "Redeploying" : "Updating"} Cloudflare State Store '${scriptName}'`,
+              detail: matches
+                ? "forced"
+                : `v${observed ?? "unknown"} → v${expected}`,
+            },
+            deployStateStore({
+              stage: scriptName,
+              state: httpState,
+              force,
+            }).pipe(Effect.flatMap(makeCloudflareStateStore)),
+          );
+        } else {
+          return httpState;
+        }
+      } else {
+        return yield* prompt.task(
+          { label: `Deploying Cloudflare State Store '${scriptName}'` },
+          deployWithLocalState({
+            scriptName,
+            profileName,
+            isCI,
+            force,
+          }),
+        );
+      }
+    }).pipe(
+      Effect.withSpan("state_store.bootstrap", {
+        attributes: {
+          "alchemy.state_store.op": "bootstrap",
+          "alchemy.state_store.script_name":
+            options.workerName ?? STATE_STORE_SCRIPT_NAME,
+        },
+      }),
+    ),
   );
 
 export interface TeardownOptions {

@@ -4,8 +4,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { profileCommandHint } from "../Util/interactive.ts";
+
 import * as Semaphore from "effect/Semaphore";
+import { UserFacingError } from "../UserFacingError.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
 
 /**
@@ -35,7 +36,9 @@ const interactiveMutex = Semaphore.makeUnsafe(1);
 export class AuthError extends Schema.TaggedError<AuthError>()("AuthError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
-}) {}
+}) {
+  readonly [UserFacingError] = true;
+}
 
 /**
  * Stored credentials exist (or are expected) but cannot be used until the
@@ -53,20 +56,27 @@ export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()(
     message: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   },
-) {}
+) {
+  readonly [UserFacingError] = true;
+}
 
 /**
- * Standard CLI hint appended to stored-credential errors ("credentials not
- * found", "refresh failed", ...). Centralized so the command phrasing lives
- * in one place when the CLI surface changes.
+ * Standard remediation hint appended to stored-credential errors
+ * ("credentials not found", "refresh failed", ...). Deliberately generic —
+ * the explicit command is correct from any surface, including inside the
+ * profile dashboard (where `r` is merely the shortcut for it). Centralized
+ * so the phrasing lives in one place; surface-aware wording can layer on
+ * top later without touching call sites.
  */
-export const refreshHint = (provider: string, profileName: string) =>
-  Effect.map(
-    profileCommandHint(
-      `alchemy profile refresh ${profileName} --provider ${provider}`,
-    ),
-    (command) => `Run \`${command}\`.`,
-  );
+export const refreshHint = (provider: string, profileName: string): string =>
+  `Run \`alchemy profile refresh ${profileName} --provider ${provider}\`.`;
+
+/** {@link refreshHint}'s sibling for reconfiguration. */
+export const reconfigureHint = (
+  provider: string,
+  profileName: string,
+): string =>
+  `Run \`alchemy profile edit ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
 export class AuthProviders extends Context.Service<
   AuthProviders,
@@ -196,11 +206,7 @@ export interface ConfigureMethod {
 export interface AuthProviderImpl<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
-  ConfigureReq = never,
-  LoginReq = never,
-  LogoutReq = never,
-  DetailsReq = never,
-  ReadReq = never,
+  R = never,
 > {
   /**
    * Schema for the provider's manifest entry ({@link Config}). Stored
@@ -214,7 +220,7 @@ export interface AuthProviderImpl<
   configure(
     profileName: string,
     currentConfig?: Config,
-  ): Effect.Effect<Config, AuthError, ConfigureReq>;
+  ): Effect.Effect<Config, AuthError, R>;
 
   /**
    * Flag-driven configuration for scripts and agents: validated `--set`
@@ -227,7 +233,7 @@ export interface AuthProviderImpl<
       readonly method: string;
       readonly values: Record<string, string>;
     },
-  ): Effect.Effect<Config, AuthError, ConfigureReq>;
+  ): Effect.Effect<Config, AuthError, R>;
 
   /**
    * The methods {@link configureWith} accepts and their fields. Required
@@ -236,15 +242,12 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
-  login(
-    profileName: string,
-    config: Config,
-  ): Effect.Effect<void, AuthError, LoginReq>;
+  login(profileName: string, config: Config): Effect.Effect<void, AuthError, R>;
 
   logout(
     profileName: string,
     config: Config,
-  ): Effect.Effect<void, AuthError, LogoutReq>;
+  ): Effect.Effect<void, AuthError, R>;
 
   /**
    * Structured credential details for display. Fails with
@@ -255,18 +258,18 @@ export interface AuthProviderImpl<
   details(
     profileName: string,
     config: Config,
-  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, DetailsReq>;
+  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, R>;
 
   read(
     profileName: string,
     config: Config,
-  ): Effect.Effect<Credentials, AuthError | NeedsReauth, ReadReq>;
+  ): Effect.Effect<Credentials, AuthError | NeedsReauth, R>;
 
   /**
    * Resolve credentials directly from the process environment for CI.
    * This never creates, selects, or mutates an Alchemy profile.
    */
-  readonly readEnvironment?: Effect.Effect<Credentials, AuthError, ReadReq>;
+  readonly readEnvironment?: Effect.Effect<Credentials, AuthError, R>;
 
   /**
    * The environment variables {@link readEnvironment} consumes. Required
@@ -280,15 +283,7 @@ export interface AuthProviderImpl<
 export interface AuthProvider<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
-> extends AuthProviderImpl<
-  Config,
-  Credentials,
-  never,
-  never,
-  never,
-  never,
-  never
-> {
+> extends AuthProviderImpl<Config, Credentials> {
   readonly kind: "AuthProvider";
   readonly name: string;
   /**
@@ -309,51 +304,17 @@ export interface AuthProvider<
 
 export const AuthProvider =
   <Config extends { method: string }, Credentials>() =>
-  <
-    ImplReq = never,
-    ConfigureReq = never,
-    LoginReq = never,
-    LogoutReq = never,
-    DetailsReq = never,
-    ReadReq = never,
-  >(
+  <R = never, ImplReq = never>(
     name: string,
     impl:
-      | AuthProviderImpl<
-          Config,
-          Credentials,
-          ConfigureReq,
-          LoginReq,
-          LogoutReq,
-          DetailsReq,
-          ReadReq
-        >
-      | Effect.Effect<
-          AuthProviderImpl<
-            Config,
-            Credentials,
-            ConfigureReq,
-            LoginReq,
-            LogoutReq,
-            DetailsReq,
-            ReadReq
-          >,
-          never,
-          ImplReq
-        >,
+      | AuthProviderImpl<Config, Credentials, R>
+      | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
   ) =>
     Effect.gen(function* () {
       // FileSystem/Path back the cross-process credentials lock that wraps
       // `logout`/`read` below, so capture them with the impl's own services.
       const ctx = yield* Effect.context<
-        | FileSystem.FileSystem
-        | Path.Path
-        | ImplReq
-        | ConfigureReq
-        | LoginReq
-        | LogoutReq
-        | DetailsReq
-        | ReadReq
+        FileSystem.FileSystem | Path.Path | R | ImplReq
       >();
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl)
@@ -446,9 +407,6 @@ export const AuthProvider =
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
           Effect.gen(function* () {
-            const command = yield* profileCommandHint(
-              `alchemy profile edit ${profileName} --reconfigure ${name}`,
-            );
             return yield* Schema.decodeUnknownEffect(service.configSchema)(
               config,
             ).pipe(
@@ -458,7 +416,7 @@ export const AuthProvider =
                     message:
                       `Stored ${name} configuration in profile '${profileName}' is not valid ` +
                       `for this version of alchemy (method '${config.method}'). ` +
-                      `Run \`${command}\` to fix it.`,
+                      `${reconfigureHint(name, profileName)}`,
                     cause,
                   }),
               ),
@@ -477,48 +435,14 @@ export const AuthProvider =
  */
 export const AuthProviderLayer =
   <Config extends { method: string }, Credentials>() =>
-  <
-    ImplReq = never,
-    ConfigureReq = never,
-    LoginReq = never,
-    LogoutReq = never,
-    DetailsReq = never,
-    ReadReq = never,
-  >(
+  <R = never, ImplReq = never>(
     name: string,
     impl:
-      | AuthProviderImpl<
-          Config,
-          Credentials,
-          ConfigureReq,
-          LoginReq,
-          LogoutReq,
-          DetailsReq,
-          ReadReq
-        >
-      | Effect.Effect<
-          AuthProviderImpl<
-            Config,
-            Credentials,
-            ConfigureReq,
-            LoginReq,
-            LogoutReq,
-            DetailsReq,
-            ReadReq
-          >,
-          never,
-          ImplReq
-        >,
+      | AuthProviderImpl<Config, Credentials, R>
+      | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
   ) =>
     Layer.effectDiscard(
-      AuthProvider<Config, Credentials>()<
-        ImplReq,
-        ConfigureReq,
-        LoginReq,
-        LogoutReq,
-        DetailsReq,
-        ReadReq
-      >(name, impl),
+      AuthProvider<Config, Credentials>()<R, ImplReq>(name, impl),
     );
 
 /**

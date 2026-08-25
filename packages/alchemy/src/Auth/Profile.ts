@@ -1,5 +1,4 @@
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,17 +6,13 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { PlatformError } from "effect/PlatformError";
+import { UserFacingError } from "../UserFacingError.ts";
 import * as Path from "effect/Path";
 import crypto from "node:crypto";
 import path from "pathe";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { profileCommandHint } from "../Util/interactive.ts";
-import * as Console from "effect/Console";
-import {
-  AuthError,
-  getAuthProvider,
-  presentEnvironment,
-} from "./AuthProvider.ts";
+import { AuthError } from "./AuthProvider.ts";
 import type { AuthProvider } from "./AuthProvider.ts";
 import { withLock, withProfileCredentialsLock } from "./Lock.ts";
 import { configFilePath, profileCredentialsDirPath } from "./Paths.ts";
@@ -120,7 +115,9 @@ export class ProfileError extends Schema.TaggedError<ProfileError>()(
     message: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   },
-) {}
+) {
+  readonly [UserFacingError] = true;
+}
 
 /** A registry-only layer reached a provider with no stored configuration. */
 export class MissingProviderConfig extends Schema.TaggedError<MissingProviderConfig>()(
@@ -686,125 +683,3 @@ export const currentProfileName: Effect.Effect<
 > = ProfileStore.use((store) => store.current).pipe(
   Effect.map((selection) => selection.name),
 );
-
-/**
- * The shared preamble of every per-cloud `fromAuthProvider` /
- * `fromEnvironment` layer: look up the provider's {@link AuthProvider} in
- * the registry and return its credential resolver. CI uses the provider's
- * environment resolver without touching profiles; other environments resolve
- * the current profile and load (or interactively configure) its stored config.
- */
-export const resolveProviderConfig = <
-  C extends { method: string } = any,
-  Credentials = any,
->(
-  providerName: string,
-) =>
-  Effect.gen(function* () {
-    const auth = yield* getAuthProvider<C, Credentials>(providerName);
-    const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    if (ci) {
-      if (auth.readEnvironment === undefined) {
-        return yield* Effect.fail(
-          new AuthError({
-            message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
-          }),
-        );
-      }
-      return {
-        auth,
-        profileName: undefined,
-        config: undefined,
-        resolve: auth.readEnvironment,
-        source: "environment" as const,
-      };
-    }
-    const profile = yield* ProfileStore;
-    // Outside CI, explicitly exported provider variables beat an
-    // *implicitly* selected profile: `CLOUDFLARE_API_TOKEN` in the current
-    // shell is a more direct instruction than the implicit `default`. Selecting
-    // a profile explicitly (`--profile` or `$ALCHEMY_PROFILE`) restores the
-    // profile's authority and the variables are ignored. Detection is on
-    // `process.env` only — values that exist solely in an `--env-file` are
-    // CI configuration, not an explicit local override.
-    const configuredProfile = yield* Config.option(ALCHEMY_PROFILE).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProfileError({
-            message: "Could not resolve ALCHEMY_PROFILE.",
-            cause,
-          }),
-      ),
-    );
-    if (
-      Option.isNone(configuredProfile) &&
-      auth.readEnvironment !== undefined
-    ) {
-      const used = yield* Effect.sync(() =>
-        presentEnvironment(auth.environment, process.env),
-      );
-      if (used !== undefined) {
-        yield* warnEnvironmentCredentials(providerName, used);
-        return {
-          auth,
-          profileName: undefined,
-          config: undefined,
-          resolve: auth.readEnvironment,
-          source: "environment" as const,
-        };
-      }
-    }
-    const selection = yield* profile.current;
-    const profileName = selection.name;
-    const config = yield* profile.loadProviderConfig(auth, profileName);
-    return {
-      auth,
-      profileName,
-      config,
-      resolve: auth.read(profileName, config),
-      source: "profile" as const,
-    };
-  });
-
-/**
- * Warn that environment variables are
- * being used instead of the selected profile, naming the exact keys so the
- * user can tell which credentials won. Suppressed in registry-only builds
- * (`alchemy profile show`/`edit`), which resolve providers for display.
- */
-const warnEnvironmentCredentials = (
-  provider: string,
-  used: ReadonlyArray<string>,
-) =>
-  Effect.gen(function* () {
-    if (yield* SuppressMissingProviderConfig) return;
-    yield* Console.warn(
-      `${provider}: using credentials from environment variables (${used.join(", ")}) — ` +
-        `the '${DEFAULT_PROFILE_NAME}' profile was not used. Pass --profile <name> (or unset ` +
-        "the variables) to use stored profile credentials.",
-    );
-  });
-
-/**
- * Returns a `ConfigProvider` that overrides `ALCHEMY_PROFILE` with the
- * given `profile` (when explicitly passed via the CLI `--profile` flag),
- * falling through to `base` for everything else.
- *
- * Use this to let the CLI's `--profile <name>` win over `$ALCHEMY_PROFILE`
- * without disturbing other config lookups.
- */
-export const withProfileOverride = (
-  base: ConfigProvider.ConfigProvider,
-  profile: string | undefined,
-): ConfigProvider.ConfigProvider => {
-  if (profile === undefined) return base;
-  const overrides: Record<string, string> = { ALCHEMY_PROFILE: profile };
-  const overrideProvider = ConfigProvider.make((path) =>
-    Effect.succeed(
-      path.length === 1 && typeof path[0] === "string" && path[0] in overrides
-        ? ConfigProvider.makeValue(overrides[path[0]]!)
-        : undefined,
-    ),
-  );
-  return ConfigProvider.orElse(base)(overrideProvider);
-};

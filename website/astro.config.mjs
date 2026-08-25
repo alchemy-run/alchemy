@@ -572,6 +572,7 @@ export default defineConfig({
                 { label: "deploy", link: "/cli/deploy" },
                 { label: "plan", link: "/cli/plan" },
                 { label: "destroy", link: "/cli/destroy" },
+                { label: "drift", link: "/cli/drift" },
                 { label: "nuke", link: "/cli/nuke" },
                 {
                   label: "Adopting Resources",
@@ -583,7 +584,6 @@ export default defineConfig({
               label: "Develop",
               items: [
                 { label: "dev", link: "/cli/dev" },
-                { label: "tail", link: "/cli/tail" },
                 { label: "logs", link: "/cli/logs" },
               ],
             },

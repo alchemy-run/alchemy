@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 import { detectCapabilities } from "@alchemy.run/sigil/capabilities";
 import { isNonInteractive } from "../../Util/interactive.ts";
 import { CliKit } from "./CliKit.ts";
-import type { CliKitCapabilities, CliKitOptions } from "./types.ts";
+import type { CliKitCapabilities, CliKitOptions } from "../components/types.ts";
 
 const resolveCapabilities = (options: CliKitOptions): CliKitCapabilities => {
   const stdout = options.stdout ?? process.stdout;
@@ -27,8 +27,11 @@ const resolveCapabilities = (options: CliKitOptions): CliKitCapabilities => {
 // bun and hand one caller a partially-evaluated namespace, which throws a
 // TDZ ReferenceError on `makeRuntime`; funneling every build through a
 // single import() sidesteps the race.
-let sigilRuntime: Promise<typeof import("./SigilRuntime.tsx")> | undefined;
-const loadSigilRuntime = () => (sigilRuntime ??= import("./SigilRuntime.tsx"));
+let sigilRuntime:
+  | Promise<typeof import("../components/view/Runtime.tsx")>
+  | undefined;
+const loadSigilRuntime = () =>
+  (sigilRuntime ??= import("../components/view/Runtime.tsx"));
 
 /** Provides one terminal runtime for the enclosing scope. */
 export const layer = (options: CliKitOptions = {}) =>

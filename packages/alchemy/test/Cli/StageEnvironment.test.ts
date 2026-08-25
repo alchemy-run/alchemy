@@ -1,4 +1,4 @@
-import { stage } from "@/Cli/commands/_shared.ts";
+import { stage } from "@/Cli/commands/flags.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";

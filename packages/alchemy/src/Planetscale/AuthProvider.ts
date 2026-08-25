@@ -384,10 +384,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       config: PlanetscaleAuthConfig,
     ) =>
       Effect.gen(function* () {
-        const reauth = yield* refreshHint(
-          PLANETSCALE_AUTH_PROVIDER_NAME,
-          profileName,
-        );
+        const reauth = refreshHint(PLANETSCALE_AUTH_PROVIDER_NAME, profileName);
         return yield* Match.value(config).pipe(
           Match.when({ method: "stored" }, () =>
             store

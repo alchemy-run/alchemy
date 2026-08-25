@@ -9,8 +9,9 @@ import { fileURLToPath } from "node:url";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { transformTypesFlags } from "../../Util/Node.ts";
-import { envFile, force, profile, script, stage } from "./_shared.ts";
-import { ExecStackOptions } from "./deploy.ts";
+import { DevOptions } from "../DevOptions.ts";
+import { config, envFile, force, profile, stage } from "./flags.ts";
+import { suppressInterruptMessages } from "./errors.ts";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -28,19 +29,18 @@ export const devCommand = Command.make(
   "dev",
   {
     force,
-    main: script,
+    main: config,
     envFile,
     stage,
     profile,
   },
   Effect.fn(
     function* (args) {
-      const options = yield* Schema.encodeEffect(ExecStackOptions)({
-        ...args,
-        yes: true,
-        dev: true,
-      });
-
+      // This process is only the exec child's supervisor; the child owns the
+      // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
+      // hits both processes and the interrupt message prints twice.
+      yield* suppressInterruptMessages;
+      const options = yield* Schema.encodeEffect(DevOptions)(args);
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
@@ -93,4 +93,4 @@ export const devCommand = Command.make(
         }),
       )(effect),
   ),
-);
+).pipe(Command.withDescription("Develop a stack with live reload"));

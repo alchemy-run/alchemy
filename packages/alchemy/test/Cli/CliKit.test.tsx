@@ -1,35 +1,50 @@
 /** @jsxImportSource react */
 import { PassThrough } from "node:stream";
+import { stripVTControlCharacters } from "node:util";
 import {
   NonInteractiveTerminal,
   Application,
   Screen,
   TerminalCancelled,
   CliKit,
-  hyperlink,
-  stripAnsi,
   layer as cliKitLayer,
 } from "@/Cli/CliKit/index.ts";
 import {
   AnsweredPrompt,
   Alert,
+  ChoiceGroup,
   DescriptionList,
   Heading,
   LiveStore,
+  PromptFrame,
   ProgressGroup,
   SectionHeading,
   Status,
+  Toast,
   Tabs,
   TaskRow,
   Text,
   TextField,
   useLiveStore,
-} from "@/Cli/CliKit/components.ts";
-import { makeRuntime } from "@/Cli/CliKit/SigilRuntime.tsx";
+} from "@/Cli/components/ui/index.ts";
+import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
+import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
+import { makeResourceLogger, makeResourceOutput } from "@/Cli/Output.ts";
+import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
+import { Plan } from "@/Cli/components/view/PlanView.tsx";
+import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";
+import {
+  buildStageNodes,
+  stateExplorerScreen,
+  StateExplorerStore,
+  type StateExplorerSource,
+} from "@/Cli/components/view/StateExplorer.tsx";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Logger from "effect/Logger";
 import { expect, it } from "alchemy-test";
+import { planWith, updateNode } from "./PlanTestNodes.ts";
 
 class CaptureStream extends PassThrough {
   readonly columns = 80;
@@ -100,6 +115,242 @@ const makeStatic = () => {
   return { ...runtime, stdout };
 };
 
+it.effect("reports terminal-native progress on TTY output", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    yield* service.nativeProgress.set("indeterminate");
+    yield* service.nativeProgress.set("normal", 50);
+    yield* service.nativeProgress.set("inactive");
+
+    expect(stdout.output).toContain("\u001B]9;4;3\u001B\\");
+    expect(stdout.output).toContain("\u001B]9;4;1;50\u001B\\");
+    expect(stdout.output).toContain("\u001B]9;4;0\u001B\\");
+  }),
+);
+
+const makeExplorerSource = () => {
+  const calls = { stacks: 0, stages: 0, resources: 0, files: 0 };
+  const source: StateExplorerSource = {
+    backend: "local",
+    listStacks: Effect.sync(() => {
+      calls.stacks++;
+      return ["app"];
+    }),
+    listStages: () =>
+      Effect.sync(() => {
+        calls.stages++;
+        return ["prod"];
+      }),
+    listResources: () =>
+      Effect.sync(() => {
+        calls.resources++;
+        return ["Api/Worker"];
+      }),
+    readFile: () =>
+      Effect.sync(() => {
+        calls.files++;
+        return { status: "created", url: "https://workers.dev" };
+      }),
+    deleteNodes: () => Effect.void,
+  };
+  return { calls, source };
+};
+
+const explorerSource = makeExplorerSource().source;
+const flushEffects = () =>
+  new Promise<void>((resolve) => setImmediate(resolve));
+
+it("builds Finder-style namespace columns from FQN names", () => {
+  const nodes = buildStageNodes("app", "prod", ["Api/Worker"]);
+  expect(nodes.map((node) => node.name)).toEqual(["Api", "output"]);
+  const api = nodes[0];
+  expect(api?.kind).toBe("namespace");
+  if (api?.kind === "namespace") {
+    expect(api.children.map((node) => node.name)).toEqual(["Worker"]);
+  }
+});
+
+it("loads state columns and file contents only when selected", async () => {
+  const { calls, source } = makeExplorerSource();
+  const store = new StateExplorerStore(source);
+  store.loadRoot();
+  await flushEffects();
+  expect(calls).toEqual({ stacks: 1, stages: 0, resources: 0, files: 0 });
+
+  const root = store.snapshot().root;
+  expect(root.status).toBe("ready");
+  if (root.status !== "ready") return;
+  const stack = root.value[0]!;
+  store.loadChildren(stack);
+  await flushEffects();
+  expect(calls).toEqual({ stacks: 1, stages: 1, resources: 0, files: 0 });
+
+  const stages = store.snapshot().children.get(stack.id);
+  if (stages?.status !== "ready") return;
+  const stage = stages.value[0]!;
+  store.loadChildren(stage);
+  await flushEffects();
+  expect(calls).toEqual({ stacks: 1, stages: 1, resources: 1, files: 0 });
+
+  const state = store.snapshot().children.get(stage.id);
+  if (state?.status !== "ready") return;
+  const namespace = state.value.find((node) => node.kind === "namespace");
+  if (namespace?.kind !== "namespace") return;
+  store.loadFile(namespace.children[0]!);
+  await flushEffects();
+  expect(calls).toEqual({ stacks: 1, stages: 1, resources: 1, files: 1 });
+});
+
+it("ignores state explorer responses from before a refresh", async () => {
+  let resolveStale: ((stacks: ReadonlyArray<string>) => void) | undefined;
+  let request = 0;
+  const source: StateExplorerSource = {
+    ...explorerSource,
+    listStacks: Effect.suspend(() => {
+      request++;
+      if (request === 1) {
+        return Effect.promise(
+          () =>
+            new Promise((resolve) => {
+              resolveStale = resolve;
+            }),
+        );
+      }
+      return Effect.succeed(["fresh"]);
+    }),
+  };
+  const store = new StateExplorerStore(source);
+  store.loadRoot();
+  store.refresh();
+  await flushEffects();
+
+  resolveStale?.(["stale"]);
+  await flushEffects();
+
+  const root = store.snapshot().root;
+  expect(root.status).toBe("ready");
+  if (root.status === "ready") {
+    expect(root.value.map((node) => node.name)).toEqual(["fresh"]);
+  }
+});
+
+it("formats stack outputs as labeled values instead of a raw object dump", () => {
+  const { service } = makeStatic();
+  const apiUrl =
+    "https://cloudflareworkerexample-api-clxp5k3fbtqacxdev7mx7uuxmw.testing-2b2.workers.dev";
+  const output = service.output.format(
+    stackOutputsView({
+      apiUrl,
+      metadata: { region: "us-east-1", replicas: 2 },
+    }),
+    { columns: 10_000 },
+  );
+
+  expect(output).toContain("Outputs");
+  expect(output).toContain("apiUrl");
+  expect(output).toContain(apiUrl);
+  expect(output).toContain("metadata");
+  expect(output).toContain("region");
+});
+
+it("renders detailed plans as nested YAML", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    <Plan
+      plan={planWith([
+        updateNode({ config: { retries: 2 } }, { config: { retries: 3 } }),
+      ])}
+      detailed
+    />,
+    { columns: 80 },
+  );
+
+  expect(output).toContain("properties:");
+  expect(output).toContain("config:");
+  expect(output).toContain("│ -     retries: 2");
+  expect(output).toContain("│ +     retries: 3");
+  expect(output).toContain("(Test.Resource)");
+});
+
+it("renders drift details without detailed mode", () => {
+  const { service } = makeStatic();
+  const node = updateNode({ value: "declared" }, { value: "declared" });
+  node.drift = {
+    expected: { value: "declared" },
+    actual: { value: "changed-out-of-band" },
+  };
+  const output = service.output.format(<Plan plan={planWith([node])} />, {
+    columns: 80,
+  });
+
+  expect(output).not.toContain("drift:");
+  expect(output).toContain("│ - value: declared");
+  expect(output).toContain("│ + value: changed-out-of-band");
+});
+
+it("replaces provider details with refresh progress in place", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    <ProfileDetailsBody
+      providers={[
+        {
+          name: "Cloudflare",
+          method: "oauth",
+          status: "ready",
+          lines: ["accessToken: cfoa****", "expires: in 59m"],
+        },
+        {
+          name: "GitHub",
+          method: "gh-cli",
+          status: "ready",
+          lines: ["token: gho_cZ****"],
+        },
+      ]}
+      refreshingProvider="Cloudflare"
+    />,
+    { columns: 80 },
+  );
+
+  expect(output).toContain("Cloudflare");
+  expect(output).toContain("refreshing OAuth credentials…");
+  expect(output).not.toContain("accessToken: cfoa****");
+  expect(output).not.toContain("expires: in 59m");
+  expect(output).toContain("GitHub");
+  expect(output).toContain("token: gho_cZ****");
+});
+
+it("renders input frames inline by default and keeps a stacked variant", () => {
+  const { service } = makeStatic();
+  const inline = service.output.format(
+    <PromptFrame
+      message="Profile name"
+      description="Used to select stored credentials."
+      layout="inline"
+    >
+      <Text>production</Text>
+    </PromptFrame>,
+  );
+  const stacked = service.output.format(
+    <PromptFrame message="Profile name" layout="stacked">
+      <Text>production</Text>
+    </PromptFrame>,
+  );
+
+  expect(inline).toContain("Profile name: production");
+  expect(inline).toContain("Used to select stored credentials.");
+  expect(stacked).toContain("Profile name\n");
+  expect(stacked).toContain("production");
+});
+
+it("renders compact informational toasts with a rail", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    <Toast variant="info">Credentials refreshed.</Toast>,
+  );
+
+  expect(output).toBe("│ • Credentials refreshed.");
+});
+
 /**
  * Scoped variant of `makeStatic` for tests that mount a persistent renderer.
  * Disposal runs as a finalizer, so a failing test never leaks a Sigil
@@ -111,6 +362,7 @@ const makeLive = (
     readonly captureConsole?: boolean;
     readonly input?: boolean;
     readonly unicode?: boolean;
+    readonly colors?: boolean;
   } = {},
 ) => {
   const input = overrides.input ?? true;
@@ -137,7 +389,7 @@ const makeLive = (
           input,
           columns: stdout.columns,
           rows: stdout.rows,
-          colors: false,
+          colors: overrides.colors ?? false,
           unicode: overrides.unicode ?? true,
           alternateScreen: input,
         },
@@ -147,6 +399,43 @@ const makeLive = (
     ({ dispose }) => Effect.promise(dispose),
   );
 };
+
+it.effect("keeps stack output URLs reachable", () =>
+  Effect.gen(function* () {
+    const { service } = yield* makeLive({ colors: true });
+    const url = "https://example.com/deploy";
+    const output = service.output.format(stackOutputsView({ url }), {
+      colors: true,
+    });
+    expect(stripVTControlCharacters(output)).toContain(url);
+  }),
+);
+
+it.effect(
+  "keeps the state explorer active while searching and quits cleanly",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+      const fiber = yield* service
+        .application(service.prompt.custom(stateExplorerScreen(explorerSource)))
+        .pipe(Application.alternate)
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("Loading"));
+
+      yield* Effect.sync(() => stdin.write("/"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("workers.dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* settleInput;
+      expect(fiber.pollUnsafe()).toBeUndefined();
+
+      yield* Effect.sync(() => stdin.write("q"));
+      yield* Fiber.join(fiber);
+    }),
+);
 
 it.effect("renders the built-in layout components without writing", () =>
   Effect.gen(function* () {
@@ -170,6 +459,62 @@ it.effect("renders the built-in layout components without writing", () =>
   }),
 );
 
+it.effect("renders confirmations as a compact segmented choice", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+
+    expect(
+      (yield* service.output.render(
+        <ChoiceGroup
+          value
+          choices={[
+            { value: true, label: "Yes" },
+            { value: false, label: "No" },
+          ]}
+        />,
+      )).trim(),
+    ).toBe("Yes   No");
+    expect(
+      (yield* service.output.render(
+        <ChoiceGroup
+          value={false}
+          choices={[
+            { value: true, label: "Yes" },
+            { value: false, label: "No" },
+          ]}
+        />,
+      )).trim(),
+    ).toBe("Yes   No");
+    expect(
+      (yield* service.output.render(
+        <ChoiceGroup
+          value
+          choices={[
+            { value: true, label: "Destroy" },
+            { value: false, label: "Cancel" },
+          ]}
+        />,
+      )).trim(),
+    ).toBe("Destroy   Cancel");
+    expect(
+      (yield* service.output.render(
+        <ChoiceGroup
+          orientation="vertical"
+          value="repair"
+          choices={[
+            {
+              value: "repair",
+              label: "Repair",
+              description: "restore declared state",
+            },
+            { value: "cancel", label: "Cancel" },
+          ]}
+        />,
+      )).trim(),
+    ).toBe("Repair · restore declared state\n   Cancel");
+  }),
+);
+
 it.effect("preserves zero in primitive-array views", () =>
   Effect.gen(function* () {
     const { service } = makeStatic();
@@ -178,6 +523,14 @@ it.effect("preserves zero in primitive-array views", () =>
     expect(rendered).toBe("count: 0");
   }),
 );
+
+it("does not animate work before it starts", () => {
+  expect(isInProgress("pending")).toBe(false);
+  expect(isInProgress("creating")).toBe(true);
+  expect(isInProgress("updating")).toBe(true);
+  expect(isInProgress("deleting")).toBe(true);
+  expect(isInProgress("running")).toBe(true);
+});
 
 it.effect("prints headings and data views through one service", () =>
   Effect.gen(function* () {
@@ -306,11 +659,13 @@ const orderingCases: ReadonlyArray<OrderingCase> = [
     },
   },
   {
-    name: "keeps captured logs static and ordered before completed live views",
+    name: "keeps styled captured logs static and ordered before completed live views",
     captureConsole: true,
-    emit: () => Effect.sync(() => console.log("runtime ready")),
+    emit: () =>
+      Effect.sync(() => console.log("\u001B[32mruntime ready\u001B[0m")),
     verify: (output) => {
       expect(output.match(/runtime ready/g)?.length).toBe(1);
+      expect(output).toContain("\u001B[32m");
       expect(output.indexOf("runtime ready")).toBeLessThan(
         output.lastIndexOf("Deployed"),
       );
@@ -330,7 +685,10 @@ const orderingCases: ReadonlyArray<OrderingCase> = [
 
 it.effect.each(orderingCases)("$name", ({ captureConsole, emit, verify }) =>
   Effect.gen(function* () {
-    const { service, stdout } = yield* makeLive({ captureConsole });
+    const { service, stdout } = yield* makeLive({
+      captureConsole,
+      colors: captureConsole,
+    });
 
     const store = new LiveStore("Deploying");
     const live = yield* service.live.open(<LiveLabel store={store} />, {
@@ -440,11 +798,61 @@ it.effect("uses ASCII fallbacks when Unicode is unavailable", () =>
   }),
 );
 
-it("strips terminal colors and hyperlinks", () => {
-  expect(
-    stripAnsi(`\u001B[31mred\u001B[0m ${hyperlink("docs", "https://x")}`),
-  ).toBe("red docs");
+it("uses one resource-prefixed pipeline for chunked stdout and stderr", () => {
+  const lines: string[] = [];
+  const output = makeResourceOutput("www", {
+    log: (...args) => lines.push(args.join(" ")),
+  });
+
+  output.stdout.push("first\nsec");
+  output.stdout.push("ond\r");
+  output.stderr.push("failed");
+  output.stdout.flush();
+  output.stderr.flush();
+
+  const prefix = "[www]";
+  expect(lines.map(stripVTControlCharacters)).toEqual([
+    `${prefix} first`,
+    `${prefix} second`,
+    `${prefix} failed`,
+  ]);
 });
+
+it.effect(
+  "routes effectful resource output through the configured logger",
+  () => {
+    const entries: Array<{ level: string; message: unknown }> = [];
+    const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+      entries.push({ level: logLevel, message });
+    });
+    const output = makeResourceLogger("www");
+
+    return Effect.gen(function* () {
+      yield* output("stdout", "[MDX] generated files");
+      yield* output("stderr", "vite diagnostic");
+      expect(entries).toEqual([
+        { level: "Info", message: ["[www] [MDX] generated files"] },
+        { level: "Info", message: ["[www] vite diagnostic"] },
+      ]);
+    }).pipe(Effect.provide(Logger.layer([logger])));
+  },
+);
+
+it.effect("does not decorate resource stderr as a semantic failure", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive({ captureConsole: true });
+    const live = yield* service.live.open(<Text>Building</Text>);
+
+    const output = makeResourceOutput("www", globalThis.console);
+    output.stderr.push("[FILE_NAME_CONFLICT] warning\n");
+    output.stderr.flush();
+    yield* live.close;
+
+    const rendered = stripVTControlCharacters(stdout.output);
+    expect(rendered).toContain(`[www] [FILE_NAME_CONFLICT] warning`);
+    expect(rendered).not.toContain("×");
+  }),
+);
 
 it.effect("runs interactive components inside the owned session", () =>
   Effect.gen(function* () {
@@ -563,6 +971,9 @@ it.effect("shows a text prompt default before it is accepted", () =>
       .pipe(Effect.forkChild);
     yield* Effect.promise(() => stdin.ready);
     yield* Effect.promise(() => stdout.waitFor("http://localhost:4566"));
+    expect(stripVTControlCharacters(stdout.output)).toContain(
+      "Emulator endpoint: http://localhost:4566",
+    );
     yield* Effect.sync(() => stdin.write("\r"));
 
     expect(yield* Fiber.join(fiber)).toBe("http://localhost:4566");
@@ -708,6 +1119,63 @@ it.effect("reopens browser authorization from the waiting screen", () =>
   }),
 );
 
+it.effect("keeps browser-only authorization cancellable", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+
+    const fiber = yield* service.prompt
+      .awaitExternal({
+        message: "AWS authorization",
+        waitingLabel: "Waiting",
+        url: "https://example.com/authorize",
+        allowManualInput: false,
+      })
+      .pipe(Effect.flip, Effect.forkChild);
+    yield* Effect.promise(() => stdin.ready);
+    yield* Effect.promise(() => stdout.waitFor("AWS authorization"));
+    expect(stripVTControlCharacters(stdout.output)).not.toContain(
+      "enter code manually",
+    );
+
+    // Enter is intentionally inert for a browser-only flow.
+    yield* Effect.sync(() => stdin.write("\r"));
+    yield* settleInput;
+    expect(fiber.pollUnsafe()).toBeUndefined();
+
+    yield* Effect.sync(() => stdin.write("\x1b"));
+    const failure = yield* Fiber.join(fiber);
+    expect(failure).toBeInstanceOf(TerminalCancelled);
+  }),
+);
+
+it.effect("shows a device authorization code", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+
+    const fiber = yield* service.prompt
+      .awaitExternal({
+        message: "AWS authorization",
+        waitingLabel: "Waiting for device authorization…",
+        url: "https://device.sso.example.com/",
+        code: "ABCD-EFGH",
+        allowManualInput: false,
+      })
+      .pipe(Effect.flip, Effect.forkChild);
+    yield* Effect.promise(() => stdin.ready);
+    yield* Effect.promise(() => stdout.waitFor("ABCD-EFGH"));
+
+    const output = stripVTControlCharacters(stdout.output);
+    expect(output).toContain("Code ABCD-EFGH");
+    expect(output).toContain("copy code");
+
+    yield* Effect.sync(() => stdin.write("\x1b"));
+    const failure = yield* Fiber.join(fiber);
+    expect(failure).toBeInstanceOf(TerminalCancelled);
+  }),
+);
+
 it.effect("toggles every visible multi-select choice on ctrl+a", () =>
   Effect.gen(function* () {
     const stdin = new InputStream();
@@ -848,7 +1316,7 @@ it.effect("cancels a screen with no cancel wiring on ctrl+c", () =>
 
 it.effect("keeps one renderer alive for an Effect-driven application", () =>
   Effect.gen(function* () {
-    const { service } = yield* makeLive();
+    const { service, stdout } = yield* makeLive();
 
     const result = yield* service.application(
       Effect.gen(function* () {
@@ -883,6 +1351,12 @@ it.effect("keeps one renderer alive for an Effect-driven application", () =>
       name: "cloudflare",
       done: true,
     });
+    // Clearing an inline application first renders an empty frame. Its final
+    // row must be reclaimed before teardown or the next shell prompt starts
+    // one line too low.
+    expect(stdout.output.slice(stdout.output.lastIndexOf("\n") + 1)).toContain(
+      "\u001B[1A",
+    );
   }),
 );
 
@@ -999,5 +1473,96 @@ it.effect(
       expect(rendered).toContain("production");
       expect(rendered).toContain("worker");
       expect(rendered).toContain("2/4");
+    }),
+);
+
+it.live(
+  "state explorer confirms deletes inline and keeps its position afterwards",
+  () =>
+    Effect.gen(function* () {
+      const { calls, source } = makeExplorerSource();
+      let resources = ["Api/Worker", "Api/Queue", "Db"];
+      const deleted: string[] = [];
+      const mutable: StateExplorerSource = {
+        ...source,
+        listResources: () =>
+          Effect.sync(() => {
+            calls.resources++;
+            return resources;
+          }),
+        deleteNodes: (nodes) =>
+          Effect.sync(() => {
+            for (const node of nodes) {
+              deleted.push(node.path);
+              const prefix = `app/prod/`;
+              const fqn = node.path.slice(prefix.length);
+              resources = resources.filter(
+                (r) => r !== fqn && !r.startsWith(`${fqn}/`),
+              );
+            }
+          }),
+      };
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+      const fiber = yield* service
+        .application(service.prompt.custom(stateExplorerScreen(mutable)))
+        .pipe(Application.alternate)
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      const press = (key: string) =>
+        Effect.sync(() => stdin.write(key)).pipe(Effect.andThen(settleInput));
+      // Bounded waits that dump the last frame on expiry — a silent hang here
+      // is otherwise undebuggable.
+      const frame = () => stripVTControlCharacters(stdout.output.slice(-6000));
+      const waitFrame = (text: string) =>
+        Effect.promise(() => stdout.waitFor(text)).pipe(
+          Effect.timeoutOrElse({
+            duration: "3 seconds",
+            orElse: () =>
+              Effect.sync(() => {
+                console.log(`=== TIMEOUT waiting for ${text} ===\n${frame()}`);
+                throw new Error(`timeout waiting for ${text}`);
+              }),
+          }),
+        );
+      yield* waitFrame("app");
+      // root → stages → state → into Api → Worker (select a row, then enter it)
+      const enter = Effect.gen(function* () {
+        yield* press("j");
+        yield* press("\x1B[C");
+      });
+      yield* enter;
+      yield* waitFrame("prod");
+      yield* enter;
+      yield* waitFrame("Api");
+      yield* enter;
+      yield* waitFrame("Worker");
+      yield* press("j");
+      yield* waitFrame("PREVIEW");
+      yield* press("d");
+      yield* waitFrame("Delete state records?");
+      // The panel must not narrow the layout: its top border spans the
+      // terminal, exactly like the header rule above the columns.
+      const confirmFrame = frame();
+      const rule = confirmFrame
+        .split("\n")
+        .filter((line) => /^─+$/.test(line.trim()));
+      expect(rule.at(-1)?.trim().length).toBe(stdout.columns);
+      const before = stdout.output.length;
+      yield* press("y");
+      yield* waitFrame("Deleted state at");
+      yield* settleInput;
+      yield* Effect.promise(flushEffects);
+      yield* settleInput;
+      const after = stripVTControlCharacters(stdout.output.slice(before));
+      expect(deleted).toEqual(["app/prod/Api/Queue"]);
+      // stage listing re-read once; stacks/stages untouched
+      expect(calls.stacks).toBe(1);
+      expect(calls.stages).toBe(1);
+      expect(calls.resources).toBe(2);
+      // cursor moved to the surviving sibling in the same column
+      expect(after).toContain("app/prod/Api/Worker");
+      yield* press("q");
+      yield* Fiber.join(fiber);
     }),
 );

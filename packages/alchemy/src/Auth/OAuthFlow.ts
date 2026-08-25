@@ -18,6 +18,17 @@ export class OAuthError extends Data.TaggedError("OAuthError")<{
 }> {}
 
 /**
+ * The local loopback callback server could not start (typically the port is
+ * already taken). Distinct from {@link OAuthError} so callers can fall back to
+ * manual code entry instead of failing the whole flow.
+ */
+export class CallbackServerStartError extends Data.TaggedError(
+  "CallbackServerStartError",
+)<{
+  message: string;
+}> {}
+
+/**
  * On-disk shape of OAuth credentials persisted under
  * `~/.alchemy/credentials/{profile}/<provider>-oauth.json`.
  *
@@ -116,7 +127,11 @@ export interface OAuthClient {
    */
   readonly callback: (
     authorization: Authorization,
-  ) => Effect.Effect<OAuthCredentials, OAuthError, never>;
+  ) => Effect.Effect<
+    OAuthCredentials,
+    OAuthError | CallbackServerStartError,
+    never
+  >;
   /** Refresh expired OAuth credentials with the stored refresh token. */
   readonly refresh: (
     credentials: OAuthCredentials,
@@ -378,13 +393,28 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
   });
 
   const callback = Effect.fn(function* (authorization: Authorization) {
-    const { pathname, port } = new URL(spec.localCallbackUri);
+    const { pathname, port, protocol } = new URL(spec.localCallbackUri);
+    const listenPort =
+      port === "" ? (protocol === "https:" ? 443 : 80) : Number(port);
     const listen = Effect.callback<
       OAuthCredentials,
-      OAuthError,
+      OAuthError | CallbackServerStartError,
       HttpClient.HttpClient
     >((resume) => {
+      // The handler can run more than once (browser retries, extra tabs);
+      // resume exactly once and ignore everything after.
       let settled = false;
+      const resolveOnce = (
+        effect: Effect.Effect<
+          OAuthCredentials,
+          OAuthError | CallbackServerStartError,
+          HttpClient.HttpClient
+        >,
+      ) => {
+        if (settled) return;
+        settled = true;
+        resume(effect);
+      };
       const server = http.createServer((req, res) => {
         const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
@@ -410,8 +440,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         if (error) {
           res.writeHead(302, { Location: AUTH_ERROR_URL });
           res.end();
-          settled = true;
-          resume(
+          resolveOnce(
             Effect.fail(
               new OAuthError({
                 error,
@@ -428,8 +457,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         if (!code || !state) {
           res.writeHead(302, { Location: AUTH_ERROR_URL });
           res.end();
-          settled = true;
-          resume(
+          resolveOnce(
             Effect.fail(
               new OAuthError({
                 error: "invalid_request",
@@ -443,8 +471,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         if (state !== authorization.state) {
           res.writeHead(302, { Location: AUTH_ERROR_URL });
           res.end();
-          settled = true;
-          resume(
+          resolveOnce(
             Effect.fail(
               new OAuthError({
                 error: "invalid_request",
@@ -454,9 +481,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
           );
           return;
         }
-        if (settled) return;
-        settled = true;
-        resume(
+        resolveOnce(
           exchange(code, authorization).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
@@ -475,20 +500,28 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       });
 
       server.on("error", (err) => {
-        if (settled) return;
-        settled = true;
-        resume(
+        resolveOnce(
           Effect.fail(
-            new OAuthError({
-              error: "server_error",
-              errorDescription: `Failed to start callback server: ${err.message}`,
-            }),
+            server.listening
+              ? new OAuthError({
+                  error: "server_error",
+                  errorDescription: `Callback server failed: ${err.message}`,
+                })
+              : new CallbackServerStartError({
+                  message: `Failed to start callback server: ${err.message}`,
+                }),
           ),
         );
       });
 
-      server.listen(Number(port));
-      return Effect.sync(() => server.close());
+      server.listen(listenPort, "127.0.0.1");
+      return Effect.sync(() => {
+        server.close();
+        // `close` only stops new connections — a keep-alive browser
+        // connection would otherwise hold the process open until its
+        // socket timeout after login completes.
+        server.closeAllConnections();
+      });
     });
     return yield* listen.pipe(
       Effect.timeoutOrElse({

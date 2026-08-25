@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+
 /**
  * Returns true when the current process looks like it's being driven by a
  * coding agent, CI runner, test runner, or anything else that won't render an
@@ -62,4 +64,3 @@ export const profileCommandHint = (nonInteractiveCommand: string) =>
     "alchemy profile",
     nonInteractiveCommand,
   );
-import * as Effect from "effect/Effect";
