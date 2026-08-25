@@ -367,7 +367,20 @@ const ensureMutex = Semaphore.makeUnsafe(1);
 export const ensureFloci = (
   config?: FlociConfig,
 ): Effect.Effect<FlociInstance, FlociError> =>
-  ensureMutex.withPermits(1)(ensureFlociUnsynchronized(config));
+  ensureMutex.withPermits(1)(
+    // The mutex serializes ensures within THIS process; across processes
+    // (a test runner and a dev CLI booting together) the recreate path can
+    // still race — one process's `rm -f` can delete the container the
+    // other just created, and the loser's `docker run` fails (sometimes
+    // with an empty stderr). Re-running the whole ensure converges: the
+    // retry re-observes whatever the winner left serving and reuses it.
+    ensureFlociUnsynchronized(config).pipe(
+      Effect.retry({
+        schedule: Schedule.spaced("2 seconds"),
+        times: 3,
+      }),
+    ),
+  );
 
 const ensureFlociUnsynchronized = (
   config?: FlociConfig,
@@ -395,17 +408,28 @@ const ensureFlociUnsynchronized = (
       published ?? new Set(),
     );
 
-    // Converge the managed container's published ports AND image: an older
-    // container that predates the ELB listener / CloudFront edge mappings
-    // can't serve emulated load balancers or distributions, and one running
-    // a superseded emulator image (a floci release bump, or a switch of
-    // `ALCHEMY_FLOCI_IMAGE`) would silently miss emulator features the
-    // providers now rely on — so either is recreated (emulated state is
-    // ephemeral by design; the next apply reconciles it). An UNMANAGED
-    // server (a dev-mode JVM, a hand-run container) is never touched. To
-    // keep running a hand-built image under the managed name, keep
-    // `ALCHEMY_FLOCI_IMAGE` set — the resolution order is the contract.
+    // Converge the managed container's EXPLICITLY-requested ports and its
+    // image: a container missing ports the caller configured can't serve
+    // them, and one running a superseded emulator image (a floci release
+    // bump, or a switch of `ALCHEMY_FLOCI_IMAGE`) would silently miss
+    // emulator features the providers now rely on — so either is recreated
+    // (emulated state is ephemeral by design; the next apply reconciles
+    // it). The OPPORTUNISTIC defaults (80/443, the CloudFront edge range)
+    // deliberately do NOT trigger recreation: which of them resolve as
+    // publishable depends on what happens to be free in the observing
+    // process, so keying recreation on them makes concurrent consumers
+    // (a test run and a dev CLI) recreate each other's container forever.
+    // An UNMANAGED server (a dev-mode JVM, a hand-run container) is never
+    // touched. To keep running a hand-built image under the managed name,
+    // keep `ALCHEMY_FLOCI_IMAGE` set — the resolution order is the
+    // contract.
     const publishPorts = [...elbPorts, ...edgePorts];
+    const requiredPorts = [
+      ...(config?.elbListenerPorts ?? []).filter((p) => elbPorts.includes(p)),
+      ...(config?.cloudfrontEdgePorts ?? []).filter((p) =>
+        edgePorts.includes(p),
+      ),
+    ];
     const image = yield* resolveImage(config);
     const runningImage =
       published !== undefined
@@ -421,7 +445,7 @@ const ensureFlociUnsynchronized = (
         : undefined;
     const needsRecreate =
       published !== undefined &&
-      (publishPorts.some((p) => !published.has(p)) ||
+      (requiredPorts.some((p) => !published.has(p)) ||
         (runningImage !== undefined && runningImage !== image));
 
     if (yield* isServing(endpoint)) {
