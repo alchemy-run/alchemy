@@ -204,12 +204,14 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         errorPage: props.errorPage,
         printUrl: true,
       });
+      const runtime = yield* Effect.sync(() => process.execPath);
       const dev = yield* Command.Dev("Dev", {
-        command: `${process.execPath} ${JSON.stringify(servePath)}`,
+        command: `${runtime} ${servePath}`,
         cwd: path.dirname(servePath),
         env: {
           ...props.env,
-          PORT: String(DEFAULT_PORT),
+          PORT: "0",
+          HOST: "127.0.0.1",
           // Depend on Build so the outdir exists before we serve it.
           ALCHEMY_BUILD_HASH: build.hash.output as unknown as string,
         },

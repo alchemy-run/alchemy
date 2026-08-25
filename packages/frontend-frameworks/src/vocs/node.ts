@@ -9,13 +9,19 @@
  * `clientDirectory` (extensionless HTML: `/about` → `about/index.html`).
  */
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as NodePath from "node:path";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { NODE_BUNDLE_CONDITIONS } from "../core/NodeServe.ts";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
-import { Framework } from "../core/index.ts";
+import {
+  DeployTargetError,
+  Framework,
+  makeDeployTarget,
+  type Framework as FrameworkService,
+} from "../core/index.ts";
 import type { VocsTarget } from "./Target.ts";
-import { make } from "./Vocs.ts";
+import { make as makeVocsLayer } from "./Vocs.ts";
 
 export interface VocsNodeTargetConfig {}
 
@@ -53,7 +59,7 @@ export const buildInChild = (config: VocsNodeBuildChildConfig) =>
   Effect.gen(function* () {
     const framework = yield* Framework.pipe(
       Effect.provide(
-        make({
+        makeVocsLayer({
           root: config.rootDir,
           target: makeNodeAdapterTarget(config.config),
         }),
@@ -85,3 +91,57 @@ export const makeNodeTarget = (
 export const target = makeNodeTarget;
 
 export default makeNodeTarget;
+
+export interface VocsNodeFrameworkOptions {
+  readonly root?: string | undefined;
+  readonly target?: string | undefined;
+  readonly outDir?: string | undefined;
+}
+
+/**
+ * Framework-module contract used by container Website composites
+ * (`module.make(...)` returns `{ build, dev }`, not a Layer).
+ */
+export const make = (options: VocsNodeFrameworkOptions = {}) =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const resolveRoot = (override: string | undefined) =>
+      path.resolve(override ?? options.root ?? process.cwd());
+
+    const withFramework = <A, E, R>(
+      root: string,
+      use: (framework: FrameworkService["Service"]) => Effect.Effect<A, E, R>,
+    ) =>
+      Effect.gen(function* () {
+        const framework = yield* Framework.pipe(
+          Effect.provide(
+            makeVocsLayer({
+              root,
+              target: makeNodeAdapterTarget({}),
+            }),
+          ),
+        );
+        return yield* use(framework);
+      });
+
+    return {
+      build: (buildOptions?: { readonly root?: string }) => {
+        const root = resolveRoot(buildOptions?.root);
+        return withFramework(root, (framework) => framework.build({ root }));
+      },
+      dev: (devOptions?: {
+        readonly root?: string;
+        readonly port?: number;
+        readonly host?: string;
+      }) => {
+        const root = resolveRoot(devOptions?.root);
+        return withFramework(root, (framework) =>
+          framework.dev({
+            root,
+            port: devOptions?.port,
+            host: devOptions?.host,
+          }),
+        );
+      },
+    };
+  });

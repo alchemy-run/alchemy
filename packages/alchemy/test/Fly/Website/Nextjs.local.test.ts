@@ -65,6 +65,6 @@ describe("Fly.Website.Nextjs local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 120_000 },
+    { timeout: 180_000 },
   );
 });

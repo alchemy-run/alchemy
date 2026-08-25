@@ -310,8 +310,10 @@ export const makeStaticServeEntrySource = (options: {
   const errorPage = options.errorPage ?? "404.html";
   const listen = options.printUrl
     ? `server.listen(PORT, HOST, () => {
+  const addr = server.address();
+  const port = typeof addr === "object" && addr !== null ? addr.port : PORT;
   const printed = HOST === "0.0.0.0" || HOST === "::" ? "localhost" : HOST;
-  console.log("http://" + printed + ":" + PORT);
+  console.log("http://" + printed + ":" + port);
 });
 `
     : `server.listen(PORT, HOST);
