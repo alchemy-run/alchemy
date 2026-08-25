@@ -77,7 +77,7 @@ export default class EmailTestWorker extends Cloudflare.Worker<EmailTestWorker>(
   "EmailTestWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true, previewsEnabled: false },
+    workersDev: { enabled: true, previewsEnabled: false },
     compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
