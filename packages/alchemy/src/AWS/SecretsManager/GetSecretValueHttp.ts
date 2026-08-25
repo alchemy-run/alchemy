@@ -3,13 +3,11 @@ import * as Layer from "effect/Layer";
 import { makeSecretHttpBinding } from "./BindingHttp.ts";
 import { GetSecretValue } from "./GetSecretValue.ts";
 
-const getSecretValueActions = ["secretsmanager:GetSecretValue"] as const;
-
 export const GetSecretValueHttp = Layer.effect(
   GetSecretValue,
   makeSecretHttpBinding({
     tag: "AWS.SecretsManager.GetSecretValue",
     operation: secretsmanager.getSecretValue,
-    actions: getSecretValueActions,
+    actions: ["secretsmanager:GetSecretValue"],
   }),
 );

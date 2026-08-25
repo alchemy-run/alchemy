@@ -12,8 +12,6 @@ import {
   type PresignGetObjectRequest,
 } from "./PresignGetObject.ts";
 
-const presignGetObjectActions = ["s3:GetObject"] as const;
-
 export const PresignGetObjectHttp = Layer.effect(
   PresignGetObject,
   Effect.gen(function* () {
@@ -30,7 +28,7 @@ export const PresignGetObjectHttp = Layer.effect(
             policyStatements: [
               {
                 Effect: "Allow",
-                Action: [...presignGetObjectActions],
+                Action: ["s3:GetObject"],
                 Resource: [Output.interpolate`${bucket.bucketArn}/*`],
               },
             ],

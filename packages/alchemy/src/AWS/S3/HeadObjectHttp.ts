@@ -3,16 +3,12 @@ import * as Layer from "effect/Layer";
 import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import { HeadObject } from "./HeadObject.ts";
 
-const headObjectPolicy = {
-  actions: ["s3:GetObject", "s3:GetObjectVersion"],
-  listBucket: true,
-} as const;
-
 export const HeadObjectHttp = Layer.effect(
   HeadObject,
   makeBucketHttpBinding({
     tag: "AWS.S3.HeadObject",
     operation: S3.headObject,
-    ...headObjectPolicy,
+    actions: ["s3:GetObject", "s3:GetObjectVersion"],
+    listBucket: true,
   }),
 );
