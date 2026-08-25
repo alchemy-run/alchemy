@@ -107,14 +107,14 @@ catalogs:
     "@octanejs/vite-plugin": 0.1.22
     "@opennextjs/aws": 4.1.0
     "@opennextjs/cloudflare": 1.20.1
-    "@react-router/dev": 7.16.0
-    "@react-router/node": 7.16.0
+    "@react-router/dev": ^7.16.0
+    "@react-router/node": ^7.16.0
     "@sveltejs/kit": 3.0.0-next.9
     "@sveltejs/vite-plugin-svelte": ^7.2.0
     "@solidjs/meta": ^0.29.4
-    "@solidjs/router": ^0.15.0
-    "@solidjs/start": 2.0.0-alpha.3
-    "@solidjs/vite-plugin-nitro-2": ^0.1.0
+    "@solidjs/router": ^0.16.0
+    "@solidjs/start": ^2.0.4
+    "@solidjs/vite-plugin-nitro-2": ^0.3.2
     "@tailwindcss/postcss": ^4.1.13
     "@tailwindcss/vite": ^4.1.13
     "@tanstack/react-router": ^1.167.4
@@ -133,9 +133,9 @@ catalogs:
     postcss: ^8.4.49
     react: ^19.2.7
     react-dom: ^19.2.7
-    react-router: 7.16.0
+    react-router: ^7.16.0
     react-server-dom-webpack: ~19.2.6
-    solid-js: latest
+    solid-js: ^1.9.5
     solid-devtools: ^0.34.3
     svelte: ^5.56.6
     tailwindcss: ^4.1.13
@@ -185,3 +185,4 @@ minimumReleaseAgeExclude:
   - '@foldkit/vite-plugin@0.16.1'
   - effect@4.0.0-rc.111
   - foldkit@0.148.2
+  - '@solidjs/start@2.0.4'
