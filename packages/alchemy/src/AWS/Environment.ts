@@ -2,7 +2,10 @@ import type {
   CredentialsError,
   ResolvedCredentials,
 } from "@distilled.cloud/aws/Credentials";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -28,6 +31,57 @@ export const AWS_ACCOUNT_ID = Config.string("AWS_ACCOUNT_ID");
 export const AWS_ACCESS_KEY_ID = Config.string("AWS_ACCESS_KEY_ID");
 export const AWS_SECRET_ACCESS_KEY = Config.redacted("AWS_SECRET_ACCESS_KEY");
 export const AWS_SESSION_TOKEN = Config.redacted("AWS_SESSION_TOKEN");
+export const AWS_SERVICE_ENDPOINTS_ENV_VAR = "ALCHEMY_AWS_SERVICE_ENDPOINTS";
+
+/** Global AWS endpoint visible inside an application runtime. */
+export const AWS_ENDPOINT_URL = Config.string("AWS_ENDPOINT_URL").pipe(
+  Config.option,
+  Effect.map(Option.getOrUndefined),
+);
+
+export class InvalidAWSServiceEndpoints extends Data.TaggedError(
+  "AWS::Environment::InvalidServiceEndpoints",
+)<{ readonly message: string }> {}
+
+const decodeServiceEndpoints = (raw: unknown) =>
+  Effect.try({
+    try: () => {
+      const value: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value) ||
+        Object.entries(value).some(
+          ([service, endpoint]) =>
+            service.length === 0 ||
+            typeof endpoint !== "string" ||
+            endpoint.length === 0,
+        )
+      ) {
+        throw new TypeError("expected a non-empty string endpoint record");
+      }
+      return value as Readonly<Record<string, string>>;
+    },
+    catch: () =>
+      new InvalidAWSServiceEndpoints({
+        message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
+      }),
+  });
+
+/** Service-specific AWS endpoints visible inside an application runtime. */
+export const AWS_SERVICE_ENDPOINTS = ConfigProvider.ConfigProvider.pipe(
+  Effect.flatMap((provider) => provider.load([AWS_SERVICE_ENDPOINTS_ENV_VAR])),
+  Effect.flatMap((node) => {
+    if (node === undefined) return Effect.succeed(undefined);
+    return node._tag === "Value"
+      ? decodeServiceEndpoints(node.value)
+      : Effect.fail(
+          new InvalidAWSServiceEndpoints({
+            message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
+          }),
+        );
+  }),
+);
 
 export type AccountID = string;
 export type RegionID = string;
@@ -54,6 +108,7 @@ export interface AWSEnvironmentShape {
   region: RegionID;
   credentials: Effect.Effect<ResolvedCredentials, CredentialsError>;
   endpoint?: string;
+  serviceEndpoints?: Readonly<Record<string, string>>;
   profile?: string;
 }
 
@@ -77,6 +132,35 @@ export class AWSEnvironment extends Context.Service<
 
 /** @see {@link AWSEnvironment.isLocalEmulator} */
 export const isLocalEmulator = AWSEnvironment.isLocalEmulator;
+
+/**
+ * Runtime-only AWS environment for generated Lambda entrypoints. It uses the
+ * process credentials and region installed by the bootstrap and never loads a
+ * profile, contacts metadata, or starts an emulator.
+ */
+export const Runtime = Layer.effect(
+  AWSEnvironment,
+  Effect.all({
+    accountId: Config.string("ALCHEMY_AWS_ACCOUNT_ID"),
+    credentials: Credentials,
+    endpoint: AWS_ENDPOINT_URL,
+    region: Region,
+    serviceEndpoints: AWS_SERVICE_ENDPOINTS,
+  }).pipe(
+    Effect.map(
+      ({ accountId, credentials, endpoint, region, serviceEndpoints }) =>
+        region.pipe(
+          Effect.map((region) => ({
+            accountId,
+            credentials,
+            endpoint,
+            region,
+            serviceEndpoints,
+          })),
+        ),
+    ),
+  ),
+);
 
 export const Default = Layer.effect(
   AWSEnvironment,

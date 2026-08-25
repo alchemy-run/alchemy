@@ -89,6 +89,12 @@
       "worker": "./src/AWS/Endpoint.ts",
       "import": "./lib/AWS/Endpoint.js"
     },
+    "./AWS/Environment": {
+      "types": "./lib/AWS/Environment.d.ts",
+      "bun": "./src/AWS/Environment.ts",
+      "worker": "./src/AWS/Environment.ts",
+      "import": "./lib/AWS/Environment.js"
+    },
     "./AWS/Region": {
       "types": "./lib/AWS/Region.d.ts",
       "bun": "./src/AWS/Region.ts",
@@ -306,6 +312,12 @@
       "bun": "./src/Runtime.ts",
       "worker": "./src/Runtime.ts",
       "import": "./lib/Runtime.js"
+    },
+    "./Runtime/Bootstrap/*": {
+      "types": "./lib/Runtime/Bootstrap/*.d.ts",
+      "bun": "./src/Runtime/Bootstrap/*.ts",
+      "worker": "./src/Runtime/Bootstrap/*.ts",
+      "import": "./lib/Runtime/Bootstrap/*.js"
     },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
