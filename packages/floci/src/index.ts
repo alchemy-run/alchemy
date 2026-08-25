@@ -536,7 +536,11 @@ const waitForHealth = (endpoint: string, config?: FlociConfig) =>
         1,
         Math.ceil(
           Duration.toSeconds(
-            Duration.fromInputUnsafe(config?.readinessTimeout ?? "180 seconds"),
+            // 300s: a freshly (re)started Docker daemon can take minutes to
+            // create the first container from the 1.3GB image; giving up
+            // early parks `alchemy dev` on a FlociError until the next file
+            // edit, which reads as a wedge.
+            Duration.fromInputUnsafe(config?.readinessTimeout ?? "300 seconds"),
           ),
         ),
       ),
