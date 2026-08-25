@@ -15,6 +15,7 @@ import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
   createRailwayHostRuntimeContext,
+  type ExtraFile,
   type RailwayBuildOptions,
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
@@ -27,7 +28,7 @@ import { mintRpcToken } from "./rpc-token.ts";
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export type { RailwayBuildOptions };
+export type { ExtraFile, RailwayBuildOptions };
 
 /**
  * Environment identity a Service is deployed into. Accepts a
@@ -101,6 +102,13 @@ export interface ServiceProps extends PlatformProps {
    * `source.image` from this registry.
    */
   registry?: string;
+  /**
+   * Extra files/directories copied into `/app` in the generated image
+   * (`COPY dest /app/dest`). Website composites use this to bake the
+   * framework `clientDirectory` (or Next.js `.next`) so asset changes
+   * rebuild the image.
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
   /**
    * Named export to load from `main`.
    *

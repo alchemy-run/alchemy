@@ -684,6 +684,7 @@ export const ServiceProvider = () =>
               isExternal: news.isExternal,
               build: news.build,
               registry: news.registry,
+              extraFiles: news.extraFiles,
             });
             if (hash !== output.code.hash) {
               return { action: "update" as const };
@@ -835,6 +836,7 @@ export const ServiceProvider = () =>
                 isExternal: props.isExternal,
                 build: props.build,
                 registry: props.registry,
+                extraFiles: props.extraFiles,
               },
               previousHash: output?.code.hash,
               session,

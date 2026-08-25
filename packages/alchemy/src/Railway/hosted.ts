@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
@@ -17,6 +19,7 @@ import {
   getStableContextDir,
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
+import { hashDirectory } from "../Command/Memo.ts";
 import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import { safeHttpEffect } from "../Http.ts";
@@ -27,6 +30,7 @@ import {
 } from "../Server/Process.ts";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { initialCwd } from "../Util/Node.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
 
@@ -103,6 +107,18 @@ export interface RailwayBuildOptions extends Bundle.BundleConfig {
   readonly install?: PackageInstall;
 }
 
+/**
+ * Extra file or directory copied into the Effect-native image next to
+ * `index.mjs` (`COPY dest /app/dest`). Used by Website composites to bake
+ * `clientDirectory` (or Next.js `.next` + `public`) into the image.
+ */
+export interface ExtraFile {
+  /** Local file or directory (absolute, or relative to `initialCwd`). */
+  source: string;
+  /** Destination path relative to `/app` (e.g. `"dist"`, `".next"`). */
+  dest: string;
+}
+
 export interface HostedProgramProps {
   main: string;
   handler?: string;
@@ -122,6 +138,11 @@ export interface HostedProgramProps {
    * image (`ghcr.io/org`, `docker.io/user`). Required when `main` is set.
    */
   registry?: string;
+  /**
+   * Extra files/directories copied into `/app` after the bundled entry.
+   * Hashed into `code.hash` so asset-only changes rebuild the image.
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
 }
 
 const matchesConfiguredExternal = (
@@ -145,6 +166,106 @@ export class RegistryRequired extends Data.TaggedError(
 )<{
   message: string;
 }> {}
+
+export class ExtraFileMissing extends Data.TaggedError(
+  "Railway.ExtraFileMissing",
+)<{
+  source: string;
+  dest: string;
+}> {}
+
+const sanitizeCopyDest = (dest: string): string | undefined => {
+  const normalized = dest.replaceAll("\\", "/").replace(/^\/+/, "");
+  if (normalized.length === 0 || normalized.split("/").includes("..")) {
+    return undefined;
+  }
+  return normalized;
+};
+
+const dockerfileCopyLines = (files: ReadonlyArray<ExtraFile> | undefined) =>
+  (files ?? []).flatMap((file) => {
+    const dest = sanitizeCopyDest(file.dest);
+    return dest === undefined ? [] : [`COPY ${dest} /app/${dest}`];
+  });
+
+const copyDirectory = (
+  from: string,
+  to: string,
+): Effect.Effect<void, unknown, Path.Path | FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.makeDirectory(to, { recursive: true });
+    const entries = yield* fs.readDirectory(from);
+    for (const entry of entries) {
+      const source = path.join(from, entry);
+      const target = path.join(to, entry);
+      const stat = yield* fs.stat(source);
+      if (stat.type === "Directory") {
+        yield* copyDirectory(source, target);
+      } else {
+        const contents = yield* fs.readFile(source);
+        yield* fs.writeFile(target, contents);
+      }
+    }
+  });
+
+const hashExtraFiles = Effect.fn(function* (
+  files: ReadonlyArray<ExtraFile> | undefined,
+) {
+  if (files === undefined || files.length === 0) return undefined;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const hashes = yield* Effect.forEach(
+    files,
+    (file) =>
+      Effect.gen(function* () {
+        const source = path.resolve(initialCwd, file.source);
+        const exists = yield* fs.exists(source);
+        if (!exists) return { dest: file.dest, hash: "" };
+        const stat = yield* fs.stat(source);
+        const hash =
+          stat.type === "Directory"
+            ? yield* hashDirectory({
+                cwd: source,
+                memo: { exclude: [], lockfile: false },
+              })
+            : yield* sha256(yield* fs.readFile(source));
+        return { dest: file.dest, hash };
+      }),
+    { concurrency: "unbounded" },
+  );
+  return yield* sha256Object(hashes);
+});
+
+const copyExtraFiles = Effect.fn(function* (
+  files: ReadonlyArray<ExtraFile> | undefined,
+  contextDir: string,
+) {
+  if (files === undefined || files.length === 0) return;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  for (const file of files) {
+    const dest = sanitizeCopyDest(file.dest);
+    if (dest === undefined) continue;
+    const source = path.resolve(initialCwd, file.source);
+    if (!(yield* fs.exists(source))) {
+      return yield* new ExtraFileMissing({ source, dest });
+    }
+    const destPath = path.join(contextDir, dest);
+    if (yield* fs.exists(destPath)) {
+      yield* fs.remove(destPath, { recursive: true });
+    }
+    const stat = yield* fs.stat(source);
+    if (stat.type === "Directory") {
+      yield* copyDirectory(source, destPath);
+    } else {
+      yield* fs.makeDirectory(path.dirname(destPath), { recursive: true });
+      const contents = yield* fs.readFile(source);
+      yield* fs.writeFile(destPath, contents);
+    }
+  }
+});
 
 export class RegistryCredentialsMissing extends Data.TaggedError(
   "Railway.RegistryCredentialsMissing",
@@ -694,6 +815,7 @@ const generateDockerfile = (
   if (hasChunks) {
     lines.push(`COPY *.js /app/`);
   }
+  lines.push(...dockerfileCopyLines(props.extraFiles));
   lines.push(
     `ENV PORT=${String(port)}`,
     `EXPOSE ${String(port)}`,
@@ -762,10 +884,12 @@ export const createRailwayHostedSupport = ({
       bundled.files.length > 1,
       install,
     );
+    const extraFilesHash = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
       packageJson,
+      ...(extraFilesHash !== undefined ? { extraFilesHash } : {}),
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash, packageJson };
   });
@@ -831,6 +955,7 @@ export const createRailwayHostedSupport = ({
         dockerfile,
         files,
       });
+      yield* copyExtraFiles(input.props.extraFiles, contextDir);
       yield* note(`Building container image ${imageRef}...`);
       yield* docker.image.build({
         context: contextDir,
