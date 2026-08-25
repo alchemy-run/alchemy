@@ -318,7 +318,10 @@ export const Worker: CelldWorkerClass = Platform(CelldWorkerTypeId, {
       // Every fleet worker serves through the gateway: RPC-path auth guard,
       // Durable Object routing, worker-level RPC over the impl shape, user
       // fetch fall-through. Applied on BOTH plan and runtime evaluations —
-      // the deploy module re-executes inside the bundle.
+      // the deploy module re-executes inside the bundle. `alwaysServe`
+      // keeps the gateway (and its Durable Object routes) served for a
+      // worker that hosts DOs but returns no fetch handler of its own.
+      alwaysServe: true,
       serve: (handler: any, options?: { shape?: Record<string, unknown> }) =>
         base.serve(makeGatewayFetch(handler, options), options),
       // Celld's worker binding contract carries plain DO declarations, not

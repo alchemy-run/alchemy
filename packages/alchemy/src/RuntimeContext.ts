@@ -32,6 +32,13 @@ export interface BaseRuntimeContext {
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
+  /**
+   * Serve even when the impl shape has no `fetch` handler and no RPC
+   * methods. Set by runtimes whose served handler carries routes of its
+   * own — e.g. the Celld fleet gateway, which must serve Durable Object
+   * routing for a worker that hosts DOs but exposes no public surface.
+   */
+  alwaysServe?: boolean;
   shape?: () => Record<string, unknown>;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
