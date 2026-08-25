@@ -86,6 +86,16 @@ export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
 export const FLOCI_CA_PATH = path.join(os.homedir(), ".floci", "ca.pem");
 
 /**
+ * Host directory mounted at the container's TLS dir (`/app/data/tls`) so
+ * the self-signed CA (which floci reuses when the files already exist)
+ * SURVIVES container recreations. Without it, every recreate — an image
+ * bump, a port-config change, a Docker daemon restart — mints a fresh CA,
+ * and every process that loaded the previous bundle (workerd trust stores
+ * read once at spawn) fails TLS against the emulator until restarted.
+ */
+export const FLOCI_TLS_DIR = path.join(os.homedir(), ".floci", "tls");
+
+/**
  * Best-effort download of the emulator's CA bundle to {@link FLOCI_CA_PATH}.
  * Never fails the ensure: an emulator predating `/_floci/tls/ca` (or a
  * filesystem error) just leaves the previous bundle in place.
@@ -448,6 +458,10 @@ const ensureFlociUnsynchronized = (
       }
     }
 
+    yield* Effect.tryPromise({
+      try: () => fs.mkdir(FLOCI_TLS_DIR, { recursive: true }),
+      catch: (cause) => new FlociError({ message: "tls dir", cause }),
+    }).pipe(Effect.ignore);
     const args = [
       "run",
       "-d",
@@ -480,7 +494,10 @@ const ensureFlociUnsynchronized = (
             "-e",
             "FLOCI_STORAGE_MODE=hybrid",
           ]
-        : []),
+        : // No full storage mount: still persist the TLS dir so the
+          // self-signed CA is stable across container recreations (floci
+          // reuses existing cert files).
+          ["-v", `${FLOCI_TLS_DIR}:/app/data/tls`]),
       ...Object.entries(config?.env ?? {}).flatMap(([key, value]) => [
         "-e",
         `${key}=${value}`,
