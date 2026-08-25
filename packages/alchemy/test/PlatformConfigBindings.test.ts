@@ -7,7 +7,7 @@ import { expect } from "alchemy-test";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 interface ConfigHost extends Resource<
   "Test.ConfigHost",
@@ -46,7 +46,7 @@ const providers = Provider.succeed(ConfigHost, {
 const { test } = Test.make({ providers, state: inMemoryState() });
 
 test.provider(
-  "an absent optional Config does not create a synthetic runtime binding",
+  "an absent optional field skips synthetic binding and preserves concrete config bindings",
   (stack) =>
     Effect.gen(function* () {
       boundKeys.length = 0;
@@ -56,17 +56,28 @@ test.provider(
           "ConfigHost",
           {},
           Effect.gen(function* () {
-            const value = yield* Config.string(
-              "ALCHEMY_TEST_MISSING_OPTIONAL_CONFIG",
-            ).pipe(Config.option);
-            expect(Option.isNone(value)).toBe(true);
+            const optional = yield* Config.schema(
+              Schema.Struct({ maybe: Schema.optional(Schema.String) }),
+            );
+            expect(optional).toEqual({});
+
+            const concrete = yield* Config.string(
+              "ALCHEMY_TEST_PRESENT_CONFIG",
+            );
+            expect(concrete).toBe("present");
             return {};
           }),
         ),
       );
 
-      expect(boundKeys).toEqual([]);
+      expect(boundKeys).toEqual(["ALCHEMY_TEST_PRESENT_CONFIG"]);
     }).pipe(
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            ALCHEMY_TEST_PRESENT_CONFIG: "present",
+          }),
+        ),
+      ),
     ),
 );
