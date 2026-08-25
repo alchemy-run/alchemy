@@ -1,5 +1,6 @@
 import { applyEnvRegionOverride } from "@/AWS/AuthProvider.ts";
 import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -82,7 +83,7 @@ describe("applyEnvRegionOverride", () => {
             ),
           );
         }),
-      ),
+      ).pipe(Effect.provide(PlatformServices)),
     { exclusive: true },
   );
 });
