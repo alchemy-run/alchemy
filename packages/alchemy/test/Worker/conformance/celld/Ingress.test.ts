@@ -87,8 +87,10 @@ const fetchJson = (url: string, init?: RequestInit) =>
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "UpstreamNotReady",
+      // Generous: a prior run's CNAME may sit in the resolver cache for up
+      // to its 300s TTL, pointing at a torn-down ALB.
       schedule: Schedule.spaced("5 seconds"),
-      times: 24,
+      times: 72,
     }),
   );
 
@@ -158,7 +160,7 @@ describe.skipIf(!!process.env.FAST)(
           (JSON.parse(second.body) as { value: number }).value,
         );
       }),
-      { timeout: 300_000 },
+      { timeout: 600_000 },
     );
 
     // ── binding security, DIRECTLY at the public ingress ──────────────────
@@ -171,7 +173,7 @@ describe.skipIf(!!process.env.FAST)(
         );
         expect(response.status).toBe(401);
       }),
-      { timeout: 300_000 },
+      { timeout: 600_000 },
     );
 
     test(
@@ -193,7 +195,7 @@ describe.skipIf(!!process.env.FAST)(
         expect(wrong.status).toBe(401);
         expect(wrong.body).toBe(missing.body);
       }),
-      { timeout: 300_000 },
+      { timeout: 600_000 },
     );
 
     test(
@@ -203,7 +205,7 @@ describe.skipIf(!!process.env.FAST)(
         expect(open.status).toBe(200);
         expect(JSON.parse(open.body)).toEqual({ value: 0 });
       }),
-      { timeout: 300_000 },
+      { timeout: 600_000 },
     );
 
     // ── the Dns seam end to end: https through ACM + Cloudflare DNS ───────
@@ -217,7 +219,7 @@ describe.skipIf(!!process.env.FAST)(
         const value = (JSON.parse(first.body) as { value: number }).value;
         expect(value).toBeGreaterThan(0);
       }),
-      { timeout: 300_000 },
+      { timeout: 600_000 },
     );
   },
 );
