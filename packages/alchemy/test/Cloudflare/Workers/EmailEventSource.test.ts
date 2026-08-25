@@ -1,7 +1,10 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
+import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -10,6 +13,7 @@ import EmailTestWorker from "./fixtures/email-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
 });
 
 const logLevel = Effect.provideService(
@@ -17,10 +21,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const ZONE = process.env.CLOUDFLARE_TEST_ZONE;
-const INBOX = process.env.CLOUDFLARE_TEST_EMAIL_INBOX;
-const FROM = process.env.CLOUDFLARE_TEST_EMAIL_FROM;
-const skip = !ZONE || !INBOX || !FROM;
+const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const INBOX = process.env.CLOUDFLARE_TEST_EMAIL_INBOX || `inbox@${ZONE}`;
+// The send→receive round trip additionally needs an outbound sender and a
+// destination Cloudflare has verified; the deploy-time assertions below do
+// not, so only the round trip is gated.
+const skipRoundTrip = !process.env.CLOUDFLARE_TEST_EMAIL_FROM;
 
 const Stack = Alchemy.Stack(
   "EmailEventSourceStack",
@@ -38,10 +44,62 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY || skip)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test.skipIf(skip)(
-  "deployed worker receives inbound mail routed by the auto-created EmailRule",
+// The scoped API token the test harness mints propagates eventually-
+// consistently across Cloudflare's edge — a fresh token intermittently 403s.
+const rideOutAuth = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
+      schedule: Schedule.exponential("500 millis"),
+      times: 8,
+    }),
+  );
+
+const resolveZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: ZONE });
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${ZONE}" not found in account`));
+  }
+  return zone.id;
+});
+
+// The deploy-time half of the event source: `email({ zone, matchers })`
+// yields an `Email.Routing` toggle and an `Email.Rule` whose action targets
+// the host Worker. Neither needs mail to flow, so this runs everywhere.
+test.provider(
+  "subscribe auto-creates Email.Routing and an Email.Rule targeting the worker",
+  () =>
+    Effect.gen(function* () {
+      const { workerName } = yield* stack;
+      const zoneId = yield* resolveZoneId;
+
+      const routing = yield* rideOutAuth(
+        emailRouting.getEmailRouting({ zoneId }),
+      );
+      expect(routing.enabled).toBe(true);
+
+      const rules = yield* rideOutAuth(emailRouting.listRules({ zoneId }));
+      const ours = (rules.result ?? []).find((rule) =>
+        (rule.actions ?? []).some(
+          (a) => a.type === "worker" && (a.value ?? []).includes(workerName),
+        ),
+      );
+      expect(ours).toBeDefined();
+      expect(ours!.enabled).toBe(true);
+      expect(ours!.matchers).toEqual([
+        { type: "literal", field: "to", value: INBOX },
+      ]);
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.skipIf(skipRoundTrip)(
+  "deployed worker receives inbound mail routed by the auto-created Email.Rule",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
