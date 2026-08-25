@@ -30,8 +30,8 @@ export interface VocsProps extends FrameworkSiteProps {
  * resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Deploying a Vocs Site
- * @example Vocs documentation site
+ * ### Deploying a Vocs Site
+ * **Example:** Vocs documentation site
  * ```typescript
  * const docs = yield* Railway.Website.Vocs("Docs", {
  *   rootDir: "./docs",
@@ -39,8 +39,8 @@ export interface VocsProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Custom Build Output
- * @example Custom output directory
+ * ### Custom Build Output
+ * **Example:** Custom output directory
  * ```typescript
  * // vocs.config.ts: defineConfig({ outDir: "build" })
  * const docs = yield* Railway.Website.Vocs("Docs", {

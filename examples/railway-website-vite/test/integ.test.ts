@@ -5,8 +5,19 @@ import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { canPushRailwayImage } from "../../../packages/alchemy/test/Railway/fixtures/registry.ts";
 import Stack from "../alchemy.run.ts";
+
+const present = (value: string | undefined): boolean =>
+  value !== undefined && value.length > 0;
+
+const canPushRailwayImage =
+  present(process.env.RAILWAY_REGISTRY) &&
+  ((present(process.env.RAILWAY_REGISTRY_USERNAME) &&
+    present(process.env.RAILWAY_REGISTRY_PASSWORD)) ||
+    (present(process.env.GITHUB_ACTOR) && present(process.env.GITHUB_TOKEN)) ||
+    (present(process.env.DOCKERHUB_USERNAME) &&
+      (present(process.env.DOCKERHUB_TOKEN) ||
+        present(process.env.DOCKER_PASSWORD))));
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),

@@ -26,8 +26,8 @@ export interface NuxtProps extends FrameworkSiteProps {
  * resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Creating Nuxt Sites
- * @example Basic Nuxt App
+ * ### Creating Nuxt Sites
+ * **Example:** Basic Nuxt App
  * ```typescript
  * const site = yield* Railway.Website.Nuxt("Web", {
  *   rootDir: "./app",
@@ -35,8 +35,8 @@ export interface NuxtProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Process Environment
+ * ### Server Configuration
+ * **Example:** Process Environment
  * ```typescript
  * const site = yield* Railway.Website.Nuxt("Web", {
  *   rootDir: "./app",

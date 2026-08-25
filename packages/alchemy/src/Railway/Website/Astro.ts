@@ -67,8 +67,8 @@ export interface AstroProps extends FrameworkSiteProps {
  * resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Creating Astro Sites
- * @example Basic Astro App
+ * ### Creating Astro Sites
+ * **Example:** Basic Astro App
  * ```typescript
  * const site = yield* Railway.Website.Astro("Web", {
  *   rootDir: "./app",
@@ -76,8 +76,8 @@ export interface AstroProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Static Sites
- * @example Fully Static Astro Site
+ * ### Static Sites
+ * **Example:** Fully Static Astro Site
  * ```typescript
  * const site = yield* Railway.Website.Astro("Docs", {
  *   rootDir: "./docs",
@@ -87,8 +87,8 @@ export interface AstroProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Process Environment
+ * ### Server Configuration
+ * **Example:** Process Environment
  * ```typescript
  * const site = yield* Railway.Website.Astro("Web", {
  *   rootDir: "./app",

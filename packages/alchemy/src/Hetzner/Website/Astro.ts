@@ -59,18 +59,16 @@ export interface AstroProps extends FrameworkSiteProps {
  * `@alchemy.run/frontend-frameworks/astro/node` deploy target. Your
  * `astro.config.*` must not declare an adapter.
  *
- * @resource
- * @product Website
  *
- * @section Creating Astro Sites
- * @example Basic Astro App
+ * ### Creating Astro Sites
+ * **Example:** Basic Astro App
  * ```typescript
  * const site = yield* Hetzner.Website.Astro("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Hetzner.Website.Astro("Web", {
  *   rootDir: "./app",
@@ -79,8 +77,8 @@ export interface AstroProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Static Sites
- * @example Fully Static Astro Site
+ * ### Static Sites
+ * **Example:** Fully Static Astro Site
  * ```typescript
  * const site = yield* Hetzner.Website.Astro("Docs", {
  *   rootDir: "./docs",
@@ -88,6 +86,9 @@ export interface AstroProps extends FrameworkSiteProps {
  *   errorPage: "404.html",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Astro = (id: string, props: AstroProps = {}) => {
   const output = props.astro?.output ?? "server";

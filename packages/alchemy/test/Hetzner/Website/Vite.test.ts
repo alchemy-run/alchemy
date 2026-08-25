@@ -71,7 +71,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       );
 
       yield* expectUrlContains(`${url!}/`, "Vite SPA fixture", {
-        timeout: "90 seconds",
+        timeout: "30 seconds",
         label: "vite spa index",
       });
       yield* expectUrlContains(
@@ -107,5 +107,5 @@ test.provider.skipIf(!hasHetznerCreds)(
         Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
       ),
     ),
-  { timeout: 120_000, exclusive: true },
+  { timeout: 180_000, exclusive: true },
 );

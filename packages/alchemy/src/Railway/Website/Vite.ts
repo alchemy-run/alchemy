@@ -60,15 +60,15 @@ export interface ViteProps extends FrameworkSiteProps {
  * {@link Octane | Railway.Website.Octane}, ...) — this composite never
  * creates a framework server module.
  *
- * @section Creating Vite Sites
- * @example Basic Vite SPA
+ * ### Creating Vite Sites
+ * **Example:** Basic Vite SPA
  * ```typescript
  * const site = yield* Railway.Website.Vite("Web", {
  *   registry: "ghcr.io/acme",
  * });
  * ```
  *
- * @example Project in a Subdirectory
+ * **Example:** Project in a Subdirectory
  * ```typescript
  * const site = yield* Railway.Website.Vite("Web", {
  *   rootDir: "./app",
@@ -76,7 +76,7 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @example Existing Project
+ * **Example:** Existing Project
  * ```typescript
  * const project = yield* Railway.Project("Site");
  * const site = yield* Railway.Website.Vite("Web", {
@@ -85,8 +85,8 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Multi-Page Sites
- * @example Per-Route HTML Pages with a 404 Page
+ * ### Multi-Page Sites
+ * **Example:** Per-Route HTML Pages with a 404 Page
  * ```typescript
  * const site = yield* Railway.Website.Vite("Docs", {
  *   spa: false,
@@ -95,8 +95,8 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Build Configuration
- * @example Custom Output Directory and Base Path
+ * ### Build Configuration
+ * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* Railway.Website.Vite("Docs", {
  *   vite: {
@@ -107,8 +107,8 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Local Development
- * @example Vite Dev Server Under `alchemy dev`
+ * ### Local Development
+ * **Example:** Vite Dev Server Under `alchemy dev`
  * ```typescript
  * // `alchemy dev` starts `vite` programmatically: site.url is the local
  * // dev server (HMR included); no Project or Service is created.

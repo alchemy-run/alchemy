@@ -23,18 +23,16 @@ export interface WakuProps extends FrameworkSiteProps {
  * pages included) baked into the unit. Prerendered pages are served
  * extensionless (`/about` not `/about/`).
  *
- * @resource
- * @product Website
  *
- * @section Creating Waku Sites
- * @example Basic Waku App
+ * ### Creating Waku Sites
+ * **Example:** Basic Waku App
  * ```typescript
  * const site = yield* Hetzner.Website.Waku("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Hetzner.Website.Waku("Web", {
  *   rootDir: "./app",
@@ -42,6 +40,9 @@ export interface WakuProps extends FrameworkSiteProps {
  *   zone,
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Waku = (id: string, props: WakuProps = {}) =>
   makeFrameworkSite(id, props, {

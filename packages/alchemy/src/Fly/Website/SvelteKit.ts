@@ -22,24 +22,25 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * static assets baked into the image, served assets-first then the
  * framework handler.
  *
- * @resource
- * @product Website
  *
- * @section Creating SvelteKit Sites
- * @example Basic SvelteKit App
+ * ### Creating SvelteKit Sites
+ * **Example:** Basic SvelteKit App
  * ```typescript
  * const site = yield* Fly.Website.SvelteKit("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Fly.Website.SvelteKit("Web", {
  *   rootDir: "./app",
  *   domain: "app.example.com",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
   frameworkSite(id, props, {

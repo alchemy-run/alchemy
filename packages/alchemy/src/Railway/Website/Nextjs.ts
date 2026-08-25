@@ -28,8 +28,8 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * no cloud resources are declared; `Alchemy.remote()` opts back into the
  * full live deployment.
  *
- * @section Creating Next.js Sites
- * @example Basic Next.js App
+ * ### Creating Next.js Sites
+ * **Example:** Basic Next.js App
  * ```typescript
  * const site = yield* Railway.Website.Nextjs("Web", {
  *   rootDir: "./app",
@@ -37,8 +37,8 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * @section Server Configuration
- * @example Process Environment
+ * ### Server Configuration
+ * **Example:** Process Environment
  * ```typescript
  * const site = yield* Railway.Website.Nextjs("Web", {
  *   rootDir: "./app",

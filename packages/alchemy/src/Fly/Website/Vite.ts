@@ -53,29 +53,27 @@ export interface ViteProps extends FrameworkSiteProps {
  * no cloud resources are created — the site's `url` is the dev server's
  * local address. `Alchemy.remote()` opts back into the full deployment.
  *
- * @resource
- * @product Website
  *
- * @section Creating Vite Sites
- * @example Basic Vite SPA
+ * ### Creating Vite Sites
+ * **Example:** Basic Vite SPA
  * ```typescript
  * const site = yield* Fly.Website.Vite("Web");
  * ```
  *
- * @example Project in a Subdirectory
+ * **Example:** Project in a Subdirectory
  * ```typescript
  * const site = yield* Fly.Website.Vite("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Existing App
+ * **Example:** Existing App
  * ```typescript
  * const site = yield* Fly.Website.Vite("Web", { app: Site });
  * ```
  *
- * @section Multi-Page Sites
- * @example Per-Route HTML Pages with a 404 Page
+ * ### Multi-Page Sites
+ * **Example:** Per-Route HTML Pages with a 404 Page
  * ```typescript
  * const site = yield* Fly.Website.Vite("Docs", {
  *   spa: false,
@@ -83,21 +81,24 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Custom Domain
- * @example ACME on an existing hostname
+ * ### Custom Domain
+ * **Example:** ACME on an existing hostname
  * ```typescript
  * const site = yield* Fly.Website.Vite("Web", {
  *   domain: "app.example.com",
  * });
  * ```
  *
- * @section Local Development
- * @example Vite Dev Server Under `alchemy dev`
+ * ### Local Development
+ * **Example:** Vite Dev Server Under `alchemy dev`
  * ```typescript
  * // `alchemy dev` starts `vite` programmatically: site.url is the local
  * // dev server (HMR included); no Fly App or Service is created.
  * const site = yield* Fly.Website.Vite("Web");
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Vite = (id: string, props: ViteProps = {}) =>
   frameworkSite(id, props, {

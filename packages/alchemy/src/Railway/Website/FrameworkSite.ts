@@ -7,6 +7,7 @@ import * as NodeNet from "node:net";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import type { Output } from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { asEffect } from "../../Util/types.ts";
@@ -175,7 +176,7 @@ export interface Website {
    * static) dev server (`http://localhost:<port>`). On deploy it is
    * `https://{domain}` (`*.up.railway.app`, or the custom hostname).
    */
-  url: string | undefined;
+  url: string | Output<string | undefined> | undefined;
   /**
    * The Railway Service that serves the site. `undefined` under
    * `alchemy dev` (no cloud resources are declared).
@@ -616,129 +617,133 @@ const writeServeEntry = Effect.fn(function* (input: {
  *
  * Callers pipe `Namespace.push(id)` themselves (the composites do).
  */
-export const makeFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(
-  function* (
-    _id: string,
-    props: FrameworkSiteProps,
-    config: FrameworkSiteConfig,
-  ) {
-    const ctx = yield* AlchemyContext;
-    const remoted = yield* ProviderModePolicy;
-    const isLocal = ctx.dev && remoted !== true;
-    const path = yield* Path.Path;
-    const root = path.resolve(initialCwd, props.rootDir ?? ".");
-    const bake = config.bake ?? "client";
+const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
+  _id: string,
+  props: FrameworkSiteProps,
+  config: FrameworkSiteConfig,
+) {
+  const ctx = yield* AlchemyContext;
+  const remoted = yield* ProviderModePolicy;
+  const isLocal = ctx.dev && remoted !== true;
+  const path = yield* Path.Path;
+  const root = path.resolve(initialCwd, props.rootDir ?? ".");
+  const bake = config.bake ?? "client";
 
-    if (isLocal) {
-      if (props.dev?.mode === "external") {
-        return {
-          url: props.dev.url,
-          service: undefined,
-          project: undefined,
-        } satisfies Website;
-      }
-      yield* applyProcessEnv(props.env);
-      const framework = yield* makeFramework(config, root);
-      const dev = props.dev;
-      const port =
-        dev && dev.mode !== "external" && dev.port !== undefined
-          ? yield* resolveDevPort({
-              framework: config.framework,
-              port: dev.port,
-              host: dev.host ?? "127.0.0.1",
-              strictPort: dev.strictPort ?? false,
-            })
-          : undefined;
-      const started = yield* Effect.mapError(
-        framework.dev({
-          root,
-          port,
-          host: dev && dev.mode !== "external" ? dev.host : undefined,
-        }),
-        (cause) =>
-          new FrameworkServerError({
-            framework: config.framework,
-            message: `The ${config.name} dev server failed to start`,
-            cause,
-          }),
-      );
-      return {
-        url: started.url,
-        service: undefined,
-        project: undefined,
-      } satisfies Website;
-    }
+  if (isLocal && props.dev?.mode === "external") {
+    return {
+      url: props.dev.url,
+      service: undefined,
+      project: undefined,
+    } satisfies Website;
+  }
 
-    const registry = props.registry;
-    if (registry === undefined || registry.length === 0) {
-      return yield* new RegistryRequired({
-        message:
-          `Railway.Website.${config.name} requires \`registry\` ` +
-          "(GHCR / Docker Hub prefix Railway can pull) on deploy.",
-      });
-    }
-
+  if (isLocal) {
+    yield* applyProcessEnv(props.env);
     const framework = yield* makeFramework(config, root);
-    const built = yield* Effect.mapError(
-      framework.build({ root }),
+    const dev = props.dev;
+    const port =
+      dev && dev.mode !== "external" && dev.port !== undefined
+        ? yield* resolveDevPort({
+            framework: config.framework,
+            port: dev.port,
+            host: dev.host ?? "127.0.0.1",
+            strictPort: dev.strictPort ?? false,
+          })
+        : undefined;
+    const started = yield* Effect.mapError(
+      framework.dev({
+        root,
+        port,
+        host: dev && dev.mode !== "external" ? dev.host : undefined,
+      }),
       (cause) =>
         new FrameworkServerError({
           framework: config.framework,
-          message: `The ${config.name} build failed`,
+          message: `The ${config.name} dev server failed to start`,
           cause,
         }),
     );
-    const distDir = path.resolve(
-      built.distDirectory ?? path.join(root, "dist"),
-    );
-    const entryName = built.serverModules?.[0]?.name;
-    const serverEntry =
-      entryName !== undefined ? path.resolve(distDir, entryName) : undefined;
-    const main = yield* writeServeEntry({
-      distDir,
-      clientDirectory: built.clientDirectory,
-      serverEntry,
-      bake,
-      static: config.static,
-    });
-    const extraFiles = yield* collectBakeFiles(
-      root,
-      built.clientDirectory,
-      bake,
-    );
-
-    const project = yield* asEffect(props.project ?? Project("Project"));
-    const service = yield* Service("Service", {
-      project,
-      main,
-      registry,
-      port: WEBSITE_PORT,
-      healthcheck: "/health",
-      isExternal: true,
-      env: envRecord(props.env),
-      extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
-      build:
-        config.install !== undefined ? { install: config.install } : undefined,
-    });
-
-    if (props.domain !== undefined && props.domain.length > 0) {
-      yield* CustomDomain("Domain", {
-        service,
-        environment: project,
-        domain: props.domain,
-        targetPort: WEBSITE_PORT,
-      });
-      return {
-        url: `https://${props.domain}`,
-        service,
-        project,
-      } satisfies Website;
-    }
-
     return {
-      url: service.url,
+      url: started.url,
+      service: undefined,
+      project: undefined,
+    } satisfies Website;
+  }
+
+  const registry = props.registry;
+  if (registry === undefined || registry.length === 0) {
+    return yield* new RegistryRequired({
+      message:
+        `Railway.Website.${config.name} requires \`registry\` ` +
+        "(GHCR / Docker Hub prefix Railway can pull) on deploy.",
+    });
+  }
+
+  const framework = yield* makeFramework(config, root);
+  const built = yield* Effect.mapError(
+    framework.build({ root }),
+    (cause) =>
+      new FrameworkServerError({
+        framework: config.framework,
+        message: `The ${config.name} build failed`,
+        cause,
+      }),
+  );
+  const distDir = path.resolve(built.distDirectory ?? path.join(root, "dist"));
+  const entryName = built.serverModules?.[0]?.name;
+  const serverEntry =
+    entryName !== undefined ? path.resolve(distDir, entryName) : undefined;
+  const main = yield* writeServeEntry({
+    distDir,
+    clientDirectory: built.clientDirectory,
+    serverEntry,
+    bake,
+    static: config.static,
+  });
+  const extraFiles = yield* collectBakeFiles(root, built.clientDirectory, bake);
+
+  const project = yield* asEffect(props.project ?? Project("Project"));
+  const service = yield* Service("Service", {
+    project,
+    main,
+    registry,
+    port: WEBSITE_PORT,
+    healthcheck: "/health",
+    isExternal: true,
+    env: envRecord(props.env),
+    extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
+    build:
+      config.install !== undefined ? { install: config.install } : undefined,
+  });
+
+  if (props.domain !== undefined && props.domain.length > 0) {
+    yield* CustomDomain("Domain", {
+      service,
+      environment: project,
+      domain: props.domain,
+      targetPort: WEBSITE_PORT,
+    });
+    return {
+      url: `https://${props.domain}`,
       service,
       project,
     } satisfies Website;
-  },
-);
+  }
+
+  return {
+    url: service.url,
+    service,
+    project,
+  } satisfies Website;
+});
+
+/**
+ * Composite-level tagged errors (`FrameworkServerError`,
+ * `RegistryRequired`, filesystem) are defects — `Alchemy.Stack` only
+ * admits `ConfigError` on the user effect.
+ */
+export const makeFrameworkSite = (
+  id: string,
+  props: FrameworkSiteProps,
+  config: FrameworkSiteConfig,
+) => runFrameworkSite(id, props, config).pipe(Effect.orDie);

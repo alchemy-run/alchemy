@@ -97,11 +97,9 @@ export interface StaticSiteProps extends Pick<
  * under `id`. The Service stays in the caller's namespace (same as
  * Cloudflare.Website.StaticSite).
  *
- * @resource
- * @product Website
  *
- * @section Basic Usage
- * @example Deploying a Hugo site
+ * ### Basic Usage
+ * **Example:** Deploying a Hugo site
  * ```typescript
  * const site = yield* Hetzner.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -109,7 +107,7 @@ export interface StaticSiteProps extends Pick<
  * });
  * ```
  *
- * @example SPA-style routing
+ * **Example:** SPA-style routing
  * ```typescript
  * const site = yield* Hetzner.Website.StaticSite("App", {
  *   command: "npm run build",
@@ -118,8 +116,8 @@ export interface StaticSiteProps extends Pick<
  * });
  * ```
  *
- * @section Building from a Subdirectory
- * @example Building a frontend in a monorepo
+ * ### Building from a Subdirectory
+ * **Example:** Building a frontend in a monorepo
  * ```typescript
  * const site = yield* Hetzner.Website.StaticSite("Web", {
  *   cwd: "apps/web",
@@ -128,8 +126,8 @@ export interface StaticSiteProps extends Pick<
  * });
  * ```
  *
- * @section Local Development
- * @example External Dev Server
+ * ### Local Development
+ * **Example:** External Dev Server
  * ```typescript
  * const site = yield* Hetzner.Website.StaticSite("App", {
  *   command: "npm run build",
@@ -137,6 +135,9 @@ export interface StaticSiteProps extends Pick<
  *   dev: { command: "npm run dev" },
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const StaticSite = (id: string, props: StaticSiteProps) =>
   Effect.gen(function* () {
@@ -256,4 +257,4 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       server,
       service,
     } satisfies Website;
-  });
+  }).pipe(Effect.orDie);

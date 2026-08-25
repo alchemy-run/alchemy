@@ -21,24 +21,25 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * During `alchemy dev` the site is `next dev` and no cloud resources are
  * declared; `Alchemy.remote()` opts back into the live Service path.
  *
- * @resource
- * @product Website
  *
- * @section Creating Next.js Sites
- * @example Basic Next.js App
+ * ### Creating Next.js Sites
+ * **Example:** Basic Next.js App
  * ```typescript
  * const site = yield* Fly.Website.Nextjs("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Fly.Website.Nextjs("Web", {
  *   rootDir: "./app",
  *   domain: "app.example.com",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Nextjs = (id: string, props: NextjsProps = {}) =>
   frameworkSite(id, props, {

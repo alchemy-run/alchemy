@@ -104,8 +104,8 @@ const envRecord = (
  * Without `dev.command`, the site still builds and a local static server
  * serves `outdir` — no Project or Service is created.
  *
- * @section Basic Usage
- * @example Deploying a Hugo site
+ * ### Basic Usage
+ * **Example:** Deploying a Hugo site
  * ```typescript
  * const site = yield* Railway.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -114,7 +114,7 @@ const envRecord = (
  * });
  * ```
  *
- * @example SPA-style routing
+ * **Example:** SPA-style routing
  * ```typescript
  * const site = yield* Railway.Website.StaticSite("App", {
  *   command: "npm run build",
@@ -124,8 +124,8 @@ const envRecord = (
  * });
  * ```
  *
- * @section Building from a Subdirectory
- * @example Building a frontend in a monorepo
+ * ### Building from a Subdirectory
+ * **Example:** Building a frontend in a monorepo
  * ```typescript
  * const site = yield* Railway.Website.StaticSite("Web", {
  *   cwd: "apps/web",
@@ -135,8 +135,8 @@ const envRecord = (
  * });
  * ```
  *
- * @section Local Development
- * @example External dev command
+ * ### Local Development
+ * **Example:** External dev command
  * ```typescript
  * const site = yield* Railway.Website.StaticSite("App", {
  *   command: "npm run build",
@@ -163,7 +163,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         env: props.dev.env ?? props.env,
       }).pipe(Namespace.push(id));
       return {
-        url: (dev.url as string | undefined) ?? props.dev.url,
+        url: props.dev.url ?? dev.url,
         service: undefined,
         project: undefined,
       } satisfies Website;
@@ -203,7 +203,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         },
       }).pipe(Namespace.push(id));
       return {
-        url: dev.url as string | undefined,
+        url: dev.url,
         service: undefined,
         project: undefined,
       } satisfies Website;
@@ -261,4 +261,4 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       service,
       project,
     } satisfies Website;
-  });
+  }).pipe(Effect.orDie);

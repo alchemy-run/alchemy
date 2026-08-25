@@ -20,24 +20,25 @@ export interface NuxtProps extends FrameworkSiteProps {
  * Deploy a Nuxt application to Fly: the nitro Node server on a Machine,
  * static assets (prerendered pages included) baked into the image.
  *
- * @resource
- * @product Website
  *
- * @section Creating Nuxt Sites
- * @example Basic Nuxt App
+ * ### Creating Nuxt Sites
+ * **Example:** Basic Nuxt App
  * ```typescript
  * const site = yield* Fly.Website.Nuxt("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Fly.Website.Nuxt("Web", {
  *   rootDir: "./app",
  *   domain: "app.example.com",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Nuxt = (id: string, props: NuxtProps = {}) =>
   frameworkSite(id, props, {

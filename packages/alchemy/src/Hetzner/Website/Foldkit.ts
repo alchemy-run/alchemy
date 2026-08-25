@@ -24,21 +24,22 @@ export interface FoldkitProps extends FrameworkSiteProps {
  * Vite site with SPA fallback to `index.html` (deep links boot the app
  * and the Foldkit router takes over).
  *
- * @resource
- * @product Website
  *
- * @section Creating Foldkit Sites
- * @example Foldkit App
+ * ### Creating Foldkit Sites
+ * **Example:** Foldkit App
  * ```typescript
  * const site = yield* Hetzner.Website.Foldkit("Website");
  * ```
  *
- * @example Project in a Subdirectory
+ * **Example:** Project in a Subdirectory
  * ```typescript
  * const site = yield* Hetzner.Website.Foldkit("Website", {
  *   rootDir: "applications/web",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Foldkit = (id: string, props: FoldkitProps = {}) =>
   makeFrameworkSite(id, props, {

@@ -23,24 +23,25 @@ export interface VocsProps extends FrameworkSiteProps {
  * Cloud Server. Vocs prerenders static HTML; unmatched paths serve
  * extensionless pages (`/about` → `about/index.html`).
  *
- * @resource
- * @product Website
  *
- * @section Creating Vocs Sites
- * @example Vocs Documentation Site
+ * ### Creating Vocs Sites
+ * **Example:** Vocs Documentation Site
  * ```typescript
  * const docs = yield* Hetzner.Website.Vocs("Docs", {
  *   rootDir: "./docs",
  * });
  * ```
  *
- * @example Custom Output Directory
+ * **Example:** Custom Output Directory
  * ```typescript
  * const docs = yield* Hetzner.Website.Vocs("Docs", {
  *   rootDir: "./docs",
  *   outDir: "build",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Vocs = (id: string, props: VocsProps = {}) =>
   makeFrameworkSite(id, props, {

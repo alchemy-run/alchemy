@@ -2,7 +2,7 @@
 
 Deploys a [Vite](https://vite.dev) SPA to Hetzner Cloud with
 `Hetzner.Website.Vite` — `vite build` output served by a generated Node
-static-file server as a systemd unit on an auto-created `cx22` Server in
+static-file server as a systemd unit on an auto-created `cpx12` Server in
 `fsn1`.
 
 During `alchemy dev` the site is Vite's own dev server (HMR included)

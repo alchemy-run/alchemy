@@ -41,15 +41,15 @@ export interface FoldkitProps extends FrameworkSiteProps {
  * resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Deploying a Foldkit App
- * @example Foldkit app
+ * ### Deploying a Foldkit App
+ * **Example:** Foldkit app
  * ```typescript
  * const site = yield* Railway.Website.Foldkit("Website", {
  *   registry: "ghcr.io/acme",
  * });
  * ```
  *
- * @example Foldkit project in a subdirectory
+ * **Example:** Foldkit project in a subdirectory
  * ```typescript
  * const site = yield* Railway.Website.Foldkit("Website", {
  *   rootDir: "applications/web",
@@ -57,8 +57,8 @@ export interface FoldkitProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Single-Page Application Routing
- * @example Serving a real 404 page
+ * ### Single-Page Application Routing
+ * **Example:** Serving a real 404 page
  * ```typescript
  * const site = yield* Railway.Website.Foldkit("Website", {
  *   errorPage: "404.html",

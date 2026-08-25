@@ -21,24 +21,25 @@ export interface VocsProps extends FrameworkSiteProps {
  * are prerendered static HTML; the node target drops server modules and
  * the Service serves extensionless pages (`/about` → `about/index.html`).
  *
- * @resource
- * @product Website
  *
- * @section Creating Vocs Sites
- * @example Vocs documentation site
+ * ### Creating Vocs Sites
+ * **Example:** Vocs documentation site
  * ```typescript
  * const docs = yield* Fly.Website.Vocs("Docs", {
  *   rootDir: "./docs",
  * });
  * ```
  *
- * @example Custom output directory
+ * **Example:** Custom output directory
  * ```typescript
  * const docs = yield* Fly.Website.Vocs("Docs", {
  *   rootDir: "./docs",
  *   outDir: "build",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Vocs = (id: string, props: VocsProps = {}) =>
   frameworkSite(id, props, {

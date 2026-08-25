@@ -26,24 +26,25 @@ export interface OctaneProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * @resource
- * @product Website
  *
- * @section Creating Octane Sites
- * @example Basic Octane App
+ * ### Creating Octane Sites
+ * **Example:** Basic Octane App
  * ```typescript
  * const site = yield* Fly.Website.Octane("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Fly.Website.Octane("Web", {
  *   rootDir: "./app",
  *   domain: "app.example.com",
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Octane = (id: string, props: OctaneProps = {}) =>
   frameworkSite(id, props, {

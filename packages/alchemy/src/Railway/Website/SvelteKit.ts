@@ -29,8 +29,8 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Creating SvelteKit Sites
- * @example Basic SvelteKit App
+ * ### Creating SvelteKit Sites
+ * **Example:** Basic SvelteKit App
  * ```typescript
  * const site = yield* Railway.Website.SvelteKit("Web", {
  *   rootDir: "./app",
@@ -38,8 +38,8 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Process Environment
+ * ### Server Configuration
+ * **Example:** Process Environment
  * ```typescript
  * const site = yield* Railway.Website.SvelteKit("Web", {
  *   rootDir: "./app",

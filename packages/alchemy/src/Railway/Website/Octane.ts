@@ -38,8 +38,8 @@ export interface OctaneProps extends FrameworkSiteProps {
  * cloud resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Creating Octane Sites
- * @example Basic Octane App
+ * ### Creating Octane Sites
+ * **Example:** Basic Octane App
  * ```typescript
  * const site = yield* Railway.Website.Octane("Web", {
  *   rootDir: "./app",
@@ -47,8 +47,8 @@ export interface OctaneProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Process Environment
+ * ### Server Configuration
+ * **Example:** Process Environment
  * ```typescript
  * const site = yield* Railway.Website.Octane("Web", {
  *   rootDir: "./app",

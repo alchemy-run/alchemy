@@ -46,11 +46,7 @@ if (!hasHetznerCreds) {
       const { url } = yield* stack;
       expect(url).toBeString();
       expect(url).toMatch(/^http:\/\//);
-    }).pipe(
-      Effect.catchTag(["PreconditionFailed", "Forbidden"], (error) =>
-        Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
-      ),
-    ),
+    }),
     { timeout: 120_000 },
   );
 
@@ -64,11 +60,7 @@ if (!hasHetznerCreds) {
       expect(response.status).toBe(200);
       const body = yield* response.text;
       expect(body).toContain("HETZNER_VITE_PAGE_MARKER");
-    }).pipe(
-      Effect.catchTag(["PreconditionFailed", "Forbidden"], (error) =>
-        Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
-      ),
-    ),
+    }),
     { timeout: 120_000 },
   );
 
@@ -82,11 +74,7 @@ if (!hasHetznerCreds) {
       expect(response.status).toBe(200);
       const body = yield* response.text;
       expect(body).toContain("ok");
-    }).pipe(
-      Effect.catchTag(["PreconditionFailed", "Forbidden"], (error) =>
-        Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
-      ),
-    ),
+    }),
     { timeout: 120_000 },
   );
 }

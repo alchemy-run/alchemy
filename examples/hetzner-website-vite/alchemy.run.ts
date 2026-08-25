@@ -10,7 +10,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     // `alchemy deploy` runs `vite build` and serves `dist/` from a
-    // Hetzner.Service on an auto-created cx22 in fsn1.
+    // Hetzner.Service on an auto-created cpx12 in fsn1.
     // `alchemy dev` is Vite's own dev server (HMR included) and creates
     // no Server or Service.
     const site = yield* Hetzner.Website.Vite("Web", {

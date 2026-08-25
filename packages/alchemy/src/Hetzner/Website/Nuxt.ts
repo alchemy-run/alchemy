@@ -26,18 +26,16 @@ export interface NuxtProps extends FrameworkSiteProps {
  * `@alchemy.run/frontend-frameworks/nuxt/node` deploy target (`nitro.preset`
  * `"node"`).
  *
- * @resource
- * @product Website
  *
- * @section Creating Nuxt Sites
- * @example Basic Nuxt App
+ * ### Creating Nuxt Sites
+ * **Example:** Basic Nuxt App
  * ```typescript
  * const site = yield* Hetzner.Website.Nuxt("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Hetzner.Website.Nuxt("Web", {
  *   rootDir: "./app",
@@ -45,6 +43,9 @@ export interface NuxtProps extends FrameworkSiteProps {
  *   zone,
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const Nuxt = (id: string, props: NuxtProps = {}) =>
   makeFrameworkSite(id, props, {

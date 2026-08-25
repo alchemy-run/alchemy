@@ -39,8 +39,8 @@ export interface WakuProps extends FrameworkSiteProps {
  * resources are created. `Alchemy.remote()` opts back into the live
  * Service path.
  *
- * @section Creating Waku Sites
- * @example Basic Waku App
+ * ### Creating Waku Sites
+ * **Example:** Basic Waku App
  * ```typescript
  * const site = yield* Railway.Website.Waku("Web", {
  *   rootDir: "./app",
@@ -48,8 +48,8 @@ export interface WakuProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * @section Server Configuration
- * @example Process Environment
+ * ### Server Configuration
+ * **Example:** Process Environment
  * ```typescript
  * const site = yield* Railway.Website.Waku("Web", {
  *   rootDir: "./app",

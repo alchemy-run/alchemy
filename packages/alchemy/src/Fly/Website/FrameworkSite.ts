@@ -1,11 +1,8 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Scope from "effect/Scope";
 import * as NodeNet from "node:net";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
@@ -158,27 +155,27 @@ export interface FrameworkSite {
   certificate: Certificate | undefined;
 }
 
-interface FrameworkService {
-  readonly build: (options?: {
-    readonly root?: string;
-  }) => Effect.Effect<FrameworkBuildOutputSlice, unknown>;
-  readonly dev: (options?: {
-    readonly root?: string;
-    readonly port?: number;
-    readonly host?: string;
-  }) => Effect.Effect<{ readonly url: string }, unknown, Scope.Scope>;
-}
-
+/**
+ * The structural slice of a framework-integration module this composite
+ * drives. Typed structurally so alchemy carries no dependency on
+ * `@alchemy.run/frontend-frameworks` — the *project's* install is always
+ * the one loaded.
+ */
 interface FrameworkModule {
-  readonly make: (
-    options: Record<string, unknown>,
-  ) =>
-    | Effect.Effect<
-        FrameworkService,
-        unknown,
-        FileSystem.FileSystem | Path.Path
-      >
-    | Layer.Layer<unknown, unknown, FileSystem.FileSystem | Path.Path>;
+  readonly make: (options: Record<string, unknown>) => Effect.Effect<
+    {
+      readonly build: (options?: {
+        readonly root?: string;
+      }) => Effect.Effect<FrameworkBuildOutputSlice, unknown>;
+      readonly dev: (options?: {
+        readonly root?: string;
+        readonly port?: number;
+        readonly host?: string;
+      }) => Effect.Effect<{ readonly url: string }, unknown>;
+    },
+    unknown,
+    FileSystem.FileSystem | Path.Path
+  >;
 }
 
 interface FrameworkBuildOutputSlice {
@@ -226,42 +223,25 @@ const importFrameworkModule = (specifier: string) =>
 const makeFramework = (
   config: FrameworkSiteConfig,
   root: string,
-  options: Record<string, unknown> | undefined,
+  memo?: MemoOptions | boolean,
 ) =>
   importFrameworkModule(config.framework).pipe(
-    Effect.flatMap((module_) => {
-      const made = module_.make({
-        ...options,
-        root,
-        target: config.target,
-      });
-      const failInit = (cause: unknown) =>
-        new FrameworkSiteError({
-          framework: config.framework,
-          message: "Failed to initialize the framework integration",
-          cause,
-        });
-      if (Layer.isLayer(made)) {
-        return Effect.tryPromise({
-          try: () =>
-            import("@alchemy.run/frontend-frameworks/core") as Promise<{
-              Framework: Effect.Effect<FrameworkService>;
-            }>,
-          catch: failInit,
-        }).pipe(
-          Effect.flatMap((core) =>
-            Effect.mapError(
-              Effect.provide(
-                core.Framework as never,
-                made as never,
-              ) as Effect.Effect<FrameworkService, unknown>,
-              failInit,
-            ),
-          ),
-        );
-      }
-      return Effect.mapError(made, failInit);
-    }),
+    Effect.flatMap((module_) =>
+      Effect.mapError(
+        module_.make({
+          ...config.options,
+          root,
+          target: config.target,
+          ...(memo !== undefined ? { memo } : {}),
+        }),
+        (cause) =>
+          new FrameworkSiteError({
+            framework: config.framework,
+            message: "Failed to initialize the framework integration",
+            cause,
+          }),
+      ),
+    ),
   );
 
 const isPortFree = (port: number, host: string) =>
@@ -535,6 +515,168 @@ const applyProcessEnv = (
     }
   });
 
+const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
+  _id: string,
+  props: FrameworkSiteProps,
+  config: FrameworkSiteConfig,
+) {
+  const ctx = yield* AlchemyContext;
+  const remoted = yield* ProviderModePolicy;
+  const isLocal = ctx.dev && remoted !== true;
+  const path = yield* Path.Path;
+  const fs = yield* FileSystem.FileSystem;
+  const root = path.resolve(initialCwd, props.rootDir ?? ".");
+
+  if (isLocal && props.dev?.mode === "external") {
+    return {
+      url: props.dev.url,
+      app: undefined,
+      service: undefined,
+      ip: undefined,
+      certificate: undefined,
+    } satisfies FrameworkSite;
+  }
+
+  if (isLocal) {
+    yield* applyProcessEnv(props.env);
+    const framework = yield* makeFramework(config, root, props.memo);
+    const dev = props.dev;
+    const resolvedPort =
+      dev && dev.mode !== "external" && dev.port !== undefined
+        ? yield* resolveDevPort({
+            framework: config.framework,
+            port: dev.port,
+            host: dev.host ?? "127.0.0.1",
+            strictPort: dev.strictPort ?? false,
+          })
+        : undefined;
+    const { url } = yield* Effect.mapError(
+      framework.dev({
+        root,
+        port: resolvedPort,
+        host: dev && dev.mode !== "external" ? dev.host : undefined,
+      }),
+      (cause) =>
+        new FrameworkSiteError({
+          framework: config.framework,
+          message: `The ${config.name} dev server failed to start`,
+          cause,
+        }),
+    );
+    return {
+      url,
+      app: undefined,
+      service: undefined,
+      ip: undefined,
+      certificate: undefined,
+    } satisfies FrameworkSite;
+  }
+
+  const framework = yield* makeFramework(config, root, props.memo);
+  const built = yield* Effect.mapError(
+    framework.build({ root }),
+    (cause) =>
+      new FrameworkSiteError({
+        framework: config.framework,
+        message: `The ${config.name} build failed`,
+        cause,
+      }),
+  );
+
+  const distDir = built.distDirectory ?? path.join(root, "dist");
+  const clientDir =
+    built.clientDirectory !== undefined
+      ? path.resolve(built.clientDirectory)
+      : undefined;
+  const entryName = built.serverModules?.[0]?.name;
+  const assetsOnly =
+    config.static !== undefined ||
+    entryName === undefined ||
+    entryName.length === 0;
+
+  let main: string;
+  if (assetsOnly) {
+    if (clientDir === undefined) {
+      return yield* Effect.fail(
+        new FrameworkSiteError({
+          framework: config.framework,
+          message: `The ${config.name} build produced no client assets`,
+        }),
+      );
+    }
+    const servePath = path.join(path.dirname(clientDir), "serve-fly.mjs");
+    main = yield* writeStaticServeEntry({
+      filePath: servePath,
+      clientDirExpression: JSON.stringify(CONTAINER_CLIENT_DIR),
+      htmlHandling: config.htmlHandling,
+      notFoundHandling: notFoundHandlingOf(config),
+      errorPage: config.static?.errorPage,
+    });
+  } else {
+    const servePath = path.resolve(distDir, entryName);
+    if (!(yield* fs.exists(servePath))) {
+      return yield* Effect.fail(
+        new FrameworkSiteError({
+          framework: config.framework,
+          message: `The ${config.name} build produced no server entry at ${servePath}`,
+        }),
+      );
+    }
+    main = yield* rewriteClientDir(servePath);
+  }
+
+  const extraFiles: Array<{ source: string; dest: string }> = [];
+  if (!config.skipClientAssets && clientDir !== undefined) {
+    extraFiles.push({ source: clientDir, dest: "dist" });
+  }
+  if (config.skipClientAssets) {
+    const nextDir = path.join(distDir, ".next");
+    if (yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))) {
+      extraFiles.push({ source: nextDir, dest: ".next" });
+    }
+    const publicDir = path.join(distDir, "public");
+    if (yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))) {
+      extraFiles.push({ source: publicDir, dest: "public" });
+    }
+  }
+
+  const app =
+    props.app !== undefined ? yield* resolveRef(props.app) : yield* App("App");
+
+  const ip = yield* IpAssignment("Shared", {
+    app,
+    type: "shared_v4",
+  });
+
+  const service = yield* Service("Service", {
+    app,
+    main,
+    port: DEFAULT_PORT,
+    // `main` is a complete bun/node program (generated static server
+    // or the framework `finish` entry), not a Platform class.
+    isExternal: true,
+    env: props.env,
+    extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
+    build:
+      config.install !== undefined && config.install.length > 0
+        ? { install: config.install }
+        : undefined,
+  });
+
+  const certificate =
+    props.domain !== undefined
+      ? yield* Certificate("Certificate", {
+          app,
+          hostname: props.domain,
+          kind: "acme",
+        })
+      : undefined;
+
+  const url = props.domain !== undefined ? `https://${props.domain}` : app.url;
+
+  return { url, app, service, ip, certificate };
+});
+
 /**
  * Shared implementation behind the Fly framework website composites:
  * load the framework + node target, run `dev()` under `alchemy dev`
@@ -543,181 +685,16 @@ const applyProcessEnv = (
  * into the image.
  *
  * Callers pipe `Namespace.push(id)` themselves (the composites do).
+ *
+ * Composite-level tagged errors (`FrameworkSiteError`, filesystem) are
+ * defects — `Alchemy.Stack` only admits `ConfigError` on the user
+ * effect, same as Cloudflare/AWS Website composites.
  */
-export const makeFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(
-  function* (
-    _id: string,
-    props: FrameworkSiteProps,
-    config: FrameworkSiteConfig,
-  ): Effect.Effect<FrameworkSite, FrameworkSiteError, any> {
-    const ctx = yield* AlchemyContext;
-    const remoted = yield* ProviderModePolicy;
-    const isLocal = ctx.dev && remoted !== true;
-    const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
-    const root = path.resolve(initialCwd, props.rootDir ?? ".");
-
-    if (isLocal) {
-      if (props.dev?.mode === "external") {
-        return {
-          url: props.dev.url,
-          app: undefined,
-          service: undefined,
-          ip: undefined,
-          certificate: undefined,
-        };
-      }
-      yield* applyProcessEnv(props.env);
-      const service = yield* makeFramework(config, root, config.options);
-      const host =
-        props.dev && props.dev.mode !== "external" ? props.dev.host : undefined;
-      const preferredPort =
-        props.dev && props.dev.mode !== "external" ? props.dev.port : undefined;
-      const port =
-        preferredPort !== undefined
-          ? yield* resolveDevPort({
-              framework: config.framework,
-              port: preferredPort,
-              host: host ?? "127.0.0.1",
-              strictPort:
-                props.dev !== undefined && props.dev.mode !== "external"
-                  ? (props.dev.strictPort ?? false)
-                  : false,
-            })
-          : undefined;
-      const scope = yield* Effect.serviceOption(Scope.Scope).pipe(
-        Effect.flatMap((option) =>
-          Option.isSome(option) ? Effect.succeed(option.value) : Scope.make(),
-        ),
-      );
-      const { url } = yield* Effect.mapError(
-        service
-          .dev({ root, port, host })
-          .pipe(Effect.provideService(Scope.Scope, scope)),
-        (cause) =>
-          new FrameworkSiteError({
-            framework: config.framework,
-            message: `The ${config.name} dev server failed to start`,
-            cause,
-          }),
-      );
-      return {
-        url,
-        app: undefined,
-        service: undefined,
-        ip: undefined,
-        certificate: undefined,
-      };
-    }
-
-    const framework = yield* makeFramework(config, root, config.options);
-    const built = yield* Effect.mapError(
-      framework.build({ root }),
-      (cause) =>
-        new FrameworkSiteError({
-          framework: config.framework,
-          message: `The ${config.name} build failed`,
-          cause,
-        }),
-    );
-
-    const distDir = built.distDirectory ?? path.join(root, "dist");
-    const clientDir =
-      built.clientDirectory !== undefined
-        ? path.resolve(built.clientDirectory)
-        : undefined;
-    const entryName = built.serverModules?.[0]?.name;
-    const assetsOnly =
-      config.static !== undefined ||
-      entryName === undefined ||
-      entryName.length === 0;
-
-    let main: string;
-    if (assetsOnly) {
-      if (clientDir === undefined) {
-        return yield* Effect.fail(
-          new FrameworkSiteError({
-            framework: config.framework,
-            message: `The ${config.name} build produced no client assets`,
-          }),
-        );
-      }
-      const servePath = path.join(path.dirname(clientDir), "serve-fly.mjs");
-      main = yield* writeStaticServeEntry({
-        filePath: servePath,
-        clientDirExpression: JSON.stringify(CONTAINER_CLIENT_DIR),
-        htmlHandling: config.htmlHandling,
-        notFoundHandling: notFoundHandlingOf(config),
-        errorPage: config.static?.errorPage,
-      });
-    } else {
-      const servePath = path.resolve(distDir, entryName);
-      if (!(yield* fs.exists(servePath))) {
-        return yield* Effect.fail(
-          new FrameworkSiteError({
-            framework: config.framework,
-            message: `The ${config.name} build produced no server entry at ${servePath}`,
-          }),
-        );
-      }
-      main = yield* rewriteClientDir(servePath);
-    }
-
-    const extraFiles: Array<{ source: string; dest: string }> = [];
-    if (!config.skipClientAssets && clientDir !== undefined) {
-      extraFiles.push({ source: clientDir, dest: "dist" });
-    }
-    if (config.skipClientAssets) {
-      const nextDir = path.join(distDir, ".next");
-      if (yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))) {
-        extraFiles.push({ source: nextDir, dest: ".next" });
-      }
-      const publicDir = path.join(distDir, "public");
-      if (yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))) {
-        extraFiles.push({ source: publicDir, dest: "public" });
-      }
-    }
-
-    const app =
-      props.app !== undefined
-        ? yield* resolveRef(props.app)
-        : yield* App("App");
-
-    const ip = yield* IpAssignment("Shared", {
-      app,
-      type: "shared_v4",
-    });
-
-    const service = yield* Service("Service", {
-      app,
-      main,
-      port: DEFAULT_PORT,
-      // `main` is a complete bun/node program (generated static server
-      // or the framework `finish` entry), not a Platform class.
-      isExternal: true,
-      env: props.env,
-      extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
-      build:
-        config.install !== undefined && config.install.length > 0
-          ? { install: config.install }
-          : undefined,
-    });
-
-    const certificate =
-      props.domain !== undefined
-        ? yield* Certificate("Certificate", {
-            app,
-            hostname: props.domain,
-            kind: "acme",
-          })
-        : undefined;
-
-    const url =
-      props.domain !== undefined ? `https://${props.domain}` : app.url;
-
-    return { url, app, service, ip, certificate };
-  },
-);
+export const makeFrameworkSite = (
+  id: string,
+  props: FrameworkSiteProps,
+  config: FrameworkSiteConfig,
+) => runFrameworkSite(id, props, config).pipe(Effect.orDie);
 
 /** Push {@link id} then run {@link makeFrameworkSite}. */
 export const frameworkSite = (

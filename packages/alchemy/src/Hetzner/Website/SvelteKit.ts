@@ -26,18 +26,16 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * The build runs through `@alchemy.run/frontend-frameworks/sveltekit` with
  * the `@alchemy.run/frontend-frameworks/sveltekit/node` deploy target.
  *
- * @resource
- * @product Website
  *
- * @section Creating SvelteKit Sites
- * @example Basic SvelteKit App
+ * ### Creating SvelteKit Sites
+ * **Example:** Basic SvelteKit App
  * ```typescript
  * const site = yield* Hetzner.Website.SvelteKit("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * @example Custom Domain
+ * **Example:** Custom Domain
  * ```typescript
  * const site = yield* Hetzner.Website.SvelteKit("Web", {
  *   rootDir: "./app",
@@ -45,6 +43,9 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *   zone,
  * });
  * ```
+ *
+ * @resource
+ * @product Website
  */
 export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
   makeFrameworkSite(id, props, {
