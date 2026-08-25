@@ -1,6 +1,7 @@
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -68,6 +69,11 @@ const fetchOnce = (url: string, marker: string) =>
           "cache-control": "no-cache",
           pragma: "no-cache",
           accept: "*/*",
+          // No keep-alive reuse: bun's fetch can wedge on a pooled
+          // connection the server closed after an error response — the
+          // reused request's promise neither settles nor honors its abort
+          // signal, pinning any timeout that awaits its interruption.
+          connection: "close",
         },
       });
       const body = await res.text();
@@ -123,7 +129,34 @@ export const expectUrlContains = (
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
-  return fetchOnce(url, marker).pipe(
+  // Bound each *attempt* independently of the fetch's own abort support:
+  // the fetch runs on a daemon fiber joined under a hard cap, and a capped
+  // attempt is ABANDONED (fire-and-forget interrupt) rather than awaited.
+  // A wedged fetch whose promise never settles and ignores its abort
+  // signal (observed with bun keep-alive reuse against CloudFront error
+  // responses) would otherwise pin `Effect.timeoutOrElse` forever — the
+  // timeout interrupts the losing fiber and then AWAITS that interruption.
+  const attemptOnce = Effect.forkDetach(fetchOnce(url, marker)).pipe(
+    Effect.flatMap((fiber) =>
+      Fiber.join(fiber).pipe(
+        Effect.timeoutOrElse({
+          duration: "15 seconds",
+          orElse: () =>
+            Effect.suspend(() => {
+              Effect.runFork(Fiber.interrupt(fiber));
+              return Effect.fail(
+                new HttpFetchFailed({
+                  url,
+                  message: "attempt exceeded 15s without settling — abandoned",
+                }),
+              );
+            }),
+        }),
+      ),
+    ),
+  );
+
+  return attemptOnce.pipe(
     Effect.retry({
       // Cap individual sleeps at 8s so very long timeouts still
       // sample at a reasonable rate near the end of the budget.
@@ -200,6 +233,11 @@ const fetchOnceResponse = (
           "cache-control": "no-cache",
           pragma: "no-cache",
           accept: "*/*",
+          // No keep-alive reuse: bun's fetch can wedge on a pooled
+          // connection the server closed after an error response — the
+          // reused request's promise neither settles nor honors its abort
+          // signal, pinning any timeout that awaits its interruption.
+          connection: "close",
         },
       });
       const mismatch = check(res);
@@ -373,6 +411,11 @@ const fetchOnceAbsent = (url: string, marker: string) =>
           "cache-control": "no-cache",
           pragma: "no-cache",
           accept: "*/*",
+          // No keep-alive reuse: bun's fetch can wedge on a pooled
+          // connection the server closed after an error response — the
+          // reused request's promise neither settles nor honors its abort
+          // signal, pinning any timeout that awaits its interruption.
+          connection: "close",
         },
       });
       const body = await res.text();
