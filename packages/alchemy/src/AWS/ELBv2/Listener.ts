@@ -384,12 +384,16 @@ export const ListenerProvider = () =>
             // A DNS-validated ACM certificate may still be
             // PENDING_VALIDATION while its validation record — declared as
             // a SIBLING resource (e.g. via the Dns seam) — lands and
-            // propagates; ELB answers `CertificateNotFound` until the
-            // certificate is ISSUED. Ride out issuance bounded (~8 min).
+            // propagates; ELB answers `UnsupportedCertificate` ("must have
+            // a fully-qualified domain name, a supported signature, and a
+            // supported key size") until the certificate is ISSUED, and
+            // `CertificateNotFound` while a freshly-requested ARN
+            // propagates. Ride out issuance bounded (~8 min).
             Effect.retry({
               while: (error): boolean =>
                 certs.length > 0 &&
-                error._tag === "CertificateNotFoundException",
+                (error._tag === "UnsupportedCertificate" ||
+                  error._tag === "CertificateNotFoundException"),
               schedule: Schedule.max([
                 Schedule.spaced("10 seconds"),
                 Schedule.recurs(48),
