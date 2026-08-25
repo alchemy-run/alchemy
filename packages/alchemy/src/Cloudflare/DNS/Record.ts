@@ -10,7 +10,11 @@ import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { listAllZones } from "../Zone/lookup.ts";
+import {
+  findZoneByName,
+  listAllZones,
+  zoneNameCandidates,
+} from "../Zone/lookup.ts";
 
 /**
  * DNS record type literal — every value Cloudflare recognises. Stable
@@ -67,8 +71,16 @@ export interface RecordCommonProps {
   /**
    * Zone the record lives in. Stable — changing the zone triggers
    * replacement.
+   *
+   * When omitted, the governing zone is inferred from the resolved
+   * {@link name} at reconcile time by walking the name's labels
+   * (`svc.api.example.com` → `api.example.com` → `example.com`) — the
+   * MOST-SPECIFIC zone in the account wins. The resolved zone id is
+   * persisted in the record's attributes (a stable identity — a changed
+   * inference replaces the record); when no zone matches, reconcile fails
+   * with {@link ZoneNotFoundForName}.
    */
-  zoneId: string;
+  zoneId?: string;
   /**
    * Fully-qualified or zone-relative record name (e.g.
    * `cluster-admin.microtrack.ai`, `_dmarc`, or `@` for the zone apex).
@@ -144,11 +156,28 @@ type StructuredRecordProps = {
 export type RecordProps = RecordCommonProps &
   (StringRecordProps | MxRecordProps | StructuredRecordProps);
 
+/**
+ * No Cloudflare zone in the account governs the record's name (walked from
+ * the full name up its parent labels). Add the zone to the account first,
+ * or pass an explicit `zoneId`.
+ */
+export class ZoneNotFoundForName extends Data.TaggedError(
+  "ZoneNotFoundForName",
+)<{
+  readonly name: string;
+  readonly message: string;
+}> {}
+
 export interface RecordAttributes {
   /** Cloudflare-assigned DNS record UUID. */
   recordId: string;
   /** Zone that owns this record. */
   zoneId: string;
+  /**
+   * Name of the zone, persisted when the zone was inferred from the record
+   * name (used to detect a changed inference).
+   */
+  zoneName?: string;
   /** Record name (FQDN, as Cloudflare returns it). */
   name: string;
   /** Record type. */
@@ -294,7 +323,7 @@ export const RecordProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as RecordProps;
       const n = news as RecordProps;
       if (o.type !== undefined && o.type !== n.type) {
@@ -312,11 +341,47 @@ export const RecordProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
+      // Inferred-zone identity: when the zone was inferred, a name that
+      // moved out from under the persisted zone changes the inference — a
+      // zone-identity change, so the record is replaced.
+      if (
+        n.zoneId === undefined &&
+        typeof n.name === "string" &&
+        typeof output?.zoneName === "string" &&
+        n.name !== output.zoneName &&
+        !n.name.endsWith(`.${output.zoneName}`)
+      ) {
+        return { action: "replace" } as const;
+      }
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      // Inputs have been resolved to concrete strings by Plan.
-      const zoneId = news.zoneId as string;
+      // Resolve the governing zone: explicit prop, or inferred from the
+      // record name (most-specific zone in the account wins).
+      let zoneId = news.zoneId as string | undefined;
+      let zoneName: string | undefined;
+      if (zoneId === undefined) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        for (const candidate of zoneNameCandidates(news.name)) {
+          const match = yield* findZoneByName({ accountId, name: candidate });
+          if (match) {
+            zoneId = match.id;
+            zoneName = match.name;
+            break;
+          }
+        }
+        if (zoneId === undefined) {
+          return yield* Effect.fail(
+            new ZoneNotFoundForName({
+              name: news.name,
+              message:
+                `No Cloudflare zone in account ${accountId} contains ` +
+                `'${news.name}' — add the zone to the account first, or ` +
+                "pass an explicit `zoneId`.",
+            }),
+          );
+        }
+      }
       const body = buildMutableBody(news);
 
       // 1. Observe by cached id first.
@@ -426,6 +491,7 @@ export const RecordProvider = () =>
       return {
         recordId: observed.id,
         zoneId,
+        zoneName: zoneName ?? output?.zoneName,
         name: observed.name ?? body.name,
         type: observed.type,
         content: observed.content,
@@ -450,7 +516,7 @@ export const RecordProvider = () =>
       // Owned path: we have persisted state (our own recordId) — refresh it.
       if (output?.recordId) {
         const observed = yield* observeById(output.zoneId, output.recordId);
-        const attrs = toAttributes(observed, output.zoneId);
+        const attrs = toAttributes(observed, output.zoneId, output.zoneName);
         if (attrs) return attrs;
       }
       // Adoption path: no state of our own, but a record with this
@@ -672,6 +738,7 @@ const narrowRecord = (raw: {
 const toAttributes = (
   observed: ObservedRecord | undefined,
   zoneId: string,
+  zoneName?: string,
 ): RecordAttributes | undefined => {
   if (
     !observed?.id ||
@@ -685,6 +752,7 @@ const toAttributes = (
   return {
     recordId: observed.id,
     zoneId,
+    zoneName,
     name: observed.name,
     type: observed.type,
     content: observed.content,

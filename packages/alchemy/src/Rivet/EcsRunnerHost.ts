@@ -24,6 +24,7 @@
  * Registered by `AWS.providers()` under the same `aws-ecs` kind as
  * `EcsClusterHost`.
  */
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -33,6 +34,7 @@ import {
   RunnerHost,
   type RunnerDeployOptions,
   type RunnerHostService,
+  type RunnerScalingRange,
   type RunnerSource,
 } from "./RunnerHost.ts";
 import type { BundledImageSource } from "../AWS/ECR/ImageSource.ts";
@@ -173,7 +175,13 @@ const deployRunner = (imageSource: ImageSource, options: RunnerDeployOptions) =>
     // otherwise. ECS's default deployment overlap (200%/100%) plus the
     // strictly-increasing RIVET_ENVOY_VERSION drains actors from the old
     // runner generation onto the new one.
-    const desiredCount = source.desiredCount ?? 1;
+    const desiredConfig = source.desiredCount ?? 1;
+    const scaling: RunnerScalingRange | undefined =
+      typeof desiredConfig === "object" ? desiredConfig : undefined;
+    // With autoscaling, the count is only the initial size — the scalable
+    // target owns it from then on, so updates leave it unchanged.
+    const initialCount =
+      typeof desiredConfig === "number" ? desiredConfig : desiredConfig.min;
     const described = yield* ecs.describeServices({
       cluster: state.clusterArn,
       services: [names.serviceName],
@@ -186,7 +194,7 @@ const deployRunner = (imageSource: ImageSource, options: RunnerDeployOptions) =>
       cluster: state.clusterArn,
       service: names.serviceName,
       taskDefinition: taskDefinitionArn,
-      desiredCount,
+      desiredCount: scaling === undefined ? initialCount : undefined,
     });
 
     if (existing === undefined) {
@@ -196,7 +204,7 @@ const deployRunner = (imageSource: ImageSource, options: RunnerDeployOptions) =>
           cluster: state.clusterArn,
           serviceName: names.serviceName,
           taskDefinition: taskDefinitionArn,
-          desiredCount,
+          desiredCount: initialCount,
           launchType: "FARGATE",
           networkConfiguration: {
             awsvpcConfiguration: {
@@ -244,6 +252,46 @@ const deployRunner = (imageSource: ImageSource, options: RunnerDeployOptions) =>
       nextArn: taskDefinitionArn,
     });
 
+    // Runner autoscaling: a scalable target + CPU target-tracking policy on
+    // the service's desired count for the range form; a fixed count
+    // deregisters any previously-registered target (which also removes its
+    // policies).
+    const clusterName = state.clusterArn.split("/").pop() ?? state.clusterArn;
+    const scalingResourceId = `service/${clusterName}/${names.serviceName}`;
+    if (scaling !== undefined) {
+      yield* session.note(
+        `Autoscaling runner service ${names.serviceName} between ${scaling.min} and ${scaling.max}`,
+      );
+      yield* aas.registerScalableTarget({
+        ServiceNamespace: "ecs",
+        ResourceId: scalingResourceId,
+        ScalableDimension: "ecs:service:DesiredCount",
+        MinCapacity: scaling.min,
+        MaxCapacity: scaling.max,
+      });
+      yield* aas.putScalingPolicy({
+        PolicyName: `${names.serviceName}-cpu`,
+        ServiceNamespace: "ecs",
+        ResourceId: scalingResourceId,
+        ScalableDimension: "ecs:service:DesiredCount",
+        PolicyType: "TargetTrackingScaling",
+        TargetTrackingScalingPolicyConfiguration: {
+          TargetValue: scaling.targetCpu ?? 60,
+          PredefinedMetricSpecification: {
+            PredefinedMetricType: "ECSServiceAverageCPUUtilization",
+          },
+        },
+      });
+    } else {
+      yield* aas
+        .deregisterScalableTarget({
+          ServiceNamespace: "ecs",
+          ResourceId: scalingResourceId,
+          ScalableDimension: "ecs:service:DesiredCount",
+        })
+        .pipe(Effect.catchTag("ObjectNotFoundException", () => Effect.void));
+    }
+
     return {
       codeHash: resolved.codeHash,
       runnerState: {
@@ -274,6 +322,19 @@ const deleteRunner = ({ output }: { output: Record<string, any> }) =>
     };
 
     if (state.clusterArn !== undefined && state.serviceName !== undefined) {
+      // Remove any runner autoscaling first so the autoscaler cannot fight
+      // the drain to zero (also deletes the target's policies).
+      const clusterName = state.clusterArn.split("/").pop() ?? state.clusterArn;
+      yield* aas
+        .deregisterScalableTarget({
+          ServiceNamespace: "ecs",
+          ResourceId: `service/${clusterName}/${state.serviceName}`,
+          ScalableDimension: "ecs:service:DesiredCount",
+        })
+        .pipe(
+          Effect.catchTag("ObjectNotFoundException", () => Effect.void),
+          Effect.catch(() => Effect.void),
+        );
       yield* ecs
         .updateService({
           cluster: state.clusterArn,

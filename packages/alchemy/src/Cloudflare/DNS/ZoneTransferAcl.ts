@@ -108,14 +108,12 @@ export const ZoneTransferAclProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map(
-              (acl): ZoneTransferAclAttributes => ({
-                aclId: acl.id,
-                accountId,
-                name: acl.name,
-                ipRange: acl.ipRange,
-              }),
-            ),
+            (page.result ?? []).map((acl): ZoneTransferAclAttributes => ({
+              aclId: acl.id,
+              accountId,
+              name: acl.name,
+              ipRange: acl.ipRange,
+            })),
           ),
         ),
       );

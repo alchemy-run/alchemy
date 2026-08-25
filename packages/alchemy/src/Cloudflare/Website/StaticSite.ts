@@ -78,10 +78,9 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
 }
 
 type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
-  [binding in keyof NormalizedBindings<
-    Bindings,
-    WorkerAssetsConfig
-  >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+  [
+    binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+  ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
 }>;
 
 /**

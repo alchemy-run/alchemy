@@ -114,11 +114,69 @@ export interface ClusterConnection {
   readonly hostState?: Record<string, any>;
 }
 
+/**
+ * Options for a host's {@link ClusterHostService.ingress}: expose the
+ * engine's guard service beyond its private network through a
+ * host-composed load balancer.
+ */
+export interface ClusterIngressOptions {
+  /** Logical id of the Cluster being exposed. */
+  readonly clusterId: string;
+  /**
+   * `"public"` composes internet-facing ingress; `"private"` composes
+   * ingress reachable only from the engine's network.
+   */
+  readonly expose: "public" | "private";
+  /**
+   * Autoscaling for the ENGINE nodes. The default RocksDB storage backend
+   * is single-node — hosts fail loudly when a multi-node range is
+   * requested without multi-node-capable storage.
+   */
+  readonly scaling?: {
+    readonly min: number;
+    readonly max: number;
+    readonly targetCpu?: number;
+  };
+  /**
+   * Custom domain intent. The host requests a matching TLS certificate and
+   * returns its DNS-validation material — the DNS records themselves are
+   * declared by the caller through the {@link ../Dns.ts Dns} seam.
+   */
+  readonly domain?: string;
+}
+
+/** What a host's {@link ClusterHostService.ingress} hands back. */
+export interface ClusterIngressResult {
+  /** The URL the exposed engine serves on (`https://{domain}` when a domain was requested). */
+  readonly url: Input<string>;
+  /** DNS name of the composed load balancer (the `domain` record's target). */
+  readonly dnsName: Input<string>;
+  /** TLS certificate material, when a `domain` was requested. */
+  readonly certificate?: {
+    /** ARN (or provider id) of the requested certificate. */
+    readonly arn: Input<string>;
+    /** Name of the DNS-validation record the caller must declare. */
+    readonly validationRecordName: Input<string>;
+    /** Value of the DNS-validation record the caller must declare. */
+    readonly validationRecordValue: Input<string>;
+  };
+}
+
 export interface ClusterHostService {
   readonly kind: "Rivet.ClusterHost";
   readonly compose: (
     options: ClusterHostComposeOptions,
   ) => Effect.Effect<ClusterHostComposeResult, any, any>;
+  /**
+   * Compose ingress (load balancer, security groups, certificate) exposing
+   * the engine's guard service per {@link ClusterIngressOptions}. Called
+   * from a Worker's props transform AFTER the cluster resolved, so the
+   * host can reference its composed cluster children. Pure plan-time
+   * composition — resources only, no imperative calls.
+   */
+  readonly ingress: (
+    options: ClusterIngressOptions,
+  ) => Effect.Effect<ClusterIngressResult, any, any>;
   readonly restartNodes: (options: {
     /** The deploying resource's resolved props (engine connection included). */
     readonly news: ClusterConnection;

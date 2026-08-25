@@ -276,17 +276,15 @@ export const PoolProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map(
-              (pool): PoolAttributes => ({
-                poolId: pool.id ?? "",
-                accountId,
-                name: pool.name ?? "",
-                enabled: pool.enabled ?? true,
-                monitor: pool.monitor ?? undefined,
-                createdOn: pool.createdOn ?? undefined,
-                modifiedOn: pool.modifiedOn ?? undefined,
-              }),
-            ),
+            (page.result ?? []).map((pool): PoolAttributes => ({
+              poolId: pool.id ?? "",
+              accountId,
+              name: pool.name ?? "",
+              enabled: pool.enabled ?? true,
+              monitor: pool.monitor ?? undefined,
+              createdOn: pool.createdOn ?? undefined,
+              modifiedOn: pool.modifiedOn ?? undefined,
+            })),
           ),
         ),
       );

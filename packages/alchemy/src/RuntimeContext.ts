@@ -49,6 +49,13 @@ export interface BaseRuntimeContext {
    * overriding the env-driven default.
    */
   telemetry?: Layer.Layer<never, any, any>;
+  /**
+   * DNS seam implementation registered during init via a provider DNS
+   * layer (`AWS.Route53Dns()` / `Cloudflare.Dns()` — see Dns.ts). Platform
+   * resources that declare DNS records (a Celld/Rivet worker with a
+   * `domain`) read it back after the impl evaluated.
+   */
+  dns?: import("./Dns.ts").DnsService;
 }
 
 /**

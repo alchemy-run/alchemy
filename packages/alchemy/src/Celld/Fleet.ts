@@ -41,10 +41,22 @@ export interface FleetProps extends PlatformProps {
    */
   host?: FleetHostProps;
   /**
-   * Number of fleet nodes.
+   * Number of fleet nodes — a fixed count, or an autoscaling range. The
+   * object form composes an Application Auto Scaling target plus a CPU
+   * target-tracking policy on the node compute (`targetCpu` percent,
+   * default 60); the plain number pins a fixed count.
    * @default 2
    */
-  instances?: number;
+  instances?:
+    | number
+    | {
+        /** Minimum node count Application Auto Scaling may scale in to. */
+        min: number;
+        /** Maximum node count Application Auto Scaling may scale out to. */
+        max: number;
+        /** Target average CPU utilization (percent). @default 60 */
+        targetCpu?: number;
+      };
   /**
    * The celld release the default node image is pinned to.
    * @default DEFAULT_CELLD_VERSION

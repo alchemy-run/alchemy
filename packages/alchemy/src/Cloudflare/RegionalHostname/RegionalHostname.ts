@@ -123,15 +123,13 @@ export const RegionalHostnameProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (item): Attributes => ({
-                    zoneId: zone.id,
-                    hostname: item.hostname,
-                    regionKey: item.regionKey,
-                    routing: item.routing ?? undefined,
-                    createdOn: item.createdOn,
-                  }),
-                ),
+                (page.result ?? []).map((item): Attributes => ({
+                  zoneId: zone.id,
+                  hostname: item.hostname,
+                  regionKey: item.regionKey,
+                  routing: item.routing ?? undefined,
+                  createdOn: item.createdOn,
+                })),
               ),
             ),
             // Plan-gated zones (no Data Localization Suite entitlement)

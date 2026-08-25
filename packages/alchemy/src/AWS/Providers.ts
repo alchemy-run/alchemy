@@ -505,6 +505,7 @@ export const providers = () =>
       ECS.CapacityProvider,
       ECS.Cluster,
       ECS.Service,
+      ECS.ServiceTargetGroupAttachment,
       ECS.Task,
       ECS.TaskDefinition,
       EFS.AccessPoint,
@@ -1301,6 +1302,7 @@ export const providers = () =>
             local: () => ECS.FlociServiceProvider(),
             dataPlane: flociServices,
           }),
+          ECS.ServiceTargetGroupAttachmentProvider(),
           flociDual(ECS.TaskDefinition, () => ECS.TaskDefinitionProvider()),
           ProviderLayer.dual(ECS.Task, {
             live: () => ECS.TaskProvider(),

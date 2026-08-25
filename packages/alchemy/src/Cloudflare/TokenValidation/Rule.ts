@@ -318,8 +318,8 @@ export const RuleProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (rule): RuleAttributes => toAttributes(rule, zone.id),
+                (page.result ?? []).map((rule): RuleAttributes =>
+                  toAttributes(rule, zone.id),
                 ),
               ),
             ),

@@ -140,18 +140,16 @@ export const SnippetProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (s): SnippetAttributes => ({
-                    name: s.snippetName,
-                    zoneId: zone.id,
-                    // The list response carries no main module; snippets
-                    // upload under the engine default and `read` falls
-                    // back to it too, so report the same here.
-                    mainModule: DEFAULT_MAIN_MODULE,
-                    createdOn: s.createdOn,
-                    modifiedOn: s.modifiedOn ?? undefined,
-                  }),
-                ),
+                (page.result ?? []).map((s): SnippetAttributes => ({
+                  name: s.snippetName,
+                  zoneId: zone.id,
+                  // The list response carries no main module; snippets
+                  // upload under the engine default and `read` falls
+                  // back to it too, so report the same here.
+                  mainModule: DEFAULT_MAIN_MODULE,
+                  createdOn: s.createdOn,
+                  modifiedOn: s.modifiedOn ?? undefined,
+                })),
               ),
             ),
             // Plan-gated / partial-permission zones reject the route; skip.

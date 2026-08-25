@@ -1,4 +1,5 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -90,8 +91,16 @@ export interface RecordCidrRoutingConfig {
 export interface RecordProps {
   /**
    * Hosted zone that owns the record.
+   *
+   * When omitted, the governing zone is inferred from the resolved
+   * {@link name} at reconcile time by walking the name's labels
+   * (`svc.api.example.com` → `api.example.com` → `example.com`) — the
+   * MOST-SPECIFIC public hosted zone wins. The resolved zone id is
+   * persisted in the record's attributes (a stable identity — a changed
+   * inference replaces the record); when no zone matches, reconcile fails
+   * with {@link HostedZoneNotFoundForName}.
    */
-  hostedZoneId: string;
+  hostedZoneId?: string;
   /**
    * Record name.
    */
@@ -154,6 +163,18 @@ export interface RecordProps {
   healthCheckId?: string;
 }
 
+/**
+ * No public Route 53 hosted zone governs the record's name (walked from the
+ * full name up its parent labels). Create the hosted zone first, or pass an
+ * explicit `hostedZoneId`.
+ */
+export class HostedZoneNotFoundForName extends Data.TaggedError(
+  "HostedZoneNotFoundForName",
+)<{
+  readonly name: string;
+  readonly message: string;
+}> {}
+
 export interface Record extends Resource<
   "AWS.Route53.Record",
   RecordProps,
@@ -162,6 +183,11 @@ export interface Record extends Resource<
      * Hosted zone that owns the record.
      */
     hostedZoneId: string;
+    /**
+     * Name of the hosted zone, persisted when the zone was inferred from
+     * the record name (used to detect a changed inference).
+     */
+    hostedZoneName: string | undefined;
     /**
      * Fully qualified record name.
      */
@@ -476,8 +502,10 @@ export const toRecordSet = (
 const toAttrs = (
   recordSet: route53.ResourceRecordSet,
   hostedZoneId: string,
+  hostedZoneName?: string,
 ) => ({
   hostedZoneId: normalizeHostedZoneId(hostedZoneId),
+  hostedZoneName,
   name: recordSet.Name,
   type: recordSet.Type,
   ttl: recordSet.TTL,
@@ -545,9 +573,48 @@ export const RecordProvider = () =>
         );
       });
 
-      const upsertRecord = Effect.fn(function* (props: RecordProps) {
+      // Infer the governing zone from the record name: walk the name's
+      // labels longest-first and take the FIRST (most-specific) public
+      // hosted zone that matches exactly.
+      const inferHostedZone = Effect.fn(function* (name: string) {
+        const labels = name
+          .replace(/\.$/, "")
+          .split(".")
+          .filter((label) => label.length > 0);
+        for (let i = 0; i < labels.length - 1; i++) {
+          const candidate = `${labels.slice(i).join(".")}.`;
+          const listed = yield* route53.listHostedZonesByName({
+            DNSName: candidate,
+            MaxItems: 1,
+          });
+          const zone = listed.HostedZones?.[0];
+          if (
+            zone?.Id !== undefined &&
+            zone.Name === candidate &&
+            zone.Config?.PrivateZone !== true
+          ) {
+            return {
+              hostedZoneId: normalizeHostedZoneId(zone.Id),
+              hostedZoneName: zone.Name,
+            };
+          }
+        }
+        return yield* Effect.fail(
+          new HostedZoneNotFoundForName({
+            name,
+            message:
+              `No public Route 53 hosted zone contains '${name}' — create ` +
+              "the hosted zone first, or pass an explicit `hostedZoneId`.",
+          }),
+        );
+      });
+
+      const upsertRecord = Effect.fn(function* (
+        props: RecordProps,
+        hostedZoneId: string,
+      ) {
         const response = yield* route53.changeResourceRecordSets({
-          HostedZoneId: normalizeHostedZoneId(props.hostedZoneId),
+          HostedZoneId: normalizeHostedZoneId(hostedZoneId),
           ChangeBatch: {
             Comment: "Alchemy Route53 record upsert",
             Changes: [
@@ -621,7 +688,7 @@ export const RecordProvider = () =>
 
             return rows.flat();
           }),
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
           // Identity change → replace, but only when the old value is known —
           // a half-created state row can't round-trip Output-valued props
@@ -629,12 +696,25 @@ export const RecordProvider = () =>
           // must fall through to the create/update recovery path.
           if (
             (olds.hostedZoneId !== undefined &&
+              news.hostedZoneId !== undefined &&
               normalizeHostedZoneId(olds.hostedZoneId) !==
                 normalizeHostedZoneId(news.hostedZoneId)) ||
             (olds.name !== undefined &&
               normalizeName(olds.name) !== normalizeName(news.name)) ||
             olds.type !== news.type ||
             olds.setIdentifier !== news.setIdentifier
+          ) {
+            return { action: "replace" } as const;
+          }
+          // Inferred-zone identity: when the zone was inferred, a name that
+          // moved out from under the persisted zone changes the inference —
+          // a zone-identity change, so the record is replaced.
+          if (
+            news.hostedZoneId === undefined &&
+            output?.hostedZoneName !== undefined &&
+            !normalizeName(news.name).endsWith(
+              normalizeName(output.hostedZoneName),
+            )
           ) {
             return { action: "replace" } as const;
           }
@@ -664,18 +744,26 @@ export const RecordProvider = () =>
             return undefined;
           }
 
-          return toAttrs(recordSet, hostedZoneId);
+          return toAttrs(recordSet, hostedZoneId, output?.hostedZoneName);
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
+          // Resolve the governing zone: explicit prop, or inferred from the
+          // record name (most-specific public zone wins).
+          const inferred =
+            news.hostedZoneId === undefined
+              ? yield* inferHostedZone(news.name)
+              : undefined;
+          const hostedZoneId = news.hostedZoneId ?? inferred!.hostedZoneId;
+
           // Route 53 `changeResourceRecordSets` with `UPSERT` is naturally
           // reconciler-friendly: it creates the record if missing and
           // overwrites it if present. There's no separate ensure/sync split
           // — one call converges to the desired record set.
-          yield* upsertRecord(news);
+          yield* upsertRecord(news, hostedZoneId);
 
           // Re-read so the returned attributes reflect the actual current
           // record (including server-applied defaults).
-          const recordSet = yield* findRecord(news.hostedZoneId, news);
+          const recordSet = yield* findRecord(hostedZoneId, news);
 
           if (!recordSet) {
             return yield* Effect.die(
@@ -684,7 +772,7 @@ export const RecordProvider = () =>
           }
 
           yield* session.note(`${news.type} ${normalizeName(news.name)}`);
-          return toAttrs(recordSet, news.hostedZoneId);
+          return toAttrs(recordSet, hostedZoneId, inferred?.hostedZoneName);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* route53

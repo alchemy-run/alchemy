@@ -29,9 +29,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as ACM from "../AWS/ACM/index.ts";
+import * as ApplicationAutoScaling from "../AWS/ApplicationAutoScaling/index.ts";
 import * as CloudMap from "../AWS/CloudMap/index.ts";
 import * as EC2 from "../AWS/EC2/index.ts";
 import * as ECS from "../AWS/ECS/index.ts";
+import * as ELBv2 from "../AWS/ELBv2/index.ts";
 import * as IAM from "../AWS/IAM/index.ts";
 import * as S3 from "../AWS/S3/index.ts";
 import type { Input } from "../Input.ts";
@@ -40,10 +43,13 @@ import * as Output from "../Output.ts";
 import { Random } from "../Random.ts";
 import { Stack } from "../Stack.ts";
 import { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";
+import { FLEET_DEPLOYMENT_PATH } from "./FleetGateway.ts";
 import {
   FleetHost,
   type FleetHostComposeOptions,
   type FleetHostService,
+  type FleetIngressOptions,
+  type FleetIngressResult,
 } from "./FleetHost.ts";
 
 declare module "./FleetHost.ts" {
@@ -70,6 +76,26 @@ declare module "./FleetHost.ts" {
 const FLEET_PORT = 8080;
 const FLEET_CIDR = "10.61.0.0/16";
 
+/**
+ * Plan-process registry of composed fleets, keyed by fleet logical id. The
+ * worker-driven `ingress` runs AFTER its worker yielded the fleet (so
+ * `compose` has populated this), and needs handles onto the fleet's
+ * composed children — the node service to attach the target group to, the
+ * network to place the load balancer in.
+ */
+interface ComposedEcsFleet {
+  readonly vpcId: Input<EC2.VpcId>;
+  readonly subnetIds: Input<EC2.SubnetId[]>;
+  /** The fleet node SG (composed) or the first BYO SG — the "private" ingress trust anchor. */
+  readonly primarySecurityGroupId: Input<EC2.SecurityGroupId>;
+  readonly clusterArn: Input<string>;
+  readonly clusterName: Input<string>;
+  readonly serviceName: Input<string>;
+  readonly containerName: Input<string>;
+  readonly tags: Record<string, string> | undefined;
+}
+const composedFleets = new Map<string, ComposedEcsFleet>();
+
 const composeEcsFleet = ({ id, props }: FleetHostComposeOptions) =>
   Effect.gen(function* () {
     const stack = yield* Stack;
@@ -92,10 +118,13 @@ const composeEcsFleet = ({ id, props }: FleetHostComposeOptions) =>
     let vpcId: Input<string>;
     let subnetIds: Input<string[]>;
     let securityGroupIds: Input<string[]>;
+    let primarySecurityGroupId: Input<EC2.SecurityGroupId>;
     if (options.vpc !== undefined) {
       vpcId = options.vpc.vpcId;
       subnetIds = options.vpc.subnetIds;
       securityGroupIds = options.vpc.securityGroupIds;
+      primarySecurityGroupId = options.vpc
+        .securityGroupIds[0] as EC2.SecurityGroupId;
     } else {
       const network = yield* EC2.Network("Network", {
         cidrBlock: FLEET_CIDR,
@@ -121,6 +150,7 @@ const composeEcsFleet = ({ id, props }: FleetHostComposeOptions) =>
         tags: props.tags,
       });
       securityGroupIds = [securityGroup.groupId];
+      primarySecurityGroupId = securityGroup.groupId;
     }
 
     const policy = yield* IAM.Policy("BucketAccess", {
@@ -194,11 +224,25 @@ ENTRYPOINT_EOF
 ENTRYPOINT ["/alchemy/busybox", "sh", "/alchemy/entrypoint.sh"]
 `;
 
+    // `instances` is either a fixed node count or an autoscaling range —
+    // the object form composes an Application Auto Scaling target plus a
+    // CPU target-tracking policy through the service's own `scaling` prop.
+    const instances = props.instances ?? 2;
+    const scaling =
+      typeof instances === "object"
+        ? {
+            min: instances.min,
+            max: instances.max,
+            cpuUtilization: instances.targetCpu ?? 60,
+          }
+        : undefined;
+
     const service = yield* ECS.Service("Nodes", {
       cluster,
       dockerfile: { content: dockerfile },
       port: FLEET_PORT,
-      desiredCount: props.instances ?? 2,
+      desiredCount: typeof instances === "number" ? instances : undefined,
+      scaling,
       cpu: options.cpu ?? 512,
       memory: options.memory ?? 1024,
       runtimePlatform: {
@@ -222,6 +266,21 @@ ENTRYPOINT ["/alchemy/busybox", "sh", "/alchemy/entrypoint.sh"]
       tags: props.tags,
     });
 
+    // Hand the ingress seam its handles onto the composed children (see
+    // ComposedEcsFleet above).
+    composedFleets.set(id, {
+      vpcId: vpcId as Input<EC2.VpcId>,
+      subnetIds: subnetIds as Input<EC2.SubnetId[]>,
+      primarySecurityGroupId,
+      clusterArn: cluster.clusterArn,
+      clusterName: cluster.clusterName,
+      serviceName: service.serviceName,
+      containerName: service.containerName.pipe(
+        Output.map((name: string | undefined) => name ?? "main"),
+      ),
+      tags: props.tags,
+    });
+
     return {
       bucket: {
         uri: Output.interpolate`s3://${bucket.bucketName}`,
@@ -237,6 +296,195 @@ ENTRYPOINT ["/alchemy/busybox", "sh", "/alchemy/entrypoint.sh"]
       },
     };
   }).pipe(Namespace.push(id));
+
+/**
+ * The `aws-ecs` fleet ingress: an ALB in front of the fleet's node tasks.
+ *
+ * - **ALB** — internet-facing for `expose: "public"`, internal otherwise,
+ *   in the fleet's subnets. Its own security group admits 80 (and 443 with
+ *   a `domain`) from the internet (public) or from the fleet's node
+ *   security group (private). Nodes need no new rules: the composed node
+ *   SG already admits the fleet port from the VPC CIDR, which covers the
+ *   ALB's ENIs (BYO networks must admit the fleet port from their VPC).
+ * - **Target group** — the nodes' gateway port, health-checked on the
+ *   gateway's cheap deployment probe.
+ * - **Attachment** — the target group attaches to the EXISTING node
+ *   service via `AWS.ECS.ServiceTargetGroupAttachment`, whose convergence
+ *   wait rides out the first `celld deploy` landing in parallel.
+ * - **TLS** — with a `domain`, a DNS-validated ACM certificate is
+ *   requested in-region and attached to a 443 listener; the validation
+ *   record itself is declared by the worker through the `Dns` seam, and
+ *   the listener provider waits out issuance.
+ */
+const composeEcsFleetIngress = (
+  options: FleetIngressOptions,
+): Effect.Effect<FleetIngressResult, any, any> =>
+  Effect.gen(function* () {
+    const composed = composedFleets.get(options.fleetId);
+    if (composed === undefined) {
+      return yield* Effect.die(
+        new Error(
+          `Celld fleet '${options.fleetId}' has not been composed in this ` +
+            "plan — a worker's ingress resolves after its fleet; was the " +
+            "fleet's host kind changed mid-plan?",
+        ),
+      );
+    }
+    const region = yield* yield* Region;
+    const tags = composed.tags;
+    const wantsTls = options.domain !== undefined;
+
+    const port80 = {
+      ipProtocol: "tcp",
+      fromPort: 80,
+      toPort: 80,
+      description: "ingress HTTP",
+    };
+    const port443 = {
+      ipProtocol: "tcp",
+      fromPort: 443,
+      toPort: 443,
+      description: "ingress HTTPS",
+    };
+    const albSecurityGroup = yield* EC2.SecurityGroup("IngressSecurityGroup", {
+      vpcId: composed.vpcId,
+      description: `Celld fleet ${options.fleetId} ingress`,
+      ingress:
+        options.expose === "public"
+          ? [
+              { ...port80, cidrIpv4: "0.0.0.0/0" },
+              ...(wantsTls ? [{ ...port443, cidrIpv4: "0.0.0.0/0" }] : []),
+            ]
+          : [
+              {
+                ...port80,
+                referencedGroupId: composed.primarySecurityGroupId,
+              },
+              ...(wantsTls
+                ? [
+                    {
+                      ...port443,
+                      referencedGroupId: composed.primarySecurityGroupId,
+                    },
+                  ]
+                : []),
+            ],
+      tags,
+    });
+
+    const targetGroup = yield* ELBv2.TargetGroup("IngressTargets", {
+      vpcId: composed.vpcId,
+      port: FLEET_PORT,
+      protocol: "HTTP",
+      targetType: "ip",
+      healthCheckPath: FLEET_DEPLOYMENT_PATH,
+      healthCheckInterval: "10 seconds",
+      healthyThresholdCount: 2,
+      unhealthyThresholdCount: 2,
+      tags,
+    });
+
+    const loadBalancer = yield* ELBv2.LoadBalancer("Ingress", {
+      type: "application",
+      scheme: options.expose === "public" ? "internet-facing" : "internal",
+      subnets: composed.subnetIds,
+      securityGroups: [albSecurityGroup.groupId],
+      tags,
+    });
+
+    const httpListener = yield* ELBv2.Listener("IngressHttp", {
+      loadBalancerArn: loadBalancer.loadBalancerArn,
+      targetGroupArn: targetGroup.targetGroupArn,
+      port: 80,
+      protocol: "HTTP",
+    });
+
+    let certificate: FleetIngressResult["certificate"];
+    if (options.domain !== undefined) {
+      // An ALB listener needs an in-region certificate. NO hostedZoneId:
+      // the validation record is declared by the caller through the Dns
+      // seam, and the HTTPS listener's provider waits out issuance.
+      const requested = yield* ACM.Certificate("IngressCertificate", {
+        domainName: options.domain,
+        region,
+        tags,
+      });
+      certificate = {
+        arn: requested.certificateArn,
+        validationRecordName: requested.domainValidationOptions.pipe(
+          Output.map(
+            (validations: { ResourceRecord?: { Name?: string } }[]) =>
+              validations[0]?.ResourceRecord?.Name ?? "",
+          ),
+        ),
+        validationRecordValue: requested.domainValidationOptions.pipe(
+          Output.map(
+            (validations: { ResourceRecord?: { Value?: string } }[]) =>
+              validations[0]?.ResourceRecord?.Value ?? "",
+          ),
+        ),
+      };
+      yield* ELBv2.Listener("IngressHttps", {
+        loadBalancerArn: loadBalancer.loadBalancerArn,
+        targetGroupArn: targetGroup.targetGroupArn,
+        port: 443,
+        protocol: "HTTPS",
+        certificateArn: requested.certificateArn,
+      });
+    }
+
+    // Attach the target group to the node service. The target group must
+    // be associated with the load balancer before ECS accepts it, so the
+    // attachment's ARN input is gated on the listener as well.
+    yield* ECS.ServiceTargetGroupAttachment("IngressAttachment", {
+      cluster: composed.clusterArn,
+      serviceName: composed.serviceName,
+      targetGroupArn: Output.all(
+        Output.asOutput(targetGroup.targetGroupArn),
+        Output.asOutput(httpListener.listenerArn),
+      ).pipe(
+        Output.map(([targetGroupArn]: [string, string]) => targetGroupArn),
+      ),
+      containerName: composed.containerName,
+      containerPort: FLEET_PORT,
+    });
+
+    // Optional ingress-level autoscaling on the node service — the fleet's
+    // own `instances: { min, max }` is the primary surface; don't combine
+    // both.
+    if (options.scaling !== undefined) {
+      const scalableTarget = yield* ApplicationAutoScaling.ScalableTarget(
+        "IngressScalingTarget",
+        {
+          serviceNamespace: "ecs",
+          resourceId: Output.interpolate`service/${composed.clusterName}/${composed.serviceName}`,
+          scalableDimension: "ecs:service:DesiredCount",
+          minCapacity: options.scaling.min,
+          maxCapacity: options.scaling.max,
+        },
+      );
+      yield* ApplicationAutoScaling.ScalingPolicy("IngressScalingPolicy", {
+        serviceNamespace: "ecs",
+        resourceId: scalableTarget.resourceId,
+        scalableDimension: "ecs:service:DesiredCount",
+        targetTracking: {
+          TargetValue: options.scaling.targetCpu ?? 60,
+          PredefinedMetricSpecification: {
+            PredefinedMetricType: "ECSServiceAverageCPUUtilization",
+          },
+        },
+      });
+    }
+
+    return {
+      url:
+        options.domain !== undefined
+          ? `https://${options.domain}`
+          : Output.interpolate`http://${loadBalancer.dnsName}`,
+      dnsName: loadBalancer.dnsName,
+      certificate,
+    } satisfies FleetIngressResult;
+  });
 
 /**
  * The `aws-ecs` {@link FleetHost} layer. Registered by `AWS.providers()`;
@@ -258,6 +506,8 @@ export const EcsFleetHost = (): Layer.Layer<FleetHost<"aws-ecs">> =>
         kind: "Celld.FleetHost" as const,
 
         compose: composeEcsFleet,
+
+        ingress: composeEcsFleetIngress,
 
         deployEnv: () =>
           Effect.gen(function* () {

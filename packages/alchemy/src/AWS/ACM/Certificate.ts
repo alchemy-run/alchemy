@@ -632,6 +632,18 @@ export const CertificateProvider = () =>
             const withRecords = yield* waitForValidationRecords(certificateArn);
             yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
             certificate = yield* waitForIssued(certificateArn);
+          } else if (
+            (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
+            certificate.Status !== "ISSUED" &&
+            (certificate.DomainValidationOptions ?? []).some(
+              (option) => option.ResourceRecord === undefined,
+            )
+          ) {
+            // No hostedZoneId: the caller validates externally (e.g. through
+            // the Dns seam) and reads the validation CNAME off this
+            // resource's attributes — ACM populates `ResourceRecord` a few
+            // seconds after the request, so wait for it (NOT for issuance).
+            certificate = yield* waitForValidationRecords(certificateArn);
           }
 
           // Sync options — only the CT logging preference is mutable in

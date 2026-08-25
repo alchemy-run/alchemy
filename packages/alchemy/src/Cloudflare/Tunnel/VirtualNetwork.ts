@@ -245,16 +245,14 @@ export const VirtualNetworkProvider = () =>
                 // ("it is the default virtual network"); never enumerate it
                 // for account-wide teardown.
                 .filter((v) => !v.isDefaultNetwork)
-                .map(
-                  (v): VirtualNetworkAttributes => ({
-                    virtualNetworkId: v.id,
-                    accountId,
-                    name: v.name,
-                    comment: v.comment,
-                    isDefaultNetwork: v.isDefaultNetwork,
-                    createdAt: v.createdAt,
-                  }),
-                ),
+                .map((v): VirtualNetworkAttributes => ({
+                  virtualNetworkId: v.id,
+                  accountId,
+                  name: v.name,
+                  comment: v.comment,
+                  isDefaultNetwork: v.isDefaultNetwork,
+                  createdAt: v.createdAt,
+                })),
             ),
           ),
         );

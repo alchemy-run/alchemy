@@ -54,6 +54,7 @@
  *   `force >= max(guard, worker)`, so the two move together.
  */
 import * as ecs from "@distilled.cloud/aws/ecs";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type { Input } from "../Input.ts";
 import * as Layer from "effect/Layer";
@@ -65,11 +66,15 @@ import {
   ClusterHost,
   type ClusterHostComposeOptions,
   type ClusterHostService,
+  type ClusterIngressOptions,
+  type ClusterIngressResult,
 } from "./ClusterHost.ts";
 import { Stack } from "../Stack.ts";
+import * as ACM from "../AWS/ACM/index.ts";
 import * as CloudMap from "../AWS/CloudMap/index.ts";
 import * as EC2 from "../AWS/EC2/index.ts";
 import * as ECS from "../AWS/ECS/index.ts";
+import * as ELBv2 from "../AWS/ELBv2/index.ts";
 
 declare module "./ClusterHost.ts" {
   interface ClusterHostOptionsRegistry {
@@ -132,6 +137,28 @@ const GUARD_SHUTDOWN_SECONDS = 100;
 const FORCE_SHUTDOWN_SECONDS = 110;
 const STOP_TIMEOUT_SECONDS = 120;
 
+/**
+ * Plan-process registry of composed clusters, keyed by cluster logical id.
+ * The worker-driven `ingress` runs AFTER its worker yielded the cluster
+ * (so `compose` has populated this), and needs handles onto the cluster's
+ * composed children — the engine service to attach the target group to,
+ * the network to place the load balancer in.
+ */
+interface ComposedEcsCluster {
+  readonly vpcId: Input<EC2.VpcId>;
+  readonly subnetIds: Input<EC2.SubnetId[]>;
+  /** The engine SG (composed) or the first BYO SG — the "private" ingress trust anchor. */
+  readonly primarySecurityGroupId: Input<EC2.SecurityGroupId>;
+  readonly clusterArn: Input<string>;
+  readonly clusterName: Input<string>;
+  readonly serviceName: Input<string>;
+  readonly containerName: Input<string>;
+  /** Whether multi-node engine storage is configured (`postgresUrl`). */
+  readonly multiNodeCapable: boolean;
+  readonly tags: Record<string, string> | undefined;
+}
+const composedClusters = new Map<string, ComposedEcsCluster>();
+
 const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
   Effect.gen(function* () {
     const stack = yield* Stack;
@@ -162,10 +189,13 @@ const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
     let vpcId: Input<string>;
     let subnetIds: Input<string[]>;
     let securityGroupIds: Input<string[]>;
+    let primarySecurityGroupId: Input<EC2.SecurityGroupId>;
     if (options.vpc !== undefined) {
       vpcId = options.vpc.vpcId;
       subnetIds = options.vpc.subnetIds;
       securityGroupIds = options.vpc.securityGroupIds;
+      primarySecurityGroupId = options.vpc
+        .securityGroupIds[0] as EC2.SecurityGroupId;
     } else {
       const network = yield* EC2.Network("Network", {
         cidrBlock: ENGINE_CIDR,
@@ -199,6 +229,7 @@ const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
         tags: props.tags,
       });
       securityGroupIds = [securityGroup.groupId];
+      primarySecurityGroupId = securityGroup.groupId;
     }
 
     const dnsNamespace = yield* CloudMap.PrivateDnsNamespace("Discovery", {
@@ -291,6 +322,22 @@ const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
       tags: props.tags,
     });
 
+    // Hand the ingress seam its handles onto the composed children (see
+    // ComposedEcsCluster above).
+    composedClusters.set(id, {
+      vpcId: vpcId as Input<EC2.VpcId>,
+      subnetIds: subnetIds as Input<EC2.SubnetId[]>,
+      primarySecurityGroupId,
+      clusterArn: cluster.clusterArn,
+      clusterName: cluster.clusterName,
+      serviceName: service.serviceName,
+      containerName: service.containerName.pipe(
+        Output.map((name: string | undefined) => name ?? "main"),
+      ),
+      multiNodeCapable: options.postgresUrl !== undefined,
+      tags: props.tags,
+    });
+
     return {
       endpoint,
       adminToken: secret.text,
@@ -303,6 +350,183 @@ const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
       },
     };
   }).pipe(Namespace.push(id));
+
+/**
+ * The `aws-ecs` cluster ingress: an ALB in front of the engine's guard
+ * service (guard speaks HTTP + WebSocket, which an ALB carries natively —
+ * simpler than an NLB with the existing machinery and it reuses the exact
+ * celld ingress shape).
+ *
+ * - **ALB** — internet-facing for `expose: "public"`, internal otherwise,
+ *   in the engine's subnets. Its own security group admits 80 (and 443
+ *   with a `domain`) from the internet (public) or from the engine's
+ *   security group (private). The engine needs no new rules: the composed
+ *   engine SG already admits guard + api-peer from the VPC CIDR, which
+ *   covers the ALB's ENIs (BYO networks must admit both from their VPC).
+ * - **Target group** — the guard port, health-checked on the api-peer's
+ *   `/health`.
+ * - **Attachment** — the target group attaches to the EXISTING engine
+ *   service via `AWS.ECS.ServiceTargetGroupAttachment`.
+ * - **TLS** — with a `domain`, a DNS-validated ACM certificate is
+ *   requested in-region and attached to a 443 listener; the validation
+ *   record is declared by the worker through the `Dns` seam.
+ */
+const composeEcsClusterIngress = (
+  options: ClusterIngressOptions,
+): Effect.Effect<ClusterIngressResult, any, any> =>
+  Effect.gen(function* () {
+    const composed = composedClusters.get(options.clusterId);
+    if (composed === undefined) {
+      return yield* Effect.die(
+        new Error(
+          `Rivet cluster '${options.clusterId}' has not been composed in ` +
+            "this plan — a worker's ingress resolves after its cluster; was " +
+            "the cluster's host kind changed mid-plan?",
+        ),
+      );
+    }
+    if (
+      options.scaling !== undefined &&
+      (options.scaling.min > 1 || options.scaling.max > 1) &&
+      !composed.multiNodeCapable
+    ) {
+      return yield* Effect.die(
+        new Error(
+          `Rivet cluster '${options.clusterId}' requests engine autoscaling ` +
+            `to ${options.scaling.max} nodes, but the default RocksDB ` +
+            "storage backend is single-node. Set the host's `postgresUrl` " +
+            "option to run more than one engine node.",
+        ),
+      );
+    }
+    const region = yield* yield* Region;
+    const tags = composed.tags;
+    const wantsTls = options.domain !== undefined;
+
+    const port80 = {
+      ipProtocol: "tcp",
+      fromPort: 80,
+      toPort: 80,
+      description: "ingress HTTP",
+    };
+    const port443 = {
+      ipProtocol: "tcp",
+      fromPort: 443,
+      toPort: 443,
+      description: "ingress HTTPS",
+    };
+    const albSecurityGroup = yield* EC2.SecurityGroup("IngressSecurityGroup", {
+      vpcId: composed.vpcId,
+      description: `Rivet cluster ${options.clusterId} ingress`,
+      ingress:
+        options.expose === "public"
+          ? [
+              { ...port80, cidrIpv4: "0.0.0.0/0" },
+              ...(wantsTls ? [{ ...port443, cidrIpv4: "0.0.0.0/0" }] : []),
+            ]
+          : [
+              {
+                ...port80,
+                referencedGroupId: composed.primarySecurityGroupId,
+              },
+              ...(wantsTls
+                ? [
+                    {
+                      ...port443,
+                      referencedGroupId: composed.primarySecurityGroupId,
+                    },
+                  ]
+                : []),
+            ],
+      tags,
+    });
+
+    const targetGroup = yield* ELBv2.TargetGroup("IngressTargets", {
+      vpcId: composed.vpcId,
+      port: GUARD_PORT,
+      protocol: "HTTP",
+      targetType: "ip",
+      // The guard's own routes 404 on probes; the api-peer service carries
+      // the engine's real health endpoint.
+      healthCheckPort: String(API_PEER_PORT),
+      healthCheckPath: "/health",
+      healthCheckInterval: "10 seconds",
+      healthyThresholdCount: 2,
+      unhealthyThresholdCount: 2,
+      tags,
+    });
+
+    const loadBalancer = yield* ELBv2.LoadBalancer("Ingress", {
+      type: "application",
+      scheme: options.expose === "public" ? "internet-facing" : "internal",
+      subnets: composed.subnetIds,
+      securityGroups: [albSecurityGroup.groupId],
+      tags,
+    });
+
+    const httpListener = yield* ELBv2.Listener("IngressHttp", {
+      loadBalancerArn: loadBalancer.loadBalancerArn,
+      targetGroupArn: targetGroup.targetGroupArn,
+      port: 80,
+      protocol: "HTTP",
+    });
+
+    let certificate: ClusterIngressResult["certificate"];
+    if (options.domain !== undefined) {
+      const requested = yield* ACM.Certificate("IngressCertificate", {
+        domainName: options.domain,
+        region,
+        tags,
+      });
+      certificate = {
+        arn: requested.certificateArn,
+        validationRecordName: requested.domainValidationOptions.pipe(
+          Output.map(
+            (validations: { ResourceRecord?: { Name?: string } }[]) =>
+              validations[0]?.ResourceRecord?.Name ?? "",
+          ),
+        ),
+        validationRecordValue: requested.domainValidationOptions.pipe(
+          Output.map(
+            (validations: { ResourceRecord?: { Value?: string } }[]) =>
+              validations[0]?.ResourceRecord?.Value ?? "",
+          ),
+        ),
+      };
+      yield* ELBv2.Listener("IngressHttps", {
+        loadBalancerArn: loadBalancer.loadBalancerArn,
+        targetGroupArn: targetGroup.targetGroupArn,
+        port: 443,
+        protocol: "HTTPS",
+        certificateArn: requested.certificateArn,
+      });
+    }
+
+    // Attach the target group to the engine service. The target group must
+    // be associated with the load balancer before ECS accepts it, so the
+    // attachment's ARN input is gated on the listener as well.
+    yield* ECS.ServiceTargetGroupAttachment("IngressAttachment", {
+      cluster: composed.clusterArn,
+      serviceName: composed.serviceName,
+      targetGroupArn: Output.all(
+        Output.asOutput(targetGroup.targetGroupArn),
+        Output.asOutput(httpListener.listenerArn),
+      ).pipe(
+        Output.map(([targetGroupArn]: [string, string]) => targetGroupArn),
+      ),
+      containerName: composed.containerName,
+      containerPort: GUARD_PORT,
+    });
+
+    return {
+      url:
+        options.domain !== undefined
+          ? `https://${options.domain}`
+          : Output.interpolate`http://${loadBalancer.dnsName}`,
+      dnsName: loadBalancer.dnsName,
+      certificate,
+    } satisfies ClusterIngressResult;
+  });
 
 /**
  * The `aws-ecs` {@link ClusterHost} layer. Registered by `AWS.providers()`;
@@ -322,6 +546,8 @@ export const EcsClusterHost = (): Layer.Layer<ClusterHost<"aws-ecs">> =>
         kind: "Rivet.ClusterHost" as const,
 
         compose: composeEcsCluster,
+
+        ingress: composeEcsClusterIngress,
 
         restartNodes: ({ news }) =>
           Effect.gen(function* () {

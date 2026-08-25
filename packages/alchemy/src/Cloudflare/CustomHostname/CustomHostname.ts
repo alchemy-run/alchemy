@@ -307,9 +307,8 @@ export const CustomHostnameProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (raw): Attributes =>
-                    toAttributes(narrowHostname(raw), zone.id),
+                (page.result ?? []).map((raw): Attributes =>
+                  toAttributes(narrowHostname(raw), zone.id),
                 ),
               ),
             ),

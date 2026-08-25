@@ -37,7 +37,9 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
-import type { InputProps } from "../Input.ts";
+import type { DnsService } from "../Dns.ts";
+import type { Input, InputProps } from "../Input.ts";
+import { push as pushNamespace } from "../Namespace.ts";
 import * as Output from "../Output.ts";
 import { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
@@ -60,6 +62,7 @@ import type {
 import type { WorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { makeWorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import type { Cluster } from "./Cluster.ts";
+import { findClusterHost, type ClusterIngressResult } from "./ClusterHost.ts";
 import {
   makeRivetActorClient,
   RIVET_ACTOR_NAMESPACE,
@@ -127,10 +130,35 @@ export interface RivetWorkerProps {
   cpu?: number;
   /** Runner task memory (MiB). @default 1024 */
   memory?: number;
-  /** Number of runner instances. @default 1 */
-  desiredCount?: number;
+  /**
+   * Number of runner instances — a fixed count, or an autoscaling range
+   * (the object form composes an Application Auto Scaling target plus a
+   * CPU target-tracking policy on the runner service; `targetCpu` percent,
+   * default 60).
+   * @default 1
+   */
+  desiredCount?: number | { min: number; max: number; targetCpu?: number };
   /** Bundler configuration overrides (`Bundle.BundleConfig`). */
   build?: unknown;
+  /**
+   * Expose the cluster's engine gateway beyond its private network through
+   * host-composed ingress (an ALB in front of the guard port on
+   * `aws-ecs`): `"public"` is internet-facing; `"private"` composes
+   * internal ingress. When set (or when {@link domain} is set) the
+   * worker's `url` attribute becomes the ingress URL. NOTE: the engine's
+   * data plane is network-guarded, not token-guarded — public exposure
+   * makes the actor gateway internet-reachable.
+   * @default undefined — no ingress; the engine stays private to its network
+   */
+  expose?: "public" | "private";
+  /**
+   * Custom domain for the exposed engine gateway. Composes a
+   * DNS-validated TLS certificate on the ingress and declares the domain
+   * + validation DNS records through the {@link ../Dns.ts Dns} seam —
+   * provide a DNS layer on the worker's impl. Implies `expose: "private"`
+   * ingress when {@link expose} is unset.
+   */
+  domain?: string;
 }
 
 /**
@@ -150,10 +178,16 @@ export interface RivetWorkerResourceProps {
   cpu?: number;
   /** Runner task memory (MiB). */
   memory?: number;
-  /** Number of runner instances. */
-  desiredCount?: number;
+  /** Number of runner instances — a fixed count or an autoscaling range. */
+  desiredCount?: number | { min: number; max: number; targetCpu?: number };
   /** Bundler configuration overrides. */
   build?: unknown;
+  /** Requested ingress exposure (see {@link RivetWorkerProps.expose}). */
+  expose?: "public" | "private";
+  /** Custom domain for the exposed engine gateway. */
+  domain?: string;
+  /** URL of the host-composed ingress, when the engine is exposed. */
+  ingressUrl?: string;
   /** Logical id of the {@link Cluster} this worker's runner connects to. */
   clusterId?: string;
   /** The runner host kind (keys the RunnerHost lookup). */
@@ -209,6 +243,63 @@ export interface RivetWorker extends Resource<
 > {}
 
 /**
+ * Ingress material stashed by the props transform for the worker's
+ * registration to consume AFTER the impl evaluated: the DNS records for a
+ * `domain` are declared through the {@link Dns} seam, which the impl's
+ * provide chain contributes (captured on the runtime context by the DNS
+ * layer's build — see Dns.ts).
+ */
+const pendingIngressDns = new Map<
+  string,
+  { domain: string | undefined; ingress: ClusterIngressResult }
+>();
+
+/**
+ * Declare the exposed engine's DNS records (domain → ingress, certificate
+ * validation) through the {@link Dns} seam captured from the impl's
+ * provide chain. Runs as part of the registration's post-impl step (the
+ * `exports` yield) — a no-op at runtime and for workers without a domain.
+ */
+const declareWorkerDnsRecords = (
+  id: string,
+  ctx: { dns?: DnsService },
+): Effect.Effect<void, never, any> =>
+  Effect.gen(function* () {
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return;
+    }
+    const pending = pendingIngressDns.get(id);
+    if (pending === undefined || pending.domain === undefined) {
+      return;
+    }
+    const dns = ctx.dns;
+    if (dns === undefined) {
+      return yield* Effect.die(
+        new Error(
+          `Rivet.Worker '${id}' declares domain '${pending.domain}' but no ` +
+            "DNS layer was provided — provide one on the worker's impl, " +
+            "e.g. Effect.provide(AWS.Route53Dns()) or " +
+            "Effect.provide(Cloudflare.Dns()).",
+        ),
+      );
+    }
+    yield* dns.record(`${id}-Domain`, {
+      name: pending.domain,
+      type: "ALIAS",
+      values: [pending.ingress.dnsName] as Input<string[]>,
+    });
+    if (pending.ingress.certificate !== undefined) {
+      yield* dns.record(`${id}-DomainCertValidation`, {
+        name: pending.ingress.certificate.validationRecordName,
+        type: "CNAME",
+        values: [pending.ingress.certificate.validationRecordValue] as Input<
+          string[]
+        >,
+      });
+    }
+  });
+
+/**
  * Resolve the public props into the persisted resource props: copy the
  * cluster's connection material off its attributes. A no-op at runtime —
  * inside the runner only the runtime behaviors matter, and the cluster
@@ -241,6 +332,34 @@ const transformWorkerProps = (
     const cluster = (yield* asEffect(clusterClass as any)) as Cluster & {
       Props?: { hostKind?: string };
     };
+
+    // Compose host ingress when the worker asks the engine gateway to be
+    // exposed (or names a domain — which implies private ingress).
+    let ingressUrl: Input<string> | undefined;
+    if (props.expose !== undefined || props.domain !== undefined) {
+      if (props.isExternal) {
+        return yield* Effect.die(
+          new Error(
+            `Rivet.Worker '${id}' sets expose/domain without an impl — ` +
+              "ingress (and its DNS wiring) requires the impl form.",
+          ),
+        );
+      }
+      const hostKind = cluster.Props?.hostKind;
+      const host = yield* findClusterHost(
+        typeof hostKind === "string" ? hostKind : undefined,
+      );
+      const ingress = yield* host
+        .ingress({
+          clusterId: clusterClass.LogicalId,
+          expose: props.expose ?? "private",
+          domain: props.domain,
+        })
+        .pipe(pushNamespace(id));
+      ingressUrl = ingress.url;
+      pendingIngressDns.set(id, { domain: props.domain, ingress });
+    }
+
     return {
       ...base,
       clusterId: clusterClass.LogicalId,
@@ -248,6 +367,9 @@ const transformWorkerProps = (
       endpoint: cluster.endpoint,
       adminToken: cluster.adminToken,
       hostState: cluster.hostState,
+      expose: props.expose,
+      domain: props.domain,
+      ingressUrl,
     } satisfies InputProps<RivetWorkerResourceProps>;
   });
 
@@ -273,19 +395,30 @@ export type RivetWorkerClass = Platform<
  */
 export const Worker: RivetWorkerClass = Platform(RivetWorkerTypeId, {
   transformProps: transformWorkerProps,
-  createRuntimeContext: (id: string) => ({
-    ...makeWorkerRuntimeContext(id),
-    Type: RivetWorkerTypeId as any,
-    // Rivet's worker binding contract carries plain DO declarations, not
-    // Cloudflare's `bindings` array.
-    durableObjectBinding: (decl: { name: string; className: string }) => ({
-      durableObjects: [{ name: decl.name, className: decl.className }],
-    }),
-    // The synthetic runner environment (see `Runner.ts`) already maps each
-    // hosted class to a gateway-backed namespace, so the "native stub" IS
-    // the finished stub.
-    durableObjectStub: (nativeStub: unknown) => nativeStub,
-  }),
+  createRuntimeContext: (id: string) => {
+    const base = makeWorkerRuntimeContext(id);
+    const ctx = {
+      ...base,
+      Type: RivetWorkerTypeId as any,
+      // Rivet's worker binding contract carries plain DO declarations, not
+      // Cloudflare's `bindings` array.
+      durableObjectBinding: (decl: { name: string; className: string }) => ({
+        durableObjects: [{ name: decl.name, className: decl.className }],
+      }),
+      // The synthetic runner environment (see `Runner.ts`) already maps each
+      // hosted class to a gateway-backed namespace, so the "native stub" IS
+      // the finished stub.
+      durableObjectStub: (nativeStub: unknown) => nativeStub,
+    };
+    // The registration's post-impl step: declare the exposed engine's DNS
+    // records through the Dns seam the impl's provide chain captured onto
+    // this context (see declareWorkerDnsRecords).
+    ctx.exports = Effect.flatMap(
+      declareWorkerDnsRecords(id, ctx),
+      () => base.exports,
+    ) as Effect.Effect<Record<string, any>>;
+    return ctx;
+  },
 }) as RivetWorkerClass;
 
 /** The provider-registration alias of {@link Worker}. @internal */
@@ -477,7 +610,7 @@ export const RivetWorkerProvider = () =>
 
           return {
             workerName: workerName(stack, id),
-            url: news.endpoint,
+            url: news.ingressUrl ?? news.endpoint,
             endpoint: news.endpoint,
             adminToken: news.adminToken,
             hostKind: news.hostKind,

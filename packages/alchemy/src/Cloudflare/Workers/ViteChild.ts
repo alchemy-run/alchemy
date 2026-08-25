@@ -79,12 +79,10 @@ export const startViteChild = (
     const alchemyContext = yield* Effect.serviceOption(AlchemyContext);
     const stack = yield* Effect.serviceOption(Stack);
     const base = yield* fromProcessEnv.pipe(
-      Effect.orElseSucceed(
-        (): RpcServerEnvironment => ({
-          profile: process.env.ALCHEMY_PROFILE,
-          envFile: undefined,
-        }),
-      ),
+      Effect.orElseSucceed((): RpcServerEnvironment => ({
+        profile: process.env.ALCHEMY_PROFILE,
+        envFile: undefined,
+      })),
     );
     const childEnvironment: RpcServerEnvironment = {
       profile: base.profile,

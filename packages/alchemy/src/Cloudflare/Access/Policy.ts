@@ -321,9 +321,8 @@ export const PolicyProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catch(
-              (): Effect.Effect<ObservedPolicy | undefined> =>
-                Effect.succeed(undefined),
+            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
+              Effect.succeed(undefined),
             ),
           );
       }
@@ -444,9 +443,8 @@ export const PolicyProvider = () =>
             policyId: output.policyId,
           })
           .pipe(
-            Effect.catch(
-              (): Effect.Effect<ObservedPolicy | undefined> =>
-                Effect.succeed(undefined),
+            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
+              Effect.succeed(undefined),
             ),
           );
         if (direct && direct.id) {

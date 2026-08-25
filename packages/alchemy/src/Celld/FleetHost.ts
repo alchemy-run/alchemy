@@ -99,11 +99,69 @@ export interface FleetConnection {
   readonly hostState?: Record<string, any>;
 }
 
+/**
+ * Options for a host's {@link FleetHostService.ingress}: expose the fleet's
+ * gateway beyond its private network through a host-composed load balancer.
+ */
+export interface FleetIngressOptions {
+  /** Logical id of the {@link Fleet} being exposed. */
+  readonly fleetId: string;
+  /**
+   * `"public"` composes internet-facing ingress; `"private"` composes
+   * ingress reachable only from the fleet's network (callers attached via
+   * `bindWorker`).
+   */
+  readonly expose: "public" | "private";
+  /**
+   * Autoscaling for the ingress' backing compute, when the host supports
+   * it. The fleet's own `instances` prop is the primary scaling surface —
+   * this option exists for hosts whose ingress adds scalable capacity.
+   */
+  readonly scaling?: {
+    readonly min: number;
+    readonly max: number;
+    readonly targetCpu?: number;
+  };
+  /**
+   * Custom domain intent. The host requests a matching TLS certificate and
+   * returns its DNS-validation material — the DNS records themselves are
+   * declared by the caller through the {@link ../Dns.ts Dns} seam.
+   */
+  readonly domain?: string;
+}
+
+/** What a host's {@link FleetHostService.ingress} hands back. */
+export interface FleetIngressResult {
+  /** The URL the exposed worker serves on (`https://{domain}` when a domain was requested). */
+  readonly url: Input<string>;
+  /** DNS name of the composed load balancer (the `domain` record's target). */
+  readonly dnsName: Input<string>;
+  /** TLS certificate material, when a `domain` was requested. */
+  readonly certificate?: {
+    /** ARN (or provider id) of the requested certificate. */
+    readonly arn: Input<string>;
+    /** Name of the DNS-validation record the caller must declare. */
+    readonly validationRecordName: Input<string>;
+    /** Value of the DNS-validation record the caller must declare. */
+    readonly validationRecordValue: Input<string>;
+  };
+}
+
 export interface FleetHostService {
   readonly kind: "Celld.FleetHost";
   readonly compose: (
     options: FleetHostComposeOptions,
   ) => Effect.Effect<FleetHostComposeResult, any, any>;
+  /**
+   * Compose ingress (load balancer, security groups, certificate) exposing
+   * the fleet's gateway per {@link FleetIngressOptions}. Called from a
+   * Worker's props transform AFTER the fleet resolved, so the host can
+   * reference its composed fleet children. Pure plan-time composition —
+   * resources only, no imperative calls.
+   */
+  readonly ingress: (
+    options: FleetIngressOptions,
+  ) => Effect.Effect<FleetIngressResult, any, any>;
   readonly deployEnv: (options: {
     /** The deploying resource's resolved props (fleet connection included). */
     readonly news: FleetConnection;

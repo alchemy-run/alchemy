@@ -452,14 +452,12 @@ export const getWorkerExport = <Export = any>({
       .then((context) =>
         Effect.runPromise(
           Effect.all([exported, runtimeContext]).pipe(
-            Effect.map(
-              ([exp, rc]): WorkerBuild<Export> => ({
-                context,
-                export: exp,
-                shape: rc.shape,
-                telemetry: () => rc.telemetry,
-              }),
-            ),
+            Effect.map(([exp, rc]): WorkerBuild<Export> => ({
+              context,
+              export: exp,
+              shape: rc.shape,
+              telemetry: () => rc.telemetry,
+            })),
             Effect.provideContext(context),
           ),
         ),

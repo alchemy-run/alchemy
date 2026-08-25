@@ -55,8 +55,9 @@ import type * as HttpClientResponse from "effect/unstable/http/HttpClientRespons
 import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../Artifacts.ts";
 import * as Binding from "../Binding.ts";
-import type { InputProps } from "../Input.ts";
-import { Namespace } from "../Namespace.ts";
+import type { DnsService } from "../Dns.ts";
+import type { Input, InputProps } from "../Input.ts";
+import { Namespace, push as pushNamespace } from "../Namespace.ts";
 import * as Output from "../Output.ts";
 import { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
@@ -92,7 +93,11 @@ import {
   FLEET_SECRET_VAR,
   makeGatewayFetch,
 } from "./FleetGateway.ts";
-import { findFleetHost, type FleetBucket } from "./FleetHost.ts";
+import {
+  findFleetHost,
+  type FleetBucket,
+  type FleetIngressResult,
+} from "./FleetHost.ts";
 import type { Providers } from "./Providers.ts";
 import {
   computeFleetMigrations,
@@ -136,6 +141,24 @@ export interface CelldWorkerProps {
   fleet: FleetRef;
   /** Entry module of the worker bundle, usually `import.meta.url`. */
   main: string;
+  /**
+   * Expose the worker beyond the fleet's private network through
+   * host-composed ingress (an ALB on `aws-ecs`): `"public"` is
+   * internet-facing; `"private"` composes internal ingress reachable only
+   * from the fleet's network. When set (or when {@link domain} is set) the
+   * worker's `url` attribute becomes the ingress URL.
+   * @default undefined — no ingress; the worker stays private to the fleet network
+   */
+  expose?: "public" | "private";
+  /**
+   * Custom domain for the exposed worker. Composes a DNS-validated TLS
+   * certificate on the ingress and declares the domain + validation DNS
+   * records through the {@link ../Dns.ts Dns} seam — provide a DNS layer
+   * on the worker's impl (`Effect.provide(AWS.Route53Dns())` or
+   * `Effect.provide(Cloudflare.Dns())`). Implies `expose: "private"`
+   * ingress when {@link expose} is unset.
+   */
+  domain?: string;
   /**
    * The celld release the managed deploy CLI is pinned to.
    * @default DEFAULT_CELLD_VERSION
@@ -184,6 +207,12 @@ export interface CelldWorkerResourceProps {
   fleetSecret?: Redacted.Redacted<string>;
   /** Host-specific connection state copied from the fleet. */
   hostState?: Record<string, any>;
+  /** Requested ingress exposure (see {@link CelldWorkerProps.expose}). */
+  expose?: "public" | "private";
+  /** Custom domain for the exposed worker. */
+  domain?: string;
+  /** URL of the host-composed ingress, when the worker is exposed. */
+  ingressUrl?: string;
   /** Extra environment variables for the worker. @internal */
   env?: Record<string, any>;
   /** Durable Object / export map, populated from the impl. @internal */
@@ -243,6 +272,63 @@ const mintGatewaySecret = (workerLogicalId: string) =>
   );
 
 /**
+ * Ingress material stashed by the props transform for the worker's
+ * registration to consume AFTER the impl evaluated: the DNS records for a
+ * `domain` are declared through the {@link Dns} seam, which the impl's
+ * provide chain contributes (captured on the runtime context by the DNS
+ * layer's build — see Dns.ts).
+ */
+const pendingIngressDns = new Map<
+  string,
+  { domain: string | undefined; ingress: FleetIngressResult }
+>();
+
+/**
+ * Declare the exposed worker's DNS records (domain → ingress, certificate
+ * validation) through the {@link Dns} seam captured from the impl's
+ * provide chain. Runs as part of the registration's post-impl step (the
+ * `exports` yield) — a no-op at runtime and for workers without a domain.
+ */
+const declareWorkerDnsRecords = (
+  id: string,
+  ctx: { dns?: DnsService },
+): Effect.Effect<void, never, any> =>
+  Effect.gen(function* () {
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return;
+    }
+    const pending = pendingIngressDns.get(id);
+    if (pending === undefined || pending.domain === undefined) {
+      return;
+    }
+    const dns = ctx.dns;
+    if (dns === undefined) {
+      return yield* Effect.die(
+        new Error(
+          `Celld.Worker '${id}' declares domain '${pending.domain}' but no ` +
+            "DNS layer was provided — provide one on the worker's impl, " +
+            "e.g. Effect.provide(AWS.Route53Dns()) or " +
+            "Effect.provide(Cloudflare.Dns()).",
+        ),
+      );
+    }
+    yield* dns.record(`${id}-Domain`, {
+      name: pending.domain,
+      type: "ALIAS",
+      values: [pending.ingress.dnsName] as Input<string[]>,
+    });
+    if (pending.ingress.certificate !== undefined) {
+      yield* dns.record(`${id}-DomainCertValidation`, {
+        name: pending.ingress.certificate.validationRecordName,
+        type: "CNAME",
+        values: [pending.ingress.certificate.validationRecordValue] as Input<
+          string[]
+        >,
+      });
+    }
+  });
+
+/**
  * Resolve the public props into the persisted resource props: copy the
  * fleet's connection material off its attributes and mint the per-worker
  * gateway secret. A no-op at runtime — inside a deployed bundle only the
@@ -277,6 +363,35 @@ const transformWorkerProps = (
     // and by `bindWorker` into each caller's env — the same root-anchored
     // Random node on both paths.
     const secret = yield* mintGatewaySecret(id);
+
+    // Compose host ingress when the worker asks to be exposed (or names a
+    // domain — which implies private ingress). The host kind must be
+    // plan-readable, same as below.
+    let ingressUrl: Input<string> | undefined;
+    if (props.expose !== undefined || props.domain !== undefined) {
+      if (props.isExternal) {
+        return yield* Effect.die(
+          new Error(
+            `Celld.Worker '${id}' sets expose/domain without an impl — ` +
+              "ingress (and its DNS wiring) requires the impl form.",
+          ),
+        );
+      }
+      const hostKind = fleet.Props?.hostKind;
+      const host = yield* findFleetHost(
+        typeof hostKind === "string" ? hostKind : undefined,
+      );
+      const ingress = yield* host
+        .ingress({
+          fleetId: fleetClass.LogicalId,
+          expose: props.expose ?? "private",
+          domain: props.domain,
+        })
+        .pipe(pushNamespace(id));
+      ingressUrl = ingress.url;
+      pendingIngressDns.set(id, { domain: props.domain, ingress });
+    }
+
     return {
       ...base,
       fleetId: fleetClass.LogicalId,
@@ -285,6 +400,9 @@ const transformWorkerProps = (
       fleetUrl: fleet.fleetUrl,
       fleetSecret: secret.text,
       hostState: fleet.hostState,
+      expose: props.expose,
+      domain: props.domain,
+      ingressUrl,
     } satisfies InputProps<CelldWorkerResourceProps>;
   });
 
@@ -312,7 +430,7 @@ export const Worker: CelldWorkerClass = Platform(CelldWorkerTypeId, {
   transformProps: transformWorkerProps,
   createRuntimeContext: (id: string) => {
     const base = makeWorkerRuntimeContext(id);
-    return {
+    const ctx = {
       ...base,
       Type: CelldWorkerTypeId as any,
       // Every fleet worker serves through the gateway: RPC-path auth guard,
@@ -334,6 +452,14 @@ export const Worker: CelldWorkerClass = Platform(CelldWorkerTypeId, {
       durableObjectStub: (nativeStub: unknown) =>
         localDurableObject(nativeStub),
     };
+    // The registration's post-impl step: declare the exposed worker's DNS
+    // records through the Dns seam the impl's provide chain captured onto
+    // this context (see declareWorkerDnsRecords).
+    ctx.exports = Effect.flatMap(
+      declareWorkerDnsRecords(id, ctx),
+      () => base.exports,
+    ) as Effect.Effect<Record<string, any>>;
+    return ctx;
   },
 }) as CelldWorkerClass;
 
@@ -552,7 +678,7 @@ export const CelldWorkerProvider = () =>
 
           return {
             workerName: workerName(stack, id),
-            url: news.fleetUrl,
+            url: news.ingressUrl ?? news.fleetUrl,
             fleetUrl: news.fleetUrl,
             fleetSecret: news.fleetSecret,
             bucket: news.bucket,
@@ -664,7 +790,11 @@ export const bindWorker = <Shape = {}>(
               ),
             },
             env: {
-              [urlKey]: target.url,
+              // The INTERNAL fleet URL on purpose: a bound caller reaches
+              // the fleet over the VPC even when the worker is also
+              // exposed through public ingress (`url` then carries the
+              // ingress URL instead).
+              [urlKey]: target.fleetUrl,
               [secretKey]: secret.text,
             },
           },

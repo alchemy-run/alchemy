@@ -675,16 +675,14 @@ const mapGateway = (
   logpushPublicKey: gateway.logpushPublicKey ?? undefined,
   // The wire shape uses explicit nulls and an open content-type union —
   // normalize into our prop shape so attributes diff cleanly against props.
-  otel: gateway.otel?.map(
-    (o): GatewayOtel => ({
-      url: o.url,
-      headers: o.headers,
-      ...(o.authorization != null ? { authorization: o.authorization } : {}),
-      ...(o.contentType != null
-        ? { contentType: o.contentType as "json" | "protobuf" }
-        : {}),
-    }),
-  ),
+  otel: gateway.otel?.map((o): GatewayOtel => ({
+    url: o.url,
+    headers: o.headers,
+    ...(o.authorization != null ? { authorization: o.authorization } : {}),
+    ...(o.contentType != null
+      ? { contentType: o.contentType as "json" | "protobuf" }
+      : {}),
+  })),
   storeId: gateway.storeId ?? "",
   stripe: gateway.stripe ?? undefined,
   spendLimits: normalizeSpendLimits(gateway.spendLimits),
@@ -720,23 +718,21 @@ const normalizeSpendLimits = (
   if (spendLimits == null) return undefined;
   return {
     enabled: spendLimits.enabled ?? false,
-    rules: (spendLimits.rules ?? []).map(
-      (rule): GatewaySpendLimitRule => ({
-        limit: rule.limit,
-        limitType: rule.limitType,
-        window: rule.window,
-        enabled: rule.enabled ?? true,
-        ...(rule.id != null ? { id: rule.id } : {}),
-        ...(rule.metadata != null && Object.keys(rule.metadata).length > 0
-          ? { metadata: rule.metadata }
-          : {}),
-        ...(rule.model != null ? { model: rule.model } : {}),
-        ...(rule.provider != null ? { provider: rule.provider } : {}),
-        ...(rule.technique != null
-          ? { technique: rule.technique as GatewayRateLimitingTechnique }
-          : {}),
-      }),
-    ),
+    rules: (spendLimits.rules ?? []).map((rule): GatewaySpendLimitRule => ({
+      limit: rule.limit,
+      limitType: rule.limitType,
+      window: rule.window,
+      enabled: rule.enabled ?? true,
+      ...(rule.id != null ? { id: rule.id } : {}),
+      ...(rule.metadata != null && Object.keys(rule.metadata).length > 0
+        ? { metadata: rule.metadata }
+        : {}),
+      ...(rule.model != null ? { model: rule.model } : {}),
+      ...(rule.provider != null ? { provider: rule.provider } : {}),
+      ...(rule.technique != null
+        ? { technique: rule.technique as GatewayRateLimitingTechnique }
+        : {}),
+    })),
   };
 };
 

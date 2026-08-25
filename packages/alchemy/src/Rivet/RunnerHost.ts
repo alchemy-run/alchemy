@@ -35,8 +35,22 @@ export interface RunnerSource {
   readonly cpu?: number;
   /** Runner task memory (MiB). @default 1024 */
   readonly memory?: number;
-  /** Number of runner instances. @default 1 */
-  readonly desiredCount?: number;
+  /**
+   * Number of runner instances — a fixed count, or an autoscaling range
+   * (the host composes a CPU target-tracking policy for the object form).
+   * @default 1
+   */
+  readonly desiredCount?: number | RunnerScalingRange;
+}
+
+/** Autoscaling range for the runner service's desired count. */
+export interface RunnerScalingRange {
+  /** Minimum runner count Application Auto Scaling may scale in to. */
+  readonly min: number;
+  /** Maximum runner count Application Auto Scaling may scale out to. */
+  readonly max: number;
+  /** Target average CPU utilization (percent). @default 60 */
+  readonly targetCpu?: number;
 }
 
 /** Physical names the engine computed for the runner's cloud resources. */
