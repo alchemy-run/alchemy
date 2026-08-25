@@ -513,6 +513,17 @@ export const MicrovmImageProvider = () =>
         yield* terminateRunningMicrovms(image.imageArn, session);
       }
 
+      // Superseded versions cost storage (and pin multi-GB docker images
+      // in the local emulator) — this resource only ever serves the
+      // latest, so prune the rest best-effort.
+      if (updated) {
+        yield* pruneStaleVersions(
+          image.imageArn,
+          image.latestActiveImageVersion,
+          session,
+        );
+      }
+
       yield* syncTags(
         image.imageArn,
         (image.tags ?? {}) as Record<string, string>,
@@ -622,6 +633,50 @@ const terminateRunningMicrovms = Effect.fn(function* (
         ),
       ),
     }),
+  );
+});
+
+// Delete every non-current version of the image. Best-effort: a version
+// still backing live MicroVMs (possible when `recycleMicrovmsOnUpdate` is
+// off) rejects the delete and is retried on the next update.
+const pruneStaleVersions = Effect.fn(function* (
+  imageArn: string,
+  currentVersion: string | undefined,
+  session: ScopedPlanStatusSession,
+) {
+  const versions = yield* microvms.listMicrovmImageVersions
+    .items({ imageIdentifier: imageArn })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catch(() =>
+        Effect.succeed([] as microvms.MicrovmImageVersionSummary[]),
+      ),
+    );
+  const stale = versions.filter(
+    (v) => v.imageVersion !== currentVersion && v.state !== "DELETED",
+  );
+  if (stale.length === 0) return;
+  yield* session.note(`Pruning ${stale.length} superseded image version(s)...`);
+  yield* Effect.forEach(
+    stale,
+    (v) =>
+      microvms
+        .deleteMicrovmImageVersion({
+          imageIdentifier: imageArn,
+          imageVersion: v.imageVersion,
+        })
+        .pipe(
+          Effect.catchTag(
+            [
+              "ResourceNotFoundException",
+              "ConflictException",
+              "ValidationException",
+            ],
+            () => Effect.void,
+          ),
+        ),
+    { concurrency: 3, discard: true },
   );
 });
 

@@ -9,17 +9,23 @@ import { stageBake } from "./SandboxBake.ts";
  * The org sandbox MicroVM image — the circular one, the Firecracker
  * sibling of the Container image in `Sandbox.ts`: the alchemy
  * repository itself, COPIED from the local repo root (`SandboxBake.ts`
- * stages the committed tree + a depth-1 `.git` — no network clone),
- * installed, and pre-type-checked at IMAGE BUILD. Every session's VM
- * wakes up inside a ready dev tree with zero cold setup — the image IS
- * the branch, a warm worktree the session can branch, commit, and
- * publish from (`pushBranch` / `openPullRequest` ride the tree's
- * origin, re-pointed at the real repository by the stager).
+ * stages the committed tree + a depth-1 `.git` — no network clone) and
+ * installed at IMAGE BUILD. Every session's VM wakes up inside a ready
+ * dev tree with zero cold setup — the image IS the branch, a warm
+ * worktree the session can branch, commit, and publish from
+ * (`pushBranch` / `openPullRequest` ride the tree's origin, re-pointed
+ * at the real repository by the stager).
  *
  * The bake is a snapshot of local `HEAD` at build time — a session
- * that needs newer code runs `git fetch`/`pull` itself. The type-check
- * is best-effort (`|| true`): a red build on the branch must not brick
- * the sandbox image.
+ * that needs newer code runs `git fetch`/`pull` itself. No type-check
+ * in the bake: `tsc -b` over this workspace needs ~8.5GB of heap and
+ * gets OOM-killed inside the docker build VM — sessions run it
+ * incrementally themselves.
+ *
+ * Layer order is load-bearing for the per-commit rebuild cost:
+ * lockfiles + patches are COPY'd alone and `pnpm fetch`ed BEFORE the
+ * full tree, so a new commit re-links from the cached store (seconds)
+ * instead of re-downloading the world.
  *
  * Layered on the stock sandbox base (git + ripgrep + ssh); bun is
  * installed for the bake but deliberately NOT linked into
@@ -46,9 +52,19 @@ RUN curl -fsSL https://bun.sh/install | bash
 # whose \`ln -s\` must not collide)
 ENV PATH="/root/.bun/bin:\${PATH}"
 
-COPY alchemy/ /workspace/alchemy/
+# Dependency store layer: lockfiles + patches only, so it survives
+# commits — pnpm fetch needs nothing but the lockfile. A new bake then
+# re-links from the warm store instead of re-downloading everything.
+COPY alchemy/package.json alchemy/pnpm-workspace.yaml alchemy/pnpm-lock.yaml /workspace/alchemy/
+COPY alchemy/patches/ /workspace/alchemy/patches/
+COPY alchemy/distilled/package.json alchemy/distilled/pnpm-workspace.yaml alchemy/distilled/pnpm-lock.yaml /workspace/alchemy/distilled/
 
 WORKDIR /workspace/alchemy
+
+RUN pnpm fetch
+RUN cd distilled && pnpm fetch
+
+COPY alchemy/ /workspace/alchemy/
 
 # the copy roundtrip drops exec bits — restore modes from the index,
 # and give the tree a commit identity so sessions can commit
@@ -56,9 +72,8 @@ RUN git checkout -- . \\
   && git config user.email "org@alchemy.run" \\
   && git config user.name "alchemy-org"
 
-RUN pnpm install --frozen-lockfile
-RUN cd distilled && pnpm install --frozen-lockfile
-RUN bun tsc -b || true
+RUN pnpm install --frozen-lockfile --prefer-offline
+RUN cd distilled && pnpm install --frozen-lockfile --prefer-offline
 `;
 
 /**
