@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
+import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
 
 import { AdoptPolicy } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -18,6 +19,7 @@ import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
 import * as Plan from "../../Plan.ts";
 import { Stage } from "../../Stage.ts";
+import { isTelemetryDisabled } from "../../Telemetry/Attributes.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
@@ -81,6 +83,22 @@ const runStack = Effect.fn(function* ({
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
 
+  // `--log-level <x>` has to actually put log records on the user's
+  // terminal. With telemetry on (the default) `TelemetryLive` deliberately
+  // drops the console logger, so every record lands in `.alchemy/log/out`
+  // and nothing reaches stderr — which is how a stalled deploy produced ten
+  // minutes of `--log-level debug` and zero bytes of output (#1231). Re-add
+  // a console sink for that run only. With telemetry off the default
+  // console logger is still in the set, and adding a second would
+  // double-print every line.
+  const askedForLogs = Option.isSome(
+    Option.flatten(yield* Effect.serviceOption(GlobalFlag.LogLevel)),
+  );
+  const consoleSink =
+    askedForLogs && !(yield* isTelemetryDisabled)
+      ? [Logger.consolePretty()]
+      : [];
+
   const services = Layer.mergeAll(
     Layer.effect(
       AlchemyContext,
@@ -112,7 +130,9 @@ const runStack = Effect.fn(function* ({
     ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(envFile), profile),
     ),
-    Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+    Logger.layer([fileLogger("out"), ...consoleSink], {
+      mergeWithExisting: true,
+    }),
     Layer.succeed(Stage, stage),
   );
 

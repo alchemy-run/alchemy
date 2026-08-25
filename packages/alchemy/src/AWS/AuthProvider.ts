@@ -182,8 +182,14 @@ export const AwsAuth = AuthProviderLayer<
             // very service still being constructed by this STS call.
             Region.of(region),
             // A custom endpoint (local emulator) must apply to this STS call
-            // too — the default resolver would call real AWS.
-            endpoint ? Endpoint.of(endpoint) : Layer.empty,
+            // too — the default resolver would call real AWS. When there is
+            // no custom endpoint we must still provide `Endpoint.none`
+            // rather than leaving it unset: falling through to the ambient
+            // `Endpoint.fromEnvironment` reads it off AWSEnvironment — the
+            // very service this STS call is constructing — and deadlocks
+            // the fiber on its own in-flight cache (no I/O, no timer, no
+            // output). Same reason as `Region.of` above.
+            endpoint ? Endpoint.of(endpoint) : Endpoint.none,
           ),
         ),
         Effect.flatMap((self) =>
