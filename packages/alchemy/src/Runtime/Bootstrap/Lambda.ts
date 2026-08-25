@@ -5,7 +5,6 @@
  * shim.
  */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -16,8 +15,11 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
+import { Runtime as AwsRuntimeEnvironment } from "../../AWS/Environment.ts";
+import * as AwsEndpoint from "../../AWS/Endpoint.ts";
 import { registerLambdaExtension } from "../../AWS/Lambda/RuntimeExtension.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { entrypointLayer, entrypointTag, stackFromEnv } from "./Process.ts";
 
 /**
@@ -44,15 +46,20 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
+  const awsRuntime = Layer.mergeAll(Credentials.fromEnv(), Region.fromEnv());
+  const awsEnvironment = AwsRuntimeEnvironment.pipe(Layer.provide(awsRuntime));
+
   const entryLayer = entrypointLayer(entrypoint).pipe(
     Layer.provideMerge(stackFromEnv),
-    Layer.provideMerge(Credentials.fromEnv()),
-    Layer.provideMerge(Region.fromEnv()),
+    Layer.provideMerge(awsRuntime),
+    Layer.provideMerge(awsEnvironment),
     // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local
     // emulators (floci) into the Lambda container — without it, runtime
     // bindings in `alchemy dev` would call REAL AWS with dummy credentials.
     // Resolves undefined when unset, so live deploys are unaffected.
-    Layer.provideMerge(Endpoint.fromEnv()),
+    Layer.provideMerge(
+      AwsEndpoint.fromEnvironment.pipe(Layer.provide(awsEnvironment)),
+    ),
     Layer.provideMerge(platform),
     Layer.provideMerge(
       Layer.succeed(
@@ -74,8 +81,12 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
   ).pipe(
     Effect.flatMap((context) =>
       entrypointTag.pipe(
-        Effect.flatMap((func) => func.RuntimeContext.exports),
-        Effect.flatMap((exports: any) => exports.handler),
+        Effect.flatMap((func) =>
+          func.RuntimeContext.exports.pipe(
+            Effect.flatMap((exports: any) => exports.handler),
+            Effect.provide(Layer.succeed(RuntimeContext, func.RuntimeContext)),
+          ),
+        ),
         Effect.provideContext(context),
       ),
     ),

@@ -43,7 +43,10 @@ import {
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
-import { AWSEnvironment } from "../Environment.ts";
+import {
+  AWS_SERVICE_ENDPOINTS_ENV_VAR,
+  AWSEnvironment,
+} from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -1115,6 +1118,32 @@ export const Function: Platform<
   },
 });
 
+/** Environment identity captured by generated Lambda entrypoints. */
+export const resolveFunctionRuntimeEnv = Effect.gen(function* () {
+  const stack = yield* Stack;
+  const { accountId, serviceEndpoints } = yield* AWSEnvironment.current;
+  const serializedServiceEndpoints =
+    serviceEndpoints === undefined || Object.keys(serviceEndpoints).length === 0
+      ? undefined
+      : JSON.stringify(
+          Object.fromEntries(
+            Object.entries(serviceEndpoints).sort(([a], [b]) =>
+              a.localeCompare(b),
+            ),
+          ),
+        );
+
+  return {
+    ALCHEMY_AWS_ACCOUNT_ID: accountId,
+    ...(serializedServiceEndpoints === undefined
+      ? {}
+      : { [AWS_SERVICE_ENDPOINTS_ENV_VAR]: serializedServiceEndpoints }),
+    ALCHEMY_STACK_NAME: stack.name,
+    ALCHEMY_STAGE: stack.stage,
+    ALCHEMY_PHASE: "runtime",
+  };
+});
+
 export const FunctionProvider = () =>
   Provider.effect(
     Function,
@@ -1125,11 +1154,7 @@ export const FunctionProvider = () =>
       // provider's watch loop can rebuild the identical artifact.
       const { bundleCode } = yield* makeFunctionBundler;
       const functionImage = yield* makeFunctionImage;
-      const alchemyEnv = {
-        ALCHEMY_STACK_NAME: stack.name,
-        ALCHEMY_STAGE: stack.stage,
-        ALCHEMY_PHASE: "runtime",
-      };
+      const alchemyEnv = yield* resolveFunctionRuntimeEnv;
 
       const createFunctionName = (
         id: string,
