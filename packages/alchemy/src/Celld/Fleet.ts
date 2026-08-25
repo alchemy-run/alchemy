@@ -10,8 +10,8 @@
  * provider layer — `AWS.providers()` registers the `aws-ecs` host. The
  * fleet carries no code; deploy a {@link Worker} onto it.
  *
- * @section Creating a Fleet
- * @example
+ * ### Creating a Fleet
+ * **Example:** Example
  * ```typescript
  * export class Cells extends Celld.Fleet<Cells>()("Cells", {
  *   instances: 2,

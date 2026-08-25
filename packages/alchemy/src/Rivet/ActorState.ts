@@ -2,7 +2,7 @@
  * `DurableObjectState` / `DurableObjectStorage` implemented over a Rivet
  * actor.
  *
- * This is where the portable Durable Object interface meets a runtime that
+ * This is where the shared Durable Object interface meets a runtime that
  * is not workerd. The mapping, all of it verified against a live engine:
  *
  * | Durable Object            | Rivet                                    |

@@ -1,6 +1,6 @@
 /**
  * The Rivet **gateway client**: the runtime transport both sides of a Rivet
- * deployment use to reach an actor (a hosted `Alchemy.DurableObject`)
+ * deployment use to reach an actor (a hosted `Cloudflare.DurableObject`)
  * through the Rivet Engine's guard service.
  *
  * One protocol, verified against the engine
@@ -23,10 +23,10 @@
  * {@link decodeRpcResult}. `Stream` results arrive as collected arrays (see
  * `ActorBridge.ts`).
  *
- * Consumed by `Rivet.Worker`'s `remoteDurableObject` (callers outside the
- * runner) and by the generated runner entry's synthetic worker environment
- * (in-runner `getByName`, which round-trips through the engine so instances
- * resolve to whichever runner owns them).
+ * Consumed by `Rivet.bindWorker` (callers outside the runner) and by the
+ * generated runner entry's synthetic worker environment (in-runner
+ * `getByName`, which round-trips through the engine so instances resolve
+ * to whichever runner owns them).
  *
  * @internal runtime-bundled; dependency-light by design.
  */

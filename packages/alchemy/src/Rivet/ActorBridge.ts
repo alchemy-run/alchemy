@@ -1,11 +1,11 @@
 /**
- * The Rivet runtime bridge: adapt an `Alchemy.DurableObject` export into a
+ * The Rivet runtime bridge: adapt a `Cloudflare.DurableObject` export into a
  * Rivet actor definition.
  *
  * The Cloudflare-family engines (workerd, celld) share
  * `makeDurableObjectBridge`, which needs `cloudflare:workers`. Rivet runs
  * user code in an ordinary Node/Bun process, so it gets its own bridge —
- * this file is the proof that the portable Durable Object authoring
+ * this file is the proof that the shared Durable Object authoring
  * surface is not secretly workerd-shaped.
  *
  * The mapping:

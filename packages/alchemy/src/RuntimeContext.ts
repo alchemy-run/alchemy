@@ -24,7 +24,7 @@ export interface BaseRuntimeContext {
   /**
    * Fold context-collected state into the resource's persisted Props after
    * the init effect ran (alongside the standard `env`/`exports` stamping) —
-   * e.g. an `Alchemy.Worker`'s deployment target, which is only known once
+   * e.g. a worker's deployment target, which is only known once
    * the impl's layers have built.
    */
   foldProps?(props: Record<string, unknown>): Record<string, unknown>;

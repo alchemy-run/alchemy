@@ -1,5 +1,5 @@
 /**
- * The Rivet **runner bridge**: resolve an `Alchemy.Worker` deployable
+ * The Rivet **runner bridge**: resolve a `Rivet.Worker` deploy
  * module's export map inside the runner process (a plain Node/Bun
  * container), mirroring what `WorkerBridge.getSharedBuild` does inside a
  * Cloudflare/celld isolate.
@@ -120,8 +120,8 @@ const makeProbeState = (): any => ({
  * Rivet reads an actor's `actions` map once at registration, so the method
  * names must be known before any real instance exists. The plan-time
  * export carries `methods` when the platform discovered them; this is the
- * runner-side fallback for exports that don't (the portable
- * `Alchemy.DurableObject` today). Instances that perform storage-dependent
+ * runner-side fallback for exports that don't. Instances that perform
+ * storage-dependent
  * init in their per-instance effect may fail the probe — the generated
  * entry then falls back to the baked list and logs the failure.
  */

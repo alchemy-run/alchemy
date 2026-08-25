@@ -1,7 +1,7 @@
 /**
  * A **Rivet cluster**: the infrastructure a {@link Worker} runs against —
  * the [Rivet Engine](https://rivet.dev) (the actor orchestrator), NOT the
- * user's code. Runners (the processes executing `Alchemy.DurableObject`
+ * user's code. Runners (the processes executing `Cloudflare.DurableObject`
  * actors) connect OUT to the engine; deploying a `Rivet.Worker` composes a
  * runner deployment against this cluster.
  *
@@ -10,8 +10,8 @@
  * `AWS.providers()` registers the `aws-ecs` host. The cluster carries no
  * code; deploy a {@link Worker} onto it.
  *
- * @section Creating a Cluster
- * @example
+ * ### Creating a Cluster
+ * **Example:** Example
  * ```typescript
  * export class Actors extends Rivet.Cluster<Actors>()("Actors") {}
  * ```
