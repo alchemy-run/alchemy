@@ -19,6 +19,7 @@ export default S3PresignTestFunction.make(
       forceDestroy: true,
     });
 
+    const headObject = yield* S3.HeadObject(bucket);
     const presignGetObject = yield* S3.PresignGetObject(bucket);
     const presignPutObject = yield* S3.PresignPutObject(bucket);
     const deleteObjects = yield* S3.DeleteObjects(bucket);
@@ -65,6 +66,16 @@ export default S3PresignTestFunction.make(
 
         if (request.method === "GET" && pathname === "/bucket-name") {
           return yield* HttpServerResponse.json({ bucketName });
+        }
+
+        if (request.method === "GET" && pathname === "/head-object") {
+          if (!key) return requireKey();
+          const result = yield* headObject({ Key: key });
+          return yield* HttpServerResponse.json({
+            contentLength: result.ContentLength,
+            contentType: result.ContentType,
+            etag: result.ETag,
+          });
         }
 
         if (request.method === "GET" && pathname === "/presign-get") {
@@ -289,6 +300,7 @@ export default S3PresignTestFunction.make(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        S3.HeadObjectHttp,
         S3.PresignGetObjectHttp,
         S3.PresignPutObjectHttp,
         S3.DeleteObjectsHttp,
