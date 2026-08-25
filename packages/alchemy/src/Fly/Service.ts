@@ -138,6 +138,16 @@ export interface ServiceProps extends PlatformProps {
    * from the stack, stage and logical ID. Changing it replaces the Service.
    */
   name?: string;
+  /**
+   * Extra host directories copied into the Machine image next to the
+   * bundled entry (e.g. a website `clientDirectory` at `/app/dist`).
+   * Hashed into `code.hash` so asset changes update the image.
+   * Destination is relative to `/app`.
+   */
+  extraFiles?: ReadonlyArray<{
+    source: string;
+    dest: string;
+  }>;
 }
 
 export type Service = Resource<
@@ -892,14 +902,17 @@ export const ServiceProvider = () =>
             }
           }
           // The code hash depends only on statically-known props (`main`,
-          // `build`, `image`, `port`). Never gate it on the WHOLE props
-          // being resolved: `app` is a resource reference that stays
-          // unresolved at diff time, so a whole-props guard makes
+          // `build`, `image`, `port`, `extraFiles`). Never gate it on the
+          // WHOLE props being resolved: `app` is a resource reference that
+          // stays unresolved at diff time, so a whole-props guard makes
           // code-only changes silently noop. By diff time the
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
-            Pick<ServiceProps, "main" | "build" | "image" | "port">
+            Pick<
+              ServiceProps,
+              "main" | "build" | "image" | "port" | "extraFiles"
+            >
           >;
           if (
             isResolved({
@@ -907,6 +920,7 @@ export const ServiceProvider = () =>
               build: statics.build,
               image: statics.image,
               port: statics.port,
+              extraFiles: statics.extraFiles,
             }) &&
             statics.main !== undefined
           ) {
