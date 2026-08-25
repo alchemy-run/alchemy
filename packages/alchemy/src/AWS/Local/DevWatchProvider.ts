@@ -166,7 +166,7 @@ export const makeDevWatchProvider = <
   Props = R["Props"],
   Attrs = R["Attributes"],
 >(
-  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   serverEntryUrl: string,
   spec: DevWatchSpec<Props, Attrs>,
 ) =>
@@ -337,8 +337,30 @@ export const makeDevWatchProvider = <
           }
           // A fresh dev session has state rows but no running watcher (and
           // possibly a wiped emulator) — force a reconcile to converge floci
-          // and (re)start the watch loop.
-          if (!watches.has(id)) return { action: "update" as const };
+          // and (re)start the watch loop. A DEAD watcher (its loop exited or
+          // was interrupted) counts as none: nothing is handling content
+          // changes for this id anymore.
+          const entry = watches.get(id);
+          if (
+            entry === undefined ||
+            (entry.fiber !== undefined &&
+              entry.fiber.pollUnsafe() !== undefined)
+          ) {
+            return { action: "update" as const };
+          }
+          // The watcher may have swapped content SINCE state was last
+          // persisted (its rerunReconcile updates the emulator and the
+          // sidecar's in-memory attrs, not the state store). If the
+          // persisted attrs drifted from the watcher's current attrs, plan
+          // an update — the content-addressed reconcile is cheap, the
+          // engine persists the fresh attrs, and downstream consumers
+          // (stack outputs, Actions keyed on `code.hash`) see the swap
+          // instead of replaying stale state forever.
+          const persistedHash = yield* canonicalHash(output as object);
+          const watcherHash = yield* canonicalHash(entry.attrs as object);
+          if (persistedHash !== watcherHash) {
+            return { action: "update" as const };
+          }
           if (!havePropsChanged(normalize(olds), normalize(news)!)) {
             // Content-only changes are the watch loop's job — the dev diff
             // never bundles or builds.

@@ -30,7 +30,6 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
-import { Self } from "../Self.ts";
 import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
@@ -1459,79 +1458,22 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
       input: realMain,
       cwd,
       platform: "node",
+      // Prisma Compute runs the bundle on bun.
+      resolve: {
+        conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+        ...props.bundle?.input?.resolve,
+      },
       plugins: [
         props.bundle?.input?.plugins,
         virtualEntryPlugin(
           (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer } from "alchemy/Runtime";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import { MinimumLogLevel } from "effect/References";
-
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Prisma";
 ${importEntrypoint} from ${JSON.stringify(importPath)};
 
-process.env.PORT ??= ${JSON.stringify(String(defaultPort))};
-
-const tag = Context.Service("${Self.key}");
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.mergeAll(
-  Layer.succeed(Stack, {
-    name: ${JSON.stringify(stack.name)},
-    stage: ${JSON.stringify(stack.stage)},
-    bindings: {},
-    resources: {},
-  }),
-  Layer.succeed(Stage, ${JSON.stringify(stack.stage)}),
-);
-
-const program = tag.pipe(
-  Effect.flatMap((app) => app.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.default),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-            ConfigProvider.fromEnv(),
-          ),
-        ),
-      ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        ),
-      ),
-    ),
-  ),
-  Effect.scoped,
-);
-
-console.log("Prisma Compute bootstrap starting...");
-await Effect.runPromise(program).catch((error) => {
-  console.error("Prisma Compute bootstrap failed:", error);
-  process.exit(1);
-});
+await bootstrap(entrypoint, ${JSON.stringify({
+            port: defaultPort,
+            stack: { name: stack.name, stage: stack.stage },
+          })});
 `,
         ),
       ],

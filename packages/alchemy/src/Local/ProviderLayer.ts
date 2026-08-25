@@ -64,6 +64,17 @@ export const dual = <
   input: {
     live: () => LayerLive;
     local: () => LayerLocal;
+    /**
+     * Data-plane override context for the local mode — the layer of cloud
+     * environment services (endpoint, credentials, region) the local
+     * lifecycle variant runs under (e.g. AWS's `flociServices()`). Stamped
+     * onto the registered service as
+     * {@link ProviderService.localDataPlane} so `Binding.Service` clients
+     * can route deploy-time data-plane calls (Action bodies, plan-time
+     * `execute`) to the emulator when the bound resource resolves local.
+     * Pass a module-memoized layer reference.
+     */
+    dataPlane?: () => Layer.Layer<any, any, never>;
   },
 ): Layer.Layer<
   Layer.Success<LayerLive | LayerLocal>,
@@ -86,12 +97,10 @@ export const dual = <
           memoMap,
           scope,
         ).pipe(
-          Effect.map(
-            (built): ProviderService<R> => ({
-              ...(built.mapUnsafe.get(cls.Type) as ProviderService<R>),
-              mode,
-            }),
-          ),
+          Effect.map((built): ProviderService<R> => ({
+            ...(built.mapUnsafe.get(cls.Type) as ProviderService<R>),
+            mode,
+          })),
         );
 
       // Memoized so each variant is constructed at most once per stack
@@ -121,6 +130,7 @@ export const dual = <
         ...defaultService,
         mode: defaultMode,
         modes,
+        localDataPlane: input.dataPlane,
       } satisfies ProviderService<R>);
     }),
   ) as any;

@@ -14,6 +14,32 @@ import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 
 /**
+ * `resolve.conditionNames` for a bundle that runs on bun / node.
+ *
+ * Rolldown's DEFAULT conditions are import-kind specific: `import` for
+ * `import` statements and `require` for `require()` calls. An explicit
+ * `conditionNames` list is applied as one set to BOTH kinds, and rolldown
+ * adds only the current kind on top. Listing `"import"` here therefore
+ * made every `require()` also match a package's `"import"` export — and
+ * `exports` maps are matched in the PACKAGE's key order, so for `pg-pool`
+ * (`{ import, require }`) a `require("pg-pool")` received the ESM namespace
+ * and `pg` died with `TypeError: The superclass is not a constructor`.
+ *
+ * So: never put `import` or `require` in these lists. Only the runtime
+ * condition and the kind-agnostic ones; rolldown supplies the kind.
+ */
+export const BUN_CONDITION_NAMES: readonly string[] = [
+  "bun",
+  "module",
+  "default",
+];
+export const NODE_CONDITION_NAMES: readonly string[] = [
+  "node",
+  "module",
+  "default",
+];
+
+/**
  * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
  * merely importing alchemy — the CLI command tree, the Cloudflare provider
  * barrel — never loads `@rolldown/binding-*`. A stack that bundles
@@ -305,12 +331,10 @@ export const watch = (
           return event;
         }
         return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
-          Effect.map(
-            (output): BundleWatchEvent.Success => ({
-              _tag: "Success",
-              output,
-            }),
-          ),
+          Effect.map((output): BundleWatchEvent.Success => ({
+            _tag: "Success",
+            output,
+          })),
           Effect.catch((error) =>
             Effect.succeed<BundleWatchEvent.Error>({
               _tag: "Error",
@@ -325,6 +349,13 @@ export const watch = (
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
 // oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
+/**
+ * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
+ * bare package specifiers (not starting with `.`, `/` or `\0`) so an
+ * unresolvable import in a generated entry fails the build (below).
+ */
+// oxlint-disable-next-line no-control-regex
+const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
@@ -360,9 +391,35 @@ export const virtualEntryPlugin = Effect.gen(function* () {
         },
       },
       resolveId: {
-        filter: { id: ENTRY_REGEX },
-        handler(id) {
-          return entries.has(id) ? { id } : null;
+        filter: { id: ENTRY_OR_BARE_REGEX },
+        async handler(id, importer) {
+          if (ENTRY_REGEX.test(id)) {
+            return entries.has(id) ? { id } : null;
+          }
+          // A bare import made BY a generated entry. Rolldown only WARNS on
+          // an unresolved import and leaves it external, which for a
+          // generated entry means the deployed process dies at boot with
+          // `Cannot find module` — the class of bug the shim design
+          // (alchemy/Runtime/Bootstrap/*) exists to prevent. Make it a build
+          // error with the cause spelled out instead. Externals resolve to
+          // `{ external: true }`, not null, so they pass through.
+          if (importer === undefined || !ENTRY_REGEX.test(importer)) {
+            return null;
+          }
+          const resolved = await this.resolve(id, importer, {
+            skipSelf: true,
+          });
+          if (resolved === null) {
+            const entry = entries.get(importer);
+            this.error(
+              new Error(
+                `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
+                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
+                  "check that `alchemy` is installed in the project containing the entry.",
+              ),
+            );
+          }
+          return resolved;
         },
       },
       load: {

@@ -1,5 +1,5 @@
 /**
- * Fixture-local `Framework` implementation driving vocs on Cloudflare Workers.
+ * `Framework` implementation driving Vocs on Cloudflare Workers.
  *
  * Vocs 2.x is built on waku (its `vocs()` vite plugin composes waku's own
  * `waku/vite-plugins` — environments, adapter-alias, static-build, ... — with
@@ -22,21 +22,34 @@
  *   platform) rides the inline vite config instead, since vocs owns the waku
  *   config it builds internally.
  */
-import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import * as FrameworkCore from "@alchemy.run/frontend-frameworks/core";
-import { WAKU_SERVER_ENTRY_MODULE } from "@alchemy.run/frontend-frameworks/waku";
-import makeWakuCloudflareTarget from "@alchemy.run/frontend-frameworks/waku/cloudflare";
-import react from "@vitejs/plugin-react";
+import * as FrameworkCore from "../core/index.ts";
+import { WAKU_SERVER_ENTRY_MODULE } from "../waku/Waku.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as vite from "vite";
-import { resolveConfig } from "vocs/config";
-import { vocs } from "vocs/vite";
+import {
+  selectVocsTargetInput,
+  type VocsTarget,
+  type VocsTargetOption,
+} from "./Target.ts";
 
-/** Fixture-side extras that don't fit the shared harness options. */
-export interface VocsFrameworkExtras {
+type ReactPluginModule = typeof import("@vitejs/plugin-react");
+type VocsViteModule = typeof import("vocs/vite");
+
+interface VocsProjectModules {
+  readonly react: ReactPluginModule;
+  readonly vite: VocsViteModule;
+}
+
+export interface VocsFrameworkOptions {
+  /** Deploy target. Defaults to `@alchemy.run/frontend-frameworks/vocs/cloudflare`. */
+  readonly target?: VocsTargetOption | undefined;
+  /** @deprecated Target configuration alias retained for the E2E harness. */
+  readonly vite?: unknown;
+  /** Project root. Defaults to the operation root or current working directory. */
+  readonly root?: string;
   /**
    * Default dev-server port, used when `dev` is called without an explicit
    * port (e.g. the Playwright dev fixture). Non-strict: if the port is taken,
@@ -72,8 +85,10 @@ interface WakuPreviewServer {
  * with `vite: {}`, so they ride the top-level inline config here (vite merges
  * inline config with plugin-contributed config).
  */
-const sharedViteConfig = {
-  resolve: { dedupe: ["waku", "hono"] },
+const sharedViteConfig = (): vite.InlineConfig => ({
+  resolve: {
+    dedupe: ["waku", "hono"],
+  },
   environments: {
     rsc: {
       optimizeDeps: { include: ["hono/tiny"] },
@@ -84,9 +99,9 @@ const sharedViteConfig = {
       build: { rolldownOptions: { platform: "neutral" } },
     },
   },
-} satisfies vite.InlineConfig;
+});
 
-const VIRTUAL_USER_CONFIG = "virtual:fixtures-vocs/user-config";
+const VIRTUAL_USER_CONFIG = "virtual:alchemy-vocs/user-config";
 const RESOLVED_VIRTUAL_USER_CONFIG = `\0${VIRTUAL_USER_CONFIG}`;
 
 /**
@@ -99,33 +114,28 @@ const RESOLVED_VIRTUAL_USER_CONFIG = `\0${VIRTUAL_USER_CONFIG}`;
  * (upstream vocs has node/vercel/netlify adapters only; there is no workers
  * deploy path to mirror). This plugin:
  *
- * 1. transforms vocs's `internal/config.js` in the bundled server
- *    environments so every `server: true` resolution (dev and prod) returns
- *    the build-time-resolved config from a virtual module, and guards the
- *    `process.cwd()` fallback for non-Node runtimes;
- * 2. serves that virtual module with the config resolved once in Node via
- *    vocs's own `resolveConfig` (functions are dropped from the JSON —
- *    `define` recomputes those defaults at runtime; the fixture's config is
- *    plain data).
+ * 1. asks Vocs to discover the project's `vocs.config.*` file;
+ * 2. exposes that file through a virtual module, so Vite loads and bundles
+ *    the original config module (including its imports and functions);
+ * 3. transforms Vocs's Node-only runtime lookup to import the bundled module
+ *    and guards the `process.cwd()` fallback for workerd.
+ *
+ * This follows Vocs's own production design, which emits the config as
+ * `dist/server/vocs.config.js`, without separately resolving or serializing
+ * the user's configuration in Alchemy.
  */
-const workerdConfigBridge = (root: string): vite.Plugin => {
-  let serialized: string | undefined;
-  const serializeUserConfig = async (): Promise<string> => {
-    serialized ??= JSON.stringify(
-      await resolveConfig({ rootDir: root }),
-      (_, value) => (typeof value === "function" ? undefined : value),
-    );
-    return serialized;
-  };
+const workerdConfigBridge = (configPath: string | undefined): vite.Plugin => {
   return {
-    name: "fixtures-vocs:workerd-config-bridge",
+    name: "@alchemy.run/frontend-frameworks/vocs:workerd-config-bridge",
     resolveId(id) {
       if (id === VIRTUAL_USER_CONFIG) return RESOLVED_VIRTUAL_USER_CONFIG;
       return;
     },
-    async load(id) {
+    load(id) {
       if (id === RESOLVED_VIRTUAL_USER_CONFIG) {
-        return `export default ${await serializeUserConfig()};`;
+        return configPath === undefined
+          ? "export default {};"
+          : `export { default } from ${JSON.stringify(configPath)};`;
       }
       return;
     },
@@ -147,24 +157,22 @@ const workerdConfigBridge = (root: string): vite.Plugin => {
       ): string => {
         if (!pattern.test(source)) {
           throw new Error(
-            `fixtures-vocs: ${normalized} no longer matches the workerd config bridge ` +
-              `pattern ${pattern} — update the transform in fixtures/vocs/framework.ts ` +
+            `@alchemy.run/frontend-frameworks/vocs: ${normalized} no longer matches the workerd config bridge ` +
+              `pattern ${pattern} — update the transform in packages/frontend-frameworks/src/vocs/Vocs.ts ` +
               "for the installed vocs version",
           );
         }
         return source.replace(pattern, replacement);
       };
       // `deserializeFunctions` revives `_vocs-fn_`-serialized config functions
-      // with `new Function`, which workerd forbids (no dynamic code
-      // generation). Fall back to dropping the function — the only serialized
-      // functions in this fixture's config are vocs's default search
-      // `boostDocument` implementations, which the browser (not workerd)
-      // executes. Node paths (SSG, dev tooling) still revive normally.
+      // with `new Function`, which workerd forbids. Vocs' server runtime does
+      // not need the browser-side search callbacks that take this path, so
+      // degrade them to `undefined` when dynamic evaluation is unavailable.
+      // Node paths (SSG and dev tooling) still revive them normally.
       if (isVocsInternal("config-serializer")) {
         return mustReplace(
           code,
-          // Not the escaped copy inside `deserializeFunctionsStringified` —
-          // that template's backticks/dollars are backslash-escaped.
+          // Avoid the escaped copy inside `deserializeFunctionsStringified`.
           /return new Function\(`return \$\{value\.slice\(9\)\}`\)\(\);?/,
           "try { return new Function(`return ${value.slice(9)}`)(); } catch { return undefined; }",
         );
@@ -197,17 +205,22 @@ const workerdConfigBridge = (root: string): vite.Plugin => {
  * adapter's Node fallback middleware (upstream parity: identical to a vocs
  * build without a platform vite plugin).
  */
-const setPreviewServerGlobal = (root: string, adapterPath: string): void => {
+const setPreviewServerGlobal = (
+  root: string,
+  adapterPath: string,
+  configPath: string | undefined,
+  project: VocsProjectModules,
+): void => {
   (globalThis as Record<string, unknown>)[PREVIEW_SERVER_GLOBAL] =
     async (): Promise<WakuPreviewServer> => {
       const server = await vite.preview({
         configFile: false,
         root,
-        ...sharedViteConfig,
+        ...sharedViteConfig(),
         plugins: [
-          react(),
-          workerdConfigBridge(root),
-          vocs({ unstable_adapter: adapterPath }),
+          project.react.default(),
+          workerdConfigBridge(configPath),
+          project.vite.vocs({ unstable_adapter: adapterPath }),
         ],
       });
       const baseUrl = server.resolvedUrls?.local[0];
@@ -242,8 +255,7 @@ const clearPreviewServerGlobal = (): void => {
  *   wiring, so the rsc environment runs in workerd.
  */
 export const make = (
-  options: Options.Options,
-  extras?: VocsFrameworkExtras,
+  options: VocsFrameworkOptions = {},
 ): Layer.Layer<
   FrameworkCore.Framework,
   never,
@@ -258,14 +270,54 @@ export const make = (
       const fail = (message: string) => (cause: unknown) =>
         new FrameworkCore.FrameworkError({ framework: "vocs", message, cause });
 
-      const { worker } = Options.resolveCloudflareOptions(options);
-      const target = makeWakuCloudflareTarget(worker);
-
       const resolveRoot = (override: string | undefined) =>
-        Effect.sync(() => override ?? process.cwd());
+        Effect.sync(() => override ?? options.root ?? process.cwd());
+
+      const resolveTarget = (root: string) => {
+        const { input, config } = selectVocsTargetInput(options);
+        return FrameworkCore.resolveDeployTarget<VocsTarget, unknown>(
+          root,
+          input,
+          config,
+        ).pipe(Effect.mapError(fail("Failed to resolve the deploy target")));
+      };
+
+      const findConfig = (root: string) =>
+        Effect.gen(function* () {
+          for (const name of [
+            "vocs.config.ts",
+            "vocs.config.js",
+            "vocs.config.mjs",
+            "vocs.config.mts",
+          ]) {
+            const candidate = path.join(root, name);
+            if (yield* fs.exists(candidate)) return candidate;
+          }
+          return undefined;
+        }).pipe(Effect.mapError(fail("Failed to locate the Vocs config")));
+
+      const loadProject = (root: string) =>
+        Effect.all(
+          {
+            react: FrameworkCore.loadProjectModule<ReactPluginModule>(
+              root,
+              "@vitejs/plugin-react",
+            ),
+            vite: FrameworkCore.loadProjectModule<VocsViteModule>(
+              root,
+              "vocs/vite",
+            ),
+          },
+          { concurrency: "unbounded" },
+        ).pipe(
+          Effect.mapError(
+            fail("Failed to load Vocs from the project dependencies"),
+          ),
+        );
 
       /** Resolve the target's adapter module + vite plugins for one pass. */
       const prepareTarget = Effect.fn(function* (
+        target: VocsTarget,
         root: string,
         phase: "build" | "dev",
       ) {
@@ -287,13 +339,20 @@ export const make = (
             fail(`The cloudflare target failed preparing the vocs ${phase}`),
           ),
         );
-        return { adapterPath, plugins };
+        return { adapterPath, plugins, wakuDirectory };
       });
 
       return FrameworkCore.Framework.of({
         build: Effect.fn(function* (buildOptions) {
           const root = yield* resolveRoot(buildOptions?.root);
-          const { adapterPath, plugins } = yield* prepareTarget(root, "build");
+          const target = yield* resolveTarget(root);
+          const { adapterPath, plugins } = yield* prepareTarget(
+            target,
+            root,
+            "build",
+          );
+          const project = yield* loadProject(root);
+          const configPath = yield* findConfig(root);
           // vocs's CLI (like waku's) runs with NODE_ENV set before loading
           // anything; waku's environmentsPlugin bakes it into `define`.
           yield* Effect.sync(() => {
@@ -309,18 +368,18 @@ export const make = (
                 {
                   configFile: false,
                   root,
-                  ...sharedViteConfig,
+                  ...sharedViteConfig(),
                   plugins: [
-                    react(),
+                    project.react.default(),
                     ...plugins,
-                    workerdConfigBridge(root),
-                    vocs({ unstable_adapter: adapterPath }),
+                    workerdConfigBridge(configPath),
+                    project.vite.vocs({ unstable_adapter: adapterPath }),
                     collector.plugin,
                   ],
                 },
                 null,
               );
-              setPreviewServerGlobal(root, adapterPath);
+              setPreviewServerGlobal(root, adapterPath, configPath, project);
               try {
                 await builder.buildApp();
               } finally {
@@ -346,23 +405,30 @@ export const make = (
         }),
         dev: Effect.fn(function* (devOptions) {
           const root = yield* resolveRoot(devOptions?.root);
-          const { adapterPath, plugins } = yield* prepareTarget(root, "dev");
+          const target = yield* resolveTarget(root);
+          const { adapterPath, plugins } = yield* prepareTarget(
+            target,
+            root,
+            "dev",
+          );
+          const project = yield* loadProject(root);
+          const configPath = yield* findConfig(root);
           yield* Effect.sync(() => {
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
           });
-          const port = devOptions?.port ?? extras?.port;
+          const port = devOptions?.port ?? options.port;
           const server = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: async () => {
                 const server = await vite.createServer({
                   configFile: false,
                   root,
-                  ...sharedViteConfig,
+                  ...sharedViteConfig(),
                   plugins: [
-                    react(),
+                    project.react.default(),
                     ...plugins,
-                    workerdConfigBridge(root),
-                    vocs({ unstable_adapter: adapterPath }),
+                    workerdConfigBridge(configPath),
+                    project.vite.vocs({ unstable_adapter: adapterPath }),
                   ],
                   ...(port !== undefined
                     ? {

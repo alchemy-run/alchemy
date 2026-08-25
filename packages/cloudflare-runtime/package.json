@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.72",
+  "version": "2.0.0-beta.74",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -779,7 +779,7 @@
   "inlinedDependencies": {
     "capnp-es": "0.0.14",
     "capnweb": "0.8.0",
-    "effect": "4.0.0-rc.110",
+    "effect": "catalog:effect",
     "http-cache-semantics": "4.2.0",
     "postal-mime": "2.7.5"
   }

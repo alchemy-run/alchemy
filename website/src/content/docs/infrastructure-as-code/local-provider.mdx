@@ -41,6 +41,27 @@ export const WorkerProvider = () =>
 **lazily** — e.g. the local provider is only constructed during a deploy
 if it has an instance to tear down.
 
+### Route deploy-time data-plane calls: `dataPlane`
+
+Binding clients can be invoked at deploy time — inside an `Action` body or
+a plan-time `execute` — and their API calls must target whatever data
+plane the bound resource actually lives on. Pass the local mode's
+environment override (endpoint, credentials, region — the same layer the
+local lifecycle runs under) as `dataPlane`:
+
+```typescript
+ProviderLayer.dual(Bucket, {
+  live: () => BucketProvider(),
+  local: () => provideProviderContext(BucketProvider(), flociServices()),
+  dataPlane: flociServices,
+});
+```
+
+With it registered, a client bound to a local-mode resource is routed to
+the emulator even when the ambient profile carries live credentials, while
+a client bound to an `Alchemy.remote()` resource keeps hitting the real
+cloud — per bound resource, within the same Action.
+
 ### Compose local deps inside the thunk
 
 Mode-specific dependency layers (`workerd`, Docker) go inside the `local`

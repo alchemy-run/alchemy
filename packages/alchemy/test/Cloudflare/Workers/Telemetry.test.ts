@@ -9,6 +9,7 @@ import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import OtelCustomWorker from "./fixtures/otel-custom-worker.ts";
+import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
 import OtelTracedWorker from "./fixtures/otel-traced-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -72,13 +73,14 @@ describe("Cloudflare Worker Telemetry", () => {
         // test body runs, so layer the just-learned collector URL on top of
         // the current provider for this deploy only.
         const currentConfig = yield* ConfigProvider.ConfigProvider;
-        const { traced, custom } = yield* stack
+        const { traced, custom, flush } = yield* stack
           .deploy(
             Effect.gen(function* () {
               yield* collectorWorker();
               const traced = yield* OtelTracedWorker;
               const custom = yield* OtelCustomWorker;
-              return { traced, custom };
+              const flush = yield* OtelEventFlushWorker;
+              return { traced, custom, flush };
             }),
           )
           .pipe(
@@ -87,6 +89,7 @@ describe("Cloudflare Worker Telemetry", () => {
               ConfigProvider.orElse(
                 ConfigProvider.fromUnknown({
                   COLLECTOR_URL: collectorUrl,
+                  OTLP_EVENT_FLUSH_URL: `${collectorUrl}/v1/traces`,
                 }),
                 currentConfig,
               ),
@@ -141,6 +144,40 @@ describe("Cloudflare Worker Telemetry", () => {
         });
         yield* expectUrlContains(collected, "custom.child-span");
         yield* expectUrlContains(collected, "custom-work-log");
+
+        // Durable Object event paths on deployed workerd: the Worker calls
+        // its DO over HTTP and over RPC; each DO event is its own telemetry
+        // scope. `state.waitUntil` is a no-op in DOs, so DO batches only
+        // arrive if the DurableObjectBridge's flush actually completes
+        // before/despite the event's I/O context winding down.
+        const flushUrl = flush.url as string;
+        yield* expectUrlContains(
+          `${flushUrl}/`,
+          "worker-saw:durable-object-ok",
+          {
+            timeout: "240 seconds",
+            label: "event-flush worker via DO fetch",
+          },
+        );
+        yield* expectUrlContains(
+          `${flushUrl}/rpc`,
+          "worker-saw:durable-object-rpc-ok",
+          {
+            timeout: "120 seconds",
+            label: "event-flush worker via DO rpc",
+          },
+        );
+        // The DO fetch event's child span…
+        yield* expectUrlContains(collected, "otel-event-flush.child", {
+          timeout: "120 seconds",
+          label: "deployed DO fetch event batch",
+        });
+        // …and the DO RPC method event's child span both reach the
+        // collector.
+        yield* expectUrlContains(collected, "otel-event-flush.rpc", {
+          timeout: "120 seconds",
+          label: "deployed DO rpc event batch",
+        });
 
         // Tear down: without this the run strands its workers (scratch
         // state is in-memory, so the LEADING destroy is a no-op) and the

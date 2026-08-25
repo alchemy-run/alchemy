@@ -313,6 +313,13 @@ const bindContainerClass = Effect.fn(function* (
       `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
     );
   }
+  // Both halves of the Worker's side describe the same env entry, so they
+  // share one `sid`. Binding rows are collapsed by sid (last write wins), so
+  // splitting them across two `bind` calls silently drops the namespace
+  // binding whenever the two sids coincide — e.g. the env key and the
+  // Container's logical id match (`Sandbox: Container("Sandbox", …)`). The
+  // Worker then uploads the Container declaration itself as a `json` binding
+  // and `env.NAME` is not a DO namespace at runtime.
   yield* resource.bind`${bindingName}`({
     bindings: [
       {
@@ -321,6 +328,7 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
+    containers: [{ className, dev: application.dev }],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {
@@ -328,9 +336,6 @@ const bindContainerClass = Effect.fn(function* (
         Output.map((namespaces) => namespaces?.[className]),
       ),
     },
-  });
-  yield* resource.bind`${application.LogicalId}`({
-    containers: [{ className, dev: application.dev }],
   });
 });
 
