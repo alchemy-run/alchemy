@@ -16,6 +16,7 @@ import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
+import type { Ref as HyperdriveRef } from "../Hyperdrive/Ref.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
@@ -193,6 +194,7 @@ export type WorkerBindingResource =
   | PipelinesStream
   | LegacyPipeline
   | Hyperdrive
+  | HyperdriveRef
   | VectorizeIndex
   | Secret
   | Worker

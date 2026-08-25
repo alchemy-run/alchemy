@@ -22,8 +22,12 @@ import type { ContainerApplication } from "../Containers/ContainerApplication.ts
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
-import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
+import {
+  getHyperdriveDevOrigin,
+  getHyperdriveRefDevOrigin,
+} from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
+import { isHyperdriveRef } from "../Hyperdrive/Ref.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
@@ -222,7 +226,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           bindings: [resolvedBindingMeta],
           hyperdrives: isHyperdriveConnection(binding)
             ? getHyperdriveDevOrigin(binding)
-            : undefined,
+            : isHyperdriveRef(binding)
+              ? getHyperdriveRefDevOrigin(binding)
+              : undefined,
           // Dev-only local-emulation opt-out channel (like `hyperdrives`):
           // worker-only bindings and `SendEmail` descriptors piped through
           // `Alchemy.remote()` carry the internal `devRemote` flag on their
@@ -542,7 +548,7 @@ const toBinding = (
       name: bindingName,
       namespace: binding.name,
     };
-  } else if (isHyperdriveConnection(binding)) {
+  } else if (isHyperdriveConnection(binding) || isHyperdriveRef(binding)) {
     return {
       type: "hyperdrive",
       name: bindingName,

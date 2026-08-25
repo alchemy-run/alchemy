@@ -402,6 +402,19 @@ export const LocalWorkerProvider = () =>
           }
           durableObjectNamespaces[className].container = dev;
         }
+        for (const binding of bindingDescriptors) {
+          // A managed Hyperdrive Connection always contributes a passthrough
+          // origin; only a read-only Hyperdrive.Ref without a `dev` override
+          // can be missing one (the Cloudflare API never returns the origin
+          // credentials of an existing config).
+          if (binding.type === "hyperdrive" && !hyperdrives[binding.id]) {
+            return yield* Effect.die(
+              `Hyperdrive binding "${binding.name}" has no local dev origin: ` +
+                `a Hyperdrive.Ref can only run in dev mode when its \`dev\` ` +
+                `origin override is set.`,
+            );
+          }
+        }
         const dev:
           | DevServerOptions
           | { readonly mode: "external"; readonly url?: string } =
