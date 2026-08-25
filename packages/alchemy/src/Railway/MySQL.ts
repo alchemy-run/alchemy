@@ -194,14 +194,13 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * {@link Service}, yield {@link ConnectMySQL}. From a laptop, use
  * `publicConnectionUri`.
  *
- * @resource
  * @see https://docs.railway.com/databases/mysql
  *
- * @section Create MySQL
+ * ### Create MySQL
  * Pass a Project. Alchemy generates a unique name, password, volume,
  * and a public TCP proxy.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const db = yield* Railway.MySQL("Db", { project: site });
@@ -212,13 +211,13 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * service and volume are deleted. Data is not copied.
  * :::
  *
- * @section Connect from a Service
+ * ### Connect from a Service
  * Yield `ConnectMySQL` inside init. Provide
  * {@link ConnectMySQLHttp}. Pass `conn.connectionString` to
  * `Drizzle.MySQL` or `SQL.MySQL`. The binding packs the private
  * URI (`{name}.railway.internal`).
  *
- * @example Bind and query
+ * **Example:** Bind and query
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/MySQL";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -239,12 +238,12 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * ) {}
  * ```
  *
- * @section Public TCP
+ * ### Public TCP
  * `public` (default `true`) creates a TCP proxy on 3306.
  * `publicConnectionUri` is `{domain}:{proxyPort}` for laptop access
  * and deploy-time migrations.
  *
- * @example Private only
+ * **Example:** Private only
  * ```typescript
  * const db = yield* Railway.MySQL("Db", {
  *   project: site,
@@ -252,10 +251,10 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * });
  * ```
  *
- * @section Image
+ * ### Image
  * Default is official MySQL 9. Pass `image` to pin another tag.
  *
- * @example MySQL 8
+ * **Example:** MySQL 8
  * ```typescript
  * const db = yield* Railway.MySQL("Db", {
  *   project: site,
@@ -263,10 +262,10 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope MySQL
+ * **Example:** Module-scope MySQL
  * ```typescript
  * // src/db.ts
  * import * as Railway from "alchemy/Railway";
@@ -274,6 +273,8 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * export const Site = Railway.Project("Site");
  * export const Db = Railway.MySQL("Db", { project: Site });
  * ```
+ *
+ * @resource
  */
 export const MySQL: typeof MySQLResource = Object.assign(
   (
@@ -364,7 +365,10 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const generatePassword = Effect.sync(() => randomBytes(16).toString("hex"));
+const generatePassword = Effect.sync(() => {
+  const bytes = randomBytes(16);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+});
 
 const isGoneService = (service: CloudService | undefined) =>
   service === undefined || service.deletedAt != null;
@@ -437,7 +441,7 @@ const encodePart = (value: string) => encodeURIComponent(value);
 const isTemplateValue = (value: string | undefined) =>
   value !== undefined && value.includes("${{");
 
-export const privateConnectionUri = (input: {
+const privateConnectionUri = (input: {
   user: string;
   password: string;
   name: string;
@@ -445,7 +449,7 @@ export const privateConnectionUri = (input: {
 }): string =>
   `mysql://${encodePart(input.user)}:${encodePart(input.password)}@${input.name}.railway.internal:${MYSQL_PORT}/${encodePart(input.database)}`;
 
-export const publicConnectionUri = (input: {
+const publicConnectionUri = (input: {
   user: string;
   password: string;
   domain: string;
@@ -972,7 +976,7 @@ export const MySQLProvider = () =>
       const volumeName = yield* createRailwayName(`${id}-mysqldata`);
       const startCommand = mysqlStartCommand(sourceImage);
 
-      let current =
+      let current: CloudService | undefined =
         output?.serviceId !== undefined && output.serviceId.length > 0
           ? yield* getById(output.serviceId)
           : undefined;
@@ -1075,7 +1079,7 @@ export const MySQLProvider = () =>
       });
       if (envChanged) needsDeploy = true;
 
-      let volume =
+      let volume: CloudInstance | undefined =
         output?.volumeInstanceId !== undefined &&
         output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)

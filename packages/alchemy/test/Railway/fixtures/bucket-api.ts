@@ -90,7 +90,14 @@ export default class BucketApi extends Railway.Service<BucketApi>()(
         }
 
         return yield* HttpServerResponse.json({ ok: false }, { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch((error) =>
+          HttpServerResponse.json(
+            { ok: false, error: String(error) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(Effect.provide([Railway.PutObjectHttp, Railway.GetObjectHttp])),
 ) {}

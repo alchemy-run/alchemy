@@ -13,7 +13,7 @@ import type { MySQL } from "./MySQL.ts";
  * `ConnectMySQL` is the Context tag, the type, and the callable —
  * `yield* Railway.ConnectMySQL(Db)`. Provide {@link ConnectMySQLHttp}.
  *
- * @example Bind MySQL in a Service
+ * **Example:** Bind MySQL in a Service
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/MySQL";
  *
@@ -25,13 +25,13 @@ import type { MySQL } from "./MySQL.ts";
  * });
  * ```
  *
- * @section Variable references
+ * ### Variable references
  * `ConnectMySQL` packs a typed private URI onto the Service. To store
  * Railway's template instead of a resolved URI (IaC `db.env.MYSQL_URL`),
  * pass `Railway.ref(Db, "MYSQL_URL")` as a {@link Variable} `value` or
  * `Service.env` entry.
  *
- * @example Railway.ref
+ * **Example:** Railway.ref
  * ```typescript
  * const db = yield* Railway.MySQL("Db", { project: site });
  * yield* Railway.Variable("MysqlUrl", {

@@ -8,6 +8,7 @@ import * as Bundle from "../Bundle/Bundle.ts";
 import {
   matchesPackageRoot,
   normalizeInstallTargets,
+  parsePackageRootFromSpecifier,
   resolvePackageInstallIdentity,
   type PackageInstall,
 } from "../Bundle/InstalledPackages.ts";
@@ -31,6 +32,10 @@ import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
 
 export type RailwayHostRuntimeContext = HostRuntimeContext;
 
+/**
+ * Container host. RPC wrapping lives in `Service.ts` so canvas Functions
+ * do not pay for `rpc-server.ts` in the 96KB start command.
+ */
 export const createRailwayHostRuntimeContext = createContainerRuntimeContext;
 
 /**
@@ -44,10 +49,12 @@ export const createRailwayFunctionRuntimeContext =
     const base = createContainerRuntimeContext(type)(id);
     return {
       ...base,
-      serve: ((handler) =>
+      serve: ((handler, options) =>
         Effect.sync(() => {
           if (!globalThis.__ALCHEMY_RUNTIME__) return;
-          const run = safeHttpEffect(handler);
+          const run = safeHttpEffect(
+            (globalThis as any).__R?.(options?.shape, handler) ?? handler,
+          );
           (
             globalThis as typeof globalThis & {
               __ALCHEMY_FUNCTION_FETCH__?: (
@@ -339,8 +346,10 @@ export const collectBindingState = (
   for (const binding of active) {
     for (const mount of binding?.data?.mounts ?? []) {
       const volumeId = coerceBindingId(mount.volumeId);
-      if (volumeId === undefined || seen.has(mount.path)) continue;
-      seen.add(mount.path);
+      if (volumeId === undefined) continue;
+      const key = `${volumeId}:${mount.path}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       mounts.push({ volumeId, path: mount.path });
     }
   }
@@ -356,45 +365,97 @@ export class FunctionBundleNotSingleFile extends Data.TaggedError(
 const decodeBundleText = (content: string | Uint8Array): string =>
   typeof content === "string" ? content : new TextDecoder().decode(content);
 
-const wrapCanvasListener = (inner: string) =>
-  Effect.sync(() => {
-    const req = createRequire(import.meta.url);
-    const effectVersion = (req("effect/package.json") as { version: string })
-      .version;
-    const bunVersion = (
-      req("@effect/platform-bun/package.json") as { version: string }
-    ).version;
-    return `import ${JSON.stringify(`effect@${effectVersion}`)};
-import ${JSON.stringify(`@effect/platform-bun@${bunVersion}`)};
+const IMPORT_SPEC =
+  /(?:from|import)\s*\(\s*["']([^"']+)["']|(?:from|import)\s+["']([^"']+)["']/g;
 
+const CANVAS_PINNED = new Set(["effect", "@effect/platform-bun"]);
+
+/** Packages Railway must install; `@effect/platform-node` is stubbed. */
+const skipCanvasPin = (root: string): boolean =>
+  CANVAS_PINNED.has(root) ||
+  root === "alchemy" ||
+  root.startsWith("@effect/platform-node") ||
+  root.startsWith("@distilled.cloud/");
+
+const collectCanvasPackageRoots = (
+  source: string,
+  install: Readonly<Record<string, string>>,
+): string[] => {
+  const roots = new Set<string>(Object.keys(install));
+  for (const match of source.matchAll(IMPORT_SPEC)) {
+    const spec = match[1] ?? match[2];
+    if (spec === undefined) continue;
+    const root = parsePackageRootFromSpecifier(spec);
+    if (root !== undefined && !skipCanvasPin(root)) roots.add(root);
+  }
+  return [...roots].sort();
+};
+
+const readPackageVersion = (name: string): string | undefined => {
+  try {
+    const req = createRequire(import.meta.url);
+    const version = (req(`${name}/package.json`) as { version?: string })
+      .version;
+    return typeof version === "string" && version.length > 0
+      ? version
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const pinImport = (name: string, version?: string): string => {
+  const spec =
+    version !== undefined && version.length > 0 && version !== "*"
+      ? `${name}@${version}`
+      : name;
+  return `import ${JSON.stringify(spec)};`;
+};
+
+/**
+ * Canvas wrapper that listens first, then import()s the bundled module.
+ * Static `import "pkg@version"` pins are for Railway's AST installer —
+ * `effect` is 4.x here, 3.x on npm without a pin. Extra pins come from
+ * remaining external imports (`pg`, `drizzle-orm`, `@effect/sql-pg`).
+ */
+const wrapCanvasListener = (
+  inner: string,
+  install: Readonly<Record<string, string>> = {},
+) =>
+  Effect.sync(() => {
+    const effectVersion = readPackageVersion("effect") ?? "latest";
+    const bunVersion = readPackageVersion("@effect/platform-bun") ?? "latest";
+    const extraPins = collectCanvasPackageRoots(inner, install).map((name) => {
+      const requested = install[name];
+      const version =
+        requested !== undefined && requested !== "*"
+          ? requested
+          : readPackageVersion(name);
+      return pinImport(name, version);
+    });
+    const pins = [
+      pinImport("effect", effectVersion),
+      pinImport("@effect/platform-bun", bunVersion),
+      ...extraPins,
+    ].join("\n");
+    return `${pins}
+const g = globalThis;
 const port = Number(process.env.PORT ?? 3000);
-globalThis.__ALCHEMY_FUNCTION_FETCH__ =
-  globalThis.__ALCHEMY_FUNCTION_FETCH__ ??
-  (async () => new Response("booting"));
+g.__ALCHEMY_FUNCTION_FETCH__ ??= async () => new Response("");
 Bun.serve({
   hostname: "0.0.0.0",
   port,
-  fetch: async (request) => {
-    try {
-      return await globalThis.__ALCHEMY_FUNCTION_FETCH__(request);
-    } catch (error) {
-      return new Response(String(error), { status: 500 });
-    }
-  },
+  fetch: (r) => g.__ALCHEMY_FUNCTION_FETCH__(r),
 });
-console.log("Railway function listening on " + port);
-
 try {
-  const innerUrl = new URL("./alchemy-inner.mjs", import.meta.url);
+  const innerUrl = new URL("./i.mjs", import.meta.url);
   await Bun.write(innerUrl, ${JSON.stringify(inner)});
   await import(innerUrl.href);
 } catch (error) {
-  console.error("Railway function module failed:", error);
-  globalThis.__ALCHEMY_FUNCTION_FETCH__ = async () =>
+  g.__ALCHEMY_FUNCTION_FETCH__ = async () =>
     new Response(String(error), { status: 500 });
 }
-
-await new Promise(() => {});
+await new Promise(()=>{});
 `;
   });
 
@@ -594,7 +655,8 @@ export const createRailwayFunctionSupport = ({
       });
     }
     const inner = decodeBundleText(bundled.files[0]!.content);
-    const source = yield* wrapCanvasListener(inner);
+    const install = yield* normalizeInstallTargets(props.build?.install);
+    const source = yield* wrapCanvasListener(inner, install);
     const hash = yield* sha256(source);
     return { source, hash };
   });

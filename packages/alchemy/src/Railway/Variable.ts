@@ -130,15 +130,14 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * injects it into services in that environment. The plaintext is never
  * stored in attributes.
  *
- * @resource
  * @see https://docs.railway.com/guides/variables
  *
- * @section Create a Variable
+ * ### Create a Variable
  * Wrap the value with `Redacted.make` so it is never logged. Omit `name`
  * and Alchemy generates an ownership-stamped name. Shared (no `service`)
  * variables apply to every service in the environment.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const dbUrl = yield* Railway.Variable("DatabaseUrl", {
@@ -151,11 +150,11 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * The value is created on the new Project. The old name is deleted.
  * :::
  *
- * @section Env-var name
+ * ### Env-var name
  * `name` is the env-var services see. It is stored as-is
  * (case-sensitive).
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * export const ApiToken = Railway.Variable("ApiToken", {
  *   project: Site,
@@ -169,11 +168,11 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * deletes the old one.
  * :::
  *
- * @section Environment
+ * ### Environment
  * Defaults to the Project's primary environment. Pass a
  * `Railway.Environment` (or `{ environmentId }`) to target another one.
  *
- * @example Extra environment
+ * **Example:** Extra environment
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", { project: site });
  * const token = yield* Railway.Variable("StagingToken", {
@@ -187,11 +186,11 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * The value is created in the new environment. The old name is deleted.
  * :::
  *
- * @section Service-scoped
+ * ### Service-scoped
  * Pass `service` to attach the variable to one service instead of the
  * shared project set.
  *
- * @example Service variable
+ * **Example:** Service variable
  * ```typescript
  * const api = yield* Railway.Service("Api", {
  *   project: site,
@@ -205,7 +204,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * });
  * ```
  *
- * @section Variable references
+ * ### Variable references
  * `value` may be a `Railway.ref(resource, key)` template instead of a
  * plaintext secret. Upsert stores `${{LogicalName.KEY}}` (or
  * `${{shared.NAME}}`) — not a resolved URI. Railway interpolates it.
@@ -214,7 +213,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * want Railway's own `${{Db.DATABASE_URL}}` interpolation (IaC
  * `db.env.DATABASE_URL`).
  *
- * @example Reference Postgres DATABASE_URL
+ * **Example:** Reference Postgres DATABASE_URL
  * ```typescript
  * const db = yield* Railway.Postgres("Db", { project: site });
  * const api = yield* Railway.Service("Api", {
@@ -229,7 +228,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * });
  * ```
  *
- * @example Shared variable
+ * **Example:** Shared variable
  * ```typescript
  * yield* Railway.Variable("SentryDsn", {
  *   project: site,
@@ -244,11 +243,11 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * });
  * ```
  *
- * @section Rotate the value
+ * ### Rotate the value
  * Updating `value` is in place via `variableUpsert`. Deploys are skipped
  * (`skipDeploys: true`); the Service resource owns deploys.
  *
- * @example New value
+ * **Example:** New value
  * ```typescript
  * export const ApiToken = Railway.Variable("ApiToken", {
  *   project: Site,
@@ -257,11 +256,11 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the Project once. Pass it into every child. Resource-valued
  * props accept the resource or an Effect producing it.
  *
- * @example Module-scope Variable
+ * **Example:** Module-scope Variable
  * ```typescript
  * // src/secrets.ts
  * import * as Railway from "alchemy/Railway";
@@ -274,6 +273,8 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  *   value: Redacted.make("sk_live_…"),
  * });
  * ```
+ *
+ * @resource
  */
 export const Variable: typeof VariableResource = Object.assign(
   (

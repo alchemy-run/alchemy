@@ -11,5 +11,4 @@ export const Echo = Railway.Service("Echo", {
   image: "hashicorp/http-echo",
   port: 5678,
   healthcheck: "/",
-  replicas: 1,
 });

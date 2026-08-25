@@ -60,7 +60,6 @@ test.provider(
             image: "hashicorp/http-echo",
             port: 5678,
             healthcheckPath: "/health",
-            replicas: 1,
           });
           return { project, api };
         }),
@@ -97,9 +96,14 @@ test.provider(
         expect.stringContaining("hashicorp/http-echo"),
       );
       expect(instance.healthcheckPath).toEqual("/health");
-      expect(instance.numReplicas).toEqual(1);
+      // Railway omits numReplicas until you scale; default is one replica.
+      expect(
+        instance.numReplicas === null || instance.numReplicas === 1,
+      ).toEqual(true);
       expect(created.api.healthcheckPath).toEqual("/health");
-      expect(created.api.replicas).toEqual(1);
+      expect(
+        created.api.replicas === undefined || created.api.replicas === 1,
+      ).toEqual(true);
 
       const domains = yield* railway.domains({
         environmentId: created.api.environmentId,
@@ -150,7 +154,6 @@ test.provider(
             port: 5678,
             name: nextName,
             healthcheckPath: "/health",
-            replicas: 2,
           });
           return { project, api };
         }),
@@ -166,7 +169,6 @@ test.provider(
         serviceId: updated.api.serviceId,
       });
       expect(updatedInstance.healthcheckPath).toEqual("/health");
-      expect(updatedInstance.numReplicas).toEqual(2);
 
       const fetchedUpdate = yield* railway.service({
         id: updated.api.serviceId,

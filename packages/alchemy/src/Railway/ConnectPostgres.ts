@@ -6,33 +6,40 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Postgres } from "./Postgres.ts";
 
 /**
- * Bind a {@link Postgres} service to a Railway {@link Service} and obtain
- * the Effect-native connection string for `Drizzle.Postgres` /
- * `SQL.Postgres`.
+ * Bind a {@link Postgres} database to a Railway {@link Service} or
+ * {@link Function} and obtain the Effect-native connection string for
+ * `Drizzle.Postgres` / `SQL.Postgres`.
  *
  * `ConnectPostgres` is the Context tag, the type, and the callable —
  * `yield* Railway.ConnectPostgres(Db)`. Provide {@link ConnectPostgresHttp}.
  *
- * @example Bind Postgres in a Service
+ * **Example:** Bind Postgres in a Function
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Postgres";
  *
- * const conn = yield* Railway.ConnectPostgres(Db);
- * const db = yield* Drizzle.Postgres(conn.connectionString);
- *
- * fetch: Effect.gen(function* () {
- *   const rows = yield* db.select().from(users);
- * });
+ * export default class Query extends Railway.Function<Query>()(
+ *   "Query",
+ *   { project: Site, main: import.meta.url, build: { install: ["pg"] } },
+ *   Effect.gen(function* () {
+ *     const conn = yield* Railway.ConnectPostgres(Db);
+ *     const db = yield* Drizzle.Postgres(conn.connectionString);
+ *     return {
+ *       fetch: db.execute("select 1 as ok").pipe(
+ *         Effect.flatMap(HttpServerResponse.json),
+ *       ),
+ *     };
+ *   }).pipe(Effect.provide(Railway.ConnectPostgresHttp)),
+ * ) {}
  * ```
  *
- * @section Variable references
- * `ConnectPostgres` packs a typed private URI onto the Service. To store
+ * ### Variable references
+ * `ConnectPostgres` packs a typed private URI onto the host. To store
  * Railway's template instead of a resolved URI (IaC
  * `db.env.DATABASE_URL`), pass `Railway.ref(Db, "DATABASE_URL")` as a
  * {@link Variable} `value` or `Service.env` entry. Railway interpolates
  * `${{Db.DATABASE_URL}}` at build/runtime.
  *
- * @example Railway.ref
+ * **Example:** Railway.ref
  * ```typescript
  * const db = yield* Railway.Postgres("Db", { project: site });
  * yield* Railway.Variable("DatabaseUrl", {
@@ -56,6 +63,9 @@ export interface ConnectPostgres extends Binding.Service<
 export const ConnectPostgres = Binding.Service<ConnectPostgres>(
   "Railway.ConnectPostgres",
 );
+
+export const DATABASE_URL_SECRET = "DATABASE_URL";
+export const DATABASE_PUBLIC_URL_SECRET = "DATABASE_PUBLIC_URL";
 
 export const connectEnvKeys = (postgres: Pick<Postgres, "LogicalId">) => {
   const id = postgres.LogicalId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();

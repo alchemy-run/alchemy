@@ -1,8 +1,10 @@
 import type * as S3 from "@distilled.cloud/aws/s3";
+import type * as Config from "effect/Config";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { RailwayS3CredentialsMissing } from "./BucketBinding.ts";
 
 export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
 
@@ -12,10 +14,9 @@ export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
  * Bind this operation to a {@link Bucket} in Service init. Provide
  * {@link GetObjectHttp}.
  *
- * @binding
  *
- * @section Reading Objects
- * @example Read an Object and Decode Its Body
+ * ### Reading Objects
+ * **Example:** Read an Object and Decode Its Body
  * ```typescript
  * const getObject = yield* Railway.GetObject(Data);
  *
@@ -25,6 +26,8 @@ export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetObject extends Binding.Service<
   GetObject,
@@ -33,8 +36,12 @@ export interface GetObject extends Binding.Service<
     bucket: Bucket,
   ) => Effect.Effect<
     (
-      request: GetObjectRequest,
-    ) => Effect.Effect<S3.GetObjectOutput, S3.GetObjectError, RuntimeContext>
+      request?: GetObjectRequest,
+    ) => Effect.Effect<
+      S3.GetObjectOutput,
+      S3.GetObjectError | Config.ConfigError | RailwayS3CredentialsMissing,
+      RuntimeContext
+    >
   >
 > {}
 

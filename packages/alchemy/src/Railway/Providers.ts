@@ -3,6 +3,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
+import { Random, RandomProvider } from "../Random.ts";
 import { RailwayAuth } from "./AuthProvider.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { CloudAgent, CloudAgentProvider } from "./CloudAgent.ts";
@@ -38,7 +39,8 @@ import {
 import { ReadRedisHttp } from "./ReadRedisHttp.ts";
 import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
-import { Service, ServiceProvider } from "./Service.ts";
+import { Service } from "./Service.ts";
+import { ServiceProvider } from "./ServiceProvider.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
@@ -102,6 +104,7 @@ export const providers = () =>
       Bucket,
       CloudAgent,
       Sandbox,
+      Random,
     ]),
   ).pipe(
     Layer.provide(
@@ -127,21 +130,26 @@ export const providers = () =>
         BucketProvider(),
         CloudAgentProvider(),
         SandboxProvider(),
+        RandomProvider(),
       ),
     ),
-    Layer.provideMerge(MountVolumeLive),
-    Layer.provideMerge(ConnectPostgresHttp),
-    Layer.provideMerge(ConnectMySQLHttp),
-    Layer.provideMerge(ConnectMongoHttp),
-    Layer.provideMerge(PutObjectHttp),
-    Layer.provideMerge(GetObjectHttp),
-    Layer.provideMerge(DeleteObjectHttp),
-    Layer.provideMerge(HeadObjectHttp),
-    Layer.provideMerge(ListObjectsV2Http),
-    Layer.provideMerge(ReadRedisHttp),
-    Layer.provideMerge(WriteRedisHttp),
-    Layer.provideMerge(ReadWriteRedisHttp),
-    Layer.provideMerge(ExecHttp),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        MountVolumeLive,
+        ConnectPostgresHttp,
+        ConnectMySQLHttp,
+        ConnectMongoHttp,
+        PutObjectHttp,
+        GetObjectHttp,
+        DeleteObjectHttp,
+        HeadObjectHttp,
+        ListObjectsV2Http,
+        ReadRedisHttp,
+        WriteRedisHttp,
+        ReadWriteRedisHttp,
+        ExecHttp,
+      ),
+    ),
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),

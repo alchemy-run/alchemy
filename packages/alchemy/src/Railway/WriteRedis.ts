@@ -9,14 +9,15 @@ import type { Redis } from "./Redis.ts";
  * `WriteRedis` is the Context tag, the type, and the callable —
  * `yield* Railway.WriteRedis(Cache)`. Provide {@link WriteRedisHttp}.
  *
- * @binding
  *
- * @section Write
- * @example Set a key
+ * ### Write
+ * **Example:** Set a key
  * ```typescript
  * const cache = yield* Railway.WriteRedis(Cache);
  * yield* cache.set("marker", "hello");
  * ```
+ *
+ * @binding
  */
 export interface WriteRedis extends Binding.Service<
   WriteRedis,

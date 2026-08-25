@@ -70,15 +70,14 @@ export type Project = Resource<
  * A Railway.Project is a workspace-scoped namespace. It owns environments
  * and services. Names are unique per workspace.
  *
- * @resource
  * @see https://docs.railway.com/guides/projects
  *
- * @section Create a Project
+ * ### Create a Project
  * Alchemy generates a unique name unless you pass one. `url` is the
  * dashboard URL. A production environment is created with the project —
  * do not recreate it as an Environment resource.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * ```
@@ -88,31 +87,31 @@ export type Project = Resource<
  * reclaimable.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you need a stable project name. Changing it later
  * updates the project in place.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const site = yield* Railway.Project("Site", {
  *   name: "my-site",
  * });
  * ```
  *
- * @section Description
+ * ### Description
  * `description` is optional and updates in place.
  *
- * @example With description
+ * **Example:** With description
  * ```typescript
  * const site = yield* Railway.Project("Site", {
  *   description: "production web app",
  * });
  * ```
  *
- * @section Workspace
+ * ### Workspace
  * Workspace defaults to the current token. Pass `workspaceId` to pin it.
  *
- * @example Pin a workspace
+ * **Example:** Pin a workspace
  * ```typescript
  * const site = yield* Railway.Project("Site", {
  *   workspaceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -123,29 +122,31 @@ export type Project = Resource<
  * The Project is created in the new workspace. The old Project is deleted.
  * :::
  *
- * @section Default environment name
+ * ### Default environment name
  * `defaultEnvironmentName` is create-only. Railway's default is
  * `production`. Extra environments (staging) are a separate Environment
  * resource.
  *
- * @example Custom default environment
+ * **Example:** Custom default environment
  * ```typescript
  * const site = yield* Railway.Project("Site", {
  *   defaultEnvironmentName: "production",
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the Project once. Pass it into every child. Resource-valued
  * props accept the resource or an Effect producing it.
  *
- * @example Module-scope Project
+ * **Example:** Module-scope Project
  * ```typescript
  * // src/project.ts
  * import * as Railway from "alchemy/Railway";
  *
  * export const Site = Railway.Project("Site");
  * ```
+ *
+ * @resource
  */
 export const Project = Resource<Project>("Railway.Project");
 
@@ -318,7 +319,7 @@ export const ProjectProvider = () =>
         output?.workspaceId ??
         (yield* currentWorkspaceId());
 
-      let current =
+      let current: CloudProject | undefined =
         output?.projectId !== undefined
           ? yield* getById(output.projectId)
           : undefined;

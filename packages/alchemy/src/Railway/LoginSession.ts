@@ -22,8 +22,8 @@ export const RAILWAY_CLI_LOGIN_HOST = "https://railway.com";
  * Alchemy's AuthProvider `method: "oauth"` runs this flow: create → print
  * the pairing URL → poll consume → store the token.
  *
- * @section Pairing URL
- * @example From a session code
+ * ### Pairing URL
+ * **Example:** From a session code
  * ```typescript
  * const code = yield* railway.loginSessionCreate({});
  * const url = loginSessionUrl(code, { hostname: "dev-box" });

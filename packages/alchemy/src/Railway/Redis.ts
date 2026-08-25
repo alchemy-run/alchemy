@@ -37,7 +37,9 @@ export type RedisEnvironment = {
 
 export const DEFAULT_REDIS_IMAGE = "redis:7";
 export const REDIS_PORT = 6379;
-export const REDIS_URL_ENV = "REDIS_URL";
+import { REDIS_URL_ENV } from "./RedisBinding.ts";
+
+export { REDIS_URL_ENV };
 export const REDIS_PASSWORD_ENV = "REDISPASSWORD";
 
 export interface RedisProps {
@@ -139,14 +141,13 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * {@link ReadWriteRedis} on a {@link Service}. Reach it from a laptop
  * through {@link TcpProxy} on port `6379`.
  *
- * @resource
  * @see https://docs.railway.com/guides/redis
  *
- * @section Create Redis
+ * ### Create Redis
  * Pass a Project. Alchemy generates a unique name and password unless
  * you pass them. Default image is `redis:7`.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const cache = yield* Railway.Redis("Cache", { project: site });
@@ -157,11 +158,11 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * reclaimable.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you want a stable service name. Changing it later
  * updates the service in place.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const cache = yield* Railway.Redis("Cache", {
  *   project: site,
@@ -169,11 +170,11 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * });
  * ```
  *
- * @section Image
+ * ### Image
  * Official Redis (`redis:7`) is started with `--requirepass`. Bitnami
  * reads `REDIS_PASSWORD`. Updating the image is in place.
  *
- * @example Bitnami
+ * **Example:** Bitnami
  * ```typescript
  * const cache = yield* Railway.Redis("Cache", {
  *   project: site,
@@ -181,11 +182,11 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * });
  * ```
  *
- * @section Public TCP
+ * ### Public TCP
  * Attach a {@link TcpProxy} on `6379` to reach Redis from outside the
  * private network.
  *
- * @example Laptop access
+ * **Example:** Laptop access
  * ```typescript
  * const cache = yield* Railway.Redis("Cache", { project: site });
  * const proxy = yield* Railway.TcpProxy("CacheProxy", {
@@ -195,12 +196,12 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * });
  * ```
  *
- * @section Bind from a Service
+ * ### Bind from a Service
  * Yield {@link ReadWriteRedis} (or {@link ReadRedis} / {@link WriteRedis})
  * in Service init. Provide the matching `*Http` layer. Runtime commands
  * use `REDIS_URL` (`{name}.railway.internal`).
  *
- * @example Read and write
+ * **Example:** Read and write
  * ```typescript
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
@@ -223,10 +224,10 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * ) {}
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Redis
+ * **Example:** Module-scope Redis
  * ```typescript
  * // src/cache.ts
  * import * as Railway from "alchemy/Railway";
@@ -234,6 +235,8 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * export const Site = Railway.Project("Site");
  * export const Cache = Railway.Redis("Cache", { project: Site });
  * ```
+ *
+ * @resource
  */
 export const Redis: typeof RedisResource = Object.assign(
   (
@@ -319,7 +322,10 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const generatePassword = Effect.sync(() => randomBytes(24).toString("hex"));
+const generatePassword = Effect.sync(() => {
+  const bytes = randomBytes(24);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+});
 
 const isBitnamiImage = (image: string) => /bitnami/i.test(image);
 
@@ -412,29 +418,25 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
   );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
-  getInstance(environmentId, serviceId).pipe(
-    Effect.flatMap((instance) => {
-      const latest = instance?.latestDeployment;
-      const status = latest?.status;
-      if (status !== undefined && deployFailed(status)) {
-        return Effect.fail(
-          new RedisDeployFailed({
-            serviceId,
-            status,
-            deploymentId: latest?.id,
-          }),
-        );
-      }
-      if (instance !== undefined && deployReady(status)) {
-        return Effect.succeed(instance);
-      }
-      return Effect.fail(
-        new RedisDeployPending({
-          serviceId,
-          status: status ?? "pending",
-        }),
-      );
-    }),
+  Effect.gen(function* () {
+    const instance = yield* getInstance(environmentId, serviceId);
+    const latest = instance?.latestDeployment;
+    const status = latest?.status;
+    if (status !== undefined && deployFailed(status)) {
+      return yield* new RedisDeployFailed({
+        serviceId,
+        status,
+        deploymentId: latest?.id,
+      });
+    }
+    if (instance !== undefined && deployReady(status)) {
+      return instance;
+    }
+    return yield* new RedisDeployPending({
+      serviceId,
+      status: status ?? "pending",
+    });
+  }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisDeployPending",
       times: 10,
@@ -694,7 +696,7 @@ export const RedisProvider = () =>
       const name = yield* resolveName(id, props.name, output?.name);
       const image = props.image ?? output?.image ?? DEFAULT_REDIS_IMAGE;
 
-      let current =
+      let current: CloudService | undefined =
         output?.serviceId !== undefined && output.serviceId.length > 0
           ? yield* getById(output.serviceId)
           : undefined;

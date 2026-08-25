@@ -5,6 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Railway.providers() });
@@ -129,4 +130,62 @@ test.provider(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 480_000 },
+);
+
+test.provider(
+  "refuse a second volume on a service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Railway.Project("Site");
+          const api = yield* Railway.Service("Api", {
+            project,
+            image: "hashicorp/http-echo",
+            port: 5678,
+          });
+          const data = yield* Railway.Volume("Data", {
+            project,
+            mountPath: "/data",
+            service: api,
+          });
+          return { project, api, data };
+        }),
+      );
+
+      const result = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Railway.Project("Site");
+            const api = yield* Railway.Service("Api", {
+              project,
+              image: "hashicorp/http-echo",
+              port: 5678,
+            });
+            const data = yield* Railway.Volume("Data", {
+              project,
+              mountPath: "/data",
+              service: api,
+            });
+            const cache = yield* Railway.Volume("Cache", {
+              project,
+              mountPath: "/cache",
+              service: api,
+            });
+            return { project, api, data, cache };
+          }),
+        ),
+      );
+
+      expect(created.data.serviceId).toEqual(created.api.serviceId);
+      expect(Result.isFailure(result)).toEqual(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toEqual("Railway.MultipleVolumes");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

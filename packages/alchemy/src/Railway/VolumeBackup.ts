@@ -153,15 +153,14 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * {@link restoreVolumeBackup}. Point-in-time restore forks a new
  * Postgres service via {@link restoreVolumePITR}.
  *
- * @resource
  * @see https://docs.railway.com/volumes/backups
  * @see https://docs.railway.com/integrations/api/manage-volumes
  *
- * @section Create a backup
+ * ### Create a backup
  * Pass the Volume. Alchemy generates a unique name. The volume should
  * be attached to a Service — Railway only backups mounted volumes.
  *
- * @example Manual snapshot
+ * **Example:** Manual snapshot
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const api = yield* Railway.Service("Api", {
@@ -181,11 +180,11 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * deleted.
  * :::
  *
- * @section Name
+ * ### Name
  * Omit `name` for an ownership-stamped name. Pass one to label the
  * snapshot in the dashboard.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const snap = yield* Railway.VolumeBackup("Nightly", {
  *   volume: data,
@@ -198,10 +197,10 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * old one is deleted.
  * :::
  *
- * @section Lock
+ * ### Lock
  * Lock to drop the expiration. One-way.
  *
- * @example Lock a backup
+ * **Example:** Lock a backup
  * ```typescript
  * const snap = yield* Railway.VolumeBackup("Nightly", {
  *   volume: data,
@@ -209,11 +208,11 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * });
  * ```
  *
- * @section Schedules
+ * ### Schedules
  * `schedules` is volume-instance state, not per-snapshot. Set it on
  * one VolumeBackup that owns the instance.
  *
- * @example Daily + weekly
+ * **Example:** Daily + weekly
  * ```typescript
  * const snap = yield* Railway.VolumeBackup("Nightly", {
  *   volume: data,
@@ -221,12 +220,12 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * });
  * ```
  *
- * @section Restore
+ * ### Restore
  * Restore is not a reconciler step. Call {@link restoreVolumeBackup}
  * (destructive to the instance) or {@link restoreVolumePITR} (forks a
  * new Postgres service).
  *
- * @example Restore a snapshot
+ * **Example:** Restore a snapshot
  * ```typescript
  * yield* Railway.restoreVolumeBackup({
  *   volumeInstanceId: snap.volumeInstanceId,
@@ -234,10 +233,10 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope backup
+ * **Example:** Module-scope backup
  * ```typescript
  * // src/data.ts
  * import * as Railway from "alchemy/Railway";
@@ -251,6 +250,8 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  *   volume: Data,
  * });
  * ```
+ *
+ * @resource
  */
 export const VolumeBackup: typeof VolumeBackupResource = Object.assign(
   (
@@ -468,32 +469,27 @@ const waitForWorkflow = (
   volumeInstanceId: string,
   mode: "create" | "delete",
 ) =>
-  railway.workflowStatus({ workflowId }).pipe(
-    Effect.flatMap((result) => {
-      if (result.status === "Complete") return Effect.succeed(result);
-      if (result.status === "Error") {
-        return Effect.fail(
-          new VolumeBackupWorkflowFailed({
-            workflowId,
-            error: result.error ?? "backup workflow failed",
-          }),
-        );
-      }
-      return Effect.fail(
-        new VolumeBackupPending({
-          volumeInstanceId,
-          state: result.status,
-        }),
-      );
-    }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.fail(
-        new VolumeBackupPending({
-          volumeInstanceId,
-          state: "NotFound",
-        }),
+  Effect.gen(function* () {
+    const result = yield* railway.workflowStatus({ workflowId }).pipe(
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed({
+          status: "NotFound",
+          error: null,
+        } as const),
       ),
-    ),
+    );
+    if (result.status === "Complete") return result;
+    if (result.status === "Error") {
+      return yield* new VolumeBackupWorkflowFailed({
+        workflowId,
+        error: result.error ?? "backup workflow failed",
+      });
+    }
+    return yield* new VolumeBackupPending({
+      volumeInstanceId,
+      state: result.status,
+    });
+  }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.VolumeBackupPending",
       times: 10,

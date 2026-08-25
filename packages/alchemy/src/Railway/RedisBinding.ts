@@ -3,8 +3,11 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import type { Url } from "../Redis/index.ts";
+import { UrlMissing as RedisUrlMissing } from "../Redis/index.ts";
 import { isRailwayHost } from "./MountVolume.ts";
-import { REDIS_URL_ENV, RedisUrlMissing, type Redis } from "./Redis.ts";
+import type { Redis } from "./Redis.ts";
+
+export const REDIS_URL_ENV = "REDIS_URL";
 
 /**
  * Shared scaffolding for Railway Redis bindings.

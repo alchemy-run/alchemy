@@ -11,18 +11,28 @@ import type {
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { isResolved } from "../Diff.ts";
-import { Platform, type Main, type PlatformProps } from "../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type MainRpc,
+  type PlatformProps,
+} from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
+import {
+  assertHostDisk,
+  type MountSpec,
+  type ServiceBinding,
+} from "./MountVolume.ts";
 import { listOwnedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -34,11 +44,13 @@ import {
   createRailwayFunctionSupport,
   createRailwayFunctionRuntimeContext,
   DEFAULT_PORT,
+  plainEnvValue,
   toEnvRecord,
   type HostedProgramProps,
   type RailwayBuildOptions,
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
+import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
 
 export { FunctionBundleNotSingleFile } from "./hosted.ts";
 
@@ -158,6 +170,11 @@ export interface FunctionProps extends PlatformProps {
    * `skipDeploys: true`; this Function owns the subsequent deploy.
    */
   env?: Record<string, any>;
+  /**
+   * Private-mesh RPC token. Minted by a child `Alchemy.Random`
+   * (`{logicalId}RpcToken`) and persisted in state. Set automatically.
+   */
+  rpcToken?: Redacted.Redacted<string>;
 }
 
 export type Function = Resource<
@@ -184,6 +201,17 @@ export type Function = Resource<
     region: string | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
+    /**
+     * Internal DNS name on the default private mesh
+     * (`{name}.railway.internal`). Derived from the service name.
+     */
+    dnsName: string;
+    /**
+     * Shared token for private schemaless RPC. Value of the child
+     * `Alchemy.Random` resource. Packed onto callers by
+     * {@link bindFunction}; never send this to the public internet.
+     */
+    rpcToken: string;
     /** Public `https://{domain}` URL (`*.up.railway.app`). */
     url: string | undefined;
     /** Generated Railway service domain hostname. */
@@ -212,13 +240,14 @@ export const isFunction = (value: unknown): value is Function =>
 
 export type FunctionServices = ServerHost;
 
-export type FunctionShape = Main<FunctionServices>;
+export type FunctionShape = Main<FunctionServices> & MainRpc<FunctionServices>;
 
 export type FunctionRuntimeContext = RailwayHostRuntimeContext;
 
 const resolveFunctionProps = (
+  id: string,
   props: FunctionProps | Effect.Effect<FunctionProps, never, Providers>,
-): Effect.Effect<FunctionProps, never, Providers> =>
+) =>
   Effect.gen(function* () {
     const resolved = Effect.isEffect(props) ? yield* props : props;
     if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
@@ -235,7 +264,8 @@ const resolveFunctionProps = (
               Providers
             >
           : resolved.environment;
-    return { ...resolved, project, environment };
+    const rpcToken = yield* mintRpcToken(id);
+    return { ...resolved, project, environment, rpcToken };
   });
 
 /**
@@ -249,16 +279,15 @@ const resolveFunctionProps = (
  * which bundles with Rolldown and **pushes a Docker image**. Functions
  * are capped at 96KB once encoded.
  *
- * @resource
  * @see https://docs.railway.com/reference/functions
  *
- * @section Effect-native Function
+ * ### Effect-native Function
  * A Function is a class. Props describe the canvas Function. The Effect
  * is the program that runs in it. `main: import.meta.url` is the bundle
  * entrypoint — Alchemy bundles this file into one JS file and deploys
  * it. No `registry`.
  *
- * @example Class + Project + main
+ * **Example:** Class + Project + main
  * ```typescript
  * export default class Ping extends Railway.Function<Ping>()(
  *   "Ping",
@@ -278,13 +307,13 @@ const resolveFunctionProps = (
  * The Function is created in the new Project. The old Function is deleted.
  * :::
  *
- * @section Inline source
+ * ### Inline source
  * Pass inline `source` (or `path` to a `.ts` file) instead of `main`
  * when the Function is not an Effect class. Alchemy generates a
  * `*.up.railway.app` domain unless `http: false` or a cron schedule is
  * set.
  *
- * @example Inline source
+ * **Example:** Inline source
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const ping = yield* Railway.Function("Ping", {
@@ -299,11 +328,11 @@ const resolveFunctionProps = (
  * });
  * ```
  *
- * @section File path
+ * ### File path
  * `path` is the CLI `--path` equivalent. The file is read at
  * plan/reconcile. Content changes update in place.
  *
- * @example Path
+ * **Example:** Path
  * ```typescript
  * const ping = yield* Railway.Function("Ping", {
  *   project: site,
@@ -311,11 +340,11 @@ const resolveFunctionProps = (
  * });
  * ```
  *
- * @section Cron
+ * ### Cron
  * `cronSchedule` runs the Function on a cron expression (`--cron`).
  * HTTP domains are skipped unless `http: true` is set explicitly.
  *
- * @example Cron schedule
+ * **Example:** Cron schedule
  * ```typescript
  * const job = yield* Railway.Function("Cleanup", {
  *   project: site,
@@ -324,10 +353,10 @@ const resolveFunctionProps = (
  * });
  * ```
  *
- * @section Serverless
+ * ### Serverless
  * `sleepApplication` sleeps the Function when idle (`--serverless`).
  *
- * @example Sleep when idle
+ * **Example:** Sleep when idle
  * ```typescript
  * const ping = yield* Railway.Function("Ping", {
  *   project: site,
@@ -337,10 +366,44 @@ const resolveFunctionProps = (
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Schemaless RPC
+ * Return methods next to `fetch`. Call `enableRailwayRpc()` in init
+ * (canvas Functions are capped at 96KB; the dispatcher is opt-in).
+ * Another Function or Service binds this class and calls them over
+ * `{name}.railway.internal` with a shared token. Public
+ * `*.up.railway.app` requests to `/__rpc__/*` get 401.
+ *
+ * **Example:** Bind a Function
+ * ```typescript
+ * export default class Query extends Railway.Function<Query>()(
+ *   "Query",
+ *   { project: Site, main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     Railway.enableRailwayRpc();
+ *     return {
+ *       greet: (name: string) => Effect.succeed(`hello ${name}`),
+ *     };
+ *   }),
+ * ) {}
+ *
+ * export default class Api extends Railway.Service<Api>()(
+ *   "Api",
+ *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   Effect.gen(function* () {
+ *     const query = yield* Railway.bindFunction(Query);
+ *     return {
+ *       fetch: query
+ *         .greet("sam")
+ *         .pipe(Effect.map((greeting) => HttpServerResponse.text(greeting))),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Function
+ * **Example:** Module-scope Function
  * ```typescript
  * // src/ping.ts
  * import * as Railway from "alchemy/Railway";
@@ -352,6 +415,8 @@ const resolveFunctionProps = (
  *   http: false,
  * });
  * ```
+ *
+ * @resource
  */
 export const Function: Platform<
   Function,
@@ -360,7 +425,7 @@ export const Function: Platform<
   FunctionRuntimeContext
 > = Platform("Railway.Function", {
   createRuntimeContext: createRailwayFunctionRuntimeContext("Railway.Function"),
-  transformProps: (_id, props) => resolveFunctionProps(props),
+  transformProps: (id, props) => resolveFunctionProps(id, props),
 });
 
 export class FunctionNotCreated extends Data.TaggedError(
@@ -387,7 +452,11 @@ export class FunctionTooLarge extends Data.TaggedError(
 )<{
   bytes: number;
   maxBytes: number;
-}> {}
+}> {
+  get message() {
+    return `canvas Function is ${this.bytes} bytes (max ${this.maxBytes})`;
+  }
+}
 
 export class FunctionRuntimeImageMissing extends Data.TaggedError(
   "Railway.FunctionRuntimeImageMissing",
@@ -470,7 +539,7 @@ const startCommandOf = (source: string) =>
       Buffer.from(source, "utf8").toString("base64"),
     );
     const cmd = `${FUNCTION_START_PREFIX}${encoded}`;
-    if (cmd.length >= FUNCTION_MAX_BYTES) {
+    if (cmd.length > FUNCTION_MAX_BYTES) {
       return yield* new FunctionTooLarge({
         bytes: cmd.length,
         maxBytes: FUNCTION_MAX_BYTES,
@@ -603,34 +672,27 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
       );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
-  getInstance(environmentId, serviceId).pipe(
-    Effect.flatMap((instance) => {
-      const latest = instance?.latestDeployment;
-      const status = latest?.status;
-      if (status !== undefined && deployFailed(status)) {
-        return fetchDeployLogs(latest?.id).pipe(
-          Effect.flatMap((logs) =>
-            Effect.fail(
-              new FunctionDeployFailed({
-                serviceId,
-                status,
-                deploymentId: latest?.id,
-                logs,
-              }),
-            ),
-          ),
-        );
-      }
-      if (instance !== undefined && deployReady(status)) {
-        return Effect.succeed(instance);
-      }
-      return Effect.fail(
-        new FunctionDeployPending({
-          serviceId,
-          status: status ?? "pending",
-        }),
-      );
-    }),
+  Effect.gen(function* () {
+    const instance = yield* getInstance(environmentId, serviceId);
+    const latest = instance?.latestDeployment;
+    const status = latest?.status;
+    if (status !== undefined && deployFailed(status)) {
+      const logs = yield* fetchDeployLogs(latest?.id);
+      return yield* new FunctionDeployFailed({
+        serviceId,
+        status,
+        deploymentId: latest?.id,
+        logs,
+      });
+    }
+    if (instance !== undefined && deployReady(status)) {
+      return instance;
+    }
+    return yield* new FunctionDeployPending({
+      serviceId,
+      status: status ?? "pending",
+    });
+  }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.FunctionDeployPending",
       times: 10,
@@ -769,6 +831,7 @@ const toAttrs = (input: {
   image: string;
   port: number | undefined;
   codeHash: string;
+  rpcToken: string;
 }): Function["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -780,6 +843,8 @@ const toAttrs = (input: {
   sleepApplication: input.instance?.sleepApplication ?? undefined,
   region: input.instance?.region ?? undefined,
   port: input.port ?? input.domain?.targetPort,
+  dnsName: `${input.service.name}.railway.internal`,
+  rpcToken: input.rpcToken,
   url: input.domain?.url,
   domain: input.domain?.domain,
   domainId: input.domain?.id,
@@ -920,6 +985,7 @@ export const FunctionProvider = () =>
             image: instance?.source?.image ?? output?.image ?? "",
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
+            rpcToken: output?.rpcToken ?? "",
           });
           if (output !== undefined) return attrs;
           return matchesAlchemyPhysicalName(found.name)
@@ -955,6 +1021,7 @@ export const FunctionProvider = () =>
                           image: image ?? "",
                           port: undefined,
                           codeHash: "",
+                          rpcToken: "",
                         });
                       }),
                     { concurrency: 8 },
@@ -990,6 +1057,10 @@ export const FunctionProvider = () =>
           }
           const name = yield* resolveName(id, props.name, output?.name);
           const bound = collectBindingState(bindings ?? []);
+          yield* assertHostDisk({
+            name,
+            mounts: bound.mounts,
+          });
           const program = hostedProgramProps(
             props,
             props.port ?? (props.main !== undefined ? DEFAULT_PORT : undefined),
@@ -1006,17 +1077,22 @@ export const FunctionProvider = () =>
           }
           const startCommand = yield* startCommandOf(source);
           const image = yield* latestRuntimeImage();
-          // Railway injects `PORT`. Only write it when the user pinned one
-          // — overriding the assigned port is a 502 on the generated domain.
-          const port = props.port;
+          // Effect-native Functions listen on PORT (canvas default 3000).
+          // Pin PORT and the generated domain's targetPort together so
+          // private-mesh RPC and public HTTP hit the same listener.
+          const port =
+            program !== undefined ? (props.port ?? DEFAULT_PORT) : props.port;
+          const rpcToken =
+            plainEnvValue(props.rpcToken) ?? output?.rpcToken ?? "";
           const env = {
             ...bound.env,
             ...(program !== undefined ? hosted.alchemyEnv : {}),
             ...(port !== undefined ? { PORT: String(port) } : {}),
             ...toEnvRecord(props.env),
+            [RPC_TOKEN_ENV]: rpcToken,
           };
 
-          let current =
+          let current: CloudService | undefined =
             output?.serviceId !== undefined && output.serviceId.length > 0
               ? yield* getById(output.serviceId)
               : undefined;
@@ -1129,6 +1205,7 @@ export const FunctionProvider = () =>
             image,
             port,
             codeHash,
+            rpcToken,
           });
         }),
 

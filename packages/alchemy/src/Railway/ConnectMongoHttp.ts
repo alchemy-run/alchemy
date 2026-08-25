@@ -59,17 +59,18 @@ const firstUrl = (
  * (`RAILWAY_MONGO_*`, `MONGO_URL`). At runtime the client reads
  * `process.env`.
  *
- * @layer
- * @provides Railway.ConnectMongo
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const conn = yield* Railway.ConnectMongo(Db);
  *   const url = yield* conn.connectionString;
  * }).pipe(Effect.provide(Railway.ConnectMongoHttp))
  * ```
+ *
+ * @layer
+ * @provides Railway.ConnectMongo
  */
 export const ConnectMongoHttp = Layer.effect(
   ConnectMongo,

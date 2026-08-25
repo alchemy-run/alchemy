@@ -59,17 +59,18 @@ const firstUrl = (
  * (`RAILWAY_MYSQL_*`, `MYSQL_URL`). At runtime the client reads
  * `process.env`.
  *
- * @layer
- * @provides Railway.ConnectMySQL
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Service
  * ```typescript
  * Effect.gen(function* () {
  *   const conn = yield* Railway.ConnectMySQL(Db);
  *   const db = yield* Drizzle.MySQL(conn.connectionString);
  * }).pipe(Effect.provide(Railway.ConnectMySQLHttp))
  * ```
+ *
+ * @layer
+ * @provides Railway.ConnectMySQL
  */
 export const ConnectMySQLHttp = Layer.effect(
   ConnectMySQL,

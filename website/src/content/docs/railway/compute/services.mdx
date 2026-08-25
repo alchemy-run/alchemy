@@ -86,6 +86,33 @@ export default class Api extends Railway.Service<Api>()(
 
 Omit `fetch` for a [background service](#background-services).
 
+## Schemaless RPC
+
+Return methods next to `fetch`. Bind the class from another Service
+or Function with `bindService` / `bindFunction`. Calls stay on
+`{name}.railway.internal` with a shared token. Public
+`*.up.railway.app` requests to `/__rpc__/*` get 401.
+
+```typescript
+export default class Query extends Railway.Service<Query>()(
+  "Query",
+  { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+  Effect.gen(function* () {
+    return {
+      greet: (name: string) => Effect.succeed(`hello ${name}`),
+    };
+  }),
+) {}
+```
+
+```typescript
+const query = yield* Railway.bindService(Query);
+const greeting = yield* query.greet("sam");
+```
+
+See [Functions](/railway/compute/functions#schemaless-rpc) for the
+Function side of the same stub.
+
 ## Pin a region
 
 Railway picks a default region if you omit `region`. Updating it
@@ -132,11 +159,11 @@ export default Alchemy.Stack(
 There is no IpAssignment resource. Railway's edge terminates TLS on
 443 and forwards to `port`.
 
-## Healthcheck and replicas
+## Healthcheck
 
 `healthcheck` / `healthcheckPath` is the HTTP path Railway probes.
-`healthcheckTimeout` is seconds. `replicas` is a count, or a
-per-region map (`{ "us-west2": 2, "europe-west4": 1 }`).
+`healthcheckTimeout` is seconds. Railway load-balances public traffic
+across whatever replicas are running. Alchemy does not pin a count.
 
 ```typescript
 const api = yield* Railway.Service("Api", {
@@ -145,7 +172,6 @@ const api = yield* Railway.Service("Api", {
   port: 5678,
   healthcheck: "/health",
   healthcheckTimeout: 30,
-  replicas: 1,
 });
 ```
 
@@ -324,7 +350,7 @@ Service logs live in the Railway dashboard. `alchemy logs` /
 
 The [tutorial](/railway/tutorial/part-2) builds a Service step by
 step. [Functions](/railway/compute/functions) covers Effect-native
-and canvas Functions.
+and canvas Functions, including [schemaless RPC](/railway/compute/functions#schemaless-rpc).
 [Volumes](/railway/data/volumes) covers `MountVolume`.
 [Postgres](/railway/data/postgres) binds with `ConnectPostgres`.
 [MySQL](/railway/data/mysql) and [Mongo](/railway/data/mongo) are the

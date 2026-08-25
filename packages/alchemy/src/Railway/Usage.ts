@@ -298,32 +298,31 @@ const UsageLimitResource = Resource<UsageLimit>("Railway.UsageLimit");
  * A Railway.UsageLimit is a soft/hard dollar cap on a workspace
  * customer. One limit per customer. `usageLimitRemove` is idempotent.
  *
- * @resource
  * @see https://docs.railway.com/reference/pricing
  *
- * @section Query usage
+ * ### Query usage
  * {@link usage} is a catalog helper — not a resource. It returns
  * aggregated rows for the current workspace (or a project).
  *
- * @example Workspace usage
+ * **Example:** Workspace usage
  * ```typescript
  * const rows = yield* Railway.usage({
  *   measurements: ["CPU_USAGE", "MEMORY_USAGE_GB"],
  * });
  * ```
  *
- * @section Set a limit
+ * ### Set a limit
  * Omit `workspace` / `project` to cap the current token workspace. A
  * number is the soft dollar cap.
  *
- * @example Soft cap
+ * **Example:** Soft cap
  * ```typescript
  * const cap = yield* Railway.UsageLimit("SpendCap", {
  *   limit: 50,
  * });
  * ```
  *
- * @example Soft and hard
+ * **Example:** Soft and hard
  * ```typescript
  * const cap = yield* Railway.UsageLimit("SpendCap", {
  *   project: site,
@@ -335,10 +334,10 @@ const UsageLimitResource = Resource<UsageLimit>("Railway.UsageLimit");
  * The cap is removed from the old customer, then set on the new one.
  * :::
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope limit
+ * **Example:** Module-scope limit
  * ```typescript
  * // src/billing.ts
  * import * as Railway from "alchemy/Railway";
@@ -349,6 +348,8 @@ const UsageLimitResource = Resource<UsageLimit>("Railway.UsageLimit");
  *   limit: 50,
  * });
  * ```
+ *
+ * @resource
  */
 export const UsageLimit: typeof UsageLimitResource = Object.assign(
   (

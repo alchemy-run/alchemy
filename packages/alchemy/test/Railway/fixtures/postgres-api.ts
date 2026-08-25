@@ -3,13 +3,12 @@ import * as Railway from "@/Railway";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Db, Site } from "./postgres-shared.ts";
 import { canPushRailwayImage, railwayRegistry } from "./registry.ts";
 
+export { Db, Site };
+
 export const POSTGRES_PORT = 3000;
-
-export const Site = Railway.Project("Site");
-
-export const Db = Railway.Postgres("Db", { project: Site });
 
 /**
  * HTTP Service that binds Postgres via {@link Railway.ConnectPostgres}
@@ -58,7 +57,14 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
           return yield* HttpServerResponse.json({ rows });
         }
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch((error) =>
+          HttpServerResponse.json(
+            { ok: false, error: String(error) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(Effect.provide(Railway.ConnectPostgresHttp)),
 ) {}

@@ -45,6 +45,47 @@ this file with Rolldown into one JS file and writes it as the
 Function's `startCommand`. Railway does **not** pull a registry
 image.
 
+## Schemaless RPC
+
+Return methods next to `fetch`. Call `enableRailwayRpc()` in init
+(the canvas start command is capped at 96KB, so the dispatcher is
+opt-in). Another Function or Service binds the class and calls
+them over `{name}.railway.internal` with a shared token. Public
+`*.up.railway.app` traffic to `/__rpc__/*` gets 401 even with the
+token — this is not a public API.
+
+```typescript
+export default class Query extends Railway.Function<Query>()(
+  "Query",
+  { project: Site, main: import.meta.url },
+  Effect.gen(function* () {
+    Railway.enableRailwayRpc();
+    return {
+      greet: (name: string) => Effect.succeed(`hello ${name}`),
+    };
+  }),
+) {}
+```
+
+```typescript
+export default class Api extends Railway.Service<Api>()(
+  "Api",
+  { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+  Effect.gen(function* () {
+    const query = yield* Railway.bindFunction(Query);
+    return {
+      fetch: query
+        .greet("sam")
+        .pipe(Effect.map((greeting) => HttpServerResponse.text(greeting))),
+    };
+  }),
+) {}
+```
+
+`bindService` is the same stub for a tagged Service. Calls are
+`POST http://{dnsName}:{port}/__rpc__/{method}` on the private mesh.
+Do not send `rpcToken` to the browser.
+
 ## Inline source
 
 Pass inline `source` (or `path` to a `.ts` file) instead of `main`

@@ -6,16 +6,14 @@ import * as Output from "../Output.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import {
   ConnectPostgres,
+  DATABASE_PUBLIC_URL_SECRET,
+  DATABASE_URL_SECRET,
   PostgresUrlMissing,
   connectEnvKeys,
   type ConnectPostgresClient,
 } from "./ConnectPostgres.ts";
 import { isRailwayHost } from "./MountVolume.ts";
-import {
-  DATABASE_URL_SECRET,
-  DATABASE_PUBLIC_URL_SECRET,
-  type Postgres,
-} from "./Postgres.ts";
+import type { Postgres } from "./Postgres.ts";
 
 const runtimeOutput = <A>(
   key: string,
@@ -53,23 +51,24 @@ const firstUrl = (
 
 /**
  * Implementation of {@link ConnectPostgres}. Provide it on the
- * {@link Service} Effect.
+ * {@link Service} or {@link Function} Effect.
  *
  * At deploy time this packs the private connection URI onto the host
  * (`RAILWAY_POSTGRES_*`, `DATABASE_URL`). At runtime the client reads
  * `process.env`.
  *
- * @layer
- * @provides Railway.ConnectPostgres
  *
- * @section Provide the layer
- * @example On a Service
+ * ### Provide the layer
+ * **Example:** On a Function or Service
  * ```typescript
  * Effect.gen(function* () {
  *   const conn = yield* Railway.ConnectPostgres(Db);
  *   const db = yield* Drizzle.Postgres(conn.connectionString);
  * }).pipe(Effect.provide(Railway.ConnectPostgresHttp))
  * ```
+ *
+ * @layer
+ * @provides Railway.ConnectPostgres
  */
 export const ConnectPostgresHttp = Layer.effect(
   ConnectPostgres,

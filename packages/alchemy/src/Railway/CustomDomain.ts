@@ -104,15 +104,14 @@ export type CustomDomain = Resource<
  * A Railway.CustomDomain is a user hostname on a {@link CustomDomainService}.
  * Railway issues a Let's Encrypt certificate once DNS is verified.
  *
- * @resource
  * @see https://docs.railway.com/guides/public-networking
  *
- * @section Attach a hostname
+ * ### Attach a hostname
  * Pass the parent Service, the environment id, and the hostname. Yield the
  * CustomDomain next to the Service. Point DNS at the values in
  * `verificationDnsHost` / `verificationToken`.
  *
- * @example Basic CustomDomain
+ * **Example:** Basic CustomDomain
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const api = yield* Railway.Service("Api", {
@@ -130,11 +129,11 @@ export type CustomDomain = Resource<
  * The old hostname is deleted. The new hostname is created.
  * :::
  *
- * @section Target port
+ * ### Target port
  * `targetPort` is optional and updates in place. Railway's edge forwards
  * HTTPS on 443 to this port on the Service.
  *
- * @example Explicit target port
+ * **Example:** Explicit target port
  * ```typescript
  * const www = yield* Railway.CustomDomain("Www", {
  *   service: api,
@@ -144,11 +143,11 @@ export type CustomDomain = Resource<
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the CustomDomain once. Resource-valued props accept the resource
  * or an Effect producing it.
  *
- * @example Module-scope CustomDomain
+ * **Example:** Module-scope CustomDomain
  * ```typescript
  * // src/domain.ts
  * import * as Railway from "alchemy/Railway";
@@ -161,6 +160,8 @@ export type CustomDomain = Resource<
  *   domain: "www.example.com",
  * });
  * ```
+ *
+ * @resource
  */
 export const CustomDomain = Resource<CustomDomain>("Railway.CustomDomain");
 

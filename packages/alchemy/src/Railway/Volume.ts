@@ -8,12 +8,14 @@ import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { MultipleVolumes } from "./MountVolume.ts";
 import { listOwnedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -159,15 +161,14 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * `createPhysicalName`. `mountPath` updates in place. Changing `project`,
  * `environment`, or `region` replaces the Volume.
  *
- * @resource
  * @see https://docs.railway.com/guides/volumes
  * @see https://docs.railway.com/integrations/api/manage-volumes
  *
- * @section Create a Volume
+ * ### Create a Volume
  * Pass a Project and a mount path. Alchemy generates a unique name.
  * The volume is disconnected until you attach a Service.
  *
- * @example Disconnected volume
+ * **Example:** Disconnected volume
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const data = yield* Railway.Volume("Data", {
@@ -180,10 +181,10 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * The Volume is created in the new Project. The old Volume is deleted.
  * :::
  *
- * @section Mount path
+ * ### Mount path
  * `mountPath` is the path in the container. Updating it is in place.
  *
- * @example Update the mount path
+ * **Example:** Update the mount path
  * ```typescript
  * const data = yield* Railway.Volume("Data", {
  *   project: site,
@@ -191,11 +192,11 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * });
  * ```
  *
- * @section Environment
+ * ### Environment
  * Defaults to the Project's primary environment. Pass a
  * `Railway.Environment` (or `{ environmentId }`) to target another one.
  *
- * @example Extra environment
+ * **Example:** Extra environment
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", { project: site });
  * const data = yield* Railway.Volume("StagingData", {
@@ -209,10 +210,10 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * The Volume is created in the new environment. The old Volume is deleted.
  * :::
  *
- * @section Region
+ * ### Region
  * Omit `region` to use Railway's default. Changing it replaces the Volume.
  *
- * @example Pin a region
+ * **Example:** Pin a region
  * ```typescript
  * const data = yield* Railway.Volume("Data", {
  *   project: site,
@@ -226,13 +227,13 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * is deleted.
  * :::
  *
- * @section Size
+ * ### Size
  * `sizeMB` on attributes is the observed plan default. Railway's public
  * `VolumeCreateInput` has no size field; growing is Pro-dashboard-only.
  * Passing `sizeMB` on props is IaC-parity documentation — it is not
  * applied.
  *
- * @example Observed size
+ * **Example:** Observed size
  * ```typescript
  * const data = yield* Railway.Volume("Data", {
  *   project: site,
@@ -241,11 +242,11 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * // data.sizeMB is the plan default (e.g. 5120 on Hobby)
  * ```
  *
- * @section Attach to a Service
+ * ### Attach to a Service
  * Pass `service` to attach at create time. Omit it and attach later with
- * `MountVolume`.
+ * `MountVolume`. One volume per service.
  *
- * @example Create-time attach
+ * **Example:** Create-time attach
  * ```typescript
  * const api = yield* Railway.Service("Api", {
  *   project: site,
@@ -258,21 +259,27 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * });
  * ```
  *
- * @section Backups
+ * :::caution[One volume per service]
+ * A second volume on the same Service fails with
+ * `Railway.MultipleVolumes`. Railway does not give each replica its
+ * own disk.
+ * :::
+ *
+ * ### Backups
  * Snapshot a mounted volume with {@link VolumeBackup}. Railway only
  * backups attached volumes. Restore is destructive — see
  * `restoreVolumeBackup`.
  *
- * @example Manual snapshot
+ * **Example:** Manual snapshot
  * ```typescript
  * const snap = yield* Railway.VolumeBackup("Nightly", { volume: data });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the Project once. Pass it into every child. Resource-valued
  * props accept the resource or an Effect producing it.
  *
- * @example Module-scope Volume
+ * **Example:** Module-scope Volume
  * ```typescript
  * // src/data.ts
  * import * as Railway from "alchemy/Railway";
@@ -283,6 +290,8 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  *   mountPath: "/data",
  * });
  * ```
+ *
+ * @resource
  */
 export const Volume: typeof VolumeResource = Object.assign(
   (
@@ -402,6 +411,18 @@ const listVolumeInstances = (environmentId: string, projectId: string) =>
     ),
   );
 
+/** Volumes currently attached to a service instance. Used by Service reconcile. */
+export const listServiceVolumes = (
+  environmentId: string,
+  projectId: string,
+  serviceId: string,
+) =>
+  listVolumeInstances(environmentId, projectId).pipe(
+    Effect.map((rows) =>
+      rows.filter((row) => (row.serviceId ?? undefined) === serviceId),
+    ),
+  );
+
 const findInEnvironment = (
   environmentId: string,
   projectId: string,
@@ -410,6 +431,47 @@ const findInEnvironment = (
   listVolumeInstances(environmentId, projectId).pipe(
     Effect.map((instances) => instances.find(match)),
   );
+
+const volumeAttachSlots = new Map<string, Semaphore.Semaphore>();
+
+const withVolumeAttachLock = <A, E, R>(
+  serviceId: string | undefined,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => {
+  if (serviceId === undefined) return effect;
+  let slot = volumeAttachSlots.get(serviceId);
+  if (slot === undefined) {
+    slot = Semaphore.makeUnsafe(1);
+    volumeAttachSlots.set(serviceId, slot);
+  }
+  return Semaphore.withPermits(slot, 1)(effect);
+};
+
+const assertAttachTarget = Effect.fn(function* (input: {
+  name: string;
+  environmentId: string;
+  projectId: string;
+  serviceId: string;
+  volumeId?: string;
+}) {
+  const others = (yield* listVolumeInstances(
+    input.environmentId,
+    input.projectId,
+  )).filter((row) => {
+    if ((row.serviceId ?? undefined) !== input.serviceId) return false;
+    if (input.volumeId !== undefined && row.volumeId === input.volumeId) {
+      return false;
+    }
+    return true;
+  });
+  if (others.length > 0) {
+    return yield* new MultipleVolumes({
+      name: input.name,
+      paths: others.map((row) => row.mountPath),
+      volumeIds: others.map((row) => row.volumeId),
+    });
+  }
+});
 
 const listEnvironmentIds = (project: {
   projectId: string;
@@ -662,7 +724,7 @@ export const VolumeProvider = () =>
       const desiredServiceId =
         props.service !== undefined ? serviceIdOf(props.service) : undefined;
 
-      let current =
+      let current: CloudInstance | undefined =
         output?.volumeInstanceId !== undefined &&
         output.volumeInstanceId.length > 0
           ? yield* getByInstanceId(output.volumeInstanceId)
@@ -682,68 +744,106 @@ export const VolumeProvider = () =>
         );
       }
 
-      if (current === undefined) {
-        const created = yield* railway
-          .volumeCreate({
-            input: {
-              projectId,
+      current = yield* withVolumeAttachLock(
+        desiredServiceId,
+        Effect.gen(function* () {
+          if (desiredServiceId !== undefined) {
+            yield* assertAttachTarget({
+              name,
               environmentId,
-              mountPath: props.mountPath,
-              ...(props.region !== undefined ? { region: props.region } : {}),
-              ...(desiredServiceId !== undefined
-                ? { serviceId: desiredServiceId }
-                : {}),
-            },
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-          );
-        if (created.name !== name) {
-          yield* stampName(created.id, name);
-        }
-        current = yield* waitForInstance(environmentId, projectId, created.id);
-      }
+              projectId,
+              serviceId: desiredServiceId,
+              volumeId: current?.volumeId,
+            });
+          }
+
+          if (current === undefined) {
+            const created = yield* railway
+              .volumeCreate({
+                input: {
+                  projectId,
+                  environmentId,
+                  mountPath: props.mountPath,
+                  ...(props.region !== undefined
+                    ? { region: props.region }
+                    : {}),
+                  ...(desiredServiceId !== undefined
+                    ? { serviceId: desiredServiceId }
+                    : {}),
+                },
+              })
+              .pipe(
+                RailwayRetry.none,
+                Effect.retry({
+                  while: (e) => e._tag === "RailwayRateLimited",
+                  schedule: Schedule.spaced("30 seconds"),
+                  times: 1,
+                }),
+                Effect.catchTag("RailwayInternalError", (error) =>
+                  desiredServiceId === undefined
+                    ? Effect.fail(error)
+                    : assertAttachTarget({
+                        name,
+                        environmentId,
+                        projectId,
+                        serviceId: desiredServiceId,
+                        volumeId: current?.volumeId,
+                      }).pipe(Effect.flatMap(() => Effect.fail(error))),
+                ),
+              );
+            if (created.name !== name) {
+              yield* stampName(created.id, name);
+            }
+            current = yield* waitForInstance(
+              environmentId,
+              projectId,
+              created.id,
+            );
+          }
+
+          if (current === undefined || isGone(current)) {
+            return yield* new VolumeNotCreated({ name, projectId });
+          }
+
+          if (current.volume.name !== name) {
+            yield* stampName(current.volumeId, name);
+            current =
+              (yield* getByInstanceId(current.id)) ??
+              (yield* findInEnvironment(
+                environmentId,
+                projectId,
+                (instance) => instance.volumeId === current!.volumeId,
+              )) ??
+              current;
+          }
+
+          const mountChanged = current.mountPath !== props.mountPath;
+          const observedServiceId = current.serviceId ?? undefined;
+          const serviceChanged =
+            desiredServiceId !== undefined &&
+            desiredServiceId !== observedServiceId;
+          if (mountChanged || serviceChanged) {
+            yield* railway.volumeInstanceUpdate({
+              volumeId: current.volumeId,
+              environmentId,
+              input: {
+                ...(mountChanged ? { mountPath: props.mountPath } : {}),
+                ...(serviceChanged ? { serviceId: desiredServiceId } : {}),
+              },
+            });
+            current =
+              (yield* waitUntilSynced(current.id, current.volumeId, {
+                ...(mountChanged ? { mountPath: props.mountPath } : {}),
+                ...(serviceChanged ? { serviceId: desiredServiceId } : {}),
+              })) ?? current;
+          }
+
+          return current;
+        }),
+      );
 
       if (current === undefined || isGone(current)) {
         return yield* new VolumeNotCreated({ name, projectId });
-      }
-
-      if (current.volume.name !== name) {
-        yield* stampName(current.volumeId, name);
-        current =
-          (yield* getByInstanceId(current.id)) ??
-          (yield* findInEnvironment(
-            environmentId,
-            projectId,
-            (instance) => instance.volumeId === current!.volumeId,
-          )) ??
-          current;
-      }
-
-      const mountChanged = current.mountPath !== props.mountPath;
-      const observedServiceId = current.serviceId ?? undefined;
-      const serviceChanged =
-        desiredServiceId !== undefined &&
-        desiredServiceId !== observedServiceId;
-      if (mountChanged || serviceChanged) {
-        yield* railway.volumeInstanceUpdate({
-          volumeId: current.volumeId,
-          environmentId,
-          input: {
-            ...(mountChanged ? { mountPath: props.mountPath } : {}),
-            ...(serviceChanged ? { serviceId: desiredServiceId } : {}),
-          },
-        });
-        current =
-          (yield* waitUntilSynced(current.id, current.volumeId, {
-            ...(mountChanged ? { mountPath: props.mountPath } : {}),
-            ...(serviceChanged ? { serviceId: desiredServiceId } : {}),
-          })) ?? current;
       }
 
       return toAttrs(current, { name });

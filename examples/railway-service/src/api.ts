@@ -43,7 +43,6 @@ export default class Api extends Railway.Service<Api>()(
     registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/example",
     build: { install: ["pg"] },
     healthcheck: "/health",
-    replicas: 1,
   },
   Effect.gen(function* () {
     yield* Marker;
@@ -74,7 +73,10 @@ export default class Api extends Railway.Service<Api>()(
         if (path === "/redis") {
           yield* cache.set(REDIS_KEY, "hello");
           const value = yield* cache.get(REDIS_KEY);
-          return yield* HttpServerResponse.json({ ok: value === "hello", value });
+          return yield* HttpServerResponse.json({
+            ok: value === "hello",
+            value,
+          });
         }
 
         if (path === "/bucket") {
@@ -84,7 +86,10 @@ export default class Api extends Railway.Service<Api>()(
             ContentType: "text/plain",
           });
           const head = yield* headObject({ Key: OBJECT_KEY });
-          const listed = yield* listObjects({ Prefix: OBJECT_KEY, MaxKeys: 10 });
+          const listed = yield* listObjects({
+            Prefix: OBJECT_KEY,
+            MaxKeys: 10,
+          });
           const obj = yield* getObject({ Key: OBJECT_KEY });
           const text =
             obj.Body === undefined
@@ -103,7 +108,14 @@ export default class Api extends Railway.Service<Api>()(
           return yield* HttpServerResponse.json({ rows });
         }
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch((error) =>
+          HttpServerResponse.json(
+            { ok: false, error: String(error) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(Effect.provide(runtime)),
 ) {}

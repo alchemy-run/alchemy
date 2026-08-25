@@ -60,12 +60,17 @@ test(
     expect(out.apiUrl).toMatch(/^https:\/\/.+\.up\.railway\.app$/);
     expect(out.workerServiceId).toBeString();
     expect(out.workspaceId).toBeString();
-    expect(out.regionCount).toBeGreaterThan(0);
 
     const health = yield* fetchOk(`${out.apiUrl}/health`);
     expect(health.status).toBe(200);
     const body = (yield* health.json) as { rows: unknown };
     expect(body.rows).toBeDefined();
+
+    expect(out.pingUrl).toEqual(expect.any(String));
+    const ping = yield* fetchOk(out.pingUrl!);
+    expect(ping.status).toBe(200);
+    const pingBody = (yield* ping.json) as { rows: unknown };
+    expect(pingBody.rows).toBeDefined();
   }),
   { timeout: 180_000 },
 );

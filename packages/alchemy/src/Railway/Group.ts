@@ -154,14 +154,13 @@ const GroupResource = Resource<Group>("Railway.Group");
  * member service/volume/bucket ids. `canvasViewMerge` /
  * `canvasViewMergePreview` copy canvas layout between environments.
  *
- * @resource
  * @see https://docs.railway.com/infrastructure-as-code/reference
  *
- * @section Create a Group
+ * ### Create a Group
  * Pass a Project and the members to group. Alchemy generates a unique
  * name unless you pass one.
  *
- * @example Group two services
+ * **Example:** Group two services
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const api = yield* Railway.Service("Api", {
@@ -182,11 +181,11 @@ const GroupResource = Resource<Group>("Railway.Group");
  * The Group is created in the new Project. The old Group is deleted.
  * :::
  *
- * @section Environment
+ * ### Environment
  * Defaults to the Project's primary environment. Pass a
  * `Railway.Environment` (or `{ environmentId }`) to target another one.
  *
- * @example Extra environment
+ * **Example:** Extra environment
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", { project: site });
  * const backend = yield* Railway.Group("Backend", {
@@ -201,11 +200,11 @@ const GroupResource = Resource<Group>("Railway.Group");
  * deleted.
  * :::
  *
- * @section Databases, volumes, and buckets
+ * ### Databases, volumes, and buckets
  * Postgres/Redis/MySQL/Mongo group as services (`serviceId`). Volumes and
  * buckets are accepted as members (`volumeId` / `bucketId`).
  *
- * @example Group a database and API
+ * **Example:** Group a database and API
  * ```typescript
  * const db = yield* Railway.Postgres("Db", { project: site });
  * const backend = yield* Railway.Group("Backend", {
@@ -214,11 +213,11 @@ const GroupResource = Resource<Group>("Railway.Group");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the Project once. Pass it into every child. Resource-valued
  * props accept the resource or an Effect producing it.
  *
- * @example Module-scope Group
+ * **Example:** Module-scope Group
  * ```typescript
  * // src/backend.ts
  * import * as Railway from "alchemy/Railway";
@@ -233,6 +232,8 @@ const GroupResource = Resource<Group>("Railway.Group");
  *   resources: [Api],
  * });
  * ```
+ *
+ * @resource
  */
 export const Group: typeof GroupResource = Object.assign(
   (

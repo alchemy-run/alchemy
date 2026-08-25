@@ -97,14 +97,13 @@ export type TcpProxy = Resource<
  * Needed so laptop tests and `ConnectPostgres` from outside the private
  * network can reach Postgres/Redis.
  *
- * @resource
  * @see https://docs.railway.com/networking/tcp-proxy
  *
- * @section Postgres
+ * ### Postgres
  * Attach a proxy to a Postgres service on `5432`. `domain` and
  * `proxyPort` are the public endpoint (`{domain}:{proxyPort}`).
  *
- * @example Public TCP for Postgres
+ * **Example:** Public TCP for Postgres
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const db = yield* Railway.Postgres("Db", { project: site });
@@ -120,10 +119,10 @@ export type TcpProxy = Resource<
  * old one is deleted.
  * :::
  *
- * @section Redis
+ * ### Redis
  * Same shape on `6379`.
  *
- * @example Public TCP for Redis
+ * **Example:** Public TCP for Redis
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const cache = yield* Railway.Redis("Cache", { project: site });
@@ -134,10 +133,10 @@ export type TcpProxy = Resource<
  * });
  * ```
  *
- * @section Any service
+ * ### Any service
  * Pass a `Railway.Service` or a `{ serviceId }` stub.
  *
- * @example Stub service id
+ * **Example:** Stub service id
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const proxy = yield* Railway.TcpProxy("ApiProxy", {
@@ -152,10 +151,10 @@ export type TcpProxy = Resource<
  * deleted.
  * :::
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Project and proxy
+ * **Example:** Module-scope Project and proxy
  * ```typescript
  * // src/db.ts
  * import * as Railway from "alchemy/Railway";
@@ -168,6 +167,8 @@ export type TcpProxy = Resource<
  *   applicationPort: 5432,
  * });
  * ```
+ *
+ * @resource
  */
 export const TcpProxy = Resource<TcpProxy>("Railway.TcpProxy");
 

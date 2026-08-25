@@ -2,16 +2,12 @@ import * as Railway from "@/Railway";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Site } from "./bindings-shared.ts";
 import { canPushRailwayImage, railwayRegistry } from "./registry.ts";
+import { Cache, REDIS_KEY, REDIS_VALUE, Site } from "./redis-shared.ts";
 
-export { Site };
+export { Cache, REDIS_KEY, REDIS_VALUE, Site };
 
 export const REDIS_PORT = 3000;
-export const REDIS_KEY = "alchemy-marker";
-export const REDIS_VALUE = "hello-from-redis";
-
-export const Cache = Railway.Redis("Cache", { project: Site });
 
 /**
  * HTTP Service that PINGs Redis and round-trips a key via
@@ -67,7 +63,14 @@ export default class RedisApi extends Railway.Service<RedisApi>()(
         }
 
         return yield* HttpServerResponse.json({ ok: false }, { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch((error) =>
+          HttpServerResponse.json(
+            { ok: false, error: String(error) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(Effect.provide(Railway.ReadWriteRedisHttp)),
 ) {}

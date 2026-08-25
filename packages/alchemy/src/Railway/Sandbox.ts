@@ -164,15 +164,14 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * `environment`, `region`, `idleTimeoutMinutes`, `networkIsolation`,
  * `template`, or `variables` replaces the Sandbox.
  *
- * @resource
  * @see https://docs.railway.com/sandboxes
  * @see https://docs.railway.com/guides/code-execution-sandboxes
  *
- * @section Create a Sandbox
+ * ### Create a Sandbox
  * Pass a Project (or Environment). Alchemy waits until the sandbox is
  * `RUNNING` and ready to exec.
  *
- * @example From a Project
+ * **Example:** From a Project
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const box = yield* Railway.Sandbox("Box", {
@@ -184,12 +183,12 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * A new VM is created. The old sandbox is destroyed.
  * :::
  *
- * @section Idle timeout
+ * ### Idle timeout
  * Railway auto-destroys a sandbox after it sits idle. Exec and SSH
  * reset the timer; processes inside do not. Hobby/Pro default is 30
  * minutes (max 120). Trial/Free default and max is 5.
  *
- * @example Short idle timeout
+ * **Example:** Short idle timeout
  * ```typescript
  * const box = yield* Railway.Sandbox("Box", {
  *   environment: site,
@@ -201,10 +200,10 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * There is no sandbox update API.
  * :::
  *
- * @section Variables
+ * ### Variables
  * Baked into the sandbox at create time. Available to every command.
  *
- * @example Create-time env
+ * **Example:** Create-time env
  * ```typescript
  * const box = yield* Railway.Sandbox("Box", {
  *   environment: site,
@@ -212,10 +211,10 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * });
  * ```
  *
- * @section Template
+ * ### Template
  * Boot from a named checkpoint, or from build instructions.
  *
- * @example Checkpoint
+ * **Example:** Checkpoint
  * ```typescript
  * const box = yield* Railway.Sandbox("Box", {
  *   environment: site,
@@ -223,10 +222,10 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * });
  * ```
  *
- * @section Exec
+ * ### Exec
  * Run a command after deploy with {@link execSandbox} or {@link Exec}.
  *
- * @example Echo
+ * **Example:** Echo
  * ```typescript
  * const result = yield* Railway.execSandbox({
  *   sandboxId: box.sandboxId,
@@ -235,10 +234,10 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Sandbox
+ * **Example:** Module-scope Sandbox
  * ```typescript
  * // src/box.ts
  * import * as Railway from "alchemy/Railway";
@@ -249,6 +248,8 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  *   idleTimeoutMinutes: 10,
  * });
  * ```
+ *
+ * @resource
  */
 export const Sandbox: typeof SandboxResource = Object.assign(
   (
@@ -406,25 +407,25 @@ const listEnvironmentIds = (project: {
   );
 
 const waitUntilRunning = (environmentId: string, sandboxId: string) =>
-  getById(environmentId, sandboxId).pipe(
-    Effect.flatMap((sandbox) => {
-      if (sandbox === undefined) {
-        return Effect.fail(
-          new SandboxPending({ sandboxId, status: "missing" }),
-        );
-      }
-      if (sandbox.status === "FAILED") {
-        return Effect.fail(
-          new SandboxFailed({ sandboxId, status: sandbox.status }),
-        );
-      }
-      if (sandbox.status !== "RUNNING") {
-        return Effect.fail(
-          new SandboxPending({ sandboxId, status: sandbox.status }),
-        );
-      }
-      return Effect.succeed(sandbox);
-    }),
+  Effect.gen(function* () {
+    const sandbox = yield* getById(environmentId, sandboxId);
+    if (sandbox === undefined) {
+      return yield* new SandboxPending({ sandboxId, status: "missing" });
+    }
+    if (sandbox.status === "FAILED") {
+      return yield* new SandboxFailed({
+        sandboxId,
+        status: sandbox.status,
+      });
+    }
+    if (sandbox.status !== "RUNNING") {
+      return yield* new SandboxPending({
+        sandboxId,
+        status: sandbox.status,
+      });
+    }
+    return sandbox;
+  }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.SandboxPending",
       times: 10,
@@ -567,15 +568,16 @@ export type ExecResult = SandboxExecResponse;
  * {@link RuntimeContext} so it is typed as runtime-only; from tests
  * prefer {@link execSandbox}.
  *
- * @binding
- * @product Railway
  *
- * @section Exec
- * @example Echo
+ * ### Exec
+ * **Example:** Echo
  * ```typescript
  * const run = yield* Railway.Exec(box);
  * const result = yield* run({ command: "echo hello" });
  * ```
+ *
+ * @binding
+ * @product Railway
  */
 export interface Exec extends Binding.Service<
   Exec,
@@ -603,7 +605,7 @@ export const ExecHttp = Layer.effect(
     Effect.fn(function* (sandbox: SandboxIdentity) {
       const sandboxId = sandbox.sandboxId;
       const environmentId = sandbox.environmentId;
-      return (request: ExecRequest) =>
+      return ((request: ExecRequest) =>
         execSandbox({
           sandboxId,
           environmentId,
@@ -611,7 +613,7 @@ export const ExecHttp = Layer.effect(
           ...(request.timeoutSec !== undefined
             ? { timeoutSec: request.timeoutSec }
             : {}),
-        });
+        })) as unknown as ExecClient;
     }),
   ),
 );
@@ -716,7 +718,7 @@ export const SandboxProvider = () =>
       }
       const projectId = projectIdOf(props.environment) ?? output?.projectId;
 
-      let current =
+      let current: CloudSandbox | undefined =
         output?.sandboxId !== undefined && output.sandboxId.length > 0
           ? yield* getById(environmentId, output.sandboxId)
           : undefined;

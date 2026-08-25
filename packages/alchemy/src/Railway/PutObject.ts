@@ -1,8 +1,10 @@
 import type * as S3 from "@distilled.cloud/aws/s3";
+import type * as Config from "effect/Config";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { RailwayS3CredentialsMissing } from "./BucketBinding.ts";
 
 export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
 
@@ -13,10 +15,9 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  * name, endpoint, and credentials are injected automatically. Provide
  * {@link PutObjectHttp}.
  *
- * @binding
  *
- * @section Writing Objects
- * @example Put an Object
+ * ### Writing Objects
+ * **Example:** Put an Object
  * ```typescript
  * const putObject = yield* Railway.PutObject(Data);
  *
@@ -26,6 +27,8 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  *   ContentType: "text/plain",
  * });
  * ```
+ *
+ * @binding
  */
 export interface PutObject extends Binding.Service<
   PutObject,
@@ -34,8 +37,12 @@ export interface PutObject extends Binding.Service<
     bucket: Bucket,
   ) => Effect.Effect<
     (
-      request: PutObjectRequest,
-    ) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError, RuntimeContext>
+      request?: PutObjectRequest,
+    ) => Effect.Effect<
+      S3.PutObjectOutput,
+      S3.PutObjectError | Config.ConfigError | RailwayS3CredentialsMissing,
+      RuntimeContext
+    >
   >
 > {}
 

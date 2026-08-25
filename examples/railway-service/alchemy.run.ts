@@ -11,10 +11,11 @@
  * - `Cache` — Redis + `ReadWriteRedis`
  * - `CacheProxy` — TcpProxy so Redis is reachable from a laptop
  * - `Data` — Bucket + Put/Get/Head/List/Delete
- * - `Echo` — image Service (`hashicorp/http-echo`, healthcheck + replicas)
- * - `Ping` — Effect-native Function (`src/ping.ts`, no registry)
+ * - `Echo` — image Service (`hashicorp/http-echo`, healthcheck)
+ * - `Ping` — Effect-native Function (`src/ping.ts`) that
+ *   `ConnectPostgres`s the same Db (no registry)
  * - `Cleanup` — canvas cron Function (`console.log("tick")`)
- * - `Api` — Effect HTTP Service (`src/api.ts`, healthcheck + replicas)
+ * - `Api` — Effect HTTP Service (`src/api.ts`, healthcheck)
  * - `Worker` — Effect background Service that writes the volume
  *   (`src/worker.ts`)
  * - `Backend` — canvas Group around the data plane
@@ -87,9 +88,6 @@ export default Alchemy.Stack(
             targetPort: 3000,
           });
 
-    const workspace = yield* Railway.currentWorkspace();
-    const regions = yield* Railway.listRegions();
-
     return {
       projectId: site.projectId,
       projectName: site.name,
@@ -117,8 +115,7 @@ export default Alchemy.Stack(
       apiUrl: api.url,
       workerServiceId: worker.serviceId,
       customDomain: www?.domain,
-      workspaceId: workspace.id,
-      regionCount: regions.length,
+      workspaceId: site.workspaceId,
     };
   }),
 );

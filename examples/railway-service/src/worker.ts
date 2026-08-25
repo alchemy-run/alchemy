@@ -28,5 +28,6 @@ export default class Worker extends Railway.Service<Worker>()(
         return yield* Effect.never;
       }).pipe(Effect.orDie),
     );
+    return {};
   }).pipe(Effect.provide(Railway.MountVolumeLive)),
 ) {}

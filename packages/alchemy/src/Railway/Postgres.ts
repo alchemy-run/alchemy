@@ -38,8 +38,12 @@ export const DEFAULT_POSTGRES_DATABASE = "railway";
 export const POSTGRES_PORT = 5432;
 export const POSTGRES_MOUNT_PATH = "/var/lib/postgresql/data";
 export const POSTGRES_PGDATA = "/var/lib/postgresql/data/pgdata";
-export const DATABASE_URL_SECRET = "DATABASE_URL";
-export const DATABASE_PUBLIC_URL_SECRET = "DATABASE_PUBLIC_URL";
+import {
+  DATABASE_PUBLIC_URL_SECRET,
+  DATABASE_URL_SECRET,
+} from "./ConnectPostgres.ts";
+
+export { DATABASE_PUBLIC_URL_SECRET, DATABASE_URL_SECRET };
 
 /**
  * Environment identity Postgres is deployed into. Accepts a
@@ -192,14 +196,13 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * {@link Service}, yield {@link ConnectPostgres}. From a laptop, use
  * `publicConnectionUri`.
  *
- * @resource
  * @see https://docs.railway.com/databases/build-a-database-service
  *
- * @section Create Postgres
+ * ### Create Postgres
  * Pass a Project. Alchemy generates a unique name, password, volume,
  * and a public TCP proxy.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const db = yield* Railway.Postgres("Db", { project: site });
@@ -210,13 +213,13 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * service and volume are deleted. Data is not copied.
  * :::
  *
- * @section Connect from a Service
+ * ### Connect from a Service
  * Yield `ConnectPostgres` inside init. Provide
  * {@link ConnectPostgresHttp}. Pass `conn.connectionString` to
  * `Drizzle.Postgres` or `SQL.Postgres`. The binding packs the private
  * URI (`{name}.railway.internal`).
  *
- * @example Bind and query
+ * **Example:** Bind and query
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Postgres";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -237,12 +240,12 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * ) {}
  * ```
  *
- * @section Public TCP
+ * ### Public TCP
  * `public` (default `true`) creates a TCP proxy on 5432.
  * `publicConnectionUri` is `{domain}:{proxyPort}` for laptop access
  * and deploy-time migrations.
  *
- * @example Private only
+ * **Example:** Private only
  * ```typescript
  * const db = yield* Railway.Postgres("Db", {
  *   project: site,
@@ -250,10 +253,10 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * });
  * ```
  *
- * @section Image
+ * ### Image
  * Default is Postgres 16 with SSL. Pass `image` to pin another tag.
  *
- * @example Postgres 17
+ * **Example:** Postgres 17
  * ```typescript
  * const db = yield* Railway.Postgres("Db", {
  *   project: site,
@@ -261,10 +264,10 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Postgres
+ * **Example:** Module-scope Postgres
  * ```typescript
  * // src/db.ts
  * import * as Railway from "alchemy/Railway";
@@ -272,6 +275,8 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * export const Site = Railway.Project("Site");
  * export const Db = Railway.Postgres("Db", { project: Site });
  * ```
+ *
+ * @resource
  */
 export const Postgres: typeof PostgresResource = Object.assign(
   (
@@ -357,7 +362,10 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const generatePassword = Effect.sync(() => randomBytes(16).toString("hex"));
+const generatePassword = Effect.sync(() => {
+  const bytes = randomBytes(16);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+});
 
 const isGoneService = (service: CloudService | undefined) =>
   service === undefined || service.deletedAt != null;
@@ -929,7 +937,7 @@ export const PostgresProvider = () =>
       const wantPublic = props.public !== false;
       const volumeName = yield* createRailwayName(`${id}-pgdata`);
 
-      let current =
+      let current: CloudService | undefined =
         output?.serviceId !== undefined && output.serviceId.length > 0
           ? yield* getById(output.serviceId)
           : undefined;
@@ -1022,7 +1030,7 @@ export const PostgresProvider = () =>
       });
       if (envChanged) needsDeploy = true;
 
-      let volume =
+      let volume: CloudInstance | undefined =
         output?.volumeInstanceId !== undefined &&
         output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)

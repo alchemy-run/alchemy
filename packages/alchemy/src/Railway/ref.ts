@@ -47,15 +47,14 @@ const namespaceOf = (resource: VariableRefSource): string => {
  * Railway interpolates by service name. Set `name` on Postgres/Service to
  * the LogicalId if you need the template to resolve to that service.
  *
- * @resource
  * @see https://docs.railway.com/variables/reference#template-syntax
  * @see https://docs.railway.com/infrastructure-as-code/reference
  *
- * @section Reference a service variable
+ * ### Reference a service variable
  * Pass a resource (or its LogicalId) and the variable key. The result is
  * a template string, not a URI.
  *
- * @example Reference Postgres DATABASE_URL
+ * **Example:** Reference Postgres DATABASE_URL
  * ```typescript
  * const db = yield* Railway.Postgres("Db", { project: site });
  * yield* Railway.Variable("DatabaseUrl", {
@@ -66,15 +65,17 @@ const namespaceOf = (resource: VariableRefSource): string => {
  * });
  * ```
  *
- * @section Shared variables
+ * ### Shared variables
  * `"shared"` is the environment-wide namespace (IaC `ctx.shared.NAME`).
  *
- * @example Shared variable
+ * **Example:** Shared variable
  * ```typescript
  * env: {
  *   SENTRY_DSN: Railway.ref("shared", "SENTRY_DSN"),
  * }
  * ```
+ *
+ * @resource
  */
 export const ref = (resource: VariableRefSource, key: string): VariableRef =>
   `\${{${namespaceOf(resource)}.${key}}}`;

@@ -12,7 +12,7 @@ import type { Mongo } from "./Mongo.ts";
  * `ConnectMongo` is the Context tag, the type, and the callable —
  * `yield* Railway.ConnectMongo(Db)`. Provide {@link ConnectMongoHttp}.
  *
- * @example Bind Mongo in a Service
+ * **Example:** Bind Mongo in a Service
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
@@ -24,13 +24,13 @@ import type { Mongo } from "./Mongo.ts";
  * });
  * ```
  *
- * @section Variable references
+ * ### Variable references
  * `ConnectMongo` packs a typed private URI onto the Service. To store
  * Railway's template instead of a resolved URI (IaC `db.env.MONGO_URL`),
  * pass `Railway.ref(Db, "MONGO_URL")` as a {@link Variable} `value` or
  * `Service.env` entry.
  *
- * @example Railway.ref
+ * **Example:** Railway.ref
  * ```typescript
  * const db = yield* Railway.mongo("Db", { project: site });
  * yield* Railway.Variable("MongoUrl", {

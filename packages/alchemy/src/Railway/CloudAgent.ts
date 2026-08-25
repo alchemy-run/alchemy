@@ -101,14 +101,13 @@ export type CloudAgent = Resource<
  * Cloud agents are Priority Boarding and bill at VM rates while
  * running.
  *
- * @resource
  * @see https://docs.railway.com/cloud-agents
  *
- * @section Create a CloudAgent
+ * ### Create a CloudAgent
  * Pass the Project (or an Environment). Alchemy generates a unique
  * name unless you pass one. `domain` is the public URL for port 8080.
  *
- * @example Next to a Project
+ * **Example:** Next to a Project
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const agent = yield* Railway.CloudAgent("Coder", {
@@ -121,11 +120,11 @@ export type CloudAgent = Resource<
  * the old one is deleted — the disk is not copied.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you need a stable agent name. Changing it later
  * replaces the agent.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const agent = yield* Railway.CloudAgent("Coder", {
  *   environment: site,
@@ -133,12 +132,12 @@ export type CloudAgent = Resource<
  * });
  * ```
  *
- * @section Variables
+ * ### Variables
  * `variables` are create-only. Pair them with a new agent — Railway
  * does not update variables on an existing VM. Values may reference
  * other services via `Railway.ref`.
  *
- * @example Variables at create
+ * **Example:** Variables at create
  * ```typescript
  * const agent = yield* Railway.CloudAgent("Coder", {
  *   environment: site,
@@ -148,21 +147,21 @@ export type CloudAgent = Resource<
  * });
  * ```
  *
- * @section Sleep and wake
+ * ### Sleep and wake
  * Sleep stops compute billing and keeps the disk. Wake re-runs the
  * entrypoint with files in place. These are not reconciler steps —
  * call {@link sleepCloudAgent} / {@link wakeCloudAgent}.
  *
- * @example Sleep then wake
+ * **Example:** Sleep then wake
  * ```typescript
  * yield* Railway.sleepCloudAgent(agent);
  * yield* Railway.wakeCloudAgent(agent);
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope CloudAgent
+ * **Example:** Module-scope CloudAgent
  * ```typescript
  * // src/agent.ts
  * import * as Railway from "alchemy/Railway";
@@ -172,6 +171,8 @@ export type CloudAgent = Resource<
  *   environment: Site,
  * });
  * ```
+ *
+ * @resource
  */
 export const CloudAgent = Resource<CloudAgent>("Railway.CloudAgent");
 

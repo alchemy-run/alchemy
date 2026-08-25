@@ -2,6 +2,7 @@ import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   PrivateNetworkCreateOrGetResponse,
   PrivateNetworkEndpointCreateOrGetResponse,
+  PrivateNetworkEndpointResponse,
   PrivateNetworkEndpointSyncStatus,
   PrivateNetworkEndpointValue,
   PrivateNetworksResultItem,
@@ -120,14 +121,13 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * removed when its Project/Environment is deleted. `create-or-get` is
  * idempotent for a given `(environment, name)`.
  *
- * @resource
  * @see https://docs.railway.com/networking/private-networking
  *
- * @section Create a named network
+ * ### Create a named network
  * Pass a Project (or Environment). Alchemy generates a unique name.
  * `dnsName` is the network suffix endpoints hang off.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const net = yield* Railway.PrivateNetwork("Mesh", {
@@ -135,11 +135,11 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * });
  * ```
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you need a stable network name. Changing it later
  * replaces the resource — Railway cannot rename a network.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const net = yield* Railway.PrivateNetwork("Mesh", {
  *   environment: site,
@@ -153,11 +153,11 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * previous name stays until the environment is deleted.
  * :::
  *
- * @section Endpoints
+ * ### Endpoints
  * Attach a Service with a custom DNS name via
  * {@link PrivateNetworkEndpoint}.
  *
- * @example Endpoint on the network
+ * **Example:** Endpoint on the network
  * ```typescript
  * const api = yield* Railway.Service("Api", {
  *   project: site,
@@ -170,10 +170,10 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope network
+ * **Example:** Module-scope network
  * ```typescript
  * // src/network.ts
  * import * as Railway from "alchemy/Railway";
@@ -183,6 +183,8 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  *   environment: Site,
  * });
  * ```
+ *
+ * @resource
  */
 export const PrivateNetwork: typeof PrivateNetworkResource = Object.assign(
   (
@@ -575,14 +577,13 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  * {@link PrivateNetwork}. Create-or-get is idempotent for a given
  * `(network, service)`. `name` is the DNS prefix and updates in place.
  *
- * @resource
  * @see https://docs.railway.com/networking/private-networking
  *
- * @section Attach a service
+ * ### Attach a service
  * Pass the network and the Service. Omit `name` to use the Service name
  * as the DNS prefix.
  *
- * @example Default prefix
+ * **Example:** Default prefix
  * ```typescript
  * const endpoint = yield* Railway.PrivateNetworkEndpoint("ApiDns", {
  *   network: net,
@@ -590,11 +591,11 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  * });
  * ```
  *
- * @section Custom DNS name
+ * ### Custom DNS name
  * `name` is the label other services use (`name.{network.dnsName}`).
  * Updating it renames in place.
  *
- * @example Custom prefix
+ * **Example:** Custom prefix
  * ```typescript
  * const endpoint = yield* Railway.PrivateNetworkEndpoint("ApiDns", {
  *   network: net,
@@ -606,6 +607,8 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  * :::caution[Changing `network` or `service` replaces the endpoint]
  * The old endpoint is deleted. The new pair is create-or-got.
  * :::
+ *
+ * @resource
  */
 export const PrivateNetworkEndpoint: typeof PrivateNetworkEndpointResource =
   Object.assign(
@@ -637,7 +640,8 @@ export class PrivateNetworkEndpointTargetMissing extends Data.TaggedError(
 
 type CloudEndpoint =
   | PrivateNetworkEndpointValue
-  | PrivateNetworkEndpointCreateOrGetResponse;
+  | PrivateNetworkEndpointCreateOrGetResponse
+  | PrivateNetworkEndpointResponse;
 
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
@@ -671,7 +675,7 @@ const dnsPrefix = (dnsName: string) =>
     .filter((part) => part.length > 0)[0] ?? dnsName;
 
 const toEndpointAttrs = (
-  endpoint: CloudEndpoint,
+  endpoint: NonNullable<CloudEndpoint>,
   fallback: {
     serviceId: string;
     privateNetworkId: string;
@@ -699,7 +703,9 @@ const getEndpoint = (input: {
   serviceId: string;
 }) =>
   railway.privateNetworkEndpoint(input).pipe(
-    Effect.map((endpoint) => (isGoneEndpoint(endpoint) ? undefined : endpoint)),
+    Effect.map((endpoint) =>
+      endpoint == null || isGoneEndpoint(endpoint) ? undefined : endpoint,
+    ),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed(undefined),
     ),
@@ -749,10 +755,7 @@ const waitUntilEndpointNamed = (input: {
 }) =>
   getEndpoint(input).pipe(
     Effect.flatMap((endpoint) => {
-      if (
-        endpoint === undefined ||
-        dnsPrefix(endpoint.dnsName) !== input.prefix
-      ) {
+      if (endpoint == null || dnsPrefix(endpoint.dnsName) !== input.prefix) {
         return Effect.fail(
           new PrivateNetworkEndpointNotCreated({
             privateNetworkId: input.privateNetworkId,
@@ -927,7 +930,7 @@ export const PrivateNetworkEndpointProvider = () =>
           ? sanitizeRailwayName(props.name)
           : sanitizeRailwayName(serviceName);
 
-      let current = yield* getEndpoint({
+      let current: CloudEndpoint | undefined = yield* getEndpoint({
         environmentId,
         privateNetworkId,
         serviceId,
@@ -967,7 +970,7 @@ export const PrivateNetworkEndpointProvider = () =>
         });
       }
 
-      if (dnsPrefix(current.dnsName) !== desiredPrefix) {
+      if (current != null && dnsPrefix(current.dnsName) !== desiredPrefix) {
         const available = yield* railway.privateNetworkEndpointNameAvailable({
           environmentId,
           privateNetworkId,

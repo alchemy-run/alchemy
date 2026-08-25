@@ -127,16 +127,15 @@ const workspaceOf = (workspaceId: string | undefined) =>
  * Defaults to the current token workspace. Pass `project` /
  * `environment` to filter. The result may be empty.
  *
- * @resource
  * @see https://docs.railway.com/reference/audit-logs
  *
- * @section List logs
- * @example Workspace logs
+ * ### List logs
+ * **Example:** Workspace logs
  * ```typescript
  * const logs = yield* Railway.listAuditLogs();
  * ```
  *
- * @example Filter by project
+ * **Example:** Filter by project
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const logs = yield* Railway.listAuditLogs({
@@ -145,17 +144,19 @@ const workspaceOf = (workspaceId: string | undefined) =>
  * });
  * ```
  *
- * @section Get by id
- * @example One row
+ * ### Get by id
+ * **Example:** One row
  * ```typescript
  * const log = yield* Railway.getAuditLog({ id: logs[0].id });
  * ```
  *
- * @section Event types
- * @example Catalog
+ * ### Event types
+ * **Example:** Catalog
  * ```typescript
  * const types = yield* Railway.listAuditLogEventTypes();
  * ```
+ *
+ * @resource
  */
 export const AuditLog = Effect.fn(function* (options?: ListAuditLogsOptions) {
   const workspaceId = yield* workspaceOf(options?.workspaceId);

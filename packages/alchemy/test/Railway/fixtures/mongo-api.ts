@@ -58,7 +58,14 @@ export default class MongoApi extends Railway.Service<MongoApi>()(
           return yield* HttpServerResponse.json(ping);
         }
         return yield* HttpServerResponse.json(ping, { status: 404 });
-      }),
+      }).pipe(
+        Effect.catch((error) =>
+          HttpServerResponse.json(
+            { ok: false, error: String(error) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(Effect.provide(Railway.ConnectMongoHttp)),
 ) {}

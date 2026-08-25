@@ -195,14 +195,13 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * {@link Service}, yield {@link ConnectMongo}. From a laptop, use
  * `publicConnectionUri`. The IaC helper is {@link mongo}.
  *
- * @resource
  * @see https://docs.railway.com/databases/mongodb
  *
- * @section Create Mongo
+ * ### Create Mongo
  * Pass a Project. Alchemy generates a unique name, password, volume,
  * and a public TCP proxy.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const db = yield* Railway.mongo("Db", { project: site });
@@ -213,13 +212,13 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * service and volume are deleted. Data is not copied.
  * :::
  *
- * @section Connect from a Service
+ * ### Connect from a Service
  * Yield `ConnectMongo` inside init. Provide
  * {@link ConnectMongoHttp}. Pass `conn.connectionString` to the
  * MongoDB driver (or {@link pingMongo}). The binding packs the private
  * URI (`{name}.railway.internal`).
  *
- * @example Bind and ping
+ * **Example:** Bind and ping
  * ```typescript
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * import * as Redacted from "effect/Redacted";
@@ -240,11 +239,11 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * ) {}
  * ```
  *
- * @section Public TCP
+ * ### Public TCP
  * `public` (default `true`) creates a TCP proxy on 27017.
  * `publicConnectionUri` is `{domain}:{proxyPort}` for laptop access.
  *
- * @example Private only
+ * **Example:** Private only
  * ```typescript
  * const db = yield* Railway.mongo("Db", {
  *   project: site,
@@ -252,10 +251,10 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * });
  * ```
  *
- * @section Image
+ * ### Image
  * Default is official Mongo 8. Pass `image` to pin another tag.
  *
- * @example Mongo 7
+ * **Example:** Mongo 7
  * ```typescript
  * const db = yield* Railway.mongo("Db", {
  *   project: site,
@@ -263,10 +262,10 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Mongo
+ * **Example:** Module-scope Mongo
  * ```typescript
  * // src/db.ts
  * import * as Railway from "alchemy/Railway";
@@ -274,6 +273,8 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * export const Site = Railway.Project("Site");
  * export const Db = Railway.mongo("Db", { project: Site });
  * ```
+ *
+ * @resource
  */
 export const Mongo: typeof MongoResource = Object.assign(
   (
@@ -374,7 +375,10 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const generatePassword = Effect.sync(() => randomBytes(24).toString("hex"));
+const generatePassword = Effect.sync(() => {
+  const bytes = randomBytes(24);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+});
 
 const isGoneService = (service: CloudService | undefined) =>
   service === undefined || service.deletedAt != null;
@@ -444,7 +448,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 
 const encodePart = (value: string) => encodeURIComponent(value);
 
-export const privateConnectionUri = (input: {
+const privateConnectionUri = (input: {
   user: string;
   password: string;
   name: string;
@@ -452,7 +456,7 @@ export const privateConnectionUri = (input: {
 }): string =>
   `mongodb://${encodePart(input.user)}:${encodePart(input.password)}@${input.name}.railway.internal:${MONGO_PORT}/${encodePart(input.database)}?authSource=admin&directConnection=true`;
 
-export const publicConnectionUri = (input: {
+const publicConnectionUri = (input: {
   user: string;
   password: string;
   domain: string;
@@ -973,7 +977,7 @@ export const MongoProvider = () =>
       const wantPublic = props.public !== false;
       const volumeName = yield* createRailwayName(`${id}-data`);
 
-      let current =
+      let current: CloudService | undefined =
         output?.serviceId !== undefined && output.serviceId.length > 0
           ? yield* getById(output.serviceId)
           : undefined;
@@ -1074,7 +1078,7 @@ export const MongoProvider = () =>
       });
       if (envChanged) needsDeploy = true;
 
-      let volume =
+      let volume: CloudInstance | undefined =
         output?.volumeInstanceId !== undefined &&
         output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)

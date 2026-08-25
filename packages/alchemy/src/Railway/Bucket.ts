@@ -142,14 +142,13 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * `createPhysicalName`. `name` updates in place. Changing `project`,
  * `environment`, or `region` replaces the Bucket.
  *
- * @resource
  * @see https://docs.railway.com/storage-buckets
  *
- * @section Create a Bucket
+ * ### Create a Bucket
  * Pass a Project. Alchemy generates a unique name and deploys to the
  * project's primary environment in `sjc`.
  *
- * @example Generated name
+ * **Example:** Generated name
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const data = yield* Railway.Bucket("Data", { project: site });
@@ -159,11 +158,11 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * The Bucket is created in the new Project. The old Bucket is deleted.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you need a stable display name. The S3 API name is
  * this plus a short hash (`s3BucketName`).
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const data = yield* Railway.Bucket("Data", {
  *   project: site,
@@ -171,10 +170,10 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * });
  * ```
  *
- * @section Region
+ * ### Region
  * Omit `region` to use `sjc`. Changing it replaces the Bucket.
  *
- * @example Pin a region
+ * **Example:** Pin a region
  * ```typescript
  * const data = yield* Railway.Bucket("Data", {
  *   project: site,
@@ -187,11 +186,11 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * one is deleted.
  * :::
  *
- * @section Environment
+ * ### Environment
  * Defaults to the Project's primary environment. Pass a
  * `Railway.Environment` (or `{ environmentId }`) to target another one.
  *
- * @example Extra environment
+ * **Example:** Extra environment
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", { project: site });
  * const data = yield* Railway.Bucket("StagingData", {
@@ -205,11 +204,11 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * instance is deleted.
  * :::
  *
- * @section Put and get objects
+ * ### Put and get objects
  * Railway buckets speak the S3 API. Bind {@link PutObject} /
  * {@link GetObject} in Service init.
  *
- * @example Put an object from a Service
+ * **Example:** Put an object from a Service
  * ```typescript
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
@@ -235,11 +234,11 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * ) {}
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the Project once. Pass it into every child. Resource-valued
  * props accept the resource or an Effect producing it.
  *
- * @example Module-scope Bucket
+ * **Example:** Module-scope Bucket
  * ```typescript
  * // src/data.ts
  * import * as Railway from "alchemy/Railway";
@@ -247,6 +246,8 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * export const Site = Railway.Project("Site");
  * export const Data = Railway.Bucket("Data", { project: Site });
  * ```
+ *
+ * @resource
  */
 export const Bucket: typeof BucketResource = Object.assign(
   (

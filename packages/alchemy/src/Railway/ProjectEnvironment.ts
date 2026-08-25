@@ -72,14 +72,13 @@ export type Environment = Resource<
  * (staging, preview, …). The production environment is created with the
  * Project — do not recreate it as an Environment resource.
  *
- * @resource
  * @see https://docs.railway.com/guides/environments
  *
- * @section Create an extra environment
+ * ### Create an extra environment
  * Alchemy generates a unique name unless you pass one. Production is
  * already on the Project as `environmentId`.
  *
- * @example Staging next to production
+ * **Example:** Staging next to production
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const staging = yield* Railway.Environment("Staging", {
@@ -92,11 +91,11 @@ export type Environment = Resource<
  * reclaimable.
  * :::
  *
- * @section A stable name
+ * ### A stable name
  * Pass `name` when you need a stable environment name (`staging`).
  * Changing it later updates the environment in place.
  *
- * @example Explicit name
+ * **Example:** Explicit name
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", {
  *   project: site,
@@ -104,11 +103,11 @@ export type Environment = Resource<
  * });
  * ```
  *
- * @section Fork from production
+ * ### Fork from production
  * `sourceEnvironmentId` copies services, volumes, configuration, and
  * variables from another environment. Create-only.
  *
- * @example Fork production
+ * **Example:** Fork production
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", {
  *   project: site,
@@ -116,11 +115,11 @@ export type Environment = Resource<
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Declare the Project once. Pass it into every child. Resource-valued
  * props accept the resource or an Effect producing it.
  *
- * @example Module-scope Environment
+ * **Example:** Module-scope Environment
  * ```typescript
  * // src/project.ts
  * import * as Railway from "alchemy/Railway";
@@ -130,6 +129,8 @@ export type Environment = Resource<
  *   project: Site,
  * });
  * ```
+ *
+ * @resource
  */
 export const Environment = Resource<Environment>("Railway.Environment");
 
@@ -280,7 +281,7 @@ export const EnvironmentProvider = () =>
       }
       const name = yield* resolveName(id, props.name, output?.name);
 
-      let current =
+      let current: CloudEnvironment | undefined =
         output?.environmentId !== undefined
           ? yield* getById(output.environmentId, output.projectId)
           : undefined;

@@ -94,6 +94,10 @@ test.provider(
       expect(created.ping.domain).toEqual(expect.any(String));
       expect(created.ping.domain).toContain("up.railway.app");
       expect(created.ping.url).toEqual(`https://${created.ping.domain}`);
+      expect(created.ping.dnsName).toEqual(
+        `${created.ping.name}.railway.internal`,
+      );
+      expect(created.ping.rpcToken.length).toBeGreaterThanOrEqual(32);
       expect(created.ping.domainId).toEqual(expect.any(String));
       expect(created.ping.domainId!.length).toBeGreaterThan(0);
 
@@ -185,6 +189,10 @@ test.provider(
       expect(created.ping.code.hash).toEqual(expect.any(String));
       expect(created.ping.domain).toContain("up.railway.app");
       expect(created.ping.url).toEqual(`https://${created.ping.domain}`);
+      expect(created.ping.dnsName).toEqual(
+        `${created.ping.name}.railway.internal`,
+      );
+      expect(created.ping.rpcToken.length).toBeGreaterThanOrEqual(32);
 
       const instance = yield* railway.serviceInstance({
         environmentId: created.ping.environmentId,

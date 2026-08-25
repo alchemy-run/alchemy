@@ -15,6 +15,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import BucketApi, {
   Data as BucketData,
   OBJECT_BODY,
@@ -182,6 +183,18 @@ const retryTransient = {
   times: 10,
 } as const;
 
+const readJson = (
+  res: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<unknown, NotReady> =>
+  res.json.pipe(
+    Effect.catch(() => Effect.fail(new NotReady({ status: res.status }))),
+    Effect.flatMap((body) =>
+      res.status === 200
+        ? Effect.succeed(body)
+        : Effect.fail(new NotReady({ status: res.status, body })),
+    ),
+  );
+
 const getJson = (url: string, path: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
@@ -190,17 +203,9 @@ const getJson = (url: string, path: string) =>
         duration: "8 seconds",
         orElse: () => Effect.fail(new NotReady({ status: 0 })),
       }),
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? res.json
-          : res.json.pipe(
-              Effect.catch(() =>
-                Effect.succeed({ status: res.status } as unknown),
-              ),
-              Effect.flatMap((body) =>
-                Effect.fail(new NotReady({ status: res.status, body })),
-              ),
-            ),
+      Effect.flatMap(readJson),
+      Effect.mapError((e) =>
+        e instanceof NotReady ? e : new NotReady({ status: 0, body: e }),
       ),
       Effect.retry(retryTransient),
     );
@@ -216,8 +221,13 @@ const getText = (url: string) =>
       }),
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.text
+          ? res.text.pipe(
+              Effect.mapError(() => new NotReady({ status: res.status })),
+            )
           : Effect.fail(new NotReady({ status: res.status })),
+      ),
+      Effect.mapError((e) =>
+        e instanceof NotReady ? e : new NotReady({ status: 0, body: e }),
       ),
       Effect.retry(retryTransient),
     );

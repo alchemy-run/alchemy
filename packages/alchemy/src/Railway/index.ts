@@ -1,4 +1,6 @@
 export * from "./AuthProvider.ts";
+export * from "./Bind.ts";
+export { enableRailwayRpc, serveRailwayRpc } from "./rpc-server.ts";
 export * from "./LoginSession.ts";
 export * from "./Bucket.ts";
 export * from "./Catalog.ts";
@@ -22,13 +24,25 @@ export * from "./Metadata.ts";
 export * from "./MountVolume.ts";
 export * from "./Postgres.ts";
 export * from "./PrivateNetwork.ts";
-export * from "./ConnectPostgres.ts";
+export {
+  ConnectPostgres,
+  PostgresUrlMissing,
+  type ConnectPostgresClient,
+} from "./ConnectPostgres.ts";
 export * from "./ConnectPostgresHttp.ts";
 export * from "./MySQL.ts";
-export * from "./ConnectMySQL.ts";
+export {
+  ConnectMySQL,
+  MySQLUrlMissing,
+  type ConnectMySQLClient,
+} from "./ConnectMySQL.ts";
 export * from "./ConnectMySQLHttp.ts";
 export * from "./Mongo.ts";
-export * from "./ConnectMongo.ts";
+export {
+  ConnectMongo,
+  MongoUrlMissing,
+  type ConnectMongoClient,
+} from "./ConnectMongo.ts";
 export * from "./ConnectMongoHttp.ts";
 export * from "./ref.ts";
 export * from "./Project.ts";
@@ -41,6 +55,7 @@ export * from "./ReadWriteRedisHttp.ts";
 export * from "./Redis.ts";
 export * from "./Sandbox.ts";
 export * from "./Service.ts";
+export * from "./ServiceProvider.ts";
 export * from "./ServiceDomain.ts";
 export * from "./TcpProxy.ts";
 export * from "./Template.ts";

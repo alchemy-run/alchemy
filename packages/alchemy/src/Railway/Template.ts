@@ -153,14 +153,13 @@ const TemplateResource = Resource<Template>("Railway.Template");
  * Alchemy creates an owned Project first (the workspace project-create
  * cap is serialized).
  *
- * @resource
  * @see https://docs.railway.com/templates/deploy
  *
- * @section Deploy a marketplace template
+ * ### Deploy a marketplace template
  * `templateId` is a marketplace UUID or code (`postgres`). Pass a
  * Project to deploy into it.
  *
- * @example Postgres into a Project
+ * **Example:** Postgres into a Project
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const db = yield* Railway.Template("Postgres", {
@@ -174,23 +173,23 @@ const TemplateResource = Resource<Template>("Railway.Template");
  * created it) are deleted. A new deploy runs.
  * :::
  *
- * @section Create the Project
+ * ### Create the Project
  * Omit `project` to let Alchemy create one. The name is stamped so
  * nuke can reclaim it.
  *
- * @example Generated Project
+ * **Example:** Generated Project
  * ```typescript
  * const db = yield* Railway.Template("Postgres", {
  *   templateId: "postgres",
  * });
  * ```
  *
- * @section Serialized config
+ * ### Serialized config
  * Omit `serializedConfig` to use the marketplace default. Pass a
  * config (from `template.serializedConfig`, with service variable
  * `value`s filled in) to override.
  *
- * @example Override config
+ * **Example:** Override config
  * ```typescript
  * const db = yield* Railway.Template("Postgres", {
  *   templateId: "postgres",
@@ -199,10 +198,10 @@ const TemplateResource = Resource<Template>("Railway.Template");
  * });
  * ```
  *
- * @section Environment
+ * ### Environment
  * Defaults to the Project's primary environment.
  *
- * @example Extra environment
+ * **Example:** Extra environment
  * ```typescript
  * const staging = yield* Railway.Environment("Staging", { project: site });
  * const db = yield* Railway.Template("StagingPostgres", {
@@ -212,10 +211,10 @@ const TemplateResource = Resource<Template>("Railway.Template");
  * });
  * ```
  *
- * @section Module-scope declarations
+ * ### Module-scope declarations
  * Resource-valued props accept the resource or an Effect producing it.
  *
- * @example Module-scope Template
+ * **Example:** Module-scope Template
  * ```typescript
  * // src/db.ts
  * import * as Railway from "alchemy/Railway";
@@ -226,6 +225,8 @@ const TemplateResource = Resource<Template>("Railway.Template");
  *   project: Site,
  * });
  * ```
+ *
+ * @resource
  */
 export const Template: typeof TemplateResource = Object.assign(
   (
@@ -511,32 +512,27 @@ const rateLimited = {
 };
 
 const waitForWorkflow = (workflowId: string, projectId: string) =>
-  railway.workflowStatus({ workflowId }).pipe(
-    Effect.flatMap((result) => {
-      if (result.status === "Complete") return Effect.succeed(result);
-      if (result.status === "Error") {
-        return Effect.fail(
-          new TemplateWorkflowFailed({
-            workflowId,
-            error: result.error ?? "template deploy failed",
-          }),
-        );
-      }
-      return Effect.fail(
-        new TemplatePending({
-          projectId,
-          state: result.status,
-        }),
-      );
-    }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.fail(
-        new TemplatePending({
-          projectId,
-          state: "NotFound",
-        }),
+  Effect.gen(function* () {
+    const result = yield* railway.workflowStatus({ workflowId }).pipe(
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed({
+          status: "NotFound",
+          error: null,
+        } as const),
       ),
-    ),
+    );
+    if (result.status === "Complete") return result;
+    if (result.status === "Error") {
+      return yield* new TemplateWorkflowFailed({
+        workflowId,
+        error: result.error ?? "template deploy failed",
+      });
+    }
+    return yield* new TemplatePending({
+      projectId,
+      state: result.status,
+    });
+  }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.TemplatePending",
       times: 10,
@@ -796,7 +792,7 @@ export const TemplateProvider = () =>
         output?.workspaceId ??
         (yield* currentWorkspaceId());
 
-      let current =
+      let current: CloudProject | undefined =
         projectId !== undefined && projectId.length > 0
           ? yield* getProject(projectId)
           : undefined;

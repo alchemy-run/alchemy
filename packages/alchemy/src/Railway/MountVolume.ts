@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../Binding.ts";
@@ -63,19 +64,61 @@ export interface ServiceBinding {
 }
 
 /**
+ * Railway allows one volume per service. Two `MountVolume`s, or a
+ * second {@link Volume} attached via `service`, is this error.
+ */
+export class MultipleVolumes extends Data.TaggedError(
+  "Railway.MultipleVolumes",
+)<{
+  name: string;
+  paths: readonly string[];
+  volumeIds: readonly string[];
+}> {}
+
+const distinctMounts = (mounts: readonly MountSpec[]): MountSpec[] => {
+  const seen = new Set<string>();
+  const out: MountSpec[] = [];
+  for (const mount of mounts) {
+    if (mount.volumeId.length === 0) continue;
+    const key = `${mount.volumeId}:${mount.path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(mount);
+  }
+  return out;
+};
+
+/** At most one volume on a host. */
+export const assertHostDisk = (input: {
+  name: string;
+  mounts: readonly MountSpec[];
+}): Effect.Effect<void, MultipleVolumes> => {
+  const mounts = distinctMounts(input.mounts);
+  if (mounts.length <= 1) return Effect.void;
+  return new MultipleVolumes({
+    name: input.name,
+    paths: mounts.map((mount) => mount.path),
+    volumeIds: mounts.map((mount) => mount.volumeId),
+  });
+};
+
+/**
  * Mount a Railway.Volume into a {@link Service} or `Railway.Function`.
  *
  * `yield* Railway.MountVolume(volume, { path: "/data" })` inside a
  * Service/Function impl registers `{ mounts: [{ volumeId, path }] }` on
  * the host. Reconcile attaches the volume via `volumeInstanceUpdate`.
  *
- * @binding
+ * Railway allows **one volume per service**. A second mount is
+ * `Railway.MultipleVolumes`. Railway does not give each replica its
+ * own disk.
  *
- * @section Mount into a Service
+ *
+ * ### Mount into a Service
  * Yield `MountVolume` inside init. Provide {@link MountVolumeLive}.
  * At runtime you get `disk.path`.
  *
- * @example Bind a path
+ * **Example:** Bind a path
  * ```typescript
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
@@ -92,6 +135,13 @@ export interface ServiceBinding {
  *   }).pipe(Effect.provide(Railway.MountVolumeLive)),
  * ) {}
  * ```
+ *
+ * :::caution[One volume per service]
+ * Railway does not attach a disk per replica. Two {@link MountVolume}s
+ * on one host fail with {@link MultipleVolumes}.
+ * :::
+ *
+ * @binding
  */
 export interface MountVolume extends Binding.Service<
   MountVolume,

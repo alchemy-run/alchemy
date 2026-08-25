@@ -56,6 +56,10 @@ At deploy time the binding writes `{ path, volumeId }` into the
 Service. Reconcile attaches the volume via `volumeInstanceUpdate`.
 At runtime you get `disk.path`.
 
+Railway allows one volume per Service. It does not give each replica
+its own disk. A second volume on the same Service is
+`Railway.MultipleVolumes`.
+
 ## Attach at create time
 
 Pass `service` to attach when the Volume is created:
@@ -73,7 +77,8 @@ const data = yield* Railway.Volume("Data", {
 });
 ```
 
-Updating `service` attaches or moves the volume in place.
+Updating `service` attaches or moves the volume in place. The
+target Service must not already have a volume.
 
 ## Environment
 

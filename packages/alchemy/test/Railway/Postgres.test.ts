@@ -14,6 +14,7 @@ import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
+import PostgresFn from "./fixtures/postgres-fn.ts";
 import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -157,11 +158,14 @@ const FixtureStack = Alchemy.Stack(
     const project = yield* Site;
     const db = yield* Db;
     const api = yield* PostgresApi;
+    const fn = yield* PostgresFn;
     return {
       projectId: project.projectId,
       environmentId: project.environmentId,
       serviceId: api.serviceId,
       url: api.url,
+      functionId: fn.serviceId,
+      functionUrl: fn.url,
       publicConnectionUri: db.publicConnectionUri,
       mode: canPushRailwayImage ? ("effect" as const) : ("image" as const),
     };
@@ -397,4 +401,56 @@ test(
     expect(firstOk(rows)).toEqual(1);
   }).pipe(logLevel),
   { timeout: 480_000 },
+);
+
+test(
+  "a Function connects and SELECTs through ConnectPostgres",
+  Effect.gen(function* () {
+    const out = yield* fixture;
+    expect(out.functionId).toEqual(expect.any(String));
+    expect(out.functionUrl).toEqual(expect.any(String));
+    expect(out.functionUrl).toContain("up.railway.app");
+
+    const vars = yield* distilled(
+      readServiceVariables(out.projectId, out.environmentId, out.functionId),
+    );
+    expect((vars[Railway.DATABASE_URL_SECRET] ?? "").length).toBeGreaterThan(0);
+
+    const client = yield* HttpClient.HttpClient;
+    const get = (path: string) =>
+      client.get(`${out.functionUrl}${path}`).pipe(
+        Effect.timeoutOrElse({
+          duration: "8 seconds",
+          orElse: () => Effect.fail(new NotReady({ status: 0 })),
+        }),
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.json.pipe(
+                Effect.mapError(() => new NotReady({ status: res.status })),
+              )
+            : res.text.pipe(
+                Effect.catch(() => Effect.succeed("")),
+                Effect.flatMap((body) =>
+                  Effect.fail(new NotReady({ status: res.status, body })),
+                ),
+              ),
+        ),
+        Effect.retry({
+          while: (e) =>
+            e._tag === "NotReady" &&
+            (e.status === 0 ||
+              e.status === 404 ||
+              e.status === 502 ||
+              e.status === 503),
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.upTo({ duration: "45 seconds" }),
+          ),
+          times: 10,
+        }),
+      );
+
+    const health = (yield* get("/")) as { rows?: unknown };
+    expect(firstOk(health.rows)).toEqual(1);
+  }).pipe(logLevel),
+  { timeout: 180_000 },
 );
