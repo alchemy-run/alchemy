@@ -1,15 +1,14 @@
 /**
- * The conformance worker, deployed to a **celld fleet**. The definition
- * is the same cloud-free `make`; only the deploy module names celld.
+ * The conformance worker's deploy module — the native `Celld.Worker`
+ * tag + `.make(props, impl)` form. The Durable Object is the SAME
+ * `Cloudflare.DurableObject` fixture every engine hosts.
  */
-import * as Celld from "@/Celld";
 import * as Effect from "effect/Effect";
 import { Counter, CounterLive } from "../counter.ts";
 import { conformanceFetch } from "../routes.ts";
 import { ConformanceCells, ConformanceWorker } from "./fleet.ts";
 
-export default Celld.Worker(
-  ConformanceWorker,
+export default ConformanceWorker.make(
   { fleet: ConformanceCells, main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;

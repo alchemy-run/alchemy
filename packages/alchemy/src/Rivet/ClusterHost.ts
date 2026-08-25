@@ -14,10 +14,6 @@
  * - **compose** — plan-time composition of the engine's child resources
  *   (network, compute, discovery, admin token), returning the connection
  *   material the core Cluster resource persists.
- * - **callerBinding** — the binding-data fragment a caller host (Lambda
- *   Function, ECS task, …) needs to reach the engine (network attachment,
- *   IAM, …). The core env vars (endpoint + admin token) are contributed by
- *   the runner/actor factory itself.
  * - **restartNodes** — roll the engine's nodes (e.g. after a config change
  *   that only takes effect at process start).
  */
@@ -25,7 +21,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
-import type { ResourceLike } from "../Resource.ts";
 
 /**
  * Host-specific options carried on the Cluster's `host` prop, keyed by host
@@ -124,16 +119,6 @@ export interface ClusterHostService {
   readonly compose: (
     options: ClusterHostComposeOptions,
   ) => Effect.Effect<ClusterHostComposeResult, any, any>;
-  readonly callerBinding: (options: {
-    /**
-     * The resource being connected TO (a `Rivet.Cluster` — its attribute
-     * accessors are `Output`s carrying the engine connection: `endpoint`,
-     * `adminToken`, `hostState`, …).
-     */
-    readonly target: any;
-    /** The caller host resource the binding lands on. */
-    readonly host: ResourceLike;
-  }) => Effect.Effect<Record<string, unknown>, any, any>;
   readonly restartNodes: (options: {
     /** The deploying resource's resolved props (engine connection included). */
     readonly news: ClusterConnection;

@@ -1,14 +1,17 @@
 /**
- * The generated virtual-entry module for Celld fleet bundles.
+ * The generated virtual-entry module for Celld fleet bundles: a thin shim
+ * importing only `cloudflare:workers` (runtime-provided), the real
+ * bootstrap module `alchemy/Runtime/Bootstrap/CelldFleet` (resolvable from
+ * any consumer — `alchemy` is its direct dependency), and the user's
+ * `main`. Everything alchemy needs lives in that real module, so the
+ * virtual entry never imports alchemy's own dependencies, which an
+ * isolated install cannot resolve from the consumer's project (see
+ * `Runtime/Bootstrap/Process.ts`).
  *
- * A fleet deploys the same Effect worker artifact Cloudflare Workers do —
- * `makeWorkerBridge` for the default fetch path and `makeDurableObjectBridge`
- * for each Durable Object class — with one divergence: celld's loader
- * requires the main worker to be the **object form** (`export default
- * { fetch }`), not a `WorkerEntrypoint` subclass. The generated entry
- * instantiates the bridge class per event and delegates; the expensive
- * isolate build inside the bridge is module-memoized, so per-event
- * instantiation costs a closure, not a rebuild.
+ * The per-class `export class` statements stay in the shim — celld's
+ * loader requires statically named exports — with the plan-time-discovered
+ * method lists baked in (celld's JSRPC dispatch stalls on Proxy-returning
+ * constructors, so the bridge materializes them as real instance methods).
  *
  * @internal not exported from the Celld barrel.
  */
@@ -32,40 +35,23 @@ export const makeCelldVirtualEntry = (
     }));
   return (importPath: string) => `
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { makeDurableObjectBridge, makeWorkerBridge } from "alchemy/Cloudflare";
-
+import { makeFleetBootstrap } from "alchemy/Runtime/Bootstrap/CelldFleet";
 import entrypoint from ${JSON.stringify(importPath)};
 
-const meta = {
-  entrypoint,
+const fleet = makeFleetBootstrap({ DurableObject, WorkerEntrypoint }, entrypoint, {
   stack: {
     name: ${JSON.stringify(stack.name)},
     stage: ${JSON.stringify(stack.stage)},
   },
-};
+});
 
-const WorkerBridge = makeWorkerBridge(WorkerEntrypoint, meta);
+export default fleet.default;
 
-// celld's loader requires the object-form main worker; the bridge class is
-// instantiated per event (the isolate build inside it is memoized).
-export default {
-  fetch: (request, env, ctx) => new WorkerBridge(ctx, env).fetch(request),
-};
-
-${
-  doClasses.length > 0
-    ? [
-        "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, meta);",
-        // The plan-time-discovered method list is baked in: celld's JSRPC
-        // dispatch stalls on Proxy-returning constructors, so the bridge
-        // materializes these as real instance methods (see
-        // DurableObjectBridge.ts).
-        ...doClasses.map(
-          ({ className, methods }) =>
-            `export class ${className} extends DurableObjectBridge(${JSON.stringify(className)}, ${JSON.stringify(methods)}) {}`,
-        ),
-      ].join("\n")
-    : ""
-}
+${doClasses
+  .map(
+    ({ className, methods }) =>
+      `export class ${className} extends fleet.durableObject(${JSON.stringify(className)}, ${JSON.stringify(methods)}) {}`,
+  )
+  .join("\n")}
 `;
 };

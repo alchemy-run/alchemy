@@ -1,13 +1,15 @@
 /**
  * The shared conformance Durable Object — ONE implementation, deployed
- * unchanged to every engine. It exercises the whole portable surface:
- * KV storage, SQL storage, alarms, a `Stream`-returning method, and a
- * typed failure.
+ * unchanged to every engine. It exercises the whole surface: KV storage,
+ * SQL storage, alarms, a `Stream`-returning method, and a typed failure.
  *
- * Nothing here may reference an engine. If a line of this file has to
- * change for a particular platform, the portable abstraction has a hole.
+ * The authoring surface is `Cloudflare.DurableObject` on ALL THREE
+ * runtimes — celld runs CF bundles via the shared bridge, Rivet's
+ * ActorBridge consumes the same DurableObjectExport. If a line of this
+ * file has to change for a particular platform, the shared hosting core
+ * has a hole.
  */
-import * as Alchemy from "@/index.ts";
+import * as Cloudflare from "@/Cloudflare";
 import type { RuntimeContext } from "@/RuntimeContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -34,18 +36,17 @@ export interface CounterShape {
   alarm: () => Effect.Effect<void, never, RuntimeContext>;
 }
 
-export class Counter extends Alchemy.DurableObject<Counter, CounterShape>()(
+export class Counter extends Cloudflare.DurableObject<Counter, CounterShape>()(
   "Counter",
 ) {}
 
 /**
- * The implementation layer — worker- and cloud-free. The hosting worker
- * is whichever deploy module's impl provides this layer; callers pipe a
- * `.ref` to reach it remotely.
+ * The implementation layer. The hosting worker is whichever engine's
+ * worker impl provides this layer.
  */
 export const CounterLive = Counter.make(
   Effect.gen(function* () {
-    const state = yield* Alchemy.DurableObjectState;
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
       return {
         // ── KV ──────────────────────────────────────────────────

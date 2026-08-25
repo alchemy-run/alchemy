@@ -1,5 +1,4 @@
 import * as Celld from "@/Celld";
-import * as Alchemy from "@/index.ts";
 
 /** The fleet: infrastructure only (nodes + bucket via the registered host). */
 export class ConformanceCells extends Celld.Fleet<ConformanceCells>()(
@@ -8,10 +7,10 @@ export class ConformanceCells extends Celld.Fleet<ConformanceCells>()(
 ) {}
 
 /**
- * The portable Worker tag. Kept in its own module so the shared counter
- * layer (which binds to it) and the deployable module (which provides the
- * celld target) stay acyclic.
+ * The Celld worker tag. Kept in its own module so the deploy module
+ * ([worker.ts](./worker.ts)) and the Lambda caller ([api.ts](./api.ts))
+ * stay acyclic — the caller imports only this tag, never the impl.
  */
-export class ConformanceWorker extends Alchemy.Worker<ConformanceWorker>()(
+export class ConformanceWorker extends Celld.Worker<ConformanceWorker>()(
   "ConformanceWorker",
 ) {}

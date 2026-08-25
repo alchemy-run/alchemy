@@ -500,7 +500,7 @@ export interface DurableObjectClass extends Effect.Effect<
           never,
           DurableObjectServices | Req
         >,
-      ): Layer.Layer<Self, never, Worker | Req>;
+      ): Layer.Layer<Self, never, Worker | Exclude<Req, DurableObjectServices>>;
     };
   };
   <Self>(): {

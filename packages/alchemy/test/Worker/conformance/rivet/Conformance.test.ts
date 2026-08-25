@@ -5,6 +5,7 @@ import * as Core from "@/Test/Core";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { conformanceTests, waitForReady } from "../spec.ts";
 import ConformanceApi from "./api.ts";
 import { ConformanceActors, ConformanceWorker } from "./cluster.ts";
@@ -26,9 +27,9 @@ const sharedStack = Core.scratchStack(testOptions, "RivetConformance");
 
 let baseUrl = "";
 
-// The portable conformance spec, run against a REAL Rivet Engine on
+// The engine conformance spec, run against a REAL Rivet Engine on
 // Fargate. The engine is private, so the Lambda re-exposes the same routes
-// and drives the actors through the remote gateway stub. First deploy
+// and drives the actors through `Rivet.bindWorker`'s stub. First deploy
 // builds the runner image and waits out Fargate placement — keep it out of
 // FAST.
 describe.skipIf(!!process.env.FAST)("rivet engine conformance", () => {
@@ -63,4 +64,33 @@ describe.skipIf(!!process.env.FAST)("rivet engine conformance", () => {
     baseUrl: () => baseUrl,
     capabilities: { sql: true, alarms: true },
   });
+
+  // ── binding security: the engine gateway's token guard ────────────────
+  const probe = (kind: string) =>
+    HttpClient.get(`${baseUrl}/probe-unauth/${kind}`).pipe(
+      Effect.flatMap((response) =>
+        response.status === 200
+          ? response.json
+          : Effect.fail(new Error(`probe route answered ${response.status}`)),
+      ),
+      Effect.map((value) => value as { status: number; body: string }),
+    );
+
+  test(
+    "security: a gateway call without the engine token is rejected",
+    Effect.gen(function* () {
+      const missing = yield* probe("missing");
+      expect(missing.status).toBeGreaterThanOrEqual(400);
+    }),
+    { timeout: 120_000 },
+  );
+
+  test(
+    "security: a wrong engine token is rejected",
+    Effect.gen(function* () {
+      const wrong = yield* probe("wrong");
+      expect(wrong.status).toBeGreaterThanOrEqual(400);
+    }),
+    { timeout: 120_000 },
+  );
 });

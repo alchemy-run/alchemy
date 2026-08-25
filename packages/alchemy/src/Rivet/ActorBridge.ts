@@ -149,12 +149,10 @@ export const makeRivetActor = (
       (exported.constructor as Effect.Effect<any, never, any>).pipe(
         Effect.provide(doContext),
         Effect.flatMap((instance) => instance.pipe(Effect.provide(doContext))),
-        Effect.map(
-          (instance): BuiltInstance => ({
-            instance: instance as Record<string, any>,
-            context: exported.services,
-          }),
-        ),
+        Effect.map((instance): BuiltInstance => ({
+          instance: instance as Record<string, any>,
+          context: exported.services,
+        })),
       ) as Effect.Effect<BuiltInstance>,
     );
     builds.set(c, built);

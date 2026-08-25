@@ -284,18 +284,6 @@ export const EcsFleetHost = (): Layer.Layer<FleetHost<"aws-ecs">> =>
             };
           }),
 
-        callerBinding: ({ target }) =>
-          Effect.succeed({
-            vpc: {
-              subnetIds: target.hostState.pipe(
-                Output.map((state: any) => state?.subnetIds ?? []),
-              ),
-              securityGroupIds: target.hostState.pipe(
-                Output.map((state: any) => state?.securityGroupIds ?? []),
-              ),
-            },
-          }),
-
         restartNodes: ({ news }) =>
           Effect.gen(function* () {
             const state = news.hostState as

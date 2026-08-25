@@ -1,6 +1,6 @@
-/** Compile-pin for the single-file Fleet + Alchemy.Worker + inline cell DX (the PR/docs sample). Not deployed by tests. */
-import * as Alchemy from "@/index.ts";
+/** Compile-pin for the single-file Fleet + Celld.Worker + inline cell DX (the PR/docs sample). */
 import * as Celld from "@/Celld";
+import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -9,10 +9,10 @@ export class Cells extends Celld.Fleet<Cells>()("Cells", {
   instances: 2,
 }) {}
 
-export class Counter extends Alchemy.DurableObject<Counter>()(
+export class Counter extends Cloudflare.DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
-    const state = yield* Alchemy.DurableObjectState;
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
       return {
         increment: () =>
@@ -26,12 +26,10 @@ export class Counter extends Alchemy.DurableObject<Counter>()(
   }),
 ) {}
 
-export class CellsWorker extends Alchemy.Worker<CellsWorker>()("CellsWorker") {}
-
-// The deploy module: the definition above is cloud-free; this line is
-// what makes it a celld deployment.
-export default Celld.Worker(
-  CellsWorker,
+// The native inline form: props (naming the fleet) + impl in one
+// declaration — the same shape a Cloudflare Worker uses.
+export default class CellsWorker extends Celld.Worker<CellsWorker>()(
+  "CellsWorker",
   { fleet: Cells, main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
@@ -45,4 +43,4 @@ export default Celld.Worker(
       }),
     };
   }),
-);
+) {}

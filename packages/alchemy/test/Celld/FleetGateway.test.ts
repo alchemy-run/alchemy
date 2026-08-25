@@ -64,10 +64,11 @@ const call = (
   req: HttpServerRequest,
   env: Record<string, unknown>,
   userFetch?: Parameters<typeof makeGatewayFetch>[0],
+  options?: Parameters<typeof makeGatewayFetch>[1],
 ): Promise<{ status: number; text: string }> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const response = yield* makeGatewayFetch(userFetch);
+      const response = yield* makeGatewayFetch(userFetch, options);
       const context = yield* Effect.context();
       const web = HttpServerResponse.toWeb(response, { context });
       const text = yield* Effect.promise(() => web.text());
@@ -89,7 +90,7 @@ describe("Celld FleetGateway", () => {
     expect(timingSafeStringEqual("", "")).toBe(true);
   });
 
-  test("DO routes require the fleet secret", async () => {
+  test("RPC paths require the fleet secret — identical 401 for missing and wrong", async () => {
     const { env } = makeEnv();
     const denied = await call(
       request("/Counter/a/__rpc__/increment", { method: "POST", body: "[]" }),
@@ -106,6 +107,35 @@ describe("Celld FleetGateway", () => {
       env,
     );
     expect(wrongSecret.status).toBe(401);
+    // A prober must learn nothing from the failure mode.
+    expect(wrongSecret.text).toBe(denied.text);
+  });
+
+  test("worker-level RPC paths are guarded too", async () => {
+    const { env } = makeEnv();
+    const denied = await call(
+      request("/__rpc__/hello", { method: "POST", body: "[]" }),
+      env,
+      undefined,
+      { shape: { hello: () => Effect.succeed("hi") } },
+    );
+    expect(denied.status).toBe(401);
+  });
+
+  test("worker-level RPC dispatches to the impl shape with the secret", async () => {
+    const { env } = makeEnv();
+    const response = await call(
+      request("/__rpc__/hello", {
+        method: "POST",
+        body: "[]",
+        headers: { [FLEET_SECRET_HEADER]: SECRET },
+      }),
+      env,
+      undefined,
+      { shape: { hello: () => Effect.succeed("hi") } },
+    );
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.text)).toBe("hi");
   });
 
   test("RPC calls forward to the named instance's fetch (prefix stripped)", async () => {
@@ -131,29 +161,20 @@ describe("Celld FleetGateway", () => {
     ]);
   });
 
-  test("pass-through forwards to the instance fetch with the prefix stripped", async () => {
+  test("plain pass-through forwards to the instance fetch without auth", async () => {
     const { env } = makeEnv();
+    // Non-RPC paths are the user-facing surface — no secret required.
     const response = await call(
-      request("/Counter/room-1/some/nested/path?q=1", {
-        headers: { [FLEET_SECRET_HEADER]: SECRET },
-      }),
+      request("/Counter/room-1/some/nested/path?q=1"),
       env,
     );
     expect(response.status).toBe(200);
     expect(response.text).toBe("path:/some/nested/path");
   });
 
-  test("deployment probe returns the deployment id (authenticated)", async () => {
+  test("deployment probe returns the deployment id", async () => {
     const { env } = makeEnv();
-    const denied = await call(request(FLEET_DEPLOYMENT_PATH), env);
-    expect(denied.status).toBe(401);
-
-    const ok = await call(
-      request(FLEET_DEPLOYMENT_PATH, {
-        headers: { [FLEET_SECRET_HEADER]: SECRET },
-      }),
-      env,
-    );
+    const ok = await call(request(FLEET_DEPLOYMENT_PATH), env);
     expect(ok.status).toBe(200);
     expect(JSON.parse(ok.text)).toEqual({ deploymentId: "deploy-123" });
   });

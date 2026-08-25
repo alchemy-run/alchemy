@@ -7,10 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import InlineWorkerLive, {
-  Cells,
-  CellsWorker,
-} from "./fixtures/worker-inline.ts";
+import CellsWorker, { Cells } from "./fixtures/worker-inline.ts";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
@@ -20,10 +17,9 @@ const sharedStack = Core.scratchStack(testOptions, "CelldInline");
 
 let workerUrl: string;
 
-// The single-file inline form — Fleet + inline cell + `Alchemy.Worker`
-// class carrying its impl (capability layers + deployment target in one
-// provide chain). Deploys the whole thing and drives the worker's own
-// fetch route from inside the VPC via a bastion Lambda.
+// The single-file inline form — Fleet + inline `Cloudflare.DurableObject`
+// + `Celld.Worker` class carrying its props and impl in one declaration.
+// Deploys the whole thing and asserts the deployed shape.
 describe.skipIf(!!process.env.FAST)("Celld inline Worker (live)", () => {
   beforeAll(
     Effect.gen(function* () {
@@ -33,7 +29,7 @@ describe.skipIf(!!process.env.FAST)("Celld inline Worker (live)", () => {
           yield* Cells;
           const worker = yield* CellsWorker;
           return { url: worker.url };
-        }).pipe(Effect.provide(InlineWorkerLive)),
+        }),
       );
       expect(url).toBeTruthy();
       workerUrl = String(url);

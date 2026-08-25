@@ -4,7 +4,7 @@ import * as Core from "@/Test/Core";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { conformanceTests, waitForReady } from "../spec.ts";
-import ConformanceWorkerLive, { ConformanceWorker } from "./worker.ts";
+import ConformanceWorker from "./worker.ts";
 
 const testOptions = { providers: Cloudflare.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -12,7 +12,7 @@ const sharedStack = Core.scratchStack(testOptions, "CfConformance");
 
 let baseUrl = "";
 
-// The portable conformance spec, run against a REAL Cloudflare Worker with
+// The engine conformance spec, run against a REAL Cloudflare Worker with
 // real Durable Objects.
 describe.skipIf(!!process.env.FAST)("Cloudflare engine conformance", () => {
   beforeAll(
@@ -22,7 +22,7 @@ describe.skipIf(!!process.env.FAST)("Cloudflare engine conformance", () => {
         Effect.gen(function* () {
           const worker = yield* ConformanceWorker;
           return { url: worker.url };
-        }).pipe(Effect.provide(ConformanceWorkerLive)),
+        }),
       );
       expect(url).toBeTruthy();
       baseUrl = String(url).replace(/\/+$/, "");

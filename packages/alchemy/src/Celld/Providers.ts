@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Provider from "../Provider.ts";
+import { Random, RandomProvider } from "../Random.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
 import { CelldWorkerProvider, CelldWorkerResource } from "./Worker.ts";
 
@@ -24,10 +25,13 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([Fleet, CelldWorkerResource as any]),
+    Provider.collection([Fleet, CelldWorkerResource as any, Random]),
   ).pipe(
     Layer.provide(FleetProvider()),
     Layer.provide(CelldWorkerProvider()),
+    // The per-worker gateway secret is a `Random` node minted by the
+    // worker's props transform and by `bindWorker`.
+    Layer.provide(RandomProvider()),
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
     Layer.orDie,
   );

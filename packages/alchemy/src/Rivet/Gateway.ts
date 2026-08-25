@@ -39,7 +39,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { decodeRpcResult } from "../Rpc.ts";
-import type { DurableObjectNamespaceClient } from "../Worker/Engine.ts";
+
+/** A named Durable Object (actor) namespace client. */
+export interface DurableObjectNamespaceClient {
+  getByName: (name: string) => any;
+}
 
 /** The engine namespace actors are created in. */
 export const RIVET_ACTOR_NAMESPACE = "default";
@@ -116,11 +120,10 @@ const withHttpClient = <A, E>(
   effect: Effect.Effect<A, E, HttpClient.HttpClient>,
 ): Effect.Effect<A, E> =>
   Effect.serviceOption(HttpClient.HttpClient).pipe(
-    Effect.flatMap(
-      (ambient): Effect.Effect<A, E> =>
-        Option.isSome(ambient)
-          ? Effect.provideService(effect, HttpClient.HttpClient, ambient.value)
-          : Effect.provide(effect, FetchHttpClient.layer),
+    Effect.flatMap((ambient): Effect.Effect<A, E> =>
+      Option.isSome(ambient)
+        ? Effect.provideService(effect, HttpClient.HttpClient, ambient.value)
+        : Effect.provide(effect, FetchHttpClient.layer),
     ),
   );
 

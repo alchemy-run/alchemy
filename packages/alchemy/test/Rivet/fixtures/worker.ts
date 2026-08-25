@@ -1,9 +1,9 @@
-import * as Alchemy from "@/index.ts";
+import * as Rivet from "@/Rivet";
 
 /**
- * Tag-only portable Worker class — the deployment target arrives in the
- * deployable module's impl layer stack ([main.ts](./main.ts)). Keeping the
- * tag in its own module is what makes `counter.ts` (which binds its layer
- * to this worker) and `main.ts` (which provides that layer) acyclic.
+ * The Rivet worker tag — the deployment (props + impl) arrives in the
+ * deploy module ([main.ts](./main.ts)) via `.make`. Keeping the tag in
+ * its own module is what makes callers (which bind to this worker) and
+ * `main.ts` (which provides the impl) acyclic.
  */
-export class ActorWorker extends Alchemy.Worker<ActorWorker>()("ActorWorker") {}
+export class ActorWorker extends Rivet.Worker<ActorWorker>()("ActorWorker") {}

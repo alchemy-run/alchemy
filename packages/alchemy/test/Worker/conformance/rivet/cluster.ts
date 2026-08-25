@@ -1,4 +1,3 @@
-import * as Alchemy from "@/index.ts";
 import * as Rivet from "@/Rivet";
 
 /** The cluster: infrastructure only (the Rivet Engine via the registered host). */
@@ -7,10 +6,10 @@ export class ConformanceActors extends Rivet.Cluster<ConformanceActors>()(
 ) {}
 
 /**
- * The portable Worker tag. Kept in its own module so the shared counter
- * layer (which binds to it) and the deployable module (which provides the
- * Rivet target) stay acyclic.
+ * The Rivet worker tag. Kept in its own module so the deploy module
+ * ([worker.ts](./worker.ts)) and the Lambda caller ([api.ts](./api.ts))
+ * stay acyclic — the caller imports only this tag, never the impl.
  */
-export class ConformanceWorker extends Alchemy.Worker<ConformanceWorker>()(
+export class ConformanceWorker extends Rivet.Worker<ConformanceWorker>()(
   "ConformanceWorker",
 ) {}

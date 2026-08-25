@@ -31,9 +31,13 @@ export {
   RivetWorkerProvider,
   RivetWorkerResource,
   Worker,
+  bindWorker,
   type ClusterRef,
   type RivetWorker,
   type RivetWorkerAttributes,
+  type RivetWorkerBindingContract,
+  type RivetWorkerClass,
+  type RivetWorkerClient,
   type RivetWorkerProps,
   type RivetWorkerResourceProps,
 } from "./Worker.ts";
@@ -41,6 +45,7 @@ export {
   RivetGatewayError,
   RIVET_ACTOR_NAMESPACE,
   RIVET_RUNNER_POOL,
+  type DurableObjectNamespaceClient,
   type RivetGatewayConnection,
 } from "./Gateway.ts";
 // Runtime bridge surface — consumed by the GENERATED runner entry

@@ -2299,7 +2299,7 @@ export const isSelf = (value: unknown): value is Self =>
  * @product Workers
  * @category Workers & Compute
  */
-const NativeWorker: ResourceClassLike<Worker> &
+export const Worker: ResourceClassLike<Worker> &
   Effect.Effect<
     Worker & WorkerRuntimeContext & RuntimeContext,
     never,
@@ -2395,10 +2395,9 @@ const NativeWorker: ResourceClassLike<Worker> &
           >,
     ): Effect.Effect<
       Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          Assets
-        >]: NormalizedBindings<Bindings, Assets>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, Assets>
+        ]: NormalizedBindings<Bindings, Assets>[binding];
       }> &
         Rpc<{}>,
       never,
@@ -2444,115 +2443,3 @@ const NativeWorker: ResourceClassLike<Worker> &
   },
   { URL },
 );
-
-// ── The public `Cloudflare.Worker` ─────────────────────────────────────
-// The native resource/class factory above, plus the portable DEPLOY form
-// (`Cloudflare.Worker(cls, props, implOrDefinition)`) and its `.ref`
-// companion. The deploy form is constructed LAZILY at first call — the
-// documented TDZ cycles keep resolving at call time.
-import {
-  makeWorkerDeploy,
-  type WorkerDeployAdapter,
-} from "../../Worker/Deploy.ts";
-import type {
-  DeploymentService,
-  HostRef,
-  HostRefService,
-} from "../../Worker/Engine.ts";
-
-/**
- * The Cloudflare-specific deployment config the deploy form forwards to
- * the native platform. A strict subset of the native {@link WorkerProps} —
- * `env` and `exports` are contributed by the portable surface itself and
- * must not be set here.
- */
-export interface CloudflareWorkerTargetProps extends Pick<
-  WorkerProps,
-  | "name"
-  | "main"
-  | "compatibility"
-  | "workersDev"
-  | "domain"
-  | "routes"
-  | "assets"
-  | "build"
-  | "bundle"
-  | "rules"
-  | "observability"
-  | "cache"
-  | "limits"
-  | "placement"
-  | "tags"
-  | "logpush"
-  | "crons"
-  | "dev"
-> {}
-
-const crossCloudNotImplemented = () =>
-  new Error(
-    "cross-cloud calls to Cloudflare-hosted workers are not implemented yet",
-  );
-
-/**
- * The Cloudflare deploy adapter. The Durable Object hosting path needs no
- * per-engine members here — the hosting core's defaults ARE the
- * Cloudflare-native flavors (see `DurableObject.ts`). Remote
- * (cross-cloud) callers are not supported yet.
- */
-const deployAdapter: WorkerDeployAdapter<"cloudflare"> = {
-  kind: "cloudflare",
-  remoteDurableObject: () => {
-    throw crossCloudNotImplemented();
-  },
-  callerBinding: (): HostRefService["callerBinding"] => () =>
-    Effect.die(crossCloudNotImplemented()),
-  makeNative: (clsId, props: CloudflareWorkerTargetProps, impl) => {
-    const nativeCls = (NativeWorker as any)(clsId);
-    return {
-      layer: nativeCls.make(props as WorkerProps, impl),
-      instance: nativeCls.Self,
-    };
-  },
-};
-
-let deployForm: ReturnType<typeof makeWorkerDeploy<"cloudflare">> | undefined;
-const deploy = () => (deployForm ??= makeWorkerDeploy(deployAdapter));
-
-export const Worker: typeof NativeWorker & {
-  /** Deploy a worker definition (shared-module form). */
-  <Self, WOut, RIn>(
-    cls: Effect.Effect<WOut, never, any>,
-    props: CloudflareWorkerTargetProps,
-    layer: Layer.Layer<Self, never, RIn | HostRef>,
-  ): Layer.Layer<
-    Self | DeploymentService<WOut, "cloudflare">,
-    never,
-    Exclude<RIn, HostRef>
-  >;
-  /** Deploy an impl effect directly (single-module form). */
-  <WOut, Self, I extends Effect.Effect<any, any, any>>(
-    cls: Effect.Effect<WOut, never, any> & {
-      make: (impl: I) => Layer.Layer<Self, never, any>;
-    },
-    props: CloudflareWorkerTargetProps,
-    impl: I,
-  ): Layer.Layer<
-    Self | DeploymentService<WOut, "cloudflare">,
-    never,
-    Extract<Effect.Services<I>, DeploymentService<any, string>>
-  >;
-  readonly ref: <WOut>(
-    cls: Effect.Effect<WOut, never, any>,
-  ) => Layer.Layer<HostRef, never, DeploymentService<WOut, "cloudflare">>;
-} = Object.assign(
-  (...args: any[]) =>
-    // The portable deploy form leads with the tag; every native form
-    // leads with a string id (or takes none at all).
-    args.length === 3 && typeof args[0] !== "string"
-      ? deploy().deployWorker(args[0], args[1], args[2])
-      : (NativeWorker as any)(...args),
-  NativeWorker,
-  {
-    ref: (cls: Effect.Effect<any, never, any>) => deploy().workerRef(cls),
-  },
-) as any;

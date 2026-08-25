@@ -1,4 +1,6 @@
 import * as AWS from "@/AWS";
+import * as Celld from "@/Celld";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -6,16 +8,14 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as Celld from "@/Celld";
-import * as Layer from "effect/Layer";
-import { Counter, CounterLive } from "./counter.ts";
+import { type CounterShape } from "./counter.ts";
 import { CellsWorker } from "./worker.ts";
 
 /**
- * The Lambda caller: `yield* Counter` returns the same namespace handle the
- * fleet impl sees — here it resolves to the remote stub over the fleet
- * gateway (with the VPC attachment + connection env registered on the
- * Lambda through the binding channel).
+ * The Lambda caller: `Celld.bindWorker(CellsWorker)` registers the caller
+ * binding (VPC attachment + connection env) at plan and returns the
+ * schemaless stub at runtime — `durableObject("Counter")` addresses the
+ * fleet-hosted cells over the authenticated gateway.
  */
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
@@ -23,7 +23,8 @@ export default class Api extends AWS.Lambda.Function<Api>()(
   // restore + replicate-before-ack) — the 3s Lambda default is too tight.
   { main: import.meta.url, timeout: Duration.seconds(30) },
   Effect.gen(function* () {
-    const counters = yield* Counter;
+    const cells = yield* Celld.bindWorker(CellsWorker);
+    const counters = cells.durableObject<CounterShape>("Counter");
 
     return {
       fetch: Effect.gen(function* () {
@@ -64,34 +65,41 @@ export default class Api extends AWS.Lambda.Function<Api>()(
             return yield* HttpServerResponse.json({ values: [...values] });
           }
           case "worker": {
-            // The fleet's own worker route (`Celld.Worker` fetch) — user
-            // routes fall through the gateway unauthenticated.
-            const fleetUrl = process.env.ALCHEMY_WORKER_CellsWorker_URL;
-            const client = yield* HttpClient.HttpClient;
-            const response = yield* client
-              .get(`${fleetUrl}/hello`)
+            // The fleet's own worker route — user routes fall through the
+            // gateway unauthenticated; the stub's raw `fetch` grafts the
+            // path onto the fleet URL.
+            const response = yield* cells
+              .fetch(HttpClientRequest.get("http://alchemy-rpc/hello"))
               .pipe(Effect.orDie);
             const body = yield* response.text.pipe(Effect.orDie);
-            return HttpServerResponse.text(body, {
-              status: response.status,
-            });
+            return HttpServerResponse.text(body, { status: response.status });
           }
           case "probe": {
             // Raw gateway call — bypasses the stub's decode so tests can
             // observe the exact status/body the fleet returns.
             const method = url.searchParams.get("m") ?? "increment";
-            const fleetUrl = process.env.ALCHEMY_WORKER_CellsWorker_URL;
-            const secretRaw = process.env.ALCHEMY_WORKER_CellsWorker_SECRET;
-            const secret = (() => {
-              try {
-                const parsed = JSON.parse(secretRaw ?? "");
-                return typeof parsed === "object" && parsed?._tag === "Redacted"
-                  ? String(parsed.value)
-                  : String(secretRaw);
-              } catch {
-                return String(secretRaw);
-              }
-            })();
+            const fleetUrl = yield* Config.string(
+              "ALCHEMY_WORKER_CellsWorker_URL",
+            ).pipe(Effect.orDie);
+            const secret = yield* Config.string(
+              "ALCHEMY_WORKER_CellsWorker_SECRET",
+            ).pipe(
+              Effect.orDie,
+              Effect.map((raw) => {
+                try {
+                  const parsed = JSON.parse(raw) as {
+                    _tag?: string;
+                    value?: unknown;
+                  };
+                  return typeof parsed === "object" &&
+                    parsed?._tag === "Redacted"
+                    ? String(parsed.value)
+                    : raw;
+                } catch {
+                  return raw;
+                }
+              }),
+            );
             const client = yield* HttpClient.HttpClient;
             const response = yield* client
               .execute(
@@ -115,12 +123,5 @@ export default class Api extends AWS.Lambda.Function<Api>()(
         }
       }),
     };
-  }).pipe(
-    // The ref supplies the host: it proves (at the stack) the worker is
-    // deployed to celld, registers the caller binding, and carries the
-    // remote transport. This Lambda deploys nothing.
-    Effect.provide(
-      CounterLive.pipe(Layer.provide(Celld.Worker.ref(CellsWorker))),
-    ),
-  ),
+  }),
 ) {}

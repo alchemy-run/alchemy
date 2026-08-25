@@ -323,18 +323,6 @@ export const EcsClusterHost = (): Layer.Layer<ClusterHost<"aws-ecs">> =>
 
         compose: composeEcsCluster,
 
-        callerBinding: ({ target }) =>
-          Effect.succeed({
-            vpc: {
-              subnetIds: target.hostState.pipe(
-                Output.map((state: any) => state?.subnetIds ?? []),
-              ),
-              securityGroupIds: target.hostState.pipe(
-                Output.map((state: any) => state?.securityGroupIds ?? []),
-              ),
-            },
-          }),
-
         restartNodes: ({ news }) =>
           Effect.gen(function* () {
             const state = news.hostState as

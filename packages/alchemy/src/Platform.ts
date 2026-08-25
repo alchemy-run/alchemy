@@ -1,6 +1,5 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
-import type { DeploymentService, HostRef } from "./Worker/Engine.ts";
 import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -197,12 +196,7 @@ export interface Platform<
       const Id extends string,
       Shape extends MainShape,
       PropsReq = never,
-      InitReq extends
-        | Services
-        | PlatformServices
-        | Resource
-        | HostRef
-        | DeploymentService<any, string> = never,
+      InitReq extends Services | PlatformServices | Resource = never,
     >(
       id: Id,
       props:
@@ -232,12 +226,7 @@ export interface Platform<
       Named<Id> & {
         make<
           PropsReq = never,
-          InitReq extends
-            | Services
-            | PlatformServices
-            | Resource
-            | HostRef
-            | DeploymentService<any, string> = never,
+          InitReq extends Services | PlatformServices | Resource = never,
         >(
           props:
             | InputProps<InlineProps>

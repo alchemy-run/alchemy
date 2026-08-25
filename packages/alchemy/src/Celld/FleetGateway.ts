@@ -3,22 +3,26 @@
  *
  * A fleet's cells are addressed from outside the fleet (Lambda Functions,
  * ECS tasks, …) over plain HTTP — celld nodes serve the deployed Worker's
- * `fetch` handler, and this gateway is wrapped around it (see
- * `FleetRuntimeContext.ts`) so every fleet exposes the same routes:
+ * `fetch` handler, and this gateway is wrapped around it (see the Celld
+ * worker's runtime context) so every fleet exposes the same routes:
  *
  * - `POST /{doLogicalId}/{instanceName}/__rpc__/{method}` — invoke an RPC
  *   method on the named instance (the {@link serveRpc} wire protocol:
  *   JSON args in, JSON value / error envelope / NDJSON stream out).
  * - `ANY /{doLogicalId}/{instanceName}/{...path}` — forward the request to
  *   the instance's `fetch` handler.
+ * - `POST /__rpc__/{method}` — invoke an RPC method on the worker's own
+ *   impl shape (the schemaless surface `Celld.bindWorker` stubs call).
  * - `GET /__alchemy__/deployment` — readiness probe returning the deployment
  *   id baked into the fleet's vars, so callers can wait for a *specific*
  *   deployment to be live on the node they reached.
  *
- * Every gateway route requires the fleet secret in the
- * {@link FLEET_SECRET_HEADER} header (constant-time compared). Requests that
- * match no Durable Object binding fall through to the user's own `fetch`
- * handler unauthenticated — that surface belongs to the user.
+ * **Auth guard**: any request whose path contains {@link RPC_PATH_PREFIX}
+ * requires the fleet secret in the {@link FLEET_SECRET_HEADER} header
+ * (constant-time compared); a missing and a wrong secret answer with an
+ * identical 401. Every other path — the user's own `fetch` surface, plain
+ * HTTP forwarding to an instance, the readiness probe — passes through
+ * unauthenticated; that surface belongs to the user.
  *
  * This module is bundled into the fleet Worker: keep it free of node-only
  * APIs (celld implements the workers runtime, not node).
@@ -29,6 +33,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerRequests from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { HttpEffect } from "../Http.ts";
+import { RPC_PATH_PREFIX, serveRpc } from "../Rpc.ts";
 import { makeRpcStub } from "../Cloudflare/Workers/Rpc.ts";
 import { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
 
@@ -38,7 +43,7 @@ export const FLEET_SECRET_VAR = "ALCHEMY_FLEET_SECRET";
 export const FLEET_SECRET_HEADER = "x-alchemy-fleet-secret";
 /** The wrangler `vars` key carrying the deployment id (the code hash). */
 export const FLEET_DEPLOYMENT_VAR = "ALCHEMY_FLEET_DEPLOYMENT";
-/** The authenticated readiness-probe route. */
+/** The readiness-probe route. */
 export const FLEET_DEPLOYMENT_PATH = "/__alchemy__/deployment";
 
 /**
@@ -60,14 +65,24 @@ export const timingSafeStringEqual = (a: string, b: string): boolean => {
 };
 
 const notFound = HttpServerResponse.text("Not Found", { status: 404 });
+// ONE unauthorized response for every failure mode (missing header, wrong
+// secret) — identical status and body, so a prober learns nothing about
+// which check failed.
 const unauthorized = HttpServerResponse.text("Unauthorized", { status: 401 });
 
 /**
  * Wrap the fleet's (optional) user `fetch` handler with the gateway routes.
- * See the module doc for the route table.
+ * See the module doc for the route table and the auth-guard rule.
  */
 export const makeGatewayFetch = (
   userFetch?: HttpEffect<any> | Effect.Effect<HttpEffect<any>, any, any>,
+  options?: {
+    /**
+     * The worker impl's full shape — its non-handler methods are served as
+     * worker-level RPC methods under `POST /__rpc__/{method}`.
+     */
+    readonly shape?: Record<string, unknown>;
+  },
 ): HttpEffect<any> =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest;
@@ -78,32 +93,36 @@ export const makeGatewayFetch = (
       Effect.map(Option.getOrUndefined),
     );
 
-    const delegate = () =>
-      userFetch === undefined
-        ? Effect.succeed(notFound)
-        : // `userFetch` may be the `HttpEffect` itself or an Effect resolving
-          // to one (the `Main.fetch` shape) — same normalization as
-          // `safeHttpEffect`.
-          (userFetch as Effect.Effect<any, any, any>).pipe(
-            Effect.flatMap((response) =>
-              HttpServerResponse.isHttpServerResponse(response)
-                ? Effect.succeed(response)
-                : (response as HttpEffect<any>),
-            ),
-          );
+    const delegate: HttpEffect<any> = Effect.gen(function* () {
+      if (userFetch === undefined) {
+        return notFound;
+      }
+      // `userFetch` may be the `HttpEffect` itself or an Effect resolving
+      // to one (the `Main.fetch` shape) — same normalization as
+      // `safeHttpEffect`.
+      const response = yield* userFetch as Effect.Effect<any, any, any>;
+      return HttpServerResponse.isHttpServerResponse(response)
+        ? response
+        : yield* response as HttpEffect<any>;
+    }) as HttpEffect<any>;
 
-    const authorized = () => {
+    // The auth guard covers exactly the RPC surface: any path containing
+    // the RPC prefix (worker-level `/__rpc__/{m}` and Durable Object
+    // `/{ns}/{name}/__rpc__/{m}` alike). Everything else falls through to
+    // the user's public surface untouched.
+    if (url.pathname.includes(RPC_PATH_PREFIX)) {
       const secret = env?.[FLEET_SECRET_VAR];
       const provided = request.headers[FLEET_SECRET_HEADER];
-      return (
-        typeof secret === "string" &&
-        typeof provided === "string" &&
-        timingSafeStringEqual(secret, provided)
-      );
-    };
+      if (
+        typeof secret !== "string" ||
+        typeof provided !== "string" ||
+        !timingSafeStringEqual(secret, provided)
+      ) {
+        return unauthorized;
+      }
+    }
 
     if (url.pathname === FLEET_DEPLOYMENT_PATH) {
-      if (!authorized()) return unauthorized;
       return yield* HttpServerResponse.json({
         deploymentId: env?.[FLEET_DEPLOYMENT_VAR],
       });
@@ -111,12 +130,11 @@ export const makeGatewayFetch = (
 
     // `/{doLogicalId}/{instanceName}/...` — route to a Durable Object
     // namespace when (and only when) the first segment names one; anything
-    // else belongs to the user's fetch handler.
+    // else belongs to the worker's own surface.
     const segments = url.pathname.split("/").filter((s) => s.length > 0);
     if (segments.length >= 2) {
       const namespace = env?.[decodeURIComponent(segments[0])];
       if (namespace && typeof namespace.getByName === "function") {
-        if (!authorized()) return unauthorized;
         const instanceName = decodeURIComponent(segments[1]);
         const stub = makeRpcStub<Record<string, unknown>>(
           namespace.getByName(instanceName),
@@ -139,5 +157,8 @@ export const makeGatewayFetch = (
       }
     }
 
-    return yield* delegate();
+    // Worker-level RPC (`/__rpc__/{method}` with no Durable Object
+    // segment): dispatch to the impl shape's methods; every other path
+    // delegates to the user's fetch handler.
+    return yield* serveRpc(options?.shape ?? {}, delegate);
   }) as HttpEffect<any>;
