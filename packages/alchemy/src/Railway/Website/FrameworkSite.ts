@@ -679,6 +679,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
     });
   }
 
+  yield* applyProcessEnv(props.env);
   const framework = yield* makeFramework(config, root);
   const built = yield* Effect.mapError(
     framework.build({ root }),

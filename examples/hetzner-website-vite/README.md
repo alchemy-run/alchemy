@@ -1,33 +1,20 @@
-# Hetzner Website: Vite
+# Hetzner Website: Vite + Notes API
 
-Deploys a [Vite](https://vite.dev) SPA to Hetzner Cloud with
-`Hetzner.Website.Vite` — `vite build` output served by a generated Node
-static-file server as a systemd unit on an auto-created `cpx12` Server in
-`fsn1`.
+A Tailwind React SPA (`Hetzner.Website.Vite`) that reads and writes notes
+through an Effect `Hetzner.Service`. Hetzner has no managed Postgres, so
+the API stores rows in a [Neon](https://neon.tech) branch.
 
-During `alchemy dev` the site is Vite's own dev server (HMR included)
-and no Server or Service is created.
-
-The integration package must be installed in the project (it is loaded
-dynamically at deploy time):
-
-```sh
-bun add -d @alchemy.run/frontend-frameworks
-```
-
-## Deploy
+- `alchemy deploy` builds the SPA (inlining `VITE_API_URL`) onto a `cpx12`
+  in `fsn1` and deploys the API unit on the same Server.
+- `alchemy dev` is Vite's own server (HMR included).
 
 ```sh
 export HCLOUD_TOKEN=...
 bun run deploy
 ```
 
-Unchanged sources skip the Vite build entirely on subsequent deploys —
-the input files are content-hashed (scoped by `memo.include`).
-
-The site URL is `http://{ipv4}:3000` (no TLS on Service).
-
-## Destroy
+The SPA is at `http://{ipv4}:3000`. The API is at `http://{ipv4}:3001`
+(`GET`/`POST /notes`).
 
 ```sh
 bun run destroy

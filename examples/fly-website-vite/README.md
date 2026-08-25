@@ -1,30 +1,19 @@
-# Fly Vite Example
+# Fly Website: Vite + Notes API
 
-Deploys a [Vite](https://vite.dev) SPA to Fly with `Fly.Website.Vite` — no
-Dockerfile, `fly.toml`, or adapter setup.
+A Tailwind React SPA (`Fly.Website.Vite`) that reads and writes notes
+through an Effect `Fly.Service`, persisted on `Fly.Postgres`.
 
-- `alchemy deploy` runs `vite build` and serves the output from a Fly
-  Machine at `https://{app}.fly.dev`.
-- `alchemy dev` starts Vite's own dev server (HMR included). No Fly App
-  or Service is created; `site.url` is the local address.
-
-The integration package must be installed in the project (it is loaded
-dynamically at deploy time):
-
-```sh
-bun add -d @alchemy.run/frontend-frameworks
-```
-
-## Deploy
+- `alchemy deploy` builds the SPA (inlining `VITE_API_URL`) and deploys
+  the API Machine + managed Postgres + the static site.
+- `alchemy dev` is Vite's own server (HMR included). The API Service
+  still deploys (Postgres is live-only).
 
 ```sh
 bun run deploy
 ```
 
-Unchanged sources skip the Vite build entirely on subsequent deploys —
-the input files are content-hashed (scoped by `memo.include`).
-
-## Destroy
+The SPA is at `https://{web-app}.fly.dev`. The API is at
+`https://{api-app}.fly.dev` (`GET`/`POST /notes`).
 
 ```sh
 bun run destroy

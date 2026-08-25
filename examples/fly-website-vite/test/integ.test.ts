@@ -5,6 +5,8 @@ import { expect } from "bun:test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 const { getWhenReady } = Test;
@@ -41,34 +43,70 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
+const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 120_000,
+  timeout: 180_000,
 });
 
-const base = Effect.map(stack, ({ url }) => {
-  if (!url) throw new Error("expected the site to expose a fly.dev url");
-  return String(url).replace(/\/+$/, "");
-});
+const executeOk = (request: HttpClientRequest.HttpClientRequest) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.execute(request).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200 || res.status === 201
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`HTTP ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.spaced("2 seconds"),
+        times: 45,
+      }),
+    );
+  });
 
 test(
-  "deploys and exposes a fly.dev url",
+  "deploys the SPA and the API",
   Effect.gen(function* () {
-    const { url, appName } = yield* stack;
+    const { url, apiUrl } = yield* stack;
     expect(url).toBeString();
     expect(url).toMatch(/^https:\/\/.+\.fly\.dev$/);
-    expect(appName).toBeString();
+    expect(apiUrl).toBeString();
+    expect(apiUrl).toMatch(/^https:\/\/.+\.fly\.dev$/);
   }),
   { timeout: 120_000 },
 );
 
 test(
-  "serves the built Vite SPA",
+  "SPA renders the Notes heading",
   Effect.gen(function* () {
-    const url = yield* base;
-    const html = yield* getBodyWhenReady(url, "Fly.Website.Vite");
-    expect(html).toContain("alchemy + vite");
+    const { url } = yield* stack;
+    if (!url) throw new Error("expected the site to expose a fly.dev url");
+    const html = yield* getBodyWhenReady(
+      String(url).replace(/\/+$/, ""),
+      "Notes — Fly",
+    );
+    expect(html).toContain("Notes — Fly");
   }),
   { timeout: 120_000 },
+);
+
+test(
+  "API persists a note in Postgres",
+  Effect.gen(function* () {
+    const { apiUrl } = yield* stack;
+    if (!apiUrl) throw new Error("expected the API url");
+    const base = String(apiUrl).replace(/\/+$/, "");
+    const marker = `fly-note-${crypto.randomUUID()}`;
+    const created = yield* executeOk(
+      HttpClientRequest.post(`${base}/notes`).pipe(
+        HttpClientRequest.bodyJsonUnsafe({ body: marker }),
+      ),
+    );
+    expect(created.status).toBe(201);
+    const listed = yield* executeOk(HttpClientRequest.get(`${base}/notes`));
+    const payload = (yield* listed.json) as { notes: Array<{ body: string }> };
+    expect(payload.notes.some((note) => note.body === marker)).toBe(true);
+  }),
+  { timeout: 180_000 },
 );

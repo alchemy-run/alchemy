@@ -1,6 +1,8 @@
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+import { Db, PublicIp, Site } from "./src/shared.ts";
 
 export default Alchemy.Stack(
   "FlyWebsiteViteExample",
@@ -9,18 +11,27 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    // `alchemy deploy` runs `vite build` and serves the output from a Fly
-    // Machine; `alchemy dev` runs Vite's own dev server (HMR included) and
-    // the site's url is the local server — no Fly App or Service is created.
-    const site = yield* Fly.Website.Vite("Web", {
+    const site = yield* Site;
+    const ip = yield* PublicIp;
+    const db = yield* Db;
+    const api = yield* Api;
+    const apiUrl = (yield* yield* api.url) ?? "";
+    const web = yield* Fly.Website.Vite("Web", {
+      env: {
+        VITE_API_URL: apiUrl,
+      },
       memo: {
         include: ["index.html", "src/**", "package.json", "vite.config.ts"],
       },
     });
 
     return {
-      url: site.url,
-      appName: site.app?.appName,
+      url: web.url,
+      apiUrl: api.url,
+      appName: web.app?.appName,
+      apiAppName: site.appName,
+      ip: ip.ip,
+      clusterId: db.clusterId,
     };
   }),
 );

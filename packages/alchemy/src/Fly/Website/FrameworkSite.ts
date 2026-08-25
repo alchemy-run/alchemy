@@ -574,6 +574,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     } satisfies FrameworkSite;
   }
 
+  yield* applyProcessEnv(props.env);
   const framework = yield* makeFramework(config, root, props.memo);
   const built = yield* Effect.mapError(
     framework.build({ root }),

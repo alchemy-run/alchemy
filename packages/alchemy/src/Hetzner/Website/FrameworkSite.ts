@@ -655,6 +655,7 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     };
   }
 
+  yield* applyProcessEnv(props.env);
   const built = yield* Effect.mapError(
     framework.build({ root }),
     (cause) =>

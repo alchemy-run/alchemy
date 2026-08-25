@@ -3,6 +3,8 @@ import * as Railway from "alchemy/Railway";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import Api from "./src/api.ts";
+import { Db, Site } from "./src/shared.ts";
 
 const RAILWAY_REGISTRY = Config.string("RAILWAY_REGISTRY").pipe(
   Config.option,
@@ -23,14 +25,17 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const registry = yield* RAILWAY_REGISTRY;
     const domain = yield* RAILWAY_TEST_DOMAIN;
-
-    // `alchemy deploy` runs `vite build` and serves `dist/` from one
-    // Railway.Service. `alchemy dev` is Vite's own dev server (HMR
-    // included) and creates no cloud resources. `registry` is required
-    // on the live path (GHCR / Docker Hub prefix Railway can pull).
-    const site = yield* Railway.Website.Vite("Web", {
+    const project = yield* Site;
+    const db = yield* Db;
+    const api = yield* Api;
+    const apiUrl = (yield* yield* api.url) ?? "";
+    const web = yield* Railway.Website.Vite("Web", {
+      project,
       registry,
       domain,
+      env: {
+        VITE_API_URL: apiUrl,
+      },
       memo: {
         include: [
           "index.html",
@@ -43,8 +48,10 @@ export default Alchemy.Stack(
     });
 
     return {
-      url: site.url,
-      serviceId: site.service?.serviceId,
+      url: web.url,
+      apiUrl: api.url,
+      serviceId: web.service?.serviceId,
+      postgresId: db.serviceId,
     };
   }),
 );

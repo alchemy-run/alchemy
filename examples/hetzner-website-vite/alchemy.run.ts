@@ -1,28 +1,40 @@
 import * as Alchemy from "alchemy";
 import * as Hetzner from "alchemy/Hetzner";
+import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/api.ts";
+import { Box, NeonBranch, NeonProject } from "./src/shared.ts";
 
 export default Alchemy.Stack(
   "HetznerWebsiteViteExample",
   {
-    providers: Hetzner.providers(),
+    providers: Layer.mergeAll(Hetzner.providers(), Neon.providers()),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    // `alchemy deploy` runs `vite build` and serves `dist/` from a
-    // Hetzner.Service on an auto-created cpx12 in fsn1.
-    // `alchemy dev` is Vite's own dev server (HMR included) and creates
-    // no Server or Service.
-    const site = yield* Hetzner.Website.Vite("Web", {
+    const server = yield* Box;
+    const project = yield* NeonProject;
+    const branch = yield* NeonBranch;
+    const api = yield* Api;
+    const apiUrl = (yield* yield* api.url) ?? "";
+    const web = yield* Hetzner.Website.Vite("Web", {
+      server,
+      env: {
+        VITE_API_URL: apiUrl,
+      },
       memo: {
         include: ["index.html", "src/**", "package.json", "vite.config.ts"],
       },
     });
 
     return {
-      url: site.url,
-      serverId: site.server?.serverId,
-      ipv4: site.server?.ipv4,
+      url: web.url,
+      apiUrl: api.url,
+      serverId: server.serverId,
+      ipv4: server.ipv4,
+      neonProjectId: project.projectId,
+      neonBranchId: branch.branchId,
     };
   }),
 );

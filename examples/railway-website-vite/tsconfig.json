@@ -3,6 +3,7 @@
   "include": [
     "alchemy.run.ts",
     "src/**/*.ts",
+    "src/**/*.tsx",
     "vite.config.ts",
     "test/**/*.ts"
   ],
@@ -11,7 +12,9 @@
     "rootDir": ".",
     "module": "Preserve",
     "moduleResolution": "Bundler",
-    "target": "ESNext"
+    "target": "ESNext",
+    "jsx": "react-jsx",
+    "types": ["bun", "vite/client"]
   },
   "references": [
     {
