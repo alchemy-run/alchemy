@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { getAuthProvider } from "../Auth/AuthProvider.ts";
 import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
@@ -43,30 +44,25 @@ export class InvalidAWSServiceEndpoints extends Data.TaggedError(
   "AWS::Environment::InvalidServiceEndpoints",
 )<{ readonly message: string }> {}
 
+const ServiceEndpoints = Schema.Record(
+  Schema.NonEmptyString,
+  Schema.NonEmptyString,
+);
+
+const ServiceEndpointsInput = Schema.Union([
+  Schema.fromJsonString(ServiceEndpoints),
+  ServiceEndpoints,
+]);
+
 const decodeServiceEndpoints = (raw: unknown) =>
-  Effect.try({
-    try: () => {
-      const value: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
-      if (
-        typeof value !== "object" ||
-        value === null ||
-        Array.isArray(value) ||
-        Object.entries(value).some(
-          ([service, endpoint]) =>
-            service.length === 0 ||
-            typeof endpoint !== "string" ||
-            endpoint.length === 0,
-        )
-      ) {
-        throw new TypeError("expected a non-empty string endpoint record");
-      }
-      return value as Readonly<Record<string, string>>;
-    },
-    catch: () =>
-      new InvalidAWSServiceEndpoints({
-        message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
-      }),
-  });
+  Schema.decodeUnknownEffect(ServiceEndpointsInput)(raw).pipe(
+    Effect.mapError(
+      () =>
+        new InvalidAWSServiceEndpoints({
+          message: `${AWS_SERVICE_ENDPOINTS_ENV_VAR} must contain a JSON object of non-empty service endpoints`,
+        }),
+    ),
+  );
 
 /** Service-specific AWS endpoints visible inside an application runtime. */
 export const AWS_SERVICE_ENDPOINTS = ConfigProvider.ConfigProvider.pipe(
