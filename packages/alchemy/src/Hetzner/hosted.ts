@@ -2,6 +2,8 @@ import { Services } from "@distilled.cloud/hetzner";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
@@ -11,7 +13,10 @@ import {
   createHostRuntimeContext,
   type HostRuntimeContext,
 } from "../Server/Process.ts";
-import { zipCode } from "../Util/zip.ts";
+import { hashDirectory } from "../Command/Memo.ts";
+import { initialCwd } from "../Util/Node.ts";
+import { sha256Object } from "../Util/sha256.ts";
+import { zipCode, type ZipFile } from "../Util/zip.ts";
 import { waitForAction } from "./actions.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 import { openSshClient, type SshClient } from "./Ssh.ts";
@@ -34,7 +39,29 @@ export interface HostedProgramProps {
   env?: Record<string, any>;
   isExternal?: boolean;
   build?: Bundle.BundleConfig;
+  /**
+   * Extra host directories packed into the unit archive (framework
+   * client assets, Next.js `.next`, …). Hashed into `code.hash` so
+   * asset changes update the unit. Destination is relative to the
+   * unit root.
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
 }
+
+export interface ExtraFile {
+  readonly source: string;
+  readonly destination: string;
+}
+
+/** Normalize a zip destination so it cannot escape the unit root. */
+export const extraFileDestination = (destination: string): string => {
+  const parts = destination
+    .replaceAll("\\", "/")
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter((part) => part.length > 0 && part !== "." && part !== "..");
+  return parts.length === 0 ? "dist" : parts.join("/");
+};
 
 const quoteEnvValue = (value: unknown) => {
   const text =
@@ -70,6 +97,83 @@ export const collectBindingState = (
   }
   return { env, volumes };
 };
+
+const skipExtraPath = (relative: string) =>
+  relative
+    .replaceAll("\\", "/")
+    .split("/")
+    .some(
+      (segment) =>
+        segment === "node_modules" ||
+        segment === ".git" ||
+        segment.startsWith(".alchemy-hetzner"),
+    );
+
+const resolveExtraSource = (
+  source: string,
+  path: {
+    readonly isAbsolute: (value: string) => boolean;
+    readonly resolve: (...segments: string[]) => string;
+  },
+) => (path.isAbsolute(source) ? source : path.resolve(initialCwd, source));
+
+const hashExtraFiles = Effect.fn(function* (
+  extraFiles: ReadonlyArray<ExtraFile> | undefined,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const hashes: Record<string, string> = {};
+  for (const extra of extraFiles ?? []) {
+    const dest = extraFileDestination(extra.destination);
+    const source = resolveExtraSource(extra.source, path);
+    const exists = yield* fs
+      .exists(source)
+      .pipe(Effect.orElseSucceed(() => false));
+    hashes[dest] = exists
+      ? yield* hashDirectory({
+          cwd: source,
+          memo: { exclude: [], lockfile: false },
+        }).pipe(Effect.orElseSucceed(() => ""))
+      : "";
+  }
+  return hashes;
+});
+
+const collectExtraFiles = Effect.fn(function* (
+  extraFiles: ReadonlyArray<ExtraFile> | undefined,
+) {
+  if (extraFiles === undefined || extraFiles.length === 0) {
+    return [] as ZipFile[];
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const files: ZipFile[] = [];
+  for (const extra of extraFiles) {
+    const dest = extraFileDestination(extra.destination);
+    const source = resolveExtraSource(extra.source, path);
+    if (!(yield* fs.exists(source))) continue;
+    const rootStat = yield* fs.stat(source);
+    if (rootStat.type === "File") {
+      files.push({
+        path: dest,
+        content: yield* fs.readFile(source),
+      });
+      continue;
+    }
+    const names = yield* fs.readDirectory(source, { recursive: true });
+    for (const name of names) {
+      if (skipExtraPath(name)) continue;
+      const full = path.join(source, name);
+      const stat = yield* fs.stat(full);
+      if (stat.type !== "File") continue;
+      files.push({
+        path: `${dest}/${name.replaceAll("\\", "/")}`.replaceAll(/\/+/g, "/"),
+        content: yield* fs.readFile(full),
+      });
+    }
+  }
+  return files;
+});
 
 /**
  * The generated entry for `Hetzner.Service` units: a shim importing only
@@ -153,14 +257,22 @@ export const createHetznerHostedSupport = ({
     const toBytes = (content: string | Uint8Array<ArrayBufferLike>) =>
       typeof content === "string" ? new TextEncoder().encode(content) : content;
     const [entryFile, ...chunkFiles] = bundleOutput.files;
-    const archive = yield* zipCode(
-      toBytes(entryFile.content),
-      chunkFiles.map((file) => ({
+    const extraFiles = yield* collectExtraFiles(props.extraFiles);
+    const archive = yield* zipCode(toBytes(entryFile.content), [
+      ...chunkFiles.map((file) => ({
         path: file.path,
         content: toBytes(file.content),
       })),
-    );
-    return { archive, hash: bundleOutput.hash };
+      ...extraFiles,
+    ]);
+    // Extra files are not part of the rolldown bundle hash. Mix their
+    // content hashes so a client-asset-only change still updates the unit.
+    const extraHash = yield* hashExtraFiles(props.extraFiles);
+    const hash =
+      extraFiles.length === 0
+        ? bundleOutput.hash
+        : yield* sha256Object({ bundle: bundleOutput.hash, extra: extraHash });
+    return { archive, hash };
   });
 
   const renderUnit = (unitName: string, appDir: string) => `[Unit]

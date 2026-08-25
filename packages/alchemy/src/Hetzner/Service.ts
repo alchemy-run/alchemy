@@ -61,6 +61,16 @@ export interface ServiceProps extends PlatformProps {
    * plus pure-annotation options (`pure`).
    */
   build?: Bundle.BundleConfig;
+  /**
+   * Extra host directories packed into the unit archive next to the
+   * bundled entry (e.g. a website `clientDirectory` at `dist/`). Hashed
+   * into `code.hash` so asset changes update the unit. Destination is
+   * relative to the unit root (`/opt/<unit>/`).
+   */
+  extraFiles?: ReadonlyArray<{
+    source: string;
+    destination: string;
+  }>;
 }
 
 export type Service = Resource<

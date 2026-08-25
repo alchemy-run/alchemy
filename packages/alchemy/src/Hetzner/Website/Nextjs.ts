@@ -1,0 +1,52 @@
+import * as Namespace from "../../Namespace.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+
+/**
+ * The framework-integration module that drives `next build` plus a Node
+ * `next({ dev: false })` serve entry. This module IS the Node pipeline
+ * (not OpenNext).
+ */
+export const NEXTJS_NODE_FRAMEWORK_SPECIFIER =
+  "@alchemy.run/frontend-frameworks/nextjs/node";
+
+export interface NextjsProps extends FrameworkSiteProps {}
+
+/**
+ * Deploy a Next.js application to a Hetzner Cloud Server: `next build`
+ * then a long-running `next({ dev: false })` systemd unit on port 3000.
+ * Does **not** use OpenNext (those wrappers are Lambda/workerd).
+ *
+ * The `.next` output (and `public/` when present) is packed into the
+ * unit archive. Hetzner has no `build.install` — `next` is bundled into
+ * the serve entry.
+ *
+ * During `alchemy dev` the site is `next dev` and no cloud resources
+ * are declared; `Alchemy.remote()` opts back into the live Service.
+ *
+ * @resource
+ * @product Website
+ *
+ * @section Creating Next.js Sites
+ * @example Basic Next.js App
+ * ```typescript
+ * const site = yield* Hetzner.Website.Nextjs("Web", {
+ *   rootDir: "./app",
+ * });
+ * ```
+ *
+ * @example Custom Domain
+ * ```typescript
+ * const site = yield* Hetzner.Website.Nextjs("Web", {
+ *   rootDir: "./app",
+ *   domain: "app.example.com",
+ *   zone,
+ * });
+ * ```
+ */
+export const Nextjs = (id: string, props: NextjsProps = {}) =>
+  makeFrameworkSite(id, props, {
+    name: "Nextjs",
+    framework: NEXTJS_NODE_FRAMEWORK_SPECIFIER,
+    target: NEXTJS_NODE_FRAMEWORK_SPECIFIER,
+    skipClientAssets: true,
+  }).pipe(Namespace.push(id));
