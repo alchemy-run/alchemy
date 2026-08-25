@@ -127,6 +127,26 @@ test.provider.skipIf(!dockerAvailable)(
       expect(described.instanceId).toBe(outputs.instanceId);
       expect(described.state).toBe("running");
 
+      // Reboot resilience: the provider's in-place update path ends in
+      // RebootInstances, and floci's guest services must come back after
+      // the container restart (the systemd shim's processes die with the
+      // container; the emulator re-runs the boot sequence). Without this
+      // the box goes dark after every hosted-program update.
+      yield* ec2
+        .rebootInstances({ InstanceIds: [outputs.instanceId] })
+        .pipe(Effect.provide(flociContext));
+      const backAfterReboot = yield* HttpClient.get(`${base}/marker`).pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.map((text) => text.includes(MARKER)),
+        Effect.catch(() => Effect.succeed(false)),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (ok): boolean => ok,
+          times: 60,
+        }),
+      );
+      expect(backAfterReboot).toBe(true);
+
       const status = yield* HttpClient.get(`${outputs.functionUrl}status`).pipe(
         Effect.flatMap((res) =>
           res.status === 200
