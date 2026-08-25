@@ -182,10 +182,13 @@ export interface EmailSubscribeProps {
  *
  * Requires `EmailEventSourceLive` provided on the Worker's Effect.
  *
- * **Failure & retry semantics**: a failing handler won't crash the
- * Worker — the event source catches the failure and moves on. Express
- * retry declaratively with `Effect.retry` inside the handler, and log
- * or report errors if you need visibility into failed deliveries.
+ * **Failure semantics**: a failing handler is logged and the failure is
+ * re-raised. Cloudflare turns that into a temporary SMTP failure, so the
+ * sending server keeps the message and retries later — mail is never
+ * accepted and then silently dropped. Handle the failures you consider
+ * final inside the handler (`Effect.retry`, `Effect.catchTag`, or
+ * `message.setReject(...)` to bounce permanently); anything you let
+ * escape becomes a retryable delivery failure.
  * @binding
  * @product Workers
  * @category Workers & Compute
@@ -318,18 +321,25 @@ export const EmailEventSourceLive = Layer.effect(
         if (!isWorkerEvent(event) || event.type !== "email") return;
 
         const message = wrap(event.input as cf.ForwardableEmailMessage);
+        // Log, then let the failure propagate. Cloudflare turns an
+        // exception out of the `email` handler into a temporary SMTP
+        // failure, so the sending server keeps the message and retries.
+        // Swallowing it here would instead ACCEPT the envelope and then
+        // drop it: a transient dependency outage would silently destroy
+        // mail with nothing left to retry from.
         return process(message).pipe(
-          Effect.onError((cause) =>
+          Effect.tapCause((cause) =>
             Effect.sync(() => {
-              // Surface the failure so the operator sees why a message
-              // was dropped; without this the handler fails silently.
               console.error(
                 `[EmailEventSource] handler failed for message to ` +
                   `"${message.to}": ${Cause.pretty(cause)}`,
               );
             }),
           ),
-          Effect.catchCause(() => Effect.void),
+          // The listener contract is `E = never`, so surface the failure as
+          // a defect rather than discarding it: the invocation fails, which
+          // is what Cloudflare turns into the temporary SMTP failure.
+          Effect.orDie,
         );
       });
     }) as EmailEventSourceService;
