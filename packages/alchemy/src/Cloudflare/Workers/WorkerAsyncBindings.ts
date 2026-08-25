@@ -328,7 +328,13 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
-    containers: [{ className, dev: application.dev }],
+    containers: [
+      {
+        className,
+        dev: application.dev,
+        hash: application.hash.pipe(Output.map((h) => h?.image)),
+      },
+    ],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {

@@ -15,7 +15,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import type * as FileSystem from "effect/FileSystem";
+import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -29,6 +31,7 @@ import type * as Bundle from "../../Bundle/Bundle.ts";
 import * as LocalProvider from "../../Dev/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
+import { sha256 } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
@@ -327,6 +330,12 @@ export const LocalWorkerProvider = () =>
         // opt-out restarts the instance.
         const devRemote: Record<string, boolean> = {};
         const containers: Record<string, ContainerImage> = {};
+        // Content hashes of the container images, keyed like `containers`.
+        // `ContainerImage` itself only carries stable paths (context /
+        // dockerfile / imageUri), so without the hash an image CONTENT
+        // change (a Dockerfile edit, a rebuilt bundle) would never change
+        // the config and the running container would serve stale code.
+        const containerHashes: Record<string, string> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -391,6 +400,9 @@ export const LocalWorkerProvider = () =>
                 ...container.dev,
                 env: unwrapRedacted(container.dev.env),
               };
+              if (container.hash !== undefined) {
+                containerHashes[container.className] = container.hash;
+              }
             }
           }
         }
@@ -446,6 +458,14 @@ export const LocalWorkerProvider = () =>
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
           hyperdrives,
+          /**
+           * Container image CONTENT hashes (className → hash). The DO
+           * namespace records above only carry the image's stable paths, so
+           * this is what makes an image content change — a Dockerfile edit,
+           * a rebuilt effectful bundle — restart the instance (which is
+           * what re-runs the docker build).
+           */
+          containerHashes,
           /**
            * External source-provider descriptor (plain JSON). Part of the
            * hashed config so changing the provider or its options restarts
@@ -577,6 +597,152 @@ export const LocalWorkerProvider = () =>
       // last good instance keeps serving until the replacement's first
       // serve completes. Ownership is tracked in `workerdScopes`, closed by
       // the next successful serve, by `delete`, or by provider shutdown.
+      /**
+       * One container-context watcher per worker id, keyed by the watched
+       * path set. Registry-held (NOT per-serve-scope): a worker restarts
+       * through several code paths that overlap scopes, and a watcher per
+       * serve produced DUPLICATES whose simultaneous restarts storm the
+       * instance until the DO's container link breaks.
+       */
+      const containerWatchers = new Map<
+        string,
+        { key: string; fiber: Fiber.Fiber<void> }
+      >();
+
+      const stopContainerWatcher = (id: string) =>
+        Effect.suspend(() => {
+          const existing = containerWatchers.get(id);
+          if (existing === undefined) return Effect.void;
+          containerWatchers.delete(id);
+          return Fiber.interrupt(existing.fiber).pipe(Effect.asVoid);
+        });
+
+      /**
+       * Watch a worker's Build-variant container contexts and restart the
+       * instance when their CONTENT changes — the docker build happens at
+       * instance start, so a restart IS the image rebuild.
+       *
+       * This is the reload path for USER-supplied Dockerfile/context
+       * containers: those files are not imported by the stack, so
+       * `bun --watch` never re-runs the exec child for them and no replan
+       * (hence no config-hash restart) ever fires. Generated contexts
+       * (under `.alchemy/`) are excluded — the effectful `main` variant
+       * rewrites its bundle there on every plan, which would loop; that
+       * variant reloads through the config's `containerHashes` instead.
+       *
+       * Events are debounced and gated on a content fingerprint
+       * (`node_modules`/`.git` skipped), so editor double-saves and
+       * metadata-only churn don't bounce the instance.
+       */
+      const ensureContainerWatcher = (
+        worker: RunnableWorkerConfig,
+        restart: Effect.Effect<
+          void,
+          never,
+          | ChildProcessSpawner.ChildProcessSpawner
+          | PlatformFileSystem.FileSystem
+          | Path.Path
+        >,
+      ) =>
+        Effect.gen(function* () {
+          const fs = yield* PlatformFileSystem.FileSystem;
+          const watched = new Map<string, { dockerfile: string | undefined }>();
+          for (const namespace of worker.durableObjectNamespaces) {
+            const image = namespace.container;
+            if (image === undefined || !("dockerfile" in image)) continue;
+            const context = path.resolve(image.context ?? ".");
+            if (context.split(path.sep).includes(".alchemy")) continue;
+            watched.set(context, {
+              dockerfile:
+                image.dockerfile !== undefined
+                  ? path.resolve(context, image.dockerfile)
+                  : undefined,
+            });
+          }
+          const key = JSON.stringify([...watched.entries()].sort());
+          const existing = containerWatchers.get(worker.id);
+          if (existing !== undefined) {
+            if (existing.key === key) return; // same watcher keeps running
+            yield* stopContainerWatcher(worker.id);
+          }
+          if (watched.size === 0) return;
+
+          const fingerprint = Effect.gen(function* () {
+            const hashes: string[] = [];
+            const walk = (dir: string): Effect.Effect<void, any> =>
+              Effect.gen(function* () {
+                const entries = yield* fs.readDirectory(dir);
+                for (const entry of entries.sort()) {
+                  if (entry === "node_modules" || entry === ".git") continue;
+                  const file = path.join(dir, entry);
+                  const stat = yield* fs.stat(file);
+                  if (stat.type === "Directory") {
+                    yield* walk(file);
+                  } else {
+                    hashes.push(
+                      `${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`,
+                    );
+                  }
+                }
+              });
+            for (const [context, { dockerfile }] of watched) {
+              yield* walk(context);
+              if (dockerfile !== undefined && !dockerfile.startsWith(context)) {
+                hashes.push(
+                  `${dockerfile}:${yield* fs.readFile(dockerfile).pipe(Effect.flatMap(sha256))}`,
+                );
+              }
+            }
+            return yield* sha256(hashes.join("\n"));
+          }).pipe(Effect.orElseSucceed(() => undefined));
+
+          const streams = [...watched.entries()].flatMap(
+            ([context, { dockerfile }]) => [
+              fs.watch(context, { recursive: true }),
+              ...(dockerfile !== undefined && !dockerfile.startsWith(context)
+                ? [fs.watch(path.dirname(dockerfile))]
+                : []),
+            ],
+          );
+          const watchLoop = Effect.gen(function* () {
+            let last = yield* fingerprint;
+            yield* Stream.mergeAll(streams, {
+              concurrency: streams.length,
+            }).pipe(
+              Stream.debounce("500 millis"),
+              Stream.runForEach(() =>
+                Effect.gen(function* () {
+                  const next = yield* fingerprint;
+                  if (next === undefined || next === last) return;
+                  last = next;
+                  yield* Effect.logInfo(
+                    `[${worker.id}] Container build context changed, restarting instance`,
+                  );
+                  yield* restart;
+                }),
+              ),
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  `[${worker.id}] Container context watch failed`,
+                  Cause.squash(cause),
+                ),
+              ),
+            );
+          });
+          const fiber = yield* watchLoop.pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                const current = containerWatchers.get(worker.id);
+                if (current?.fiber === fiber) {
+                  containerWatchers.delete(worker.id);
+                }
+              }),
+            ),
+            Effect.forkIn(rootScope),
+          );
+          containerWatchers.set(worker.id, { key, fiber });
+        });
+
       const serveWith = (
         worker: RunnableWorkerConfig,
         bundle: Bundle.BundleOutput,
@@ -666,6 +832,13 @@ export const LocalWorkerProvider = () =>
                   worker.name,
                   restartWorker(worker.id),
                 );
+                // Idempotent: the registry keeps ONE watcher per worker id
+                // across restarts (a new one only when the watched path set
+                // changed).
+                yield* ensureContainerWatcher(
+                  worker,
+                  Effect.suspend(() => restartWorker(worker.id)),
+                );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (
                   JSON.stringify(currentConsumers) !==
@@ -716,7 +889,15 @@ export const LocalWorkerProvider = () =>
           ),
         );
 
-      const restartWorker = (id: string) =>
+      const restartWorker = (
+        id: string,
+      ): Effect.Effect<
+        void,
+        never,
+        | ChildProcessSpawner.ChildProcessSpawner
+        | PlatformFileSystem.FileSystem
+        | Path.Path
+      > =>
         Effect.suspend(() => {
           const latest = latestServes.get(id);
           if (latest) {
@@ -744,6 +925,7 @@ export const LocalWorkerProvider = () =>
       // instance replacement does NOT go through this: the previous workerd
       // keeps serving until the replacement's first serve closes it.
       const closeWorkerd = Effect.fn(function* (id: string) {
+        yield* stopContainerWatcher(id);
         const scope = workerdScopes.get(id);
         if (scope) {
           workerdScopes.delete(id);

@@ -156,6 +156,7 @@ export interface Platform<
   MainShape,
   RuntimeContext extends BaseRuntimeContext,
   BaseShape = {},
+  InlineProps extends Resource["Props"] = Resource["Props"],
 > extends Effect.Effect<Resource & RuntimeContext, never, Resource> {
   Type: Resource["Type"];
   Provider: Provider<Resource>;
@@ -171,9 +172,9 @@ export interface Platform<
       Named<Id> & {
         make<PropsReq = never, LOut = never, LIn = never, InitReq = never>(
           props:
-            | InputProps<Resource["Props"]>
+            | InputProps<InlineProps>
             | Effect.Effect<
-                InputProps<Resource["Props"]>,
+                InputProps<InlineProps>,
                 ConfigError.ConfigError,
                 PropsReq
               >,
@@ -206,9 +207,9 @@ export interface Platform<
     >(
       id: Id,
       props:
-        | InputProps<Resource["Props"]>
+        | InputProps<InlineProps>
         | Effect.Effect<
-            InputProps<Resource["Props"]>,
+            InputProps<InlineProps>,
             ConfigError.ConfigError,
             PropsReq
           >,
@@ -248,9 +249,9 @@ export interface Platform<
           InitReq extends Services | PlatformServices | Resource | LOut = never,
         >(
           props:
-            | InputProps<Resource["Props"]>
+            | InputProps<InlineProps>
             | Effect.Effect<
-                InputProps<Resource["Props"]>,
+                InputProps<InlineProps>,
                 ConfigError.ConfigError,
                 PropsReq
               >,
@@ -291,8 +292,8 @@ export interface Platform<
   >(
     id: Id,
     props:
-      | InputProps<Resource["Props"]>
-      | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
+      | InputProps<InlineProps>
+      | Effect.Effect<InputProps<InlineProps>, never, PropsReq>,
     impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     layers?: Layer.Layer<LOut, never, LIn>,
   ): Effect.Effect<

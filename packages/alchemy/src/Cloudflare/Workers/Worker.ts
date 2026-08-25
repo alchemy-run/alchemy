@@ -1301,7 +1301,17 @@ export type Worker<Bindings = any> = Resource<
      * `WorkerProps.cache` takes precedence.
      */
     cache?: WorkerCache;
-    containers?: { className: string; dev: DevContainerImage | undefined }[];
+    containers?: {
+      className: string;
+      dev: DevContainerImage | undefined;
+      /**
+       * Content hash of the image (bundle/Dockerfile/context). Part of the
+       * local worker's restart config: `dev` only carries stable PATHS, so
+       * without the hash an image content change would never restart the
+       * instance and the running container would serve stale code.
+       */
+      hash: string | undefined;
+    }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**

@@ -8,9 +8,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import type { ValidationException } from "@distilled.cloud/aws/Errors";
+import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import { hostStatementsFor, type Host } from "../../Docker/Host.ts";
+import type { Input, InputProps } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -95,7 +97,88 @@ const buildPropsIdentity = (news: MicrovmImageProps) =>
 interface ResolvedArtifact {
   uri: string;
   hash: string;
+  contentHash: string;
 }
+
+/**
+ * The content half of an image's artifact identity, before any upload: the
+ * bundled program (or packaged context) plus the hash that names THAT —
+ * independent of the props, which fold into the full `hash` later.
+ */
+type ArtifactContent = {
+  /** Stored on the attrs; compared by `diff`. */
+  readonly contentHash: string;
+  /**
+   * The raw content identity the full `hash` is derived from — kept
+   * separate so that formula stays byte-identical to what deployed images
+   * already carry (`sha256(identity + ":" + propsId)`).
+   */
+  readonly identity: string;
+} & (
+  | {
+      /**
+       * Materializes the archive on demand — deferred because a baked
+       * `contextInclude` can be ~1GB, and an unchanged artifact (or a
+       * diff-time hash) must never pay the read + zip.
+       */
+      readonly buildArchive: Effect.Effect<Uint8Array, any, any>;
+    }
+  | { readonly uri: string }
+);
+
+/** The props that decide what the artifact's CONTENT is. */
+type ContentInputs = Pick<
+  MicrovmImageProps,
+  | "main"
+  | "context"
+  | "codeArtifact"
+  | "runtime"
+  | "port"
+  | "dockerfile"
+  | "isExternal"
+  | "external"
+  | "build"
+  | "contextInclude"
+  | "imageStatements"
+  | "cpuConfigurations"
+>;
+
+/**
+ * Pick the content inputs off the plan-time props, or `undefined` when they
+ * cannot be read yet. At plan time the props may be unresolved — the build
+ * role, env, … are Outputs, and the whole object may itself be an
+ * Output/Effect/Config — so only a plain object whose content inputs have
+ * all resolved qualifies.
+ */
+const resolvedContentInputs = (
+  news: Input<MicrovmImageProps>,
+): ContentInputs | undefined => {
+  if (typeof news !== "object" || news === null) return undefined;
+  const n = news as InputProps<MicrovmImageProps>;
+  const picked: Input<ContentInputs> = {
+    main: n.main,
+    context: n.context,
+    codeArtifact: n.codeArtifact,
+    runtime: n.runtime,
+    port: n.port,
+    dockerfile: n.dockerfile,
+    isExternal: n.isExternal,
+    external: n.external,
+    build: n.build,
+    contextInclude: n.contextInclude,
+    imageStatements: n.imageStatements,
+    cpuConfigurations: n.cpuConfigurations,
+  };
+  if (!isResolved(picked)) return undefined;
+  // `isResolved` has verified every field; the cast only re-states that
+  // for a type the guard cannot express on a mapped `Input<…>` object.
+  const resolved = picked as ContentInputs;
+  // An Effect/Config-shaped props object has none of these set.
+  if (!resolved.main && !resolved.context && !resolved.codeArtifact?.uri) {
+    return undefined;
+  }
+  return resolved;
+};
 
 const resolveName = (id: string, name?: string) =>
   name
@@ -141,7 +224,6 @@ const defaultBaseImageArn = Effect.fn(function* () {
   return base.imageArn;
 });
 
-// Materialize + upload the code artifact and compute its build identity hash.
 /**
  * The single target architecture of a MicroVM image, in Docker naming.
  * An image VERSION fans out to one server-side build per configured
@@ -149,7 +231,7 @@ const defaultBaseImageArn = Effect.fn(function* () {
  * (which are rendered per-arch) require the config to pin exactly one.
  */
 const resolveImageArchitecture = (
-  news: MicrovmImageProps,
+  news: ContentInputs,
 ): Effect.Effect<Host.Architecture> => {
   const arches = [
     ...new Set(
@@ -170,11 +252,155 @@ const resolveImageArchitecture = (
   return Effect.succeed(arches[0]!);
 };
 
-const hasHostStatements = (news: MicrovmImageProps): boolean =>
+const hasHostStatements = (news: ContentInputs): boolean =>
   (news.imageStatements?.amd64.length ?? 0) > 0 ||
   (news.imageStatements?.arm64.length ?? 0) > 0;
 
+/**
+ * Bundle (or package) the image's code and hash the result. Nothing is
+ * uploaded here and no prop outside {@link ContentInputs} is read: `diff`
+ * calls this before the props have resolved (the build role is an Output
+ * at plan time) to see a content-only edit of the in-VM program, and
+ * `reconcile` calls it again for the archive to upload. Memoized per
+ * resource for the run so a diff→reconcile cycle bundles once.
+ *
+ * The archive is LAZY (`buildArchive`): a baked `contextInclude` can be
+ * ~1GB, and its identity rides the declared fingerprints — the diff never
+ * has to read the directory, and an unchanged artifact never zips it.
+ */
+const artifactContent = (
+  id: string,
+  news: ContentInputs,
+  note: (message: string) => Effect.Effect<void>,
+) =>
+  Effect.gen(function* (): Generator<any, ArtifactContent, any> {
+    if (!news.main && hasHostStatements(news)) {
+      // bindings contributed Dockerfile fragments, but this image ships a
+      // user-owned build context — the contribution would be silently
+      // dropped, so fail loud instead
+      return yield* Effect.die(
+        new Error(
+          "A binding contributed Dockerfile statements (via Docker.Host.install), but this MicroVM image does not generate its Dockerfile — only `main` (Effect-native) images accept contributions. Install the binding's system dependencies in your own Dockerfile, or switch to `main`.",
+        ),
+      );
+    }
+
+    if (news.main) {
+      const runtime = news.runtime ?? "node";
+      const port = news.port ?? DEFAULT_MICROVM_PORT;
+      yield* note("Bundling MicroVM program...");
+      const { files, hash: bundleHash } = yield* bundleMicrovmProgram({
+        main: news.main,
+        runtime,
+        isExternal: news.isExternal ?? false,
+        external: news.external,
+        port,
+        build: news.build,
+      });
+      const dockerfile = buildMicrovmDockerfile(
+        news.dockerfile,
+        runtime,
+        port,
+        hostStatementsFor(news, yield* resolveImageArchitecture(news)),
+      );
+      // `contextInclude` directories ride the artifact under their `to`
+      // prefixes. When EVERY include declares a fingerprint, the
+      // fingerprints ARE the identity — computed without touching the
+      // filesystem. Only a fingerprint-less include falls back to
+      // reading the directory and hashing its bytes.
+      const includes = news.contextInclude ?? [];
+      const readIncludes = Effect.gen(function* () {
+        const includeFiles: ArtifactFile[] = [];
+        for (const include of includes) {
+          const entries = yield* readContextDirectory(include.from);
+          for (const entry of entries) {
+            includeFiles.push({
+              path: `${include.to}/${entry.path}`,
+              content: entry.content,
+            });
+          }
+        }
+        return includeFiles;
+      });
+
+      let includeFiles: ArtifactFile[] | undefined;
+      let includeId: string;
+      if (includes.every((i) => i.fingerprint !== undefined)) {
+        includeId = includes
+          .map((i) => `${i.to}:${i.fingerprint}`)
+          .sort()
+          .join("|");
+      } else {
+        includeFiles = yield* readIncludes;
+        includeId = (yield* Effect.forEach(
+          [...includeFiles].sort((a, b) => (a.path < b.path ? -1 : 1)),
+          (f) => Effect.map(sha256(f.content), (hash) => `${f.path}:${hash}`),
+        )).join("|");
+      }
+      // Keep the pre-`contextInclude` formula byte-identical for images
+      // without includes so already-deployed images are not rebuilt once.
+      const identity =
+        includes.length === 0
+          ? `${bundleHash}:${dockerfile}`
+          : `${bundleHash}:${dockerfile}:${includeId}`;
+      const contentHash = yield* sha256(identity);
+      const staticFiles: ArtifactFile[] = [
+        { path: "Dockerfile", content: dockerfile },
+        ...files,
+      ];
+      const alreadyRead = includeFiles;
+      const buildArchive = Effect.gen(function* () {
+        return yield* zipFiles([
+          ...staticFiles,
+          ...(alreadyRead ?? (yield* readIncludes)),
+        ]);
+      });
+      return { contentHash, identity, buildArchive };
+    }
+
+    if (news.context) {
+      const path = yield* Path.Path;
+      const fs = yield* FileSystem.FileSystem;
+      yield* note("Packaging MicroVM build context...");
+      const files = yield* readContextDirectory(news.context);
+      // Ensure a Dockerfile is present (resolve from `dockerfile` path or default).
+      const dockerfileName = news.dockerfile ?? "Dockerfile";
+      const hasDockerfile = files.some((f) => f.path === dockerfileName);
+      if (!hasDockerfile) {
+        const dockerfilePath = path.join(news.context, dockerfileName);
+        const content = yield* fs
+          .readFile(dockerfilePath)
+          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+        if (content) files.push({ path: "Dockerfile", content });
+      }
+      // Hash the BYTES, not `path:byteLength` — a same-length edit (a
+      // flipped version string, a swapped constant) must count as a change.
+      const contentId = (yield* Effect.forEach(
+        [...files].sort((a, b) => (a.path < b.path ? -1 : 1)),
+        (f) => Effect.map(sha256(f.content), (hash) => `${f.path}:${hash}`),
+      )).join("|");
+      return {
+        contentHash: yield* sha256(contentId),
+        identity: contentId,
+        buildArchive: zipFiles(files),
+      };
+    }
+
+    if (news.codeArtifact?.uri) {
+      const uri: string = news.codeArtifact.uri;
+      return { contentHash: yield* sha256(uri), identity: uri, uri };
+    }
+
+    return yield* Effect.die(
+      "MicrovmImage requires one of `main`, `context`, or `codeArtifact.uri`.",
+    );
+  }).pipe(Artifacts.cached(`microvm-image-content:${id}`));
+
+// Materialize + upload the code artifact and compute its build identity hash
+// (content + props). The `hash` formulas are unchanged from before
+// `contentHash` existed, so images deployed earlier are not rebuilt once.
 const resolveArtifact = Effect.fn(function* (
+  id: string,
   news: MicrovmImageProps,
   session: ScopedPlanStatusSession,
   /** The last deployed artifact — when the computed identity matches
@@ -182,133 +408,38 @@ const resolveArtifact = Effect.fn(function* (
   existing?: { uri?: string; hash?: string },
 ) {
   const propsId = buildPropsIdentity(news);
-
-  if (!news.main && hasHostStatements(news)) {
-    // bindings contributed Dockerfile fragments, but this image ships a
-    // user-owned build context — the contribution would be silently
-    // dropped, so fail loud instead
-    return yield* Effect.die(
-      new Error(
-        "A binding contributed Dockerfile statements (via Docker.Host.install), but this MicroVM image does not generate its Dockerfile — only `main` (Effect-native) images accept contributions. Install the binding's system dependencies in your own Dockerfile, or switch to `main`.",
-      ),
-    );
+  const content = yield* artifactContent(id, news, session.note);
+  const hash = yield* sha256(`${content.identity}:${propsId}`);
+  if ("uri" in content) {
+    return {
+      uri: content.uri,
+      hash,
+      contentHash: content.contentHash,
+    } satisfies ResolvedArtifact;
   }
-
-  if (news.main) {
-    const runtime = news.runtime ?? "node";
-    const port = news.port ?? DEFAULT_MICROVM_PORT;
-    yield* session.note("Bundling MicroVM program...");
-    const { files, hash: bundleHash } = yield* bundleMicrovmProgram({
-      main: news.main,
-      runtime,
-      isExternal: news.isExternal ?? false,
-      external: news.external,
-      port,
-      build: news.build,
-    });
-    const dockerfile = buildMicrovmDockerfile(
-      news.dockerfile,
-      runtime,
-      port,
-      hostStatementsFor(news, yield* resolveImageArchitecture(news)),
-    );
-    // `contextInclude` directories ride the artifact under their `to`
-    // prefixes. Their identity rides the artifact hash: when EVERY
-    // include declares a fingerprint, the fingerprints ARE the identity
-    // — computed without touching the filesystem, so an unchanged
-    // artifact skips the (potentially huge) read + zip + upload
-    // entirely. Only a fingerprint-less include falls back to reading
-    // the directory to derive a content id.
-    const includes = news.contextInclude ?? [];
-    const fingerprinted = includes.every((i) => i.fingerprint !== undefined);
-    const readIncludes = Effect.gen(function* () {
-      const includeFiles: ArtifactFile[] = [];
-      for (const include of includes) {
-        const entries = yield* readContextDirectory(include.from);
-        for (const entry of entries) {
-          includeFiles.push({
-            path: `${include.to}/${entry.path}`,
-            content: entry.content,
-          });
-        }
-      }
-      return includeFiles;
-    });
-
-    let includeFiles: ArtifactFile[] | undefined;
-    let includeId: string;
-    if (fingerprinted) {
-      includeId = includes
-        .map((i) => `${i.to}:${i.fingerprint}`)
-        .sort()
-        .join("|");
-    } else {
-      includeFiles = yield* readIncludes;
-      includeId = includeFiles
-        .map((f) => `${f.path}:${(f.content as Uint8Array).byteLength}`)
-        .sort()
-        .join("|");
+  const assets = yield* Assets;
+  if (existing?.hash === hash && existing.uri !== undefined) {
+    // Trust the hash for identity, but VERIFY the artifact still
+    // exists before skipping the upload: a local emulator's S3 is
+    // ephemeral (recreating the container wipes it), and handing the
+    // builder a dangling URI fails the build far from the cause.
+    if (yield* assets.hasAsset(hash)) {
+      return {
+        uri: existing.uri,
+        hash,
+        contentHash: content.contentHash,
+      } satisfies ResolvedArtifact;
     }
-    const hash = yield* sha256(
-      `${bundleHash}:${dockerfile}:${propsId}:${includeId}`,
-    );
-    if (existing?.hash === hash && existing.uri !== undefined) {
-      // Trust the hash for identity, but VERIFY the artifact still
-      // exists before skipping the upload: a local emulator's S3 is
-      // ephemeral (recreating the container wipes it), and handing the
-      // builder a dangling URI fails the build far from the cause.
-      const assets = yield* Assets;
-      if (yield* assets.hasAsset(hash)) {
-        return { uri: existing.uri, hash };
-      }
-    }
-    yield* session.note("Packaging MicroVM code artifact...");
-    const archive = yield* zipFiles([
-      { path: "Dockerfile", content: dockerfile },
-      ...files,
-      ...(includeFiles ?? (yield* readIncludes)),
-    ]);
-    const assets = yield* Assets;
-    const key = yield* assets.uploadAsset(hash, archive);
-    const bucket = yield* assets.bucketName;
-    return { uri: `s3://${bucket}/${key}`, hash };
   }
-
-  if (news.context) {
-    const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
-    yield* session.note("Packaging MicroVM build context...");
-    const files = yield* readContextDirectory(news.context);
-    // Ensure a Dockerfile is present (resolve from `dockerfile` path or default).
-    const dockerfileName = news.dockerfile ?? "Dockerfile";
-    const hasDockerfile = files.some((f) => f.path === dockerfileName);
-    if (!hasDockerfile) {
-      const dockerfilePath = path.join(news.context, dockerfileName);
-      const content = yield* fs
-        .readFile(dockerfilePath)
-        .pipe(Effect.catch(() => Effect.succeed(undefined)));
-      if (content) files.push({ path: "Dockerfile", content });
-    }
-    const contentId = files
-      .map((f) => `${f.path}:${f.content.byteLength}`)
-      .sort()
-      .join("|");
-    const hash = yield* sha256(`${contentId}:${propsId}`);
-    const archive = yield* zipFiles(files);
-    const assets = yield* Assets;
-    const key = yield* assets.uploadAsset(hash, archive);
-    const bucket = yield* assets.bucketName;
-    return { uri: `s3://${bucket}/${key}`, hash };
-  }
-
-  if (news.codeArtifact?.uri) {
-    const hash = yield* sha256(`${news.codeArtifact.uri}:${propsId}`);
-    return { uri: news.codeArtifact.uri, hash };
-  }
-
-  return yield* Effect.die(
-    "MicrovmImage requires one of `main`, `context`, or `codeArtifact.uri`.",
-  );
+  yield* session.note("Packaging MicroVM code artifact...");
+  const archive = yield* content.buildArchive;
+  const key = yield* assets.uploadAsset(hash, archive);
+  const bucket = yield* assets.bucketName;
+  return {
+    uri: `s3://${bucket}/${key}`,
+    hash,
+    contentHash: content.contentHash,
+  } satisfies ResolvedArtifact;
 });
 
 const toAttrs = (
@@ -325,7 +456,11 @@ const toAttrs = (
   createdAt: toIso(image.createdAt),
   updatedAt: toIso(image.updatedAt),
   codeArtifact: artifact
-    ? { uri: artifact.uri, hash: artifact.hash }
+    ? {
+        uri: artifact.uri,
+        hash: artifact.hash,
+        contentHash: artifact.contentHash,
+      }
     : undefined,
 });
 
@@ -427,7 +562,27 @@ export const MicrovmImageProvider = () =>
   Provider.succeed(MicrovmImage, {
     stables: ["imageArn", "name"],
 
-    diff: Effect.fn(function* ({ id, olds, news }) {
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
+      // A content-only edit of the in-VM program changes none of the props,
+      // so the engine's structural diff would call it a noop and the image
+      // would never rebuild. Bundle (memoized for the run) and compare the
+      // CONTENT hash, exactly as the Lambda Function diff does. This runs
+      // before the props resolve — the build role is an Output at plan
+      // time — which is fine because only the plain content inputs are
+      // read. Rows persisted before `contentHash` existed skip the check
+      // until their next reconcile stamps it.
+      const previousContentHash = output?.codeArtifact?.contentHash;
+      const content = resolvedContentInputs(news);
+      if (previousContentHash !== undefined && content !== undefined) {
+        const { contentHash } = yield* artifactContent(
+          id,
+          content,
+          () => Effect.void,
+        );
+        if (contentHash !== previousContentHash) {
+          return { action: "update" } as const;
+        }
+      }
       if (!isResolved(news)) return;
       const oldName = yield* resolveName(id, olds.name);
       const newName = yield* resolveName(id, news.name);
@@ -473,6 +628,7 @@ export const MicrovmImageProvider = () =>
       // Resolve the artifact's build identity — packaging + upload are
       // skipped when it matches the deployed artifact.
       const artifact = yield* resolveArtifact(
+        id,
         news,
         session,
         output?.codeArtifact,

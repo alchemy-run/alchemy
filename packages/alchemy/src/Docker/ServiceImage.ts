@@ -7,7 +7,6 @@ import {
   getStableContextDir,
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
-import { Self } from "../Self.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker } from "./Docker.ts";
 import { hostArchitecture, hostStatementsFor, type Host } from "./Host.ts";
@@ -58,85 +57,18 @@ export interface ResolvedServiceImage {
 }
 
 /**
- * The standard bun bootstrap wrapped around a `Docker.Service` `main` entry:
- * resolves the bundled program's registered runners (`host.run` loops and the
- * served `fetch` handler) and runs them with a Bun HTTP server bound to
- * `PORT`. Mirrors the ECS bootstrap minus the AWS credential/region layers —
- * a Swarm task has no ambient cloud identity.
+ * The generated entry for `Docker.Service` containers: a shim importing only
+ * `alchemy/Runtime/Bootstrap/Docker` plus the user's `main` — see that
+ * module for why the entry never imports alchemy's own dependencies.
  */
 export const makeServiceBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Docker";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-// Normalize the entrypoint export: an inline-effect class default export is
-// an Effect resolving the platform instance, while the tagged form
-// (X.make(props, impl)) exports a Layer providing the Self tag. Both fold
-// into a Layer via makeEntrypointLayer (same pattern as the ECS bridge).
-const tag = Context.Service("${Self.key}");
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT, so the returned { fetch }
-// handler is actually served and host.run loops stay alive.
-const program = tag.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Docker service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Docker service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `;
 
 /**
@@ -180,7 +112,7 @@ export const makeServiceImage = Effect.gen(function* () {
             ...((source.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...source.build?.input?.resolve,
           },
           plugins: [source.build?.input?.plugins, plugins],

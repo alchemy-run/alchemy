@@ -27,6 +27,7 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
+  type Ec2HostedProps,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
@@ -650,6 +651,36 @@ export const InstanceProvider = () =>
             );
           }),
         diff: Effect.fn(function* ({ id, news, olds, output }) {
+          // The hosted bundle hash must participate in planning even while
+          // OTHER props are unresolved Outputs (an `imageId` AMI lookup, a
+          // subnet reference): a content-only edit changes no prop at all,
+          // so bailing on full resolution silently no-ops the update. The
+          // content inputs are plain — gate on THEM, not on the whole bag
+          // (the same isResolved-defeats-content-diff bug the MicroVM image
+          // diff had).
+          const raw = news as unknown as Record<string, unknown>;
+          const contentInputs = {
+            main: raw.main,
+            handler: raw.handler,
+            build: raw.build,
+            port: raw.port,
+          };
+          if (
+            isResolved(contentInputs) &&
+            contentInputs.main !== undefined &&
+            output?.code?.hash
+          ) {
+            const { hash } = yield* hosted.bundleProgram(
+              id,
+              contentInputs as unknown as Ec2HostedProps,
+            );
+            if (hash !== output.code.hash) {
+              return {
+                action: "update",
+                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+              } as const;
+            }
+          }
           if (!isResolved(news)) return;
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
@@ -690,20 +721,8 @@ export const InstanceProvider = () =>
             } as const;
           }
 
-          // The hosted bundle hash participates in planning: a change confined
-          // to the runtime program (or its imports) leaves every prop equal, so
-          // re-bundle and compare against the deployed hash. A mismatch plans
-          // an in-place update, whose reconcile re-uploads the bundle and
-          // reboots the instance.
-          if (news.main && output?.code?.hash) {
-            const { hash } = yield* hosted.bundleProgram(id, news);
-            if (hash !== output.code.hash) {
-              return {
-                action: "update",
-                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
-              } as const;
-            }
-          }
+          // Content-only changes were already handled by the resolved-subset
+          // bundle-hash check above.
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId

@@ -12,9 +12,11 @@ import * as RpcServer from "../../Dev/RpcServer.ts";
 import { FlociServiceProvider } from "../ECS/FlociServiceProvider.ts";
 import { FlociTaskProvider } from "../ECS/FlociTaskProvider.ts";
 import { FlociFunctionProvider } from "../Lambda/FlociFunctionProvider.ts";
+import { FlociMicrovmImageProvider } from "../Lambda/FlociMicrovmImageProvider.ts";
 
 Layer.mergeAll(
   FlociFunctionProvider(),
+  FlociMicrovmImageProvider(),
   FlociTaskProvider(),
   FlociServiceProvider(),
 ).pipe(

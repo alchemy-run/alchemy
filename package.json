@@ -62,6 +62,7 @@
     "test:aws:floci": "bun scripts/test-aws-floci.ts",
     "test:cloudflare-packages": "turbo run test --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frontend-frameworks --filter='./fixtures/*'",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
+    "test:dev": "cd ./examples/dev-stress && bun test",
     "test:examples": "bun scripts/test-examples.ts",
     "typecheck:cloudflare-packages": "turbo run typecheck --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frontend-frameworks --filter=@alchemy.run/cloudflare-test-tools",
     "validate:publish-packages": "bun scripts/validate-publish-packages.ts"

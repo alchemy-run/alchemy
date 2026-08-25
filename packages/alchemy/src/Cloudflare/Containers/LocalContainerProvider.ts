@@ -151,6 +151,42 @@ export const LocalContainerProvider = () =>
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
 
+      /**
+       * The props that decide what the dev IMAGE is, picked off the
+       * possibly-unresolved plan-time props — or `undefined` when any of
+       * them has not resolved yet. Everything else (env, instances, …) may
+       * still carry Outputs/Effects (the `.make` form's `exports` impl
+       * Effect never resolves at all) without disabling the content check.
+       */
+      const resolvedImageInputs = (
+        input: unknown,
+      ): AnyContainerApplicationProps | undefined => {
+        if (typeof input !== "object" || input === null) return undefined;
+        const news = input as AnyContainerApplicationProps;
+        const picked = {
+          main: news.main,
+          image: news.image,
+          dockerfile: news.dockerfile,
+          context: news.context,
+          runtime: news.runtime,
+          handler: news.handler,
+          isExternal: news.isExternal,
+          external: news.external,
+          build: news.build,
+          autoInstallExternals: news.autoInstallExternals,
+        };
+        if (!isResolved(picked)) return undefined;
+        if (
+          !picked.main &&
+          !picked.image &&
+          !picked.dockerfile &&
+          !picked.context
+        ) {
+          return undefined;
+        }
+        return picked as AnyContainerApplicationProps;
+      };
+
       const placeholderConfiguration = (
         props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
@@ -210,17 +246,32 @@ export const LocalContainerProvider = () =>
       });
 
       return {
-        // No HMR for containers (yet): bundle once on first reconcile, then
-        // treat the resource as a no-op so subsequent reconciles don't
-        // re-bundle on every change.
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output }) {
           if (!output) return { action: "update" };
+          // A content-only edit (an imported module of `main`, a Dockerfile,
+          // a context file) changes no prop, so the engine's structural
+          // fallback would call it a noop and the image would never rebuild.
+          // Compare the recomputed image hash instead — and gate only on
+          // the IMAGE inputs being resolved, not the whole props bag: the
+          // platform `.make` form carries an `exports` impl Effect that is
+          // never "resolved", and requiring full resolution silently
+          // disabled this check for every effectful container.
+          const imageInputs = resolvedImageInputs(news);
+          if (imageInputs !== undefined) {
+            // Recompute fresh on every plan. `prepareImage` is memoized so
+            // a plan's diff→precreate→reconcile chain bundles once — but
+            // this provider runs in the RPC sidecar, whose `ArtifactStore`
+            // outlives every run, so without this eviction the FIRST run's
+            // hash would be compared forever.
+            yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
+            const input = yield* prepareImage(id, imageInputs);
+            if (input.hash !== output.hash?.image || !output.dev) {
+              return { action: "update" };
+            }
+          }
           if (!isResolved(news)) return undefined;
-          const input = yield* prepareImage(id, news);
-          return input.hash !== output.hash?.image || !output.dev
-            ? { action: "update" }
-            : undefined;
+          return !output.dev ? { action: "update" } : undefined;
         }),
         read: Effect.fn(function* ({ output }) {
           return output;

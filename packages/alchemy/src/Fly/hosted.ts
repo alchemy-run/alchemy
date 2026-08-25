@@ -19,7 +19,6 @@ import {
 } from "../Bundle/TempRoot.ts";
 import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
-import { Self } from "../Self.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -83,73 +82,23 @@ export class DeployTokenMissing extends Data.TaggedError(
   appName: string;
 }> {}
 
+/**
+ * The generated entry for `Fly.Service` / `Fly.Sprite` machines: a shim
+ * importing only `alchemy/Runtime/Bootstrap/Fly` plus the user's `main` —
+ * see that module for why the entry never imports alchemy's own
+ * dependencies. The runtime flag is raised BEFORE the user's module is
+ * evaluated (hence the dynamic import) so its module-scope code sees it.
+ */
 const makeBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Fly";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 
-const tag = Context.Service(${JSON.stringify(Self.key)});
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-const program = tag.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Fly service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Fly service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `;
 
 /** Flatten a binding/env leaf into a machine env string. Unwraps Redacted. */
@@ -396,7 +345,7 @@ export const createFlyHostedSupport = ({
             );
           },
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -606,7 +555,7 @@ export const createSpriteHostedSupport = ({
             ...((props.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
