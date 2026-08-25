@@ -238,6 +238,8 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         ...unwrapEnv(props.env),
         PORT: String(port),
       },
+      // Generated static-file server is a complete bun/node program.
+      isExternal: true,
     });
 
     if (props.domain !== undefined && props.zone !== undefined) {

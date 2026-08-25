@@ -734,6 +734,9 @@ export const makeFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(
       extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
       port,
       env,
+      // `main` is a complete bun/node program (generated static server
+      // or the framework `finish` entry), not a Platform class.
+      isExternal: true,
     });
 
     if (props.domain !== undefined && props.zone !== undefined) {

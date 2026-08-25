@@ -188,6 +188,9 @@
       "path": "./examples/hetzner-app/tsconfig.json"
     },
     {
+      "path": "./examples/hetzner-website-vite/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-service/tsconfig.json"
     },
     {
