@@ -1,18 +1,9 @@
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { CreateTask, type CreateTaskRequest } from "./CreateTask.ts";
 import type { Queue } from "./Queue.ts";
-
-const createTask = (
-  input: cloudtasks.CreateProjectsLocationsQueuesTasksRequest,
-): Effect.Effect<
-  cloudtasks.Task,
-  cloudtasks.CreateProjectsLocationsQueuesTasksError,
-  Credentials | HttpClient.HttpClient
-> => cloudtasks.createProjectsLocationsQueuesTasks(input);
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link CreateTask}.
@@ -23,19 +14,20 @@ const createTask = (
 export const CreateTaskHttp = Layer.effect(
   CreateTask,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const createTask = yield* cloudtasks.createProjectsLocationsQueuesTasks;
     return Effect.fn(function* (queue: Queue) {
+      yield* bindGcpHost({
+        tag: "GCP.CloudTasks.CreateTask",
+        resource: queue,
+        iam: [{ role: defaultRoleFor("GCP.CloudTasks.CreateTask") }],
+      });
       const name = yield* queue.name;
       return Effect.fn(`GCP.CloudTasks.CreateTask(${queue.LogicalId})`)(
         function* (request: CreateTaskRequest) {
           return yield* createTask({
             ...request,
             parent: yield* name,
-          }).pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+          });
         },
       );
     });

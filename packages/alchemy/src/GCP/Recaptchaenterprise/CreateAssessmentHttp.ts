@@ -9,6 +9,7 @@ import {
 } from "./CreateAssessment.ts";
 import { lastSegment } from "./internal.ts";
 import type { Key } from "./Key.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link CreateAssessment}.
@@ -19,9 +20,16 @@ import type { Key } from "./Key.ts";
 export const CreateAssessmentHttp = Layer.effect(
   CreateAssessment,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const createProjectsAssessments =
+      yield* recaptchaenterprise.createProjectsAssessments;
     return Effect.fn(function* <K extends Key>(key: K) {
+      yield* bindGcpHost({
+        tag: "GCP.Recaptchaenterprise.CreateAssessment",
+        resource: key,
+        iam: [
+          { role: defaultRoleFor("GCP.Recaptchaenterprise.CreateAssessment") },
+        ],
+      });
       const name = yield* key.name;
       return Effect.fn(
         `GCP.Recaptchaenterprise.CreateAssessment(${key.LogicalId})`,
@@ -32,21 +40,16 @@ export const CreateAssessmentHttp = Layer.effect(
         const project =
           projectAt >= 0 && parts[projectAt + 1] ? parts[projectAt + 1]! : "";
         const siteKey = lastSegment(keyName);
-        return yield* recaptchaenterprise
-          .createProjectsAssessments({
-            parent: `projects/${project}`,
-            body: {
-              ...request?.body,
-              event: {
-                ...request?.body?.event,
-                siteKey: request?.body?.event?.siteKey ?? siteKey,
-              },
+        return yield* createProjectsAssessments({
+          parent: `projects/${project}`,
+          body: {
+            ...request?.body,
+            event: {
+              ...request?.body?.event,
+              siteKey: request?.body?.event?.siteKey ?? siteKey,
             },
-          })
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+          },
+        });
       });
     });
   }),

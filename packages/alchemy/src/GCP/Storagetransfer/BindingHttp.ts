@@ -2,6 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { TransferJob } from "./TransferJob.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * Shared HTTP scaffolding for Storage Transfer job bindings.
@@ -17,6 +18,7 @@ export const makeTransferJobHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: Effect.Effect<
     (input: I) => Effect.Effect<A, E>,
     never,
@@ -28,6 +30,11 @@ export const makeTransferJobHttpBinding = <
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (job: TransferJob) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: job,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* job.name;
       const project = yield* job.project;
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (

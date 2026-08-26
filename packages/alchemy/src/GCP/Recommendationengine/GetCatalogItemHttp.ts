@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { CatalogsCatalogItem } from "./CatalogsCatalogItem.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 import {
   GetCatalogItem,
   type GetCatalogItemRequest,
@@ -22,14 +23,16 @@ export const GetCatalogItemHttp: Layer.Layer<
 > = Layer.effect(
   GetCatalogItem,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
     const run =
-      yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+      yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems;
     return Effect.fn(function* (item: CatalogsCatalogItem) {
+      yield* bindGcpHost({
+        tag: "GCP.Recommendationengine.GetCatalogItem",
+        resource: item,
+        iam: [
+          { role: defaultRoleFor("GCP.Recommendationengine.GetCatalogItem") },
+        ],
+      });
       const name = yield* item.name;
       return Effect.fn(
         `GCP.Recommendationengine.GetCatalogItem(${item.LogicalId})`,

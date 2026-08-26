@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Page } from "./Page.ts";
 import type { Post } from "./Post.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -21,11 +22,17 @@ export const makePageHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (page: Page) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: page,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const blogId = yield* page.blogId;
       const pageId = yield* page.pageId;
       return Effect.fn(`${options.tag}(${page.LogicalId})`)(function* (
@@ -50,11 +57,17 @@ export const makePostHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (post: Post) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: post,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const blogId = yield* post.blogId;
       const postId = yield* post.postId;
       return Effect.fn(`${options.tag}(${post.LogicalId})`)(function* (

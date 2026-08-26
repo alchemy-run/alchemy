@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { GetSchema, type GetSchemaRequest } from "./GetSchema.ts";
 import type { Schema } from "./Schema.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetSchema}.
@@ -15,13 +16,13 @@ import type { Schema } from "./Schema.ts";
 export const GetSchemaHttp = Layer.effect(
   GetSchema,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const getSchema = yield* pubsub.getProjectsSchemas.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const getSchema = yield* pubsub.getProjectsSchemas;
     return Effect.fn(function* (schema: Schema) {
+      yield* bindGcpHost({
+        tag: "GCP.PubSub.GetSchema",
+        resource: schema,
+        iam: [{ role: defaultRoleFor("GCP.PubSub.GetSchema") }],
+      });
       const name = yield* schema.name;
       return Effect.fn(`GCP.PubSub.GetSchema(${schema.LogicalId})`)(function* (
         request?: GetSchemaRequest,

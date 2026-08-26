@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Ruleset } from "./Ruleset.ts";
 import { TestRuleset, type TestRulesetRequest } from "./TestRuleset.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link TestRuleset}.
@@ -15,21 +16,20 @@ import { TestRuleset, type TestRulesetRequest } from "./TestRuleset.ts";
 export const TestRulesetHttp = Layer.effect(
   TestRuleset,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const testProjects = yield* firebaserules.testProjects;
     return Effect.fn(function* (ruleset: Ruleset) {
+      yield* bindGcpHost({
+        tag: "GCP.Firebaserules.TestRuleset",
+        resource: ruleset,
+        iam: [{ role: defaultRoleFor("GCP.Firebaserules.TestRuleset") }],
+      });
       const name = yield* ruleset.name;
       return Effect.fn(`GCP.Firebaserules.TestRuleset(${ruleset.LogicalId})`)(
         function* (request: TestRulesetRequest = {}) {
-          return yield* firebaserules
-            .testProjects({
-              ...request,
-              name: yield* name,
-            })
-            .pipe(
-              Effect.provideService(Credentials, credentials),
-              Effect.provideService(HttpClient.HttpClient, httpClient),
-            );
+          return yield* testProjects({
+            ...request,
+            name: yield* name,
+          });
         },
       );
     });

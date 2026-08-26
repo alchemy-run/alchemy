@@ -4,6 +4,8 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Backup } from "./Backup.ts";
 import type { Instance } from "./Instance.ts";
 import type { InstancesSnapshot } from "./InstancesSnapshot.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Filestore instance, backup, and snapshot
@@ -15,27 +17,25 @@ export const makeFilestoreInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (instance: Instance) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: instance,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* instance.name;
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });
@@ -46,27 +46,25 @@ export const makeFilestoreBackupHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (backup: Backup) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: backup,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* backup.name;
       return Effect.fn(`${options.tag}(${backup.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });
@@ -77,27 +75,25 @@ export const makeFilestoreSnapshotHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (snapshot: InstancesSnapshot) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: snapshot,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* snapshot.name;
       return Effect.fn(`${options.tag}(${snapshot.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });

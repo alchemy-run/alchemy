@@ -1,7 +1,7 @@
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import type { Output } from "../Output.ts";
-import { bindGcpHost } from "./Host.ts";
+import { bindGcpHost, defaultRoleFor } from "./Host.ts";
 
 /**
  * Distilled ops are `OperationMethod`s: yield them once at Layer
@@ -32,7 +32,7 @@ export const makeNamedHttpBinding = <
   tag: string;
   operation: GcpHttpOp<I, A, E>;
   /** IAM role granted to the host runtime SA, e.g. `roles/redis.viewer`. */
-  role: string;
+  role?: string;
   resourceName: (resource: Resource) => Output<string, never>;
 }) =>
   Effect.gen(function* () {
@@ -42,7 +42,7 @@ export const makeNamedHttpBinding = <
       yield* bindGcpHost({
         tag: options.tag,
         resource,
-        iam: [{ role: options.role }],
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
       });
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,

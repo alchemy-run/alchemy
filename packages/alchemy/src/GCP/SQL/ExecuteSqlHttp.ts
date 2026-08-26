@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { ExecuteSql, type ExecuteSqlRequest } from "./ExecuteSql.ts";
 import type { Instance } from "./Instance.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link ExecuteSql}.
@@ -15,13 +16,13 @@ import type { Instance } from "./Instance.ts";
 export const ExecuteSqlHttp = Layer.effect(
   ExecuteSql,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const execute = yield* sqladmin.executeSqlInstances.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const execute = yield* sqladmin.executeSqlInstances;
     return Effect.fn(function* (instance: Instance) {
+      yield* bindGcpHost({
+        tag: "GCP.SQL.ExecuteSql",
+        resource: instance,
+        iam: [{ role: defaultRoleFor("GCP.SQL.ExecuteSql") }],
+      });
       const instanceName = yield* instance.instanceName;
       const project = yield* instance.project;
       return Effect.fn(`GCP.SQL.ExecuteSql(${instance.LogicalId})`)(function* (

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Resolve, type ResolveRequest } from "./Resolve.ts";
 import type { Service } from "./Service.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link Resolve}.
@@ -15,21 +16,21 @@ import type { Service } from "./Service.ts";
 export const ResolveHttp = Layer.effect(
   Resolve,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const resolveProjectsLocationsNamespacesServices =
+      yield* servicedirectory.resolveProjectsLocationsNamespacesServices;
     return Effect.fn(function* <S extends Service>(service: S) {
+      yield* bindGcpHost({
+        tag: "GCP.ServiceDirectory.Resolve",
+        resource: service,
+        iam: [{ role: defaultRoleFor("GCP.ServiceDirectory.Resolve") }],
+      });
       const name = yield* service.name;
       return Effect.fn(`GCP.ServiceDirectory.Resolve(${service.LogicalId})`)(
         function* (request?: ResolveRequest) {
-          return yield* servicedirectory
-            .resolveProjectsLocationsNamespacesServices({
-              ...request,
-              name: yield* name,
-            })
-            .pipe(
-              Effect.provideService(Credentials, credentials),
-              Effect.provideService(HttpClient.HttpClient, httpClient),
-            );
+          return yield* resolveProjectsLocationsNamespacesServices({
+            ...request,
+            name: yield* name,
+          });
         },
       );
     });

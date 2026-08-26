@@ -6,6 +6,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { GetPage, type GetPageRequest } from "./GetPage.ts";
 import { pageNameOf } from "./internal.ts";
 import type { Page } from "./Page.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetPage}.
@@ -16,20 +17,19 @@ import type { Page } from "./Page.ts";
 export const GetPageHttp = Layer.effect(
   GetPage,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const getPages = yield* factchecktools.getPages;
     return Effect.fn(function* (page: Page) {
+      yield* bindGcpHost({
+        tag: "GCP.Factchecktools.GetPage",
+        resource: page,
+        iam: [{ role: defaultRoleFor("GCP.Factchecktools.GetPage") }],
+      });
       const name = yield* page.name;
       return Effect.fn(`GCP.Factchecktools.GetPage(${page.LogicalId})`)(
         function* (_request: GetPageRequest) {
-          return yield* factchecktools
-            .getPages({
-              name: pageNameOf(yield* name),
-            })
-            .pipe(
-              Effect.provideService(Credentials, credentials),
-              Effect.provideService(HttpClient.HttpClient, httpClient),
-            );
+          return yield* getPages({
+            name: pageNameOf(yield* name),
+          });
         },
       );
     });

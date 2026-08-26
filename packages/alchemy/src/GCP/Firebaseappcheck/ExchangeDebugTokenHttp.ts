@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AppsDebugToken } from "./AppsDebugToken.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 import {
   ExchangeDebugToken,
   type ExchangeDebugTokenRequest,
@@ -18,14 +19,15 @@ import {
 export const ExchangeDebugTokenHttp = Layer.effect(
   ExchangeDebugToken,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const exchange =
-      yield* firebaseappcheck.exchangeDebugTokenProjectsApps.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+    const exchange = yield* firebaseappcheck.exchangeDebugTokenProjectsApps;
     return Effect.fn(function* (debugToken: AppsDebugToken) {
+      yield* bindGcpHost({
+        tag: "GCP.Firebaseappcheck.ExchangeDebugToken",
+        resource: debugToken,
+        iam: [
+          { role: defaultRoleFor("GCP.Firebaseappcheck.ExchangeDebugToken") },
+        ],
+      });
       const app = yield* debugToken.app;
       const secret = yield* debugToken.token;
       return Effect.fn(

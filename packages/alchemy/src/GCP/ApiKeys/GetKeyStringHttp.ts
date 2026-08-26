@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { GetKeyString } from "./GetKeyString.ts";
 import type { Key } from "./Key.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetKeyString}.
@@ -15,20 +16,20 @@ import type { Key } from "./Key.ts";
 export const GetKeyStringHttp = Layer.effect(
   GetKeyString,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const getKeyStringProjectsLocationsKeys =
+      yield* apikeys.getKeyStringProjectsLocationsKeys;
     return Effect.fn(function* <K extends Key>(key: K) {
+      yield* bindGcpHost({
+        tag: "GCP.ApiKeys.GetKeyString",
+        resource: key,
+        iam: [{ role: defaultRoleFor("GCP.ApiKeys.GetKeyString") }],
+      });
       const name = yield* key.name;
       return Effect.fn(`GCP.ApiKeys.GetKeyString(${key.LogicalId})`)(
         function* () {
-          return yield* apikeys
-            .getKeyStringProjectsLocationsKeys({
-              name: yield* name,
-            })
-            .pipe(
-              Effect.provideService(Credentials, credentials),
-              Effect.provideService(HttpClient.HttpClient, httpClient),
-            );
+          return yield* getKeyStringProjectsLocationsKeys({
+            name: yield* name,
+          });
         },
       );
     });

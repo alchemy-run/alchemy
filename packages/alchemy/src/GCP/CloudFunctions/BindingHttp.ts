@@ -11,6 +11,7 @@ export const makeFunctionHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<CloudFunction, I, A, E>({

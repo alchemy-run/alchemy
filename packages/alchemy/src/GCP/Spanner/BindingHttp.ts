@@ -2,6 +2,8 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Instance } from "./Instance.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Spanner instance bindings.
@@ -13,27 +15,25 @@ export const makeSpannerInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (instance: Instance) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: instance,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* instance.name;
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { GetLabel, type GetLabelRequest } from "./GetLabel.ts";
 import type { Label } from "./Label.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetLabel}.
@@ -15,13 +16,13 @@ import type { Label } from "./Label.ts";
 export const GetLabelHttp = Layer.effect(
   GetLabel,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const getLabels = yield* drivelabels.getLabels.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const getLabels = yield* drivelabels.getLabels;
     return Effect.fn(function* (label: Label) {
+      yield* bindGcpHost({
+        tag: "GCP.Drivelabels.GetLabel",
+        resource: label,
+        iam: [{ role: defaultRoleFor("GCP.Drivelabels.GetLabel") }],
+      });
       const name = yield* label.name;
       const useAdminAccess = yield* label.useAdminAccess;
       return Effect.fn(`GCP.Drivelabels.GetLabel(${label.LogicalId})`)(

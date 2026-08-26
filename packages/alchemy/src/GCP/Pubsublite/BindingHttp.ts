@@ -5,6 +5,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AdminReservation } from "./AdminReservation.ts";
 import type { AdminSubscription } from "./AdminSubscription.ts";
 import type { AdminTopic } from "./AdminTopic.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type Op<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -26,22 +27,21 @@ export const makeReservationHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* (
-      options.operation as Effect.Effect<
-        (input: I) => Effect.Effect<A, E>,
-        never,
-        Credentials | HttpClient.HttpClient
-      >
-    ).pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation as Effect.Effect<
+      (input: I) => Effect.Effect<A, E>,
+      never,
+      Credentials | HttpClient.HttpClient
+    >;
     return Effect.fn(function* (reservation: AdminReservation) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: reservation,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* reservation.name;
       return Effect.fn(`${options.tag}(${reservation.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -60,22 +60,21 @@ export const makeTopicNameHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* (
-      options.operation as Effect.Effect<
-        (input: I) => Effect.Effect<A, E>,
-        never,
-        Credentials | HttpClient.HttpClient
-      >
-    ).pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation as Effect.Effect<
+      (input: I) => Effect.Effect<A, E>,
+      never,
+      Credentials | HttpClient.HttpClient
+    >;
     return Effect.fn(function* (topic: AdminTopic) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: topic,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* topic.name;
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -94,22 +93,21 @@ export const makeTopicStatsHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* (
-      options.operation as Effect.Effect<
-        (input: I) => Effect.Effect<A, E>,
-        never,
-        Credentials | HttpClient.HttpClient
-      >
-    ).pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation as Effect.Effect<
+      (input: I) => Effect.Effect<A, E>,
+      never,
+      Credentials | HttpClient.HttpClient
+    >;
     return Effect.fn(function* (topic: AdminTopic) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: topic,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* topic.name;
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
         request?: Omit<I, "topic">,
@@ -128,23 +126,22 @@ export const makeSubscriptionHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   field: "name" | "subscription";
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* (
-      options.operation as Effect.Effect<
-        (input: I) => Effect.Effect<A, E>,
-        never,
-        Credentials | HttpClient.HttpClient
-      >
-    ).pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation as Effect.Effect<
+      (input: I) => Effect.Effect<A, E>,
+      never,
+      Credentials | HttpClient.HttpClient
+    >;
     return Effect.fn(function* (subscription: AdminSubscription) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: subscription,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* subscription.name;
       return Effect.fn(`${options.tag}(${subscription.LogicalId})`)(function* (
         request?: Omit<I, "name" | "subscription">,

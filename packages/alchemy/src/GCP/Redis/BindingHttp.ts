@@ -12,6 +12,7 @@ export const makeRedisHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<AclPolicy, I, A, E>({
@@ -31,6 +32,7 @@ export const makeRedisInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<Instance, I, A, E>({

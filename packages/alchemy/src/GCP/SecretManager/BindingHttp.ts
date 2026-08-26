@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { LocationsSecret } from "./LocationsSecret.ts";
 import type { Secret } from "./Secret.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 export type SecretBindingTarget = Secret | LocationsSecret;
 
@@ -19,12 +20,18 @@ type GcpHttpOp<I, A, E> = Effect.Effect<
  */
 export const makeSecretHttpBinding = <I, A, E, Req = void>(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
   toInput: (secretName: string, request: Req | undefined) => I;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (secret: SecretBindingTarget) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: secret,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* secret.name;
       return Effect.fn(`${options.tag}(${secret.LogicalId})`)(function* (
         request?: Req,

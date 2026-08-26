@@ -2,6 +2,8 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Certificate Authority Service bindings.
@@ -13,27 +15,25 @@ export const makeCertificateAuthorityHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (ca: CertificateAuthority) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: ca,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* ca.name;
       return Effect.fn(`${options.tag}(${ca.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });

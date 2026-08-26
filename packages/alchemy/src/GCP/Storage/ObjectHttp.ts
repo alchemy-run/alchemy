@@ -3,6 +3,7 @@ import type { GcpOpContext } from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Bucket } from "./Bucket.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -24,16 +25,17 @@ export const makeObjectHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (bucket: Bucket) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: bucket,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const bucketName = yield* bucket.bucketName;
       return Effect.fn(`${options.tag}(${bucket.LogicalId})`)(function* (
         request: Omit<I, "bucket">,

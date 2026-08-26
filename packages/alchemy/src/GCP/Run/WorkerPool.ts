@@ -1,15 +1,29 @@
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
+import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  applyHostBindings,
+  defaultComputeServiceAccount,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -124,7 +138,7 @@ export type WorkerPoolBinaryAuthorization = {
   policy?: string;
 };
 
-export type WorkerPoolProps = {
+export type WorkerPoolProps = PlatformProps & {
   /**
    * Worker pool id (the `{workerPool}` segment of
    * `projects/{project}/locations/{location}/workerPools/{workerPool}`).
@@ -172,9 +186,29 @@ export type WorkerPoolProps = {
   scaling?: WorkerPoolScaling;
   /**
    * Revision template. If omitted, a single container runs the public
-   * Cloud Run worker-pool image.
+   * Cloud Run worker-pool image. The Effect-native `main` form fills
+   * `image` for you.
    */
   template?: WorkerPoolRevisionTemplate;
+  /**
+   * Module entrypoint for an Effect-native worker pool (typically
+   * `import.meta.url`). Alchemy bundles the program, builds a container,
+   * and deploys the pool. Bindings attach env + IAM onto the runtime SA.
+   */
+  main?: string;
+  /**
+   * Named export to load from `main`.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Additional environment variables for the Effect-native container.
+   */
+  env?: Record<string, any>;
+  /**
+   * Bundler configuration for `main`.
+   */
+  build?: Bundle.BundleConfig;
 };
 
 export type WorkerPool = Resource<
@@ -218,9 +252,13 @@ export type WorkerPool = Resource<
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
   },
-  never,
+  GcpHostBinding,
   Providers
 >;
+
+export type WorkerPoolRuntimeContext = HostRuntimeContext;
+export type WorkerPoolServices = Credentials | GcpEnvironment | ServerHost;
+export type WorkerPoolShape = Main<WorkerPoolServices>;
 
 /**
  * A Cloud Run worker pool (pull-based revision + instance split).
@@ -260,11 +298,35 @@ export type WorkerPool = Resource<
  * const live = yield* getWorkerPool();
  * ```
  *
+ * ### Effect-native Worker Pool with bindings
+ * **Example:** Pull workers with Memorystore
+ * ```typescript
+ * export class Workers extends GCP.Run.WorkerPool<Workers>()(
+ *   "Workers",
+ *   { main: import.meta.url, scaling: { manualInstanceCount: 1 } },
+ *   Effect.gen(function* () {
+ *     const redis = yield* GCP.Redis.ReadWriteRedis(cache);
+ *     return {
+ *       run: redis.set("worker", "up"),
+ *     };
+ *   }).pipe(Effect.provide(GCP.Redis.ReadWriteRedisHttp)),
+ * ) {}
+ * ```
+ *
  * @resource
  * @product GCP
  * @category Run
  */
-export const WorkerPool = Resource<WorkerPool>("GCP.Run.WorkerPool");
+export const WorkerPool: Platform<
+  WorkerPool,
+  WorkerPoolServices,
+  WorkerPoolShape,
+  WorkerPoolRuntimeContext
+> = Platform("GCP.Run.WorkerPool", {
+  createRuntimeContext: createHostRuntimeContext("GCP.Run.WorkerPool") as (
+    id: string,
+  ) => WorkerPoolRuntimeContext,
+});
 
 export class WorkerPoolNotResolved extends Data.TaggedError(
   "GCP.Run.WorkerPoolNotResolved",
@@ -859,7 +921,7 @@ export const WorkerPoolProvider = () =>
         );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const workerPoolId = yield* toId(
         id,
@@ -875,6 +937,67 @@ export const WorkerPoolProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
+      const serviceAccount =
+        template.serviceAccount && template.serviceAccount.length > 0
+          ? template.serviceAccount
+          : yield* defaultComputeServiceAccount(env.project);
+      template.serviceAccount = serviceAccount;
+      const collected = yield* applyHostBindings({
+        project: env.project,
+        serviceAccount,
+        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+      });
+      const runtimeEnv = { ...collected.env, ...news.env };
+      if (news.main !== undefined) {
+        const images = yield* makeImageSource;
+        const handler = news.handler ?? "default";
+        const image = yield* images.resolve({
+          id,
+          source: {
+            main: news.main,
+            handler,
+            build: news.build,
+          },
+          repositoryName: rfc1035(`${workerPoolId}-src`),
+          location,
+          isExternal: news.isExternal,
+          bootstrap: (importPath: string) => `
+import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRunJob";
+
+globalThis.__ALCHEMY_RUNTIME__ = true;
+const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
+
+await bootstrap(entrypoint);
+`,
+          session,
+        });
+        const existing = template.containers?.[0] ?? {};
+        template.containers = [
+          {
+            ...existing,
+            image: image.imageUri,
+            env: [
+              ...(existing.env ?? []),
+              ...Object.entries(runtimeEnv).map(([envName, value]) => ({
+                name: envName,
+                value:
+                  typeof value === "string" ? value : JSON.stringify(value),
+              })),
+            ],
+          },
+        ];
+      } else if (Object.keys(runtimeEnv).length > 0) {
+        const existing = template.containers?.[0];
+        if (existing !== undefined) {
+          existing.env = [
+            ...(existing.env ?? []),
+            ...Object.entries(runtimeEnv).map(([envName, value]) => ({
+              name: envName,
+              value: typeof value === "string" ? value : JSON.stringify(value),
+            })),
+          ];
+        }
+      }
 
       let current = yield* getByName(name);
       if (current?.deleteTime !== undefined) {

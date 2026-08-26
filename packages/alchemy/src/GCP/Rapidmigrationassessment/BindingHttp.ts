@@ -2,6 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Collector } from "./Collector.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * Shared HTTP scaffolding for Rapid Migration Assessment collector
@@ -17,6 +18,7 @@ export const makeCollectorHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: Effect.Effect<
     (input: I) => Effect.Effect<A, E>,
     never,
@@ -27,6 +29,11 @@ export const makeCollectorHttpBinding = <
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (collector: Collector) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: collector,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* collector.name;
       return Effect.fn(`${options.tag}(${collector.LogicalId})`)(function* (
         request?: Omit<I, "name">,

@@ -14,6 +14,7 @@ export const makeTopicHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
@@ -42,6 +43,7 @@ export const makeSubscriptionHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { CaPool } from "./CaPool.ts";
 import { FetchCaCerts, type FetchCaCertsRequest } from "./FetchCaCerts.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link FetchCaCerts}.
@@ -15,24 +16,24 @@ import { FetchCaCerts, type FetchCaCertsRequest } from "./FetchCaCerts.ts";
 export const FetchCaCertsHttp = Layer.effect(
   FetchCaCerts,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const fetchCaCertsProjectsLocationsCaPools =
+      yield* privateca.fetchCaCertsProjectsLocationsCaPools;
     return Effect.fn(function* <P extends CaPool>(pool: P) {
+      yield* bindGcpHost({
+        tag: "GCP.PrivateCA.FetchCaCerts",
+        resource: pool,
+        iam: [{ role: defaultRoleFor("GCP.PrivateCA.FetchCaCerts") }],
+      });
       const name = yield* pool.name;
       return Effect.fn(`GCP.PrivateCA.FetchCaCerts(${pool.LogicalId})`)(
         function* (request?: FetchCaCertsRequest) {
-          return yield* privateca
-            .fetchCaCertsProjectsLocationsCaPools({
-              caPool: yield* name,
-              body:
-                request?.requestId !== undefined
-                  ? { requestId: request.requestId }
-                  : {},
-            })
-            .pipe(
-              Effect.provideService(Credentials, credentials),
-              Effect.provideService(HttpClient.HttpClient, httpClient),
-            );
+          return yield* fetchCaCertsProjectsLocationsCaPools({
+            caPool: yield* name,
+            body:
+              request?.requestId !== undefined
+                ? { requestId: request.requestId }
+                : {},
+          });
         },
       );
     });
