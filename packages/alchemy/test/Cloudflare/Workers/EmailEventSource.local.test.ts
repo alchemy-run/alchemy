@@ -75,34 +75,19 @@ const postEmail = (workerUrl: string, raw: string) =>
 /**
  * `Cloudflare.email().subscribe(...)` against the local simulator.
  *
- * SKIPPED — this does not work yet, and the test is here to pin the gap
- * rather than to claim support.
+ * The local entry worker delivers inbound mail as a JSRPC call,
+ * `env[USER_WORKER].email(message)` — the same shape Cloudflare's mail
+ * pipeline uses against a deployed Worker. workerd resolves JSRPC methods
+ * only on the target entrypoint's *prototype chain*, so this is a
+ * regression guard for `WorkerBridge` keeping the handler set there: an own
+ * instance property of the same name shadows the prototype entry and the
+ * call fails with `The RPC receiver does not implement the method "email"`.
  *
- * The local entry worker dispatches inbound mail as a JSRPC call,
- * `env[USER_WORKER].email(message)`. Against an Effect-native Worker that
- * fails with:
- *
- *     TypeError: The RPC receiver does not implement the method "email".
- *
- * What the failure is NOT:
- *
- * - not the environment: `EmailHandler.local.test.ts` drives the same
- *   `/cdn-cgi/handler/email` route successfully, for a raw async `email()`
- *   export (a plain `ExportedHandler` object).
- * - not the RPC path in general: `CronEventSource.local.test.ts` passes, so
- *   `scheduled()` reaches an Effect Worker over the *same*
- *   `BINDING_USER_WORKER_DIRECT` binding.
- *
- * The difference is that `scheduled`/`queue` are built-in `Fetcher` methods
- * while `email` is resolved as a custom RPC method on the target
- * entrypoint, and it is not being found on the generated `WorkerBridge`
- * class the way it is on a plain object export. Fixing it is a runtime-side
- * change in `@alchemy.run/cloudflare-runtime`, not in the event source.
- *
- * Un-skip once the bridge exposes `email` to JSRPC; the assertions below
- * are the acceptance criteria.
+ * `fetch`/`scheduled`/`queue` cannot catch that — workerd dispatches those
+ * through its built-in event path rather than over RPC — which is why this
+ * test earns its keep alongside `CronEventSource.local.test.ts`.
  */
-test.provider.skip(
+test.provider(
   "the local email trigger dispatches to a subscribe() handler",
   (stack) =>
     Effect.gen(function* () {
