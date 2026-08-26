@@ -19,7 +19,8 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_NETWORKSECURITY;
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsInterceptEndpointGroups({ name }).pipe(

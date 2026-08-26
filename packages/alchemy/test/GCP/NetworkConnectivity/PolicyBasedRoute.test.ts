@@ -32,7 +32,9 @@ const waitUntilGone = (name: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_NCC,
+)(
   "create, replace, and delete a policy-based route",
   (stack) =>
     Effect.gen(function* () {

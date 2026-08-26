@@ -57,7 +57,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_NCC,
+)(
   "create, update, and delete an internal range",
   (stack) =>
     Effect.gen(function* () {

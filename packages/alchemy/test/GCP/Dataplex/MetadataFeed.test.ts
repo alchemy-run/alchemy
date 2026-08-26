@@ -30,7 +30,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
+)(
   "create, update, and delete a metadata feed",
   (stack) =>
     Effect.gen(function* () {

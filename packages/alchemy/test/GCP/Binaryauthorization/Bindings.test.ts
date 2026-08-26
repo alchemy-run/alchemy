@@ -71,14 +71,13 @@ test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_BINAUTHZ_VALIDATE)(
           const Probe = Action(
             "ProbeValidate",
             Effect.gen(function* () {
-              yield* attestor.name;
-              yield* note.name;
+              yield* attestor.attestorId;
+              yield* attestor.noteReference;
               const validate =
                 yield* GCP.Binaryauthorization.ValidateAttestation(attestor);
               return Effect.fn(function* () {
                 return yield* validate({
                   occurrenceResourceUri: TEST_RESOURCE_URI,
-                  occurrenceNote: yield* note.name,
                   attestation: TEST_ATTESTATION,
                 });
               });

@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
@@ -36,8 +37,8 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const imageUriOf = (repo: { name: string }) =>
-  `${repo.name}/genericArtifacts/plugin:v1`;
+const imageUriOf = (repo: { name: any }) =>
+  Output.interpolate`${repo.name}/genericArtifacts/plugin:v1`;
 
 const uploadPluginWasm = (repositoryName: string) =>
   Effect.gen(function* () {
@@ -90,7 +91,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(
+  !hasGcpCreds ||
+    !!process.env.FAST ||
+    !process.env.GCP_TEST_WASM_PLUGIN_VERSION,
+)(
   "create and delete a wasm plugin version",
   (stack) =>
     Effect.gen(function* () {
@@ -124,7 +129,7 @@ test.provider.skipIf(!hasGcpCreds)(
             versions: {
               v1: {
                 description: "inline v1",
-                imageUri: imageUriOf(repo),
+                imageUri: imageUriOf(artifacts),
               },
             },
           });
@@ -134,7 +139,7 @@ test.provider.skipIf(!hasGcpCreds)(
             wasmPluginVersionId: "v2",
             description: "wasm version a",
             labels: { env: "test" },
-            imageUri: imageUriOf(repo),
+            imageUri: imageUriOf(artifacts),
           });
           return { artifacts, plugin, version };
         }),
@@ -181,7 +186,7 @@ test.provider.skipIf(!hasGcpCreds)(
             location: "global",
             description: "wasm version a",
             labels: { env: "test" },
-            imageUri: imageUriOf(repo),
+            imageUri: imageUriOf(artifacts),
           });
           return { artifacts, plugin, version };
         }),

@@ -18,7 +18,8 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_WORKSTATIONS;
 
 test.provider.skipIf(!runLifecycle)(
   "GetWorkstationCluster, GetWorkstationConfig, and GetWorkstation invoke HTTP bindings",
