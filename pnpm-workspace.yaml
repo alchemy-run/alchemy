@@ -46,12 +46,12 @@ catalogs:
     "@cloudflare/containers": ^0.3.7
     "@cloudflare/puppeteer": ^1.1.0
     "@cloudflare/vite-plugin": ^1.13.12
-    "@cloudflare/workers-types": 4.20260702.1
+    "@cloudflare/workers-types": 5.20260826.1
     wrangler: ^4.103.0
   cloudflare-runtime:
     "@cloudflare/unenv-preset": ^2.16.0
     "@cloudflare/vitest-pool-workers": ^0.13.0
-    "@cloudflare/workers-types": ^5.20260812.1
+    "@cloudflare/workers-types": ^5.20260826.1
     "@octanejs/vite-plugin": ">=0.1.22"
     "@puppeteer/browsers": ^3.2.0
     "@sveltejs/kit": ">=3.0.0-next.9"
@@ -163,7 +163,7 @@ catalogs:
     pathe: ^2.0.3
     tsx: ^4.20.6
 overrides:
-  "@cloudflare/workers-types": 5.20260812.1
+  "@cloudflare/workers-types": 5.20260826.1
   effect: 4.0.0-rc.111
   "@effect/platform-browser": 4.0.0-rc.111
   drizzle-kit: 1.0.0-rc.5-ab785fc
@@ -186,3 +186,4 @@ minimumReleaseAgeExclude:
   - effect@4.0.0-rc.111
   - foldkit@0.148.2
   - '@solidjs/start@2.0.4'
+  - '@cloudflare/workers-types@5.20260826.1'
