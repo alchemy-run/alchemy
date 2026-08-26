@@ -25,12 +25,7 @@ export const makePipelineHttpBinding = <
     ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (pipeline: Pipeline) {
       const name = yield* pipeline.name;
       return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (

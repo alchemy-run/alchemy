@@ -1,15 +1,29 @@
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
+import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  applyHostBindings,
+  defaultComputeServiceAccount,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -92,7 +106,7 @@ export type JobBinaryAuthorization = {
   policy?: string;
 };
 
-export type JobProps = {
+export type JobProps = PlatformProps & {
   /**
    * Job id (the `{job}` segment of
    * `projects/{project}/locations/{location}/jobs/{job}`). If omitted, a
@@ -143,10 +157,28 @@ export type JobProps = {
    */
   executionAnnotations?: Record<string, string>;
   /**
-   * Containers that run as each task. At least one container with `image`
-   * is required.
+   * Containers that run as each task. Required unless `main` is set.
    */
-  containers: JobContainer[];
+  containers?: JobContainer[];
+  /**
+   * Module entrypoint for an Effect-native job (typically
+   * `import.meta.url`). Alchemy bundles the program, builds a container,
+   * and runs it to completion. Bindings grant IAM onto the runtime SA.
+   */
+  main?: string;
+  /**
+   * Named export to load from `main`.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Additional environment variables for the Effect-native container.
+   */
+  env?: Record<string, any>;
+  /**
+   * Bundler configuration for `main`.
+   */
+  build?: Bundle.BundleConfig;
   /**
    * Max time a task attempt may run (e.g. `"600s"`).
    * @default "600s"
@@ -223,9 +255,13 @@ export type Job = Resource<
     /** Task service account email. */
     serviceAccount: string | undefined;
   },
-  never,
+  GcpHostBinding,
   Providers
 >;
+
+export type JobRuntimeContext = HostRuntimeContext;
+export type JobServices = Credentials | GcpEnvironment | ServerHost;
+export type JobShape = Main<JobServices>;
 
 /**
  * A Cloud Run Job — a container that runs to completion.
@@ -259,6 +295,21 @@ export type Job = Resource<
  * });
  * ```
  *
+ * ### Effect-native Job with bindings
+ * **Example:** Drain a cache then exit
+ * ```typescript
+ * export class Warm extends GCP.Run.Job<Warm>()(
+ *   "Warm",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const redis = yield* GCP.Redis.ReadWriteRedis(cache);
+ *     return {
+ *       run: redis.set("warmed", "1"),
+ *     };
+ *   }).pipe(Effect.provide(GCP.Redis.ReadWriteRedisHttp)),
+ * ) {}
+ * ```
+ *
  * ### Running a Job
  * **Example:** Trigger an execution
  * ```typescript
@@ -270,7 +321,12 @@ export type Job = Resource<
  * @product GCP
  * @category Run
  */
-export const Job = Resource<Job>("GCP.Run.Job");
+export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
+  Platform("GCP.Run.Job", {
+    createRuntimeContext: createHostRuntimeContext("GCP.Run.Job") as (
+      id: string,
+    ) => JobRuntimeContext,
+  });
 
 export class JobNotResolved extends Data.TaggedError("GCP.Run.JobNotResolved")<{
   name: string;
@@ -400,9 +456,9 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const toApiContainers = (
-  containers: JobContainer[],
+  containers: JobContainer[] | undefined,
 ): cloudrun.GoogleCloudRunV2ContainerList =>
-  containers.map((container) => ({
+  (containers ?? []).map((container) => ({
     name: container.name,
     image: container.image,
     command: container.command,
@@ -461,8 +517,8 @@ const comparableEnv = (env: cloudrun.GoogleCloudRunV2EnvVarList | undefined) =>
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 
-const comparableContainers = (containers: JobContainer[]) =>
-  containers.map((container) => ({
+const comparableContainers = (containers: JobContainer[] | undefined) =>
+  (containers ?? []).map((container) => ({
     name: container.name ?? "",
     image: container.image,
     command: container.command ?? [],
@@ -476,10 +532,10 @@ const comparableContainers = (containers: JobContainer[]) =>
 
 const comparableObservedContainers = (
   containers: cloudrun.GoogleCloudRunV2ContainerList | undefined,
-  desired: JobContainer[],
+  desired: JobContainer[] | undefined,
 ) =>
   (containers ?? []).map((container, index) => {
-    const user = desired[index];
+    const user = desired?.[index];
     return {
       name: user?.name !== undefined ? (container.name ?? "") : "",
       image: container.image ?? "",
@@ -717,7 +773,7 @@ export const JobProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
       const location = normalizeLocation(news.location ?? output?.location);
@@ -727,6 +783,51 @@ export const JobProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
       const desiredAnnotations = userAnnotations(news.annotations);
+      const serviceAccount =
+        news.serviceAccount && news.serviceAccount.length > 0
+          ? news.serviceAccount
+          : yield* defaultComputeServiceAccount(env.project);
+      const collected = yield* applyHostBindings({
+        project: env.project,
+        serviceAccount,
+        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+      });
+      const runtimeEnv = { ...collected.env, ...news.env };
+      let containers = news.containers;
+      if (news.main !== undefined) {
+        const images = yield* makeImageSource;
+        const handler = news.handler ?? "default";
+        const image = yield* images.resolve({
+          id,
+          source: {
+            main: news.main,
+            handler,
+            build: news.build,
+          },
+          repositoryName: rfc1035(`${jobId}-src`),
+          location,
+          isExternal: news.isExternal,
+          bootstrap: (importPath: string) => `
+import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRunJob";
+
+globalThis.__ALCHEMY_RUNTIME__ = true;
+const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
+
+await bootstrap(entrypoint);
+`,
+          session,
+        });
+        containers = [
+          {
+            image: image.imageUri,
+            env: Object.entries(runtimeEnv).map(([envName, value]) => ({
+              name: envName,
+              value: typeof value === "string" ? value : JSON.stringify(value),
+            })),
+          },
+        ];
+      }
+      const effectiveNews: JobProps = { ...news, containers, serviceAccount };
 
       let current = yield* getByName(name);
       if (current?.deleteTime !== undefined) {
@@ -747,7 +848,7 @@ export const JobProvider = () =>
                   : undefined,
               launchStage: news.launchStage,
               binaryAuthorization: news.binaryAuthorization,
-              template: desiredTemplate(news, undefined),
+              template: desiredTemplate(effectiveNews, undefined),
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -769,11 +870,11 @@ export const JobProvider = () =>
         stable(desiredAnnotations) !==
           stable(userAnnotations(current.annotations));
       const containersChanged =
-        stable(comparableContainers(news.containers)) !==
+        stable(comparableContainers(effectiveNews.containers)) !==
         stable(
           comparableObservedContainers(
             current.template?.template?.containers,
-            news.containers,
+            effectiveNews.containers,
           ),
         );
       const timeoutChanged =
@@ -850,7 +951,7 @@ export const JobProvider = () =>
             launchStage: news.launchStage ?? current.launchStage,
             binaryAuthorization:
               news.binaryAuthorization ?? current.binaryAuthorization,
-            template: desiredTemplate(news, current),
+            template: desiredTemplate(effectiveNews, current),
           },
         });
         yield* waitForOperation(operation);

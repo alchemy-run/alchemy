@@ -20,12 +20,7 @@ export const makeParameterVersionHttpBinding = <I, A, E, Req = void>(options: {
   toInput: (versionName: string, request: Req | undefined) => I;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (version: ParametersVersion) {
       const name = yield* version.name;
       return Effect.fn(`${options.tag}(${version.LogicalId})`)(function* (

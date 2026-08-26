@@ -24,12 +24,7 @@ export const makeServiceHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (service: Service) {
       const name = yield* service.name;
       return Effect.fn(`${options.tag}(${service.LogicalId})`)(function* (
@@ -52,12 +47,7 @@ export const makeConnectorHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (connector: ServicesConnector) {
       const name = yield* connector.name;
       return Effect.fn(`${options.tag}(${connector.LogicalId})`)(function* (

@@ -1,15 +1,8 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { bindGcpHost } from "../Host.ts";
+import type { GcpHttpOp } from "../HttpBinding.ts";
 import type { Subscription } from "./Subscription.ts";
 import type { Topic } from "./Topic.ts";
-
-type GcpHttpOp<I, A, E> = Effect.Effect<
-  (input: I) => Effect.Effect<A, E>,
-  never,
-  Credentials | HttpClient.HttpClient
-> &
-  ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 
 /**
  * Shared HTTP scaffolding for Pub/Sub bindings.
@@ -24,14 +17,14 @@ export const makeTopicHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (topic: Topic) {
       const name = yield* topic.name;
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: topic,
+        iam: [{ role: "roles/pubsub.publisher" }],
+      });
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
         request: Omit<I, "topic">,
       ) {
@@ -52,14 +45,14 @@ export const makeSubscriptionHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (subscription: Subscription) {
       const name = yield* subscription.name;
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: subscription,
+        iam: [{ role: "roles/pubsub.subscriber" }],
+      });
       return Effect.fn(`${options.tag}(${subscription.LogicalId})`)(function* (
         request: Omit<I, "subscription">,
       ) {

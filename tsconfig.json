@@ -30,7 +30,7 @@
       "path": "./submodules/distilled/packages/fly-io/tsconfig.json"
     },
     {
-      "path": "./distilled/packages/gcp/tsconfig.json"
+      "path": "./submodules/distilled/packages/gcp/tsconfig.json"
     },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
