@@ -26,12 +26,13 @@ const close = (server: Net.Server) =>
 
 const readOnce = (host: string, port: number) =>
   Effect.callback<string, Error>((resume) => {
-    const socket = Net.connect({ host, port }, () => undefined);
-    const chunks: Buffer[] = [];
-    socket.on("data", (chunk) => chunks.push(chunk));
-    socket.on("end", () =>
-      resume(Effect.succeed(Buffer.concat(chunks).toString())),
-    );
+    const socket = Net.connect({ host, port });
+    socket.setEncoding("utf8");
+    let data = "";
+    socket.on("data", (chunk) => {
+      data += chunk;
+    });
+    socket.on("end", () => resume(Effect.succeed(data)));
     socket.on("error", (error) => resume(Effect.fail(error)));
     socket.setTimeout(2000, () => {
       socket.destroy();
