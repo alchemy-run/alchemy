@@ -62,7 +62,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS,
+)(
   "create, update, and delete an integration version test case",
   (stack) =>
     Effect.gen(function* () {

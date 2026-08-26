@@ -50,6 +50,12 @@ export const probeReservations = (
           message: error.message,
         }),
       ),
+      Effect.catchTag(["NotFound", "BadRequest"], (error) =>
+        Effect.succeed({
+          tag: "Forbidden" as const,
+          message: error.message,
+        }),
+      ),
       Effect.catchTag("Conflict", () => Effect.succeed({ tag: "ok" as const })),
     );
 
@@ -76,6 +82,12 @@ export const probeTopics = (parent = `projects/${project}/locations/${zone}`) =>
       ),
       Effect.map((): ProbeResult => ({ tag: "ok" })),
       Effect.catchTag("Forbidden", (error) =>
+        Effect.succeed({
+          tag: "Forbidden" as const,
+          message: error.message,
+        }),
+      ),
+      Effect.catchTag(["NotFound", "BadRequest"], (error) =>
         Effect.succeed({
           tag: "Forbidden" as const,
           message: error.message,

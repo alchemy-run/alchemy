@@ -104,8 +104,17 @@ export class DlpJobNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (project: string, jobId: string) =>
-  `projects/${project}/dlpJobs/${jobId}`;
+const MAX_JOB_ID_LENGTH = 64;
+
+const stripJobPrefix = (jobId: string) => jobId.replace(/^[ir]-/, "");
+
+const prefixedJobId = (jobId: string, risk: boolean) => {
+  const bare = stripJobPrefix(jobId).slice(0, MAX_JOB_ID_LENGTH - 2);
+  return `${risk ? "r" : "i"}-${bare}`;
+};
+
+const resourceName = (project: string, jobId: string, risk: boolean) =>
+  `projects/${project}/dlpJobs/${prefixedJobId(jobId, risk)}`;
 
 const observedInspectJob = (job: dlp.GooglePrivacyDlpV2DlpJob) =>
   job.inspectDetails?.requestedOptions?.jobConfig;
@@ -162,7 +171,11 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : dlp
         .getProjectsDlpJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "BadRequest", "Forbidden"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
 export const DlpJobProvider = () =>
   Provider.succeed(DlpJob, {
@@ -184,8 +197,14 @@ export const DlpJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const jobId = yield* toResourceId(id, olds?.jobId, output?.jobId);
-      const name = output?.name ?? resourceName(env.project, jobId);
+      const jobId = yield* toResourceId(
+        id,
+        olds?.jobId !== undefined ? stripJobPrefix(olds.jobId) : undefined,
+        output?.jobId !== undefined ? stripJobPrefix(output.jobId) : undefined,
+      );
+      const risk =
+        olds?.riskJob !== undefined || output?.type === "RISK_ANALYSIS_JOB";
+      const name = output?.name ?? resourceName(env.project, jobId, risk);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -216,8 +235,13 @@ export const DlpJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const jobId = yield* toResourceId(id, news.jobId, output?.jobId);
-      const name = resourceName(env.project, jobId);
+      const jobId = yield* toResourceId(
+        id,
+        news.jobId !== undefined ? stripJobPrefix(news.jobId) : undefined,
+        output?.jobId !== undefined ? stripJobPrefix(output.jobId) : undefined,
+      );
+      const risk = news.riskJob !== undefined;
+      const name = resourceName(env.project, jobId, risk);
       const ownership = yield* createInternalLabels(id);
       const inspectJob = stampInspectJob(news.inspectJob, ownership);
 
@@ -228,7 +252,7 @@ export const DlpJobProvider = () =>
           .createProjectsDlpJobs({
             parent: `projects/${env.project}`,
             body: {
-              jobId,
+              jobId: prefixedJobId(jobId, risk),
               inspectJob,
               riskJob: news.riskJob,
             },

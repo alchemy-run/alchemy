@@ -26,9 +26,7 @@ const lifecycleName = `alch-sm-lifecycle.endpoints.${project}.cloud.goog`;
 const waitUntilGone = (serviceName: string) =>
   servicemanagement.getServices({ serviceName }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.catchTag("Forbidden", (error) =>
       error.message.toLowerCase().includes("not found")
         ? Effect.succeed("gone" as const)
@@ -50,12 +48,7 @@ test.provider.skipIf(!hasGcpCreds)(
       const error = yield* Effect.flip(
         servicemanagement.getServices({ serviceName: missingName }),
       );
-      expect([
-        "NotFound",
-        "ServiceNotFound",
-        "Forbidden",
-        "ServiceManagementApiDisabled",
-      ]).toContain(error._tag);
+      expect(["NotFound", "Forbidden"]).toContain(error._tag);
       if (error._tag === "Forbidden") {
         expect(error.message.toLowerCase()).toContain("not found");
       }
@@ -67,9 +60,8 @@ test.provider.skipIf(!hasGcpCreds)(
           pageSize: 10,
         })
         .pipe(
-          Effect.catchTag(
-            ["Forbidden", "NotFound", "ServiceManagementApiDisabled"],
-            () => Effect.succeed({ services: [] as const }),
+          Effect.catchTag(["Forbidden", "NotFound"], () =>
+            Effect.succeed({ services: [] as const }),
           ),
         );
       expect(Array.isArray(page.services ?? [])).toEqual(true);
@@ -89,15 +81,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
         .getServices({ serviceName: missingName })
         .pipe(
           Effect.as("ok" as const),
-          Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-            Effect.succeed("ok" as const),
-          ),
-          Effect.catchTag("ServiceManagementApiDisabled", (error) => {
-            console.log(
-              `servicemanagement get skip tag=${error._tag} message=${error.message}`,
-            );
-            return Effect.succeed(error);
-          }),
+          Effect.catchTag("NotFound", () => Effect.succeed("ok" as const)),
           Effect.catchTag("Forbidden", (error) => {
             const apiDisabled = error.message
               .toLowerCase()
@@ -111,9 +95,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
           }),
         );
       if (access !== "ok") {
-        expect(["ServiceManagementApiDisabled", "Forbidden"]).toContain(
-          access._tag,
-        );
+        expect(access._tag).toBe("Forbidden");
         yield* stack.destroy();
         return;
       }

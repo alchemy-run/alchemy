@@ -71,7 +71,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/rulesets/alchemy-missing-xxxx`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

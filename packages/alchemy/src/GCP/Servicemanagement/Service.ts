@@ -293,7 +293,6 @@ export const ServiceProvider = () =>
             Effect.retry({
               while: (error) =>
                 error._tag === "NotFound" ||
-                error._tag === "ServiceNotFound" ||
                 (error._tag === "Forbidden" &&
                   isMissingForbidden(error.message)),
               times: 8,
@@ -323,9 +322,7 @@ export const ServiceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.catchTag("Forbidden", (error) =>
             isMissingForbidden(error.message)
               ? Effect.succeed(undefined)

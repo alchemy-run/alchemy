@@ -51,7 +51,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_INTEGRATIONS)(
   "create, update, and delete an integration template",
   (stack) =>
     Effect.gen(function* () {

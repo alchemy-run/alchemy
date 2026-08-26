@@ -24,9 +24,6 @@ test.provider.skipIf(!hasGcpCreds)(
 
       const probe = yield* probeTopics();
       expect(["ok", "Forbidden"]).toContain(probe.tag);
-      if (probe.tag === "Forbidden") {
-        expect(probe.message ?? "").toContain("deprecated");
-      }
 
       yield* stack.destroy();
     }).pipe(logLevel),

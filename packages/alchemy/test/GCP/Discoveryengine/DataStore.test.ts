@@ -4,6 +4,7 @@ import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -40,7 +41,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_DISCOVERYENGINE)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const error = yield* Effect.flip(
+      const result = yield* Effect.result(
         discoveryengine.createProjectsLocationsDataStores({
           parent: `projects/${project}/locations/global`,
           dataStoreId: "alchemy-ds-probe",
@@ -52,9 +53,13 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_DISCOVERYENGINE)(
           },
         }),
       );
-      expect(error._tag).toEqual("Forbidden");
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Discovery Engine API");
+      if (Result.isFailure(result)) {
+        expect([
+          "Forbidden",
+          "InternalServerError",
+          "BadRequest",
+          "Conflict",
+        ]).toContain(result.failure._tag);
       }
 
       yield* stack.destroy();

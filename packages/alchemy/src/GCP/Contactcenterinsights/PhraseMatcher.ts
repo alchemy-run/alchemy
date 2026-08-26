@@ -252,7 +252,11 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : cci
         .getProjectsLocationsPhraseMatchers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "BadRequest", "Forbidden"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsPhraseMatchers
