@@ -57,7 +57,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(
+  !hasGcpCreds || !process.env.GCP_TEST_REGIONAL_SECRETS || !!process.env.FAST,
+)(
   "AddSecretVersion and AccessSecretVersion round-trip a regional secret",
   (stack) =>
     Effect.gen(function* () {

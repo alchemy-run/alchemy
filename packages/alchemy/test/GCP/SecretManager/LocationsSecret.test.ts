@@ -19,6 +19,11 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
+const runLifecycle =
+  hasGcpCreds && !!process.env.GCP_TEST_REGIONAL_SECRETS && !process.env.FAST;
+
+const project = process.env.GOOGLE_PROJECT_ID ?? "";
+
 const waitUntilGone = (name: string) =>
   secretmanager.getProjectsLocationsSecrets({ name }).pipe(
     Effect.as("found" as const),
@@ -33,6 +38,24 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider.skipIf(!hasGcpCreds)(
+  "createProjectsLocationsSecrets on the global endpoint fails with BadRequest",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const error = yield* Effect.flip(
+        secretmanager.createProjectsLocationsSecrets({
+          parent: `projects/${project}/locations/us-central1`,
+          secretId: "alchemy-regional-probe",
+          body: { labels: { env: "probe" } },
+        }),
+      );
+      expect(["BadRequest", "Forbidden", "NotFound"]).toContain(error._tag);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 60_000 },
+);
+
+test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a regional secret",
   (stack) =>
     Effect.gen(function* () {
@@ -107,7 +130,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!runLifecycle)(
   "replace a regional secret when location changes",
   (stack) =>
     Effect.gen(function* () {

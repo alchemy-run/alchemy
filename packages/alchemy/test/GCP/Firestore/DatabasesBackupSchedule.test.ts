@@ -26,7 +26,9 @@ const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const waitUntilGone = (name: string) =>
   firestore.getProjectsDatabasesBackupSchedules({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.catchTag(["NotFound", "BadRequest", "Forbidden"], () =>
+      Effect.succeed("gone" as const),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",

@@ -171,7 +171,7 @@ const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesBackupSchedules({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -179,7 +179,7 @@ const getByName = (name: string) =>
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesBackupSchedules({ parent }).pipe(
     Effect.map((page) => page.backupSchedules ?? []),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
       Effect.succeed([] as firestore.GoogleFirestoreAdminV1BackupSchedule[]),
     ),
   );
@@ -302,6 +302,13 @@ export const DatabasesBackupScheduleProvider = () =>
             },
           })
           .pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "BadRequest" &&
+                (error.message ?? "").toLowerCase().includes("must exist"),
+              times: 8,
+              schedule: Schedule.spaced("3 seconds"),
+            }),
             Effect.catchTag(["Conflict", "BadRequest"], () =>
               Effect.succeed(undefined),
             ),
