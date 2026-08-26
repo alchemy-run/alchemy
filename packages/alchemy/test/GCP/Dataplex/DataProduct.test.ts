@@ -50,7 +50,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
+)(
   "create, update, and delete a data product",
   (stack) =>
     Effect.gen(function* () {
