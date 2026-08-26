@@ -551,12 +551,26 @@ WantedBy=multi-user.target
       const pathLit = JSON.stringify(path);
       const deviceLit = JSON.stringify(device);
       const fsLit = JSON.stringify(fsType);
+      // Attach returns before udev creates `/dev/disk/by-id/scsi-0HC_Volume_*`.
       yield* input.ssh.exec(
         [
           `set -euo pipefail`,
           `mkdir -p ${pathLit}`,
           `if ! findmnt -n ${pathLit} >/dev/null 2>&1; then`,
-          `  mount -t ${fsLit} ${deviceLit} ${pathLit} || findmnt -n ${pathLit} >/dev/null`,
+          `  udevadm settle --timeout=10 2>/dev/null || true`,
+          `  mounted=0`,
+          `  for i in 1 2 3 4 5 6 7 8 9 10; do`,
+          `    if [ -e ${deviceLit} ] && mount -t ${fsLit} ${deviceLit} ${pathLit}; then`,
+          `      mounted=1`,
+          `      break`,
+          `    fi`,
+          `    sleep 2`,
+          `  done`,
+          `  if [ "$mounted" != 1 ]; then`,
+          `    echo "volume device ${deviceLit} did not appear" >&2`,
+          `    ls -l /dev/disk/by-id 2>/dev/null || true`,
+          `    exit 1`,
+          `  fi`,
           `fi`,
           `if ! grep -qF ${pathLit} /etc/fstab; then`,
           `  echo ${JSON.stringify(`${device} ${path} ${fsType} defaults,nofail 0 2`)} >> /etc/fstab`,

@@ -286,6 +286,17 @@ export const defaultHttpServices = (
       { port: 80, handlers: ["http"], force_https: true },
       { port: 443, handlers: ["tls", "http"] },
     ],
+    // Wait until the process is listening before the proxy sends traffic.
+    // Without this, fly.dev hangs (status 0) while Node is still booting.
+    checks: [
+      {
+        type: "tcp",
+        port,
+        interval: "10s",
+        timeout: "2s",
+        grace_period: "30s",
+      },
+    ],
   },
 ];
 
