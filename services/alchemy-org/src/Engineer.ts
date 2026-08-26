@@ -1,5 +1,8 @@
 import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
+import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
+import { connected } from "./Repos.ts";
 import {
   Bash,
   EditFile,
@@ -33,15 +36,45 @@ import {
  */
 export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
+/** Thread keys are `<session>` or `<session>::<thread>` — the session
+ *  part names the machine (and thus the one worktree on it). */
+const sessionOf = (key: string): string => {
+  const at = key.indexOf("::");
+  return at < 0 ? key : key.slice(0, at);
+};
+
 export const GeneralEngineer = Engineer.make(
   Effect.gen(function* () {
     // ── INIT: once per chat ──────────────────────────────────────────
     const thread = yield* AI.Thread;
+    const checkouts = yield* Git.Checkouts;
+
+    // Session keys are `<owner>/<repo>/<name>` — the prefix picks the
+    // session's repository from the STATIC connected list (Repos.ts).
+    // The checkout claims the machine's one tree under the SESSION key,
+    // so every thread of the session (sharing the machine) adopts the
+    // same worktree; for the alchemy repo the image's bake IS the tree
+    // (adopted in place — warm installs, zero clone). Legacy keys
+    // (`main`, `t-…`) skip the claim and work the baked tree directly.
+    const session = sessionOf(thread.key);
+    let workspace = "the alchemy repository";
+    for (const entry of connected) {
+      if (!entry.sessions) continue;
+      const identity = yield* GitHub.resolveRepository(entry.repository);
+      const full = `${identity.owner}/${identity.repository}`;
+      if (session.startsWith(`${full}/`)) {
+        yield* checkouts
+          .checkout({ key: session, remote: GitHub.remote(entry.repository) })
+          .pipe(Effect.orDie);
+        workspace = full;
+        break;
+      }
+    }
 
     // ── the STANCE: re-rendered before every sampling ────────────────
     return AI.fragment`
-      You are a coding agent working in a checkout of the alchemy
-      repository on your own machine — the operator's pair of hands in
+      You are a coding agent working in a checkout of ${workspace}
+      on your own machine — the operator's pair of hands in
       this codebase. The operator reads your work in a chat UI; be
       direct, lead with the outcome, and keep prose tight.
 

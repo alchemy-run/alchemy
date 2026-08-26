@@ -45,7 +45,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 interface BoardThread {
   id: string;
@@ -80,6 +80,46 @@ interface ApprovalRequest {
   at: number;
 }
 
+/** A connected repository — STATIC code (src/Repos.ts), reflected
+ *  read-only by /api/repos. Never runtime-editable. */
+interface RepoInfo {
+  name: string;
+  sessions: boolean;
+  reviews: boolean;
+}
+
+/** One command's collected output from the session's machine. */
+interface ExecResult {
+  success: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  durationMs: number;
+}
+
+/**
+ * KEY CONVENTIONS. A coding SESSION owns one sandbox MicroVM and has
+ * 1..* THREADS. Thread keys are `<session>` (the base thread) or
+ * `<session>::<thread>`; the server derives the machine from the
+ * session part, so every thread and the terminal share the machine.
+ * Session keys are `<owner>/<repo>/<name>` (legacy keys without a
+ * connected-repo prefix group as unscoped).
+ */
+const splitThreadKey = (
+  key: string,
+): { session: string; thread: string | undefined } => {
+  const at = key.indexOf("::");
+  return at < 0
+    ? { session: key, thread: undefined }
+    : { session: key.slice(0, at), thread: key.slice(at + 2) };
+};
+
+const sessionOfId = (id: string): string | undefined =>
+  id.startsWith("Engineer:")
+    ? splitThreadKey(id.slice("Engineer:".length)).session
+    : undefined;
 
 /** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
 const DEFAULT_THREAD = "Engineer:main";
@@ -159,9 +199,70 @@ const threadTitle = (thread: BoardThread | undefined): string => {
     : "New thread";
 };
 
+/** A thread's TAB label: first input (truncated), else its suffix. */
+const tabTitle = (thread: BoardThread): string => {
+  const first = thread.firstInput?.trim();
+  if (first !== undefined && first !== null && first.length > 0) {
+    return first.length > 28 ? `${first.slice(0, 28)}…` : first;
+  }
+  return splitThreadKey(thread.key).thread ?? "main";
+};
+
+/** Session status rollup: the most alive thread wins. */
+const SESSION_STATUS_ORDER: Array<BoardThread["status"]> = [
+  "running",
+  "idle",
+  "crashed",
+  "settled",
+];
+
+interface SessionGroup {
+  /** The full session key (repo prefix included when present). */
+  session: string;
+  repo: string | undefined;
+  /** The session key minus its repo prefix — the sidebar label. */
+  label: string;
+  /** The session's threads, oldest first (tab order). */
+  threads: BoardThread[];
+  status: BoardThread["status"];
+  updatedAt: number;
+}
+
+const groupSessions = (
+  threads: BoardThread[],
+  repos: RepoInfo[],
+): SessionGroup[] => {
+  const bySession = new Map<string, BoardThread[]>();
+  for (const thread of threads) {
+    const { session } = splitThreadKey(thread.key);
+    const list = bySession.get(session);
+    if (list === undefined) bySession.set(session, [thread]);
+    else list.push(thread);
+  }
+  return [...bySession.entries()]
+    .map(([session, group]): SessionGroup => {
+      const repo = repos.find((entry) =>
+        session.startsWith(`${entry.name}/`),
+      )?.name;
+      return {
+        session,
+        repo,
+        label: repo === undefined ? session : session.slice(repo.length + 1),
+        threads: [...group].sort((a, b) => a.createdAt - b.createdAt),
+        status:
+          SESSION_STATUS_ORDER.find((status) =>
+            group.some((thread) => thread.status === status),
+          ) ?? "idle",
+        updatedAt: Math.max(...group.map((thread) => thread.updatedAt)),
+      };
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+};
+
 export const App = () => {
   const [threads, setThreads] = useState<BoardThread[]>([]);
   const [board, setBoard] = useState<Board>({ repo: "", prs: [] });
+  const [repos, setRepos] = useState<RepoInfo[]>([]);
   const [activeId, setActiveId] = useState<string>(threadFromHash);
   // visited threads stay MOUNTED (visibility-hidden) so switching
   // back preserves scroll position and the streaming tail
@@ -169,13 +270,48 @@ export const App = () => {
   // PRs whose review the user requested — auto-select when the
   // session lands on the board stream
   const [requested, setRequested] = useState<Set<number>>(() => new Set());
+  // the two ACTIVITIES (Code | Review) each remember their last
+  // selection, so flipping tabs restores where you were
+  const [activity, setActivity] = useState<"code" | "review">(() =>
+    threadFromHash().startsWith("ReviewBot:") ? "review" : "code",
+  );
+  const [codeId, setCodeId] = useState<string>(() => {
+    const id = threadFromHash();
+    return id.startsWith("Engineer:") ? id : DEFAULT_THREAD;
+  });
+  const [reviewId, setReviewId] = useState<string | undefined>(() => {
+    const id = threadFromHash();
+    return id.startsWith("ReviewBot:") ? id : undefined;
+  });
+  // per-session TERMINAL tab selection + lazy mounting (a terminal
+  // mounts on first visit and stays mounted, like chat views)
+  const [terminalSel, setTerminalSel] = useState<Record<string, boolean>>({});
+  const [terminalVisited, setTerminalVisited] = useState<string[]>([]);
 
-  const open = (id: string) => {
-    window.location.hash = encodeURIComponent(id);
+  /** Route to a thread id — updates the hash, the activity, and the
+   *  per-activity memory. Selecting a thread deselects the session's
+   *  terminal tab. */
+  const apply = (id: string) => {
     setActiveId(id);
     setVisited((current) =>
       current.includes(id) ? current : [...current, id],
     );
+    if (id.startsWith("Engineer:")) {
+      setCodeId(id);
+      setActivity("code");
+      const session = sessionOfId(id);
+      if (session !== undefined) {
+        setTerminalSel((current) => ({ ...current, [session]: false }));
+      }
+    } else if (id.startsWith("ReviewBot:")) {
+      setReviewId(id);
+      setActivity("review");
+    }
+  };
+
+  const open = (id: string) => {
+    window.location.hash = encodeURIComponent(id);
+    apply(id);
   };
 
   /** A PR with no review session: clicking REQUESTS its review — the
@@ -193,15 +329,20 @@ export const App = () => {
 
   // back/forward navigation drives the same path
   useEffect(() => {
-    const onHash = () => {
-      const id = threadFromHash();
-      setActiveId(id);
-      setVisited((current) =>
-        current.includes(id) ? current : [...current, id],
-      );
-    };
+    const onHash = () => apply(threadFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // the CONNECTED repositories — static code, fetched once
+  useEffect(() => {
+    fetch("/api/repos")
+      .then(
+        (response) =>
+          (response.ok ? response.json() : []) as Promise<RepoInfo[]>,
+      )
+      .then(setRepos)
+      .catch(() => {});
   }, []);
 
   // the thread list: poll — threads appear the moment their session
@@ -305,8 +446,30 @@ export const App = () => {
     }).catch(() => {});
   };
 
-  const newThread = () =>
-    open(`Engineer:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
+  const randomSuffix = () =>
+    `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+
+  /** A new SESSION under a connected repo — one sandbox MicroVM. */
+  const newSession = (repo: string | undefined) => {
+    const name = window
+      .prompt("Session name", `s-${randomSuffix()}`)
+      ?.trim()
+      .replace(/\s+/g, "-");
+    if (!name) return;
+    open(`Engineer:${repo === undefined ? name : `${repo}/${name}`}`);
+  };
+
+  /** A new THREAD in a session — rides the session's machine. */
+  const newThread = (session: string) =>
+    open(`Engineer:${session}::t-${randomSuffix()}`);
+
+  /** The terminal tab: mounts on first visit, stays mounted. */
+  const openTerminal = (session: string) => {
+    setTerminalSel((current) => ({ ...current, [session]: true }));
+    setTerminalVisited((current) =>
+      current.includes(session) ? current : [...current, session],
+    );
+  };
 
   /** The off switch: settle the session in place — terminal, the
    *  transcript stays readable. Optimistic; the poll corrects. */
@@ -321,191 +484,433 @@ export const App = () => {
     }).catch(() => {});
   };
 
-  /** The eraser: stop + purge the transcript + drop the row. The
-   *  session's name is fresh after — reusable by a new thread. */
-  const deleteThread = (id: string) => {
-    if (!window.confirm("Delete this session and its transcript?")) return;
-    setThreads((current) => current.filter((thread) => thread.id !== id));
-    // unmount its chat view (closes the socket client-side too)
-    setVisited((current) => current.filter((visitedId) => visitedId !== id));
-    if (activeId === id) open(DEFAULT_THREAD);
-    void fetch(`/api/chats/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    }).catch(() => {});
+  /** Stop every live thread of a session. */
+  const stopSession = (group: SessionGroup) => {
+    for (const thread of group.threads) {
+      if (thread.status === "running" || thread.status === "idle") {
+        stopThread(thread.id);
+      }
+    }
   };
 
-  // newest first; the active thread is listed even before the board
-  // knows it (a just-created thread has no row yet). Review sessions
-  // live in the PR section, never here.
+  /** The eraser: stop + purge every thread of the session. Its name
+   *  is fresh after — reusable by a new session. */
+  const deleteSession = (group: SessionGroup) => {
+    if (
+      !window.confirm(
+        `Delete session '${group.label}' (${group.threads.length} thread${
+          group.threads.length === 1 ? "" : "s"
+        }) and its transcripts?`,
+      )
+    ) {
+      return;
+    }
+    const ids = new Set(group.threads.map((thread) => thread.id));
+    setThreads((current) => current.filter((thread) => !ids.has(thread.id)));
+    // unmount its chat views (closes the sockets client-side too)
+    setVisited((current) => current.filter((id) => !ids.has(id)));
+    setTerminalVisited((current) =>
+      current.filter((session) => session !== group.session),
+    );
+    for (const id of ids) {
+      void fetch(`/api/chats/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }).catch(() => {});
+    }
+    if (sessionOfId(codeId) === group.session) open(DEFAULT_THREAD);
+  };
+
+  // the active/code thread is listed even before the board knows it
+  // (a just-created thread has no row yet). Review sessions live in
+  // the Review activity, never here.
   const list = useMemo(() => {
     const byId = new Map(threads.map((thread) => [thread.id, thread]));
-    if (!byId.has(activeId) && activeId.startsWith("Engineer:")) {
-      byId.set(activeId, {
-        id: activeId,
-        term: "Engineer",
-        key: activeId.slice("Engineer:".length),
-        status: "idle",
-        ticks: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        firstInput: null,
-      });
+    for (const id of [activeId, codeId]) {
+      if (!byId.has(id) && id.startsWith("Engineer:")) {
+        byId.set(id, {
+          id,
+          term: "Engineer",
+          key: id.slice("Engineer:".length),
+          status: "idle",
+          ticks: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          firstInput: null,
+        });
+      }
     }
-    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [threads, activeId]);
+    return [...byId.values()];
+  }, [threads, activeId, codeId]);
+
+  /** Sessions (threads grouped by `::`-stripped key), newest first. */
+  const groups = useMemo(() => groupSessions(list, repos), [list, repos]);
+
+  const currentSession = sessionOfId(codeId);
+  const currentGroup = groups.find(
+    (group) => group.session === currentSession,
+  );
+  const terminalActive =
+    currentSession !== undefined && terminalSel[currentSession] === true;
+
+  /** Sidebar buckets: one per connected `sessions: true` repo, plus
+   *  an unscoped bucket for legacy keys (`main`, `t-…`). */
+  const repoBuckets = useMemo(() => {
+    const buckets: Array<{
+      repo: string | undefined;
+      groups: SessionGroup[];
+    }> = repos
+      .filter((repo) => repo.sessions)
+      .map((repo) => ({
+        repo: repo.name,
+        groups: groups.filter((group) => group.repo === repo.name),
+      }));
+    const unscoped = groups.filter((group) => group.repo === undefined);
+    if (unscoped.length > 0 || buckets.length === 0) {
+      buckets.push({ repo: undefined, groups: unscoped });
+    }
+    return buckets;
+  }, [groups, repos]);
+
+  const openPrCount = board.prs.filter((pull) => pull.state === "open").length;
+  const reviewRef = reviewId?.match(/^ReviewBot:(.+)#(\d+)$/);
 
   return (
     <div className="flex h-screen bg-background text-foreground">
       <aside className="flex w-72 shrink-0 flex-col border-r border-border">
-        {/* THE PULL REQUESTS — one review session each */}
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-            pull requests
-          </span>
-          {board.repo && (
-            <a
-              href={`https://github.com/${board.repo}`}
-              target="_blank"
-              rel="noreferrer"
-              className="truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
-            >
-              {board.repo}
-            </a>
-          )}
-        </div>
-        <div className="max-h-[45%] shrink-0 overflow-y-auto">
-          {board.prs.map((pull) => {
-            const repo = board.repo || pull.session?.key.split("#")[0];
-            return (
-              <button
-                key={pull.number}
-                type="button"
-                onClick={() =>
-                  pull.session !== undefined
-                    ? open(pull.session.id)
-                    : requestReview(pull.number)
-                }
-                className={cn(
-                  "flex w-full items-center gap-2 border-b border-border/50 px-3 py-2.5 text-left hover:bg-accent/50",
-                  pull.session?.id === activeId && "bg-accent",
-                )}
-              >
-                <IssueBadge
-                  number={pull.number}
-                  state={pull.state}
-                  repo={repo}
-                />
-                <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                  {pull.title}
-                </span>
-                {pull.session?.status === "running" && (
-                  <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
-                )}
-                {pull.session === undefined && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {requested.has(pull.number) ? "reviewing…" : "review"}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {board.prs.length === 0 && (
-            <div className="px-3 py-4 text-xs text-muted-foreground">
-              No pull requests yet — open one on the repository and the
-              bot reviews it.
-            </div>
-          )}
-        </div>
-        {/* THE CODING SESSIONS — the engineer's chats, one sandbox each */}
-        <div className="flex items-center justify-between border-b border-t border-border px-3 py-2">
-          <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-            coding sessions
-          </span>
-          <button
-            type="button"
-            onClick={newThread}
-            className="rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            + new
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {list.map((thread) => (
-            <div
-              key={thread.id}
-              onClick={() => open(thread.id)}
+        {/* THE ACTIVITIES: Code (sessions) | Review (pull requests) */}
+        <div className="flex border-b border-border">
+          {(["code", "review"] as const).map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setActivity(name)}
               className={cn(
-                "group flex w-full cursor-pointer flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
-                thread.id === activeId && "bg-accent",
+                "flex-1 border-b-2 px-3 py-2 font-mono text-xs",
+                activity === name
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
-              <span className="flex items-center gap-1">
-                <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
-                  {threadTitle(thread)}
-                </span>
-                {(thread.status === "running" || thread.status === "idle") && (
-                  <button
-                    type="button"
-                    title="Stop session (terminal)"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      stopThread(thread.id);
-                    }}
-                    className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
-                  >
-                    <Square className="size-3" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  title="Delete session"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    deleteThread(thread.id);
-                  }}
-                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
-                >
-                  <Trash2 className="size-3" />
-                </button>
-              </span>
-              <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                <span
-                  className={cn(
-                    "inline-block size-1.5 rounded-full",
-                    statusDot[thread.status] ?? statusDot.idle,
-                  )}
-                />
-                {thread.status}
-                <span className="ml-auto">
-                  <AtTooltip at={thread.updatedAt}>
-                    <span className="cursor-default">
-                      {timeAgo(thread.updatedAt)}
-                    </span>
-                  </AtTooltip>
-                </span>
-              </span>
-            </div>
+              {name === "code" ? "Code" : `Review${openPrCount > 0 ? ` (${openPrCount})` : ""}`}
+            </button>
           ))}
         </div>
+        {activity === "code" ? (
+          /* SESSIONS grouped under their CONNECTED repo (static code) */
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {repoBuckets.map((bucket) => (
+              <div key={bucket.repo ?? "~unscoped"}>
+                <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                  {bucket.repo !== undefined ? (
+                    <a
+                      href={`https://github.com/${bucket.repo}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      {bucket.repo}
+                    </a>
+                  ) : (
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      unscoped
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => newSession(bucket.repo)}
+                    className="rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    + session
+                  </button>
+                </div>
+                {bucket.groups.map((group) => (
+                  <div
+                    key={group.session}
+                    onClick={() =>
+                      open(
+                        [...group.threads].sort(
+                          (a, b) => b.updatedAt - a.updatedAt,
+                        )[0]!.id,
+                      )
+                    }
+                    className={cn(
+                      "group flex w-full cursor-pointer flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
+                      group.session === currentSession && "bg-accent",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "inline-block size-1.5 shrink-0 rounded-full",
+                          statusDot[group.status] ?? statusDot.idle,
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
+                        {group.label}
+                      </span>
+                      {(group.status === "running" ||
+                        group.status === "idle") && (
+                        <button
+                          type="button"
+                          title="Stop session (terminal)"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            stopSession(group);
+                          }}
+                          className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
+                        >
+                          <Square className="size-3" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        title="Delete session"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteSession(group);
+                        }}
+                        className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </span>
+                    <span className="flex items-center gap-1.5 pl-3 font-mono text-[10px] text-muted-foreground">
+                      {group.threads.length} thread
+                      {group.threads.length === 1 ? "" : "s"} · {group.status}
+                      <span className="ml-auto">
+                        <AtTooltip at={group.updatedAt}>
+                          <span className="cursor-default">
+                            {timeAgo(group.updatedAt)}
+                          </span>
+                        </AtTooltip>
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                {bucket.groups.length === 0 && (
+                  <div className="px-3 py-3 text-xs text-muted-foreground">
+                    No sessions yet.
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* THE PULL REQUESTS — one review session each */
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {board.repo && (
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <a
+                  href={`https://github.com/${board.repo}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  {board.repo}
+                </a>
+              </div>
+            )}
+            {board.prs.map((pull) => {
+              const repo = board.repo || pull.session?.key.split("#")[0];
+              return (
+                <button
+                  key={pull.number}
+                  type="button"
+                  onClick={() =>
+                    pull.session !== undefined
+                      ? open(pull.session.id)
+                      : requestReview(pull.number)
+                  }
+                  className={cn(
+                    "flex w-full items-center gap-2 border-b border-border/50 px-3 py-2.5 text-left hover:bg-accent/50",
+                    pull.session?.id === reviewId && "bg-accent",
+                  )}
+                >
+                  <IssueBadge
+                    number={pull.number}
+                    state={pull.state}
+                    repo={repo}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                    {pull.title}
+                  </span>
+                  {pull.session?.status === "running" && (
+                    <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
+                  )}
+                  {pull.session === undefined && (
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {requested.has(pull.number) ? "reviewing…" : "review"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {board.prs.length === 0 && (
+              <div className="px-3 py-4 text-xs text-muted-foreground">
+                No pull requests yet — open one on the repository and the
+                bot reviews it.
+              </div>
+            )}
+          </div>
+        )}
       </aside>
       <main className="relative flex min-w-0 flex-1 flex-col">
-        {visited.map((id) => (
-          <div
-            key={id}
-            className={cn(
-              "absolute inset-0 flex flex-col",
-              id === activeId ? "visible" : "pointer-events-none invisible",
-            )}
-          >
-            <ChatView
-              id={id}
-              active={id === activeId}
-              agents={[]}
-              breadcrumb={undefined}
-              onOpenThread={open}
-            />
+        {/* ── CODE: the session surface — tabbed threads + terminal ── */}
+        <div
+          className={cn(
+            "absolute inset-0 flex flex-col",
+            activity === "code" ? "visible" : "pointer-events-none invisible",
+          )}
+        >
+          {currentGroup !== undefined && (
+            <div className="flex items-center gap-0.5 border-b border-border px-2">
+              {currentGroup.threads.map((thread) => (
+                <button
+                  key={thread.id}
+                  type="button"
+                  onClick={() => open(thread.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
+                    thread.id === codeId && !terminalActive
+                      ? "border-foreground text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block size-1.5 shrink-0 rounded-full",
+                      statusDot[thread.status] ?? statusDot.idle,
+                    )}
+                  />
+                  <span className="max-w-48 truncate">{tabTitle(thread)}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => openTerminal(currentGroup.session)}
+                className={cn(
+                  "border-b-2 px-3 py-2 font-mono text-xs",
+                  terminalActive
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {">_"} terminal
+              </button>
+              <button
+                type="button"
+                title="New thread (shares this session's machine)"
+                onClick={() => newThread(currentGroup.session)}
+                className="px-2 py-2 font-mono text-sm text-muted-foreground hover:text-foreground"
+              >
+                +
+              </button>
+              <span className="ml-auto pr-2 font-mono text-[10px] text-muted-foreground">
+                one machine · {currentGroup.threads.length} thread
+                {currentGroup.threads.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
+          <div className="relative min-h-0 flex-1">
+            {visited
+              .filter((id) => id.startsWith("Engineer:"))
+              .map((id) => {
+                const shown =
+                  activity === "code" && id === codeId && !terminalActive;
+                return (
+                  <div
+                    key={id}
+                    className={cn(
+                      "absolute inset-0 flex flex-col",
+                      shown ? "visible" : "pointer-events-none invisible",
+                    )}
+                  >
+                    <ChatView
+                      id={id}
+                      active={shown}
+                      agents={[]}
+                      breadcrumb={undefined}
+                      onOpenThread={open}
+                    />
+                  </div>
+                );
+              })}
+            {terminalVisited.map((session) => {
+              const shown =
+                activity === "code" &&
+                session === currentSession &&
+                terminalActive;
+              return (
+                <div
+                  key={session}
+                  className={cn(
+                    "absolute inset-0 flex flex-col",
+                    shown ? "visible" : "pointer-events-none invisible",
+                  )}
+                >
+                  <TerminalView
+                    sessionId={`Engineer:${session}`}
+                    active={shown}
+                  />
+                </div>
+              );
+            })}
           </div>
-        ))}
+        </div>
+        {/* ── REVIEW: the pull-request surface ── */}
+        <div
+          className={cn(
+            "absolute inset-0 flex flex-col",
+            activity === "review"
+              ? "visible"
+              : "pointer-events-none invisible",
+          )}
+        >
+          {reviewRef && (
+            <div className="flex items-center gap-3 border-b border-border px-4 py-2 font-mono text-xs text-muted-foreground">
+              <span className="truncate">
+                {reviewRef[1]}#{reviewRef[2]}
+              </span>
+              <a
+                href={`https://github.com/${reviewRef[1]}/pull/${reviewRef[2]}`}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-auto shrink-0 rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+              >
+                open on GitHub ↗
+              </a>
+            </div>
+          )}
+          <div className="relative min-h-0 flex-1">
+            {visited
+              .filter((id) => id.startsWith("ReviewBot:"))
+              .map((id) => {
+                const shown = activity === "review" && id === reviewId;
+                return (
+                  <div
+                    key={id}
+                    className={cn(
+                      "absolute inset-0 flex flex-col",
+                      shown ? "visible" : "pointer-events-none invisible",
+                    )}
+                  >
+                    <ChatView
+                      id={id}
+                      active={shown}
+                      agents={[]}
+                      breadcrumb={undefined}
+                      onOpenThread={open}
+                    />
+                  </div>
+                );
+              })}
+            {reviewId === undefined && (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Select a pull request — or click “review” to request one.
+              </div>
+            )}
+          </div>
+        </div>
         {/* the operator's gate — one card per pending approval */}
         {approvals.length > 0 && (
           <div className="absolute bottom-4 right-4 z-20 flex w-96 flex-col gap-2">
@@ -550,6 +955,139 @@ export const App = () => {
   );
 };
 
+
+interface TerminalEntry {
+  command: string;
+  /** undefined while the command is in flight. */
+  result: ExecResult | undefined;
+}
+
+/**
+ * The TERMINAL tab — a shared REPL into the session's machine (the
+ * same MicroVM its threads work on). One command per round trip via
+ * `/api/sessions/:id/exec` with collected output; not a PTY (yet) —
+ * no vim, no interactive prompts, but the whole point is `git status`,
+ * `pnpm test`, `ls` against the tree the agent is editing.
+ */
+const TerminalView = ({
+  sessionId,
+  active,
+}: {
+  sessionId: string;
+  active: boolean;
+}) => {
+  const [entries, setEntries] = useState<TerminalEntry[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [entries]);
+  useEffect(() => {
+    if (active) inputRef.current?.focus();
+  }, [active]);
+
+  const run = () => {
+    const command = input.trim();
+    if (command.length === 0 || busy) return;
+    setInput("");
+    setBusy(true);
+    setEntries((current) => [...current, { command, result: undefined }]);
+    const failed = (stderr: string): ExecResult => ({
+      success: false,
+      exitCode: -1,
+      stdout: "",
+      stderr,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      durationMs: 0,
+    });
+    void fetch(`/api/sessions/${encodeURIComponent(sessionId)}/exec`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ command }),
+    })
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as ExecResult)
+          : failed(`HTTP ${response.status}`),
+      )
+      .catch((error) => failed(String(error)))
+      .then((result) => {
+        setEntries((current) =>
+          current.map((entry, index) =>
+            index === current.length - 1 ? { ...entry, result } : entry,
+          ),
+        );
+        setBusy(false);
+      });
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-background font-mono text-xs">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
+        {entries.length === 0 && (
+          <div className="text-muted-foreground">
+            The session's machine — same tree the threads edit. One
+            command per line; output is collected (not a PTY).
+          </div>
+        )}
+        {entries.map((entry, index) => (
+          <div key={index} className="mb-2">
+            <div className="text-foreground">
+              <span className="text-moss">$</span> {entry.command}
+            </div>
+            {entry.result === undefined ? (
+              <div className="animate-pulse text-muted-foreground">
+                running…
+              </div>
+            ) : (
+              <>
+                {entry.result.stdout.length > 0 && (
+                  <pre className="whitespace-pre-wrap text-muted-foreground">
+                    {entry.result.stdout}
+                  </pre>
+                )}
+                {entry.result.stderr.length > 0 && (
+                  <pre className="whitespace-pre-wrap text-terracotta">
+                    {entry.result.stderr}
+                  </pre>
+                )}
+                {(entry.result.stdoutTruncated ||
+                  entry.result.stderrTruncated) && (
+                  <div className="text-muted-foreground">
+                    …output truncated (oldest dropped)
+                  </div>
+                )}
+                {entry.result.exitCode !== 0 && (
+                  <div className="text-terracotta">
+                    exit {entry.result.exitCode}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+        <span className="text-moss">$</span>
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") run();
+          }}
+          disabled={busy}
+          placeholder={busy ? "running…" : "command (Enter to run)"}
+          className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+    </div>
+  );
+};
 
 interface ChatContext {
   /** The channel's dispatched workers — dispatch cards link to them. */

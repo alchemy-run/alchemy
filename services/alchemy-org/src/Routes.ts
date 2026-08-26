@@ -10,7 +10,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { buildBoard } from "./lib/Board.ts";
-import { testAlchemy } from "./Repos.ts";
+import { connected, testAlchemy } from "./Repos.ts";
 import { ReviewBot } from "./ReviewBot.ts";
 import { Approvals } from "./services/Approvals.ts";
 
@@ -21,6 +21,23 @@ const parseSessionId = (id: string): { term: string; key: string } => {
     ? { term: id, key: id }
     : { term: id.slice(0, at), key: id.slice(at + 1) };
 };
+
+/**
+ * A PHANTOM thread identity — just enough `AI.Thread` for the sandbox
+ * layer to derive the session's machine (it only reads `key`). Lets
+ * the WORKER-level terminal door address a session's MicroVM without
+ * being inside the session: the sandbox keys machines by
+ * `machineKey(thread.key)`, so providing the session key here lands
+ * on the same VM the session's threads use.
+ */
+const phantomThread = (key: string): AI.ThreadService => ({
+  key,
+  tokens: Effect.succeed(0),
+  entries: Effect.succeed([]),
+  compact: () => Effect.void,
+  reply: () => Effect.void,
+  remind: () => Effect.void,
+});
 
 /**
  * The org's HTTP surface. The chat list comes from the
@@ -40,10 +57,25 @@ export const routes = Effect.gen(function* () {
   // endpoints 404, and the UI hydrates from the session socket's
   // replay instead.
   const storage = yield* Effect.serviceOption(AI.ThreadStorage);
+  // OPTIONAL: the terminal door needs the session machine seam; a
+  // placement without a sandbox (pure API mirror) 404s the route.
+  const sandbox = yield* Effect.serviceOption(AI.Sandbox);
   const bot = yield* ReviewBot;
   const approvals = yield* Approvals;
   const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
   const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
+
+  // the CONNECTED repositories — static code (Repos.ts), reflected
+  // read-only; identities resolve without provisioning
+  const repos = yield* Effect.forEach(connected, (entry) =>
+    GitHub.resolveRepository(entry.repository).pipe(
+      Effect.map((identity) => ({
+        name: `${identity.owner}/${identity.repository}`,
+        sessions: entry.sessions,
+        reviews: entry.reviews,
+      })),
+    ),
+  );
 
   const sseHeaders = {
     "content-type": "text/event-stream",
@@ -78,6 +110,73 @@ export const routes = Effect.gen(function* () {
     "/api/chats",
     Effect.gen(function* () {
       return yield* HttpServerResponse.json(yield* sessions.list());
+    }),
+  );
+
+  /** The connected repositories — a read-only reflection of code. */
+  const listRepos = HttpRouter.add(
+    "GET",
+    "/api/repos",
+    Effect.gen(function* () {
+      return yield* HttpServerResponse.json(repos);
+    }),
+  );
+
+  /**
+   * The TERMINAL door: run one command on a session's machine — the
+   * same MicroVM its threads work on (the sandbox layer keys machines
+   * by session, so a phantom thread with the session key lands there).
+   * REPL-grade (collected output), not a PTY: the UI sends a line,
+   * renders the result, repeats.
+   */
+  const sessionExec = HttpRouter.add(
+    "POST",
+    "/api/sessions/:id/exec",
+    Effect.gen(function* () {
+      if (Option.isNone(sandbox)) {
+        return yield* HttpServerResponse.json(
+          { error: "no session sandbox on this placement" },
+          { status: 404 },
+        );
+      }
+      const request = yield* HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const { key } = parseSessionId(
+        decodeURIComponent(String(params.id ?? "")),
+      );
+      const body = (yield* request.json.pipe(
+        Effect.catch(() => Effect.succeed({})),
+      )) as { command?: string; cwd?: string };
+      const command =
+        typeof body.command === "string" ? body.command.trim() : "";
+      if (command.length === 0) {
+        return yield* HttpServerResponse.json(
+          { error: "command required" },
+          { status: 400 },
+        );
+      }
+      const result = yield* sandbox.value
+        .exec(command, undefined, {
+          timeout: 120_000,
+          ...(typeof body.cwd === "string" ? { cwd: body.cwd } : {}),
+        })
+        .pipe(
+          Effect.provideService(AI.Thread, phantomThread(key)),
+          // sandbox failures are model-visible strings — surface them
+          // as a failed exec, not a 500
+          Effect.catch((error) =>
+            Effect.succeed({
+              success: false,
+              exitCode: -1,
+              stdout: "",
+              stderr: String(error),
+              stdoutTruncated: false,
+              stderrTruncated: false,
+              durationMs: 0,
+            }),
+          ),
+        );
+      return yield* HttpServerResponse.json(result);
     }),
   );
 
@@ -308,6 +407,8 @@ export const routes = Effect.gen(function* () {
 
   return Layer.mergeAll(
     listSessions,
+    listRepos,
+    sessionExec,
     board,
     boardStream,
     sessionMessages,

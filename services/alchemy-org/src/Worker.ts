@@ -48,7 +48,11 @@ import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
  *
  * (and mirror the swap in services/DriverCloudflare.ts + alchemy.run.ts)
  */
-const SandboxSession = AWS.AI.SandboxMicrovmSession().pipe(
+const SandboxSession = AWS.AI.SandboxMicrovmSession({
+  // the SESSION owns the machine: thread keys are `<session>::<thread>`,
+  // so every thread of a session (and its terminal) shares one MicroVM
+  machineKey: (key) => key.split("::")[0]!,
+}).pipe(
   Layer.provide(
     Layer.mergeAll(
       AWS.Lambda.RunMicrovmHttp,
@@ -61,6 +65,11 @@ const SandboxSession = AWS.AI.SandboxMicrovmSession().pipe(
 /** The artifact store on that same machine (readOutput reads what the
  *  spill net and the bash tool parked). */
 const Store = ArtifactsSandbox;
+
+/** Git over that same machine — ONE composition shared by both
+ *  charters (the engineer claims the session repo's tree; the review
+ *  bot claims the PR head's). */
+const Checkouts = CheckoutsSandbox.pipe(Layer.provide(SandboxSession));
 
 const Toolbox = Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
   Layer.provide(Store),
@@ -85,6 +94,7 @@ const EngineerWorker = GeneralEngineer.pipe(
   ),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
+  Layer.provide(Checkouts),
   Layer.provide(SandboxSession),
 );
 
@@ -95,7 +105,7 @@ const ReviewBotWorkerLive = Layer.suspend(() => ReviewBotLive).pipe(
   Layer.provide([QualityAssuranceGeneral, ReadDiffLive, ReadIssueLive]),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
-  Layer.provide(CheckoutsSandbox.pipe(Layer.provide(SandboxSession))),
+  Layer.provide(Checkouts),
 );
 
 /**
@@ -123,8 +133,11 @@ const ReviewBotWorker = ReviewBotEvents.pipe(
   Layer.provideMerge(LedgerD1),
 );
 
-/** The whole org over CLOUDFLARE physics. */
-const Org = Layer.mergeAll(EngineerWorker, ReviewBotWorker).pipe(
+/** The whole org over CLOUDFLARE physics. SandboxSession is merged in
+ *  so the ROUTES see `AI.Sandbox` too (the terminal door) — the same
+ *  layer reference the charters consume, deduped by the build MemoMap,
+ *  so the terminal lands on the same machine registry the tools use. */
+const Org = Layer.mergeAll(EngineerWorker, ReviewBotWorker, SandboxSession).pipe(
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   Layer.provideMerge(ApprovalsD1),

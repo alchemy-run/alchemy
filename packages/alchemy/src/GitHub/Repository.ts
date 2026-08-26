@@ -659,47 +659,45 @@ export const RepositoryProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      // Resolve the current repository name via the stable numeric ID. A rename
-      // whose state persistence failed leaves `olds.name` stale; deleting by
-      // the stale name 404s and silently leaves the repo behind. Looking it up
-      // by `repoId` gives us the live name.
-      let owner = olds.owner;
-      let repo = olds.name;
-      if (output?.repoId !== undefined) {
-        const current = yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } = await octokit.request("GET /repositories/{id}", {
-                id: output.repoId,
-              });
-              return data;
-            } catch (error: any) {
-              if (error.status === 404) return undefined;
-              throw error;
-            }
-          },
-          catch: (e) => e as Error,
-        });
-        if (current !== undefined) {
-          owner = current.owner.login;
-          repo = current.name;
-        }
-      }
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.delete({ owner, repo });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      // const octokit = yield* octokitFor(olds.baseUrl);
+      // // Resolve the current repository name via the stable numeric ID. A rename
+      // // whose state persistence failed leaves `olds.name` stale; deleting by
+      // // the stale name 404s and silently leaves the repo behind. Looking it up
+      // // by `repoId` gives us the live name.
+      // let owner = olds.owner;
+      // let repo = olds.name;
+      // if (output?.repoId !== undefined) {
+      //   const current = yield* Effect.tryPromise({
+      //     try: async () => {
+      //       try {
+      //         const { data } = await octokit.request("GET /repositories/{id}", {
+      //           id: output.repoId,
+      //         });
+      //         return data;
+      //       } catch (error: any) {
+      //         if (error.status === 404) return undefined;
+      //         throw error;
+      //       }
+      //     },
+      //     catch: (e) => e as Error,
+      //   });
+      //   if (current !== undefined) {
+      //     owner = current.owner.login;
+      //     repo = current.name;
+      //   }
+      // }
+      // yield* Effect.tryPromise({
+      //   try: async () => {
+      //     try {
+      //       await octokit.rest.repos.delete({ owner, repo });
+      //     } catch (error: any) {
+      //       if (error.status !== 404) {
+      //         throw error;
+      //       }
+      //     }
+      //   },
+      //   catch: (e) => e as Error,
+      // });
     }),
   });
 

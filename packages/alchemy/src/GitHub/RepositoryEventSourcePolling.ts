@@ -156,6 +156,33 @@ export const RepositoryEventSourcePolling = (
             `GitHub polling [${names.join(", ")}] of ${props.owner}/${props.repository} every ${String(every)}`,
           );
 
+          // Registration-time backfill: the cursor only observes NEW
+          // activity, so open pull requests from before this process
+          // are delivered once here (deterministic ids — a ledgered
+          // receiver drops what it already consumed).
+          if (names.includes("pull_request") && props.backfill !== false) {
+            const backlog = yield* backfillOpenPullRequests(
+              octokit,
+              props,
+            ).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `GitHub.RepositoryEventSourcePolling backfill of ${props.owner}/${props.repository} failed`,
+                  error,
+                ).pipe(Effect.as([] as SynthesizedRepositoryEvent[])),
+              ),
+            );
+            if (backlog.length > 0) {
+              yield* Effect.logInfo(
+                `GitHub poll of ${props.owner}/${props.repository}: backfilling ${backlog.length} open pull request(s)`,
+              );
+            }
+            for (const delivery of backlog) {
+              delivered.set(delivery.event.id, delivery.at);
+              yield* process(delivery.event);
+            }
+          }
+
           const pollOnce = Effect.gen(function* () {
             const since = yield* Ref.get(cursor);
             const lookback = Math.max(since - LOOKBACK_MS, started);
@@ -235,6 +262,59 @@ const deliveryId = (
   timestamp: string,
 ): string =>
   `poll/${props.owner}/${props.repository}/${eventAction}/${entity}/${timestamp}`;
+
+/**
+ * Synthesize `pull_request.opened` deliveries for every pull request
+ * that is currently OPEN — the registration-time BACKFILL shared by
+ * the polling event source and the dev webhook emulator. Their cursors
+ * start at "now", so a PR opened while no process was watching would
+ * otherwise NEVER deliver — routing keyed to the opened event (review
+ * sessions) silently never starts. The ids are the same deterministic
+ * `poll/…/pull_request.opened/…` the window synthesis produces, so a
+ * ledgered receiver drops every backfilled delivery it has already
+ * consumed: redelivery is safe by construction, and a receiver whose
+ * state was reset simply reviews the still-open backlog again — the
+ * desired semantics.
+ */
+export const backfillOpenPullRequests = (
+  octokit: OctokitClient,
+  props: RepositoryEventSourceProps,
+): Effect.Effect<SynthesizedRepositoryEvent[], Error> =>
+  Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        octokit.rest.pulls.list({
+          owner: props.owner,
+          repo: props.repository,
+          state: "open",
+          sort: "created",
+          direction: "asc",
+          per_page: 100,
+        }),
+      catch: (cause) => new Error(`pulls.list failed: ${cause}`),
+    });
+    return response.data.map((pull) =>
+      synthesize(Date.parse(pull.created_at), {
+        id: deliveryId(
+          props,
+          "pull_request.opened",
+          pull.number,
+          pull.created_at,
+        ),
+        name: "pull_request",
+        payload: {
+          action: "opened",
+          pull_request: {
+            number: pull.number,
+            title: pull.title,
+            body: pull.body ?? null,
+            merged: false,
+          },
+          repository: repositoryPayload(props),
+        },
+      }),
+    );
+  });
 
 /**
  * Synthesize the webhook-shaped deliveries for ONE event name from the

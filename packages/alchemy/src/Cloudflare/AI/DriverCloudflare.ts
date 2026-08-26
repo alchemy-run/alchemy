@@ -396,7 +396,13 @@ export const DurableObjectHost: Layer.Layer<
             }).pipe(
               // a malformed frame must never kill the socket's DO
               Effect.catchDefect((defect) =>
-                Effect.logWarning(`[session-socket] bad frame: ${defect}`),
+                Effect.logWarning(
+                  `[session-socket] bad frame: ${
+                    defect instanceof Error
+                      ? (defect.stack ?? defect.message)
+                      : String(defect)
+                  }`,
+                ),
               ),
               Effect.provide(RuntimeContext.phantom),
             ) as Effect.Effect<void>,
@@ -441,9 +447,23 @@ export const DurableObjectHost: Layer.Layer<
            */
           destroy: () =>
             Effect.gen(function* () {
-              yield* (yield* engine).settle(me.key, stoppedByOperator, {
-                admit: true,
-              });
+              // settle is BEST-EFFORT: `admit: true` runs the charter's
+              // INIT when no session is live, and a session whose INIT
+              // can no longer run (e.g. its sandbox image was replaced
+              // out from under it) must still be erasable — the purge
+              // below is the point of destroy, not the settle.
+              yield* Effect.catchCause(
+                Effect.gen(function* () {
+                  yield* (yield* engine).settle(me.key, stoppedByOperator, {
+                    admit: true,
+                  });
+                }),
+                (cause) =>
+                  Effect.logWarning(
+                    `DriverCloudflare destroy for '${me.term}/${me.key}': settle failed (contained) — purging anyway`,
+                    cause,
+                  ),
+              );
               for (const socket of yield* state.getWebSockets()) {
                 yield* Effect.ignore(socket.close(1000, "session removed"));
               }

@@ -82,6 +82,14 @@ export interface SandboxMicrovmOptions {
   readonly authTokenMinutes?: number;
   /** Hard cap on a MicroVM's lifetime, in seconds. */
   readonly maximumDurationInSeconds?: number;
+  /**
+   * Derive the MACHINE key from the session key. Sessions whose keys
+   * map to the same machine key SHARE one MicroVM — e.g. the org's
+   * `<session>::<thread>` convention gives every thread of a session
+   * (and its terminals) the same machine by stripping the `::<thread>`
+   * suffix. The default is the identity: one machine per session.
+   */
+  readonly machineKey?: (sessionKey: string) => string;
 }
 
 const DEFAULT_IDLE_POLICY = {
@@ -96,8 +104,13 @@ const DEFAULT_IDLE_POLICY = {
  *  launching a second one. Keyed on `Thread.key` alone (the session
  *  context carries no term), so two TERMS sharing a session key would
  *  share a machine — org key conventions (`main`, `owner/repo#7`,
- *  minted uuids) don't collide in practice. */
-const sessionToken = (key: string): string => {
+ *  minted uuids) don't collide in practice.
+ *
+ *  EXPORTED so out-of-session doors (an operator terminal reaching a
+ *  session's machine from the Worker's HTTP surface) can derive the
+ *  same clientToken and reattach to the same VM instead of launching
+ *  a stranger. */
+export const sessionToken = (key: string): string => {
   let hash = 0x811c9dc5;
   for (let i = 0; i < key.length; i++) {
     hash ^= key.charCodeAt(i);
@@ -261,7 +274,11 @@ export const SandboxMicrovmSession = (
       ): Effect.Effect<A, E> =>
         Effect.gen(function* () {
           const thread = yield* Thread;
-          const token = sessionToken(thread.key);
+          const token = sessionToken(
+            options?.machineKey === undefined
+              ? thread.key
+              : options.machineKey(thread.key),
+          );
           const attempt = Effect.gen(function* () {
             const stub = yield* stubFor(token);
             return yield* use(stub);

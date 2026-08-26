@@ -10,10 +10,12 @@ import * as LocalProvider from "../Dev/LocalProvider.ts";
 import { Octokit } from "./Octokit.ts";
 import type { WebhookEventName } from "./RepositoryEventSource.ts";
 import {
+  backfillOpenPullRequests,
   isPollableEvent,
   POLLABLE_EVENTS,
   pollRepositoryEvent,
   type PollableEventName,
+  type SynthesizedRepositoryEvent,
 } from "./RepositoryEventSourcePolling.ts";
 import { Webhook } from "./Webhook.ts";
 
@@ -71,7 +73,35 @@ export const emulateWebhook = (
     const LOOKBACK_MS = 120_000;
     const delivered = new Map<string, number>();
 
+    // Registration-time backfill (see {@link backfillOpenPullRequests}):
+    // opened deliveries for every OPEN pull request, queued rather than
+    // fire-and-forget — the Worker may still be booting, so each tick
+    // drains what the receiver has not yet acknowledged before any new
+    // activity (order preserved). `undefined` = not yet fetched.
+    const backlog = yield* Ref.make<SynthesizedRepositoryEvent[] | undefined>(
+      names.includes("pull_request") ? undefined : [],
+    );
+
     const pollOnce = Effect.gen(function* () {
+      let pending = yield* Ref.get(backlog);
+      if (pending === undefined) {
+        pending = yield* backfillOpenPullRequests(octokit, props);
+        yield* Ref.set(backlog, pending);
+        if (pending.length > 0) {
+          yield* Effect.logInfo(
+            `GitHub.Webhook (dev): backfilling ${pending.length} open pull request(s) of ${config.owner}/${config.repository}`,
+          );
+        }
+      }
+      while (pending.length > 0) {
+        const next = pending[0]!;
+        const posted = yield* post(config.url, secret, next.event);
+        if (!posted) return; // receiver not serving yet — retry next tick
+        delivered.set(next.event.id, next.at);
+        pending = pending.slice(1);
+        yield* Ref.set(backlog, pending);
+      }
+
       const since = yield* Ref.get(cursor);
       const lookback = Math.max(since - LOOKBACK_MS, started);
       const batches = yield* Effect.forEach(names, (name) =>
@@ -137,10 +167,13 @@ export const emulateWebhook = (
  * `issues` / `issue_comment` / `pull_request` are synthesizable (other
  * names warn once and are skipped), poll-interval granularity, and a
  * cursor that starts at "now" — only activity newer than the dev
- * session is delivered. Delivery ids are deterministic
- * (`poll/{owner}/{repo}/…`), so the receiver's ledger dedupe holds
- * across dev restarts. A failed POST (the Worker still booting) leaves
- * the cursor in place — the delivery retries on the next tick.
+ * session is delivered, EXCEPT open pull requests, which are
+ * backfilled once at registration (see `backfillOpenPullRequests`) so
+ * a PR opened while dev was down still starts its review. Delivery ids
+ * are deterministic (`poll/{owner}/{repo}/…`), so the receiver's
+ * ledger dedupe holds across dev restarts. A failed POST (the Worker
+ * still booting) leaves the cursor in place — the delivery retries on
+ * the next tick.
  */
 export const LocalWebhookProvider = () =>
   LocalProvider.make(

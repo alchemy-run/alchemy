@@ -10,8 +10,9 @@
   },
   "type": "module",
   "scripts": {
-    "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy",
+    "dev": "ALCHEMY_PROFILE=testing doppler run -p alchemy-v2 -c dev -- bun alchemy dev",
+    "deploy": "ALCHEMY_PROFILE=testing doppler run -p alchemy-v2 -c dev -- bun alchemy deploy",
+    "destroy": "ALCHEMY_PROFILE=testing doppler run -p alchemy-v2 -c dev -- bun alchemy destroy",
     "test": "bun test",
     "test:tools": "bun test test/tools",
     "typecheck": "bun tsc -b tsconfig.json"

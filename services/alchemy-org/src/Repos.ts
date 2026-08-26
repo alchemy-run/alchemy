@@ -45,3 +45,19 @@ export const alchemy = GitHub.Repository("alchemy", {
  * at call time (`tools/Publish.ts`).
  */
 export const publishTargets = [alchemy, testAlchemy] as const;
+
+/**
+ * The repositories CONNECTED to the org UI — STATIC CODE, the one
+ * source of truth (never a runtime-editable database; connecting a
+ * repository is a code change and a deploy). The UI's sidebar groups
+ * are a read-only reflection of this list:
+ *
+ * - `sessions` — coding sessions may be created under the repo
+ *   (session keys are `<owner>/<repo>/<name>`; threads within a
+ *   session append `::<thread>` and share the session's sandbox).
+ * - `reviews` — the ReviewBot watches the repo's pull requests
+ *   (review session keys are `<owner>/<repo>#<n>`).
+ */
+export const connected = [
+  { repository: testAlchemy, sessions: true, reviews: true },
+] as const;

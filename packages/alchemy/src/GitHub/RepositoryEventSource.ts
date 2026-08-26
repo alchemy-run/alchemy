@@ -84,6 +84,17 @@ export interface RepositoryEventSourceOptions<
   events?: E;
 
   /**
+   * Deliver `pull_request.opened` for every pull request that is
+   * currently OPEN when a polling implementation registers — a PR
+   * opened while no process was watching would otherwise never
+   * deliver (polling cursors start at "now"). Delivery ids are
+   * deterministic, so a ledgered consumer drops what it has already
+   * seen. Ignored by push (webhook) implementations.
+   * @default true
+   */
+  backfill?: boolean;
+
+  /**
    * Secret used to verify each delivery's `HMAC-SHA256` signature. When set,
    * the event source provisions the webhook with this secret and the runtime
    * rejects deliveries whose `X-Hub-Signature-256` header doesn't match.
