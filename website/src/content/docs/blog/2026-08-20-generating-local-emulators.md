@@ -1,6 +1,7 @@
 ---
 title: Looping the Generation of Local Emulators
 date: 2026-08-20T16:00:00Z
+draft: true
 excerpt: The live test suite that generates our IaC and SDKs is also an executable spec of the cloud. Point it at an emulator and every red test is a fidelity bug with a repro. alchemy dev now emulates 219 resources across ~39 AWS services on your machine, with no AWS account.
 ---
 
@@ -29,7 +30,7 @@ and every red test is a fidelity bug that arrives with its own
 reproduction. This is how `alchemy dev` for AWS works. Your
 stack runs on your machine with no AWS account and no
 credentials. It shipped in
-[2.0.0-beta.74](/blog/2026-08-21-beta-74).
+[2.0.0-beta.75](/blog/2026-08-25-beta-75).
 
 ## We forked floci
 
@@ -128,7 +129,7 @@ built on workerd itself and held to the same live suites. AWS
 now joins it. The next provider the factory brings up will ship
 all three artifacts together.
 
-- [2.0.0-beta.74 — the release AWS local dev shipped in](/blog/2026-08-21-beta-74)
+- [2.0.0-beta.75 — the release AWS local dev shipped in](/blog/2026-08-25-beta-75)
 - [AWS local development](/aws/local-development)
 - [Looping the Generation of IaC and SDKs — the first post in this series](/blog/2026-07-02-cloudflare-resource-factory)
 - [alchemy-run/floci — the fork](https://github.com/alchemy-run/floci)
