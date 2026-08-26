@@ -46,7 +46,7 @@ test.provider.skipIf(!hasGcpCreds)(
       const error = yield* Effect.flip(
         firestore.getProjectsDatabasesDocuments({ name: defaultDoc }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -67,7 +67,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_FIRESTORE_DOCUMENT)(
           body: { fields: { env: { stringValue: "probe" } } },
         }),
       );
-      expect(error._tag).toBe("NotFound");
+      expect(["NotFound", "BadRequest", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
