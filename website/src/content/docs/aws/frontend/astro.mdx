@@ -216,12 +216,12 @@ infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Astro("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.
 
 :::note
 Astro's default image service uses `sharp`. To use Astro image

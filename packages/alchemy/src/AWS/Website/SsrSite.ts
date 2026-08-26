@@ -405,7 +405,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
     }
 
     const records =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -414,7 +414,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
             ],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
-                hostedZoneId: domain.hostedZoneId!,
+                // Optional — the Record provider infers the most specific
+                // public zone containing `name` when omitted.
+                hostedZoneId: domain.hostedZoneId,
                 name,
                 type: "A",
                 aliasTarget: {

@@ -310,14 +310,13 @@ CloudFront infrastructure even during dev.
 // alchemy.run.ts
 export const Website = AWS.Website.Vite("Website", {
   rootDir: "./web",
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: "Z0123456789ABCDEFGHIJ",
-  },
+  domain: { name: "app.example.com" },
 });
 ```
 
-The certificate and Route 53 records are managed for you. To serve
+The certificate and Route 53 records are managed for you — the hosted
+zone is inferred from the hostname, and `hostedZoneId` pins it when
+several zones could match. To serve
 several sites from one front door, attach to an
 [`AWS.Website.Router`](/aws/frontend/static-site#compose-sites-with-a-router)
 with `domain: { router, path: "/app" }` instead.

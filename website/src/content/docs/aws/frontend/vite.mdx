@@ -262,15 +262,14 @@ export const Website = AWS.Website.Vite("Website", {
 ```typescript
 // alchemy.run.ts
 export const Website = AWS.Website.Vite("Website", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: "Z0123456789ABCDEFGHIJ",
-  },
+  domain: { name: "app.example.com" },
 });
 ```
 
-The ACM certificate and Route 53 records are managed for you. A bare
-string is shorthand for `{ name }`.
+The ACM certificate and Route 53 records are managed for you — the
+hosted zone is inferred from the hostname, and `hostedZoneId` pins it
+when several zones could match. A bare string is shorthand for
+`{ name }`.
 
 ## Share a CloudFront Router
 
@@ -284,7 +283,7 @@ Stack generator:
 ```typescript
 Effect.gen(function* () {
   const router = yield* AWS.Website.Router("Router", {
-    domain: { name: "example.com", hostedZoneId: "Z0123456789ABCDEFGHIJ" },
+    domain: { name: "example.com" },
   });
 
   const site = yield* AWS.Website.Vite("Docs", {

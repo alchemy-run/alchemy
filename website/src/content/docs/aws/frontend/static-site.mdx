@@ -117,7 +117,8 @@ distribution:
 
 ```typescript
 const router = yield* AWS.Website.Router("WebsiteRouter", {
-  domain: { name: "example.com", hostedZoneId },
+  // hosted zone inferred from the hostname; pass hostedZoneId to pin it
+  domain: { name: "example.com" },
 });
 
 const site = yield* AWS.Website.StaticSite("Docs", {

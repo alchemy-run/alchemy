@@ -286,15 +286,14 @@ topology.
 ```typescript
 // alchemy.run.ts
 export const Website = AWS.Website.ReactRouter("Website", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: "Z0123456789ABCDEFGHIJ",
-  },
+  domain: { name: "app.example.com" },
 });
 ```
 
 The certificate is created in `us-east-1` (required by CloudFront), DNS
 validation records and the alias record are managed through Route 53.
+The hosted zone is inferred from the hostname — pass `hostedZoneId` to
+pin it when several zones could match.
 
 ## Share a distribution with Router
 
@@ -309,7 +308,7 @@ Stack generator:
 // alchemy.run.ts
 Effect.gen(function* () {
   const router = yield* AWS.Website.Router("FrontDoor", {
-    domain: { name: "example.com", hostedZoneId: "Z0123456789ABCDEFGHIJ" },
+    domain: { name: "example.com" },
   });
 
   const site = yield* AWS.Website.ReactRouter("Website", {

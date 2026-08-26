@@ -191,16 +191,14 @@ even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Nuxt("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
 
 The certificate is created in `us-east-1` (required by CloudFront),
 DNS validation records and the alias record are managed through
-Route 53.
+Route 53. The hosted zone is inferred from the hostname — pass
+`hostedZoneId` to pin it when several zones could match.
 
 ## Share a distribution with Router
 
@@ -210,7 +208,7 @@ to an [`AWS.Website.Router`](/aws/frontend/static-site#compose-sites-with-a-rout
 
 ```typescript
 const router = yield* AWS.Website.Router("FrontDoor", {
-  domain: { name: "example.com", hostedZoneId: zone.hostedZoneId },
+  domain: { name: "example.com" },
 });
 
 const site = yield* AWS.Website.Nuxt("Web", {

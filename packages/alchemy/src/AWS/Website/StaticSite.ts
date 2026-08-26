@@ -738,12 +738,14 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    if (domain?.hostedZoneId && domain.dns !== false) {
+    if (domain && domain.dns !== false) {
       yield* Effect.forEach(
         [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
         (name, index) =>
           Route53Record(`AliasRecord${index + 1}`, {
-            hostedZoneId: domain.hostedZoneId!,
+            // Optional — the Record provider infers the most specific
+            // public zone containing `name` when omitted.
+            hostedZoneId: domain.hostedZoneId,
             name,
             type: "A",
             aliasTarget: {

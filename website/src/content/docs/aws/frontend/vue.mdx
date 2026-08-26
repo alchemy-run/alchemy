@@ -261,15 +261,14 @@ infrastructure even during dev.
 ```typescript
 // alchemy.run.ts
 export const Website = AWS.Website.Vite("Vue", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: "Z1234567890ABC",
-  },
+  domain: { name: "app.example.com" },
 });
 ```
 
 The ACM certificate and the Route 53 records are created for you, and
-`site.url` becomes `https://app.example.com`.
+`site.url` becomes `https://app.example.com`. The hosted zone is
+inferred from the hostname — pass `hostedZoneId` to pin it when
+several zones could match.
 
 ## Where next
 

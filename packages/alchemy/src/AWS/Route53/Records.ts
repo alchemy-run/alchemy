@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
+import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 import {
   normalizeHostedZoneId,
   normalizeName,
@@ -30,9 +31,13 @@ export type RecordsBinding = {
 
 export interface RecordsProps {
   /**
-   * Hosted zone that owns the records.
+   * Hosted zone that owns the records. When omitted, the most specific
+   * PUBLIC hosted zone in the account containing the set's first name is
+   * inferred by walking its parent domains; the deploy fails actionably
+   * when no zone matches. Every name in the set lives in the one zone
+   * either way.
    */
-  hostedZoneId: string;
+  hostedZoneId?: string;
   /**
    * Record type shared by every record in the set.
    */
@@ -62,9 +67,11 @@ export interface Records extends Resource<
   RecordsProps,
   {
     /**
-     * Hosted zone that owns the records.
+     * Hosted zone that owns the records. `undefined` only while the set
+     * is empty with no explicit zone — resolved (explicit or inferred) on
+     * the first reconcile that has a name.
      */
-    hostedZoneId: string;
+    hostedZoneId: string | undefined;
     /**
      * Record type shared by every record in the set.
      */
@@ -290,7 +297,11 @@ export const RecordsProvider = () =>
           // themselves are mutable — prop/binding deltas fall through to
           // the engine's default update logic.
           if (
+            // An undefined side means "inferred" — reconcile resolves it
+            // against the live account, so only two explicit, differing
+            // zones are a replacement.
             (olds.hostedZoneId !== undefined &&
+              news.hostedZoneId !== undefined &&
               normalizeHostedZoneId(olds.hostedZoneId) !==
                 normalizeHostedZoneId(news.hostedZoneId)) ||
             olds.type !== news.type
@@ -304,6 +315,10 @@ export const RecordsProvider = () =>
             // to look up — report "not found" so the engine re-drives the
             // reconcile (upserts converge on any half-created records).
             return undefined;
+          }
+          if (output.hostedZoneId === undefined) {
+            // An empty set that never resolved a zone — nothing to observe.
+            return output;
           }
           const found: string[] = [];
           let recordSet: route53.ResourceRecordSet | undefined;
@@ -331,6 +346,26 @@ export const RecordsProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output, session, bindings }) {
           const desired = resolveDesiredNames(news.names, bindings);
+          // Resolve the zone: explicit prop, else the zone this set already
+          // resolved to, else infer from the first name in the set. A set
+          // that is still empty with no explicit zone stays unresolved —
+          // the zone materializes on the first reconcile that has a name.
+          const explicitZoneId = news.hostedZoneId ?? output?.hostedZoneId;
+          if (explicitZoneId === undefined && desired.length === 0) {
+            yield* session.note(`${news.type} × 0 record(s)`);
+            return {
+              hostedZoneId: undefined,
+              type: news.type,
+              names: [],
+              ttl: undefined,
+              records: undefined,
+              aliasTarget: undefined,
+            };
+          }
+          const hostedZoneId = yield* resolveHostedZoneId(
+            explicitZoneId,
+            desired[0] ?? "",
+          );
           // `output.names` is the cache of which records this resource
           // managed before — the only way to know what to garbage-collect
           // (Route 53 records carry no tags to observe ownership from).
@@ -346,14 +381,14 @@ export const RecordsProvider = () =>
           const changes: route53.Change[] = [];
           for (const name of desired) {
             const target = desiredRecordSet(news, name);
-            const live = yield* findRecord(news.hostedZoneId, name, news.type);
+            const live = yield* findRecord(hostedZoneId, name, news.type);
             if (!live || !matchesDesired(live, target)) {
               changes.push({ Action: "UPSERT", ResourceRecordSet: target });
             }
           }
           if (changes.length > 0) {
             const response = yield* route53.changeResourceRecordSets({
-              HostedZoneId: normalizeHostedZoneId(news.hostedZoneId),
+              HostedZoneId: normalizeHostedZoneId(hostedZoneId),
               ChangeBatch: {
                 Comment: "Alchemy Route53 record-set upsert",
                 Changes: changes,
@@ -363,7 +398,7 @@ export const RecordsProvider = () =>
           }
 
           // Garbage-collect names that left the set.
-          yield* deleteNames(news.hostedZoneId, news.type, stale);
+          yield* deleteNames(hostedZoneId, news.type, stale);
 
           yield* session.note(
             `${news.type} × ${desired.length} record(s)` +
@@ -372,10 +407,10 @@ export const RecordsProvider = () =>
 
           const sample =
             desired.length > 0
-              ? yield* findRecord(news.hostedZoneId, desired[0]!, news.type)
+              ? yield* findRecord(hostedZoneId, desired[0]!, news.type)
               : undefined;
           return {
-            hostedZoneId: normalizeHostedZoneId(news.hostedZoneId),
+            hostedZoneId: normalizeHostedZoneId(hostedZoneId),
             type: news.type,
             names: desired.map((name) => normalizeName(name)),
             ttl: sample?.TTL,
@@ -384,6 +419,10 @@ export const RecordsProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          if (output.hostedZoneId === undefined) {
+            // The set never resolved a zone — it never created records.
+            return;
+          }
           yield* deleteNames(output.hostedZoneId, output.type, output.names);
         }),
       };

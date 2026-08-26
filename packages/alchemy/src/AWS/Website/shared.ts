@@ -31,7 +31,8 @@ export interface WebsiteRouterBindTargets {
   /**
    * The Router's Route 53 alias record set — bound hostnames get A-alias
    * records pointing at the distribution. Absent when the Router's domain
-   * sets `dns: false` or has no `hostedZoneId`.
+   * sets `dns: false`. Without an explicit `hostedZoneId`, the set infers
+   * its zone from the first bound hostname.
    */
   records?: Records;
 }
@@ -69,7 +70,11 @@ export interface WebsiteStandaloneDomainProps {
    */
   name: string;
   /**
-   * Hosted zone used for Route 53 automation.
+   * Hosted zone used for Route 53 automation. Optional — when omitted,
+   * the most specific PUBLIC hosted zone in the account containing each
+   * hostname is inferred by walking its parent domains; the deploy fails
+   * actionably when no zone matches. Pass an explicit id to pin the zone
+   * (e.g. when several zones could match).
    */
   hostedZoneId?: string;
   /**

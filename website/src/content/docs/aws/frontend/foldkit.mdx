@@ -219,12 +219,12 @@ export const Website = AWS.Website.Foldkit("Website", {
 ```typescript
 // alchemy.run.ts
 export const Website = AWS.Website.Foldkit("Website", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: "Z0123456789ABCDEFGHIJ",
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.
 
 Serve several sites under one distribution by pointing `domain.router`
 at an existing

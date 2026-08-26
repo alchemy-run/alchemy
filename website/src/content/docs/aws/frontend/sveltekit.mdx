@@ -183,9 +183,9 @@ local address and no AWS resources are created. Wrap the site in
 
 ```typescript
 const site = yield* AWS.Website.SvelteKit("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.
