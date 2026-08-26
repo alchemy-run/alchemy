@@ -389,7 +389,7 @@ const waitSnapshotGone = (project: string, snapshotName: string) =>
     ),
     Effect.retry({
       while: (error) => error instanceof SnapshotStillExists,
-      times: 10,
+      times: 18,
       schedule: Schedule.spaced("3 seconds"),
     }),
   );

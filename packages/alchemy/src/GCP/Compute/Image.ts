@@ -352,7 +352,7 @@ const waitUntilDone = (
     }
     const done = yield* waitGlobalOperations(
       { project, operation: name },
-      { times: options?.times ?? 12 },
+      { times: options?.times ?? 24 },
     );
     return yield* failIfErrored(imageName, done, options);
   });
@@ -394,7 +394,7 @@ const waitUntilGone = (project: string, imageName: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.ImageStillExists",
-      times: 10,
+      times: 18,
       schedule: Schedule.spaced("3 seconds"),
     }),
   );
@@ -661,8 +661,11 @@ export const ImageProvider = () =>
       if (operation !== undefined) {
         yield* waitUntilDone(env.project, output.imageName, operation, {
           ignoreNotFound: true,
-          times: 20,
-        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+          times: 45,
+        }).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
+        );
       }
       yield* waitUntilGone(env.project, output.imageName);
     }),

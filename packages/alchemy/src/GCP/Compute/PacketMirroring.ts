@@ -703,7 +703,7 @@ export const PacketMirroringProvider = () =>
       let current = yield* getByName(env.project, region, packetMirroringName);
 
       if (current === undefined) {
-        yield* compute
+        const inserted = yield* compute
           .insertPacketMirrorings({
             project: env.project,
             region,
@@ -719,16 +719,23 @@ export const PacketMirroringProvider = () =>
             },
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                region,
-                packetMirroringName,
-                operation,
-              ),
-            ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "BadRequest" &&
+                (error.message ?? "").toLowerCase().includes("not ready"),
+              times: 8,
+              schedule: Schedule.spaced("3 seconds"),
+            }),
           );
+        if (inserted !== undefined) {
+          yield* waitUntilDone(
+            env.project,
+            region,
+            packetMirroringName,
+            inserted,
+          );
+        }
         current = yield* requirePolicy(
           env.project,
           region,

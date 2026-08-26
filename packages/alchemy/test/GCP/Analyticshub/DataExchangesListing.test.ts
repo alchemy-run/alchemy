@@ -25,10 +25,13 @@ const waitUntilGone = (parent: string, name: string) =>
           : ("gone" as const),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      Effect.catchTag("InternalServerError", () =>
+        Effect.succeed("found" as const),
+      ),
       Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
+        schedule: Schedule.spaced("2 seconds"),
         until: (status) => status === "gone",
-        times: 10,
+        times: 20,
       }),
     );
 

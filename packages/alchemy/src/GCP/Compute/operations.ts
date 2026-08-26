@@ -49,7 +49,7 @@ export const waitGlobalOperations = (
       project: input.project,
       operation: input.operation,
     }),
-    options?.times ?? 12,
+    options?.times ?? 24,
   );
 
 export const waitZoneOperations = (
@@ -63,7 +63,7 @@ export const waitZoneOperations = (
       zone: input.zone,
       operation: input.operation,
     }),
-    options?.times ?? 12,
+    options?.times ?? 24,
   );
 
 export const waitRegionOperations = (
@@ -77,7 +77,7 @@ export const waitRegionOperations = (
       region: input.region,
       operation: input.operation,
     }),
-    options?.times ?? 12,
+    options?.times ?? 24,
   );
 
 /** Hierarchical firewall policies (and other org-scoped compute APIs). */
@@ -91,5 +91,5 @@ export const waitGlobalOrganizationOperations = (
       operation: input.operation,
       parentId: input.parentId,
     }),
-    options?.times ?? 12,
+    options?.times ?? 24,
   );

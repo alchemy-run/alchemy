@@ -220,5 +220,5 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
 
       yield* deleteVm();
     }).pipe(logLevel),
-  { timeout: 220_000 },
+  { timeout: 240_000 },
 );

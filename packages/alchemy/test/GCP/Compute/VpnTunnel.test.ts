@@ -179,5 +179,5 @@ test.provider.skipIf(!hasGcpCreds)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 240_000 },
 );

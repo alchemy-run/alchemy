@@ -507,7 +507,7 @@ const waitForRegionOperation = (
         region,
         operation: name,
       },
-      { times: 20 },
+      { times: 30 },
     );
     if (waited.status === "DONE") {
       yield* assertOperationOk(waited, options);
@@ -568,7 +568,7 @@ const waitUntilRouterGone = (
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RouterOperationPending",
       schedule: Schedule.spaced("2 seconds"),
-      times: 10,
+      times: 20,
     }),
   );
 
@@ -750,6 +750,12 @@ export const RouterProvider = () =>
           router: routerName,
         })
         .pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "Conflict" || error._tag === "BadRequest",
+            times: 15,
+            schedule: Schedule.spaced("3 seconds"),
+          }),
           Effect.flatMap((operation) =>
             waitForRegionOperation(project, region, operation, {
               allowMissing: true,
@@ -758,11 +764,12 @@ export const RouterProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) =>
-              error._tag === "Conflict" ||
+              error._tag === "GCP.Compute.OperationPending" ||
+              error._tag === "GCP.Compute.RouterOperationPending" ||
               (error._tag === "GCP.Compute.RouterOperationFailed" &&
                 isInUseOp(error.errors)),
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
+            times: 10,
+            schedule: Schedule.spaced("3 seconds"),
           }),
         );
       yield* waitUntilRouterGone(project, region, routerName);
