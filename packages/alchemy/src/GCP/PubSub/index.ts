@@ -7,6 +7,7 @@ export * from "./PublishHttp.ts";
 export * from "./Pull.ts";
 export * from "./PullHttp.ts";
 export * from "./Schema.ts";
+export * from "./Snapshot.ts";
 export * from "./Subscription.ts";
 export * from "./Topic.ts";
 export * from "./ValidateMessage.ts";

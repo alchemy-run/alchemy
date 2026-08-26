@@ -199,7 +199,15 @@ export class RepositoryOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-const waitForOperation = (operation: artifactregistry.Operation) =>
+const waitForOperation = (
+  operation: artifactregistry.Operation,
+): Effect.Effect<
+  artifactregistry.Operation,
+  | RepositoryOperationFailed
+  | RepositoryOperationPending
+  | artifactregistry.GetProjectsLocationsOperationsError,
+  artifactregistry.GcpOpContext
+> =>
   Effect.gen(function* () {
     const name = operation.name;
     if (operation.done === true) {
@@ -224,17 +232,14 @@ const waitForOperation = (operation: artifactregistry.Operation) =>
           (current) => current.done === true,
           () => new RepositoryOperationPending({ operation: name }),
         ),
-        Effect.flatMap((current) => {
-          const error = current.error;
-          return error
-            ? Effect.fail(
-                new RepositoryOperationFailed({
-                  operation: name,
-                  message: error.message ?? "operation failed",
-                }),
-              )
-            : Effect.succeed(current);
-        }),
+        Effect.filterOrFail(
+          (current) => current.error === undefined,
+          (current) =>
+            new RepositoryOperationFailed({
+              operation: name,
+              message: current.error?.message ?? "operation failed",
+            }),
+        ),
         Effect.retry({
           while: (error) =>
             error._tag === "GCP.ArtifactRegistry.ImageSourceOperationPending",

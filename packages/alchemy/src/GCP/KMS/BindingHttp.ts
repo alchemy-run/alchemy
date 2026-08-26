@@ -13,29 +13,27 @@ export const makeCryptoKeyHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: Effect.Effect<
-    (input: I) => Effect.Effect<A, E>,
-    never,
-    Credentials | HttpClient.HttpClient
-  > &
-    ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
+  operation: (
+    input: I,
+  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
 }) =>
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
     return Effect.fn(function* (key: CryptoKey) {
       const name = yield* key.name;
       return Effect.fn(`${options.tag}(${key.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* run({
-          ...(request as I),
-          name: yield* name,
-        } as I);
+        return yield* options
+          .operation({
+            ...(request as I),
+            name: yield* name,
+          } as I)
+          .pipe(
+            Effect.provideService(Credentials, credentials),
+            Effect.provideService(HttpClient.HttpClient, httpClient),
+          );
       });
     });
   });

@@ -2,6 +2,7 @@ import type * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { LocationsSecret } from "./LocationsSecret.ts";
 import type { Secret } from "./Secret.ts";
 
 export interface AddSecretVersionRequest {
@@ -15,7 +16,8 @@ export interface AddSecretVersionRequest {
 /**
  * Runtime binding for Secret Manager `secrets.addVersion`.
  *
- * Bind this operation to a {@link Secret} in a Function/Action init phase.
+ * Bind this operation to a {@link Secret} or {@link LocationsSecret} in a
+ * Function/Action init phase.
  * Provide {@link AddSecretVersionHttp}.
  *
  * ### Adding Secret Versions
@@ -33,7 +35,7 @@ export interface AddSecretVersion extends Binding.Service<
   AddSecretVersion,
   "GCP.SecretManager.AddSecretVersion",
   (
-    secret: Secret,
+    secret: Secret | LocationsSecret,
   ) => Effect.Effect<
     (
       request: AddSecretVersionRequest,

@@ -2,6 +2,7 @@ import type * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { LocationsSecret } from "./LocationsSecret.ts";
 import type { Secret } from "./Secret.ts";
 
 export interface AccessSecretVersionRequest {
@@ -15,7 +16,8 @@ export interface AccessSecretVersionRequest {
 /**
  * Runtime binding for Secret Manager `secrets.versions.access`.
  *
- * Bind this operation to a {@link Secret} in a Function/Action init phase.
+ * Bind this operation to a {@link Secret} or {@link LocationsSecret} in a
+ * Function/Action init phase.
  * Provide {@link AccessSecretVersionHttp}. Payload `data` is standard
  * base64.
  *
@@ -40,7 +42,7 @@ export interface AccessSecretVersion extends Binding.Service<
   AccessSecretVersion,
   "GCP.SecretManager.AccessSecretVersion",
   (
-    secret: Secret,
+    secret: Secret | LocationsSecret,
   ) => Effect.Effect<
     (
       request?: AccessSecretVersionRequest,

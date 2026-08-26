@@ -1,10 +1,21 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import type { GcpOpContext } from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Bucket } from "./Bucket.ts";
 
+type GcpHttpOp<I, A, E> = Effect.Effect<
+  (input: I) => Effect.Effect<A, E>,
+  never,
+  GcpOpContext
+> &
+  ((input: I) => Effect.Effect<A, E, GcpOpContext>);
+
 /**
  * Shared HTTP scaffolding for Cloud Storage object bindings.
+ * Distilled ops are OperationMethods: yield them once at Layer
+ * construction (after providing Credentials + HttpClient) so the inner
+ * runtime Effect is `Effect<A, E>` and does not leak `GcpOpContext`.
  * NOT exported from index.ts.
  */
 export const makeObjectHttpBinding = <
@@ -13,27 +24,24 @@ export const makeObjectHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation.pipe(
+      Effect.provideService(Credentials, credentials),
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+    );
     return Effect.fn(function* (bucket: Bucket) {
       const bucketName = yield* bucket.bucketName;
       return Effect.fn(`${options.tag}(${bucket.LogicalId})`)(function* (
         request: Omit<I, "bucket">,
       ) {
-        return yield* options
-          .operation({
-            ...request,
-            bucket: yield* bucketName,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...request,
+          bucket: yield* bucketName,
+        } as I);
       });
     });
   });

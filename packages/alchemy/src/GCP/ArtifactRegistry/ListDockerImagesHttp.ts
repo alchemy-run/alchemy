@@ -9,6 +9,14 @@ import {
 } from "./ListDockerImages.ts";
 import type { Repository } from "./Repository.ts";
 
+const listDockerImages = (
+  input: artifactregistry.ListProjectsLocationsRepositoriesDockerImagesRequest,
+): Effect.Effect<
+  artifactregistry.ListDockerImagesResponse,
+  artifactregistry.ListProjectsLocationsRepositoriesDockerImagesError,
+  Credentials | HttpClient.HttpClient
+> => artifactregistry.listProjectsLocationsRepositoriesDockerImages(input);
+
 /**
  * HTTP implementation of {@link ListDockerImages}.
  *
@@ -20,20 +28,18 @@ export const ListDockerImagesHttp = Layer.effect(
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const httpClient = yield* HttpClient.HttpClient;
-    return Effect.fn(function* <T extends Repository>(repository: T) {
+    return Effect.fn(function* (repository: Repository) {
       const name = yield* repository.name;
       return Effect.fn(
         `GCP.ArtifactRegistry.ListDockerImages(${repository.LogicalId})`,
       )(function* (request?: ListDockerImagesRequest) {
-        return yield* artifactregistry
-          .listProjectsLocationsRepositoriesDockerImages({
-            ...request,
-            parent: yield* name,
-          })
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* listDockerImages({
+          ...request,
+          parent: yield* name,
+        }).pipe(
+          Effect.provideService(Credentials, credentials),
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        );
       });
     });
   }),

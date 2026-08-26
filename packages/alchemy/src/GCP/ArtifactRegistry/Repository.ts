@@ -299,7 +299,13 @@ const cleanupPoliciesJson = (
 const waitForOperation = (
   operation: artifactregistry.Operation,
   options?: { notFoundOk?: boolean },
-) =>
+): Effect.Effect<
+  artifactregistry.Operation,
+  | RepositoryOperationFailed
+  | RepositoryOperationPending
+  | artifactregistry.GetProjectsLocationsOperationsError,
+  artifactregistry.GcpOpContext
+> =>
   Effect.gen(function* () {
     const name = operation.name;
     if (operation.done === true) {
@@ -344,17 +350,14 @@ const waitForOperation = (
         (current) => current.done === true,
         () => new RepositoryOperationPending({ operation: name }),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new RepositoryOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
+      Effect.filterOrFail(
+        (current) => current.error === undefined,
+        (current) =>
+          new RepositoryOperationFailed({
+            operation: name,
+            message: current.error?.message ?? "operation failed",
+          }),
+      ),
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.ArtifactRegistry.RepositoryOperationPending",
@@ -366,10 +369,9 @@ const waitForOperation = (
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
-    Effect.flatMap((repo) =>
-      repo
-        ? Effect.succeed(repo)
-        : Effect.fail(new RepositoryNotResolved({ name })),
+    Effect.filterOrFail(
+      (repo): repo is artifactregistry.Repository => repo !== undefined,
+      () => new RepositoryNotResolved({ name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -381,11 +383,11 @@ const waitUntilExists = (name: string) =>
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
-    Effect.flatMap((repo) =>
-      repo === undefined
-        ? Effect.void
-        : Effect.fail(new RepositoryStillExists({ name })),
+    Effect.filterOrFail(
+      (repo) => repo === undefined,
+      () => new RepositoryStillExists({ name }),
     ),
+    Effect.asVoid,
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.ArtifactRegistry.RepositoryStillExists",

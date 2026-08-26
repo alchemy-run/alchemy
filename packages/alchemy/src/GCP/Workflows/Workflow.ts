@@ -358,7 +358,11 @@ const waitForOperation = (
     }
 
     const getOperation = workflows.getProjectsLocationsOperations({ name });
-    const resolved =
+    const resolved: Effect.Effect<
+      workflows.Operation,
+      workflows.GetProjectsLocationsOperationsError,
+      workflows.GcpOpContext
+    > = Effect.suspend(() =>
       options?.notFoundOk === true
         ? getOperation.pipe(
             Effect.catchTag("NotFound", () =>
@@ -374,9 +378,16 @@ const waitForOperation = (
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
-          );
+          ),
+    );
 
-    return yield* resolved.pipe(
+    const settled: Effect.Effect<
+      workflows.Operation,
+      | WorkflowOperationFailed
+      | WorkflowOperationPending
+      | workflows.GetProjectsLocationsOperationsError,
+      workflows.GcpOpContext
+    > = resolved.pipe(
       Effect.filterOrFail(
         (current) => current.done === true,
         () => new WorkflowOperationPending({ operation: name }),
@@ -390,6 +401,9 @@ const waitForOperation = (
             message: current.error?.message ?? "operation failed",
           }),
       ),
+    );
+
+    return yield* settled.pipe(
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Workflows.WorkflowOperationPending",

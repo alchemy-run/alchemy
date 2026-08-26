@@ -1,5 +1,5 @@
-import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -17,22 +17,21 @@ export const ExecuteSqlHttp = Layer.effect(
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const httpClient = yield* HttpClient.HttpClient;
+    const execute = yield* sqladmin.executeSqlInstances.pipe(
+      Effect.provideService(Credentials, credentials),
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+    );
     return Effect.fn(function* (instance: Instance) {
       const instanceName = yield* instance.instanceName;
       const project = yield* instance.project;
       return Effect.fn(`GCP.SQL.ExecuteSql(${instance.LogicalId})`)(function* (
         request: ExecuteSqlRequest,
       ) {
-        return yield* sqladmin
-          .executeSqlInstances({
-            ...request,
-            instance: yield* instanceName,
-            project: yield* project,
-          })
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* execute({
+          ...request,
+          instance: yield* instanceName,
+          project: yield* project,
+        });
       });
     });
   }),
