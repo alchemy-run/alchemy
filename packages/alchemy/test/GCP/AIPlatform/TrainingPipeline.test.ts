@@ -48,7 +48,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/locations/us-central1/trainingPipelines/alchemy-missing-pipeline`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden"]).toContain(error._tag);
 
       const page = yield* aiplatform
         .listProjectsLocationsTrainingPipelines({
@@ -56,7 +56,7 @@ test.provider.skipIf(!hasGcpCreds)(
           pageSize: 10,
         })
         .pipe(
-          Effect.catchTag(["Forbidden", "BadRequest"], () =>
+          Effect.catchTag(["Forbidden"], () =>
             Effect.succeed({ trainingPipelines: [] as const }),
           ),
         );

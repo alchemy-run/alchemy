@@ -310,11 +310,7 @@ const toAttrs = (secret: secretmanager.Secret, project: string) => {
 const getByName = (name: string) =>
   secretmanager
     .getProjectsLocationsSecrets({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "BadRequest"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
 
 const hasAlchemyLabelMap = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -335,7 +331,6 @@ const collectSecretPages = (parent: string) =>
       ),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      Effect.catchTag("BadRequest", () => Effect.succeed([])),
     );
 
 const toCreateBody = (
@@ -525,6 +520,6 @@ export const LocationsSecretProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* secretmanager
         .deleteProjectsLocationsSecrets({ name: output.name })
-        .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound"], () => Effect.void));
     }),
   });

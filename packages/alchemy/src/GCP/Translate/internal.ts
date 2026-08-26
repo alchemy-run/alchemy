@@ -458,7 +458,7 @@ export const listGlossariesAt = (parent: string) =>
         }),
         (page) => page.glossaries,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           emptyList<translate.Glossary>(),
         ),
       );
@@ -473,7 +473,7 @@ export const listGlossaryEntriesAt = (parent: string) =>
         }),
         (page) => page.glossaryEntries,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           emptyList<translate.GlossaryEntry>(),
         ),
       );

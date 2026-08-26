@@ -172,7 +172,7 @@ const getByName = (name: string) =>
     : dlp
         .getProjectsDlpJobs({ name })
         .pipe(
-          Effect.catchTag(["NotFound", "BadRequest", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "Forbidden"], () =>
             Effect.succeed(undefined),
           ),
         );

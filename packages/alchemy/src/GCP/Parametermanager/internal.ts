@@ -204,9 +204,7 @@ export const retryApiEnablement = {
 export const getParameter = (name: string) =>
   parametermanager.getProjectsLocationsParameters({ name }).pipe(
     Effect.retry(retryApiEnablement),
-    Effect.catchTag(["NotFound", "BadRequest"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)),
   );
 
 export const getVersion = (name: string) =>
@@ -214,9 +212,7 @@ export const getVersion = (name: string) =>
     .getProjectsLocationsParametersVersions({ name, view: "FULL" })
     .pipe(
       Effect.retry(retryApiEnablement),
-      Effect.catchTag(["NotFound", "BadRequest"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)),
     );
 
 export const waitUntilParameterGone = (name: string) =>

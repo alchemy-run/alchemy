@@ -49,7 +49,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `${parent}/tuningJobs/alchemy-aiplatform-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden"]).toContain(error._tag);
 
       const page = yield* aiplatform
         .listProjectsLocationsTuningJobs({
@@ -57,7 +57,7 @@ test.provider.skipIf(!hasGcpCreds)(
           pageSize: 10,
         })
         .pipe(
-          Effect.catchTag(["Forbidden", "BadRequest"], () =>
+          Effect.catchTag(["Forbidden"], () =>
             Effect.succeed({ tuningJobs: [] as const }),
           ),
         );

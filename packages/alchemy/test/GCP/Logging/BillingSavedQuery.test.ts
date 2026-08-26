@@ -53,7 +53,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `billingAccounts/${account}/locations/global/savedQueries/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -79,7 +79,7 @@ test.provider.skipIf(!hasGcpCreds)(
             },
           }),
         );
-        expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+        expect(["NotFound", "Forbidden"]).toContain(error._tag);
         yield* stack.destroy();
         return;
       }
@@ -91,12 +91,12 @@ test.provider.skipIf(!hasGcpCreds)(
         })
         .pipe(
           Effect.as("ok" as const),
-          Effect.catchTag(["Forbidden", "NotFound", "BadRequest"], (error) =>
+          Effect.catchTag(["Forbidden", "NotFound"], (error) =>
             Effect.succeed(error._tag),
           ),
         );
       if (access !== "ok") {
-        expect(["Forbidden", "NotFound", "BadRequest"]).toContain(access);
+        expect(["Forbidden", "NotFound"]).toContain(access);
         yield* stack.destroy();
         return;
       }
