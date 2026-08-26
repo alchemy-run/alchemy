@@ -112,9 +112,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 60_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_COMPOSITE_HEALTH,
-)(
+test.provider.skipIf(!hasGcpCreds)(
   "create, update, and delete a regional composite health check",
   (stack) =>
     Effect.gen(function* () {
@@ -125,7 +123,7 @@ test.provider.skipIf(
           const network = yield* GCP.Compute.Network("Vpc", {
             autoCreateSubnetworks: false,
           });
-          const subnet = yield* GCP.Compute.Subnetwork("Ilb", {
+          const subnet = yield* GCP.Compute.Subnetwork("IlbSubnet", {
             network: network.networkName,
             region,
             ipCidrRange: "10.54.0.0/24",
@@ -136,15 +134,18 @@ test.provider.skipIf(
             type: "TCP",
             tcpHealthCheck: { port: 80 },
           });
-          const backend = yield* GCP.Compute.RegionBackendService("Ilb", {
-            region,
-            protocol: "TCP",
-            loadBalancingScheme: "INTERNAL",
-            network: network.selfLink.as<string>(),
-            healthChecks: [check.selfLink.as<string>()],
-            description: "ilb backend",
-          });
-          const rule = yield* GCP.Compute.ForwardingRule("Ilb", {
+          const backend = yield* GCP.Compute.RegionBackendService(
+            "IlbBackend",
+            {
+              region,
+              protocol: "TCP",
+              loadBalancingScheme: "INTERNAL",
+              network: network.selfLink.as<string>(),
+              healthChecks: [check.selfLink.as<string>()],
+              description: "ilb backend",
+            },
+          );
+          const rule = yield* GCP.Compute.ForwardingRule("IlbRule", {
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: backend.selfLink.as<string>(),
@@ -205,7 +206,7 @@ test.provider.skipIf(
             networkName: created.network.networkName,
             autoCreateSubnetworks: false,
           });
-          const subnet = yield* GCP.Compute.Subnetwork("Ilb", {
+          const subnet = yield* GCP.Compute.Subnetwork("IlbSubnet", {
             subnetworkName: created.subnet.subnetworkName,
             network: network.networkName,
             region,
@@ -218,16 +219,19 @@ test.provider.skipIf(
             type: "TCP",
             tcpHealthCheck: { port: 80 },
           });
-          const backend = yield* GCP.Compute.RegionBackendService("Ilb", {
-            name: created.backend.name,
-            region,
-            protocol: "TCP",
-            loadBalancingScheme: "INTERNAL",
-            network: network.selfLink.as<string>(),
-            healthChecks: [check.selfLink.as<string>()],
-            description: "ilb backend",
-          });
-          const rule = yield* GCP.Compute.ForwardingRule("Ilb", {
+          const backend = yield* GCP.Compute.RegionBackendService(
+            "IlbBackend",
+            {
+              name: created.backend.name,
+              region,
+              protocol: "TCP",
+              loadBalancingScheme: "INTERNAL",
+              network: network.selfLink.as<string>(),
+              healthChecks: [check.selfLink.as<string>()],
+              description: "ilb backend",
+            },
+          );
+          const rule = yield* GCP.Compute.ForwardingRule("IlbRule", {
             forwardingRuleName: created.rule.forwardingRuleName,
             region,
             loadBalancingScheme: "INTERNAL",
