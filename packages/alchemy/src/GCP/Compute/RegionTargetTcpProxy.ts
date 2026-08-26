@@ -2,6 +2,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -112,9 +113,11 @@ export type RegionTargetTcpProxy = Resource<
  * regional proxy Network Load Balancers. This resource maps to the
  * `regionTargetTcpProxies` collection (the global `targetTcpProxies`
  * collection is `GCP.Compute.TargetTcpProxy`). Compute RegionTargetTcpProxy
- * has no labels field and no in-place update API — Alchemy ownership is
- * stored in the description so nuke can find leaked proxies, and every
- * user-facing field change replaces the resource.
+ * has no labels field and no in-place update API (`setBackendService` exists
+ * only on the global collection). Alchemy ownership is stored in the
+ * description so nuke can find leaked proxies. Changing the backend,
+ * proxy header, description, `proxyBind`, or load-balancing scheme
+ * deletes and recreates the proxy so the observed backend always matches.
  *
  * ### Creating a Regional Target TCP Proxy
  * **Example:** Generated name in front of a TCP backend service
@@ -151,6 +154,13 @@ export class RegionTargetTcpProxyOperationFailed extends Data.TaggedError(
   targetTcpProxyName: string;
   operation: string;
   message: string;
+}> {}
+
+export class RegionTargetTcpProxyStillExists extends Data.TaggedError(
+  "GCP.Compute.RegionTargetTcpProxyStillExists",
+)<{
+  targetTcpProxyName: string;
+  region: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -238,6 +248,30 @@ const getByName = (project: string, region: string, targetTcpProxy: string) =>
   compute
     .getRegionTargetTcpProxies({ project, region, targetTcpProxy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+
+const waitUntilGone = (
+  project: string,
+  region: string,
+  targetTcpProxyName: string,
+) =>
+  getByName(project, region, targetTcpProxyName).pipe(
+    Effect.flatMap((proxy) =>
+      proxy === undefined
+        ? Effect.void
+        : Effect.fail(
+            new RegionTargetTcpProxyStillExists({
+              targetTcpProxyName,
+              region,
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (error) =>
+        error._tag === "GCP.Compute.RegionTargetTcpProxyStillExists",
+      times: 18,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 
 const operationId = (operation: compute.Operation) => {
   const name = operation.name ?? "";
@@ -420,25 +454,24 @@ export const RegionTargetTcpProxyProvider = () =>
         region,
         news.service,
       );
+      const desiredHeader = news.proxyHeader ?? DEFAULT_PROXY_HEADER;
+      const desiredBind = news.proxyBind ?? false;
+      const desiredScheme = news.loadBalancingScheme ?? "";
 
-      let current = yield* getByName(env.project, region, targetTcpProxyName);
-
-      if (current === undefined) {
+      const insertProxy = () => {
         const body: compute.TargetTcpProxy = {
           name: targetTcpProxyName,
           description: desiredDescription,
           service: desiredService,
+          proxyHeader: desiredHeader,
         };
-        if (news.proxyHeader !== undefined) {
-          body.proxyHeader = news.proxyHeader;
-        }
         if (news.proxyBind !== undefined) {
           body.proxyBind = news.proxyBind;
         }
         if (news.loadBalancingScheme !== undefined) {
           body.loadBalancingScheme = news.loadBalancingScheme;
         }
-        yield* compute
+        return compute
           .insertRegionTargetTcpProxies({
             project: env.project,
             region,
@@ -450,6 +483,52 @@ export const RegionTargetTcpProxyProvider = () =>
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
+      };
+
+      const deleteProxy = () =>
+        compute
+          .deleteRegionTargetTcpProxies({
+            project: env.project,
+            region,
+            targetTcpProxy: targetTcpProxyName,
+          })
+          .pipe(
+            Effect.flatMap((operation) =>
+              waitUntilDone(env.project, region, targetTcpProxyName, operation),
+            ),
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
+
+      let current = yield* getByName(env.project, region, targetTcpProxyName);
+
+      // Regional target TCP proxies have no setBackendService API. If the
+      // observed backend (or other immutable fields) drifted, delete then
+      // insert so update-as-well-as-replace converges.
+      if (current !== undefined) {
+        const serviceChanged =
+          resourceTail(current.service) !== resourceTail(desiredService);
+        const headerChanged =
+          (current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredHeader;
+        const descriptionChanged =
+          (current.description ?? "") !== desiredDescription;
+        const bindChanged = (current.proxyBind === true) !== desiredBind;
+        const schemeChanged =
+          (current.loadBalancingScheme ?? "") !== desiredScheme;
+        if (
+          serviceChanged ||
+          headerChanged ||
+          descriptionChanged ||
+          bindChanged ||
+          schemeChanged
+        ) {
+          yield* deleteProxy();
+          yield* waitUntilGone(env.project, region, targetTcpProxyName);
+          current = undefined;
+        }
+      }
+
+      if (current === undefined) {
+        yield* insertProxy();
         current = yield* getByName(env.project, region, targetTcpProxyName);
       }
 
@@ -481,5 +560,6 @@ export const RegionTargetTcpProxyProvider = () =>
           operation,
         ).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
+      yield* waitUntilGone(env.project, region, output.targetTcpProxyName);
     }),
   });
