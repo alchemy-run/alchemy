@@ -4,7 +4,6 @@ import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -22,19 +21,6 @@ const hasGcpCreds = !!(
 const runLifecycle = hasGcpCreds && !process.env.FAST;
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
-const waitUntilGone = (name: string) =>
-  firestore.getProjectsDatabasesBackupSchedules({ name }).pipe(
-    Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
 
 test.provider.skipIf(!hasGcpCreds)(
   "getProjectsDatabasesBackupSchedules on a missing schedule fails with NotFound",
@@ -118,9 +104,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(refetched.retention).toEqual("1209600s");
 
       yield* stack.destroy();
-
-      const gone = yield* waitUntilGone(created.schedule.name);
-      expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

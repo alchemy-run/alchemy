@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 import {
   createOwnership,
   encodeDescription,
@@ -284,8 +285,34 @@ export const LocationsBucketsLinkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.lifecycleState === "DELETE_REQUESTED") return;
       yield* logging.deleteLocationsBucketsLinks({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.asVoid,
+        Effect.flatMap((operation) =>
+          waitForOperation(operation, { notFoundOk: true }).pipe(
+            Effect.catchTag(
+              [
+                "GCP.Logging.OperationPending",
+                "GCP.Logging.OperationFailed",
+                "NotFound",
+              ],
+              () => Effect.void,
+            ),
+          ),
+        ),
+        Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
+      );
+      yield* getByName(output.name).pipe(
+        Effect.flatMap((link) =>
+          isDeleted(link)
+            ? Effect.void
+            : Effect.fail(
+                new LocationsBucketsLinkNotResolved({ name: output.name }),
+              ),
+        ),
+        Effect.retry({
+          while: (error) =>
+            error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",
+          times: 10,
+          schedule: Schedule.spaced("3 seconds"),
+        }),
       );
     }),
   });
