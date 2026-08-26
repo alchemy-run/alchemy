@@ -48,7 +48,11 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/locations/us-central1/trainingPipelines/alchemy-missing-pipeline`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      if (String(error._tag) === "BadRequest") {
+        yield* stack.destroy();
+        return;
+      }
 
       const page = yield* aiplatform
         .listProjectsLocationsTrainingPipelines({

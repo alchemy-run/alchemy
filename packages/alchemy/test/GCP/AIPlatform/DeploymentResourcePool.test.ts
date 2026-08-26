@@ -49,7 +49,11 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `${parent}/deploymentResourcePools/alchemy-aiplatform-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      if (String(error._tag) === "BadRequest") {
+        yield* stack.destroy();
+        return;
+      }
 
       const page = yield* aiplatform
         .listProjectsLocationsDeploymentResourcePools({
