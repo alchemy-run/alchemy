@@ -125,6 +125,26 @@ describe("Docker", () => {
       );
       expect(rewriteLoopbackHosts("8080")).toBe("8080");
     });
+
+    it("leaves Neon and PlanetScale cloud URLs untouched", () => {
+      const neon =
+        "postgres://neondb_owner:secret@ep-cool-name-123456-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require";
+      const neonDirect =
+        "postgresql://neondb_owner:secret@ep-cool-name-123456.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+      const planetscalePg =
+        "postgresql://user:secret@xxxx.pg.psdb.cloud:6432/postgres?sslmode=verify-full";
+      const planetscaleMysql =
+        "mysql://user:secret@aws.connect.psdb.cloud:3306/db?sslaccept=strict";
+      expect(rewriteLoopbackHosts(neon)).toBe(neon);
+      expect(rewriteLoopbackHosts(neonDirect)).toBe(neonDirect);
+      expect(rewriteLoopbackHosts(planetscalePg)).toBe(planetscalePg);
+      expect(rewriteLoopbackHosts(planetscaleMysql)).toBe(planetscaleMysql);
+      expect(
+        mergeContainerCreateEnv(["DATABASE_URL=" + neon], {
+          DATABASE_URL: neon,
+        }),
+      ).toEqual([`DATABASE_URL=${neon}`]);
+    });
   });
 
   describe("mergeContainerCreateEnv", () => {

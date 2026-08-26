@@ -18,6 +18,19 @@ export const HOST_PROBE_PORT = 42117;
  */
 export const PPG_URL = "prisma+postgres://localhost:51216/?api_key=test-key";
 
+/**
+ * Cloud SQL URLs (Neon pooled, PlanetScale Postgres pooled, PlanetScale
+ * MySQL). The rewrite must leave these hosts alone — they are not loopback,
+ * and mangling them is how a "fix localhost" change would break Neon /
+ * PlanetScale from a container.
+ */
+export const NEON_URL =
+  "postgres://neondb_owner:secret@ep-cool-name-123456-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require";
+export const PLANETSCALE_PG_URL =
+  "postgresql://user:secret@xxxx.pg.psdb.cloud:6432/postgres?sslmode=verify-full";
+export const PLANETSCALE_MYSQL_URL =
+  "mysql://user:secret@aws.connect.psdb.cloud:3306/db?sslaccept=strict";
+
 class HostReachContainer extends Cloudflare.Container<HostReachContainer>()(
   "HostReachContainer",
   {
@@ -27,6 +40,9 @@ class HostReachContainer extends Cloudflare.Container<HostReachContainer>()(
     env: {
       TARGET_URL: `http://localhost:${HOST_PROBE_PORT}/hello`,
       PPG_URL,
+      NEON_URL,
+      PLANETSCALE_PG_URL,
+      PLANETSCALE_MYSQL_URL,
     },
     observability: { logs: { enabled: true } },
   },

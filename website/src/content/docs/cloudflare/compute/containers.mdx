@@ -376,6 +376,11 @@ must also listen there — Alchemy TCP-forwards `@prisma/dev`'s loopback
 ports onto the gateway automatically. A host server you start yourself
 should bind `0.0.0.0` (or the bridge address), not `127.0.0.1`.
 
+Neon and PlanetScale have no local emulator: even under `alchemy
+dev` the URL is a cloud host (`*.neon.tech`, `*.psdb.cloud`) and the
+rewrite is a no-op. The container still needs
+`enableInternet: true` to reach them.
+
 ## Which capabilities reach a container
 
 The split follows the transport. A capability whose config travels as

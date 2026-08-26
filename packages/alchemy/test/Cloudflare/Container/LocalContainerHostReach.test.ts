@@ -6,7 +6,13 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as NodeHttp from "node:http";
-import { HOST_PROBE_PORT, PPG_URL } from "./fixtures/hostreach/object.ts";
+import {
+  HOST_PROBE_PORT,
+  NEON_URL,
+  PLANETSCALE_MYSQL_URL,
+  PLANETSCALE_PG_URL,
+  PPG_URL,
+} from "./fixtures/hostreach/object.ts";
 import HostReachStack from "./fixtures/hostreach/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -96,6 +102,9 @@ describe("local container reaches host services", () => {
       const env = JSON.parse(yield* get("/env")) as {
         TARGET_URL: string;
         PPG_URL: string;
+        NEON_URL: string;
+        PLANETSCALE_PG_URL: string;
+        PLANETSCALE_MYSQL_URL: string;
       };
       expect(new URL(env.TARGET_URL).hostname).not.toBe("localhost");
       expect(new URL(env.TARGET_URL).hostname).toContain("localhost");
@@ -106,6 +115,11 @@ describe("local container reaches host services", () => {
       expect(new URL(env.PPG_URL).searchParams.get("api_key")).toBe(
         new URL(PPG_URL).searchParams.get("api_key"),
       );
+      // Cloud SQL URLs (Neon, PlanetScale) must not be rewritten — they are
+      // not loopback, and the container talks to them over the internet.
+      expect(env.NEON_URL).toBe(NEON_URL);
+      expect(env.PLANETSCALE_PG_URL).toBe(PLANETSCALE_PG_URL);
+      expect(env.PLANETSCALE_MYSQL_URL).toBe(PLANETSCALE_MYSQL_URL);
 
       // The proof: the container fetches TARGET_URL (the host-side server)
       // and reports what it got back.

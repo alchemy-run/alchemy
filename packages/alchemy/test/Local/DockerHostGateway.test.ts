@@ -44,6 +44,11 @@ describe("Docker host-gateway loopback expose", () => {
     expect(isLoopbackHost("localhost")).toBe(true);
     expect(isLoopbackHost("host.docker.localhost")).toBe(true);
     expect(isLoopbackHost("db.example.com")).toBe(false);
+    expect(
+      isLoopbackHost("ep-cool-name-123456-pooler.us-east-1.aws.neon.tech"),
+    ).toBe(false);
+    expect(isLoopbackHost("xxxx.pg.psdb.cloud")).toBe(false);
+    expect(isLoopbackHost("aws.connect.psdb.cloud")).toBe(false);
   });
 
   it.effect(

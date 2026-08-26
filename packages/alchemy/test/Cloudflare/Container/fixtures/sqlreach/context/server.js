@@ -1,8 +1,9 @@
-// Probe server for the Linux host-gateway Prisma regression (#1334).
-// `/env` reports the DATABASE_URL the process actually received (including
-// duplicate-key count from the raw environ, because glibc getenv is first
-// match). `/probe` TCP-connects to that URL from inside the container —
-// the failure mode was `dial error: timeout` to 172.17.0.1:port.
+// Probe server for container → SQL DATABASE_URL reachability. Plain node,
+// no deps. `/env` reports the URL the process received (and duplicate-key
+// count from the raw environ — glibc getenv is first-match). `/probe`
+// TCP-connects to that URL from inside the container.
+//
+// NOTE: this file is force-added past the repo's `*.js` ignore rule.
 const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
@@ -18,13 +19,19 @@ const countEnv = (name) => {
   }
 };
 
+const defaultPort = (url) => {
+  if (url.port) return Number(url.port);
+  if (url.protocol.startsWith("mysql")) return 3306;
+  return 5432;
+};
+
 const tcpProbe = (hostname, port) =>
   new Promise((resolve) => {
     const socket = net.connect({ host: hostname, port }, () => {
       socket.end();
       resolve({ ok: true, host: hostname, port });
     });
-    socket.setTimeout(4000, () => {
+    socket.setTimeout(8000, () => {
       socket.destroy();
       resolve({ ok: false, host: hostname, port, error: "timeout" });
     });
@@ -52,7 +59,7 @@ const server = http.createServer(async (req, res) => {
     }
     try {
       const url = new URL(value);
-      res.end(JSON.stringify(await tcpProbe(url.hostname, Number(url.port))));
+      res.end(JSON.stringify(await tcpProbe(url.hostname, defaultPort(url))));
     } catch (error) {
       res.end(JSON.stringify({ error: String(error) }));
     }
@@ -62,5 +69,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(8080, () => {
-  console.log("prismahost probe server listening on 8080");
+  console.log("sqlreach probe server listening on 8080");
 });

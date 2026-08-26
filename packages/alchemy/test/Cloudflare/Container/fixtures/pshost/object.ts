@@ -1,32 +1,26 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { PrismaHostConnection } from "./db.ts";
+import { PlanetscaleHostRole } from "./db.ts";
 
-class PrismaHostContainer extends Cloudflare.Container<PrismaHostContainer>()(
-  "PrismaHostContainer",
+class PlanetscaleHostContainer extends Cloudflare.Container<PlanetscaleHostContainer>()(
+  "PlanetscaleHostContainer",
   Effect.gen(function* () {
-    const connection = yield* PrismaHostConnection;
+    const role = yield* PlanetscaleHostRole;
     return {
-      // Template string, not `path.join(import.meta.dirname, …)`: this module is
-      // bundled into the Worker and `import.meta.dirname` is undefined there.
       context: `${import.meta.dirname}/../sqlreach/context`,
       env: {
-        DATABASE_URL: connection.directConnectionString,
+        DATABASE_URL: role.connectionUrlPooled,
       },
       observability: { logs: { enabled: true } },
     };
   }),
 ) {}
 
-/**
- * Durable Object that binds the {@link PrismaHostContainer} and exposes the
- * probe server's routes to the Worker.
- */
-export class PrismaHostContainerObject extends Cloudflare.DurableObject<PrismaHostContainerObject>()(
-  "PrismaHostContainerObject",
+export class PlanetscaleHostContainerObject extends Cloudflare.DurableObject<PlanetscaleHostContainerObject>()(
+  "PlanetscaleHostContainerObject",
   Effect.gen(function* () {
-    const container = yield* PrismaHostContainer;
+    const container = yield* PlanetscaleHostContainer;
 
     return Effect.gen(function* () {
       const { fetch } = yield* container.getTcpPort(8080);
@@ -46,7 +40,7 @@ export class PrismaHostContainerObject extends Cloudflare.DurableObject<PrismaHo
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layer(PrismaHostContainer, {
+      Cloudflare.Containers.layer(PlanetscaleHostContainer, {
         enableInternet: true,
       }),
     ),

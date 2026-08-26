@@ -1,15 +1,15 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Prisma from "@/Prisma";
+import * as Neon from "@/Neon";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
-import PrismaHostStack from "./fixtures/prismahost/stack.ts";
 import { expectDatabaseReachable } from "./fixtures/sqlreach/expect.ts";
+import NeonHostStack from "./fixtures/neonhost/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.merge(Cloudflare.providers(), Prisma.providers()),
+  providers: Layer.merge(Cloudflare.providers(), Neon.providers()),
   state: Cloudflare.state(),
   dev: true,
 });
@@ -23,27 +23,27 @@ const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 240_000;
 
 /**
- * Regression for alchemy-run/alchemy#1334 on Linux: an arbitrary image given
- * a local Prisma `DATABASE_URL` (`postgres://…@127.0.0.1:…`) must be able to
- * reach `@prisma/dev` from inside the container. host-gateway rewrites the
- * hostname, but the server still has to accept connections on the Docker
- * bridge — a 127.0.0.1 listener times out with
- * `dial error: timeout` to `172.17.0.1`.
+ * Neon is mode-agnostic: `alchemy dev` still hands the container a cloud
+ * `*.neon.tech` URL. The loopback rewrite must not touch it, and with
+ * `enableInternet` the container must be able to dial it — the same
+ * #1334 "container reaches a SQL database" path as Prisma, minus a local
+ * emulator.
  */
-describe("local container reaches Prisma Postgres", () => {
-  const stack = beforeAll(deploy(PrismaHostStack), { timeout: HOOK_TIMEOUT });
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(PrismaHostStack), {
+describe("local container reaches Neon Postgres", () => {
+  const stack = beforeAll(deploy(NeonHostStack), { timeout: HOOK_TIMEOUT });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(NeonHostStack), {
     timeout: HOOK_TIMEOUT,
   });
 
   test(
-    "container DATABASE_URL is rewritten once and reaches the host Prisma",
+    "container DATABASE_URL keeps the Neon host and reaches it",
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* expectDatabaseReachable(url, (hostname) => {
         expect(hostname).not.toBe("localhost");
         expect(hostname).not.toBe("127.0.0.1");
-        expect(hostname).toContain("localhost");
+        expect(hostname).not.toContain("host.docker.localhost");
+        expect(hostname).toMatch(/neon\.tech$/);
       });
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
