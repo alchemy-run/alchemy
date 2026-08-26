@@ -9,6 +9,7 @@ import {
   CONTAINER_LOOPBACK_ALIAS,
   Docker,
   DockerLive,
+  mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
 } from "../Docker.ts";
@@ -123,6 +124,44 @@ describe("Docker", () => {
         "http://notlocalhost:3000",
       );
       expect(rewriteLoopbackHosts("8080")).toBe("8080");
+    });
+  });
+
+  describe("mergeContainerCreateEnv", () => {
+    it("rewrites and replaces by name instead of appending a second value", () => {
+      expect(
+        mergeContainerCreateEnv(
+          [
+            "PATH=/usr/bin",
+            "DATABASE_URL=postgres://postgres@127.0.0.1:5432/db",
+          ],
+          {
+            DATABASE_URL: "postgres://postgres@127.0.0.1:5432/db",
+            PPG_URL: "prisma+postgres://localhost:51216/?api_key=test",
+          },
+        ),
+      ).toEqual([
+        "PATH=/usr/bin",
+        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+        `PPG_URL=prisma+postgres://${CONTAINER_LOOPBACK_ALIAS}:51216/?api_key=test`,
+      ]);
+    });
+
+    it("rewrites loopback hosts already present on the create body", () => {
+      expect(
+        mergeContainerCreateEnv(
+          ["DATABASE_URL=postgres://postgres@127.0.0.1:5432/db"],
+          undefined,
+        ),
+      ).toEqual([
+        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+      ]);
+    });
+
+    it("preserves flag-style entries that have no value", () => {
+      expect(
+        mergeContainerCreateEnv(["DEBUG", "FOO=bar"], { FOO: "baz" }),
+      ).toEqual(["DEBUG", "FOO=baz"]);
     });
   });
 });

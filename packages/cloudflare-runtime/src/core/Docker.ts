@@ -111,6 +111,9 @@ export const toPullRef = (imageUri: string) =>
  * into the host's loopback, so services bound to `127.0.0.1` are reachable.
  * On native Linux Docker it resolves to the bridge gateway IP, so a host
  * service must listen on `0.0.0.0` (or the bridge address) to be reachable.
+ * Local emulators alchemy starts (e.g. `@prisma/dev`) cannot always choose
+ * their bind address, so alchemy also TCP-forwards their loopback ports onto
+ * the Docker bridge — see `exposeLoopbackPortsToDockerHostGateway`.
  */
 export const CONTAINER_LOOPBACK_ALIAS = "host.docker.localhost";
 
@@ -134,6 +137,42 @@ const LOOPBACK_HOST =
  */
 export const rewriteLoopbackHosts = (value: string) =>
   value.replace(LOOPBACK_HOST, `$1${CONTAINER_LOOPBACK_ALIAS}`);
+
+/**
+ * Merge workerd's create-body `Env` with the deployment env alchemy injects,
+ * rewriting loopback hosts and **replacing by name**.
+ *
+ * Appending would leave the original `DATABASE_URL=…127.0.0.1…` in place and
+ * add a rewritten copy. glibc/`os.Getenv` (Go, C, Python, Node on Linux)
+ * return the first match, so the container would still dial `127.0.0.1`
+ * inside its own netns.
+ */
+export const mergeContainerCreateEnv = (
+  originalEnv: ReadonlyArray<string> | undefined,
+  imageEnv: Record<string, string> | undefined,
+): string[] => {
+  const order: string[] = [];
+  const values = new Map<string, string | undefined>();
+  const set = (name: string, value: string | undefined) => {
+    if (!values.has(name)) order.push(name);
+    values.set(name, value);
+  };
+  for (const entry of originalEnv ?? []) {
+    const eq = entry.indexOf("=");
+    if (eq === -1) {
+      set(entry, undefined);
+    } else {
+      set(entry.slice(0, eq), rewriteLoopbackHosts(entry.slice(eq + 1)));
+    }
+  }
+  for (const [name, value] of Object.entries(imageEnv ?? {})) {
+    set(name, rewriteLoopbackHosts(value));
+  }
+  return order.map((name) => {
+    const value = values.get(name);
+    return value === undefined ? name : `${name}=${value}`;
+  });
+};
 
 export const DockerLive = Layer.effect(
   Docker,
@@ -208,12 +247,7 @@ export const DockerLive = Layer.effect(
           const transformed = JSON.stringify({
             ...original,
             Image: image?.tag ?? original.Image,
-            Env: [
-              ...(original.Env ?? []),
-              ...Object.entries(image?.env ?? {}).map(
-                ([name, value]) => `${name}=${rewriteLoopbackHosts(value)}`,
-              ),
-            ],
+            Env: mergeContainerCreateEnv(original.Env, image?.env),
           });
           const proxy = sendProxyRequest({
             socketPath,

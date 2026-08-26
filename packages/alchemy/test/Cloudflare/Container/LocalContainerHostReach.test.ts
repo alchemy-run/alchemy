@@ -41,7 +41,12 @@ const hostServer = Effect.acquireRelease(
       res.setHeader("content-type", "text/plain");
       res.end("hello-from-host");
     });
-    server.listen(HOST_PROBE_PORT, "127.0.0.1", () =>
+    // Bind every interface, not just loopback. Docker Desktop's
+    // host-gateway forwards into 127.0.0.1; native Linux Docker's
+    // host-gateway is the bridge IP, which a 127.0.0.1 listener never
+    // sees. Local emulators we don't control (Prisma) get a TCP forward
+    // onto that bridge instead — see DockerHostGateway.ts.
+    server.listen(HOST_PROBE_PORT, "0.0.0.0", () =>
       resume(Effect.succeed(server)),
     );
     server.on("error", (err) => resume(Effect.die(err)));
