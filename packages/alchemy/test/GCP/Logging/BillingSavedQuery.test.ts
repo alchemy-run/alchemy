@@ -22,6 +22,11 @@ const hasGcpCreds = !!(
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
+// Billing-account saved queries return BadRequest ("Billing account is
+// not supported") on this testing project. Set GCP_TEST_BILLING_SAVED_QUERY=1
+// on an entitled billing account to run the lifecycle.
+const entitled = process.env.GCP_TEST_BILLING_SAVED_QUERY === "1";
+
 const waitUntilGone = (name: string) =>
   logging.getBillingAccountsLocationsSavedQueries({ name }).pipe(
     Effect.as("found" as const),
@@ -42,7 +47,7 @@ const billingAccountId = () =>
   );
 
 test.provider.skipIf(!hasGcpCreds)(
-  "getBillingAccountsLocationsSavedQueries on a missing query fails with NotFound or Forbidden",
+  "getBillingAccountsLocationsSavedQueries on a missing query fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -53,14 +58,42 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `billingAccounts/${account}/locations/global/savedQueries/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || entitled)(
+  "createBillingAccountsLocationsSavedQueries is rejected when the billing account is not supported",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const account = (yield* billingAccountId()) || "000000-000000-000000";
+      const error = yield* Effect.flip(
+        logging.createBillingAccountsLocationsSavedQueries({
+          parent: `billingAccounts/${account}/locations/global`,
+          savedQueryId: "alchemy-probe",
+          body: {
+            displayName: "probe",
+            visibility: "PRIVATE",
+            loggingQuery: { filter: "severity>=ERROR" },
+          },
+        }),
+      );
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      if (error._tag === "BadRequest") {
+        expect(error.message).toContain("Billing account is not supported");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds || !entitled)(
   "create, update, replace, and delete a billing saved query",
   (stack) =>
     Effect.gen(function* () {

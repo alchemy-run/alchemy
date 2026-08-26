@@ -463,10 +463,19 @@ export const listGlossariesAt = (parent: string) =>
         ),
       );
 
+const isListableGlossary = (parent: string) => {
+  if (parent.length === 0 || parent.includes("/locations/global/")) {
+    return false;
+  }
+  const parts = parent.split("/").filter((part) => part.length > 0);
+  const glossariesAt = parts.lastIndexOf("glossaries");
+  const glossaryId = glossariesAt >= 0 ? (parts[glossariesAt + 1] ?? "") : "";
+  return glossaryId.length > 0;
+};
+
 export const listGlossaryEntriesAt = (parent: string) =>
-  parent.length === 0 || parent.includes("/locations/global/")
-    ? emptyList<translate.GlossaryEntry>()
-    : collectPages(
+  isListableGlossary(parent)
+    ? collectPages(
         translate.listProjectsLocationsGlossariesGlossaryEntries.pages({
           parent,
           pageSize: 100,
@@ -476,7 +485,8 @@ export const listGlossaryEntriesAt = (parent: string) =>
         Effect.catchTag(["NotFound", "Forbidden"], () =>
           emptyList<translate.GlossaryEntry>(),
         ),
-      );
+      )
+    : emptyList<translate.GlossaryEntry>();
 
 export const listProjectAdaptiveMtDatasets = (project: string) =>
   Effect.gen(function* () {
@@ -514,7 +524,7 @@ export const listProjectModels = (project: string) =>
 
 export const listProjectGlossaryEntries = (project: string) =>
   Effect.gen(function* () {
-    const parents = listLocationParents(project);
+    const parents = listLocationParents(project, MODEL_LIST_LOCATIONS);
     const glossaries = (yield* Effect.forEach(parents, listGlossariesAt, {
       concurrency: 2,
     })).flat();
