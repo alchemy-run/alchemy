@@ -1486,10 +1486,6 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.VpcId, subnets: subnetIds };
 });
 
-// Zone-by-name inference shared with Route 53 Record/Records and ACM
-// Certificate validation.
-const findHostedZoneId = findPublicHostedZoneId;
-
 const toValuesArray = (value: string | string[] | undefined) =>
   value === undefined ? undefined : Array.isArray(value) ? value : [value];
 
@@ -1823,7 +1819,7 @@ const composeManagedIngress = (
     const domainZones = new Map<string, string>();
     if (domain !== undefined) {
       for (const name of domainNames) {
-        const zoneId = yield* findHostedZoneId(name);
+        const zoneId = yield* findPublicHostedZoneId(name);
         if (zoneId === undefined) {
           return yield* Effect.fail(
             new ServiceHostedZoneNotFound({

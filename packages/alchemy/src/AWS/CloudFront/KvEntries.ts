@@ -145,18 +145,16 @@ export const KvEntriesProvider = () =>
           // etag on the failed attempt so the retried generator fetches a
           // fresh one.
           let stale = currentEtag;
-          const resp = yield* Effect.suspend(() =>
-            Effect.gen(function* () {
-              const attemptEtag = stale ?? (yield* getKvsEtag(store));
-              stale = undefined;
-              return yield* sendBatch(
-                store,
-                attemptEtag,
-                batchPuts,
-                batchDeletes,
-              );
-            }),
-          ).pipe(
+          const resp = yield* Effect.gen(function* () {
+            const attemptEtag = stale ?? (yield* getKvsEtag(store));
+            stale = undefined;
+            return yield* sendBatch(
+              store,
+              attemptEtag,
+              batchPuts,
+              batchDeletes,
+            );
+          }).pipe(
             Effect.retry({
               while: (error) =>
                 error._tag === "ValidationException" &&
