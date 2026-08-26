@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as RemovalPolicy from "../../RemovalPolicy.ts";
@@ -263,12 +264,23 @@ export const EmailEventSourceLive = Layer.effect(
         message: ForwardableEmailMessage,
       ) => Effect.Effect<void, E, Req>,
     ) {
+      // Under `alchemy dev` the Worker only exists locally, so Cloudflare's
+      // mail pipeline has nothing to deliver to. Pointing a real zone's
+      // catch-all at a script that was never uploaded would fail — and if it
+      // did land, it would silently take over inbound mail for the whole zone
+      // and drop it. Local inbound is driven by the runtime's
+      // `POST /cdn-cgi/handler/email?from=&to=` trigger route instead, which
+      // dispatches to the same listener registered below.
+      const dev = yield* Effect.serviceOption(AlchemyContext).pipe(
+        Effect.map((ctx) => (ctx._tag === "Some" ? ctx.value.dev : false)),
+      );
+
       // Deploy-time: provision the Email.Routing toggle plus the routing
       // resource that hands matched mail to this Worker. Skipped once
-      // running inside the deployed Worker (the global guard) and when
-      // `zone` is omitted (bring-your-own routing). Namespaced under the
-      // host so logical identity is stable per Worker.
-      if (!globalThis.__ALCHEMY_RUNTIME__ && props.zone !== undefined) {
+      // running inside the deployed Worker (the global guard), when `zone`
+      // is omitted (bring-your-own routing), and in dev (above). Namespaced
+      // under the host so logical identity is stable per Worker.
+      if (!globalThis.__ALCHEMY_RUNTIME__ && props.zone !== undefined && !dev) {
         const zone = props.zone;
         const matchers = props.matchers;
         yield* Namespace.push(
