@@ -371,10 +371,23 @@ hostname so clients that gate plain-HTTP on a local-looking host
 the local dev server.
 
 On Docker Desktop that alias reaches processes bound to `127.0.0.1`.
-On native Linux Docker it is the bridge gateway IP, so the process
-must also listen there — Alchemy TCP-forwards `@prisma/dev`'s loopback
-ports onto the gateway automatically. A host server you start yourself
+On native Linux Docker (including CachyOS/Arch) it is the bridge
+gateway IP (`172.17.0.1`), so the process must also listen there —
+Alchemy TCP-forwards `@prisma/dev`'s loopback ports onto every local
+RFC1918 address automatically. A host server you start yourself
 should bind `0.0.0.0` (or the bridge address), not `127.0.0.1`.
+
+If the container still times out to `172.17.0.1` on Linux, a host
+firewall is dropping docker→host INPUT (nftables/firewalld on
+CachyOS). Trust the docker subnet, for example:
+
+```
+sudo firewall-cmd --permanent --zone=trusted --add-source=172.16.0.0/12
+sudo firewall-cmd --reload
+```
+
+or an nftables equivalent that accepts `iifname docker0` / source
+`172.16.0.0/12` on the prisma/dev ports.
 
 Neon and PlanetScale have no local emulator: even under `alchemy
 dev` the URL is a cloud host (`*.neon.tech`, `*.psdb.cloud`) and the
