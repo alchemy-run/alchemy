@@ -80,5 +80,5 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
       const gone = yield* waitUntilGone(created.link.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
