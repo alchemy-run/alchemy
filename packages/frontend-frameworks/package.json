@@ -39,7 +39,10 @@
     "test:nextjs": "vitest run src/nextjs/test",
     "test:nuxt": "vitest run src/nuxt/test",
     "test:octane": "vitest run src/octane/test",
+    "test:react-router": "vitest run src/react-router/test",
+    "test:solidstart": "vitest run src/solidstart/test",
     "test:sveltekit": "vitest run src/sveltekit/test",
+    "test:tanstack-start": "vitest run src/tanstack-start/test",
     "test:vite": "vitest run src/vite/test",
     "test:waku": "vitest run src/waku/test",
     "test:vocs": "vitest run src/vocs/test",
@@ -260,6 +263,30 @@
       "worker": "./dist/octane/source.js",
       "import": "./dist/octane/source.js"
     },
+    "./react-router": {
+      "types": "./dist/react-router/index.d.ts",
+      "bun": "./dist/react-router/index.js",
+      "worker": "./dist/react-router/index.js",
+      "import": "./dist/react-router/index.js"
+    },
+    "./react-router/aws": {
+      "types": "./dist/react-router/aws.d.ts",
+      "bun": "./dist/react-router/aws.js",
+      "worker": "./dist/react-router/aws.js",
+      "import": "./dist/react-router/aws.js"
+    },
+    "./solidstart": {
+      "types": "./dist/solidstart/index.d.ts",
+      "bun": "./dist/solidstart/index.js",
+      "worker": "./dist/solidstart/index.js",
+      "import": "./dist/solidstart/index.js"
+    },
+    "./solidstart/aws": {
+      "types": "./dist/solidstart/aws.d.ts",
+      "bun": "./dist/solidstart/aws.js",
+      "worker": "./dist/solidstart/aws.js",
+      "import": "./dist/solidstart/aws.js"
+    },
     "./sveltekit": {
       "types": "./dist/sveltekit/index.d.ts",
       "bun": "./dist/sveltekit/index.js",
@@ -283,6 +310,18 @@
       "bun": "./dist/sveltekit/source.js",
       "worker": "./dist/sveltekit/source.js",
       "import": "./dist/sveltekit/source.js"
+    },
+    "./tanstack-start": {
+      "types": "./dist/tanstack-start/index.d.ts",
+      "bun": "./dist/tanstack-start/index.js",
+      "worker": "./dist/tanstack-start/index.js",
+      "import": "./dist/tanstack-start/index.js"
+    },
+    "./tanstack-start/aws": {
+      "types": "./dist/tanstack-start/aws.d.ts",
+      "bun": "./dist/tanstack-start/aws.js",
+      "worker": "./dist/tanstack-start/aws.js",
+      "import": "./dist/tanstack-start/aws.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",

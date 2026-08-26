@@ -734,6 +734,7 @@ export default defineConfig({
                 },
                 { label: "Next.js", link: "/cloudflare/frontend/nextjs" },
                 { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
+                { label: "Octane", link: "/cloudflare/frontend/octane" },
                 {
                   label: "React Router",
                   link: "/cloudflare/frontend/react-router",
@@ -909,8 +910,23 @@ export default defineConfig({
                   link: "/aws/frontend/websites",
                 },
                 { label: "Astro", link: "/aws/frontend/astro" },
+                { label: "Foldkit", link: "/aws/frontend/foldkit" },
+                {
+                  label: "Full-stack RPC + Drizzle",
+                  link: "/aws/frontend/full-stack-tanstack-rpc-drizzle",
+                },
                 { label: "Next.js", link: "/aws/frontend/nextjs" },
                 { label: "Nuxt", link: "/aws/frontend/nuxt" },
+                { label: "Octane", link: "/aws/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/aws/frontend/react-router",
+                },
+                { label: "React SPA", link: "/aws/frontend/vite-spa" },
+                {
+                  label: "SolidStart",
+                  link: "/aws/frontend/solidstart",
+                },
                 {
                   label: "Static sites",
                   link: "/aws/frontend/static-site",
@@ -919,6 +935,12 @@ export default defineConfig({
                   label: "SvelteKit",
                   link: "/aws/frontend/sveltekit",
                 },
+                {
+                  label: "TanStack Start",
+                  link: "/aws/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/aws/frontend/vite" },
+                { label: "Vue", link: "/aws/frontend/vue" },
                 { label: "Waku", link: "/aws/frontend/waku" },
               ],
             },
