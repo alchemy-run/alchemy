@@ -304,6 +304,9 @@ const waitUntilDeleted = (name: string) =>
 
 export const BucketsLinkProvider = () =>
   Provider.succeed(BucketsLink, {
+    nuke: {
+      dependsOn: ["GCP.Logging.LogBucket"],
+    },
     stables: [
       "name",
       "linkId",

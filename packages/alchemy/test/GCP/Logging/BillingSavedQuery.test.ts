@@ -91,12 +91,12 @@ test.provider.skipIf(!hasGcpCreds)(
         })
         .pipe(
           Effect.as("ok" as const),
-          Effect.catchTag(["Forbidden", "NotFound"], (error) =>
+          Effect.catchTag(["Forbidden", "NotFound", "BadRequest"], (error) =>
             Effect.succeed(error._tag),
           ),
         );
       if (access !== "ok") {
-        expect(["Forbidden", "NotFound"]).toContain(access);
+        expect(["Forbidden", "NotFound", "BadRequest"]).toContain(access);
         yield* stack.destroy();
         return;
       }

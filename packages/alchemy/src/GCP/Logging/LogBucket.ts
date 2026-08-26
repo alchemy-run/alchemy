@@ -586,16 +586,47 @@ export const LogBucketProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      if (output.lifecycleState === "DELETE_REQUESTED") return;
+      const name = output.name;
+      if (!name) return;
+
+      yield* getByName(name).pipe(
+        Effect.flatMap((bucket) => {
+          if (isDeleted(bucket)) return Effect.void;
+          if (bucket !== undefined && isPending(bucket.lifecycleState)) {
+            return Effect.fail(new LogBucketNotResolved({ name }));
+          }
+          return Effect.void;
+        }),
+        Effect.retry({
+          while: (error) => error._tag === "GCP.Logging.LogBucketNotResolved",
+          times: 10,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+      );
+
+      const live = yield* getByName(name);
+      if (isDeleted(live)) return;
+
+      const ignoreIfGone = (error: { readonly _tag: "BadRequest" }) =>
+        getByName(name).pipe(
+          Effect.flatMap((bucket) =>
+            isDeleted(bucket) ? Effect.void : Effect.fail(error),
+          ),
+        );
+
       const deleteBucket = logging
-        .deleteProjectsLocationsBuckets({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .deleteProjectsLocationsBuckets({ name })
+        .pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.catchTag("BadRequest", ignoreIfGone),
+        );
+
       yield* deleteBucket.pipe(
         Effect.catchTag("BadRequest", () =>
           Effect.gen(function* () {
             const links = yield* logging.listProjectsLocationsBucketsLinks
               .pages({
-                parent: output.name,
+                parent: name,
                 pageSize: 100,
               })
               .pipe(
@@ -634,10 +665,11 @@ export const LogBucketProvider = () =>
                 times: 8,
                 schedule: Schedule.spaced("2 seconds"),
               }),
+              Effect.catchTag("BadRequest", ignoreIfGone),
             );
           }),
         ),
       );
-      yield* waitUntilDeleted(output.name);
+      yield* waitUntilDeleted(name);
     }),
   });

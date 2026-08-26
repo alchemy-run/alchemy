@@ -163,6 +163,9 @@ const waitUntilActive = (name: string) =>
 
 export const FolderBucketsLinkProvider = () =>
   Provider.succeed(FolderBucketsLink, {
+    nuke: {
+      dependsOn: ["GCP.Logging.LogBucket"],
+    },
     stables: ["name", "linkId", "bucketName", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
@@ -288,5 +291,20 @@ export const FolderBucketsLinkProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.asVoid,
         );
+      yield* getByName(output.name).pipe(
+        Effect.flatMap((link) =>
+          isDeleted(link)
+            ? Effect.void
+            : Effect.fail(
+                new FolderBucketsLinkNotResolved({ name: output.name }),
+              ),
+        ),
+        Effect.retry({
+          while: (error) =>
+            error._tag === "GCP.Logging.FolderBucketsLinkNotResolved",
+          times: 10,
+          schedule: Schedule.spaced("3 seconds"),
+        }),
+      );
     }),
   });
