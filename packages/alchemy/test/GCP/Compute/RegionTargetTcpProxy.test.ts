@@ -63,11 +63,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds ||
-    !!process.env.FAST ||
-    !process.env.GCP_TEST_REGION_TARGET_TCP_PROXY,
-)(
+test.provider.skipIf(!hasGcpCreds)(
   "create, update, and delete a regional target tcp proxy",
   (stack) =>
     Effect.gen(function* () {
@@ -159,9 +155,7 @@ test.provider.skipIf(
         created.proxy.targetTcpProxyName,
       );
       expect(updated.proxy.description).toEqual("tcp frontend");
-      expect(["PROXY_V1", "NONE", undefined]).toContain(
-        updated.proxy.proxyHeader,
-      );
+      expect(updated.proxy.proxyHeader).toEqual("PROXY_V1");
       expect(resourceTail(updated.proxy.service)).toEqual(updated.other.name);
 
       const refetched = yield* compute.getRegionTargetTcpProxies({
@@ -169,7 +163,7 @@ test.provider.skipIf(
         region,
         targetTcpProxy: updated.proxy.targetTcpProxyName,
       });
-      expect(["PROXY_V1", "NONE", undefined]).toContain(refetched.proxyHeader);
+      expect(refetched.proxyHeader).toEqual("PROXY_V1");
       expect(resourceTail(refetched.service)).toEqual(
         resourceTail(updated.proxy.service),
       );
