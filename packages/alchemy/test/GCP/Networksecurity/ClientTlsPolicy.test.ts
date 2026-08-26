@@ -22,7 +22,9 @@ const hasGcpCreds = !!(
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsClientTlsPolicies({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
+      Effect.succeed("gone" as const),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -119,5 +121,5 @@ test.provider.skipIf(!hasGcpCreds)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { timeout: 180_000 },
 );

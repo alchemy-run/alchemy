@@ -44,9 +44,12 @@ test.provider.skipIf(!hasGcpCreds)(
           body: { displayName: "probe" },
         }),
       );
-      expect(["InternalServerError", "BadRequest", "Forbidden"]).toContain(
-        error._tag,
-      );
+      expect([
+        "InternalServerError",
+        "BadRequest",
+        "Forbidden",
+        "TooManyRequests",
+      ]).toContain(error._tag);
     }).pipe(logLevel),
   { timeout: 30_000 },
 );

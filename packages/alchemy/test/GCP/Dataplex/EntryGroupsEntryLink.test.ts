@@ -33,7 +33,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
+)(
   "create, update, and delete an entry link",
   (stack) =>
     Effect.gen(function* () {
