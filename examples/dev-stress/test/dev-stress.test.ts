@@ -279,8 +279,8 @@ test(
 
     // ── #1334: the container reaches a service on the HOST through an env
     // var written as `http://localhost:…` (the dev runtime rewrites the
-    // loopback host to the `host.docker.localhost` alias, mapped to the
-    // host gateway in the container's shared network namespace) ──
+    // loopback host to `host.docker.localhost`; Linux unix-socket-tunnels
+    // it into the sidecar netns instead of SYNing the docker bridge) ──
     const hostFetch = await fetchJson<{ target: string; body: string }>(
       echo("/sandbox/host-fetch"),
       undefined,

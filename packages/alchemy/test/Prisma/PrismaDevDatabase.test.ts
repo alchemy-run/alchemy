@@ -1,4 +1,3 @@
-import { dockerHostGatewayAddresses } from "@/Local/DockerHostGateway";
 import {
   closePrismaDevDatabase,
   ensurePrismaDevDatabase,
@@ -75,15 +74,6 @@ describe("Prisma dev database", () => {
 
         const answer = yield* queryAnswer(direct);
         expect(answer).toBe(42);
-
-        // Native Linux Docker: host-gateway is the bridge IP, and a
-        // 127.0.0.1 listener is not reachable from a container. The local
-        // Prisma server must also accept connections on that gateway.
-        for (const gateway of dockerHostGatewayAddresses()) {
-          const viaGateway = new URL(direct);
-          viaGateway.hostname = gateway;
-          expect(yield* queryAnswer(viaGateway.toString())).toBe(42);
-        }
 
         expect(
           yield* ensurePrismaDevDatabase(databaseId, false),

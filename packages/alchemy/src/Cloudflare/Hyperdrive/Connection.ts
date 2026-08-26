@@ -5,10 +5,6 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
-import {
-  exposeLoopbackPortsToDockerHostGateway,
-  isLoopbackHost,
-} from "../../Local/DockerHostGateway.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -350,14 +346,6 @@ export const ProviderLocal = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (isResolved(news)) {
-        // A Worker Hyperdrive binding connects from workerd (the host) and
-        // can reach 127.0.0.1. A sibling container cannot: on Linux, Docker
-        // host-gateway is the bridge IP. If the origin is a loopback
-        // emulator, expose that port on the gateway so containers sharing
-        // the origin (Prisma, local Postgres) can dial it.
-        yield* exposeLoopbackOriginToDocker(news.dev ?? news.origin);
-      }
       return {
         hyperdriveId: output?.hyperdriveId ?? generateLocalId(),
         name: yield* createConfigName(id, news.name),
@@ -396,16 +384,6 @@ const findByName = (name: string) =>
 
 export const defaultPort = (scheme: Scheme): number =>
   scheme === "mysql" ? 3306 : 5432;
-
-const exposeLoopbackOriginToDocker = (
-  origin: Origin | DevOrigin | undefined,
-) => {
-  if (origin === undefined || "accessClientId" in origin) return Effect.void;
-  if (!isLoopbackHost(origin.host)) return Effect.void;
-  return exposeLoopbackPortsToDockerHostGateway([
-    origin.port ?? defaultPort(origin.scheme),
-  ]);
-};
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;

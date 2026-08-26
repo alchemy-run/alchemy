@@ -47,12 +47,11 @@ const hostServer = Effect.acquireRelease(
       res.setHeader("content-type", "text/plain");
       res.end("hello-from-host");
     });
-    // Bind every interface, not just loopback. Docker Desktop's
-    // host-gateway forwards into 127.0.0.1; native Linux Docker's
-    // host-gateway is the bridge IP, which a 127.0.0.1 listener never
-    // sees. Local emulators we don't control (Prisma) get a TCP forward
-    // onto that bridge instead — see DockerHostGateway.ts.
-    server.listen(HOST_PROBE_PORT, "0.0.0.0", () =>
+    // Bind loopback only, like `@prisma/dev`. Docker Desktop's
+    // host-gateway reaches 127.0.0.1. Native Linux cannot SYN the
+    // bridge IP (UFW INPUT); the sidecar unix-socket-tunnels this
+    // port into the container netns instead.
+    server.listen(HOST_PROBE_PORT, "127.0.0.1", () =>
       resume(Effect.succeed(server)),
     );
     server.on("error", (err) => resume(Effect.die(err)));

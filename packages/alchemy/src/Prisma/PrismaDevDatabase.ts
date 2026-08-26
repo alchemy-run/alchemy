@@ -8,10 +8,6 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type { Server, ServerOptions } from "@prisma/dev";
-import {
-  closeDockerHostGatewayForwards,
-  exposeLoopbackPortsToDockerHostGateway,
-} from "../Local/DockerHostGateway.ts";
 import type { DatabaseDev } from "./Database.ts";
 
 export interface PrismaDevDatabaseAttrs {
@@ -28,7 +24,6 @@ interface PrismaDevDatabaseEntry {
   migrationKey: string | undefined;
   server: Server;
   attrs: PrismaDevDatabaseAttrs | undefined;
-  dockerGatewayPorts: readonly number[];
 }
 
 const servers = new Map<string, PrismaDevDatabaseEntry>();
@@ -80,32 +75,6 @@ const normalizeConnectionString = Effect.fn(function* (value: string) {
   return url.toString();
 });
 
-const portFromUrl = (value: string | undefined) => {
-  if (value === undefined || value === "") return undefined;
-  try {
-    const port = Number(new URL(value).port);
-    return Number.isInteger(port) && port > 0 ? port : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const dockerGatewayPortsFromServer = (server: Server) => {
-  const ports = new Set<number>();
-  const add = (value: string | undefined) => {
-    const port = portFromUrl(value);
-    if (port !== undefined) ports.add(port);
-  };
-  add(
-    server.database.prismaORMConnectionString ??
-      server.database.connectionString,
-  );
-  add(server.ppg.url);
-  add(server.http.url);
-  add(server.shadowDatabase.connectionString);
-  return [...ports];
-};
-
 const detailsFrom = Effect.fn(function* (value: string) {
   const url = yield* parseUrl("direct Prisma", value);
   return yield* Effect.try({
@@ -156,7 +125,6 @@ const startServer = Effect.fn(function* (
 });
 
 const closeEntry = Effect.fn(function* (entry: PrismaDevDatabaseEntry) {
-  yield* closeDockerHostGatewayForwards(entry.dockerGatewayPorts);
   yield* Effect.tryPromise({
     try: () => entry.server.close(),
     catch: toError("Failed to stop local Prisma database"),
@@ -346,16 +314,13 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
       servers.delete(databaseId);
     }
     const server = yield* startServer(databaseId, options);
-    const dockerGatewayPorts = dockerGatewayPortsFromServer(server);
-    // `@prisma/dev` binds Postgres/HTTP to 127.0.0.1. Docker Desktop's
-    // host-gateway still reaches that; native Linux Docker's host-gateway
-    // is the bridge IP, so we also listen there and forward to loopback.
-    yield* exposeLoopbackPortsToDockerHostGateway(dockerGatewayPorts);
+    // `@prisma/dev` binds Postgres/HTTP to 127.0.0.1. Native Linux Docker
+    // must not SYN the bridge IP (UFW INPUT). The workerd sidecar proxy
+    // unix-socket-tunnels these ports into the container netns.
     const attrsResult = yield* Effect.result(
       prismaDevDatabaseAttrsFromServer(server),
     );
     if (Result.isFailure(attrsResult)) {
-      yield* closeDockerHostGatewayForwards(dockerGatewayPorts);
       const closeResult = yield* Effect.result(
         Effect.tryPromise({
           try: () => server.close(),
@@ -368,7 +333,6 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
           migrationKey: undefined,
           server,
           attrs: undefined,
-          dockerGatewayPorts,
         });
         return yield* Effect.fail(
           new AggregateError(
@@ -385,7 +349,6 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
       migrationKey: undefined,
       server,
       attrs,
-      dockerGatewayPorts,
     };
     servers.set(databaseId, entry);
   }
