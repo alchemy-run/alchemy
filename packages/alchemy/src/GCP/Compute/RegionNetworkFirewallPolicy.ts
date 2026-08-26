@@ -25,8 +25,14 @@ import type {
 
 const DEFAULT_POLICY_TYPE = "VPC_POLICY";
 const DEFAULT_REGION = "us-central1";
-const DEFAULT_RULE_PRIORITY = 2147483647;
+const RESERVED_PRIORITY_MIN = 2147483548;
+const RESERVED_PRIORITY_MAX = 2147483647;
 const MAX_NAME_LENGTH = 63;
+
+const isReservedPriority = (priority: number | undefined) =>
+  priority !== undefined &&
+  priority >= RESERVED_PRIORITY_MIN &&
+  priority <= RESERVED_PRIORITY_MAX;
 
 export type RegionNetworkFirewallPolicyProps = {
   /**
@@ -55,11 +61,12 @@ export type RegionNetworkFirewallPolicyProps = {
    */
   policyType?: FirewallPolicyType;
   /**
-   * Network firewall rules. GCP always keeps a default rule at
-   * priority `2147483647` matching all traffic. When this field is set,
-   * Alchemy syncs rules with `addRule` / `patchRule` / `removeRule`
-   * (not `patch`). When omitted on later updates, observed rules are
-   * left in place.
+   * Network firewall rules. GCP always keeps default `goto_next` rules
+   * in the reserved priority range `2147483548`–`2147483647`; Alchemy
+   * never add/patch/remove those. When this field is set, user rules
+   * are synced with `addRule` / `patchRule` / `removeRule` (not
+   * `patch`). When omitted on later updates, observed rules are left
+   * in place.
    */
   rules?: FirewallPolicyRule[];
 };
@@ -307,21 +314,13 @@ const toRuleBody = (rule: FirewallPolicyRule): FirewallPolicyRule => ({
 
 const desiredRules = (
   news: RegionNetworkFirewallPolicyProps,
-  observed: readonly FirewallPolicyRule[],
 ): FirewallPolicyRule[] | undefined => {
   if (news.rules === undefined) return undefined;
   const byPriority = new Map<number, FirewallPolicyRule>();
   for (const rule of news.rules) {
     if (rule.priority === undefined) continue;
+    if (isReservedPriority(rule.priority)) continue;
     byPriority.set(rule.priority, rule);
-  }
-  if (!byPriority.has(DEFAULT_RULE_PRIORITY)) {
-    const observedDefault = observed.find(
-      (rule) => rule.priority === DEFAULT_RULE_PRIORITY,
-    );
-    if (observedDefault !== undefined) {
-      byPriority.set(DEFAULT_RULE_PRIORITY, observedDefault);
-    }
   }
   return [...byPriority.values()].sort(
     (left, right) => (left.priority ?? 0) - (right.priority ?? 0),
@@ -534,7 +533,6 @@ const insertBody = (
   name: firewallPolicyName,
   description,
   policyType: typeOf(news.policyType),
-  rules: news.rules !== undefined ? news.rules.map(toRuleBody) : undefined,
 });
 
 const syncRules = (
@@ -559,6 +557,7 @@ const syncRules = (
     }
 
     for (const [priority, rule] of desiredByPriority) {
+      if (isReservedPriority(priority)) continue;
       const current = observedByPriority.get(priority);
       if (current === undefined) {
         yield* runOp(
@@ -593,7 +592,7 @@ const syncRules = (
 
     for (const priority of observedByPriority.keys()) {
       if (desiredByPriority.has(priority)) continue;
-      if (priority === DEFAULT_RULE_PRIORITY) continue;
+      if (isReservedPriority(priority)) continue;
       yield* runOp(
         project,
         region,
@@ -751,7 +750,7 @@ export const RegionNetworkFirewallPolicyProvider = () =>
           current;
       }
 
-      const nextRules = desiredRules(news, current.rules ?? []);
+      const nextRules = desiredRules(news);
       if (nextRules !== undefined) {
         yield* syncRules(
           env.project,

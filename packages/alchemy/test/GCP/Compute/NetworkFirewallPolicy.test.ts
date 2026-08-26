@@ -35,6 +35,15 @@ const ruleAt = (
   priority: number,
 ) => (rules ?? []).find((rule) => rule.priority === priority);
 
+const hasReservedGotoNext = (rules: compute.FirewallPolicyRule[] | undefined) =>
+  (rules ?? []).some(
+    (rule) =>
+      rule.action === "goto_next" &&
+      rule.priority !== undefined &&
+      rule.priority >= 2147483548 &&
+      rule.priority <= 2147483647,
+  );
+
 const nextName = (name: string) =>
   name.length < 63 ? `${name}x` : `${name.slice(0, 62)}x`;
 
@@ -56,11 +65,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds ||
-    !!process.env.FAST ||
-    !process.env.GCP_TEST_NETWORK_FIREWALL_POLICY,
-)(
+test.provider.skipIf(!hasGcpCreds)(
   "create, update, replace, and delete a network firewall policy",
   (stack) =>
     Effect.gen(function* () {
@@ -89,7 +94,7 @@ test.provider.skipIf(
       expect(created.policyType).toEqual("VPC_POLICY");
       expect(created.description).toEqual("allow internal http");
       expect(ruleAt(created.rules, 1000)?.action).toEqual("allow");
-      expect(ruleAt(created.rules, 2147483647)?.action).toEqual("goto_next");
+      expect(hasReservedGotoNext(created.rules)).toEqual(true);
 
       const fetched = yield* compute.getNetworkFirewallPolicies({
         project: created.project,
@@ -192,5 +197,5 @@ test.provider.skipIf(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { timeout: 180_000 },
 );

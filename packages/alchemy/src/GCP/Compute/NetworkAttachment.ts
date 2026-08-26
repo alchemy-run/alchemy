@@ -49,6 +49,8 @@ export type NetworkAttachmentProps = {
   /**
    * How producer connections are admitted. `ACCEPT_AUTOMATIC` always
    * accepts; `ACCEPT_MANUAL` uses the accept and reject lists.
+   * Immutable — GCP rejects `patch` of this field, so changing it
+   * replaces the attachment.
    * @default "ACCEPT_AUTOMATIC"
    */
   connectionPreference?: NetworkAttachmentConnectionPreference;
@@ -256,12 +258,26 @@ const refsKey = (values: ReadonlyArray<string> | undefined) =>
 const toAttrs = (
   attachment: compute.NetworkAttachment,
   project: string,
+  fallbackName?: string,
 ): NetworkAttachment["Attributes"] => {
   const parsed = parseDescription(attachment.description);
+  const region = normalizeRegion(attachment.region);
+  const networkAttachmentName =
+    attachment.name ||
+    lastSegment(attachment.selfLink) ||
+    lastSegment(attachment.selfLinkWithId) ||
+    fallbackName ||
+    "";
+  const selfLink =
+    attachment.selfLink && attachment.selfLink.length > 0
+      ? attachment.selfLink
+      : networkAttachmentName.length > 0
+        ? `https://www.googleapis.com/compute/v1/projects/${project}/regions/${region}/networkAttachments/${networkAttachmentName}`
+        : undefined;
   return {
-    networkAttachmentName: attachment.name ?? "",
+    networkAttachmentName,
     project,
-    region: normalizeRegion(attachment.region),
+    region,
     network: attachment.network,
     subnetworks: attachment.subnetworks ?? [],
     connectionPreference: attachment.connectionPreference,
@@ -271,8 +287,8 @@ const toAttrs = (
     connectionEndpoints: attachment.connectionEndpoints ?? [],
     fingerprint: attachment.fingerprint,
     networkAttachmentId: attachment.id,
-    selfLink: attachment.selfLink,
-    selfLinkWithId: attachment.selfLinkWithId,
+    selfLink,
+    selfLinkWithId: attachment.selfLinkWithId ?? selfLink,
     creationTimestamp: attachment.creationTimestamp,
     kind: attachment.kind,
   };
@@ -464,10 +480,17 @@ export const NetworkAttachmentProvider = () =>
         previousName !== nextName;
       const previousRegion = normalizeRegion(olds?.region ?? output?.region);
       const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousPreference = preferenceOf(
+        olds?.connectionPreference ?? output?.connectionPreference,
+      );
+      const nextPreference = preferenceOf(news.connectionPreference);
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      if (previousRegion !== nextRegion) {
+      if (
+        previousRegion !== nextRegion ||
+        previousPreference !== nextPreference
+      ) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -487,7 +510,7 @@ export const NetworkAttachmentProvider = () =>
         networkAttachmentName,
       );
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, networkAttachmentName);
       const { labels } = parseDescription(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -567,7 +590,6 @@ export const NetworkAttachmentProvider = () =>
 
       const needsPatch =
         (current.description ?? "") !== desiredDescription ||
-        preferenceOf(current.connectionPreference) !== connectionPreference ||
         refsKey(current.subnetworks) !== refsKey(subnetworks) ||
         (news.producerAcceptLists !== undefined &&
           refsKey(current.producerAcceptLists) !==
@@ -592,7 +614,6 @@ export const NetworkAttachmentProvider = () =>
               fingerprint: latest.fingerprint,
               description: desiredDescription,
               subnetworks,
-              connectionPreference,
               producerAcceptLists:
                 news.producerAcceptLists ?? current.producerAcceptLists,
               producerRejectLists:
@@ -605,7 +626,7 @@ export const NetworkAttachmentProvider = () =>
           current;
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, networkAttachmentName);
     }),
 
     delete: Effect.fn(function* ({ output }) {

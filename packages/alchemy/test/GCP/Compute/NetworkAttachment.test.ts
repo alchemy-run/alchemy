@@ -57,11 +57,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds ||
-    !!process.env.FAST ||
-    !process.env.GCP_TEST_NETWORK_ATTACHMENT,
-)(
+test.provider.skipIf(!hasGcpCreds)(
   "create, update, and delete a network attachment",
   (stack) =>
     Effect.gen(function* () {
@@ -72,34 +68,34 @@ test.provider.skipIf(
           const network = yield* GCP.Compute.Network("Vpc", {
             autoCreateSubnetworks: false,
           });
-          const subnet = yield* GCP.Compute.Subnetwork("Consumer", {
+          const subnet = yield* GCP.Compute.Subnetwork("ConsumerSubnet", {
             network: network.networkName,
             region,
             ipCidrRange: "10.53.0.0/24",
           });
-          const attachment = yield* GCP.Compute.NetworkAttachment("Consumer", {
-            region,
-            subnetworks: [subnet.selfLink.as<string>()],
-            connectionPreference: "ACCEPT_AUTOMATIC",
-            description: "psc consumer",
-          });
+          const attachment = yield* GCP.Compute.NetworkAttachment(
+            "ConsumerAttachment",
+            {
+              region,
+              subnetworks: [subnet.selfLink.as<string>()],
+              connectionPreference: "ACCEPT_AUTOMATIC",
+              description: "psc consumer",
+            },
+          );
           return { network, subnet, attachment };
         }),
       );
 
-      expect(created.attachment.networkAttachmentName).toEqual(
-        expect.any(String),
+      expect(created.attachment.networkAttachmentName.length).toBeGreaterThan(
+        0,
       );
       expect(created.attachment.region).toEqual(region);
       expect(created.attachment.connectionPreference).toEqual(
         "ACCEPT_AUTOMATIC",
       );
-      expect(
-        created.attachment.description === "psc consumer" ||
-          created.attachment.description === undefined,
-      ).toEqual(true);
+      expect(created.attachment.description).toEqual("psc consumer");
       expect(created.attachment.subnetworks.length).toBeGreaterThan(0);
-      expect(created.attachment.selfLink).toEqual(expect.any(String));
+      expect(created.attachment.selfLink).toContain("/networkAttachments/");
 
       const fetched = yield* compute.getNetworkAttachments({
         project: created.attachment.project,
@@ -117,13 +113,13 @@ test.provider.skipIf(
             networkName: created.network.networkName,
             autoCreateSubnetworks: false,
           });
-          const subnet = yield* GCP.Compute.Subnetwork("Consumer", {
+          const subnet = yield* GCP.Compute.Subnetwork("ConsumerSubnet", {
             subnetworkName: created.subnet.subnetworkName,
             network: network.networkName,
             region,
             ipCidrRange: "10.53.0.0/24",
           });
-          return yield* GCP.Compute.NetworkAttachment("Consumer", {
+          return yield* GCP.Compute.NetworkAttachment("ConsumerAttachment", {
             networkAttachmentName: created.attachment.networkAttachmentName,
             region,
             subnetworks: [subnet.selfLink.as<string>()],

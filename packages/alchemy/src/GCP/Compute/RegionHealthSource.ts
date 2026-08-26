@@ -160,6 +160,26 @@ export class RegionHealthSourceOperationFailed extends Data.TaggedError(
 const typeOf = (value: string | undefined) =>
   (value ?? DEFAULT_SOURCE_TYPE).toUpperCase();
 
+const toBackendServiceUrl = (
+  project: string,
+  region: string,
+  value: string | undefined,
+) => {
+  if (value === undefined || value.length === 0) return undefined;
+  if (value.includes("/backendServices/")) return value;
+  return `projects/${project}/regions/${region}/backendServices/${lastSegment(value)}`;
+};
+
+const toHealthAggregationPolicyUrl = (
+  project: string,
+  region: string,
+  value: string | undefined,
+) => {
+  if (value === undefined || value.length === 0) return undefined;
+  if (value.includes("/healthAggregationPolicies/")) return value;
+  return `projects/${project}/regions/${region}/healthAggregationPolicies/${lastSegment(value)}`;
+};
+
 const toAttrs = (
   source: compute.HealthSource,
   project: string,
@@ -300,6 +320,16 @@ export const RegionHealthSourceProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const sourceType = typeOf(news.sourceType);
+      const sources = news.sources.flatMap((source) => {
+        const url = toBackendServiceUrl(env.project, region, source);
+        return url === undefined ? [] : [url];
+      });
+      const healthAggregationPolicy =
+        toHealthAggregationPolicyUrl(
+          env.project,
+          region,
+          news.healthAggregationPolicy,
+        ) ?? news.healthAggregationPolicy;
 
       let current = yield* getByName(env.project, region, sourceName);
 
@@ -314,8 +344,8 @@ export const RegionHealthSourceProvider = () =>
               name: sourceName,
               description: desiredDescription,
               sourceType,
-              sources: news.sources,
-              healthAggregationPolicy: news.healthAggregationPolicy,
+              sources,
+              healthAggregationPolicy,
             },
           }),
           (operation, message) => failOp(sourceName, operation, message),
@@ -339,15 +369,15 @@ export const RegionHealthSourceProvider = () =>
         patch.description = desiredDescription;
         dirty = true;
       }
-      if (!sameUrlList(current.sources, news.sources)) {
-        patch.sources = news.sources;
+      if (!sameUrlList(current.sources, sources)) {
+        patch.sources = sources;
         dirty = true;
       }
       if (
         lastSegment(current.healthAggregationPolicy) !==
-        lastSegment(news.healthAggregationPolicy)
+        lastSegment(healthAggregationPolicy)
       ) {
-        patch.healthAggregationPolicy = news.healthAggregationPolicy;
+        patch.healthAggregationPolicy = healthAggregationPolicy;
         dirty = true;
       }
       if (dirty) {
