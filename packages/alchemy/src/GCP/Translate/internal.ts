@@ -458,13 +458,13 @@ export const listGlossariesAt = (parent: string) =>
         }),
         (page) => page.glossaries,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
           emptyList<translate.Glossary>(),
         ),
       );
 
 export const listGlossaryEntriesAt = (parent: string) =>
-  parent.length === 0
+  parent.length === 0 || parent.includes("/locations/global/")
     ? emptyList<translate.GlossaryEntry>()
     : collectPages(
         translate.listProjectsLocationsGlossariesGlossaryEntries.pages({
@@ -473,7 +473,7 @@ export const listGlossaryEntriesAt = (parent: string) =>
         }),
         (page) => page.glossaryEntries,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
           emptyList<translate.GlossaryEntry>(),
         ),
       );
@@ -519,7 +519,11 @@ export const listProjectGlossaryEntries = (project: string) =>
       concurrency: 2,
     })).flat();
     const groups = yield* Effect.forEach(
-      glossaries.map((glossary) => glossary.name ?? ""),
+      glossaries
+        .map((glossary) => glossary.name ?? "")
+        .filter(
+          (name) => name.length > 0 && !name.includes("/locations/global/"),
+        ),
       listGlossaryEntriesAt,
       { concurrency: 2 },
     );

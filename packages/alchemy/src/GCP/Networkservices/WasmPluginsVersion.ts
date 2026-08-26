@@ -215,9 +215,17 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  networkservices
-    .getProjectsLocationsWasmPluginsVersions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  name.length === 0 ||
+  !name.includes("/wasmPlugins/") ||
+  name.includes("/wasmPlugins//")
+    ? Effect.succeed(undefined)
+    : networkservices
+        .getProjectsLocationsWasmPluginsVersions({ name })
+        .pipe(
+          Effect.catchTag(["NotFound", "BadRequest"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
 const getPlugin = (name: string) =>
   networkservices
@@ -407,52 +415,50 @@ export const WasmPluginsVersionProvider = () =>
           (version) =>
             lastSegment(version.name ?? "") !== output.wasmPluginVersionId,
         );
-        if (other === undefined) {
-          return;
-        }
-        const nextMain = lastSegment(other.name ?? "");
-        const switched = yield* networkservices
-          .patchProjectsLocationsWasmPlugins({
-            name: output.wasmPlugin,
-            updateMask: "mainVersionId",
-            body: {
+        if (other !== undefined) {
+          const nextMain = lastSegment(other.name ?? "");
+          const switched = yield* networkservices
+            .patchProjectsLocationsWasmPlugins({
               name: output.wasmPlugin,
-              mainVersionId: nextMain,
-            },
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        if (switched !== undefined) {
-          yield* waitForOperation(switched, { notFoundOk: true });
-          yield* getPlugin(output.wasmPlugin).pipe(
-            Effect.flatMap((current) =>
-              current !== undefined && current.mainVersionId === nextMain
-                ? Effect.succeed(current)
-                : Effect.fail(
-                    new NetworkservicesNotResolved({
-                      name: output.wasmPlugin,
-                    }),
-                  ),
-            ),
-            Effect.retry({
-              while: (error) =>
-                error._tag === "GCP.Networkservices.NotResolved",
-              times: 8,
-              schedule: Schedule.spaced("1 second"),
-            }),
-          );
+              updateMask: "mainVersionId",
+              body: {
+                name: output.wasmPlugin,
+                mainVersionId: nextMain,
+              },
+            })
+            .pipe(
+              Effect.catchTag(["NotFound", "BadRequest"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (switched !== undefined) {
+            yield* waitForOperation(switched, { notFoundOk: true }).pipe(
+              Effect.catchTag(
+                "GCP.Networkservices.OperationFailed",
+                () => Effect.void,
+              ),
+            );
+          }
         }
       }
 
       yield* Effect.gen(function* () {
         const operation = yield* networkservices
           .deleteProjectsLocationsWasmPluginsVersions({ name: output.name })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(
+            Effect.catchTag(["NotFound", "BadRequest"], () =>
+              Effect.succeed(undefined),
+            ),
+          );
         if (operation !== undefined) {
-          yield* waitForOperation(operation, { notFoundOk: true });
+          yield* waitForOperation(operation, { notFoundOk: true }).pipe(
+            Effect.catchTag("GCP.Networkservices.OperationFailed", (error) =>
+              error.message.toLowerCase().includes("image") ||
+              error.message.toLowerCase().includes("not found")
+                ? Effect.void
+                : Effect.fail(error),
+            ),
+          );
         }
       }).pipe(
         Effect.retry({

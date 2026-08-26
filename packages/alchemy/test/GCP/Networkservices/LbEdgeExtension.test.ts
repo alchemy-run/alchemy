@@ -49,7 +49,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_LB_EDGE_EXTENSION,
+)(
   "create, update, and delete an lb edge extension",
   (stack) =>
     Effect.gen(function* () {

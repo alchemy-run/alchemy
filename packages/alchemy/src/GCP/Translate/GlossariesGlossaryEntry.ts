@@ -310,6 +310,15 @@ export const GlossariesGlossaryEntryProvider = () =>
         news.location ?? output?.location ?? DEFAULT_LOCATION,
       );
       const parent = glossaryParentOf(env.project, location, news.parent);
+      if (
+        parent.length === 0 ||
+        parent.endsWith("/glossaries") ||
+        parent.includes("/locations/global/")
+      ) {
+        return yield* new ResourceNotResolved({
+          name: parent || news.parent,
+        });
+      }
       const glossaryEntryId = news.glossaryEntryId ?? output?.glossaryEntryId;
       const name = glossaryEntryId
         ? resourceNameOf(parent, "glossaryEntries", glossaryEntryId)

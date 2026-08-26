@@ -26,14 +26,22 @@ export const ValidateAttestationHttp = Layer.effect(
         Effect.provideService(HttpClient.HttpClient, httpClient),
       );
     return Effect.fn(function* (attestor: Attestor) {
-      const name = yield* attestor.name;
+      const project = yield* attestor.project;
+      const attestorId = yield* attestor.attestorId;
+      const noteReference = yield* attestor.noteReference;
       return Effect.fn(
         `GCP.Binaryauthorization.ValidateAttestation(${attestor.LogicalId})`,
       )(function* (request: ValidateAttestationRequest) {
-        const attestorName = yield* name;
+        const projectId = yield* project;
+        const id = yield* attestorId;
+        const occurrenceNote = request.occurrenceNote ?? (yield* noteReference);
         return yield* validate({
-          attestor: attestorName,
-          body: request,
+          attestor: `projects/${projectId}/attestors/${id}`,
+          body: {
+            occurrenceResourceUri: request.occurrenceResourceUri,
+            occurrenceNote,
+            attestation: request.attestation,
+          },
         });
       });
     });

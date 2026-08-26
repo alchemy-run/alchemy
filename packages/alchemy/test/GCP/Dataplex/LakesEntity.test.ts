@@ -31,7 +31,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
+)(
   "create, update, and delete a lake entity",
   (stack) =>
     Effect.gen(function* () {

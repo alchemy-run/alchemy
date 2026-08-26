@@ -18,7 +18,8 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_WORKSTATIONS;
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
@@ -52,7 +53,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!runLifecycle)(
   "create against a missing network is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
