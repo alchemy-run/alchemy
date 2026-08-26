@@ -17,10 +17,6 @@ export const QueryHttp = Layer.effect(
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const httpClient = yield* HttpClient.HttpClient;
-    const queryJobs = yield* bigquery.queryJobs.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
     return Effect.fn(function* (dataset: Dataset) {
       const project = yield* dataset.project;
       const datasetId = yield* dataset.datasetId;
@@ -28,18 +24,23 @@ export const QueryHttp = Layer.effect(
       return Effect.fn(`GCP.BigQuery.Query(${dataset.LogicalId})`)(function* (
         request: QueryRequest,
       ) {
-        return yield* queryJobs({
-          projectId: yield* project,
-          body: {
-            useLegacySql: false,
-            location: yield* location,
-            ...request,
-            defaultDataset: request.defaultDataset ?? {
-              projectId: yield* project,
-              datasetId: yield* datasetId,
+        return yield* bigquery
+          .queryJobs({
+            projectId: yield* project,
+            body: {
+              useLegacySql: false,
+              location: yield* location,
+              ...request,
+              defaultDataset: request.defaultDataset ?? {
+                projectId: yield* project,
+                datasetId: yield* datasetId,
+              },
             },
-          },
-        });
+          })
+          .pipe(
+            Effect.provideService(Credentials, credentials),
+            Effect.provideService(HttpClient.HttpClient, httpClient),
+          );
       });
     });
   }),

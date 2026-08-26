@@ -79,3 +79,17 @@ export const waitRegionOperations = (
     }),
     options?.times ?? 12,
   );
+
+/** Hierarchical firewall policies (and other org-scoped compute APIs). */
+export const waitGlobalOrganizationOperations = (
+  input: { operation: string; parentId?: string },
+  options?: { times?: number },
+) =>
+  poll(
+    input.operation,
+    compute.getGlobalOrganizationOperations({
+      operation: input.operation,
+      parentId: input.parentId,
+    }),
+    options?.times ?? 12,
+  );

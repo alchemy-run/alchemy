@@ -50,6 +50,20 @@ export type BucketProps = {
    * @default false
    */
   forceDestroy?: boolean;
+  /**
+   * Enable uniform bucket-level access. Required for managed folders.
+   * Hierarchical namespace implies this is enabled. Fine-grained ACLs
+   * cannot be used when this is true.
+   * @default false
+   */
+  uniformBucketLevelAccess?: boolean;
+  /**
+   * Enable hierarchical namespace (first-class folders). Immutable —
+   * must be set at create time; changing it replaces the bucket.
+   * Implies uniform bucket-level access.
+   * @default false
+   */
+  hierarchicalNamespace?: boolean;
 };
 
 export type Bucket = Resource<
@@ -74,6 +88,10 @@ export type Bucket = Resource<
     projectNumber: string | undefined;
     /** RFC3339 creation timestamp. */
     timeCreated: string | undefined;
+    /** Whether uniform bucket-level access is enabled. */
+    uniformBucketLevelAccess: boolean;
+    /** Whether hierarchical namespace is enabled. */
+    hierarchicalNamespace: boolean;
   },
   never,
   Providers
@@ -98,6 +116,15 @@ export type Bucket = Resource<
  *   storageClass: "STANDARD",
  *   versioning: true,
  *   labels: { env: "prod" },
+ *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * **Example:** Hierarchical namespace (folders)
+ * ```typescript
+ * const bucket = yield* GCP.Storage.Bucket("tree", {
+ *   hierarchicalNamespace: true,
+ *   uniformBucketLevelAccess: true,
  *   forceDestroy: true,
  * });
  * ```
@@ -143,6 +170,9 @@ const toAttrs = (bucket: storage.Bucket) => ({
   selfLink: bucket.selfLink,
   projectNumber: bucket.projectNumber,
   timeCreated: bucket.timeCreated,
+  uniformBucketLevelAccess:
+    bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true,
+  hierarchicalNamespace: bucket.hierarchicalNamespace?.enabled === true,
 });
 
 const getByName = (bucketName: string) =>
@@ -173,6 +203,50 @@ const emptyBucket = (bucketName: string) =>
       ),
     );
 
+const emptyFolders = (bucketName: string) =>
+  storage.listFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((chunk) => {
+      const folders = Array.from(chunk)
+        .map((folder) => folder.name)
+        .filter((name): name is string => !!name)
+        .sort((left, right) => right.length - left.length);
+      return Effect.forEach(
+        folders,
+        (folder) =>
+          storage
+            .deleteFolders({ bucket: bucketName, folder })
+            .pipe(Effect.catchTag("NotFound", () => Effect.void)),
+        { concurrency: 1 },
+      );
+    }),
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+  );
+
+const emptyManagedFolders = (bucketName: string) =>
+  storage.listManagedFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((chunk) => {
+      const folders = Array.from(chunk)
+        .map((folder) => folder.name)
+        .filter((name): name is string => !!name)
+        .sort((left, right) => right.length - left.length);
+      return Effect.forEach(
+        folders,
+        (managedFolder) =>
+          storage
+            .deleteManagedFolders({
+              bucket: bucketName,
+              managedFolder,
+              allowNonEmpty: true,
+            })
+            .pipe(Effect.catchTag("NotFound", () => Effect.void)),
+        { concurrency: 1 },
+      );
+    }),
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+  );
+
 export const BucketProvider = () =>
   Provider.succeed(Bucket, {
     stables: [
@@ -192,6 +266,17 @@ export const BucketProvider = () =>
         previous !== undefined &&
         previous.toUpperCase() !== next.toUpperCase()
       ) {
+        const previousName = olds?.bucketName ?? output?.bucketName;
+        const nextName = news.bucketName ?? previousName;
+        return {
+          action: "replace" as const,
+          deleteFirst: nextName !== undefined && nextName === previousName,
+        };
+      }
+      const previousHns =
+        olds?.hierarchicalNamespace ?? output?.hierarchicalNamespace;
+      const nextHns = news.hierarchicalNamespace === true;
+      if (previousHns !== undefined && previousHns !== nextHns) {
         const previousName = olds?.bucketName ?? output?.bucketName;
         const nextName = news.bucketName ?? previousName;
         return {
@@ -239,6 +324,11 @@ export const BucketProvider = () =>
       const location = news.location ?? DEFAULT_LOCATION;
       const storageClass = news.storageClass ?? "STANDARD";
       const versioning = news.versioning === true;
+      const hierarchicalNamespace = news.hierarchicalNamespace === true;
+      const uniformBucketLevelAccess =
+        news.uniformBucketLevelAccess === true || hierarchicalNamespace;
+      const configureIam =
+        news.uniformBucketLevelAccess !== undefined || hierarchicalNamespace;
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -257,6 +347,16 @@ export const BucketProvider = () =>
               storageClass,
               versioning: { enabled: versioning },
               labels: desiredLabels,
+              hierarchicalNamespace: hierarchicalNamespace
+                ? { enabled: true }
+                : undefined,
+              iamConfiguration: configureIam
+                ? {
+                    uniformBucketLevelAccess: {
+                      enabled: uniformBucketLevelAccess,
+                    },
+                  }
+                : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(bucketName)));
@@ -274,8 +374,18 @@ export const BucketProvider = () =>
         (current.storageClass ?? "STANDARD") !== storageClass;
       const versioningChanged =
         (current.versioning?.enabled === true) !== versioning;
+      const ublChanged =
+        configureIam &&
+        (current.iamConfiguration?.uniformBucketLevelAccess?.enabled ===
+          true) !==
+          uniformBucketLevelAccess;
 
-      if (labelsChanged || storageClassChanged || versioningChanged) {
+      if (
+        labelsChanged ||
+        storageClassChanged ||
+        versioningChanged ||
+        ublChanged
+      ) {
         const nextLabels: Record<string, string | null> = { ...desiredLabels };
         for (const [key] of removed) {
           nextLabels[key] = null;
@@ -287,6 +397,13 @@ export const BucketProvider = () =>
             storageClass,
             versioning: { enabled: versioning },
             labels: nextLabels as unknown as Record<string, string>,
+            iamConfiguration: ublChanged
+              ? {
+                  uniformBucketLevelAccess: {
+                    enabled: uniformBucketLevelAccess,
+                  },
+                }
+              : undefined,
           },
         });
       }
@@ -298,6 +415,12 @@ export const BucketProvider = () =>
       const mayEmpty = olds.forceDestroy === true || force === true;
       if (mayEmpty) {
         yield* emptyBucket(output.bucketName);
+        if (output.hierarchicalNamespace) {
+          yield* emptyFolders(output.bucketName);
+        }
+        if (output.uniformBucketLevelAccess) {
+          yield* emptyManagedFolders(output.bucketName);
+        }
       }
       yield* storage
         .deleteBuckets({ bucket: output.bucketName })

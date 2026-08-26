@@ -310,12 +310,12 @@ const getByName = (name: string) =>
 
 const waitUntilPresent = (name: string) =>
   getByName(name).pipe(
-    Effect.flatMap((existing) =>
-      existing !== undefined
-        ? Effect.succeed(existing)
-        : Effect.fail(new SubscriptionNotResolved({ name })),
+    Effect.filterOrFail(
+      (existing): existing is pubsub.Subscription => existing !== undefined,
+      () => new SubscriptionNotResolved({ name }),
     ),
     Effect.retry({
+      while: (error) => error._tag === "GCP.PubSub.SubscriptionNotResolved",
       schedule: Schedule.spaced("1 second"),
       times: 8,
     }),

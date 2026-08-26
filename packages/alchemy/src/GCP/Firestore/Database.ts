@@ -377,7 +377,7 @@ const getOwnershipLabels = (databaseName: string) =>
     .pipe(
       Effect.map((document) => labelsFromFields(document.fields)),
       Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed({} as Record<string, string>),
+        Effect.succeed<Record<string, string>>({}),
       ),
     );
 
@@ -428,7 +428,13 @@ const isNotFoundStatus = (error: firestore.Status | undefined) => {
 const waitForOperation = (
   operation: firestore.GoogleLongrunningOperation,
   options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
+): Effect.Effect<
+  firestore.GoogleLongrunningOperation,
+  | DatabaseOperationFailed
+  | DatabaseOperationPending
+  | firestore.GetProjectsDatabasesOperationsError,
+  firestore.GcpOpContext
+> =>
   Effect.gen(function* () {
     const name = operation.name;
     if (operation.done === true) {
@@ -475,29 +481,38 @@ const waitForOperation = (
             }),
           );
 
-    return yield* resolved.pipe(
+    const poll: Effect.Effect<
+      firestore.GoogleLongrunningOperation,
+      | DatabaseOperationFailed
+      | DatabaseOperationPending
+      | firestore.GetProjectsDatabasesOperationsError,
+      firestore.GcpOpContext
+    > = resolved.pipe(
       Effect.filterOrFail(
         (current) => current.done === true,
         () => new DatabaseOperationPending({ operation: name }),
       ),
       Effect.flatMap((current) => {
         const status = current.error;
-        if (status) {
-          if (options?.alreadyExistsOk === true && isAlreadyExists(status)) {
-            return Effect.succeed(current);
-          }
-          if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-            return Effect.succeed(current);
-          }
-          return Effect.fail(
-            new DatabaseOperationFailed({
-              operation: name,
-              message: status.message ?? "operation failed",
-            }),
-          );
+        if (!status) {
+          return Effect.succeed(current);
         }
-        return Effect.succeed(current);
+        if (options?.alreadyExistsOk === true && isAlreadyExists(status)) {
+          return Effect.succeed(current);
+        }
+        if (options?.notFoundOk === true && isNotFoundStatus(status)) {
+          return Effect.succeed(current);
+        }
+        return Effect.fail(
+          new DatabaseOperationFailed({
+            operation: name,
+            message: status.message ?? "operation failed",
+          }),
+        );
       }),
+    );
+
+    return yield* poll.pipe(
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Firestore.DatabaseOperationPending",
@@ -509,10 +524,10 @@ const waitForOperation = (
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
-    Effect.flatMap((database) =>
-      database
-        ? Effect.succeed(database)
-        : Effect.fail(new DatabaseNotResolved({ name })),
+    Effect.filterOrFail(
+      (database): database is firestore.GoogleFirestoreAdminV1Database =>
+        database !== undefined,
+      () => new DatabaseNotResolved({ name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.DatabaseNotResolved",
@@ -523,16 +538,16 @@ const waitUntilExists = (name: string) =>
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
-    Effect.flatMap((database) =>
-      database === undefined
-        ? Effect.void
-        : Effect.fail(new DatabaseStillExists({ name })),
+    Effect.filterOrFail(
+      (database) => database === undefined,
+      () => new DatabaseStillExists({ name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.DatabaseStillExists",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
+    Effect.asVoid,
   );
 
 const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(
@@ -638,12 +653,16 @@ export const DatabaseProvider = () =>
           parent: `projects/${env.project}`,
         });
         const databases = (page.databases ?? []).filter(
-          (database) => database.deleteTime === undefined && database.name,
+          (
+            database,
+          ): database is firestore.GoogleFirestoreAdminV1Database & {
+            name: string;
+          } => database.deleteTime === undefined && database.name !== undefined,
         );
         const owned = yield* Effect.forEach(
           databases,
           (database) =>
-            getOwnershipLabels(database.name!).pipe(
+            getOwnershipLabels(database.name).pipe(
               Effect.map((labels) =>
                 Object.keys(labels).some((key) => key.startsWith("alchemy-"))
                   ? toAttrs(database, env.project)

@@ -436,25 +436,29 @@ const waitForOperation = (
       });
     }
 
-    const getOperation = sqladmin
-      .getOperations({ project, operation: operationName })
-      .pipe(
-        Effect.catchIf(
-          (error) => options?.notFoundOk === true && error._tag === "NotFound",
-          () =>
-            Effect.succeed({
-              name: operationName,
-              status: "DONE",
-            } satisfies sqladmin.Operation),
-        ),
-      );
+    const getOperation = sqladmin.getOperations({
+      project,
+      operation: operationName,
+    });
+    const resolved =
+      options?.notFoundOk === true
+        ? getOperation.pipe(
+            Effect.catchTag("NotFound", () =>
+              Effect.succeed({
+                name: operationName,
+                status: "DONE",
+              } satisfies sqladmin.Operation),
+            ),
+          )
+        : getOperation.pipe(
+            Effect.retry({
+              while: (error) => error._tag === "NotFound",
+              times: 5,
+              schedule: Schedule.exponential("250 millis"),
+            }),
+          );
 
-    return yield* getOperation.pipe(
-      Effect.retry({
-        while: (error) => error._tag === "NotFound",
-        times: 5,
-        schedule: Schedule.exponential("250 millis"),
-      }),
+    return yield* resolved.pipe(
       Effect.filterOrFail(
         (current) => current.status === "DONE",
         (current) =>

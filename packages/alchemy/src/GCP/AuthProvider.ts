@@ -80,7 +80,9 @@ export const GcpAuth = AuthProviderLayer<
       { accessToken: string; expirationMs: number; project: string } | undefined
     >(undefined);
 
-    const readKeyFile = (path: string) =>
+    const readKeyFile = (
+      path: string,
+    ): Effect.Effect<ServiceAccountKey, AuthError> =>
       fs.readFileString(path).pipe(
         Effect.flatMap(parseServiceAccountKey),
         Effect.mapError(
@@ -96,7 +98,10 @@ export const GcpAuth = AuthProviderLayer<
       sa: ServiceAccountKey,
       project: string,
     ): Effect.Effect<GcpResolvedCredentials, AuthError> =>
-      Effect.gen(function* () {
+      Effect.gen(function* (): Effect.gen.Return<
+        GcpResolvedCredentials,
+        AuthError
+      > {
         const now = yield* Effect.sync(() => Date.now());
         const cached = yield* Ref.get(tokenCache);
         if (
@@ -245,7 +250,10 @@ export const GcpAuth = AuthProviderLayer<
       GcpResolvedCredentials,
       AuthError
     > =>
-      Effect.gen(function* () {
+      Effect.gen(function* (): Effect.gen.Return<
+        GcpResolvedCredentials,
+        AuthError
+      > {
         const project = yield* getEnv(GOOGLE_PROJECT_ID_ENV);
         const token = yield* getEnvRedacted(GOOGLE_ACCESS_TOKEN_ENV);
         if (token) {
@@ -275,7 +283,10 @@ export const GcpAuth = AuthProviderLayer<
     const resolveFromServiceAccountFile = (
       credentialsFile: string | undefined,
     ): Effect.Effect<GcpResolvedCredentials, AuthError> =>
-      Effect.gen(function* () {
+      Effect.gen(function* (): Effect.gen.Return<
+        GcpResolvedCredentials,
+        AuthError
+      > {
         const fromEnv = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
         const path = credentialsFile ?? fromEnv;
         if (!path) {
@@ -291,33 +302,32 @@ export const GcpAuth = AuthProviderLayer<
     const resolveFromStored = (
       profileName: string,
     ): Effect.Effect<GcpResolvedCredentials, AuthError> =>
-      store.read<GcpStoredCredentials>(profileName, STORAGE_KEY).pipe(
-        Effect.flatMap(
-          (creds): Effect.Effect<GcpResolvedCredentials, AuthError> => {
-            if (creds == null) {
-              return Effect.fail(
-                new AuthError({
-                  message:
-                    "GCP stored credentials not found. Run: alchemy login --configure",
-                }),
-              );
-            }
-            if (creds.type === "token") {
-              return Effect.succeed({
-                type: "token",
-                accessToken: Redacted.make(creds.accessToken),
-                project: creds.project,
-                source: { type: "stored" },
-              });
-            }
-            return parseServiceAccountKey(creds.json).pipe(
-              Effect.flatMap((sa) =>
-                resolveFromServiceAccount(sa, creds.project),
-              ),
-            );
-          },
-        ),
-      );
+      Effect.gen(function* (): Effect.gen.Return<
+        GcpResolvedCredentials,
+        AuthError
+      > {
+        const creds = yield* store.read<GcpStoredCredentials>(
+          profileName,
+          STORAGE_KEY,
+        );
+        if (creds == null) {
+          return yield* new AuthError({
+            message:
+              "GCP stored credentials not found. Run: alchemy login --configure",
+          });
+        }
+        if (creds.type === "token") {
+          const resolved: GcpResolvedCredentials = {
+            type: "token",
+            accessToken: Redacted.make(creds.accessToken),
+            project: creds.project,
+            source: { type: "stored" },
+          };
+          return resolved;
+        }
+        const sa = yield* parseServiceAccountKey(creds.json);
+        return yield* resolveFromServiceAccount(sa, creds.project);
+      });
 
     const resolveCredentials = (
       profileName: string,

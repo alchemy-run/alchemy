@@ -13,19 +13,13 @@ export const makeTableHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: Effect.Effect<
-    (input: I) => Effect.Effect<A, E>,
-    never,
-    Credentials | HttpClient.HttpClient
-  >;
+  operation: (
+    input: I,
+  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
 }) =>
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
     return Effect.fn(function* (table: Table) {
       const project = yield* table.project;
       const datasetId = yield* table.datasetId;
@@ -33,12 +27,17 @@ export const makeTableHttpBinding = <
       return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
         request?: Omit<I, "projectId" | "datasetId" | "tableId">,
       ) {
-        return yield* run({
-          ...(request as I),
-          projectId: yield* project,
-          datasetId: yield* datasetId,
-          tableId: yield* tableId,
-        });
+        return yield* options
+          .operation({
+            ...request,
+            projectId: yield* project,
+            datasetId: yield* datasetId,
+            tableId: yield* tableId,
+          } as I)
+          .pipe(
+            Effect.provideService(Credentials, credentials),
+            Effect.provideService(HttpClient.HttpClient, httpClient),
+          );
       });
     });
   });

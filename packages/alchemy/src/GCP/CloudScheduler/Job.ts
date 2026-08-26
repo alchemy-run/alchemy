@@ -657,10 +657,12 @@ const syncPaused = Effect.fn(function* (
     const pausedJob = yield* retryTransient(
       scheduler.pauseProjectsLocationsJobs({ name, body: {} }),
     ).pipe(
-      Effect.catchTag(["BadRequest", "Conflict", "NotFound"], (error) =>
+      Effect.catchTag(["BadRequest", "Conflict", "NotFound"], () =>
         getByName(name).pipe(
           Effect.flatMap((job) =>
-            job?.state === "PAUSED" ? Effect.succeed(job) : Effect.fail(error),
+            job !== undefined && job.state === "PAUSED"
+              ? Effect.succeed(job)
+              : new JobNotResolved({ name }),
           ),
         ),
       ),
@@ -671,10 +673,12 @@ const syncPaused = Effect.fn(function* (
     const resumed = yield* retryTransient(
       scheduler.resumeProjectsLocationsJobs({ name, body: {} }),
     ).pipe(
-      Effect.catchTag(["BadRequest", "Conflict", "NotFound"], (error) =>
+      Effect.catchTag(["BadRequest", "Conflict", "NotFound"], () =>
         getByName(name).pipe(
           Effect.flatMap((job) =>
-            job?.state === "ENABLED" ? Effect.succeed(job) : Effect.fail(error),
+            job !== undefined && job.state === "ENABLED"
+              ? Effect.succeed(job)
+              : new JobNotResolved({ name }),
           ),
         ),
       ),

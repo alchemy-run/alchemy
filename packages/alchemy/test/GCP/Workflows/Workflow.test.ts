@@ -1,13 +1,21 @@
 import * as GCP from "@/GCP";
+import type { StackServices } from "@/Stack";
 import * as Test from "@/Test/Alchemy";
 import * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
 import * as workflows from "@distilled.cloud/gcp/workflows_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const { test } = Test.make({
+  providers: GCP.providers() as Layer.Layer<
+    GCP.ProviderRequirements,
+    never,
+    StackServices
+  >,
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
