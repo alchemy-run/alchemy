@@ -253,7 +253,7 @@ function BrowserChrome({
 }) {
   return (
     // Simulated browser chrome — decoration, kept out of search snippets.
-    <div className="bhr-browser" style={style} data-nosnippet>
+    <div className="bhr-browser" style={style} data-nosnippet="">
       <div className="bhr-browser__header">
         <span
           className="alc-code-block__dot"

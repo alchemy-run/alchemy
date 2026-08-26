@@ -360,7 +360,10 @@ export default defineConfig({
         !page.endsWith(".md") &&
         !page.endsWith(".mdx") &&
         // OAuth device-flow landing pages — `noindex` in `Auth.astro`.
-        !page.includes("/auth/"),
+        !page.includes("/auth/") &&
+        // starlight-blog's paginated listings (`/blog/2/`, …) — thin pages
+        // that only repeat post excerpts; the posts themselves are listed.
+        !/\/blog\/\d+\/?$/.test(page),
     }),
     starlight({
       title: "Alchemy",

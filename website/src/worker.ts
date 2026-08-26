@@ -16,18 +16,30 @@ interface HTMLRewriterElement {
 }
 
 /**
- * Astro bakes absolute URLs into `<meta property="og:image">`,
- * `og:url`, `twitter:image`, and `<link rel="canonical">` at build time
- * using the `site` config (`https://alchemy.run`). PR previews and
- * custom domains then advertise OG / canonical URLs that point back at
- * the canonical host — so a Slack/Twitter unfurl of a preview URL
- * fetches the *production* card, not the one for the page being
- * shared.
+ * `https://alchemy.run` is the one indexable origin. Every other host this
+ * worker answers on — `main.alchemy.run`, PR previews on `*.workers.dev`,
+ * future aliases — is a mirror of the same build:
  *
- * Rewrite those tags at the edge to match the request's actual host so
- * each deployment unfurls itself.
+ * - `<link rel="canonical">` is baked at build time against `site` and is left
+ *   alone, so mirrors point search engines back at production.
+ * - Every mirror response carries `X-Robots-Tag: noindex` and its `robots.txt`
+ *   advertises no sitemap, so a mirror URL that leaks (a PR comment, a shared
+ *   link) never becomes a duplicate search result.
+ * - `og:*` / `twitter:*` card URLs ARE rewritten to the request host, so a
+ *   Slack/X unfurl of a preview URL shows that preview's card, not
+ *   production's.
  */
 const CANONICAL_HOST = "alchemy.run";
+const CANONICAL_ORIGIN = `https://${CANONICAL_HOST}`;
+
+/**
+ * The v1 docs moved to their own host. v1-era URLs (`/docs/...`, and the
+ * pre-hub `/guides/...` / `/providers/...` / `/concepts/...` trees) are still
+ * in search indexes; instead of 404ing them we probe v1 and 301 when it has
+ * the page.
+ */
+const V1_ORIGIN = "https://v1.alchemy.run";
+const V1_PREFIXES = ["/docs/", "/guides/", "/providers/", "/concepts/"];
 
 /**
  * 301s for the docs restructure (guides/tutorials moved into per-cloud hubs).
@@ -228,12 +240,22 @@ const resolveRedirect = (url: URL): string | undefined => {
 
 export default {
   fetch: async (request: Request, env: WorkerEnv) => {
-    const redirect = resolveRedirect(new URL(request.url));
+    const url = new URL(request.url);
+    const canonical = url.host === CANONICAL_HOST;
+    const redirect = resolveRedirect(url);
     if (redirect !== undefined) {
       return Response.redirect(new URL(redirect, request.url), 301);
     }
+    if (url.pathname === "/robots.txt" && !canonical) {
+      return new Response(MIRROR_ROBOTS_TXT, {
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "x-robots-tag": "noindex",
+        },
+      });
+    }
     if (request.method === "GET" && prefersMarkdown(request)) {
-      const mdUrl = toMarkdownUrl(new URL(request.url)).toString();
+      const mdUrl = toMarkdownUrl(url).toString();
       const res = await env.ASSETS.fetch(new Request(mdUrl, request));
       // Astro's asset server labels `.md` as `application/octet-stream`, which
       // agents treat as a binary download instead of rendering. Force the
@@ -241,19 +263,38 @@ export default {
       if (res.status !== 404)
         return withoutIndexing(
           withContentType(res, "text/markdown; charset=utf-8"),
+          url,
+          canonical,
         );
     }
     const res = await env.ASSETS.fetch(request);
+    if (res.status === 404 && request.method === "GET") {
+      const v1 = await resolveV1Fallback(url);
+      if (v1 !== undefined) return Response.redirect(v1, 301);
+    }
     return withoutIndexing(
       withUtf8Charset(
         await rewriteAgentTextOrigin(
           request,
-          rewriteCanonicalHost(request, res),
+          rewriteSocialCardHost(request, res),
         ),
       ),
+      url,
+      canonical,
     );
   },
 };
+
+/**
+ * Served as `robots.txt` on every non-canonical host. Crawlable on purpose:
+ * a `Disallow` would stop crawlers from ever seeing the `noindex` header, and
+ * a blocked URL can still be indexed by URL alone. No `Sitemap:` line, so the
+ * mirror never advertises itself.
+ */
+const MIRROR_ROBOTS_TXT = `# Mirror of https://${CANONICAL_HOST} — every response is noindex.
+User-agent: *
+Allow: /
+`;
 
 /**
  * Every page is mirrored as raw markdown (`/getting-started.md`, or the same
@@ -264,27 +305,54 @@ export default {
  * kind of agent-facing text.
  *
  * Keep them crawlable (so the directive is actually seen) but out of the index.
+ * On a non-canonical host *everything* is noindex — the HTML included.
  */
-const withoutIndexing = (res: Response): Response => {
+const withoutIndexing = (
+  res: Response,
+  url: URL,
+  canonicalHost: boolean,
+): Response => {
   const ct = res.headers.get("content-type") ?? "";
-  if (!ct.includes("text/markdown") && !ct.includes("text/plain")) return res;
+  const agentText =
+    url.pathname.endsWith(".md") ||
+    ct.includes("text/markdown") ||
+    ct.includes("text/plain");
+  if (canonicalHost && !agentText) return res;
   const next = new Response(res.body, res);
   next.headers.set("x-robots-tag", "noindex");
   return next;
 };
 
 /**
- * `llms.txt` / `llms-full.txt` / `robots.txt` are generated at build time with
- * absolute canonical URLs, so a PR preview would hand agents an index — and
- * crawlers a sitemap — that points back at production. Rewrite the baked origin
- * to the request's own origin — the same treatment `rewriteCanonicalHost` gives
- * HTML meta tags.
+ * v1-era URL that still resolves on the v1 docs host, or `undefined`. Only
+ * consulted after production 404s, so the extra HEAD subrequest is confined
+ * to dead links.
  */
-const AGENT_TEXT_PATHS = new Set([
-  "/llms.txt",
-  "/llms-full.txt",
-  "/robots.txt",
-]);
+const resolveV1Fallback = async (url: URL): Promise<string | undefined> => {
+  const pathname = url.pathname.replace(/\/$/, "");
+  if (pathname.endsWith(".md")) return undefined;
+  if (!V1_PREFIXES.some((prefix) => `${pathname}/`.startsWith(prefix))) {
+    return undefined;
+  }
+  const v1Path = pathname.startsWith("/docs/")
+    ? pathname.slice("/docs".length)
+    : pathname;
+  const target = `${V1_ORIGIN}${v1Path}${url.search}`;
+  try {
+    const probe = await fetch(target, { method: "HEAD", redirect: "follow" });
+    return probe.ok ? target : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * `llms.txt` / `llms-full.txt` are generated at build time with absolute
+ * canonical URLs, so a PR preview would hand agents an index that points back
+ * at production. Rewrite the baked origin to the request's own origin — the
+ * same treatment `rewriteSocialCardHost` gives the OG tags.
+ */
+const AGENT_TEXT_PATHS = new Set(["/llms.txt", "/llms-full.txt"]);
 
 const rewriteAgentTextOrigin = async (
   request: Request,
@@ -299,7 +367,7 @@ const rewriteAgentTextOrigin = async (
     return res;
   }
   const body = (await res.text()).replaceAll(
-    `https://${CANONICAL_HOST}/`,
+    `${CANONICAL_ORIGIN}/`,
     `${reqUrl.origin}/`,
   );
   return new Response(body, res);
@@ -323,19 +391,21 @@ const withContentType = (res: Response, contentType: string): Response => {
   return next;
 };
 
-const rewriteCanonicalHost = (request: Request, res: Response): Response => {
+/**
+ * Astro bakes absolute URLs into `og:image`, `og:url`, and `twitter:image`
+ * using the `site` config. Rewrite those to the request's host so each
+ * deployment unfurls itself. `<link rel="canonical">` is deliberately NOT
+ * rewritten — it must keep pointing at production on every mirror.
+ */
+const rewriteSocialCardHost = (request: Request, res: Response): Response => {
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.includes("text/html")) return res;
   const reqUrl = new URL(request.url);
   if (reqUrl.host === CANONICAL_HOST) return res;
 
-  class HostRewriter {
-    attr: "content" | "href";
-    constructor(attr: "content" | "href") {
-      this.attr = attr;
-    }
+  const content = {
     element(el: HTMLRewriterElement) {
-      const value = el.getAttribute(this.attr);
+      const value = el.getAttribute("content");
       if (!value) return;
       let u: URL;
       try {
@@ -346,18 +416,14 @@ const rewriteCanonicalHost = (request: Request, res: Response): Response => {
       if (u.host !== CANONICAL_HOST) return;
       u.protocol = reqUrl.protocol;
       u.host = reqUrl.host;
-      el.setAttribute(this.attr, u.toString());
-    }
-  }
-
-  const content = new HostRewriter("content");
-  const href = new HostRewriter("href");
+      el.setAttribute("content", u.toString());
+    },
+  };
 
   return new HTMLRewriter()
     .on('meta[property="og:image"]', content)
     .on('meta[property="og:url"]', content)
     .on('meta[name="twitter:image"]', content)
-    .on('link[rel="canonical"]', href)
     .transform(res);
 };
 
