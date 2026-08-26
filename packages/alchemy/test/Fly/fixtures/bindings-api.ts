@@ -46,16 +46,19 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
         const url = new URL(request.url, "http://service");
         const path = url.pathname;
 
-        const fail = (error: unknown) =>
-          HttpServerResponse.json(
-            {
-              error:
-                error instanceof Error
-                  ? `${error.name}: ${error.message}`
-                  : String(error),
-            },
-            { status: 500 },
-          );
+        const fail = (error: unknown) => {
+          const tagged =
+            typeof error === "object" && error !== null && "_tag" in error
+              ? (error as { _tag: string; message?: unknown })
+              : undefined;
+          const message =
+            tagged !== undefined
+              ? `${tagged._tag}${tagged.message === undefined ? "" : `: ${String(tagged.message)}`}`
+              : error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : String(error);
+          return HttpServerResponse.json({ error: message }, { status: 500 });
+        };
 
         if (path === "/health") {
           const token = process.env.FLY_API_TOKEN ?? "";

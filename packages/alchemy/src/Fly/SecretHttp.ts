@@ -2,13 +2,16 @@ import {
   Credentials,
   CredentialsFromEnv,
   credentials,
+  MachineIdentity,
 } from "@distilled.cloud/fly-io";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import type * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Binding from "../Binding.ts";
 import type { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -162,30 +165,22 @@ export const makeSecretAuth = (
 
 const FLY_MACHINE_API_SOCKET = "/.fly/api";
 
-const flyMachineFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-  const raw =
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.href
-        : input.url;
-  const url = raw.replace(
-    /^https:\/\/api\.machines\.dev\/v1/,
-    "http://localhost/v1",
+/** Distilled machines client over `/.fly/api`. URL host is unused. */
+const flyMachineApiHttp: Layer.Layer<HttpClient.HttpClient> =
+  NodeHttpClient.layerNodeHttpNoAgent.pipe(
+    Layer.provide(
+      NodeHttpClient.layerAgentOptions({
+        socketPath: FLY_MACHINE_API_SOCKET,
+        keepAlive: false,
+      }),
+    ),
   );
-  const headers = new Headers(init?.headers);
-  headers.delete("authorization");
-  headers.delete("Authorization");
-  return fetch(url, {
-    ...init,
-    headers,
-    unix: FLY_MACHINE_API_SOCKET,
-  } as RequestInit);
-}) as typeof fetch;
 
 /**
  * PetSem encrypt/sign/decrypt/verify from a Machine. Org API tokens are
  * Forbidden; the machine identity is the unix socket at `/.fly/api`.
+ * {@link MachineIdentity} is the protocol signal (no Authorization,
+ * Connection: close). GetSecret in the same process keeps Bearer.
  */
 export const makeKmsAuth = (
   ambient: Context.Context<Credentials | HttpClient.HttpClient>,
@@ -194,17 +189,22 @@ export const makeKmsAuth = (
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
-      return eff.pipe(
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provideService(FetchHttpClient.Fetch, flyMachineFetch),
-        Effect.provide(
-          credentials({
-            apiKey: "machine",
-            apiBaseUrl: "http://localhost/v1",
-          }),
+      return Effect.scoped(
+        eff.pipe(
+          Effect.provide(Layer.succeed(MachineIdentity, true)),
+          Effect.provide(flyMachineApiHttp),
+          Effect.provide(
+            credentials({
+              apiKey: "unused",
+              apiBaseUrl: "http://localhost/v1",
+            }),
+          ),
         ),
-        Effect.timeout("8 seconds"),
-      ) as Effect.Effect<A, E, RuntimeContext>;
+      ).pipe(Effect.timeout("8 seconds")) as Effect.Effect<
+        A,
+        E,
+        RuntimeContext
+      >;
     }
     return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<
       A,
