@@ -150,7 +150,7 @@ test(
     // SSR env parity: GREETING from alchemy.run.ts reaches the dev server
     // (read via waku's `getEnv` in the RSC page).
     const home = await (await fetchOk(url)).text();
-    expect(home).toContain("Hello from alchemy");
+    expect(home).toContain("Hello from Waku on AWS!");
     expect(home).toContain(MARKER);
 
     // Static route serves through the dev server.

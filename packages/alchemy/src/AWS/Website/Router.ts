@@ -325,7 +325,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     });
 
     const records =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -334,7 +334,9 @@ export const Router = Effect.fn("AWS.Website.Router")(
             ],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
-                hostedZoneId: domain.hostedZoneId!,
+                // Optional — the Record provider infers the most specific
+                // public zone containing `name` when omitted.
+                hostedZoneId: domain.hostedZoneId,
                 name,
                 type: "A",
                 aliasTarget: {
@@ -351,8 +353,10 @@ export const Router = Effect.fn("AWS.Website.Router")(
     // becoming an A-alias record pointing at this distribution (see
     // `WebsiteRouterBindTargets`).
     const siteRecords =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Route53Records("SiteAliasRecords", {
+            // Optional — the Records provider infers the zone from the
+            // first bound hostname when omitted.
             hostedZoneId: domain.hostedZoneId,
             type: "A",
             aliasTarget: {

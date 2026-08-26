@@ -14,7 +14,7 @@ const { test } = Test.make({
 });
 
 // A resource declared once, at module scope, and referenced from a site's
-// `env` — the pattern `examples/cloudflare-tanstack` uses.
+// `env` — the pattern `examples/cloudflare-website-tanstack-start` uses.
 const Cache = Cloudflare.KV.Namespace("Cache", {});
 
 /** Compile the stack and return its registered resources. */

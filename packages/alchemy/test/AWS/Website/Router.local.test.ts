@@ -326,13 +326,14 @@ describe("AWS.Website.Router local", () => {
             });
             const appSite = yield* AWS.Website.Vite("AppSite", {
               rootDir: app.cwd,
+              domain: { router, path: "/app" },
               // The Router forwards the FULL uri to the origin — it never
               // strips the mount prefix — so the dev server has to serve at
-              // the prefix. `base` is what makes Vite do that, for both the
-              // module URLs it writes into the HTML and the requests it then
-              // has to answer.
+              // the prefix. `vite.base` is what makes Vite do that, for both
+              // the module URLs it writes into the HTML and the requests it
+              // then has to answer. Passed as the deploy-time override bag
+              // (merged over the fixture's config file, which has none).
               vite: { base: "/app/" },
-              domain: { router, path: "/app" },
             });
             return {
               routerUrl: router.url,
@@ -421,7 +422,10 @@ describe("AWS.Website.Router local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 120_000 },
+    // 300s like the sibling cases: fixture clone + `bun install` + vite dev
+    // boot through the emulated edge stack up under whole-suite concurrency
+    // (the test itself runs in ~6s in isolation).
+    { timeout: 300_000 },
   );
 
   /**

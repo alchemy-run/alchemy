@@ -58,6 +58,11 @@ export interface ViteBuildConfig {
   readonly outDir?: string | undefined;
   /** Public base path the site deploys under (vite's `base`). */
   readonly base?: string | undefined;
+  /**
+   * Alternate config file to load instead of the auto-discovered
+   * `vite.config.*`, resolved relative to the project root.
+   */
+  readonly configFile?: string | undefined;
 }
 
 /**
@@ -167,6 +172,12 @@ export const make: (
   const inlineConfig = (root: string): Record<string, unknown> => ({
     root,
     logLevel: "warn",
+    // Resolve against the project root, not the cwd vite would use, so
+    // "relative to rootDir" semantics hold regardless of where the engine
+    // (or the build child) happens to run.
+    ...(options?.vite?.configFile !== undefined
+      ? { configFile: path.resolve(root, options.vite.configFile) }
+      : undefined),
     ...(options?.vite?.base !== undefined
       ? { base: options.vite.base }
       : undefined),
@@ -252,6 +263,9 @@ export const make: (
         try: async () => {
           const server = await vite.createServer({
             root,
+            ...(options?.vite?.configFile !== undefined
+              ? { configFile: path.resolve(root, options.vite.configFile) }
+              : undefined),
             ...(options?.vite?.base !== undefined
               ? { base: options.vite.base }
               : undefined),

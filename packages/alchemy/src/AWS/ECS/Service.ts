@@ -28,6 +28,7 @@ import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
+import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import {
   SecurityGroup,
@@ -1485,35 +1486,6 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.VpcId, subnets: subnetIds };
 });
 
-/**
- * Find the most specific PUBLIC Route 53 hosted zone containing
- * `domainName`, walking up its labels (`svc.api.example.com` →
- * `api.example.com` → `example.com`). Returns the bare zone id (no
- * `/hostedzone/` prefix), or undefined when no zone matches.
- */
-const findHostedZoneId = Effect.fn(function* (domainName: string) {
-  const labels = domainName
-    .replace(/\.$/, "")
-    .split(".")
-    .filter((label) => label.length > 0);
-  for (let i = 0; i < labels.length - 1; i++) {
-    const candidate = `${labels.slice(i).join(".")}.`;
-    const listed = yield* route53.listHostedZonesByName({
-      DNSName: candidate,
-      MaxItems: 1,
-    });
-    const zone = listed.HostedZones?.[0];
-    if (
-      zone?.Id !== undefined &&
-      zone.Name === candidate &&
-      zone.Config?.PrivateZone !== true
-    ) {
-      return zone.Id.replace(/^\/hostedzone\//, "");
-    }
-  }
-  return undefined;
-});
-
 const toValuesArray = (value: string | string[] | undefined) =>
   value === undefined ? undefined : Array.isArray(value) ? value : [value];
 
@@ -1847,7 +1819,7 @@ const composeManagedIngress = (
     const domainZones = new Map<string, string>();
     if (domain !== undefined) {
       for (const name of domainNames) {
-        const zoneId = yield* findHostedZoneId(name);
+        const zoneId = yield* findPublicHostedZoneId(name);
         if (zoneId === undefined) {
           return yield* Effect.fail(
             new ServiceHostedZoneNotFound({

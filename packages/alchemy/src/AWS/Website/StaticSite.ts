@@ -52,10 +52,6 @@ export interface StaticSiteProps {
    */
   build?: StaticSiteBuildProps;
   /**
-   * Environment variables exposed to the build command.
-   */
-  environment?: Record<string, Input<string>>;
-  /**
    * Static site asset upload configuration.
    */
   assets?: WebsiteAssetsConfig;
@@ -191,9 +187,9 @@ export interface StaticSiteProps {
  *   build: {
  *     command: "bun run build",
  *     output: "dist",
- *   },
- *   environment: {
- *     VITE_API_URL: api.url,
+ *     env: {
+ *       VITE_API_URL: api.url,
+ *     },
  *   },
  * });
  * ```
@@ -410,7 +406,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
           lockfile: props.build.lockfile,
         },
         outdir: props.build.output,
-        env: props.environment,
+        env: props.build.env,
       })
     : undefined;
 
@@ -742,12 +738,14 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    if (domain?.hostedZoneId && domain.dns !== false) {
+    if (domain && domain.dns !== false) {
       yield* Effect.forEach(
         [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
         (name, index) =>
           Route53Record(`AliasRecord${index + 1}`, {
-            hostedZoneId: domain.hostedZoneId!,
+            // Optional — the Record provider infers the most specific
+            // public zone containing `name` when omitted.
+            hostedZoneId: domain.hostedZoneId,
             name,
             type: "A",
             aliasTarget: {

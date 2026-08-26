@@ -11,9 +11,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
-// ~5-15 min). Run with ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS=true (same gate
+// ~5-15 min). Skipped under --fast (FAST=1) (same gate
 // as the AWS.CloudFront suites).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 // The emulated pipeline test runs under the floci runner
 // (`pnpm test:aws:floci`), where every pipeline provider resolves its local
