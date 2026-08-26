@@ -8,7 +8,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import Api, { ApiLive } from "./fixtures/rpc-api.ts";
+import { Api, ApiLive } from "./fixtures/rpc-api.ts";
 import Caller from "./fixtures/rpc-caller.ts";
 import Greeter from "./fixtures/rpc-greeter.ts";
 import Query from "./fixtures/rpc-query.ts";

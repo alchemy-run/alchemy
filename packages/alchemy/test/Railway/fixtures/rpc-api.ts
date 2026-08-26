@@ -11,6 +11,9 @@ export { Api };
 /**
  * Tagged Service that hosts `ping` and binds the tagged {@link Query}
  * Function. `GET /` is local; `GET /hello` calls `query.greet("sam")`.
+ *
+ * Default-export the `.make()` Layer: the Docker bootstrap loads
+ * `default`, and a Tag class never registers `fetch`/`run`.
  */
 export const ApiLive = Api.make(
   {
@@ -33,4 +36,4 @@ export const ApiLive = Api.make(
   }),
 );
 
-export default Api;
+export default ApiLive;

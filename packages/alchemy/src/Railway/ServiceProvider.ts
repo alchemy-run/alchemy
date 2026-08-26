@@ -76,7 +76,14 @@ export class ServiceDeployFailed extends Data.TaggedError(
   serviceId: string;
   status: string;
   deploymentId: string | undefined;
-}> {}
+  logs: string;
+}> {
+  override get message() {
+    return this.logs.length > 0
+      ? `Service deploy ${this.status}: ${this.logs}`
+      : `Service deploy ${this.status}`;
+  }
+}
 
 class ServicePending extends Data.TaggedError("Railway.ServicePending")<{
   serviceId: string;
@@ -481,16 +488,34 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     ),
   );
 
+const fetchDeployLogs = (deploymentId: string | undefined) =>
+  deploymentId === undefined || deploymentId.length === 0
+    ? Effect.succeed("")
+    : railway.deploymentLogs({ deploymentId, limit: 80 }).pipe(
+        Effect.map((rows) =>
+          rows
+            .map((row) =>
+              row.severity != null
+                ? `[${row.severity}] ${row.message}`
+                : row.message,
+            )
+            .join("\n"),
+        ),
+        Effect.orElseSucceed(() => ""),
+      );
+
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
     const instance = yield* getInstance(environmentId, serviceId);
     const latest = instance?.latestDeployment;
     const status = latest?.status;
     if (status !== undefined && deployFailed(status)) {
+      const logs = yield* fetchDeployLogs(latest?.id);
       return yield* new ServiceDeployFailed({
         serviceId,
         status,
         deploymentId: latest?.id,
+        logs,
       });
     }
     if (instance !== undefined && deployReady(status)) {
@@ -532,10 +557,12 @@ const waitForDeploymentById = (input: {
     const watched = match ?? latest;
     const status = watched?.status;
     if (status !== undefined && deployFailed(status)) {
+      const logs = yield* fetchDeployLogs(watched?.id);
       return yield* new ServiceDeployFailed({
         serviceId: input.serviceId,
         status,
         deploymentId: watched?.id,
+        logs,
       });
     }
     if (match !== undefined && instance !== undefined && deployReady(status)) {
