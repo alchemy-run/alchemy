@@ -550,10 +550,9 @@ export const NetworkProvider = () =>
             Effect.retry({
               while: (error) =>
                 error._tag === "NotFound" ||
-                (error._tag === "GCP.Compute.NetworkOperationFailed" &&
-                  error.message.toLowerCase().includes("quota")),
+                error._tag === "GCP.Compute.NetworkOperationFailed",
               times: 6,
-              schedule: Schedule.spaced("15 seconds"),
+              schedule: Schedule.spaced("5 seconds"),
             }),
           );
         current = yield* requireNetwork(env.project, networkName);

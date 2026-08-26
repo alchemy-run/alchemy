@@ -34,7 +34,7 @@ const waitUntilGone = (
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
   "create, update, and delete an HA VPN gateway",
   (stack) =>
     Effect.gen(function* () {

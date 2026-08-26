@@ -487,7 +487,7 @@ export const InstantSnapshotProvider = () =>
             ),
             Effect.retry({
               while: tooRecent,
-              times: 2,
+              times: 3,
               schedule: Schedule.spaced("30 seconds"),
             }),
           );

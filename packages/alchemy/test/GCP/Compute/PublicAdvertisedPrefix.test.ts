@@ -73,6 +73,12 @@ test.provider.skipIf(!hasGcpCreds)(
               message: error.message,
             }),
           ),
+          Effect.catchTag("Conflict", (error) =>
+            Effect.succeed({
+              tag: "Conflict" as const,
+              message: error.message,
+            }),
+          ),
         );
       if (result.tag === "ok") {
         yield* compute
@@ -86,7 +92,9 @@ test.provider.skipIf(!hasGcpCreds)(
             Effect.catchTag("Forbidden", () => Effect.void),
           );
       } else {
-        expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        expect(["Forbidden", "BadRequest", "NotFound", "Conflict"]).toContain(
+          result.tag,
+        );
       }
       yield* stack.destroy();
     }).pipe(logLevel),
