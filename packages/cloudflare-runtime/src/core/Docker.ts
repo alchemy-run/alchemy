@@ -107,6 +107,27 @@ export const toPullRef = (imageUri: string) =>
   imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
 
 /**
+ * Stderr signatures of a docker CLI that cannot run our build. Image builds
+ * use BuildKit flags (`--load`, `--provenance=false`), which a CLI without
+ * the buildx plugin rejects outright. Its stderr names the flag rather than
+ * the missing component, and several distros package the two separately
+ * (Arch/CachyOS `docker` vs `docker-buildx`, Debian `docker.io` vs
+ * `docker-buildx`), so this is a first-run trap rather than a broken setup.
+ */
+const BUILDKIT_MISSING_MARKERS = [
+  "unknown flag: --load",
+  "unknown flag: --provenance",
+  "'buildx' is not a docker command",
+  "buildx component is missing",
+];
+
+/** Names the missing buildx plugin when docker's own stderr only names the flag. */
+export const buildFailureHint = (stderr: string): string | undefined =>
+  BUILDKIT_MISSING_MARKERS.some((marker) => stderr.includes(marker))
+    ? "This docker CLI has no BuildKit (buildx) plugin, which building container images requires. Install it and retry — e.g. `pacman -S docker-buildx` (Arch/CachyOS), `apt install docker-buildx` (Debian/Ubuntu), or Docker Desktop, which bundles it."
+    : undefined;
+
+/**
  * Matches a loopback host (`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`)
  * where it denotes a connection target inside an env value: at the start of
  * the value, after a `scheme://` (with optional userinfo), after `=` (DSN
@@ -364,6 +385,25 @@ export const DockerLive = Layer.effect(
         Effect.scoped,
       );
 
+    /**
+     * `run` resolves with the command's exit code instead of failing on it
+     * (some callers, e.g. `inspect`, treat a non-zero exit as a legitimate
+     * "not present" answer). Every command whose failure actually matters
+     * therefore has to check the code itself: without this, a `docker build`
+     * that exits 1 is indistinguishable from a successful build, the image
+     * is never created, and the only symptom the user ever sees is workerd
+     * reporting `Container exited while waiting for port <port>` on a loop.
+     */
+    const ensureExitZero = <E>(
+      result: { exitCode: number; stdout: string; stderr: string },
+      onNonZero: (result: {
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+      }) => E,
+    ): Effect.Effect<void, E> =>
+      result.exitCode === 0 ? Effect.void : Effect.fail(onNonZero(result));
+
     const pull = ({ imageUri }: ContainerImage.Pull) =>
       run(["pull", toPullRef(imageUri), "--platform", "linux/amd64"]).pipe(
         Effect.mapError(
@@ -505,7 +545,6 @@ export const DockerLive = Layer.effect(
             ),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
-            Effect.asVoid,
             Effect.mapError(
               (cause) =>
                 new SystemError({
@@ -513,6 +552,18 @@ export const DockerLive = Layer.effect(
                   message: `Failed to build image "${tag}".`,
                   cause,
                 }),
+            ),
+            Effect.flatMap((result) =>
+              ensureExitZero(
+                result,
+                ({ exitCode, stdout, stderr }) =>
+                  new SystemError({
+                    subtag: "DockerBuildFailed",
+                    message: `Failed to build image "${tag}".`,
+                    hint: buildFailureHint(stderr),
+                    detail: { bin, tag, exitCode, stdout, stderr },
+                  }),
+              ),
             ),
           );
         }),
@@ -527,6 +578,24 @@ export const DockerLive = Layer.effect(
                     message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
                     cause,
                   }),
+              ),
+              Effect.flatMap((result) =>
+                ensureExitZero(
+                  result,
+                  ({ exitCode, stdout, stderr }) =>
+                    new SystemError({
+                      subtag: "DockerTagFailed",
+                      message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
+                      detail: {
+                        bin,
+                        imageUri: image.imageUri,
+                        tag,
+                        exitCode,
+                        stdout,
+                        stderr,
+                      },
+                    }),
+                ),
               ),
             ),
           ),
