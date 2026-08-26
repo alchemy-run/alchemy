@@ -96,3 +96,81 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
+
+test.provider.skipIf(!runLifecycle)(
+  "GetRuleSet and GetSynonymSet invoke HTTP bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const probe = yield* cw
+        .listProjectsLocationsRuleSets({
+          parent,
+          pageSize: 1,
+        })
+        .pipe(
+          Effect.map(() => ({ tag: "ok" as const })),
+          Effect.catchTag("Forbidden", () =>
+            Effect.succeed({ tag: "Forbidden" as const }),
+          ),
+          Effect.catchTag("NotFound", () =>
+            Effect.succeed({ tag: "NotFound" as const }),
+          ),
+        );
+      if (probe.tag !== "ok") {
+        expect(["Forbidden", "NotFound"]).toContain(probe.tag);
+        yield* stack.destroy();
+        return;
+      }
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const rules = yield* GCP.Contentwarehouse.RuleSet("Checks", {
+            location,
+            description: "binding rules",
+            source: "alchemy",
+            rules: [
+              {
+                description: "require title",
+                triggerType: "ON_CREATE",
+                condition: "true",
+                actions: [
+                  {
+                    dataValidation: {
+                      conditions: { display_name: "true" },
+                    },
+                  },
+                ],
+              },
+            ],
+          });
+          const synonyms = yield* GCP.Contentwarehouse.SynonymSet("Sales", {
+            location,
+            synonyms: [{ words: ["sale", "invoice", "bill"] }],
+          });
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* rules.name;
+              yield* synonyms.name;
+              const getRuleSet = yield* GCP.Contentwarehouse.GetRuleSet(rules);
+              const getSynonyms =
+                yield* GCP.Contentwarehouse.GetSynonymSet(synonyms);
+              return Effect.fn(function* () {
+                const liveRules = yield* getRuleSet();
+                const liveSynonyms = yield* getSynonyms();
+                return { liveRules, liveSynonyms };
+              });
+            }),
+          );
+          return { rules, synonyms, probe: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.probe.liveRules.name).toEqual(out.rules.name);
+      expect(out.probe.liveSynonyms.name).toEqual(out.synonyms.name);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);

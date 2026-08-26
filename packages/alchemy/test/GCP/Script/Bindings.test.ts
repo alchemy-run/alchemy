@@ -120,9 +120,23 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
                 yield* deployment.deploymentId;
                 const getDeployment =
                   yield* GCP.Script.GetDeployment(deployment);
+                const run = yield* GCP.Script.RunScripts(deployment);
                 return Effect.fn(function* () {
                   const live = yield* getDeployment({});
-                  return { live };
+                  const ran = yield* run({
+                    body: { function: "hello" },
+                  }).pipe(
+                    Effect.map((result) => ({ tag: "ok" as const, result })),
+                    Effect.catchTag(
+                      ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                      (error) =>
+                        Effect.succeed({
+                          tag: error._tag,
+                          message: error.message,
+                        }),
+                    ),
+                  );
+                  return { live, ran };
                 });
               }),
             );
@@ -136,6 +150,13 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
         expect(out.probe.live.deploymentConfig?.scriptId).toEqual(
           fixture.scriptId,
         );
+        expect([
+          "ok",
+          "Forbidden",
+          "BadRequest",
+          "NotFound",
+          "Conflict",
+        ]).toContain(out.probe.ran.tag);
 
         yield* stack.destroy();
       }).pipe(Effect.ensuring(deleteScriptProject(fixture.scriptId)));

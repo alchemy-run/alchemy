@@ -35,7 +35,16 @@ test.provider.skipIf(!runLifecycle)(
             "Queries",
             {
               service: schema.service,
-              source: connectorSource,
+              source: {
+                files: [
+                  ...connectorSource.files,
+                  {
+                    path: "mutations.gql",
+                    content:
+                      "mutation CreateAlchemyNote($title: String!) @auth(level: PUBLIC) { alchemyNote_insert(data: { title: $title }) { id } }",
+                  },
+                ],
+              },
               labels: { env: "test" },
             },
           );
@@ -46,16 +55,39 @@ test.provider.skipIf(!runLifecycle)(
               yield* connector.name;
               const executeGraphql =
                 yield* GCP.Firebasedataconnect.ExecuteGraphql(service);
+              const executeGraphqlRead =
+                yield* GCP.Firebasedataconnect.ExecuteGraphqlRead(service);
               const executeQuery =
                 yield* GCP.Firebasedataconnect.ExecuteQuery(connector);
+              const executeMutation =
+                yield* GCP.Firebasedataconnect.ExecuteMutation(connector);
               return Effect.fn(function* () {
                 const graphql = yield* executeGraphql({
+                  body: { query: "{ __typename }" },
+                });
+                const graphqlRead = yield* executeGraphqlRead({
                   body: { query: "{ __typename }" },
                 });
                 const query = yield* executeQuery({
                   body: { operationName: "ListAlchemyNotes" },
                 });
-                return { graphql, query };
+                const mutation = yield* executeMutation({
+                  body: {
+                    operationName: "CreateAlchemyNote",
+                    variables: { title: "hello" },
+                  },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return { graphql, graphqlRead, query, mutation };
               });
             }),
           );
@@ -64,7 +96,15 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(out.graphql).toBeDefined();
+      expect(out.graphqlRead).toBeDefined();
       expect(out.query).toBeDefined();
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.mutation.tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -98,3 +98,41 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
+
+test.provider.skipIf(!runLifecycle)(
+  "GetConnectCluster invokes the HTTP binding",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const cluster = yield* GCP.Managedkafka.Cluster("Brokers", {
+            location: "us-central1",
+          });
+          const connect = yield* GCP.Managedkafka.ConnectCluster("Connect", {
+            kafkaCluster: cluster.name,
+            labels: { env: "test" },
+          });
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* connect.name;
+              const getConnect =
+                yield* GCP.Managedkafka.GetConnectCluster(connect);
+              return Effect.fn(function* () {
+                const live = yield* getConnect();
+                return { live };
+              });
+            }),
+          );
+          return { connect, probe: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.probe.live.name).toEqual(out.connect.name);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);

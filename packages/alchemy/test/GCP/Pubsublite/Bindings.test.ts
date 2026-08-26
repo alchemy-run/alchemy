@@ -7,7 +7,9 @@ import {
   entitlementTags,
   hasGcpCreds,
   logLevel,
+  probeReservations,
   probeTopics,
+  region,
   runLifecycle,
   zone,
 } from "./common.ts";
@@ -113,6 +115,52 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
 
       expect(out.probe.live.name).toEqual(out.subscription.name);
       expect(out.probe.committed).toEqual(expect.any(Object));
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider.skipIf(!runLifecycle)(
+  "GetReservation round-trip",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const probe = yield* probeReservations();
+      if (probe.tag !== "ok") {
+        expect([...entitlementTags]).toContain(probe.tag);
+        yield* stack.destroy();
+        return;
+      }
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const reservation = yield* GCP.Pubsublite.AdminReservation(
+            "Capacity",
+            {
+              location: region,
+              throughputCapacity: "4",
+            },
+          );
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* reservation.name;
+              const getReservation =
+                yield* GCP.Pubsublite.GetReservation(reservation);
+              return Effect.fn(function* () {
+                const live = yield* getReservation();
+                return { live };
+              });
+            }),
+          );
+          return { reservation, probe: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.probe.live.name).toEqual(out.reservation.name);
+      expect(out.probe.live.throughputCapacity).toEqual("4");
 
       yield* stack.destroy();
     }).pipe(logLevel),

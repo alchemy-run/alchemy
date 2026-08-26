@@ -43,14 +43,35 @@ test.provider.skipIf(!runLifecycle)(
             Effect.gen(function* () {
               yield* product.name;
               const search = yield* GCP.Retail.Search(serving);
+              const predict = yield* GCP.Retail.Predict(serving);
               return Effect.fn(function* () {
-                return yield* search({
+                const searched = yield* search({
                   body: {
                     visitorId: "alchemy-visitor",
                     query: "tee",
                     pageSize: 5,
                   },
                 });
+                const predicted = yield* predict({
+                  body: {
+                    validateOnly: true,
+                    userEvent: {
+                      eventType: "detail-page-view",
+                      visitorId: "visitor-1",
+                    },
+                  },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return { searched, predicted };
               });
             }),
           );
@@ -59,10 +80,17 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(
-        out.attributionToken === undefined ||
-          typeof out.attributionToken === "string",
+        out.searched.attributionToken === undefined ||
+          typeof out.searched.attributionToken === "string",
       ).toEqual(true);
-      expect(Array.isArray(out.results ?? [])).toEqual(true);
+      expect(Array.isArray(out.searched.results ?? [])).toEqual(true);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.predicted.tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

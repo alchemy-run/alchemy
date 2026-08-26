@@ -123,3 +123,118 @@ test.provider.skipIf(!hasGcpCreds)(
     }).pipe(logLevel),
   { timeout: 90_000 },
 );
+
+const runModelBindings =
+  hasGcpCreds &&
+  !process.env.FAST &&
+  process.env.GCP_TEST_TRANSLATE_MODEL === "1";
+
+test.provider.skipIf(!runModelBindings)(
+  "GetModel and TranslateText invoke HTTP bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const dataset = process.env.GCP_TEST_TRANSLATE_MODEL_DATASET ?? "";
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const model = yield* GCP.Translate.Model("EnEs", {
+            location,
+            dataset,
+            displayName: "enes",
+          });
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* model.name;
+              const getModel = yield* GCP.Translate.GetModel(model);
+              const translateText = yield* GCP.Translate.TranslateText(model);
+              return Effect.fn(function* () {
+                const live = yield* getModel();
+                const translated = yield* translateText({
+                  body: {
+                    contents: ["Hello, world"],
+                    targetLanguageCode: "es",
+                    sourceLanguageCode: "en",
+                    mimeType: "text/plain",
+                  },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return { live, translated };
+              });
+            }),
+          );
+          return { model, probe: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.probe.live.name).toEqual(out.model.name);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.probe.translated.tag);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+const runGlossaryBindings =
+  hasGcpCreds &&
+  !process.env.FAST &&
+  process.env.GCP_TEST_TRANSLATE_GLOSSARY === "1";
+
+test.provider.skipIf(!runGlossaryBindings)(
+  "GetGlossariesGlossaryEntry invokes the HTTP binding",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const glossary = process.env.GCP_TEST_TRANSLATE_GLOSSARY_NAME ?? "";
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const entry = yield* GCP.Translate.GlossariesGlossaryEntry("Hello", {
+            parent: glossary,
+            location,
+            description: "greeting",
+            termsPair: {
+              sourceTerm: { languageCode: "en", text: "hello" },
+              targetTerm: { languageCode: "es", text: "hola" },
+            },
+          });
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* entry.name;
+              const getEntry =
+                yield* GCP.Translate.GetGlossariesGlossaryEntry(entry);
+              return Effect.fn(function* () {
+                const live = yield* getEntry();
+                return { live };
+              });
+            }),
+          );
+          return { entry, probe: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.probe.live.name).toEqual(out.entry.name);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);

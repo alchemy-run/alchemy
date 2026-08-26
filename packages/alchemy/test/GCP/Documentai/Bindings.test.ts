@@ -153,3 +153,109 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+const invoiceSchema: GCP.Documentai.DocumentSchemaSpec = {
+  displayName: "invoice",
+  description: "invoice fields",
+  entityTypes: [
+    {
+      name: "invoice",
+      baseTypes: ["document"],
+      properties: [
+        {
+          name: "invoice_id",
+          valueType: "string",
+          occurrenceType: "OPTIONAL_ONCE",
+        },
+      ],
+    },
+  ],
+};
+
+test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+  "GetSchema and GetSchemaVersion round-trip",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const parent = `projects/${process.env.GOOGLE_PROJECT_ID ?? ""}/locations/us`;
+      const probe = yield* documentai
+        .listProjectsLocationsSchemas({
+          parent,
+          pageSize: 1,
+        })
+        .pipe(
+          Effect.map(() => ({ tag: "ok" as const })),
+          Effect.catchTag("Forbidden", (error) =>
+            Effect.succeed({
+              tag: "Forbidden" as const,
+              message: error.message,
+            }),
+          ),
+          Effect.catchTag("NotFound", (error) =>
+            Effect.succeed({
+              tag: "NotFound" as const,
+              message: error.message,
+            }),
+          ),
+        );
+      if (probe.tag !== "ok") {
+        expect(["Forbidden", "NotFound"]).toContain(probe.tag);
+        yield* stack.destroy();
+        return;
+      }
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const schema = yield* GCP.Documentai.Schema("Invoice", {
+            location: "us",
+            displayName: "invoice-bind",
+            labels: { env: "test" },
+          });
+          const version = yield* GCP.Documentai.SchemasSchemaVersion("V1", {
+            schema: schema.name,
+            location: "us",
+            displayName: "v1",
+            documentSchema: invoiceSchema,
+            labels: { env: "test" },
+          });
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* schema.name;
+              yield* version.name;
+              const getSchema = yield* GCP.Documentai.GetSchema(schema);
+              const getVersion =
+                yield* GCP.Documentai.GetSchemaVersion(version);
+              return Effect.fn(function* () {
+                const liveSchema = yield* getSchema();
+                const liveVersion = yield* getVersion();
+                return { liveSchema, liveVersion };
+              });
+            }),
+          );
+          return { schema, version, probe: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.probe.liveSchema.name).toEqual(out.schema.name);
+      expect(out.probe.liveVersion.name).toEqual(out.version.name);
+
+      yield* stack.destroy();
+      const gone = yield* documentai
+        .getProjectsLocationsSchemas({
+          name: out.schema.name,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
+        );
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
