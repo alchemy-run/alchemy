@@ -642,8 +642,8 @@ export const NetworkProvider = () =>
               error._tag === "Conflict" ||
               (error._tag === "GCP.Compute.NetworkOperationFailed" &&
                 isInUseOp(error.errors)),
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
+            times: 10,
+            schedule: Schedule.spaced("3 seconds"),
           }),
         );
     }),

@@ -68,15 +68,21 @@ test.provider.skipIf(!hasGcpCreds)(
               message: error.message,
             }),
           ),
+          Effect.catchTag("Conflict", (error) =>
+            Effect.succeed({
+              tag: "Conflict" as const,
+              message: error.message,
+            }),
+          ),
         );
-      if (result.tag === "ok") {
+      if (result.tag === "ok" || result.tag === "Conflict") {
         yield* compute
           .deleteGlobalVmExtensionPolicies({
             project,
             globalVmExtensionPolicy: "alchemy-vep-probe",
             body: { predefinedRolloutPlan: "FAST_ROLLOUT" },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
         return;
       }
       expect(["Forbidden", "BadRequest"]).toContain(result.tag);

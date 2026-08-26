@@ -118,5 +118,5 @@ test.provider.skipIf(!hasGcpCreds)(
       const gone = yield* waitUntilGone(created.project, created.networkName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

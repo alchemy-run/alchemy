@@ -21,7 +21,14 @@ const hasGcpCreds = !!(
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const zone = "us-central1-a";
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+
+// Zone capacity for n1-standard-1 reservations is often exhausted
+// (`ZONE_RESOURCE_POOL_EXHAUSTED`). Set GCP_TEST_COMPUTE_RESERVATION=1
+// when the zone has spare committed-use inventory.
+const runLifecycle =
+  hasGcpCreds &&
+  !!process.env.GCP_TEST_COMPUTE_RESERVATION &&
+  !process.env.FAST;
 
 const waitUntilGone = (
   projectId: string,

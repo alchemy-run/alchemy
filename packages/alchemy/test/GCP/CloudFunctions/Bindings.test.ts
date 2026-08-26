@@ -25,6 +25,9 @@ const hasGcpCreds = !!(
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const LOCATION = "us-central1";
 
+const runLifecycle =
+  hasGcpCreds && !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
+
 const uploadSource = Effect.fn(function* () {
   const archive = yield* zipFiles([
     {
@@ -61,7 +64,7 @@ const uploadSource = Effect.fn(function* () {
   return uploaded.storageSource;
 });
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!runLifecycle)(
   "GetFunction and GenerateDownloadUrl invoke HTTP bindings",
   (stack) =>
     Effect.gen(function* () {
@@ -101,5 +104,5 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

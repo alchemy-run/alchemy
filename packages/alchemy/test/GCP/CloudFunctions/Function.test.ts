@@ -25,6 +25,12 @@ const hasGcpCreds = !!(
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const LOCATION = "us-central1";
 
+// Gen2 function create/update/delete is a multi-minute LRO. Set
+// GCP_TEST_CLOUDFUNCTIONS=1 to run the lifecycle; default recapture
+// keeps the list probe only.
+const runLifecycle =
+  hasGcpCreds && !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
+
 const waitUntilGone = (name: string) =>
   cloudfunctions.getProjectsLocationsFunctions({ name }).pipe(
     Effect.as("found" as const),
@@ -96,7 +102,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 60_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a function",
   (stack) =>
     Effect.gen(function* () {
@@ -176,5 +182,5 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 200_000 },
+  { timeout: 240_000 },
 );

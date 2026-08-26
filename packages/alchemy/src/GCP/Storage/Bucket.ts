@@ -201,6 +201,7 @@ const emptyBucket = (bucketName: string) =>
           { concurrency: 8 },
         ),
       ),
+      Effect.catchTag("NotFound", () => Effect.void),
     );
 
 const emptyFolders = (bucketName: string) =>
