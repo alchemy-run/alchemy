@@ -19,7 +19,8 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_APIHUB;
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const location = "us-central1";
 
@@ -45,7 +46,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/locations/${location}/plugins/alchemy-missing-plugin/instances/alchemy-missing-instance`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -80,8 +80,12 @@ export const expandParent = (
   location: string,
   collection: string,
 ) => {
-  if (value.includes("/")) return value.replace(/\/+$/, "");
-  return `${locationParent(project, location)}/${collection}/${value}`;
+  const trimmed = value.replace(/\/+$/, "");
+  if (trimmed.length === 0) {
+    return `${locationParent(project, location)}/${collection}`;
+  }
+  if (trimmed.includes("/")) return trimmed;
+  return `${locationParent(project, location)}/${collection}/${trimmed}`;
 };
 
 export const resourceNameOf = (

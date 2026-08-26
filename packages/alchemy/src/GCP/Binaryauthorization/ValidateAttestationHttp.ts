@@ -27,16 +27,13 @@ export const ValidateAttestationHttp = Layer.effect(
       );
     return Effect.fn(function* (attestor: Attestor) {
       const name = yield* attestor.name;
-      const noteReference = yield* attestor.noteReference;
       return Effect.fn(
         `GCP.Binaryauthorization.ValidateAttestation(${attestor.LogicalId})`,
       )(function* (request: ValidateAttestationRequest) {
+        const attestorName = yield* name;
         return yield* validate({
-          attestor: yield* name,
-          body: {
-            ...request,
-            occurrenceNote: request.occurrenceNote ?? (yield* noteReference),
-          },
+          attestor: attestorName,
+          body: request,
         });
       });
     });

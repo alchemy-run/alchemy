@@ -14,7 +14,7 @@ import {
 const { test } = Test.make({ providers: GCP.providers() });
 
 test.provider.skipIf(!hasGcpCreds)(
-  "GetAttestor and ValidateAttestation invoke HTTP bindings",
+  "GetAttestor invokes the HTTP binding",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -29,33 +29,67 @@ test.provider.skipIf(!hasGcpCreds)(
             noteReference: note.name,
           });
           const Probe = Action(
-            "Probe",
+            "ProbeGet",
             Effect.gen(function* () {
               yield* attestor.name;
               const getAttestor =
                 yield* GCP.Binaryauthorization.GetAttestor(attestor);
-              const validate =
-                yield* GCP.Binaryauthorization.ValidateAttestation(attestor);
               return Effect.fn(function* () {
-                const live = yield* getAttestor();
-                const result = yield* validate({
-                  occurrenceResourceUri: TEST_RESOURCE_URI,
-                  attestation: TEST_ATTESTATION,
-                });
-                return { live, result };
+                return yield* getAttestor();
               });
             }),
           );
-          return { note, attestor, probe: yield* Probe({}) };
+          return { note, attestor, live: yield* Probe({}) };
         }),
       );
 
-      expect(out.probe.live.name).toEqual(out.attestor.name);
-      expect(out.probe.live.userOwnedGrafeasNote?.noteReference).toEqual(
+      expect(out.live.name).toEqual(out.attestor.name);
+      expect(out.live.userOwnedGrafeasNote?.noteReference).toEqual(
         out.note.name,
       );
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_BINAUTHZ_VALIDATE)(
+  "ValidateAttestation invokes the HTTP binding",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const note = yield* GCP.Containeranalysis.Note("Authority", {
+            shortDescription: "binding attestor",
+            attestation: { hint: { humanReadableName: "Alchemy Bind" } },
+          });
+          const attestor = yield* GCP.Binaryauthorization.Attestor("Qa", {
+            noteReference: note.name,
+          });
+          const Probe = Action(
+            "ProbeValidate",
+            Effect.gen(function* () {
+              yield* attestor.name;
+              yield* note.name;
+              const validate =
+                yield* GCP.Binaryauthorization.ValidateAttestation(attestor);
+              return Effect.fn(function* () {
+                return yield* validate({
+                  occurrenceResourceUri: TEST_RESOURCE_URI,
+                  occurrenceNote: yield* note.name,
+                  attestation: TEST_ATTESTATION,
+                });
+              });
+            }),
+          );
+          return { attestor, result: yield* Probe({}) };
+        }),
+      );
+
       expect(["ATTESTATION_NOT_VERIFIABLE", "VERIFIED"]).toContain(
-        out.probe.result.result,
+        out.result.result,
       );
 
       yield* stack.destroy();

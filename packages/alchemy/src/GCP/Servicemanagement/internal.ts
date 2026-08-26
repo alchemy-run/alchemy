@@ -181,9 +181,7 @@ const isIgnorableOperationError = (
 
 export const getByName = (serviceName: string) =>
   servicemanagement.getServices({ serviceName }).pipe(
-    Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     Effect.catchTag("Forbidden", (error) =>
       isMissingForbidden(error.message)
         ? Effect.succeed(undefined)
@@ -307,9 +305,7 @@ export const undeleteService = (serviceName: string) =>
     const operation = yield* servicemanagement
       .undeleteServices({ serviceName })
       .pipe(
-        Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         Effect.catchTag("Forbidden", (error) =>
           isMissingForbidden(error.message)
             ? Effect.succeed(undefined)
@@ -342,8 +338,7 @@ export const listProducerServices = (project: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.services ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(
-        ["NotFound", "Forbidden", "ServiceManagementApiDisabled"],
-        () => Effect.succeed([] as servicemanagement.ManagedService[]),
+      Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.succeed([] as servicemanagement.ManagedService[]),
       ),
     );

@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
@@ -60,7 +61,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
             labels: { env: "test" },
             resourceSpec: {
               type: "STORAGE_BUCKET",
-              name: `projects/${bucket.projectNumber ?? lake.project}/buckets/${bucket.bucketName}`,
+              name: Output.interpolate`projects/${bucket.projectNumber}/buckets/${bucket.bucketName}`,
             },
             discoverySpec: { enabled: false },
           });
@@ -110,7 +111,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
             labels: { env: "prod", team: "data" },
             resourceSpec: {
               type: "STORAGE_BUCKET",
-              name: `projects/${bucket.projectNumber ?? lake.project}/buckets/${bucket.bucketName}`,
+              name: Output.interpolate`projects/${bucket.projectNumber}/buckets/${bucket.bucketName}`,
             },
             discoverySpec: { enabled: false },
           });

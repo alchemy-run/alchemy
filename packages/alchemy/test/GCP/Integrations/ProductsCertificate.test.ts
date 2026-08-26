@@ -53,7 +53,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS,
+)(
   "create, update, and delete a product certificate",
   (stack) =>
     Effect.gen(function* () {

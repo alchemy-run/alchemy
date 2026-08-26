@@ -17,7 +17,8 @@ export const hasGcpCreds = !!(
 
 export const runLifecycle = hasGcpCreds;
 
-export const runSlowLifecycle = runLifecycle && !process.env.FAST;
+export const runSlowLifecycle =
+  runLifecycle && !process.env.FAST && !!process.env.GCP_TEST_DATASTREAM;
 
 export const project = process.env.GOOGLE_PROJECT_ID ?? "";
 

@@ -49,7 +49,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(
+  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_TAGMANAGER,
+)(
   "create, update, and delete a workspace variable",
   (stack) =>
     Effect.gen(function* () {

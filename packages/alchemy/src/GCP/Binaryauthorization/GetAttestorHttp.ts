@@ -26,9 +26,10 @@ export const GetAttestorHttp = Layer.effect(
       return Effect.fn(
         `GCP.Binaryauthorization.GetAttestor(${attestor.LogicalId})`,
       )(function* (request?: GetAttestorRequest) {
+        const attestorName = yield* name;
         return yield* getAttestor({
           ...request,
-          name: yield* name,
+          name: attestorName,
         });
       });
     });
