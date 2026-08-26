@@ -1,5 +1,5 @@
 {
-  "name": "example-basic",
+  "name": "cloudflare-website-solidstart",
   "private": true,
   "type": "module",
   "scripts": {
@@ -31,6 +31,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-solidstart"
+    "directory": "examples/cloudflare-website-solidstart"
   }
 }

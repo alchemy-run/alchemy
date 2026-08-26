@@ -1,12 +1,12 @@
 {
-  "name": "cloudflare-tanstack-example",
+  "name": "cloudflare-website-tanstack-start",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-tanstack"
+    "directory": "examples/cloudflare-website-tanstack-start"
   },
   "type": "module",
   "scripts": {

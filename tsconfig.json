@@ -116,7 +116,7 @@
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-tanstack/tsconfig.json"
+      "path": "./examples/cloudflare-website-tanstack-start/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-worker/tsconfig.json"

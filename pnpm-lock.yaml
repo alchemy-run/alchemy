@@ -2051,40 +2051,6 @@ importers:
         specifier: ^2.11.8
         version: 2.11.14(solid-js@1.9.14)(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  examples/cloudflare-solidstart:
-    dependencies:
-      '@solidjs/meta':
-        specifier: catalog:frontend
-        version: 0.29.4(solid-js@1.9.15)
-      '@solidjs/router':
-        specifier: ^0.15.0
-        version: 0.15.4(solid-js@1.9.15)
-      '@solidjs/start':
-        specifier: 2.0.0-alpha.2
-        version: 2.0.0-alpha.2(crossws@0.4.10(srvx@0.12.5))(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      '@solidjs/vite-plugin-nitro-2':
-        specifier: catalog:frontend
-        version: 0.3.2(srvx@0.12.5)(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      alchemy:
-        specifier: workspace:*
-        version: link:../../packages/alchemy
-      effect:
-        specifier: 4.0.0-rc.111
-        version: 4.0.0-rc.111
-      solid-js:
-        specifier: ^1.9.5
-        version: 1.9.15
-      vite:
-        specifier: ^7.0.0
-        version: 7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
-    devDependencies:
-      '@tailwindcss/vite':
-        specifier: catalog:frontend
-        version: 4.3.3(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      tailwindcss:
-        specifier: catalog:frontend
-        version: 4.3.3
-
   examples/cloudflare-static-site:
     dependencies:
       '@distilled.cloud/cloudflare':
@@ -2103,52 +2069,6 @@ importers:
       typescript:
         specifier: catalog:build
         version: 7.0.2
-
-  examples/cloudflare-tanstack:
-    dependencies:
-      '@tanstack/react-router':
-        specifier: catalog:frontend
-        version: 1.170.27(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@tanstack/react-start':
-        specifier: catalog:frontend
-        version: 1.168.44(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(crossws@0.4.10(srvx@0.12.5))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2)(vite-plugin-solid@2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
-      alchemy:
-        specifier: workspace:*
-        version: link:../../packages/alchemy
-      effect:
-        specifier: 4.0.0-rc.111
-        version: 4.0.0-rc.111
-      react:
-        specifier: ^19.2.4
-        version: 19.2.8
-      react-dom:
-        specifier: ^19.2.4
-        version: 19.2.8(react@19.2.8)
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: 5.20260812.1
-        version: 5.20260812.1
-      '@tailwindcss/vite':
-        specifier: catalog:frontend
-        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      '@types/react':
-        specifier: ^19.2.14
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: ^19.2.3
-        version: 19.2.4(@types/react@19.2.18)
-      '@vitejs/plugin-react':
-        specifier: ^6.0.1
-        version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      tailwindcss:
-        specifier: catalog:frontend
-        version: 4.3.3
-      typescript:
-        specifier: catalog:build
-        version: 7.0.2
-      vite:
-        specifier: catalog:build
-        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   examples/cloudflare-tanstack-rpc-drizzle:
     dependencies:
@@ -2464,6 +2384,40 @@ importers:
         specifier: catalog:build
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
+  examples/cloudflare-website-solidstart:
+    dependencies:
+      '@solidjs/meta':
+        specifier: catalog:frontend
+        version: 0.29.4(solid-js@1.9.15)
+      '@solidjs/router':
+        specifier: ^0.15.0
+        version: 0.15.4(solid-js@1.9.15)
+      '@solidjs/start':
+        specifier: 2.0.0-alpha.2
+        version: 2.0.0-alpha.2(crossws@0.4.10(srvx@0.12.5))(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@solidjs/vite-plugin-nitro-2':
+        specifier: catalog:frontend
+        version: 0.3.2(srvx@0.12.5)(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      solid-js:
+        specifier: ^1.9.5
+        version: 1.9.15
+      vite:
+        specifier: ^7.0.0
+        version: 7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+
   examples/cloudflare-website-sveltekit:
     dependencies:
       alchemy:
@@ -2500,6 +2454,52 @@ importers:
       vite:
         specifier: catalog:build
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/cloudflare-website-tanstack-start:
+    dependencies:
+      '@tanstack/react-router':
+        specifier: catalog:frontend
+        version: 1.170.27(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tanstack/react-start':
+        specifier: catalog:frontend
+        version: 1.168.44(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(crossws@0.4.10(srvx@0.12.5))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2)(vite-plugin-solid@2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      react:
+        specifier: ^19.2.4
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20260812.1
+        version: 5.20260812.1
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.4(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.1.0(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   examples/cloudflare-website-vite:
     dependencies:
@@ -16049,12 +16049,6 @@ packages:
     resolution: {integrity: sha512-avMLDQpUI9I5XFrklECw1ZEUPJhqzcwSWsyyI8blhRLT+8N1jLJWLWWYQpB2q2xthq8xDvjZPISVh53T/+CLYQ==}
     engines: {node: '>=18'}
 
-  terracotta@1.1.1:
-    resolution: {integrity: sha512-Sa6wnvkGMFmPq8N/wQb2aKkIW2eXH0LJvUOEk6QZLBEjqy+LsbzAOpDuqEfOmfA/hexssE6eQve2i1IIOeOh4g==}
-    engines: {node: '>=10'}
-    peerDependencies:
-      solid-js: ^1.8
-
   terracotta@1.2.4:
     resolution: {integrity: sha512-lVBegOwHeQ4483/H0736+D6orU8YDgG5msLyEsoB/ZBess/RWe8NRBKh0lEfpZTIyKYiLm2VzzWd6axkkWt0kQ==}
     engines: {node: '>=10'}
@@ -23589,7 +23583,7 @@ snapshots:
       solid-js: 1.9.15
       source-map-js: 1.2.1
       srvx: 0.9.8
-      terracotta: 1.1.1(solid-js@1.9.15)
+      terracotta: 1.2.4(solid-js@1.9.15)
       vite: 7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       vite-plugin-solid: 2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -33228,11 +33222,6 @@ snapshots:
       - react-native-b4a
 
   terminal-size@4.0.1: {}
-
-  terracotta@1.1.1(solid-js@1.9.15):
-    dependencies:
-      solid-js: 1.9.15
-      solid-use: 0.9.1(solid-js@1.9.15)
 
   terracotta@1.2.4(solid-js@1.9.15):
     dependencies:
