@@ -422,7 +422,10 @@ describe("AWS.Website.Router local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 120_000 },
+    // 300s like the sibling cases: fixture clone + `bun install` + vite dev
+    // boot through the emulated edge stack up under whole-suite concurrency
+    // (the test itself runs in ~6s in isolation).
+    { timeout: 300_000 },
   );
 
   /**
