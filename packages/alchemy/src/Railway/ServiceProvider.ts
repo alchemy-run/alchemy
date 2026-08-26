@@ -1016,7 +1016,19 @@ export const ServiceProvider = () =>
             sourceImage,
             sourceRepo,
             registryCredentials: undefined,
-            props,
+            props: {
+              ...props,
+              // Effect-native images must answer HTTP before Railway
+              // stamps SUCCESS — otherwise waitForDeploymentById returns
+              // while `/up` is still building and public GET hangs.
+              healthcheckPath:
+                props.healthcheckPath ??
+                props.healthcheck ??
+                (hostedMain !== undefined ? "/" : undefined),
+              healthcheckTimeout:
+                props.healthcheckTimeout ??
+                (hostedMain !== undefined ? 300 : undefined),
+            },
           });
           if (instanceDelta !== undefined) {
             yield* railway
