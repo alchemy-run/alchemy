@@ -215,7 +215,16 @@
       "path": "./examples/fly-website-nuxt/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-react-router/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-solidstart/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-tanstack-start/tsconfig.json"
     },
     {
       "path": "./examples/fly-website-waku/tsconfig.json"
@@ -245,6 +254,15 @@
       "path": "./examples/hetzner-website-vocs/tsconfig.json"
     },
     {
+      "path": "./examples/hetzner-website-react-router/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-solidstart/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-tanstack-start/tsconfig.json"
+    },
+    {
       "path": "./examples/railway-website-astro/tsconfig.json"
     },
     {
@@ -264,6 +282,15 @@
     },
     {
       "path": "./examples/railway-website-vocs/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-react-router/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-solidstart/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-tanstack-start/tsconfig.json"
     },
     {
       "path": "./examples/fly-sprite/tsconfig.json"

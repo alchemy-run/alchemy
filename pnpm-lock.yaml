@@ -2968,6 +2968,101 @@ importers:
         specifier: catalog:build
         version: 7.0.2
 
+  examples/fly-website-react-router:
+    dependencies:
+      '@react-router/node':
+        specifier: catalog:frontend
+        version: 7.16.0(react-router@7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@7.0.2)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      isbot:
+        specifier: catalog:frontend
+        version: 5.2.1
+      react:
+        specifier: catalog:frontend
+        version: 19.2.8
+      react-dom:
+        specifier: catalog:frontend
+        version: 19.2.8(react@19.2.8)
+      react-router:
+        specifier: catalog:frontend
+        version: 7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../distilled/packages/fly-io
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@react-router/dev':
+        specifier: catalog:frontend
+        version: 7.16.0(@types/node@26.2.0)(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(jiti@2.7.0)(lightningcss@1.33.0)(react-router@7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(terser@5.50.0)(tsx@4.23.12)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(wrangler@4.114.0(@cloudflare/workers-types@5.20260812.1))(yaml@2.9.0)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: catalog:frontend
+        version: 19.2.18
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/fly-website-solidstart:
+    dependencies:
+      '@solidjs/router':
+        specifier: catalog:frontend
+        version: 0.16.3(solid-js@1.9.15)
+      '@solidjs/start':
+        specifier: catalog:frontend
+        version: 2.0.4(@solidjs/router@0.16.3(solid-js@1.9.15))(crossws@0.4.10(srvx@0.12.5))(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@solidjs/vite-plugin-nitro-2':
+        specifier: catalog:frontend
+        version: 0.3.2(srvx@0.12.5)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      solid-js:
+        specifier: catalog:frontend
+        version: 1.9.15
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../distilled/packages/fly-io
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
   examples/fly-website-sveltekit:
     dependencies:
       alchemy:
@@ -3010,6 +3105,58 @@ importers:
       vite:
         specifier: catalog:build
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/fly-website-tanstack-start:
+    dependencies:
+      '@tanstack/react-router':
+        specifier: catalog:frontend
+        version: 1.170.27(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tanstack/react-start':
+        specifier: catalog:frontend
+        version: 1.168.44(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(crossws@0.4.10(srvx@0.12.5))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2)(vite-plugin-solid@2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      react:
+        specifier: catalog:frontend
+        version: 19.2.8
+      react-dom:
+        specifier: catalog:frontend
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../distilled/packages/fly-io
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: catalog:frontend
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.4(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: catalog:frontend
+        version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   examples/fly-website-vite:
     dependencies:
@@ -3357,6 +3504,101 @@ importers:
         specifier: catalog:build
         version: 7.0.2
 
+  examples/hetzner-website-react-router:
+    dependencies:
+      '@react-router/node':
+        specifier: catalog:frontend
+        version: 7.16.0(react-router@7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@7.0.2)
+      isbot:
+        specifier: catalog:frontend
+        version: 5.2.1
+      react:
+        specifier: catalog:frontend
+        version: 19.2.8
+      react-dom:
+        specifier: catalog:frontend
+        version: 19.2.8(react@19.2.8)
+      react-router:
+        specifier: catalog:frontend
+        version: 7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/hetzner':
+        specifier: workspace:*
+        version: link:../../distilled/packages/hetzner
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@react-router/dev':
+        specifier: catalog:frontend
+        version: 7.16.0(@types/node@26.2.0)(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(jiti@2.7.0)(lightningcss@1.33.0)(react-router@7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(terser@5.50.0)(tsx@4.23.12)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(wrangler@4.114.0(@cloudflare/workers-types@5.20260812.1))(yaml@2.9.0)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: catalog:frontend
+        version: 19.2.18
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/hetzner-website-solidstart:
+    dependencies:
+      '@solidjs/router':
+        specifier: catalog:frontend
+        version: 0.16.3(solid-js@1.9.15)
+      '@solidjs/start':
+        specifier: catalog:frontend
+        version: 2.0.4(@solidjs/router@0.16.3(solid-js@1.9.15))(crossws@0.4.10(srvx@0.12.5))(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@solidjs/vite-plugin-nitro-2':
+        specifier: catalog:frontend
+        version: 0.3.2(srvx@0.12.5)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      solid-js:
+        specifier: catalog:frontend
+        version: 1.9.15
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/hetzner':
+        specifier: workspace:*
+        version: link:../../distilled/packages/hetzner
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
   examples/hetzner-website-sveltekit:
     dependencies:
       alchemy:
@@ -3399,6 +3641,58 @@ importers:
       vite:
         specifier: catalog:build
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/hetzner-website-tanstack-start:
+    dependencies:
+      '@tanstack/react-router':
+        specifier: catalog:frontend
+        version: 1.170.27(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tanstack/react-start':
+        specifier: catalog:frontend
+        version: 1.168.44(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(crossws@0.4.10(srvx@0.12.5))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2)(vite-plugin-solid@2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+      react:
+        specifier: catalog:frontend
+        version: 19.2.8
+      react-dom:
+        specifier: catalog:frontend
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/hetzner':
+        specifier: workspace:*
+        version: link:../../distilled/packages/hetzner
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: catalog:frontend
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.4(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: catalog:frontend
+        version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   examples/hetzner-website-vite:
     dependencies:
@@ -3935,6 +4229,101 @@ importers:
         specifier: catalog:build
         version: 7.0.2
 
+  examples/railway-website-react-router:
+    dependencies:
+      '@react-router/node':
+        specifier: catalog:frontend
+        version: 7.16.0(react-router@7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@7.0.2)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      isbot:
+        specifier: catalog:frontend
+        version: 5.2.1
+      react:
+        specifier: catalog:frontend
+        version: 19.2.8
+      react-dom:
+        specifier: catalog:frontend
+        version: 19.2.8(react@19.2.8)
+      react-router:
+        specifier: catalog:frontend
+        version: 7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/railway':
+        specifier: workspace:*
+        version: link:../../distilled/packages/railway
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@react-router/dev':
+        specifier: catalog:frontend
+        version: 7.16.0(@types/node@26.2.0)(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(jiti@2.7.0)(lightningcss@1.33.0)(react-router@7.16.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(terser@5.50.0)(tsx@4.23.12)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(wrangler@4.114.0(@cloudflare/workers-types@5.20260812.1))(yaml@2.9.0)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: catalog:frontend
+        version: 19.2.18
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/railway-website-solidstart:
+    dependencies:
+      '@solidjs/router':
+        specifier: catalog:frontend
+        version: 0.16.3(solid-js@1.9.15)
+      '@solidjs/start':
+        specifier: catalog:frontend
+        version: 2.0.4(@solidjs/router@0.16.3(solid-js@1.9.15))(crossws@0.4.10(srvx@0.12.5))(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@solidjs/vite-plugin-nitro-2':
+        specifier: catalog:frontend
+        version: 0.3.2(srvx@0.12.5)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      solid-js:
+        specifier: catalog:frontend
+        version: 1.9.15
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/railway':
+        specifier: workspace:*
+        version: link:../../distilled/packages/railway
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
   examples/railway-website-sveltekit:
     dependencies:
       alchemy:
@@ -3977,6 +4366,58 @@ importers:
       vite:
         specifier: catalog:build
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/railway-website-tanstack-start:
+    dependencies:
+      '@tanstack/react-router':
+        specifier: catalog:frontend
+        version: 1.170.27(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tanstack/react-start':
+        specifier: catalog:frontend
+        version: 1.168.44(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(crossws@0.4.10(srvx@0.12.5))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2)(vite-plugin-solid@2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
+      react:
+        specifier: catalog:frontend
+        version: 19.2.8
+      react-dom:
+        specifier: catalog:frontend
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      '@distilled.cloud/railway':
+        specifier: workspace:*
+        version: link:../../distilled/packages/railway
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: catalog:frontend
+        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/react':
+        specifier: catalog:frontend
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.4(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: catalog:frontend
+        version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      tailwindcss:
+        specifier: catalog:frontend
+        version: 4.3.3
+      typescript:
+        specifier: catalog:build
+        version: 7.0.2
+      vite:
+        specifier: catalog:build
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   examples/railway-website-vite:
     dependencies:

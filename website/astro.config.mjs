@@ -1001,12 +1001,24 @@ export default defineConfig({
                 { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
                 { label: "Octane", link: "/hetzner/frontend/octane" },
                 {
+                  label: "React Router",
+                  link: "/hetzner/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/hetzner/frontend/solidstart",
+                },
+                {
                   label: "Static sites",
                   link: "/hetzner/frontend/static-site",
                 },
                 {
                   label: "SvelteKit",
                   link: "/hetzner/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/hetzner/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/hetzner/frontend/vite" },
                 { label: "Vocs", link: "/hetzner/frontend/vocs" },
@@ -1056,12 +1068,24 @@ export default defineConfig({
                 { label: "Nuxt", link: "/fly/frontend/nuxt" },
                 { label: "Octane", link: "/fly/frontend/octane" },
                 {
+                  label: "React Router",
+                  link: "/fly/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/fly/frontend/solidstart",
+                },
+                {
                   label: "Static sites",
                   link: "/fly/frontend/static-site",
                 },
                 {
                   label: "SvelteKit",
                   link: "/fly/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/fly/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/fly/frontend/vite" },
                 { label: "Vocs", link: "/fly/frontend/vocs" },
@@ -1117,12 +1141,24 @@ export default defineConfig({
                 { label: "Nuxt", link: "/railway/frontend/nuxt" },
                 { label: "Octane", link: "/railway/frontend/octane" },
                 {
+                  label: "React Router",
+                  link: "/railway/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/railway/frontend/solidstart",
+                },
+                {
                   label: "Static sites",
                   link: "/railway/frontend/static-site",
                 },
                 {
                   label: "SvelteKit",
                   link: "/railway/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/railway/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/railway/frontend/vite" },
                 { label: "Vocs", link: "/railway/frontend/vocs" },

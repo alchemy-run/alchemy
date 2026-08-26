@@ -311,6 +311,12 @@
       "worker": "./dist/react-router/aws.js",
       "import": "./dist/react-router/aws.js"
     },
+    "./react-router/node": {
+      "types": "./dist/react-router/node.d.ts",
+      "bun": "./dist/react-router/node.js",
+      "worker": "./dist/react-router/node.js",
+      "import": "./dist/react-router/node.js"
+    },
     "./solidstart": {
       "types": "./dist/solidstart/index.d.ts",
       "bun": "./dist/solidstart/index.js",
@@ -322,6 +328,12 @@
       "bun": "./dist/solidstart/aws.js",
       "worker": "./dist/solidstart/aws.js",
       "import": "./dist/solidstart/aws.js"
+    },
+    "./solidstart/node": {
+      "types": "./dist/solidstart/node.d.ts",
+      "bun": "./dist/solidstart/node.js",
+      "worker": "./dist/solidstart/node.js",
+      "import": "./dist/solidstart/node.js"
     },
     "./sveltekit": {
       "types": "./dist/sveltekit/index.d.ts",
@@ -364,6 +376,12 @@
       "bun": "./dist/tanstack-start/aws.js",
       "worker": "./dist/tanstack-start/aws.js",
       "import": "./dist/tanstack-start/aws.js"
+    },
+    "./tanstack-start/node": {
+      "types": "./dist/tanstack-start/node.d.ts",
+      "bun": "./dist/tanstack-start/node.js",
+      "worker": "./dist/tanstack-start/node.js",
+      "import": "./dist/tanstack-start/node.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
