@@ -10,6 +10,8 @@
     "allowJs": true,
     "strict": true,
     "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "types": ["vite/client"],
     "isolatedModules": true,
     "paths": {

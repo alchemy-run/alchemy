@@ -1,41 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { Card } from "../components/Card.tsx";
+import { env } from "../env.ts";
 
-export const getServerTime = createServerFn({
-  method: "GET",
-}).handler(() => ({
-  message: "Hello from a TanStack Start server function.",
-  time: new Date().toISOString(),
-}));
+// Runs on the server for both the SSR render and client navigations — in
+// the deployed Worker (or, under `alchemy dev`, in TanStack Start's own
+// Vite dev server). The `env` declared on the Website in alchemy.run.ts
+// is available through the `cloudflare:workers` env proxy.
+const getGreeting = createServerFn({ method: "GET" }).handler(
+  () => env.GREETING ?? "Hello!",
+);
 
 export const Route = createFileRoute("/")({
-  loader: () => getServerTime(),
+  loader: () => getGreeting(),
   component: Home,
 });
 
 function Home() {
-  const initialData = Route.useLoaderData();
-  const [data, setData] = useState(initialData);
-
+  const greeting = Route.useLoaderData();
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="m-0 text-3xl font-bold">TanStack Start</h1>
-      <p className="mt-4 text-lg leading-relaxed">
-        This is the minimal app scaffold in{" "}
-        <code>examples/cloudflare-tanstack</code>.
-      </p>
-      <p className="mt-4 leading-relaxed">{data.message}</p>
-      <p className="rounded-lg bg-slate-200 px-4 py-3 font-mono">{data.time}</p>
-      <button
-        type="button"
-        onClick={async () => {
-          setData(await getServerTime());
-        }}
-        className="cursor-pointer rounded-lg border-none bg-slate-900 px-4 py-3 text-white"
-      >
-        Refresh from server
-      </button>
+    <main>
+      <h1 className="text-3xl font-bold">{greeting}</h1>
+      <Card
+        title="Styled with Tailwind CSS"
+        body="This card is a React component styled with Tailwind utilities."
+      />
     </main>
   );
 }

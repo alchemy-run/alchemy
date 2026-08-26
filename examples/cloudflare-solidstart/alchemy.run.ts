@@ -13,6 +13,9 @@ export default Alchemy.Stack(
       compatibility: {
         flags: ["nodejs_compat"],
       },
+      env: {
+        GREETING: "Hello from SolidStart on Cloudflare!",
+      },
     });
 
     return {

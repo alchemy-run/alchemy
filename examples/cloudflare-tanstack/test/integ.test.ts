@@ -81,6 +81,27 @@ test(
 );
 
 test(
+  "serves the server-rendered home page",
+  Effect.gen(function* () {
+    const { websiteUrl } = yield* stack;
+    const base = websiteUrl.replace(/\/+$/, "");
+    // The `GREETING` env value from alchemy.run.ts, read through the
+    // `cloudflare:workers` env proxy in the server function — proves the
+    // Worker rendered it at request time.
+    const html = yield* getBodyWhenReady(
+      base,
+      "Hello from TanStack Start on Cloudflare!",
+    );
+    // The Card component rendered under the heading.
+    expect(html).toContain("Styled with Tailwind CSS");
+    expect(html).toContain(
+      "This card is a React component styled with Tailwind utilities.",
+    );
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "compiles tailwind from vite.config.ts",
   Effect.gen(function* () {
     const { websiteUrl } = yield* stack;

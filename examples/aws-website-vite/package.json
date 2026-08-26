@@ -1,32 +1,38 @@
 {
-  "name": "aws-vite-example",
+  "name": "aws-website-vite",
   "version": "0.0.0",
   "private": true,
-  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "react": "catalog:frontend",
+    "react-dom": "catalog:frontend"
+  },
+  "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@tailwindcss/vite": "catalog:frontend",
+    "@types/react": "catalog:frontend",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "catalog:frontend",
+    "alchemy": "workspace:*",
+    "effect": "catalog:effect",
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:build",
+    "vite": "catalog:build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "examples/aws-website-vite"
-  },
-  "type": "module",
-  "scripts": {
-    "build": "vite build",
-    "dev:vite": "vite",
-    "preview": "vite preview",
-    "deploy": "alchemy deploy",
-    "dev": "alchemy dev",
-    "destroy": "alchemy destroy"
-  },
-  "dependencies": {
-    "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@cloudflare/vite-plugin": "catalog:cloudflare",
-    "@distilled.cloud/aws": "workspace:*",
-    "@effect/platform-node": "catalog:effect",
-    "alchemy": "workspace:*",
-    "effect": "catalog:effect"
-  },
-  "devDependencies": {
-    "typescript": "catalog:build",
-    "vite": "catalog:build"
   }
 }

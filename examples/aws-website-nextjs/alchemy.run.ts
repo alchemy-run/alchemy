@@ -25,7 +25,7 @@ export default Alchemy.Stack(
       },
       forceDestroy: true,
       env: {
-        GREETING: "Hello from Alchemy!",
+        GREETING: "Hello from Next.js on AWS!",
       },
     });
 

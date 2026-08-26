@@ -6,10 +6,9 @@ The resource builds the app with waku's own Vite pipeline and a wrangler-free in
 
 ```ts
 const site = yield* AWS.Website.Waku("WakuSite", {
-  server: {
-    environment: {
-      GREETING: "Hello from alchemy",
-    },
+  forceDestroy: true,
+  env: {
+    GREETING: "Hello from Waku on AWS!",
   },
 });
 ```

@@ -17,7 +17,7 @@ export default Alchemy.Stack(
       },
       forceDestroy: true,
       env: {
-        GREETING: "Hello from Alchemy!",
+        GREETING: "Hello from Astro on AWS!",
       },
     });
 

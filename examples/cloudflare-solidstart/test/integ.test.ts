@@ -75,9 +75,11 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    // SolidStart server-renders the index route in the Cloudflare Worker.
-    expect(html).toContain("Hello world!");
-    expect(html).toContain("to learn how to build SolidStart apps");
+    // SolidStart server-renders the index route in the Cloudflare Worker;
+    // the `GREETING` env value from alchemy.run.ts reaches it via
+    // `process.env` (populated by the `nodejs_compat` flag).
+    expect(html).toContain("Hello from SolidStart on Cloudflare!");
+    expect(html).toContain("Styled with Tailwind CSS");
   }),
   { timeout: 180_000 },
 );

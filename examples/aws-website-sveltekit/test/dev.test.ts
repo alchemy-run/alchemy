@@ -149,7 +149,7 @@ test(
     // SSR env parity: GREETING from alchemy.run.ts reaches the dev server
     // (read via `process.env` in +page.server.ts's load).
     const home = await (await fetchOk(url)).text();
-    expect(home).toContain("Hello from alchemy");
+    expect(home).toContain("Hello from SvelteKit on AWS!");
     expect(home).toContain(MARKER);
 
     // Prerendered route serves through the dev server.

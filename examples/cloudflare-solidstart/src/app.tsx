@@ -9,7 +9,7 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <Title>SolidStart - Basic</Title>
+          <Title>SolidStart on Cloudflare</Title>
           <nav class="flex justify-center gap-4 p-4 text-sky-700 underline">
             <a href="/">Index</a>
             <a href="/about">About</a>

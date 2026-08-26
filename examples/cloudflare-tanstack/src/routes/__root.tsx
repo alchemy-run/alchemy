@@ -18,7 +18,7 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "TanStack Start",
+        title: "TanStack Start on Cloudflare",
       },
     ],
     links: [
@@ -45,7 +45,7 @@ function Document(props: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body className="m-0 bg-slate-50 font-sans text-slate-900">
+      <body className="bg-slate-50 p-8 text-slate-900">
         {props.children}
         <Scripts />
       </body>

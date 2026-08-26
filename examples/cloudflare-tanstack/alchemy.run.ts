@@ -8,6 +8,7 @@ export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
     flags: ["nodejs_compat"],
   },
   env: {
+    GREETING: "Hello from TanStack Start on Cloudflare!",
     BUCKET: Bucket,
     BACKEND: Backend,
   },
