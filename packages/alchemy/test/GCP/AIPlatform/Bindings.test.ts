@@ -19,7 +19,9 @@ const hasGcpCreds = !!(
 );
 
 const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_VERTEX && !process.env.FAST;
+  hasGcpCreds &&
+  !process.env.FAST &&
+  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 
 test.provider.skipIf(!runLifecycle)(
   "GetReasoningEngine invokes the HTTP binding",

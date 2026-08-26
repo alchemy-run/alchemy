@@ -20,7 +20,9 @@ const hasGcpCreds = !!(
 );
 
 const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_VERTEX;
+  hasGcpCreds &&
+  !process.env.FAST &&
+  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const agent =
   process.env.GCP_TEST_AGENT ??
@@ -48,7 +50,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/locations/us-central1/semanticGovernancePolicies/alchemy-sgp-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

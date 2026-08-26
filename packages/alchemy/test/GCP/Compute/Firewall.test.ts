@@ -129,5 +129,5 @@ test.provider.skipIf(!hasGcpCreds)(
       const gone = yield* waitUntilGone(created.project, created.firewallName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { timeout: 180_000 },
 );

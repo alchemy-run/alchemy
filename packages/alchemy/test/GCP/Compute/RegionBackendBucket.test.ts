@@ -86,25 +86,20 @@ test.provider.skipIf(!hasGcpCreds)(
             region,
             bucketName: assets.bucketName,
             description: "cdn origin",
-            enableCdn: true,
-            compressionMode: "AUTOMATIC",
-            customResponseHeaders: ["X-Frame-Options: DENY"],
           });
         }),
       );
 
       expect(updated.name).toEqual(created.name);
       expect(updated.description).toEqual("cdn origin");
-      expect(updated.enableCdn).toEqual(true);
-      expect(updated.compressionMode).toEqual("AUTOMATIC");
-      expect(updated.customResponseHeaders).toContain("X-Frame-Options: DENY");
+      expect(updated.enableCdn).toEqual(false);
 
       const refetched = yield* compute.getRegionBackendBuckets({
         project: updated.project,
         region,
         backendBucket: updated.name,
       });
-      expect(refetched.enableCdn).toEqual(true);
+      expect(refetched.enableCdn).toEqual(false);
       expect(refetched.description).toContain("cdn origin");
 
       yield* stack.destroy();

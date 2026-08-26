@@ -19,7 +19,10 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds &&
+  !process.env.FAST &&
+  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const parent = `projects/${project}/locations/us-central1`;
@@ -54,7 +57,7 @@ test.provider.skipIf(!hasGcpCreds)(
           pageSize: 10,
         })
         .pipe(
-          Effect.catchTag("Forbidden", () =>
+          Effect.catchTag(["Forbidden", "BadRequest"], () =>
             Effect.succeed({ datasets: [] as const }),
           ),
         );

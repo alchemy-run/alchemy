@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { lastSegment, operationMessage, waitGlobal } from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -182,6 +182,7 @@ export class NetworkOperationFailed extends Data.TaggedError(
 )<{
   operation: string;
   errors: ReadonlyArray<{ code?: string; message?: string }>;
+  message: string;
 }> {}
 
 const DEFAULT_AUTO_CREATE = false;
@@ -317,24 +318,43 @@ const isInUseOp = (
     );
   });
 
-const assertOperationOk = (operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
+const operationErrors = (operation: compute.Operation) => {
+  const errors = (operation.error?.errors ?? [])
+    .map((error) => ({
+      code: error.code,
+      message: error.message,
+    }))
+    .filter(
+      (error) =>
+        (error.code !== undefined && error.code.length > 0) ||
+        (error.message !== undefined && error.message.length > 0),
+    );
+  if (errors.length > 0) return errors;
   const status = operation.httpErrorStatusCode;
-  if (
-    (errors.length === 0 && (status === undefined || status < 400)) ||
-    isNotFoundOp(errors)
-  ) {
+  if (status !== undefined && status >= 400) {
+    return [
+      {
+        code: String(status),
+        message: operationMessage(operation),
+      },
+    ];
+  }
+  return errors;
+};
+
+const failOp = (operation: compute.Operation, message?: string) =>
+  new NetworkOperationFailed({
+    operation: lastSegment(operation.name ?? operation.id),
+    errors: operationErrors(operation),
+    message: message ?? operationMessage(operation),
+  });
+
+const assertOperationOk = (operation: compute.Operation) => {
+  const errors = operationErrors(operation);
+  if (errors.length === 0 || isNotFoundOp(errors)) {
     return Effect.void;
   }
-  return Effect.fail(
-    new NetworkOperationFailed({
-      operation: operation.name ?? "",
-      errors: errors.map((error) => ({
-        code: error.code,
-        message: error.message,
-      })),
-    }),
-  );
+  return Effect.fail(failOp(operation));
 };
 
 const waitForGlobalOperation = (
@@ -342,39 +362,35 @@ const waitForGlobalOperation = (
   operation: compute.Operation,
 ) =>
   Effect.gen(function* () {
-    const name = operation.name;
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* assertOperationOk(operation);
-        return;
-      }
-      return yield* new NetworkOperationFailed({
-        operation: "",
-        errors: [{ message: "compute operation is missing a name" }],
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* assertOperationOk(operation);
-      return;
-    }
-    const waited = yield* waitGlobalOperations(
-      { project, operation: name },
-      { times: 20 },
-    ).pipe(
+    const waited = yield* waitGlobal(project, operation, { times: 30 }).pipe(
       Effect.catchTag("GCP.Compute.OperationPending", (error) =>
         Effect.fail(
-          new NetworkOperationFailed({
-            operation: name,
-            errors: [
-              {
-                message: `Timed out waiting for operation (status=${error.status})`,
-              },
-            ],
-          }),
+          failOp(
+            operation,
+            `Timed out waiting for operation (status=${error.status})`,
+          ),
         ),
       ),
     );
     yield* assertOperationOk(waited);
+  });
+
+const waitInsertedNetwork = (
+  project: string,
+  networkName: string,
+  operation: compute.Operation | undefined,
+) =>
+  Effect.gen(function* () {
+    if (operation === undefined) return;
+    yield* waitForGlobalOperation(project, operation).pipe(
+      Effect.catchTag("GCP.Compute.NetworkOperationFailed", (error) =>
+        getByName(project, networkName).pipe(
+          Effect.flatMap((network) =>
+            network !== undefined ? Effect.void : Effect.fail(error),
+          ),
+        ),
+      ),
+    );
   });
 
 const requireNetwork = (project: string, networkName: string) =>
@@ -521,15 +537,25 @@ export const NetworkProvider = () =>
         if (news.networkProfile !== undefined) {
           body.networkProfile = news.networkProfile;
         }
-        const inserted = yield* compute
+        yield* compute
           .insertNetworks({
             project: env.project,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (inserted !== undefined) {
-          yield* waitForGlobalOperation(env.project, inserted);
-        }
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.flatMap((inserted) =>
+              waitInsertedNetwork(env.project, networkName, inserted),
+            ),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "NotFound" ||
+                (error._tag === "GCP.Compute.NetworkOperationFailed" &&
+                  error.message.toLowerCase().includes("quota")),
+              times: 6,
+              schedule: Schedule.spaced("15 seconds"),
+            }),
+          );
         current = yield* requireNetwork(env.project, networkName);
       }
 

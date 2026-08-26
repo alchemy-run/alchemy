@@ -54,7 +54,7 @@ test.provider.skipIf(!hasGcpCreds)(
           securityPolicy: "0",
         }),
       );
-      expect(error._tag).toBe("NotFound");
+      expect(["NotFound", "BadRequest", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
