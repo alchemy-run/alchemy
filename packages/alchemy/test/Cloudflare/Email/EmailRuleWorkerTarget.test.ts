@@ -46,14 +46,17 @@ describe.sequential("Email.Rule -> Worker in one apply", () => {
   // resource whose `{ type: "worker", value: [scriptName] }` action names
   // it, both created in the same apply, into a stage that did not exist.
   //
-  // NOTE: this does NOT reproduce the #1348 failure on current main, and
-  // was confirmed to still pass with the provider's retry removed. The
-  // Worker provider pre-creates a stub script before the rule is created
-  // (see "pre-creating" in a deploy log), so by the time Cloudflare
-  // validates the action the name already resolves. The retry stays as
-  // defensive handling for paths where that stub is absent or slow — the
-  // error itself is real and typed (`WorkerScriptNotFound`, Cloudflare
-  // code 2016, observed live on both createRule and putRuleCatchAll).
+  // NOTE: this is a smoke test, NOT the regression guard for #1348. It was
+  // confirmed to still pass with the provider's retry removed — by us and
+  // independently by the reporter, who mutated the retry away and got three
+  // green runs. The Worker provider pre-creates a stub script before the
+  // rule is created (see "pre-creating" in a deploy log), so by the time
+  // Cloudflare validates the action the name already resolves.
+  //
+  // The retry itself is guarded deterministically in `retry.test.ts`, which
+  // injects the failure and does fail when the retry is removed. The error
+  // is real and typed (`WorkerScriptNotFound`, Cloudflare code 2016,
+  // observed live on both createRule and putRuleCatchAll).
   test.provider(
     "first deploy of a fresh stage creates the rule targeting the worker",
     (stack) =>
