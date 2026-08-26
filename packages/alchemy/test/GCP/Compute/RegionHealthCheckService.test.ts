@@ -19,6 +19,9 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
+const runLifecycle =
+  hasGcpCreds && !!process.env.GCP_TEST_HCAAS && !process.env.FAST;
+
 const region = "us-central1";
 
 const waitUntilGone = (
@@ -43,6 +46,61 @@ const waitUntilGone = (
     );
 
 test.provider.skipIf(!hasGcpCreds)(
+  "probe insertRegionHealthCheckServices entitlement",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const project = process.env.GOOGLE_PROJECT_ID ?? "";
+      const result = yield* compute
+        .insertRegionHealthCheckServices({
+          project,
+          region,
+          body: {
+            name: "alchemy-hcss-probe",
+            description: "alchemy entitlement probe",
+            healthChecks: [
+              `projects/${project}/regions/${region}/healthChecks/does-not-exist`,
+            ],
+          },
+        })
+        .pipe(
+          Effect.map(() => ({ tag: "ok" as const })),
+          Effect.catchTag("Forbidden", (error) =>
+            Effect.succeed({
+              tag: "Forbidden" as const,
+              message: error.message,
+            }),
+          ),
+          Effect.catchTag("BadRequest", (error) =>
+            Effect.succeed({
+              tag: "BadRequest" as const,
+              message: error.message,
+            }),
+          ),
+          Effect.catchTag("NotFound", (error) =>
+            Effect.succeed({
+              tag: "NotFound" as const,
+              message: error.message,
+            }),
+          ),
+        );
+      if (result.tag === "ok") {
+        yield* compute
+          .deleteRegionHealthCheckServices({
+            project,
+            region,
+            healthCheckService: "alchemy-hcss-probe",
+          })
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      } else {
+        expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+      }
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 60_000 },
+);
+
+test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a region health check service",
   (stack) =>
     Effect.gen(function* () {

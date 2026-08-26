@@ -80,7 +80,11 @@ test.provider.skipIf(!hasGcpCreds)(
             project,
             publicAdvertisedPrefix: "alchemy-pap-probe",
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          .pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+            Effect.catchTag("BadRequest", () => Effect.void),
+            Effect.catchTag("Forbidden", () => Effect.void),
+          );
       } else {
         expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
       }

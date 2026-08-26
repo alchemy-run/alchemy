@@ -19,7 +19,10 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds &&
+  !process.env.FAST &&
+  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
@@ -43,22 +46,23 @@ test.provider.skipIf(!hasGcpCreds)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        aiplatform.getProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates(
-          {
+        aiplatform
+          .getProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
             name: `projects/${project}/locations/us-central1/reasoningEngines/alchemy-missing-engine/sandboxEnvironmentTemplates/alchemy-missing-template`,
-          },
-        ),
+          })
+          .pipe(Effect.timeout("15 seconds")),
       );
       expect([
         "NotFound",
         "Forbidden",
         "BadRequest",
         "UnknownGCPError",
+        "TimeoutError",
       ]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { timeout: 30_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(

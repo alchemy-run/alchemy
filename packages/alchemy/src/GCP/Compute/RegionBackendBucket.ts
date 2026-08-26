@@ -63,7 +63,10 @@ export type RegionBackendBucketProps = {
    */
   customResponseHeaders?: string[];
   /**
-   * Load balancing scheme. Changing this replaces the resource.
+   * Load balancing scheme. Regional backend buckets require this field;
+   * Alchemy defaults it to `EXTERNAL_MANAGED`. Changing this replaces
+   * the resource.
+   * @default "EXTERNAL_MANAGED"
    */
   loadBalancingScheme?: "EXTERNAL_MANAGED" | "INTERNAL_MANAGED";
   /**
@@ -162,6 +165,8 @@ export class RegionBackendBucketOperationFailed extends Data.TaggedError(
   operation: string;
   message: string;
 }> {}
+
+const DEFAULT_LOAD_BALANCING_SCHEME = "EXTERNAL_MANAGED" as const;
 
 const sameList = (
   left: readonly string[] | undefined,
@@ -322,23 +327,38 @@ export const RegionBackendBucketProvider = () =>
       let current = yield* getByName(env.project, region, name);
 
       if (current === undefined) {
+        const insertBody: compute.BackendBucket = {
+          name,
+          bucketName: news.bucketName,
+          description: desiredDescription,
+          enableCdn,
+          loadBalancingScheme:
+            news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME,
+        };
+        if (
+          news.compressionMode !== undefined &&
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
+            "EXTERNAL_MANAGED"
+        ) {
+          insertBody.compressionMode = news.compressionMode;
+        }
+        if (
+          desiredHeaders.length > 0 &&
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
+            "EXTERNAL_MANAGED"
+        ) {
+          insertBody.customResponseHeaders = desiredHeaders;
+        }
+        if (news.cdnPolicy !== undefined) {
+          insertBody.cdnPolicy = news.cdnPolicy;
+        }
         yield* runRegionOp(
           env.project,
           region,
           compute.insertRegionBackendBuckets({
             project: env.project,
             region,
-            body: {
-              name,
-              bucketName: news.bucketName,
-              description: desiredDescription,
-              enableCdn,
-              compressionMode: news.compressionMode,
-              customResponseHeaders:
-                desiredHeaders.length > 0 ? desiredHeaders : undefined,
-              loadBalancingScheme: news.loadBalancingScheme,
-              cdnPolicy: news.cdnPolicy,
-            },
+            body: insertBody,
           }),
           (operation, message) => failOp(name, operation, message),
           { ignoreAlreadyExists: true },
@@ -376,6 +396,28 @@ export const RegionBackendBucketProvider = () =>
         headersChanged ||
         policyChanged
       ) {
+        const patchBody: compute.BackendBucket = {
+          bucketName: news.bucketName,
+          description: desiredDescription,
+          enableCdn,
+        };
+        if (
+          news.compressionMode !== undefined &&
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
+            "EXTERNAL_MANAGED"
+        ) {
+          patchBody.compressionMode = news.compressionMode;
+        }
+        if (
+          desiredHeaders.length > 0 &&
+          (news.loadBalancingScheme ?? DEFAULT_LOAD_BALANCING_SCHEME) !==
+            "EXTERNAL_MANAGED"
+        ) {
+          patchBody.customResponseHeaders = desiredHeaders;
+        }
+        if (news.cdnPolicy !== undefined) {
+          patchBody.cdnPolicy = news.cdnPolicy;
+        }
         yield* runRegionOp(
           env.project,
           region,
@@ -383,14 +425,7 @@ export const RegionBackendBucketProvider = () =>
             project: env.project,
             region,
             backendBucket: name,
-            body: {
-              bucketName: news.bucketName,
-              description: desiredDescription,
-              enableCdn,
-              compressionMode: news.compressionMode,
-              customResponseHeaders: desiredHeaders,
-              cdnPolicy: news.cdnPolicy,
-            },
+            body: patchBody,
           }),
           (operation, message) => failOp(name, operation, message),
         );

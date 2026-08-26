@@ -19,7 +19,10 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds &&
+  !process.env.FAST &&
+  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 

@@ -458,7 +458,11 @@ export const InstantSnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        const inserted = yield* compute
+        const tooRecent = (error: { _tag: string; message?: string }) =>
+          (error._tag === "GCP.Compute.InstantSnapshotOperationFailed" ||
+            error._tag === "BadRequest") &&
+          (error.message ?? "").toLowerCase().includes("too recent");
+        yield* compute
           .insertInstantSnapshots({
             project: env.project,
             zone,
@@ -469,12 +473,24 @@ export const InstantSnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (inserted !== undefined) {
-          yield* waitZoneOperation(env.project, zone, inserted).pipe(
-            Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.flatMap((inserted) =>
+              inserted === undefined
+                ? Effect.void
+                : waitZoneOperation(env.project, zone, inserted).pipe(
+                    Effect.catchTag(
+                      "GCP.Compute.OperationPending",
+                      () => Effect.void,
+                    ),
+                  ),
+            ),
+            Effect.retry({
+              while: tooRecent,
+              times: 2,
+              schedule: Schedule.spaced("30 seconds"),
+            }),
           );
-        }
         current = yield* waitReady(env.project, zone, instantSnapshotName);
       }
 

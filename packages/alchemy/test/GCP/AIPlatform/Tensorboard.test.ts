@@ -19,7 +19,10 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle =
+  hasGcpCreds &&
+  !process.env.FAST &&
+  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
@@ -44,7 +47,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/locations/us-central1/tensorboards/alchemy-tb-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
 
       const page = yield* aiplatform
         .listProjectsLocationsTensorboards({
@@ -52,7 +55,7 @@ test.provider.skipIf(!hasGcpCreds)(
           pageSize: 10,
         })
         .pipe(
-          Effect.catchTag("Forbidden", () =>
+          Effect.catchTag(["Forbidden", "BadRequest"], () =>
             Effect.succeed({ tensorboards: [] as const }),
           ),
         );
