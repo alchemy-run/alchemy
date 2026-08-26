@@ -27,9 +27,7 @@ const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const waitUntilGone = (name: string) =>
   secretmanager.getProjectsLocationsSecrets({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "BadRequest"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

@@ -47,7 +47,7 @@ test.provider.skipIf(!hasGcpCreds)(
           name: `projects/${project}/locations/us-central1/tensorboards/alchemy-tb-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(["NotFound", "Forbidden"]).toContain(error._tag);
 
       const page = yield* aiplatform
         .listProjectsLocationsTensorboards({
@@ -55,7 +55,7 @@ test.provider.skipIf(!hasGcpCreds)(
           pageSize: 10,
         })
         .pipe(
-          Effect.catchTag(["Forbidden", "BadRequest"], () =>
+          Effect.catchTag(["Forbidden"], () =>
             Effect.succeed({ tensorboards: [] as const }),
           ),
         );

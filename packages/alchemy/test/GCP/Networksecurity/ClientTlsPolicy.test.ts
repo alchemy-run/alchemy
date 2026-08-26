@@ -22,7 +22,7 @@ const hasGcpCreds = !!(
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsClientTlsPolicies({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
+    Effect.catchTag(["NotFound", "Forbidden"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({

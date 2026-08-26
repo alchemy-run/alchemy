@@ -171,7 +171,7 @@ const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesBackupSchedules({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
+      Effect.catchTag(["NotFound", "Forbidden"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -179,7 +179,7 @@ const getByName = (name: string) =>
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesBackupSchedules({ parent }).pipe(
     Effect.map((page) => page.backupSchedules ?? []),
-    Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
+    Effect.catchTag(["NotFound", "Forbidden"], () =>
       Effect.succeed([] as firestore.GoogleFirestoreAdminV1BackupSchedule[]),
     ),
   );
@@ -301,18 +301,7 @@ export const DatabasesBackupScheduleProvider = () =>
                 weeklyDay !== undefined ? { day: weeklyDay } : undefined,
             },
           })
-          .pipe(
-            Effect.retry({
-              while: (error) =>
-                error._tag === "BadRequest" &&
-                (error.message ?? "").toLowerCase().includes("must exist"),
-              times: 8,
-              schedule: Schedule.spaced("3 seconds"),
-            }),
-            Effect.catchTag(["Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created?.name !== undefined) {
           current = created;
         } else {
