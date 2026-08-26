@@ -23,6 +23,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { listOwnedProjects, type Project } from "./Project.ts";
+import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -424,9 +425,9 @@ const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
+  while: isRailwayTransient,
+  schedule: Schedule.spaced("15 seconds"),
+  times: 10 as const,
 };
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
@@ -549,8 +550,10 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
+    RailwayRetry.none,
+    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -734,7 +737,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.MySQLDeployPending",
-      times: 10,
+      times: 36,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.MySQLDeployPending", () =>
@@ -1114,7 +1117,7 @@ export const MySQLProvider = () =>
           .pipe(
             RailwayRetry.none,
             Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
+              while: isRailwayTransient,
               schedule: Schedule.spaced("30 seconds"),
               times: 1,
             }),

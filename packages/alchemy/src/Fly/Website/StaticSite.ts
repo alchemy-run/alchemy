@@ -15,11 +15,9 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { App } from "../App.ts";
-import { Bucket } from "../Bucket.ts";
 import { Certificate } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
 import { Service } from "../Service.ts";
-import { AssetDeployment } from "./AssetDeployment.ts";
 import {
   type FrameworkSite,
   type Ref,
@@ -246,15 +244,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       type: "shared_v4",
     }).pipe(Namespace.push(id));
 
-    const bucket = yield* Bucket("Assets", { public: true }).pipe(
-      Namespace.push(id),
-    );
-    yield* AssetDeployment("Files", {
-      bucket,
-      sourcePath: outdir,
-      purge: true,
-    }).pipe(Namespace.push(id));
-
+    // Serve the built tree from the Machine. Fly Tigris `statics` on
+    // `urlPrefix: "/"` do not rewrite HTML routes and hang GET `/`.
+    // Hashed `/assets` still go to Tigris on FrameworkSite.
     const service = yield* Service(id, {
       app,
       main,
@@ -266,14 +258,6 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         {
           source: outdir,
           dest: path.basename(outdir),
-        },
-      ],
-      statics: [
-        {
-          guestPath: "/",
-          urlPrefix: "/",
-          tigrisBucket: bucket.name as unknown as string,
-          ...(internal.spa === true ? { indexDocument: "index.html" } : {}),
         },
       ],
     });

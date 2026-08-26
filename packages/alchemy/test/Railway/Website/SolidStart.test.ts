@@ -79,8 +79,12 @@ test.provider(
       expect(deployed.site.service).toBeDefined();
       expect(deployed.site.project).toBeDefined();
 
-      yield* expectUrlContains(`${url!}/`, "SOLIDSTART_AWS_PAGE_MARKER", {
+      yield* expectUrlContains(`${url!}/health`, "ok", {
         timeout: "60 seconds",
+        label: "health",
+      });
+      yield* expectUrlContains(`${url!}/`, "SOLIDSTART_AWS_PAGE_MARKER", {
+        timeout: "180 seconds",
         label: "home page",
       });
       yield* expectUrlContains(
@@ -97,5 +101,5 @@ test.provider(
       const gone = yield* waitUntilGone(serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 720_000, exclusive: true },
 );

@@ -25,6 +25,7 @@ import { Resource } from "../Resource.ts";
 import { RailwayEnvironment } from "./Environment.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { createProject, listOwnedProjects } from "./Project.ts";
+import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -506,7 +507,7 @@ const normalizeConfig = (config: unknown): unknown => {
 };
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
+  while: isRailwayTransient,
   schedule: Schedule.spaced("31 seconds"),
   times: 8 as const,
 };

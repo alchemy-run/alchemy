@@ -18,7 +18,7 @@ export interface NextjsProps extends FrameworkSiteProps {}
  *
  * The `.next` output (and `public/` when present) is packed into the
  * unit archive. `next`, `react`, and `react-dom` are installed on the
- * unit with `bun install` rather than bundled.
+ * unit with `npm install` rather than bundled.
  *
  * During `alchemy dev` the site is `next dev` and no cloud resources
  * are declared; `Alchemy.remote()` opts back into the live Service.

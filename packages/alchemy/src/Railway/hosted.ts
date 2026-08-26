@@ -43,7 +43,9 @@ export type RailwayHostRuntimeContext = HostRuntimeContext;
 
 /**
  * Container host. RPC wrapping lives in `Service.ts` so canvas Functions
- * do not pay for `rpc-server.ts` in the 96KB start command.
+ * do not pay for `rpc-server.ts` in the 96KB start command. The generated
+ * Service entry is a shim that imports `alchemy/Runtime/Bootstrap/Railway`
+ * (Node HTTP) plus the user's `main` — see that module for why.
  */
 export const createRailwayHostRuntimeContext = createContainerRuntimeContext;
 
@@ -93,13 +95,13 @@ export const createRailwayFunctionRuntimeContext =
     } as HostRuntimeContext;
   };
 
-export const DEFAULT_BASE_IMAGE = "oven/bun:1";
+export const DEFAULT_BASE_IMAGE = "node:26-slim";
 export const DEFAULT_PORT = 3000;
 
 export interface RailwayBuildOptions extends Bundle.BundleConfig {
   /**
    * Native or Node-only packages to install into the image with
-   * `bun install` instead of bundling them. `pg` is CommonJS: Rolldown's
+   * `npm install` instead of bundling them. `pg` is CommonJS: Rolldown's
    * interop turns `Client` into a namespace (`The superclass is not a
    * constructor`). Same `build.install` shape as Lambda / Fly.
    *
@@ -131,7 +133,7 @@ export interface HostedProgramProps {
    * Dockerfile `FROM` for the Effect-native image. Ignored for the
    * public-image path (`props.image` without `main`).
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim"
    */
   image?: string;
   env?: Record<string, any>;
@@ -193,6 +195,11 @@ const copyDirectory = (
     yield* fs.makeDirectory(to, { recursive: true });
     const entries = yield* fs.readDirectory(from);
     for (const entry of entries) {
+      // Keep nested `node_modules`: nitro's node preset emits runtime
+      // deps there (`solid-js`, `seroval`, …) and the container imports them.
+      if (entry === ".git" || entry === ".alchemy") {
+        continue;
+      }
       const source = path.join(from, entry);
       const target = path.join(to, entry);
       const stat = yield* fs.stat(source);
@@ -276,73 +283,21 @@ const copyExtraFiles = Effect.fn(function* (
   }
 });
 
-const makeBunBootstrap =
+/**
+ * The generated entry for `Railway.Service` containers: a shim importing
+ * only `alchemy/Runtime/Bootstrap/Railway` plus the user's `main` — see
+ * that module for why the entry never imports alchemy's own dependencies.
+ */
+const makeNodeBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Railway";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 
-const tag = Context.Service(${JSON.stringify(Self.key)});
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-const program = tag.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Railway service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Railway service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `;
 
 /**
@@ -563,6 +518,8 @@ const wrapCanvasListener = (
       ...extraPins,
     ].join("\n");
     return `${pins}
+import { setDefaultResultOrder } from "node:dns";
+setDefaultResultOrder("ipv4first");
 const g=globalThis,port=Number(process.env.PORT??3000);
 g.__ALCHEMY_FUNCTION_FETCH__??=async()=>new Response("");
 Bun.serve({hostname:"0.0.0.0",port,fetch:r=>g.__ALCHEMY_FUNCTION_FETCH__(r)});
@@ -661,7 +618,7 @@ const createBundleProgram = (
     const handler = props.handler ?? "default";
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
-    const bootstrap = (options?.bootstrap ?? makeBunBootstrap)(handler);
+    const bootstrap = (options?.bootstrap ?? makeNodeBootstrap)(handler);
     const requested = yield* normalizeInstallTargets(props.build?.install);
     const installRoots = new Set(Object.keys(requested));
     const configuredExternal = props.build?.input?.external;
@@ -694,7 +651,9 @@ const createBundleProgram = (
             );
           },
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: canvasExternals
+              ? ["bun", "import", "module", "default"]
+              : [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [
@@ -764,6 +723,7 @@ export const createRailwayFunctionSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = createBundleProgram(virtualEntryPlugin, {
@@ -810,7 +770,7 @@ const generateDockerfile = (
   if (install !== undefined && Object.keys(install).length > 0) {
     lines.push(
       `COPY package.json /app/package.json`,
-      `RUN bun install --production`,
+      `RUN npm install --omit=dev --no-fund --no-audit`,
     );
   }
   if (props.isExternal === true) {
@@ -821,8 +781,9 @@ const generateDockerfile = (
         : "serve-node.mjs";
     lines.push(
       `ENV PORT=${String(port)}`,
+      `ENV HOST=0.0.0.0`,
       `EXPOSE ${String(port)}`,
-      `ENTRYPOINT ["bun", ${JSON.stringify(`/app/${entry}`)}]`,
+      `ENTRYPOINT ["node", ${JSON.stringify(`/app/${entry}`)}]`,
     );
     return `${lines.join("\n")}\n`;
   }
@@ -833,8 +794,9 @@ const generateDockerfile = (
   lines.push(...dockerfileCopyLines(props.extraFiles));
   lines.push(
     `ENV PORT=${String(port)}`,
+    `ENV HOST=0.0.0.0`,
     `EXPOSE ${String(port)}`,
-    `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+    `ENTRYPOINT ["node", "/app/index.mjs"]`,
   );
   return `${lines.join("\n")}\n`;
 };
@@ -863,6 +825,7 @@ export const createRailwayHostedSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = createBundleProgram(virtualEntryPlugin);
@@ -905,6 +868,7 @@ export const createRailwayHostedSupport = ({
       bundleHash: bundled.hash,
       dockerfile,
       packageJson,
+      extraFilesIncludesNodeModules: true,
       ...(extraFilesHash !== undefined ? { extraFilesHash } : {}),
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash, packageJson };

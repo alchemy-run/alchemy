@@ -22,6 +22,7 @@ import {
   sanitizeRailwayName,
 } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
+import { isRailwayTransient } from "./transient.ts";
 
 export interface ProjectProps {
   /**
@@ -240,7 +241,7 @@ export const createProject = (input: {
       .pipe(
         RailwayRetry.none,
         Effect.retry({
-          while: (e) => e._tag === "RailwayRateLimited",
+          while: isRailwayTransient,
           schedule: Schedule.spaced("31 seconds"),
           times: 8,
         }),

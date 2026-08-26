@@ -18,6 +18,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { listOwnedProjects, type Project } from "./Project.ts";
+import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -361,9 +362,9 @@ const alreadyExists = (message: string) =>
   /already exists|already in use|duplicate/i.test(message);
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
+  while: isRailwayTransient,
+  schedule: Schedule.spaced("15 seconds"),
+  times: 10 as const,
 };
 
 const getById = (serviceId: string) =>
@@ -376,8 +377,10 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
+    RailwayRetry.none,
+    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -439,7 +442,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisDeployPending",
-      times: 10,
+      times: 36,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.RedisDeployPending", () =>

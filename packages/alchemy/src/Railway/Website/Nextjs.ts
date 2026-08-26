@@ -21,7 +21,7 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * `next({ dev: false }).prepare()` + `getRequestHandler()` on `PORT`
  * (default 3000). **Not** OpenNext — those wrappers are Lambda/workerd.
  *
- * The image `bun install`s `next`, `react`, and `react-dom`, and bakes
+ * The image `npm install`s `next`, `react`, and `react-dom`, and bakes
  * `.next` plus `public/` into `/app`.
  *
  * During `alchemy dev` the site is Next's own dev server (`next dev`) and

@@ -62,7 +62,7 @@ test.provider(
       expect(deployed.site.app).toBeDefined();
 
       yield* expectUrlContains(`${url!}/`, "StaticSite fixture v1", {
-        timeout: "90 seconds",
+        timeout: "180 seconds",
         label: "staticsite index",
       });
 
@@ -71,5 +71,5 @@ test.provider(
       const gone = yield* waitUntilGone(appName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 360_000 },
 );

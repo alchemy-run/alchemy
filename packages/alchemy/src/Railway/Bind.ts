@@ -47,6 +47,19 @@ const resolveTarget = <Shape, Req>(
     ? (targetEff as Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>)
     : Effect.succeed(targetEff as RpcTarget & Rpc<Shape>);
 
+/** Logical id without yielding the Resource (runtime has no engine). */
+const logicalIdOf = (target: unknown): string => {
+  if (target !== null && typeof target === "object" && "LogicalId" in target) {
+    const id = (target as { LogicalId?: unknown }).LogicalId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  if (typeof target === "function") {
+    const named = (target as { name?: unknown }).name;
+    if (typeof named === "string" && named.length > 0) return named;
+  }
+  return "";
+};
+
 const makeStub = <Shape>(options: {
   readonly baseUrl: string;
   readonly token: string;
@@ -59,10 +72,10 @@ const makeStub = <Shape>(options: {
         if (typeof prop !== "string") return undefined;
         return (...args: unknown[]) =>
           Effect.gen(function* () {
-            if (token.length === 0) {
+            if (!baseUrl || !token) {
               return yield* new RpcCallError({
                 method: prop,
-                cause: "missing Railway RPC token",
+                cause: !baseUrl ? "missing host" : "missing token",
               });
             }
             const response = yield* Effect.tryPromise({
@@ -76,6 +89,7 @@ const makeStub = <Shape>(options: {
                       [RPC_TOKEN_HEADER]: token,
                     },
                     body: JSON.stringify(args),
+                    signal: AbortSignal.timeout(25_000),
                   },
                 ),
               catch: (cause) => new RpcCallError({ method: prop, cause }),
@@ -108,9 +122,9 @@ const bindRpc = <Shape, Req = never>(
     | Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>,
 ): Effect.Effect<Shape, never, Req> =>
   Effect.gen(function* () {
-    const target = yield* resolveTarget(targetEff);
-    const keys = rpcEnvKeys(target.LogicalId);
     if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const target = yield* resolveTarget(targetEff);
+      const keys = rpcEnvKeys(target.LogicalId);
       const host = yield* Binding.Host;
       if (isRailwayHost(host)) {
         yield* host.bind`${target}`({
@@ -123,13 +137,14 @@ const bindRpc = <Shape, Req = never>(
       }
     }
 
+    const keys = rpcEnvKeys(logicalIdOf(targetEff));
     const hostName = fromProcessEnv(keys.host);
     const port = fromProcessEnv(keys.port);
     const token = fromProcessEnv(keys.token);
     const baseUrl =
       hostName.length > 0
         ? `http://${hostName}:${port.length > 0 ? port : String(DEFAULT_RPC_PORT)}`
-        : "http://127.0.0.1";
+        : "";
 
     return makeStub<Shape>({ baseUrl, token });
   });

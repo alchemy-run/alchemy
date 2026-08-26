@@ -7,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { isRailwayTransient } from "../transient.ts";
 
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
@@ -134,7 +135,9 @@ export const CdnProvider = () =>
       const config = { caching: cachingInput(news) };
       const retryTransient = {
         while: (e: { _tag: string }) =>
-          e._tag === "RailwayInternalError" || e._tag === "TimeoutError",
+          e._tag === "RailwayInternalError" ||
+          e._tag === "TimeoutError" ||
+          isRailwayTransient(e),
         times: 2 as const,
         schedule: Schedule.spaced("1 second"),
       };

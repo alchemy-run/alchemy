@@ -105,8 +105,9 @@ describe("makeNodeServeEntrySource", () => {
     });
     expect(source).toContain("http.createServer(async (req, res) => {");
     expect(source).toContain("endedGet(req)");
-    expect(source).toContain('delete req.headers["content-length"]');
-    expect(source).toContain("req.resume()");
+    expect(source).toContain('delete headers["content-length"]');
+    expect(source).toContain("new http.IncomingMessage(req.socket)");
+    expect(source).toContain("fake.push(null)");
     expect(source).not.toContain("void (async () => {");
     expect(source).not.toContain("fetchFromNode");
     expect(source).not.toContain("PassThrough");

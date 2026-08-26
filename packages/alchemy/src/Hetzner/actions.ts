@@ -63,9 +63,8 @@ const backoff = Schedule.min([
 /**
  * Poll a Hetzner Action until it reaches `success` or `error`.
  *
- * Bounded: at most 10 polls, exponential backoff starting at 500ms and
- * capped at 5s (under 60s total). Already-finished actions return
- * immediately.
+ * Bounded: at most 24 polls, exponential backoff starting at 500ms and
+ * capped at 5s. Already-finished actions return immediately.
  */
 export const waitForAction = (
   ref: ActionRef,
@@ -98,11 +97,8 @@ export const waitForAction = (
       ),
       Effect.retry({
         while: retryable,
-        times: 10,
-        schedule: Schedule.min([
-          Schedule.exponential(Duration.millis(500), 1.5),
-          Schedule.spaced(Duration.seconds(5)),
-        ]),
+        times: 24,
+        schedule: backoff,
       }),
       Effect.catchTag(
         "ActionPending",
@@ -166,11 +162,8 @@ export const waitForZoneAction = (
       ),
       Effect.retry({
         while: retryable,
-        times: 10,
-        schedule: Schedule.min([
-          Schedule.exponential(Duration.millis(500), 1.5),
-          Schedule.spaced(Duration.seconds(5)),
-        ]),
+        times: 24,
+        schedule: backoff,
       }),
       Effect.catchTag(
         "ActionPending",

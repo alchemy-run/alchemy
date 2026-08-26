@@ -47,7 +47,7 @@ export const createHetznerHostRuntimeContext = createHostRuntimeContext;
 
 export interface HetznerBuildOptions extends Bundle.BundleConfig {
   /**
-   * Native or Node-only packages to `bun install` into the unit instead
+   * Native or Node-only packages to `npm install` into the unit instead
    * of bundling them. Same shape as Fly/Lambda `build.install`.
    */
   readonly install?: PackageInstall;
@@ -264,6 +264,7 @@ export const createHetznerHostedSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = Effect.fn(function* (
@@ -301,7 +302,7 @@ export const createHetznerHostedSupport = ({
             );
           },
           resolve: {
-            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+            conditionNames: [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -312,7 +313,7 @@ export const createHetznerHostedSupport = ({
           sourcemap: props.build?.output?.sourcemap ?? false,
           minify: props.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
-          // Match Fly: nitro/vue hang on bun without preserved init order.
+          // Preserve init order for framework SSR bundles.
           strictExecutionOrder: true,
           keepNames: true,
         },
@@ -349,9 +350,9 @@ export const createHetznerHostedSupport = ({
           ]
         : [];
 
-    // `isExternal` mains are already complete bun/node programs. Pack the
+    // `isExternal` mains are already complete Node programs. Pack the
     // dist tree as-built so relative imports (`../client`, nitro chunks)
-    // survive. Do not rolldown-flatten — that hangs Vue SSR on bun.
+    // survive. Do not rolldown-flatten.
     if (props.isExternal) {
       const fs = yield* FileSystem.FileSystem;
       const pathMod = yield* Path.Path;
@@ -422,7 +423,8 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${appDir}
 EnvironmentFile=-${appDir}/env
-ExecStart=/root/.bun/bin/bun --no-install ${appDir}/${entryRel}
+Environment=HOST=0.0.0.0
+ExecStart=/usr/bin/env node ${appDir}/${entryRel}
 Restart=always
 RestartSec=5
 
@@ -577,21 +579,19 @@ WantedBy=multi-user.target
       [
         `set -uo pipefail`,
         `export HOME=/root`,
-        `export BUN_INSTALL=/root/.bun`,
-        `export PATH="/root/.bun/bin:$PATH"`,
         `mkdir -p ${JSON.stringify(appDir)}`,
-        `if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then`,
+        `if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1 || ! command -v ca-certificates >/dev/null 2>&1; then`,
         `  apt-get update`,
         `  DEBIAN_FRONTEND=noninteractive apt-get install -y curl unzip ca-certificates`,
         `fi`,
-        `if [ ! -x /root/.bun/bin/bun ]; then`,
+        `if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(Number(process.versions.node.split(".")[0])<26)'; then`,
         `  for attempt in 1 2 3 4 5; do`,
-        `    curl -fsSL https://bun.sh/install | bash && break`,
+        `    curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs && break`,
         `    sleep 5`,
         `  done`,
         `fi`,
-        `if [ ! -x /root/.bun/bin/bun ]; then`,
-        `  echo "bun install failed" >&2`,
+        `if ! command -v node >/dev/null 2>&1; then`,
+        `  echo "node install failed" >&2`,
         `  exit 1`,
         `fi`,
       ].join("\n"),
@@ -611,12 +611,10 @@ WantedBy=multi-user.target
       [
         `set -euo pipefail`,
         `export HOME=/root`,
-        `export BUN_INSTALL=/root/.bun`,
-        `export PATH="/root/.bun/bin:$PATH"`,
-        `if [ ! -x /root/.bun/bin/bun ]; then echo "bun missing at start" >&2; exit 1; fi`,
+        `if ! command -v node >/dev/null 2>&1; then echo "node missing at start" >&2; exit 1; fi`,
         `unzip -o ${JSON.stringify(`${appDir}/bundle.zip`)} -d ${JSON.stringify(appDir)}`,
         `if [ -f ${JSON.stringify(`${appDir}/package.json`)} ]; then`,
-        `  (cd ${JSON.stringify(appDir)} && /root/.bun/bin/bun install --production)`,
+        `  (cd ${JSON.stringify(appDir)} && npm install --omit=dev --no-fund --no-audit)`,
         `fi`,
         `systemctl daemon-reload`,
         `systemctl enable --now ${input.unitName}.service`,

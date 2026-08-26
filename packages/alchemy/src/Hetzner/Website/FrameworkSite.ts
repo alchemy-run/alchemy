@@ -185,7 +185,7 @@ export interface FrameworkSiteConfig {
    */
   skipClientAssets?: boolean | undefined;
   /**
-   * Native packages to `bun install` into the unit instead of bundling
+   * Native packages to `npm install` into the unit instead of bundling
    * (Next.js needs `next` / `react` / `react-dom`).
    */
   install?: string[] | undefined;

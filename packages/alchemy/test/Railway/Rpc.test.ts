@@ -35,7 +35,7 @@ const getText = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     return yield* client.get(url).pipe(
-      Effect.timeout("10 seconds"),
+      Effect.timeout("15 seconds"),
       Effect.flatMap((res) =>
         res.status === 200
           ? res.text
@@ -47,7 +47,7 @@ const getText = (url: string) =>
       ),
       Effect.retry({
         schedule: Schedule.spaced("4 seconds"),
-        times: 10,
+        times: 20,
       }),
     );
   });
@@ -101,7 +101,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 480_000, exclusive: true },
 );
 
 test.provider(
@@ -121,11 +121,23 @@ test.provider(
       expect(created.query.url).toEqual(expect.any(String));
       expect(created.api.url).toEqual(expect.any(String));
 
-      const fromFunction = yield* getText(created.query.url!);
-      expect(fromFunction).toEqual("pong");
+      yield* Effect.log(
+        `tagged rpc urls query=${created.query.url} api=${created.api.url}`,
+      );
 
+      // Probe the Service origin first (Docker). The Function canvas
+      // used to hang GET `/` while this side was already serving.
       const fromService = yield* getText(created.api.url!);
-      expect(fromService).toEqual("hello sam");
+      expect(fromService).toEqual("api");
+
+      const fromFunction = yield* getText(created.query.url!);
+      expect(fromFunction).toEqual("query");
+
+      const viaFunction = yield* getText(`${created.query.url}/pong`);
+      expect(viaFunction).toEqual("pong");
+
+      const viaService = yield* getText(`${created.api.url}/hello`);
+      expect(viaService).toEqual("hello sam");
 
       const client = yield* HttpClient.HttpClient;
       const functionRpc = yield* client.execute(
@@ -151,5 +163,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 720_000, exclusive: true },
 );

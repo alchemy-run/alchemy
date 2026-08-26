@@ -452,7 +452,23 @@ export const make = (
               },
               catch: fail("Failed to start the vocs dev server"),
             }),
-            (server) => Effect.promise(async () => await server.close()),
+            (server) =>
+              Effect.promise(async () => {
+                try {
+                  (
+                    server.httpServer as
+                      | { closeAllConnections?: () => void }
+                      | null
+                      | undefined
+                  )?.closeAllConnections?.();
+                  await server.close();
+                } catch {
+                  // teardown is best-effort
+                }
+              }).pipe(
+                Effect.timeout("3 seconds"),
+                Effect.orElseSucceed(() => undefined),
+              ),
           );
           const url = server.resolvedUrls?.local[0];
           if (url === undefined) {

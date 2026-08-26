@@ -79,11 +79,12 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = hasHetznerCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000 })
+  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: true })
   : null;
 
 afterAll.skipIf(!hasHetznerCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
+  exclusive: true,
 });
 
 test.skipIf(!hasHetznerCreds)(
@@ -187,5 +188,5 @@ test.skipIf(!hasHetznerCreds)(
     expect(body.path).toEqual(VOLUME_PATH);
     expect(body.text).toEqual(MARKER);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );

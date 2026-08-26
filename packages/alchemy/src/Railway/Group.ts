@@ -17,6 +17,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { listOwnedProjects, type Project } from "./Project.ts";
+import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -513,9 +514,9 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
+  while: isRailwayTransient,
+  schedule: Schedule.spaced("15 seconds"),
+  times: 10 as const,
 };
 
 const getProject = (projectId: string) =>

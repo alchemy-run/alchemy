@@ -323,9 +323,10 @@ const writeResponse = async (res, response) => {
 `
     : "";
 
-  // Bun's node:http IncomingMessage often never emits "end" for GET.
-  // Strip length/chunked so h3 does not wait on a body, and resume the
-  // stream so "end" still fires for consumers that listen.
+  // Bun's node:http IncomingMessage often never emits "end" for GET, so
+  // h3/nitro waits forever. A plain Readable.from([]) is not an
+  // IncomingMessage; h3 still hangs. Construct a real IncomingMessage
+  // that is already complete.
   const nodeHelpers =
     handler === undefined || handlerIsFetch
       ? ""
@@ -333,10 +334,19 @@ const writeResponse = async (res, response) => {
 const endedGet = (req) => {
   const method = (req.method ?? "GET").toUpperCase();
   if (method !== "GET" && method !== "HEAD") return req;
-  delete req.headers["content-length"];
-  delete req.headers["transfer-encoding"];
-  if (typeof req.resume === "function") req.resume();
-  return req;
+  const headers = { ...req.headers };
+  delete headers["content-length"];
+  delete headers["transfer-encoding"];
+  const fake = new http.IncomingMessage(req.socket);
+  fake.method = req.method;
+  fake.url = req.url;
+  fake.headers = headers;
+  fake.httpVersion = req.httpVersion ?? "1.1";
+  fake.httpVersionMajor = req.httpVersionMajor ?? 1;
+  fake.httpVersionMinor = req.httpVersionMinor ?? 1;
+  fake.complete = true;
+  fake.push(null);
+  return fake;
 };
 `;
 
@@ -355,7 +365,7 @@ const endedGet = (req) => {
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
-${handlerIsFetch ? `import { Readable } from "node:stream";\n` : ""}import { fileURLToPath } from "node:url";
+${handler !== undefined ? `import { Readable } from "node:stream";\n` : ""}import { fileURLToPath } from "node:url";
 ${handler?.imports ?? ""}
 
 const PORT = Number.parseInt(process.env.PORT ?? "${String(port)}", 10);

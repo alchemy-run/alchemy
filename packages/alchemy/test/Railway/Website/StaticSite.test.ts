@@ -91,5 +91,5 @@ test.provider(
       const gone = yield* waitUntilGone(serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 240_000, exclusive: true },
 );

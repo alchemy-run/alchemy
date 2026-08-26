@@ -1,7 +1,10 @@
 /**
- * Process bootstrap for `Fly.Service` and `Fly.Sprite` (a Node process
- * serving the bundled program). The generated entry imports this module
- * and the user's `main`, nothing else — see {@link ./Process.ts} for why.
+ * Process bootstrap for `Railway.Service` (a Node process serving the
+ * bundled program). The generated entry imports this module and the user's
+ * `main`, nothing else — see {@link ./Process.ts} for why.
+ *
+ * Railway canvas Functions stay on bun (`functionRuntime(bun)` + the
+ * inline canvas wrapper). This module is the Docker/Service path only.
  */
 import { setDefaultResultOrder } from "node:dns";
 import { NodeServices } from "@effect/platform-node";
@@ -51,5 +54,5 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Effect.scoped,
   );
 
-  return runProcess("Fly service", program);
+  return runProcess("Railway service", program);
 };

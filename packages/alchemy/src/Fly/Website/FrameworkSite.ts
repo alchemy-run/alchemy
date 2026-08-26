@@ -176,7 +176,7 @@ export interface FrameworkSiteConfig {
    */
   htmlHandling?: "none" | "drop-trailing-slash";
   /**
-   * Packages installed into the Machine image with `bun install` instead
+   * Packages installed into the Machine image with `npm install` instead
    * of bundling (Next.js needs `next`).
    */
   install?: string[] | undefined;
@@ -505,6 +505,8 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     app,
     main,
     port: DEFAULT_PORT,
+    // Node + nitro SSR needs more than the Machine default 256MB.
+    guest: { memoryMb: 512 },
     isExternal: true,
     env: props.env,
     extraFiles: extraFiles.length > 0 ? extraFiles : undefined,

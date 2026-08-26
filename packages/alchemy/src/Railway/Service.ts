@@ -64,7 +64,7 @@ export interface ServiceProps extends PlatformProps {
    *
    * When `main` is omitted this is `source.image` (e.g.
    * `hashicorp/http-echo`). When `main` is set this is the generated
-   * Dockerfile's `FROM` (default `oven/bun:1`).
+   * Dockerfile's `FROM` (default `node:26-slim`).
    */
   image?: string;
   /**
@@ -324,7 +324,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * ### Effect-native Service
  * A Service is a class. `main: import.meta.url` is the bundle
  * entrypoint. Alchemy bundles this file with Rolldown, generates a
- * Dockerfile (`FROM oven/bun:1`), and uploads the context. Railway
+ * Dockerfile (`FROM node:26-slim`), and uploads the context. Railway
  * builds the image. `build.install: ["pg"]` ships `pg` unbundled.
  *
  * **Example:** Class + Project + main

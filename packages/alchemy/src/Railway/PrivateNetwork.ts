@@ -23,6 +23,7 @@ import {
   sanitizeRailwayName,
 } from "./Metadata.ts";
 import { listOwnedProjects } from "./Project.ts";
+import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -34,7 +35,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 const ALCHEMY_TAG = "alchemy";
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
+  while: isRailwayTransient,
   times: 1,
   schedule: Schedule.spaced("30 seconds"),
 } as const;

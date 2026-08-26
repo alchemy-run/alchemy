@@ -4,6 +4,7 @@ import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { isRailwayTransient } from "./transient.ts";
 
 /**
  * A Railway-generated `*.up.railway.app` hostname on a Service. Created
@@ -94,9 +95,9 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
       .pipe(
         RailwayRetry.none,
         Effect.retry({
-          while: (e) => e._tag === "RailwayRateLimited",
-          schedule: Schedule.spaced("2 seconds"),
-          times: 3,
+          while: isRailwayTransient,
+          schedule: Schedule.spaced("15 seconds"),
+          times: 10,
         }),
         Effect.catchTag("RailwayValidationError", (e) =>
           alreadyExists(e.message) ? Effect.void : Effect.fail(e),
@@ -133,9 +134,9 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
       .pipe(
         RailwayRetry.none,
         Effect.retry({
-          while: (e) => e._tag === "RailwayRateLimited",
-          schedule: Schedule.spaced("2 seconds"),
-          times: 3,
+          while: isRailwayTransient,
+          schedule: Schedule.spaced("15 seconds"),
+          times: 10,
         }),
       );
     current =

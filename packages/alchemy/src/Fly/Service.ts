@@ -125,9 +125,10 @@ export interface ServiceProps extends PlatformProps {
   build?: FlyBuildOptions;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must
-   * be able to run the bun runtime.
+   * be able to run Node (websites and Effect-native Services use Node
+   * in production).
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim"
    */
   image?: string;
   /**
@@ -229,7 +230,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * `app` is the parent {@link App}. Pass the declaration directly,
  * yielded or module-scope. `main: import.meta.url` is the bundle
  * entrypoint. Alchemy bundles this file with Rolldown, builds a
- * Docker image (default `oven/bun:1`), and pushes it to
+ * Docker image (default `node:26-slim`), and pushes it to
  * `registry.fly.io/{app}:{id}-{hash}`.
  *
  * **Example:** Class + App + main
@@ -519,8 +520,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * ### Base image
  * `image` is the generated Dockerfile's `FROM`. Default is
- * `oven/bun:1`. It must still run bun. A content-hash change of
- * `main` updates the Machine in place.
+ * `node:26-slim`. A content-hash change of `main` updates the
+ * Machine in place.
  *
  * **Example:** Override FROM
  * ```typescript
@@ -529,7 +530,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   {
  *     app: Site,
  *     main: import.meta.url,
- *     image: "oven/bun:1.2",
+ *     image: "node:26",
  *     port: 3000,
  *   },
  *   Effect.gen(function* () {

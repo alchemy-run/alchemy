@@ -51,6 +51,7 @@ import {
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
+import { isRailwayTransient } from "./transient.ts";
 
 export { FunctionBundleNotSingleFile } from "./hosted.ts";
 
@@ -597,9 +598,9 @@ const alreadyExists = (message: string) =>
   /already exists|already in use|duplicate/i.test(message);
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
+  while: isRailwayTransient,
+  schedule: Schedule.spaced("15 seconds"),
+  times: 10 as const,
 };
 
 const getById = (serviceId: string) =>
@@ -612,8 +613,10 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
+    RailwayRetry.none,
+    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -695,12 +698,9 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.FunctionDeployPending",
-      times: 10,
+      times: 36,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.FunctionDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
@@ -1037,6 +1037,38 @@ export const FunctionProvider = () =>
           return rows.flat();
         }),
 
+        // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
+        // Those are knowable from the physical name and props; the cloud
+        // service is created in reconcile (and re-synced in converge).
+        precreate: Effect.fn(function* ({ id, news }) {
+          const name = yield* resolveName(
+            id,
+            typeof news.name === "string" ? news.name : undefined,
+          );
+          const port = typeof news.port === "number" ? news.port : DEFAULT_PORT;
+          return {
+            serviceId: "",
+            name,
+            projectId: "",
+            environmentId: "",
+            image: "",
+            runtime: FUNCTION_RUNTIME_NAME,
+            cronSchedule: undefined,
+            sleepApplication: undefined,
+            region: undefined,
+            port,
+            dnsName: `${name}.railway.internal`,
+            rpcToken: plainEnvValue(news.rpcToken) ?? "",
+            url: undefined,
+            domain: undefined,
+            domainId: undefined,
+            deploymentId: undefined,
+            deploymentStatus: undefined,
+            nextCronRunAt: undefined,
+            code: { hash: "" },
+          } satisfies Function["Attributes"];
+        }),
+
         reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
           const props = news ?? ({} as FunctionProps);
           const projectId = projectIdOf(props.project) ?? output?.projectId;
@@ -1129,10 +1161,12 @@ export const FunctionProvider = () =>
           }
 
           if (current.name !== name) {
-            current = yield* railway.serviceUpdate({
-              id: current.id,
-              input: { name },
-            });
+            current = yield* railway
+              .serviceUpdate({
+                id: current.id,
+                input: { name },
+              })
+              .pipe(RailwayRetry.none, Effect.retry(rateLimited));
           }
 
           let instance = yield* waitForInstance(environmentId, current.id);

@@ -114,5 +114,5 @@ test.provider(
       const gone = yield* waitUntilGone(appName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180000 },
+  { timeout: 240000 },
 );

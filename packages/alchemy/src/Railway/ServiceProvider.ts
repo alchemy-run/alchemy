@@ -29,6 +29,7 @@ import {
   type ServiceBinding,
 } from "./MountVolume.ts";
 import { listOwnedProjects, type Project } from "./Project.ts";
+import { isRailwayTransient } from "./transient.ts";
 import { listServiceVolumes } from "./Volume.ts";
 import {
   ensureServiceDomain,
@@ -87,7 +88,11 @@ class ServiceDeployPending extends Data.TaggedError(
 )<{
   serviceId: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `deployment still ${this.status}`;
+  }
+}
 
 type CloudService =
   | ServiceResponse
@@ -134,8 +139,10 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
+    RailwayRetry.none,
+    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -178,9 +185,9 @@ const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
 const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
+  while: isRailwayTransient,
+  schedule: Schedule.spaced("15 seconds"),
+  times: 10 as const,
 };
 
 const undef = <T>(value: T | null | undefined): T | undefined =>
@@ -496,7 +503,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 10,
+      times: 36,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.ServiceDeployPending", () =>
@@ -510,41 +517,40 @@ const waitForDeploymentById = (input: {
   environmentId: string;
 }) =>
   Effect.gen(function* () {
-    const deployment = yield* railway
-      .deployment({ id: input.deploymentId })
-      .pipe(
-        Effect.catchTag(["RailwayNotFound", "RailwayInternalError"], () =>
-          Effect.fail(
-            new ServiceDeployPending({
-              serviceId: input.serviceId,
-              status: "pending",
-            }),
-          ),
-        ),
-      );
-    if (deployFailed(deployment.status)) {
+    // Poll the instance, not `deployment(id)`. Distilled's deployment
+    // query is a huge nested selection that 404s/times out for /up ids;
+    // `serviceInstance.latestDeployment` is the same record the rest of
+    // reconcile already uses.
+    const instance = yield* getInstance(input.environmentId, input.serviceId);
+    const latest = instance?.latestDeployment;
+    const match =
+      latest?.id === input.deploymentId
+        ? latest
+        : (instance?.activeDeployments ?? []).find(
+            (deployment) => deployment.id === input.deploymentId,
+          );
+    const watched = match ?? latest;
+    const status = watched?.status;
+    if (status !== undefined && deployFailed(status)) {
       return yield* new ServiceDeployFailed({
         serviceId: input.serviceId,
-        status: deployment.status,
-        deploymentId: deployment.id,
+        status,
+        deploymentId: watched?.id,
       });
     }
-    if (deployReady(deployment.status)) {
-      return yield* getInstance(input.environmentId, input.serviceId);
+    if (match !== undefined && instance !== undefined && deployReady(status)) {
+      return instance;
     }
     return yield* new ServiceDeployPending({
       serviceId: input.serviceId,
-      status: deployment.status,
+      status: status ?? "pending",
     });
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 8,
-      schedule: Schedule.spaced("3 seconds"),
+      times: 90,
+      schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.ServiceDeployPending", () =>
-      getInstance(input.environmentId, input.serviceId),
-    ),
   );
 
 const upsertVariable = (input: {
@@ -809,6 +815,42 @@ export const ServiceProvider = () =>
             { concurrency: 8 },
           );
           return rows.flat();
+        }),
+
+        // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
+        // Those are knowable from the physical name and props; the cloud
+        // service is created in reconcile (and re-synced in converge).
+        precreate: Effect.fn(function* ({ id, news }) {
+          const name = yield* resolveName(
+            id,
+            typeof news.name === "string" ? news.name : undefined,
+          );
+          const port = typeof news.port === "number" ? news.port : DEFAULT_PORT;
+          return {
+            serviceId: "",
+            name,
+            projectId: "",
+            environmentId: "",
+            image: undefined,
+            repo: undefined,
+            healthcheckPath: undefined,
+            healthcheckTimeout: undefined,
+            replicas: undefined,
+            buildCommand: undefined,
+            startCommand: undefined,
+            cronSchedule: undefined,
+            rootDirectory: undefined,
+            region: undefined,
+            port,
+            url: undefined,
+            domain: undefined,
+            dnsName: `${name}.railway.internal`,
+            rpcToken: plainEnvValue(news.rpcToken) ?? "",
+            domainId: undefined,
+            deploymentId: undefined,
+            deploymentStatus: undefined,
+            code: { hash: "" },
+          } satisfies Service["Attributes"];
         }),
 
         reconcile: Effect.fn(function* ({

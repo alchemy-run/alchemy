@@ -187,7 +187,7 @@ export interface FrameworkSiteConfig {
    */
   static?: WebsiteStaticConfig | undefined;
   /**
-   * Native packages to `bun install` into the image instead of bundling
+   * Native packages to `npm install` into the image instead of bundling
    * (Next.js needs `next` / `react`).
    */
   install?: PackageInstall | undefined;

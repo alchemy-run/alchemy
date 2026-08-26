@@ -146,7 +146,7 @@ export interface ServerProps {
    * Accepts a shell script (`#!/bin/bash …`), a `#cloud-config` document,
    * or a bare shell snippet (a `#!/bin/bash` shebang is added for you).
    * Alchemy combines it with its own bootstrap script (which preinstalls
-   * `bun` for `Hetzner.Service`) into a multipart cloud-init document, so
+   * Node 26 for `Hetzner.Service`) into a multipart cloud-init document, so
    * both run — the bootstrap first. A document that already starts with a
    * `Content-Type:` / `MIME-Version:` header is passed through untouched,
    * taking over the whole payload including the bootstrap.
@@ -447,23 +447,20 @@ const createServerName = (
   });
 
 /**
- * Preinstall Bun so `Hetzner.Service`'s first deploy does not have to.
- * Mirrors the SSH-side install in `./hosted.ts` — Ubuntu images ship curl
- * but not unzip, and bun's installer needs both. Never fails the boot:
- * `hosted.ts` installs Bun over SSH if this did not manage to.
+ * Preinstall Node 26 so `Hetzner.Service`'s first deploy does not have to.
+ * Mirrors the SSH-side install in `./hosted.ts`. Never fails the boot:
+ * `hosted.ts` installs Node over SSH if this did not manage to.
  */
 const ALCHEMY_BOOTSTRAP = `#!/bin/bash
 set -uo pipefail
 export HOME=/root
-export BUN_INSTALL=/root/.bun
-export PATH="/root/.bun/bin:$PATH"
 if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
   apt-get update || true
   DEBIAN_FRONTEND=noninteractive apt-get install -y curl unzip ca-certificates || true
 fi
-if [ ! -x /root/.bun/bin/bun ]; then
+if ! command -v node >/dev/null 2>&1; then
   for attempt in 1 2 3; do
-    curl -fsSL https://bun.sh/install | bash && break
+    curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs && break
     sleep 5
   done
 fi
@@ -1025,7 +1022,18 @@ export const ServerProvider = () =>
                   }
                 : undefined,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            Effect.retry({
+              while: (e) =>
+                (e._tag === "Forbidden" &&
+                  e.message.includes("server limit")) ||
+                (e._tag === "PreconditionFailed" &&
+                  e.message.includes("placement")),
+              schedule: Schedule.spaced("5 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          );
         if (created !== undefined) {
           if (created.action) {
             yield* waitForActions([created.action, ...created.next_actions]);

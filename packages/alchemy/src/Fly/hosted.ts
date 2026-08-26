@@ -42,14 +42,14 @@ export type FlyHostRuntimeContext = HostRuntimeContext;
 export const createFlyHostRuntimeContext = createContainerRuntimeContext;
 
 export const FLY_REGISTRY = "registry.fly.io";
-export const DEFAULT_BASE_IMAGE = "oven/bun:1";
+export const DEFAULT_BASE_IMAGE = "node:26-slim";
 export const DEFAULT_PORT = 3000;
 export const MACHINE_PLATFORM = "linux/amd64";
 
 export interface FlyBuildOptions extends Bundle.BundleConfig {
   /**
    * Native or Node-only packages to install into the Machine image with
-   * `bun install` instead of bundling them. `pg` is CommonJS: Rolldown's
+   * `npm install` instead of bundling them. `pg` is CommonJS: Rolldown's
    * interop turns `Client` into a namespace (`The superclass is not a
    * constructor`). Same `build.install` shape as Lambda.
    *
@@ -308,7 +308,7 @@ const generateDockerfile = (
   if (install !== undefined && Object.keys(install).length > 0) {
     lines.push(
       `COPY package.json /app/package.json`,
-      `RUN bun install --production`,
+      `RUN npm install --omit=dev --no-fund --no-audit`,
     );
   }
   if (props.isExternal === true) {
@@ -319,8 +319,9 @@ const generateDockerfile = (
         : "serve-node.mjs";
     lines.push(
       `ENV PORT=${String(port)}`,
+      `ENV HOST=0.0.0.0`,
       `EXPOSE ${String(port)}`,
-      `ENTRYPOINT ["bun", ${JSON.stringify(`/app/${entry}`)}]`,
+      `ENTRYPOINT ["node", ${JSON.stringify(`/app/${entry}`)}]`,
     );
     return `${lines.join("\n")}\n`;
   }
@@ -337,8 +338,9 @@ const generateDockerfile = (
   }
   lines.push(
     `ENV PORT=${String(port)}`,
+    `ENV HOST=0.0.0.0`,
     `EXPOSE ${String(port)}`,
-    `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+    `ENTRYPOINT ["node", "/app/index.mjs"]`,
   );
   return `${lines.join("\n")}\n`;
 };
@@ -385,7 +387,9 @@ const hashExtraFiles = Effect.fn(function* (
 /**
  * Copy a file or directory without macOS `clonefile`. Nitro/Nuxt
  * `.output/server` trees (and their nested `node_modules`) fail
- * `fs.copy` with `EINVAL: invalid argument, clonefile`.
+ * `fs.copy` with `EINVAL: invalid argument, clonefile`. Nested
+ * `node_modules` are copied — nitro's node preset emits runtime
+ * deps there (`solid-js`, `seroval`, …) and the Machine imports them.
  */
 const copyTree = Effect.fn(function* (from: string, to: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -404,6 +408,13 @@ const copyTree = Effect.fn(function* (from: string, to: string) {
   yield* fs.makeDirectory(to, { recursive: true });
   const names = yield* fs.readDirectory(from, { recursive: true });
   for (const name of names) {
+    if (
+      name
+        .split(/[\\/]/)
+        .some((segment) => segment === ".git" || segment === ".alchemy")
+    ) {
+      continue;
+    }
     const src = path.join(from, name);
     const item = yield* fs
       .stat(src)
@@ -476,6 +487,7 @@ export const createFlyHostedSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = Effect.fn(function* (props: HostedProgramProps) {
@@ -510,7 +522,7 @@ export const createFlyHostedSupport = ({
             );
           },
           resolve: {
-            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+            conditionNames: [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -593,6 +605,7 @@ export const createFlyHostedSupport = ({
       dockerfile,
       packageJson,
       extraFiles,
+      extraFilesIncludesNodeModules: true,
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash, packageJson, entryRel };
   });
@@ -739,7 +752,7 @@ export const createFlyHostedSupport = ({
 
 /**
  * Bundle a Sprite program the same way {@link createFlyHostedSupport}
- * bundles a Service — rolldown + bun bootstrap — without building a
+ * bundles a Service — rolldown + Node bootstrap — without building a
  * Docker image. The provider writes the files onto the Sprite.
  */
 export const createSpriteHostedSupport = ({
@@ -757,6 +770,7 @@ export const createSpriteHostedSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = Effect.fn(function* (props: HostedProgramProps) {
@@ -781,7 +795,7 @@ export const createSpriteHostedSupport = ({
             ...((props.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+            conditionNames: [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],

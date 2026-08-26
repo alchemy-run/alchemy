@@ -77,8 +77,12 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(deployed.site.service).toBeDefined();
       expect(deployed.site.server).toBeDefined();
 
+      yield* expectUrlContains(`${url!}/health`, "ok", {
+        timeout: "60 seconds",
+        label: "health",
+      });
       yield* expectUrlContains(`${url!}/`, "SOLIDSTART_AWS_PAGE_MARKER", {
-        timeout: "90 seconds",
+        timeout: "180 seconds",
         label: "home page",
       });
       yield* expectUrlContains(
@@ -100,5 +104,5 @@ test.provider.skipIf(!hasHetznerCreds)(
         Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
       ),
     ),
-  { timeout: 240000, exclusive: true },
+  { timeout: 420000, exclusive: true },
 );
