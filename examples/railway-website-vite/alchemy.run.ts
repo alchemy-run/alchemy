@@ -6,11 +6,6 @@ import * as Option from "effect/Option";
 import Api from "./src/api.ts";
 import { Db, Site } from "./src/shared.ts";
 
-const RAILWAY_REGISTRY = Config.string("RAILWAY_REGISTRY").pipe(
-  Config.option,
-  Config.map(Option.getOrUndefined),
-);
-
 const RAILWAY_TEST_DOMAIN = Config.string("RAILWAY_TEST_DOMAIN").pipe(
   Config.option,
   Config.map(Option.getOrUndefined),
@@ -23,7 +18,6 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const registry = yield* RAILWAY_REGISTRY;
     const domain = yield* RAILWAY_TEST_DOMAIN;
     const project = yield* Site;
     const db = yield* Db;
@@ -31,7 +25,6 @@ export default Alchemy.Stack(
     const apiUrl = (yield* yield* api.url) ?? "";
     const web = yield* Railway.Website.Vite("Web", {
       project,
-      registry,
       domain,
       env: {
         VITE_API_URL: apiUrl,

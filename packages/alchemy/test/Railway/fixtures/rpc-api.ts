@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Api } from "./rpc-api-tag.ts";
 import Query from "./rpc-query.ts";
-import { canPushRailwayImage, railwayRegistry } from "./registry.ts";
 import { Site } from "./rpc-shared.ts";
 
 export { Api };
@@ -17,9 +16,6 @@ export const ApiLive = Api.make(
     project: Site,
     main: import.meta.url,
     port: 3000,
-    registry: canPushRailwayImage
-      ? railwayRegistry
-      : (railwayRegistry ?? "ghcr.io/example"),
   },
   Effect.gen(function* () {
     const query = yield* bindFunction(Query);

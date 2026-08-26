@@ -33,6 +33,10 @@ import { MountVolumeLive } from "./MountVolume.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
 import { Service, ServiceProvider } from "./Service.ts";
+import {
+  AssetDeployment,
+  AssetDeploymentProvider,
+} from "./Website/AssetDeployment.ts";
 import { SignHttp } from "./SignHttp.ts";
 import { Sprite, SpriteProvider } from "./Sprite.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
@@ -77,6 +81,7 @@ export const providers = () =>
     Providers,
     Provider.collection([
       App,
+      AssetDeployment,
       Bucket,
       Certificate,
       IpAssignment,
@@ -93,6 +98,7 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         AppProvider(),
+        AssetDeploymentProvider(),
         BucketProvider(),
         CertificateProvider(),
         IpAssignmentProvider(),

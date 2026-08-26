@@ -47,6 +47,7 @@ describe("makeNodeServeEntrySource", () => {
     expect(source).toContain("http.createServer(async (req, res) => {");
     expect(source).toContain("server.listen");
     expect(source).toContain("lookupStatic");
+    expect(source).toContain("max-age=31536000, immutable");
     expect(source).toContain(`import { handler } from "./index.mjs";`);
     expect(source).not.toContain("aws-lambda");
     expect(source).not.toContain("cloudflare:");
@@ -111,6 +112,21 @@ describe("makeNodeServeEntrySource", () => {
     expect(source).not.toContain("PassThrough");
   });
 
+  it("omits a handler for assets-only sites and 404s after static lookup", () => {
+    const source = makeNodeServeEntrySource({
+      clientDirExpression: `fileURLToPath(new URL("./", import.meta.url))`,
+      notFoundHandling: "spa",
+    });
+    expect(source).toContain("/health");
+    expect(source).toContain("lookupStatic");
+    expect(source).toContain('lookupStatic("/index.html")');
+    expect(source).toContain('res.end("Not Found")');
+    expect(source).not.toContain("toRequest");
+    expect(source).not.toContain("endedGet");
+    expect(source).not.toContain('from "node:stream"');
+    expect(source).toContain("const isRoot = false");
+  });
+
   it("does not map GET / onto public/index.html (SSR home stays on the handler)", () => {
     const source = makeNodeServeEntrySource({
       clientDirExpression: `fileURLToPath(new URL("../client/", import.meta.url))`,
@@ -121,7 +137,7 @@ describe("makeNodeServeEntrySource", () => {
       },
     });
     expect(source).toContain(
-      'const isRoot = urlPath === "/" || urlPath === ""',
+      'const isRoot = (urlPath === "/" || urlPath === "")',
     );
     expect(source).toContain("existingFile(base, !isRoot)");
   });

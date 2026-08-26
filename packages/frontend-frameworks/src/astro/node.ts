@@ -13,9 +13,10 @@
  * - **`integration`** — the adapter integration: registers itself via
  *   `setAdapter` at `astro:config:done` (rejecting a user-declared adapter
  *   with an actionable error) and pins the `node-server` entrypoint.
- * - **`finish`** — a fully-static build (`output: "static"`) deploys
- *   ASSETS-ONLY (`serverModules` dropped). Otherwise writes the HTTP serve
- *   entry and pins it as `serverModules[0]`.
+ * - **`finish`** — a fully-static build (`output: "static"`) writes the
+ *   same Node static serve entry Vite uses. Otherwise writes the HTTP
+ *   serve entry (static files then the Astro fetch handler) and pins it
+ *   as `serverModules[0]`.
  * - **`selectServerEntry`** — pins the adapter's entry chunk as
  *   `serverModules[0]` before the finishing pass wraps it.
  * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
@@ -173,10 +174,28 @@ const makeNodeAdapterTarget = (
         )),
     finish: (output) =>
       Effect.gen(function* () {
-        if (buildOutput === "static") {
-          return { ...output, serverModules: undefined };
-        }
         const path = yield* Path.Path;
+        if (buildOutput === "static") {
+          if (output.clientDirectory === undefined) {
+            return yield* Effect.fail(
+              fail(
+                "The Astro static build produced no client directory for the Node serve entry",
+              ),
+            );
+          }
+          const servePath = path.join(
+            output.clientDirectory,
+            NODE_SERVE_ENTRY_FILE_NAME,
+          );
+          return yield* writeNodeServeEntry({
+            output,
+            servePath,
+            serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
+            clientDirExpression: `fileURLToPath(new URL("./", import.meta.url))`,
+            notFoundHandling: "spa",
+            platform: "node",
+          });
+        }
         if (
           output.distDirectory === undefined ||
           output.clientDirectory === undefined

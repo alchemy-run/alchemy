@@ -36,7 +36,6 @@ export interface VocsProps extends FrameworkSiteProps {
  * ```typescript
  * const docs = yield* Railway.Website.Vocs("Docs", {
  *   rootDir: "./docs",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -47,7 +46,6 @@ export interface VocsProps extends FrameworkSiteProps {
  * const docs = yield* Railway.Website.Vocs("Docs", {
  *   rootDir: "./docs",
  *   outDir: "build",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *

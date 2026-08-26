@@ -1,3 +1,4 @@
+export * from "./AssetDeployment.ts";
 export * from "./Astro.ts";
 export * from "./Foldkit.ts";
 export * from "./FrameworkSite.ts";

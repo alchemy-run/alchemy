@@ -8,7 +8,6 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { canPushRailwayImage, railwayRegistry } from "../fixtures/registry.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -39,7 +38,7 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-test.provider.skipIf(!canPushRailwayImage)(
+test.provider(
   "SvelteKit: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {
@@ -55,7 +54,6 @@ test.provider.skipIf(!canPushRailwayImage)(
         Effect.gen(function* () {
           const site = yield* Railway.Website.SvelteKit("Web", {
             rootDir,
-            registry: railwayRegistry!,
             memo: {
               include: ["src/**", "static/**", "package.json"],
             },

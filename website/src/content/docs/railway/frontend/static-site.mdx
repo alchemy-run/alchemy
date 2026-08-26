@@ -1,6 +1,6 @@
 ---
 title: Static sites
-description: Deploy a static site to Railway with Railway.Website.StaticSite — a build command, a container Service, and a required image registry on deploy.
+description: Deploy a static site to Railway with Railway.Website.StaticSite — a build command, a container Service.
 sidebar:
   order: 4
 ---
@@ -16,10 +16,8 @@ For Vite-based projects, prefer
 
 ## Declare the Website
 
-`command` and `outdir` are required. On the live path `registry` is
-required too (`ghcr.io/org` or `docker.io/user`) — deploy dies with
-`RegistryRequired` if it is missing. It is unused under
-`alchemy dev`. Declare the site as a module-level const:
+`command` and `outdir` are required. Declare the site as a
+module-level const:
 
 ```typescript
 // alchemy.run.ts
@@ -28,7 +26,6 @@ import * as Railway from "alchemy/Railway";
 export const Website = Railway.Website.StaticSite("Website", {
   command: "hugo --minify",
   outdir: "public",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -77,7 +74,6 @@ export const Website = Railway.Website.StaticSite("Website", {
   command: "hugo --minify",
   outdir: "public",
   project: Site,
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -91,7 +87,6 @@ export const Website = Railway.Website.StaticSite("Web", {
   cwd: "apps/web",
   command: "npm run build",
   outdir: "dist",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -107,7 +102,6 @@ export const App = Railway.Website.StaticSite("App", {
   command: "npm run build",
   outdir: "dist",
   spa: true,
-  registry: "ghcr.io/acme",
 });
 
 // Static site: misses return a real 404 status with your error page.
@@ -115,7 +109,6 @@ export const Docs = Railway.Website.StaticSite("Docs", {
   command: "hugo --minify",
   outdir: "public",
   errorPage: "404.html",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -129,7 +122,6 @@ Worker bindings and not AWS `server.environment`:
 export const Website = Railway.Website.StaticSite("Website", {
   command: "hugo --minify",
   outdir: "public",
-  registry: "ghcr.io/acme",
 +  env: {
 +    HUGO_ENV: "production",
 +  },
@@ -144,7 +136,7 @@ SSR runtime.
 
 During `alchemy dev`, `dev.command` replaces the build with that
 process as a long-lived child. No Project or Service is created,
-`registry` is unused, and `site.url` is the local address detected
+ url` is the local address detected
 from stdout (`dev.url` pins it when detection fails). `dev` also
 accepts `cwd` and `env` overrides:
 
@@ -152,7 +144,6 @@ accepts `cwd` and `env` overrides:
 export const Website = Railway.Website.StaticSite("Website", {
   command: "hugo --minify",
   outdir: "public",
-  registry: "ghcr.io/acme",
   dev: { command: "hugo server" },
 });
 ```
@@ -165,7 +156,6 @@ server serves `outdir` — still no cloud resources. Wrap the site in
 export const Website = Railway.Website.StaticSite("Website", {
   command: "hugo --minify",
   outdir: "public",
-  registry: "ghcr.io/acme",
 }).pipe(Alchemy.remote());
 ```
 
@@ -180,7 +170,6 @@ the generated `*.up.railway.app`. Railway's edge terminates TLS:
 export const Website = Railway.Website.StaticSite("Website", {
   command: "hugo --minify",
   outdir: "public",
-  registry: "ghcr.io/acme",
   domain: "blog.example.com",
 });
 ```

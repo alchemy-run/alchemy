@@ -1,4 +1,10 @@
+import {
+  NODE_SERVE_ENTRY_FILE_NAME,
+  relativeClientDirExpression,
+  writeNodeServeEntry,
+} from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -9,16 +15,18 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { App } from "../App.ts";
+import { Bucket } from "../Bucket.ts";
 import { Certificate } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
 import { Service } from "../Service.ts";
+import { AssetDeployment } from "./AssetDeployment.ts";
 import {
   type FrameworkSite,
   type Ref,
-  writeStaticServeEntry,
+  type WebsiteAssetsProps,
+  staticConfigFromAssets,
 } from "./FrameworkSite.ts";
 
-const CONTAINER_CLIENT_DIR = "/app/dist";
 const DEFAULT_PORT = 3000;
 
 const resolveRef = <T>(ref: Ref<T>) =>
@@ -26,28 +34,35 @@ const resolveRef = <T>(ref: Ref<T>) =>
 
 export interface StaticSiteProps {
   /**
-   * Shell command that produces the site (e.g. `"hugo --minify"`).
+   * Path to the local site directory (working directory for
+   * {@link build.command}).
+   * @default "."
    */
-  command: string;
+  path?: string;
   /**
-   * Directory the command writes, relative to {@link cwd}.
+   * Build executed before deploy.
    */
-  outdir: string;
-  /**
-   * Working directory for {@link command}.
-   * @default process cwd
-   */
-  cwd?: string;
+  build: {
+    /** Shell command that produces the site (e.g. `"hugo --minify"`). */
+    command: string;
+    /** Directory the command writes, relative to {@link path}. */
+    output: string;
+    /** Environment variables for the build command. */
+    env?: Record<string, string | Redacted.Redacted<string>>;
+  };
   /**
    * Controls which files are hashed to decide whether the build re-runs.
    * @default true
    */
   memo?: MemoOptions | boolean;
   /**
-   * Environment variables for the build (and the local dev command when
-   * `dev.env` is omitted).
+   * Process environment for the hosted static server.
    */
   env?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Miss handling for the generated file server.
+   */
+  assets?: WebsiteAssetsProps;
   /**
    * Parent Fly App. When omitted, a `Fly.App` is created. The Service
    * stays in the caller namespace; only `Build` / `Dev` are pushed.
@@ -57,16 +72,6 @@ export interface StaticSiteProps {
    * Optional custom hostname. Requests ACME (`Fly.Certificate`) on the App.
    */
   domain?: string;
-  /**
-   * Answer misses with `index.html` (200) so client-side routes deep-link.
-   * Mutually exclusive with {@link errorPage}.
-   */
-  spa?: boolean;
-  /**
-   * Serve this file with a real `404` for requests that match no output
-   * file. Mutually exclusive with {@link spa}.
-   */
-  errorPage?: string;
   /**
    * User-defined tags. Accepted for API parity; Fly Services do not
    * surface resource tags.
@@ -116,17 +121,15 @@ export interface StaticSiteProps {
  * **Example:** Deploying a Hugo site
  * ```typescript
  * const site = yield* Fly.Website.StaticSite("Blog", {
- *   command: "hugo --minify",
- *   outdir: "public",
+ *   build: { command: "hugo --minify", output: "public" },
  * });
  * ```
  *
  * **Example:** SPA-style routing
  * ```typescript
  * const site = yield* Fly.Website.StaticSite("App", {
- *   command: "npm run build",
- *   outdir: "dist",
- *   spa: true,
+ *   build: { command: "npm run build", output: "dist" },
+ *   assets: { notFoundHandling: "single-page-application" },
  * });
  * ```
  *
@@ -134,9 +137,8 @@ export interface StaticSiteProps {
  * **Example:** Building a frontend in a monorepo
  * ```typescript
  * const site = yield* Fly.Website.StaticSite("Web", {
- *   cwd: "apps/web",
- *   command: "npm run build",
- *   outdir: "dist",
+ *   path: "apps/web",
+ *   build: { command: "npm run build", output: "dist" },
  * });
  * ```
  *
@@ -144,8 +146,7 @@ export interface StaticSiteProps {
  * **Example:** External dev command
  * ```typescript
  * const site = yield* Fly.Website.StaticSite("App", {
- *   command: "npm run build",
- *   outdir: "dist",
+ *   build: { command: "npm run build", output: "dist" },
  *   dev: { command: "npm run dev" },
  * });
  * ```
@@ -171,7 +172,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     if (isLocal && props.dev) {
       const dev = yield* Command.Dev("Dev", {
         command: props.dev.command,
-        cwd: props.dev.cwd ?? props.cwd,
+        cwd: props.dev.cwd ?? props.path,
         env: props.dev.env ?? props.env,
       }).pipe(Namespace.push(id));
       const url = Output.map(dev.url, (value) => value ?? props.dev?.url);
@@ -179,31 +180,43 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     }
 
     const build = yield* Command.Build("Build", {
-      command: props.command,
-      cwd: props.cwd,
+      command: props.build.command,
+      cwd: props.path,
       memo: props.memo,
-      outdir: props.outdir,
-      env: props.env,
+      outdir: props.build.output,
+      env: props.build.env ?? props.env,
     }).pipe(Namespace.push(id));
 
-    const cwd = path.resolve(initialCwd, props.cwd ?? ".");
-    const outdir = path.resolve(cwd, props.outdir);
+    const cwd = path.resolve(initialCwd, props.path ?? ".");
+    const outdir = path.resolve(cwd, props.build.output);
+    const internal = staticConfigFromAssets(props.assets);
     const notFoundHandling =
-      props.errorPage !== undefined
+      internal.errorPage !== undefined
         ? ("404-page" as const)
-        : props.spa === true
+        : internal.spa === true
           ? ("spa" as const)
           : ("none" as const);
 
+    const servePath = path.join(
+      path.dirname(outdir),
+      NODE_SERVE_ENTRY_FILE_NAME,
+    );
+    const serveOutput = {
+      clientDirectory: outdir,
+      serverModules: [],
+      externalWorkspaces: new Set<string>(),
+    };
+    yield* writeNodeServeEntry({
+      output: serveOutput,
+      servePath,
+      serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
+      clientDirExpression: relativeClientDirExpression(servePath, outdir),
+      notFoundHandling,
+      printUrl: isLocal,
+      platform: "node",
+    });
+
     if (isLocal) {
-      const servePath = path.join(path.dirname(outdir), "serve-fly.mjs");
-      yield* writeStaticServeEntry({
-        filePath: servePath,
-        clientDirExpression: JSON.stringify(outdir),
-        notFoundHandling,
-        errorPage: props.errorPage,
-        printUrl: true,
-      });
       const runtime = yield* Effect.sync(() => process.execPath);
       const dev = yield* Command.Dev("Dev", {
         command: `${runtime} ${servePath}`,
@@ -212,7 +225,6 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           ...props.env,
           PORT: "0",
           HOST: "127.0.0.1",
-          // Depend on Build so the outdir exists before we serve it.
           ALCHEMY_BUILD_HASH: build.hash.output as unknown as string,
         },
       }).pipe(Namespace.push(id));
@@ -222,13 +234,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       };
     }
 
-    const servePath = path.join(path.dirname(outdir), "serve-fly.mjs");
-    const main = yield* writeStaticServeEntry({
-      filePath: servePath,
-      clientDirExpression: JSON.stringify(CONTAINER_CLIENT_DIR),
-      notFoundHandling,
-      errorPage: props.errorPage,
-    });
+    const main = servePath;
 
     const app =
       props.app !== undefined
@@ -238,6 +244,15 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const ip = yield* IpAssignment("Shared", {
       app,
       type: "shared_v4",
+    }).pipe(Namespace.push(id));
+
+    const bucket = yield* Bucket("Assets", { public: true }).pipe(
+      Namespace.push(id),
+    );
+    yield* AssetDeployment("Files", {
+      bucket,
+      sourcePath: outdir,
+      purge: true,
     }).pipe(Namespace.push(id));
 
     const service = yield* Service(id, {
@@ -250,7 +265,15 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       extraFiles: [
         {
           source: outdir,
-          dest: "dist",
+          dest: path.basename(outdir),
+        },
+      ],
+      statics: [
+        {
+          guestPath: "/",
+          urlPrefix: "/",
+          tigrisBucket: bucket.name as unknown as string,
+          ...(internal.spa === true ? { indexDocument: "index.html" } : {}),
         },
       ],
     });

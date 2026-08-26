@@ -20,7 +20,6 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
-import { DockerLive, Docker } from "../Docker/Docker.ts";
 import * as Provider from "../Provider.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
@@ -43,6 +42,8 @@ import {
   toEnvRecord,
 } from "./hosted.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
+import { tarGzipDirectory } from "./tarGzip.ts";
+import { uploadDeployTarball } from "./Up.ts";
 import {
   Service,
   type ServiceEnvironment,
@@ -503,6 +504,49 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     ),
   );
 
+const waitForDeploymentById = (input: {
+  deploymentId: string;
+  serviceId: string;
+  environmentId: string;
+}) =>
+  Effect.gen(function* () {
+    const deployment = yield* railway
+      .deployment({ id: input.deploymentId })
+      .pipe(
+        Effect.catchTag(["RailwayNotFound", "RailwayInternalError"], () =>
+          Effect.fail(
+            new ServiceDeployPending({
+              serviceId: input.serviceId,
+              status: "pending",
+            }),
+          ),
+        ),
+      );
+    if (deployFailed(deployment.status)) {
+      return yield* new ServiceDeployFailed({
+        serviceId: input.serviceId,
+        status: deployment.status,
+        deploymentId: deployment.id,
+      });
+    }
+    if (deployReady(deployment.status)) {
+      return yield* getInstance(input.environmentId, input.serviceId);
+    }
+    return yield* new ServiceDeployPending({
+      serviceId: input.serviceId,
+      status: deployment.status,
+    });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Railway.ServiceDeployPending",
+      times: 8,
+      schedule: Schedule.spaced("3 seconds"),
+    }),
+    Effect.catchTag("Railway.ServiceDeployPending", () =>
+      getInstance(input.environmentId, input.serviceId),
+    ),
+  );
+
 const upsertVariable = (input: {
   projectId: string;
   environmentId: string;
@@ -647,14 +691,12 @@ export const ServiceProvider = () =>
     Service,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const docker = yield* Docker;
       const { dotAlchemy } = yield* AlchemyContext;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const hosted = createRailwayHostedSupport({
         stackName: stack.name,
         stage: stack.stage,
         virtualEntryPlugin,
-        docker,
         dotAlchemy,
       });
 
@@ -683,7 +725,6 @@ export const ServiceProvider = () =>
               env: news.env,
               isExternal: news.isExternal,
               build: news.build,
-              registry: news.registry,
               extraFiles: news.extraFiles,
             });
             if (hash !== output.code.hash) {
@@ -821,29 +862,34 @@ export const ServiceProvider = () =>
           let sourceImage: string | undefined;
           let sourceRepo: string | undefined;
           let codeHash = output?.code.hash ?? "";
-          let registryCredentials:
-            | { username: string; password: string }
+          let hashed:
+            | {
+                bundled: {
+                  files: ReadonlyArray<{
+                    path: string;
+                    content: string | Uint8Array;
+                  }>;
+                };
+                dockerfile: string;
+                codeHash: string;
+                packageJson: string | undefined;
+              }
             | undefined;
           if (hostedMain !== undefined) {
-            const resolved = yield* hosted.resolveImage({
-              id,
-              props: {
-                main: hostedMain,
-                handler: props.handler,
-                port,
-                image: props.image,
-                env: props.env,
-                isExternal: props.isExternal,
-                build: props.build,
-                registry: props.registry,
-                extraFiles: props.extraFiles,
-              },
-              previousHash: output?.code.hash,
-              session,
+            yield* (session?.note ?? ((_message: string) => Effect.void))(
+              `Bundling ${id} program...`,
+            );
+            hashed = yield* hosted.computeCodeHash({
+              main: hostedMain,
+              handler: props.handler,
+              port,
+              image: props.image,
+              env: props.env,
+              isExternal: props.isExternal,
+              build: props.build,
+              extraFiles: props.extraFiles,
             });
-            sourceImage = resolved.imageRef;
-            codeHash = resolved.codeHash;
-            registryCredentials = resolved.registryCredentials;
+            codeHash = hashed.codeHash;
           } else if (props.image !== undefined && props.image.length > 0) {
             sourceImage = props.image;
           } else if (props.repo !== undefined && props.repo.length > 0) {
@@ -851,7 +897,7 @@ export const ServiceProvider = () =>
           } else {
             return yield* new ServiceImageOrMainRequired({
               message:
-                "Railway.Service requires `image` (public image), `main` + `registry` (Effect-native), or `repo` (GitHub).",
+                "Railway.Service requires `image` (public image), `main` (Effect-native Dockerfile), or `repo` (GitHub).",
             });
           }
 
@@ -870,15 +916,13 @@ export const ServiceProvider = () =>
                   projectId,
                   environmentId,
                   name,
-                  source:
-                    sourceRepo !== undefined
-                      ? { repo: sourceRepo }
-                      : { image: sourceImage },
+                  ...(sourceRepo !== undefined
+                    ? { source: { repo: sourceRepo } }
+                    : sourceImage !== undefined
+                      ? { source: { image: sourceImage } }
+                      : {}),
                   ...(sourceRepo !== undefined && props.branch !== undefined
                     ? { branch: props.branch }
-                    : {}),
-                  ...(registryCredentials !== undefined
-                    ? { registryCredentials }
                     : {}),
                   ...(Object.keys(env).length > 0 ? { variables: env } : {}),
                 },
@@ -929,7 +973,7 @@ export const ServiceProvider = () =>
             instance,
             sourceImage,
             sourceRepo,
-            registryCredentials,
+            registryCredentials: undefined,
             props,
           });
           if (instanceDelta !== undefined) {
@@ -984,7 +1028,52 @@ export const ServiceProvider = () =>
             targetPort: port,
           });
 
-          if (needsDeploy || instance?.latestDeployment == null) {
+          const latestOk = deployReady(instance?.latestDeployment?.status);
+          const shouldUpload =
+            hostedMain !== undefined &&
+            hashed !== undefined &&
+            (codeHash !== output?.code.hash || !latestOk);
+
+          if (
+            hostedMain !== undefined &&
+            hashed !== undefined &&
+            shouldUpload
+          ) {
+            const note = session?.note ?? ((_message: string) => Effect.void);
+            const contextDir = yield* hosted.writeContext({
+              id,
+              props: {
+                main: hostedMain,
+                handler: props.handler,
+                port,
+                image: props.image,
+                env: props.env,
+                isExternal: props.isExternal,
+                build: props.build,
+                extraFiles: props.extraFiles,
+              },
+              hashed,
+            });
+            yield* note(`Uploading ${id} build context to Railway...`);
+            const tarball = yield* tarGzipDirectory(contextDir);
+            const uploaded = yield* uploadDeployTarball({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              tarball,
+              message: `alchemy ${id} ${codeHash}`,
+            });
+            yield* note(`Queued Railway build ${uploaded.deploymentId}`);
+            instance =
+              (yield* waitForDeploymentById({
+                deploymentId: uploaded.deploymentId,
+                serviceId: current.id,
+                environmentId,
+              })) ?? instance;
+          } else if (
+            hostedMain === undefined &&
+            (needsDeploy || instance?.latestDeployment == null)
+          ) {
             yield* railway
               .serviceInstanceDeployV2({
                 environmentId,
@@ -995,13 +1084,25 @@ export const ServiceProvider = () =>
                 Effect.retry(rateLimited),
                 Effect.catchTag("RailwayValidationError", () => Effect.void),
               );
+            instance =
+              sourceRepo !== undefined
+                ? ((yield* getInstance(environmentId, current.id)) ?? instance)
+                : ((yield* waitForDeployment(environmentId, current.id)) ??
+                  instance);
+          } else if (hostedMain !== undefined && needsDeploy) {
+            yield* railway
+              .serviceInstanceDeployV2({
+                environmentId,
+                serviceId: current.id,
+              })
+              .pipe(
+                RailwayRetry.none,
+                Effect.retry(rateLimited),
+                Effect.catchTag("RailwayValidationError", () => Effect.void),
+              );
+            instance =
+              (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           }
-
-          instance =
-            sourceRepo !== undefined
-              ? ((yield* getInstance(environmentId, current.id)) ?? instance)
-              : ((yield* waitForDeployment(environmentId, current.id)) ??
-                instance);
 
           return toAttrs({
             service: current,
@@ -1042,4 +1143,4 @@ export const ServiceProvider = () =>
         }),
       });
     }),
-  ).pipe(Layer.provide(DockerLive));
+  );

@@ -53,10 +53,10 @@ export interface ServiceProps extends PlatformProps {
    */
   environment?: Ref<ServiceEnvironment>;
   /**
-   * Module entrypoint bundled with rolldown and baked into a Docker
-   * image pushed to {@link registry}. Typically `import.meta.url`.
-   * Mutually exclusive with the public-image path (`image` without
-   * `main`). A content-hash change updates the Service in place.
+   * Module entrypoint bundled with rolldown and packed into a generated
+   * Dockerfile. Railway builds that Dockerfile (`railway up`). Typically
+   * `import.meta.url`. Mutually exclusive with the public-image path
+   * (`image` without `main`). A content-hash change updates in place.
    */
   main?: string;
   /**
@@ -97,16 +97,10 @@ export interface ServiceProps extends PlatformProps {
    */
   build?: RailwayBuildOptions;
   /**
-   * Registry prefix to push Effect-native images to (`ghcr.io/org`,
-   * `docker.io/user`). Required when `main` is set. Railway pulls
-   * `source.image` from this registry.
-   */
-  registry?: string;
-  /**
-   * Extra files/directories copied into `/app` in the generated image
-   * (`COPY dest /app/dest`). Website composites use this to bake the
-   * framework `clientDirectory` (or Next.js `.next`) so asset changes
-   * rebuild the image.
+   * Extra files/directories copied into `/app` in the generated
+   * Dockerfile (`COPY dest /app/dest`). Website composites use this to
+   * bake the framework `clientDirectory` (or Next.js `.next`) so asset
+   * changes rebuild on Railway.
    */
   extraFiles?: ReadonlyArray<ExtraFile>;
   /**
@@ -264,7 +258,7 @@ export type Service = Resource<
     deploymentId: string | undefined;
     /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
     deploymentStatus: string | undefined;
-    /** Content hash of the bundled program's image (empty for public images). */
+    /** Content hash of the bundled program (empty for public images). */
     code: {
       hash: string;
     };
@@ -303,10 +297,9 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
 
 /**
  * A Railway.Service is a container in a Project. Point it at a public
- * image (`hashicorp/http-echo`) or an Effect program (`main` +
- * `registry`). Alchemy stamps the name, creates a `*.up.railway.app`
- * domain via `serviceDomainCreate`, and deploys with
- * `serviceInstanceDeployV2`.
+ * image (`hashicorp/http-echo`) or an Effect program (`main`). Alchemy
+ * stamps the name, creates a `*.up.railway.app` domain via
+ * `serviceDomainCreate`, and deploys.
  *
  * @see https://docs.railway.com/guides/services
  *
@@ -330,9 +323,9 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *
  * ### Effect-native Service
  * A Service is a class. `main: import.meta.url` is the bundle
- * entrypoint. Alchemy bundles this file with Rolldown, builds a Docker
- * image (default `oven/bun:1`), pushes it to `registry`, and sets
- * `source.image`. `build.install: ["pg"]` ships `pg` unbundled.
+ * entrypoint. Alchemy bundles this file with Rolldown, generates a
+ * Dockerfile (`FROM oven/bun:1`), and uploads the context. Railway
+ * builds the image. `build.install: ["pg"]` ships `pg` unbundled.
  *
  * **Example:** Class + Project + main
  * ```typescript
@@ -341,7 +334,6 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   {
  *     project: Site,
  *     main: import.meta.url,
- *     registry: "ghcr.io/acme",
  *     build: { install: ["pg"] },
  *   },
  *   Effect.gen(function* () {
@@ -456,7 +448,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * ```typescript
  * export default class Query extends Railway.Service<Query>()(
  *   "Query",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     return {
  *       greet: (name: string) => Effect.succeed(`hello ${name}`),

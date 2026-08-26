@@ -8,38 +8,19 @@ export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 export const WAKU_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/waku/node";
 
-const wakuOptions = (props: WakuProps) => {
-  const waku = {
-    ...(props.srcDir !== undefined ? { srcDir: props.srcDir } : {}),
-    ...(props.distDir !== undefined ? { distDir: props.distDir } : {}),
-    ...(props.basePath !== undefined ? { basePath: props.basePath } : {}),
-  };
-  return Object.keys(waku).length > 0 ? { waku } : undefined;
-};
+const wakuOptions = (props: WakuProps) =>
+  props.waku !== undefined ? { waku: props.waku } : undefined;
 
 export interface WakuProps extends FrameworkSiteProps {
   /**
-   * Waku source directory, relative to {@link rootDir}. Setting this
-   * overrides a `srcDir` in the project's `waku.config.*`.
-   * @default the project's `waku.config.*` value, or waku's own default (`"src"`)
+   * Serializable Waku config merged OVER the project's own
+   * `waku.config.*`.
    */
-  srcDir?: string;
-  /**
-   * Waku build output directory, relative to {@link rootDir}. The server
-   * bundle is read from `<distDir>/server` and the client assets from
-   * `<distDir>/public`. Setting this overrides a `distDir` in the
-   * project's `waku.config.*` — if your config file customizes `distDir`,
-   * mirror it here (or exclude it via `memo`) so the build output doesn't
-   * pollute the rebuild hash.
-   * @default the project's `waku.config.*` value, or waku's own default (`"dist"`)
-   */
-  distDir?: string;
-  /**
-   * Base path the app is served under. Setting this overrides a
-   * `basePath` in the project's `waku.config.*`.
-   * @default the project's `waku.config.*` value, or waku's own default (`"/"`)
-   */
-  basePath?: string;
+  waku?: {
+    srcDir?: string;
+    distDir?: string;
+    basePath?: string;
+  };
 }
 
 /**
@@ -57,7 +38,6 @@ export interface WakuProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* Railway.Website.Waku("Web", {
  *   rootDir: "./app",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -69,7 +49,6 @@ export interface WakuProps extends FrameworkSiteProps {
  *   env: {
  *     API_BASE: "https://api.example.com",
  *   },
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *

@@ -13,8 +13,7 @@ export const devDeps = "@alchemy.run/frontend-frameworks";
 documentation project as one
 [Railway.Service](/railway/compute/services) from a container
 image. Vocs prerenders static HTML; a Node static-file server
-serves extensionless pages (`/about` not `/about/`). `registry` is
-required on deploy. Your `vocs.config.*` loads natively — there is
+serves extensionless pages (`/about` not `/about/`). Your `vocs.config.*` loads natively — there is
 no adapter to install.
 
 ## Install
@@ -67,16 +66,13 @@ rebuild hash:
 export const Website = Railway.Website.Vocs("Website", {
   rootDir: "./docs",
   outDir: "build",
-  registry: "ghcr.io/acme",
 });
 ```
 
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is the image prefix Railway can pull
-(`ghcr.io/org`, `docker.io/user`) — required on deploy, unused
-under `alchemy dev`:
+Stack):
 
 ```typescript
 // alchemy.run.ts
@@ -84,7 +80,6 @@ import * as Railway from "alchemy/Railway";
 
 export const Website = Railway.Website.Vocs("Website", {
   rootDir: "./docs",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -98,7 +93,6 @@ export const Site = Railway.Project("Site");
 export const Website = Railway.Website.Vocs("Website", {
   rootDir: "./docs",
   project: Site,
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -138,7 +132,6 @@ Top-level `env` is copied onto `process.env` before build and
 // alchemy.run.ts
 export const Website = Railway.Website.Vocs("Website", {
   rootDir: "./docs",
-  registry: "ghcr.io/acme",
 +  env: {
 +    DOCS_TITLE: "Hello from Alchemy!",
 +  },
@@ -161,14 +154,13 @@ const title = process.env.DOCS_TITLE ?? "Docs";
 
 `alchemy dev` runs Vocs' own dev server (native HMR) instead of
 deploying; `site.url` is the local address and no Railway resources
-are created (`service` and `project` are `undefined`). `registry`
-is unused. Wrap the site in `Alchemy.remote()` to deploy the live
+are created (`service` and `project` are `undefined`). Wrap the
+site in `Alchemy.remote()` to deploy the live
 Service even during dev:
 
 ```typescript
 export const Website = Railway.Website.Vocs("Website", {
   rootDir: "./docs",
-  registry: "ghcr.io/acme",
 }).pipe(Alchemy.remote());
 ```
 
@@ -181,7 +173,6 @@ becomes `https://{domain}` instead of `*.up.railway.app`:
 ```typescript
 export const Website = Railway.Website.Vocs("Website", {
   rootDir: "./docs",
-  registry: "ghcr.io/acme",
   domain: "docs.example.com",
 });
 ```

@@ -19,8 +19,6 @@ to Railway as a long-running Node process. It runs a real
   `project` is omitted) and a
   [`Railway.Service`](/railway/compute/services) from a container
   image
-- `registry` required on deploy (`ghcr.io/org`, `docker.io/user`);
-  unused under `alchemy dev`
 - `.next` and `public/` baked into `/app`; `next`, `react`, and
   `react-dom` installed with `bun install`
 - `url` is `https://{name}.up.railway.app`
@@ -66,15 +64,13 @@ Pass `rootDir` when the Next.js project is not the stack root.
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is required on the live path:
+Stack):
 
 ```typescript
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.Nextjs("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.Nextjs("Website");
 ```
 
 ## Add it to the Stack
@@ -108,7 +104,6 @@ Pass an existing Project to share it with other Services:
 ```typescript
 export const Website = Railway.Website.Nextjs("Website", {
   project: Site,
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -120,7 +115,6 @@ Process environment is the top-level `env` prop — plain strings, or
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.Nextjs("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    GREETING: "Hello from Alchemy!",
 +    API_BASE: "https://api.example.com",
@@ -153,14 +147,13 @@ bun alchemy dev
 
 `alchemy dev` runs `next dev` (native HMR, Turbopack) instead of
 deploying; `site.url` is the local address and no Railway resources
-are created. `registry` is unused. Wrap the site in
+are created. Wrap the site in
 `Alchemy.remote()` to deploy the live Service even during dev.
 
 ## Custom domain
 
 ```typescript
 const site = yield* Railway.Website.Nextjs("Web", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

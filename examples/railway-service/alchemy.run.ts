@@ -23,8 +23,8 @@
  * `VolumeBackup` is Pro-plan gated (`RailwayForbidden` on Hobby) and
  * omitted here; see `Railway.VolumeBackup` and the volumes hub page.
  *
- * Effect-native images are pushed to `RAILWAY_REGISTRY` (GHCR / Docker
- * Hub). Railway has no private registry of its own.
+ * Effect-native Services upload a generated Dockerfile; Railway
+ * builds the image. No GHCR.
  *
  * CustomDomain needs a hostname you control. Pass
  * `RAILWAY_TEST_DOMAIN` to attach one to Api.

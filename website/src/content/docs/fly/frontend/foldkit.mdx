@@ -155,18 +155,16 @@ A Foldkit app that uses URL routing (`Runtime.makeApplication` with
 client, so a deep link like `/counter/42` arrives as a request for a
 file that doesn't exist.
 
-`Foldkit` defaults `spa` on, which returns `index.html` (200) for
-unmatched paths so the Foldkit runtime can resolve the route. Pass
-`errorPage` to serve a real 404 instead:
+`Foldkit` defaults `assets.notFoundHandling` to
+`"single-page-application"`, which returns `index.html` (200) for
+unmatched paths so the Foldkit runtime can resolve the route. Use
+`"404-page"` to serve a real 404 instead:
 
 ```typescript
 export const Website = Fly.Website.Foldkit("Website", {
-  spa: false,
-  errorPage: "404.html",
+  assets: { notFoundHandling: "404-page" },
 });
 ```
-
-`spa` and `errorPage` are mutually exclusive.
 
 ## Local dev
 

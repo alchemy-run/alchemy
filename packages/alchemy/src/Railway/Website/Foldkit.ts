@@ -17,16 +17,13 @@ export interface FoldkitProps extends ViteProps {}
  * ### Deploying a Foldkit App
  * **Example:** Foldkit app
  * ```typescript
- * const site = yield* Railway.Website.Foldkit("Website", {
- *   registry: "ghcr.io/acme",
- * });
+ * const site = yield* Railway.Website.Foldkit("Website");
  * ```
  *
  * **Example:** Foldkit project in a subdirectory
  * ```typescript
  * const site = yield* Railway.Website.Foldkit("Website", {
  *   rootDir: "applications/web",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -34,9 +31,7 @@ export interface FoldkitProps extends ViteProps {}
  * **Example:** Serving a real 404 page
  * ```typescript
  * const site = yield* Railway.Website.Foldkit("Website", {
- *   spa: false,
- *   errorPage: "404.html",
- *   registry: "ghcr.io/acme",
+ *   assets: { notFoundHandling: "404-page" },
  * });
  * ```
  *
@@ -46,5 +41,8 @@ export interface FoldkitProps extends ViteProps {}
 export const Foldkit = (id: string, props: FoldkitProps = {}) =>
   Vite(id, {
     ...props,
-    spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
+    assets: {
+      notFoundHandling: "single-page-application",
+      ...props.assets,
+    },
   });

@@ -11,10 +11,12 @@ import type { Output } from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { App } from "../App.ts";
+import { Bucket } from "../Bucket.ts";
 import { Certificate } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
 import type { Providers } from "../Providers.ts";
 import { Service } from "../Service.ts";
+import { AssetDeployment } from "./AssetDeployment.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -63,6 +65,48 @@ export type ServerDevProps =
     };
 
 /**
+ * How unmatched GET paths are answered. Same names as Cloudflare
+ * Workers `assets.notFoundHandling`.
+ */
+export type WebsiteNotFoundHandling =
+  | "none"
+  | "single-page-application"
+  | "404-page";
+
+/**
+ * Static-asset routing. The Fly half of the shared Website vocabulary
+ * (`rootDir` / `env` / `memo` / `assets` / `dev`). Hashed files are
+ * published to a public Tigris bucket and served via Machine `statics`;
+ * this bag only describes miss/HTML handling on the origin.
+ */
+export interface WebsiteAssetsProps {
+  /**
+   * `"single-page-application"` serves `index.html` (200).
+   * `"404-page"` serves `404.html` with status 404.
+   * `"none"` falls through to the framework handler (or a 404).
+   */
+  notFoundHandling?: WebsiteNotFoundHandling;
+  /**
+   * Serve `about/index.html` at `/about` (Cloudflare
+   * `htmlHandling: "drop-trailing-slash"`).
+   * @default "none"
+   */
+  htmlHandling?: "none" | "drop-trailing-slash";
+}
+
+/** Map {@link WebsiteAssetsProps} onto the generated Node serve entry. */
+export const staticConfigFromAssets = (
+  assets: WebsiteAssetsProps | undefined,
+  defaults?: { notFoundHandling?: WebsiteNotFoundHandling },
+): { spa?: boolean; errorPage?: string } => {
+  const handling = assets?.notFoundHandling ?? defaults?.notFoundHandling;
+  if (handling === "single-page-application") return { spa: true };
+  if (handling === "404-page") return { errorPage: "404.html" };
+  if (handling === "none") return { spa: false };
+  return {};
+};
+
+/**
  * Props shared by every Fly framework website composite.
  */
 export interface FrameworkSiteProps {
@@ -86,6 +130,11 @@ export interface FrameworkSiteProps {
    * bindings — values become Machine env vars.
    */
   env?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Static-asset routing (`notFoundHandling`, `htmlHandling`). Hashed
+   * client files are uploaded to Tigris regardless of this bag.
+   */
+  assets?: WebsiteAssetsProps;
   /**
    * Options for the local dev server that runs this site under
    * `alchemy dev`.
@@ -117,9 +166,8 @@ export interface FrameworkSiteConfig {
    */
   options?: Record<string, unknown> | undefined;
   /**
-   * Assets-only mode: generate a static-file server when the build has
-   * no `serverModules` (or this is set). `spa` falls back to
-   * `index.html`; `errorPage` serves that file with 404.
+   * Assets-only routing forwarded to the Node target (Vite SPA fallback).
+   * `spa` also publishes client files to Tigris at `/`.
    */
   static?: { spa?: boolean; errorPage?: string } | undefined;
   /**
@@ -190,7 +238,6 @@ export class FrameworkSiteError extends Data.TaggedError("FrameworkSiteError")<{
   readonly cause?: unknown;
 }> {}
 
-const CONTAINER_CLIENT_DIR = "/app/dist";
 const DEFAULT_PORT = 3000;
 
 const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
@@ -281,267 +328,6 @@ const resolveDevPort = Effect.fn(function* (options: {
   );
 });
 
-const notFoundHandlingOf = (
-  config: FrameworkSiteConfig,
-): "none" | "spa" | "404-page" => {
-  if (config.static?.errorPage !== undefined) return "404-page";
-  if (config.static?.spa === true) return "spa";
-  return "none";
-};
-
-/**
- * Generate a complete Node/Bun HTTP program: `/health`, GET static
- * assets, then 404. Used when the framework build has no server modules.
- */
-export const makeStaticServeEntrySource = (options: {
-  readonly clientDirExpression: string;
-  readonly htmlHandling?: "none" | "drop-trailing-slash";
-  readonly notFoundHandling?: "none" | "spa" | "404-page";
-  readonly errorPage?: string;
-  readonly printUrl?: boolean;
-  readonly defaultPort?: number;
-}): string => {
-  const port = options.defaultPort ?? DEFAULT_PORT;
-  const htmlHandling = options.htmlHandling ?? "none";
-  const notFoundHandling = options.notFoundHandling ?? "none";
-  const dropSlash = htmlHandling === "drop-trailing-slash";
-  const spa = notFoundHandling === "spa";
-  const notFoundPage = notFoundHandling === "404-page";
-  const errorPage = options.errorPage ?? "404.html";
-  const listen = options.printUrl
-    ? `server.listen(PORT, HOST, () => {
-  const addr = server.address();
-  const port = typeof addr === "object" && addr !== null ? addr.port : PORT;
-  const printed = HOST === "0.0.0.0" || HOST === "::" ? "localhost" : HOST;
-  console.log("http://" + printed + ":" + port);
-});
-`
-    : `server.listen(PORT, HOST);
-`;
-
-  return `// Generated by Fly.Website — Node container static serve entry.
-import * as fs from "node:fs";
-import * as http from "node:http";
-import * as path from "node:path";
-
-const PORT = Number.parseInt(process.env.PORT ?? "${String(port)}", 10);
-const HOST = process.env.HOST ?? "0.0.0.0";
-const CLIENT_DIR = ${options.clientDirExpression};
-
-const MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".cjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".ico": "image/x-icon",
-  ".webp": "image/webp",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".txt": "text/plain; charset=utf-8",
-  ".xml": "application/xml",
-  ".wasm": "application/wasm",
-  ".map": "application/json",
-};
-
-const existingFile = (filePath) => {
-  try {
-    const st = fs.statSync(filePath);
-    if (st.isFile()) return filePath;
-    if (st.isDirectory()) {
-      const index = path.join(filePath, "index.html");
-      try {
-        if (fs.statSync(index).isFile()) return index;
-      } catch {}
-    }
-  } catch {}
-  return undefined;
-};
-
-const safeJoin = (urlPath) => {
-  const relative = urlPath.replace(/^\\/+/, "");
-  const resolved = path.resolve(CLIENT_DIR, relative);
-  const root = path.resolve(CLIENT_DIR);
-  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-    return undefined;
-  }
-  return resolved;
-};
-
-const lookupStatic = (urlPath) => {
-  const base = safeJoin(urlPath);
-  if (base === undefined) return undefined;
-  const direct = existingFile(base);
-  if (direct) return direct;
-${
-  dropSlash
-    ? `  if (!path.extname(base)) {
-    const html = existingFile(base + ".html");
-    if (html) return html;
-  }
-`
-    : ""
-}  return undefined;
-};
-
-const sendFile = (res, filePath, status) => {
-  const ext = path.extname(filePath).toLowerCase();
-  res.writeHead(status, {
-    "content-type": MIME[ext] ?? "application/octet-stream",
-  });
-  fs.createReadStream(filePath).pipe(res);
-};
-
-const pathnameOf = (url) => {
-  try {
-    return decodeURIComponent(new URL(url, "http://127.0.0.1").pathname);
-  } catch {
-    return "/";
-  }
-};
-
-const server = http.createServer((req, res) => {
-  void (async () => {
-    const urlPath = pathnameOf(req.url ?? "/");
-    if (
-      (req.method === "GET" || req.method === "HEAD") &&
-      urlPath === "/health"
-    ) {
-      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-      res.end("ok");
-      return;
-    }
-    if (req.method === "GET" || req.method === "HEAD") {
-      const file = lookupStatic(urlPath);
-      if (file !== undefined) {
-        if (req.method === "HEAD") {
-          res.writeHead(200);
-          res.end();
-          return;
-        }
-        sendFile(res, file, 200);
-        return;
-      }
-${
-  spa
-    ? `      const spaIndex = lookupStatic("/index.html");
-      if (spaIndex !== undefined) {
-        if (req.method === "HEAD") {
-          res.writeHead(200);
-          res.end();
-          return;
-        }
-        sendFile(res, spaIndex, 200);
-        return;
-      }
-`
-    : ""
-}${
-    notFoundPage
-      ? `      const notFound = lookupStatic(${JSON.stringify(`/${errorPage.replace(/^\/+/, "")}`)});
-      if (notFound !== undefined) {
-        if (req.method === "HEAD") {
-          res.writeHead(404);
-          res.end();
-          return;
-        }
-        sendFile(res, notFound, 404);
-        return;
-      }
-`
-      : ""
-  }    }
-    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    res.end("Not Found");
-  })().catch((error) => {
-    if (!res.headersSent) {
-      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    }
-    res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
-  });
-});
-
-${listen}`;
-};
-
-export const writeStaticServeEntry = Effect.fn(function* (options: {
-  readonly filePath: string;
-  readonly clientDirExpression: string;
-  readonly htmlHandling?: "none" | "drop-trailing-slash";
-  readonly notFoundHandling?: "none" | "spa" | "404-page";
-  readonly errorPage?: string;
-  readonly printUrl?: boolean;
-  readonly defaultPort?: number;
-}) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  yield* fs.makeDirectory(path.dirname(options.filePath), {
-    recursive: true,
-  });
-  yield* fs.writeFileString(
-    options.filePath,
-    makeStaticServeEntrySource(options),
-  );
-  return options.filePath;
-});
-
-/**
- * Octane's node `entry.js` auto-listens when `import.meta.url` is the
- * process entry. Rolldown flattening into `/app/index.mjs` would start
- * a second HTTP server on `PORT`. Neutralize the guard in sibling JS
- * so only the generated serve entry binds the port. Harmless for
- * frameworks that don't emit that pattern.
- */
-const neutralizeSiblingAutoListen = Effect.fn(function* (serverDir: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const names = yield* fs
-    .readDirectory(serverDir)
-    .pipe(Effect.orElseSucceed(() => [] as string[]));
-  for (const name of names) {
-    if (name.startsWith("serve-")) continue;
-    if (!name.endsWith(".js") && !name.endsWith(".mjs")) continue;
-    const file = path.join(serverDir, name);
-    const info = yield* fs
-      .stat(file)
-      .pipe(Effect.orElseSucceed(() => undefined));
-    if (info?.type !== "File") continue;
-    const source = yield* fs.readFileString(file);
-    const patched = source
-      .replaceAll(
-        "fileURLToPath(import.meta.url) === resolve(process.argv[1])",
-        "false",
-      )
-      .replaceAll(
-        "fileURLToPath(import.meta.url)===resolve(process.argv[1])",
-        "false",
-      );
-    if (patched !== source) {
-      yield* fs.writeFileString(file, patched);
-    }
-  }
-});
-
-const rewriteClientDir = Effect.fn(function* (servePath: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const source = yield* fs.readFileString(servePath);
-  if (!source.includes("const CLIENT_DIR =")) return servePath;
-  const rewritten = source.replace(
-    /const CLIENT_DIR = [^;]+;/,
-    `const CLIENT_DIR = ${JSON.stringify(CONTAINER_CLIENT_DIR)};`,
-  );
-  const out = path.join(path.dirname(servePath), "serve-fly.mjs");
-  yield* fs.writeFileString(out, rewritten);
-  return out;
-});
-
 const applyProcessEnv = (
   env: Record<string, string | Redacted.Redacted<string>> | undefined,
 ) =>
@@ -623,66 +409,33 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
       }),
   );
 
-  const distDir = built.distDirectory ?? path.join(root, "dist");
+  const distDir = path.resolve(
+    built.distDirectory ?? built.clientDirectory ?? path.join(root, "dist"),
+  );
   const clientDir =
     built.clientDirectory !== undefined
       ? path.resolve(built.clientDirectory)
       : undefined;
   const entryName = built.serverModules?.[0]?.name;
-  const assetsOnly =
-    config.static !== undefined ||
-    entryName === undefined ||
-    entryName.length === 0;
-
-  let main: string;
-  if (assetsOnly) {
-    if (clientDir === undefined) {
-      return yield* Effect.fail(
-        new FrameworkSiteError({
-          framework: config.framework,
-          message: `The ${config.name} build produced no client assets`,
-        }),
-      );
-    }
-    const servePath = path.join(path.dirname(clientDir), "serve-fly.mjs");
-    main = yield* writeStaticServeEntry({
-      filePath: servePath,
-      clientDirExpression: JSON.stringify(CONTAINER_CLIENT_DIR),
-      htmlHandling: config.htmlHandling,
-      notFoundHandling: notFoundHandlingOf(config),
-      errorPage: config.static?.errorPage,
-    });
-  } else {
-    const servePath = path.resolve(distDir, entryName);
-    if (!(yield* fs.exists(servePath))) {
-      return yield* Effect.fail(
-        new FrameworkSiteError({
-          framework: config.framework,
-          message: `The ${config.name} build produced no server entry at ${servePath}`,
-        }),
-      );
-    }
-    main = yield* rewriteClientDir(servePath);
-    yield* neutralizeSiblingAutoListen(path.dirname(main));
+  if (entryName === undefined || entryName.length === 0) {
+    return yield* Effect.fail(
+      new FrameworkSiteError({
+        framework: config.framework,
+        message: `The ${config.name} build produced no Node serve entry (serverModules[0]). The Node deploy target should write serve-node.mjs.`,
+      }),
+    );
+  }
+  const main = path.resolve(distDir, entryName);
+  if (!(yield* fs.exists(main))) {
+    return yield* Effect.fail(
+      new FrameworkSiteError({
+        framework: config.framework,
+        message: `The ${config.name} build produced no server entry at ${main}`,
+      }),
+    );
   }
 
   const extraFiles: Array<{ source: string; dest: string }> = [];
-  if (!config.skipClientAssets && clientDir !== undefined) {
-    extraFiles.push({ source: clientDir, dest: "dist" });
-  }
-  // Octane SSR reads `join(__dirname, "./index.html")` after rolldown
-  // flattens the serve entry to `/app/index.mjs`. Bake the template next
-  // to that entry — not into `dist/`, or NodeServe would serve the
-  // unrendered shell at GET /.
-  if (!assetsOnly && entryName !== undefined) {
-    const ssrTemplate = path.join(
-      path.dirname(path.resolve(distDir, entryName)),
-      "index.html",
-    );
-    if (yield* fs.exists(ssrTemplate).pipe(Effect.orElseSucceed(() => false))) {
-      extraFiles.push({ source: ssrTemplate, dest: "index.html" });
-    }
-  }
   if (config.skipClientAssets) {
     const nextDir = path.join(distDir, ".next");
     if (yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))) {
@@ -705,6 +458,8 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
         extraFiles.push({ source: configPath, dest: name });
       }
     }
+  } else {
+    extraFiles.push({ source: distDir, dest: "." });
   }
 
   const app =
@@ -715,15 +470,45 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     type: "shared_v4",
   });
 
+  // SPA: hashed `/assets` at Tigris. HTML and unknown paths stay on
+  // origin (NodeServe `notFoundHandling: "spa"`). Intercepting `/` with
+  // Tigris hangs SPA fallbacks — Fly does not rewrite `/counter/42` to
+  // `index.html`.
+  let statics:
+    | Array<{
+        guestPath: string;
+        urlPrefix: string;
+        tigrisBucket?: string;
+        indexDocument?: string;
+      }>
+    | undefined;
+  if (config.static?.spa === true && clientDir !== undefined) {
+    const bucket = yield* Bucket("Assets", { public: true });
+    yield* AssetDeployment("Files", {
+      bucket,
+      sourcePath: clientDir,
+      purge: true,
+    });
+    const assetsDir = path.join(clientDir, "assets");
+    if (yield* fs.exists(assetsDir).pipe(Effect.orElseSucceed(() => false))) {
+      statics = [
+        {
+          guestPath: "/assets",
+          urlPrefix: "/assets",
+          tigrisBucket: bucket.name as unknown as string,
+        },
+      ];
+    }
+  }
+
   const service = yield* Service("Service", {
     app,
     main,
     port: DEFAULT_PORT,
-    // `main` is a complete bun/node program (generated static server
-    // or the framework `finish` entry), not a Platform class.
     isExternal: true,
     env: props.env,
     extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
+    statics,
     build:
       config.install !== undefined && config.install.length > 0
         ? { install: config.install }
@@ -748,8 +533,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
  * Shared implementation behind the Fly framework website composites:
  * load the framework + node target, run `dev()` under `alchemy dev`
  * (no cloud Service), otherwise `build()` and deploy one Fly.Service
- * with the node serve entry as `main` and `clientDirectory` baked
- * into the image.
+ * with the framework's `serve-node.mjs` as `main` (dist packed as-built).
  *
  * Callers pipe `Namespace.push(id)` themselves (the composites do).
  *

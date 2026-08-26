@@ -26,6 +26,13 @@ import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
 } from "../Server/Process.ts";
+import {
+  CONTEXT_ROOT_DEST,
+  EXTRA_FILES_HASH_EXCLUDE,
+  contextRootOf,
+  isContextRootDest,
+  posixRelUnder,
+} from "../Server/externalProgram.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { DiskSpec, ServiceBinding } from "./MountVolume.ts";
@@ -80,11 +87,11 @@ export interface HostedProgramProps {
   extraFiles?: ReadonlyArray<ExtraFile>;
 }
 
-/** Normalize a COPY destination so it cannot escape `/app`. */
+/** Normalize a COPY destination so it cannot escape `/app`. `"."` is the image root. */
 export const extraFileDestination = (destination: string): string => {
-  const parts = destination
-    .replaceAll("\\", "/")
-    .replace(/^\/+/, "")
+  const normalized = destination.replaceAll("\\", "/").replace(/^\/+/, "");
+  if (isContextRootDest(normalized)) return CONTEXT_ROOT_DEST;
+  const parts = normalized
     .split("/")
     .filter((part) => part.length > 0 && part !== "." && part !== "..");
   return parts.length === 0 ? "dist" : parts.join("/");
@@ -294,6 +301,7 @@ const generateDockerfile = (
   props: HostedProgramProps,
   hasChunks: boolean,
   install?: Record<string, string>,
+  entryRel?: string,
 ) => {
   const port = props.port ?? DEFAULT_PORT;
   const lines = [`FROM ${props.image ?? DEFAULT_BASE_IMAGE}`, `WORKDIR /app`];
@@ -303,6 +311,19 @@ const generateDockerfile = (
       `RUN bun install --production`,
     );
   }
+  if (props.isExternal === true) {
+    lines.push(`COPY . /app`);
+    const entry =
+      entryRel !== undefined && entryRel.length > 0
+        ? entryRel
+        : "serve-node.mjs";
+    lines.push(
+      `ENV PORT=${String(port)}`,
+      `EXPOSE ${String(port)}`,
+      `ENTRYPOINT ["bun", ${JSON.stringify(`/app/${entry}`)}]`,
+    );
+    return `${lines.join("\n")}\n`;
+  }
   lines.push(`COPY index.mjs /app/index.mjs`);
   if (hasChunks) {
     lines.push(`COPY *.js /app/`);
@@ -310,7 +331,7 @@ const generateDockerfile = (
   const seen = new Set<string>();
   for (const extra of props.extraFiles ?? []) {
     const dest = extraFileDestination(extra.dest);
-    if (seen.has(dest)) continue;
+    if (isContextRootDest(dest) || seen.has(dest)) continue;
     seen.add(dest);
     lines.push(`COPY ${dest} /app/${dest}`);
   }
@@ -351,11 +372,48 @@ const hashExtraFiles = Effect.fn(function* (
       stat.type === "Directory"
         ? yield* hashDirectory({
             cwd: source,
-            memo: { exclude: [], lockfile: false },
+            memo: {
+              exclude: EXTRA_FILES_HASH_EXCLUDE,
+              lockfile: false,
+            },
           }).pipe(Effect.orElseSucceed(() => ""))
         : yield* sha256(yield* fs.readFile(source));
   }
   return hashes;
+});
+
+/**
+ * Copy a file or directory without macOS `clonefile`. Nitro/Nuxt
+ * `.output/server` trees (and their nested `node_modules`) fail
+ * `fs.copy` with `EINVAL: invalid argument, clonefile`.
+ */
+const copyTree = Effect.fn(function* (from: string, to: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const stat = yield* fs
+    .stat(from)
+    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+  if (stat === undefined) return;
+  if (stat.type !== "Directory") {
+    if (stat.type !== "File") return;
+    yield* fs.makeDirectory(path.dirname(to), { recursive: true });
+    const contents = yield* fs.readFile(from);
+    yield* fs.writeFile(to, contents);
+    return;
+  }
+  yield* fs.makeDirectory(to, { recursive: true });
+  const names = yield* fs.readDirectory(from, { recursive: true });
+  for (const name of names) {
+    const src = path.join(from, name);
+    const item = yield* fs
+      .stat(src)
+      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    if (item === undefined || item.type !== "File") continue;
+    const dst = path.join(to, name);
+    yield* fs.makeDirectory(path.dirname(dst), { recursive: true });
+    const contents = yield* fs.readFile(src);
+    yield* fs.writeFile(dst, contents);
+  }
 });
 
 const copyExtraFiles = Effect.fn(function* (
@@ -370,12 +428,25 @@ const copyExtraFiles = Effect.fn(function* (
       .exists(source)
       .pipe(Effect.orElseSucceed(() => false));
     if (!exists) continue;
-    const dest = path.join(contextDir, extraFileDestination(extra.dest));
+    const destName = extraFileDestination(extra.dest);
+    if (isContextRootDest(destName)) {
+      const stat = yield* fs.stat(source);
+      if (stat.type === "Directory") {
+        const names = yield* fs.readDirectory(source);
+        for (const name of names) {
+          yield* copyTree(path.join(source, name), path.join(contextDir, name));
+        }
+      } else {
+        yield* copyTree(source, path.join(contextDir, path.basename(source)));
+      }
+      continue;
+    }
+    const dest = path.join(contextDir, destName);
     if (yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))) {
       yield* fs.remove(dest, { recursive: true });
     }
     yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
-    yield* fs.copy(source, dest, { overwrite: true });
+    yield* copyTree(source, dest);
   }
 });
 
@@ -456,9 +527,21 @@ export const createFlyHostedSupport = ({
       );
     });
 
-    const bundleOutput = props.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
+    if (props.isExternal === true) {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const bytes = yield* fs.readFile(realMain);
+      const hash = yield* sha256(bytes);
+      return {
+        files: [{ path: path.basename(realMain), content: bytes }],
+        hash,
+      };
+    }
+
+    const bundleOutput = yield* buildBundle(
+      realMain,
+      virtualEntryPlugin(bootstrap),
+    );
 
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
@@ -475,6 +558,7 @@ export const createFlyHostedSupport = ({
     const bundled = yield* bundleProgram(props);
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
+    const path = yield* Path.Path;
     const requested = yield* normalizeInstallTargets(props.build?.install);
     const identity =
       Object.keys(requested).length > 0
@@ -486,10 +570,22 @@ export const createFlyHostedSupport = ({
         : undefined;
     const packageJson =
       install === undefined ? undefined : installManifest(install);
+    const extras = (props.extraFiles ?? []).map((file) => ({
+      source: file.source,
+      dest: file.dest,
+    }));
+    const root = contextRootOf(realMain, extras, path, (source) =>
+      resolveExtraSource(source, path),
+    );
+    const entryRel =
+      props.isExternal === true
+        ? (posixRelUnder(root, realMain, path) ?? path.basename(realMain))
+        : undefined;
     const dockerfile = generateDockerfile(
       props,
       bundled.files.length > 1,
       install,
+      entryRel,
     );
     const extraFiles = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
@@ -498,7 +594,7 @@ export const createFlyHostedSupport = ({
       packageJson,
       extraFiles,
     })).slice(0, 16);
-    return { bundled, dockerfile, codeHash, packageJson };
+    return { bundled, dockerfile, codeHash, packageJson, entryRel };
   });
 
   const imageExists = (imageRef: string) =>
@@ -530,6 +626,7 @@ export const createFlyHostedSupport = ({
     yield* note(`Bundling ${input.id} program...`);
     const { bundled, dockerfile, codeHash, packageJson } =
       yield* computeCodeHash(input.props);
+    yield* note(`Hashed ${input.id} (${codeHash})`);
     const repo = sanitizeImageRepo(input.id);
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${repo}-${codeHash}`;
 
@@ -544,22 +641,54 @@ export const createFlyHostedSupport = ({
         dotAlchemy,
         `${input.id}-image`,
       );
-      const files = bundled.files.map((file, index) => ({
-        path: index === 0 ? "index.mjs" : file.path,
-        content: file.content,
-      }));
-      if (packageJson !== undefined) {
-        files.push({
-          path: "package.json",
-          content: new TextEncoder().encode(packageJson),
-        });
-      }
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const files =
+        input.props.isExternal === true
+          ? packageJson !== undefined
+            ? [
+                {
+                  path: "package.json",
+                  content: new TextEncoder().encode(packageJson),
+                },
+              ]
+            : []
+          : [
+              ...bundled.files.map((file, index) => ({
+                path: index === 0 ? "index.mjs" : file.path,
+                content: file.content,
+              })),
+              ...(packageJson !== undefined
+                ? [
+                    {
+                      path: "package.json",
+                      content: new TextEncoder().encode(packageJson),
+                    },
+                  ]
+                : []),
+            ];
       yield* docker.materialize({
         context: contextDir,
         dockerfile,
         files,
       });
       yield* copyExtraFiles(contextDir, input.props.extraFiles);
+      if (input.props.isExternal === true) {
+        const extras = (input.props.extraFiles ?? []).map((file) => ({
+          source: file.source,
+          dest: file.dest,
+        }));
+        const root = contextRootOf(realMain, extras, path, (source) =>
+          resolveExtraSource(source, path),
+        );
+        const entryRel =
+          posixRelUnder(root, realMain, path) ?? path.basename(realMain);
+        const dest = path.join(contextDir, entryRel);
+        if (!(yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false)))) {
+          yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+          yield* fs.copy(realMain, dest, { overwrite: true });
+        }
+      }
       yield* note(`Building container image ${imageRef}...`);
       yield* docker.image.build({
         context: contextDir,

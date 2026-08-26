@@ -22,7 +22,7 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
   one. `https://railway.com/project/{projectId}` is the dashboard.
 - **[Services](/railway/compute/services)** — a container in a
   Project. Pass `image` for a public tag (`hashicorp/http-echo`),
-  `main` + `registry` for an Effect program, or `repo` for GitHub.
+  `main` for an Effect program, or `repo` for GitHub.
   `healthcheck` / `cronSchedule` / `buildCommand` match Railway IaC.
   `url` is `https://{name}.up.railway.app`. Railway load-balances
   public traffic; Alchemy does not pin a replica count.
@@ -42,8 +42,8 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 - **[Websites](/railway/frontend/websites)** — Vite, Astro,
   Next.js, Nuxt, SvelteKit, Waku, Octane, Foldkit, Vocs, and
   StaticSite. Each builds your app and deploys a
-  [Service](/railway/compute/services) image. `registry` is
-  required on deploy. URL is `*.up.railway.app` or a
+  [Service](/railway/compute/services) from a generated Dockerfile
+  Railway builds. URL is `*.up.railway.app` or a
   [custom domain](/railway/networking#custom-domains).
 - [`Vite`](/railway/frontend/vite), [`Astro`](/railway/frontend/astro),
   [`Next.js`](/railway/frontend/nextjs), [`Nuxt`](/railway/frontend/nuxt),
@@ -92,7 +92,7 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 | You're building              | Reach for                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------- |
 | An HTTP API on Railway       | [Project](/railway/compute/projects) + [Service](/railway/compute/services) |
-| A Vite SPA                   | [`Website.Vite`](/railway/frontend/vite) (`registry` on deploy)           |
+| A Vite SPA                   | [`Website.Vite`](/railway/frontend/vite)           |
 | An SSR site (Astro, Next, Nuxt, …) | [`Website`](/railway/frontend/websites)                             |
 | A raw container              | [Service](/railway/compute/services) with an `image`                      |
 | An Effect Function (no registry) | [Function](/railway/compute/functions)                                 |

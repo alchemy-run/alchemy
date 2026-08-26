@@ -1,3 +1,8 @@
+import {
+  NODE_SERVE_ENTRY_FILE_NAME,
+  relativeClientDirExpression,
+  writeNodeServeEntry,
+} from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -13,7 +18,6 @@ import { Service } from "../Service.ts";
 import {
   bindWebsiteDomain,
   DEFAULT_WEBSITE_PORT,
-  makeStaticServeSource,
   resolveWebsiteServer,
   unwrapEnv,
   websiteUrl,
@@ -185,30 +189,37 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const path = yield* Path.Path;
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const outdir = path.resolve(cwd, props.outdir);
-    const serveDir = path.join(ctx.dotAlchemy, "hetzner-website");
-    yield* fs.makeDirectory(serveDir, { recursive: true });
     const servePath = path.join(
-      serveDir,
-      `${id.replaceAll(/[^a-zA-Z0-9._-]+/g, "-") || "site"}-static-serve.mjs`,
+      path.dirname(outdir),
+      NODE_SERVE_ENTRY_FILE_NAME,
     );
-    yield* fs.writeFileString(
+    yield* writeNodeServeEntry({
+      output: {
+        clientDirectory: outdir,
+        serverModules: [],
+        externalWorkspaces: new Set<string>(),
+      },
       servePath,
-      makeStaticServeSource({
-        spa: props.spa,
-        errorPage: props.errorPage,
-        defaultPort: port,
-      }),
-    );
+      serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
+      clientDirExpression: relativeClientDirExpression(servePath, outdir),
+      notFoundHandling:
+        props.errorPage !== undefined
+          ? "404-page"
+          : props.spa === true
+            ? "spa"
+            : "none",
+      printUrl: isLocal,
+      defaultPort: port,
+      platform: "node",
+    });
 
     if (isLocal) {
       const bun = yield* Effect.sync(() => process.execPath);
       const dev = yield* Command.Dev("Dev", {
         command: `${bun} ${servePath}`,
-        cwd: props.cwd,
+        cwd: path.dirname(servePath),
         env: {
           ...unwrapEnv(props.env),
-          ALCHEMY_CLIENT_DIR: outdir,
-          // Depend on Build so the outdir exists before we serve it.
           ALCHEMY_BUILD_HASH: build.hash.output as unknown as string,
           PORT: "0",
           HOST: "127.0.0.1",
@@ -230,8 +241,8 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       main: servePath,
       extraFiles: [
         {
-          source: build.outdir as unknown as string,
-          destination: "dist",
+          source: outdir,
+          destination: path.basename(outdir),
         },
       ],
       port,

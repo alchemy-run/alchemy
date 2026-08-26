@@ -14,7 +14,6 @@ export default class Worker extends Railway.Service<Worker>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/example",
   },
   Effect.gen(function* () {
     const mount = yield* Railway.MountVolume(Disk, { path: VOLUME_PATH });

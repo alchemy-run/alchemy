@@ -15,9 +15,7 @@ deliberately thin: it runs your project's own `vite build` — Octane's
 plugin builds the client bundle and the self-contained SSR server
 bundle, and the Node deploy target's finishing pass wraps its fetch
 handler as a Node HTTP program. The server plus client assets run on
-one `Railway.Service` from a container image. Pass `registry` on
-deploy (`ghcr.io/org`, `docker.io/user`); it is unused under
-`alchemy dev`. The live URL is the generated
+one `Railway.Service` from a container image. The live URL is the generated
 `https://{name}.up.railway.app`. No Dockerfile, no build command to
 run.
 
@@ -68,15 +66,13 @@ error.
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is required on the live path:
+Stack):
 
 ```typescript
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.Octane("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.Octane("Website");
 ```
 
 Omit `project` and Alchemy creates a `Railway.Project` under the
@@ -87,7 +83,6 @@ export const Site = Railway.Project("Site");
 
 export const Website = Railway.Website.Octane("Website", {
   project: Site,
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -126,7 +121,6 @@ build and onto the Service at deploy time:
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.Octane("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    GREETING: "Hello from alchemy",
 +    API_BASE: "https://api.example.com",
@@ -172,14 +166,13 @@ bun alchemy dev
 in-process SSR middleware serves rendering, server routes, and RPC
 with full HMR. `site.url` is the local address and no Railway
 resources are created (`service` and `project` are `undefined`;
-`registry` is unused). Wrap the site in `Alchemy.remote()` to deploy
+ Wrap the site in `Alchemy.remote()` to deploy
 the real infrastructure even during dev.
 
 ## Custom domain
 
 ```typescript
 const site = yield* Railway.Website.Octane("Web", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

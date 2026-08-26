@@ -25,8 +25,7 @@ export interface FoldkitProps extends ViteProps {}
  * **Example:** Serving a real 404 page
  * ```typescript
  * const site = yield* Fly.Website.Foldkit("Web", {
- *   spa: false,
- *   errorPage: "404.html",
+ *   assets: { notFoundHandling: "404-page" },
  * });
  * ```
  *
@@ -36,5 +35,8 @@ export interface FoldkitProps extends ViteProps {}
 export const Foldkit = (id: string, props: FoldkitProps = {}) =>
   Vite(id, {
     ...props,
-    spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
+    assets: {
+      notFoundHandling: "single-page-application",
+      ...props.assets,
+    },
   });

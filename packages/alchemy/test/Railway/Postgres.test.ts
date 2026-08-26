@@ -15,7 +15,6 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
 import PostgresFn from "./fixtures/postgres-fn.ts";
-import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -167,7 +166,7 @@ const FixtureStack = Alchemy.Stack(
       functionId: fn.serviceId,
       functionUrl: fn.url,
       publicConnectionUri: db.publicConnectionUri,
-      mode: canPushRailwayImage ? ("effect" as const) : ("image" as const),
+      mode: "effect" as const,
     };
   }),
 );

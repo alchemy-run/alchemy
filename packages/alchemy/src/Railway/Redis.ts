@@ -210,7 +210,7 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const cache = yield* Railway.ReadWriteRedis(Cache);
  *     return {

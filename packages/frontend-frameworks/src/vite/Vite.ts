@@ -72,6 +72,17 @@ export interface ViteBuildConfig {
  */
 export interface ViteTargetConfig {
   readonly vite?: ViteBuildConfig | undefined;
+  /**
+   * Assets-only Node serve entry (`vite/node` finish). `"spa"` serves
+   * `index.html` for unmatched GET paths.
+   * @default "spa" on the Node target
+   */
+  readonly notFoundHandling?: "none" | "spa" | "404-page" | undefined;
+  /**
+   * Serve `about/index.html` at `/about`.
+   * @default "none"
+   */
+  readonly htmlHandling?: "none" | "drop-trailing-slash" | undefined;
 }
 
 /**
@@ -108,6 +119,12 @@ export interface ViteOptions {
   readonly target?: ViteTargetInput | undefined;
   /** Serializable overrides merged over the project's `vite.config.*`. */
   readonly vite?: ViteBuildConfig | undefined;
+  /**
+   * Forwarded to the Node target's static serve entry. Ignored by AWS
+   * (S3) / Cloudflare (Workers assets).
+   */
+  readonly notFoundHandling?: "none" | "spa" | "404-page" | undefined;
+  readonly htmlHandling?: "none" | "drop-trailing-slash" | undefined;
   readonly dev?:
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
@@ -148,7 +165,11 @@ export const make: (
   const path = yield* Path.Path;
   const baseRoot = options?.root ?? (yield* Effect.sync(() => process.cwd()));
 
-  const targetConfig: ViteTargetConfig = { vite: options?.vite };
+  const targetConfig: ViteTargetConfig = {
+    vite: options?.vite,
+    notFoundHandling: options?.notFoundHandling,
+    htmlHandling: options?.htmlHandling,
+  };
 
   const resolveTarget = (root: string) =>
     FrameworkCore.resolveDeployTarget<ViteTarget, ViteTargetConfig>(

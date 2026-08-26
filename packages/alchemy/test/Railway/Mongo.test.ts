@@ -12,7 +12,6 @@ import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import MongoApi, { Db, Site } from "./fixtures/mongo-api.ts";
-import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -146,7 +145,7 @@ const FixtureStack = Alchemy.Stack(
       serviceId: api.serviceId,
       url: api.url,
       publicConnectionUri: db.publicConnectionUri,
-      mode: canPushRailwayImage ? ("effect" as const) : ("image" as const),
+      mode: "effect" as const,
     };
   }),
 );

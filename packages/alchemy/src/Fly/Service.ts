@@ -3,6 +3,7 @@ import type {
   FlyMachineGuest,
   FlyMachineMount,
   FlyMachineService,
+  FlyStatic,
   Machine as FlyMachine,
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
@@ -147,6 +148,22 @@ export interface ServiceProps extends PlatformProps {
   extraFiles?: ReadonlyArray<{
     source: string;
     dest: string;
+  }>;
+  /**
+   * Fly proxy static-file maps. Matching GET paths skip the process and
+   * are served from the image (`guestPath`) or a Tigris bucket
+   * (`tigrisBucket`). Website composites publish hashed client assets
+   * this way.
+   */
+  statics?: ReadonlyArray<{
+    /** Path inside the image, or key prefix in {@link tigrisBucket}. */
+    guestPath: string;
+    /** URL prefix, e.g. `"/"`. */
+    urlPrefix: string;
+    /** Tigris bucket name. When set, files come from the bucket. */
+    tigrisBucket?: string;
+    /** Directory index file (`index.html`) for Tigris statics. */
+    indexDocument?: string;
   }>;
 }
 
@@ -742,6 +759,29 @@ const desiredEnv = (
   ...toEnv(props.env),
 });
 
+const toFlyStatics = (
+  statics:
+    | ReadonlyArray<{
+        guestPath: string;
+        urlPrefix: string;
+        tigrisBucket?: string;
+        indexDocument?: string;
+      }>
+    | undefined,
+): FlyStatic[] | undefined => {
+  if (statics === undefined || statics.length === 0) return undefined;
+  return statics.map((entry) => ({
+    guest_path: entry.guestPath,
+    url_prefix: entry.urlPrefix,
+    ...(entry.tigrisBucket !== undefined
+      ? { tigris_bucket: entry.tigrisBucket }
+      : {}),
+    ...(entry.indexDocument !== undefined
+      ? { index_document: entry.indexDocument }
+      : {}),
+  }));
+};
+
 const buildConfig = (input: {
   image: string;
   guest: FlyMachineGuest;
@@ -749,6 +789,7 @@ const buildConfig = (input: {
   services: FlyMachineService[];
   mounts: FlyMachineMount[];
   metadata: Record<string, string>;
+  statics?: FlyStatic[];
 }): FlyMachineConfig => ({
   image: input.image,
   guest: input.guest,
@@ -756,6 +797,10 @@ const buildConfig = (input: {
   services: input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
+  statics:
+    input.statics !== undefined && input.statics.length > 0
+      ? input.statics
+      : undefined,
 });
 
 const sameImage = (machine: FlyMachine, image: string) => {
@@ -818,6 +863,11 @@ const metadataChanged = (
   );
 };
 
+const sameStatics = (
+  observed: FlyStatic[] | undefined,
+  desired: FlyStatic[] | undefined,
+) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
+
 const configDrifted = (
   machine: FlyMachine,
   desired: {
@@ -827,6 +877,7 @@ const configDrifted = (
     services: FlyMachineService[];
     mounts: FlyMachineMount[];
     metadata: Record<string, string>;
+    statics?: FlyStatic[];
   },
 ) => {
   const config = machine.config;
@@ -836,7 +887,8 @@ const configDrifted = (
     !sameEnv(config?.env, desired.env) ||
     !sameServices(config?.services, desired.services) ||
     !sameMounts(config?.mounts, desired.mounts) ||
-    metadataChanged(config?.metadata, desired.metadata)
+    metadataChanged(config?.metadata, desired.metadata) ||
+    !sameStatics(config?.statics, desired.statics)
   );
 };
 
@@ -993,6 +1045,7 @@ export const ServiceProvider = () =>
             props.services !== undefined
               ? props.services.map(toFlyService)
               : defaultHttpServices(port, count);
+          const statics = toFlyStatics(props.statics);
 
           const { imageRef, codeHash } = yield* hosted.resolveImage({
             id,
@@ -1023,6 +1076,7 @@ export const ServiceProvider = () =>
                 services,
                 mounts: desired.mounts,
                 metadata: desired.metadata,
+                statics,
               }),
             buildConfig: ({ mounts, metadata }) =>
               buildConfig({
@@ -1032,6 +1086,7 @@ export const ServiceProvider = () =>
                 services,
                 mounts,
                 metadata,
+                statics,
               }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>

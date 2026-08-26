@@ -224,7 +224,7 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme", build: { install: ["mysql2"] } },
+ *   { project: Site, main: import.meta.url, build: { install: ["mysql2"] } },
  *   Effect.gen(function* () {
  *     const conn = yield* Railway.ConnectMySQL(Db);
  *     const db = yield* Drizzle.MySQL(conn.connectionString);
@@ -1166,9 +1166,11 @@ export const MySQLProvider = () =>
           .pipe(
             RailwayRetry.none,
             Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
+              while: (e) =>
+                e._tag === "RailwayRateLimited" ||
+                e._tag === "RailwayInternalError",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 4,
             }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),

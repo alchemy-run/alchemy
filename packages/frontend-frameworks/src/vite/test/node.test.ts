@@ -7,7 +7,7 @@ describe("makeNodeTarget", () => {
     const node = makeNodeTarget({ vite: { outDir: "dist" } });
     expect(node.platform).toBe("node");
     expect(node.build).toBeTypeOf("function");
-    expect(node.finish).toBeUndefined();
+    expect(node.finish).toBeTypeOf("function");
     expect(node.entry).toBeUndefined();
     expect(node.bundle?.conditions).toEqual([...NODE_BUNDLE_CONDITIONS]);
     expect(node.bundle?.external ?? []).not.toContain("cloudflare:");

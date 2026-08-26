@@ -1,5 +1,9 @@
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  staticConfigFromAssets,
+  type FrameworkSiteProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Astro build. */
 export const ASTRO_FRAMEWORK_SPECIFIER =
@@ -36,16 +40,6 @@ export interface AstroProps extends FrameworkSiteProps {
     /** Trailing-slash handling for routes. */
     trailingSlash?: "always" | "never" | "ignore";
   };
-  /**
-   * Serve the built error page (e.g. astro's `404.html`) for requests that
-   * match no file. Only applies to `output: "static"` sites.
-   */
-  errorPage?: string;
-  /**
-   * Answer misses with the index page (200) instead of a 404. Only
-   * applies to `output: "static"` sites.
-   */
-  spa?: boolean;
 }
 
 /**
@@ -83,7 +77,7 @@ export interface AstroProps extends FrameworkSiteProps {
  * const site = yield* Hetzner.Website.Astro("Docs", {
  *   rootDir: "./docs",
  *   astro: { output: "static" },
- *   errorPage: "404.html",
+ *   assets: { notFoundHandling: "404-page" },
  * });
  * ```
  *
@@ -98,8 +92,6 @@ export const Astro = (id: string, props: AstroProps = {}) => {
     target: ASTRO_NODE_TARGET_SPECIFIER,
     options: { astro: { ...props.astro, output } },
     static:
-      output === "static"
-        ? { spa: props.spa, errorPage: props.errorPage }
-        : undefined,
+      output === "static" ? staticConfigFromAssets(props.assets) : undefined,
   }).pipe(Namespace.push(id));
 };

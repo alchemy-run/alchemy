@@ -23,8 +23,7 @@ module-level const:
 import * as Fly from "alchemy/Fly";
 
 export const Website = Fly.Website.StaticSite("Website", {
-  command: "hugo --minify",
-  outdir: "public",
+  build: { command: "hugo --minify", output: "public" },
 });
 ```
 
@@ -71,22 +70,20 @@ Pass `app` to put the site on an App you already declared:
 export const Site = Fly.App("Site");
 
 export const Website = Fly.Website.StaticSite("Website", {
-  command: "hugo --minify",
-  outdir: "public",
+  build: { command: "hugo --minify", output: "public" },
   app: Site,
 });
 ```
 
 ## Building from a subdirectory
 
-`cwd` is the working directory for `command`. `outdir` is relative
-to `cwd` (default: process cwd):
+`path` is the working directory for `build.command`. `build.output`
+is relative to `path` (default: process cwd):
 
 ```typescript
 export const Website = Fly.Website.StaticSite("Web", {
-  cwd: "apps/web",
-  command: "npm run build",
-  outdir: "dist",
+  path: "apps/web",
+  build: { command: "npm run build", output: "dist" },
 });
 ```
 
@@ -99,16 +96,14 @@ ways, and they are mutually exclusive:
 // Single-page app: misses serve index.html with a 200 so the
 // client-side router takes over.
 export const App = Fly.Website.StaticSite("App", {
-  command: "npm run build",
-  outdir: "dist",
-  spa: true,
+  build: { command: "npm run build", output: "dist" },
+  assets: { notFoundHandling: "single-page-application" },
 });
 
 // Static site: misses return a real 404 status with your error page.
 export const Docs = Fly.Website.StaticSite("Docs", {
-  command: "hugo --minify",
-  outdir: "public",
-  errorPage: "404.html",
+  build: { command: "hugo --minify", output: "public" },
+  assets: { notFoundHandling: "404-page" },
 });
 ```
 
@@ -120,8 +115,7 @@ Worker bindings and not AWS `server.environment`:
 
 ```diff lang="typescript"
 export const Website = Fly.Website.StaticSite("Website", {
-  command: "hugo --minify",
-  outdir: "public",
+  build: { command: "hugo --minify", output: "public" },
 +  env: {
 +    HUGO_ENV: "production",
 +  },
@@ -142,8 +136,7 @@ detected from stdout (`dev.url` pins it when detection fails).
 
 ```typescript
 export const Website = Fly.Website.StaticSite("Website", {
-  command: "hugo --minify",
-  outdir: "public",
+  build: { command: "hugo --minify", output: "public" },
   dev: { command: "hugo server" },
 });
 ```
@@ -154,8 +147,7 @@ server serves `outdir` — still no cloud resources. Wrap the site in
 
 ```typescript
 export const Website = Fly.Website.StaticSite("Website", {
-  command: "hugo --minify",
-  outdir: "public",
+  build: { command: "hugo --minify", output: "public" },
 }).pipe(Alchemy.remote());
 ```
 
@@ -168,8 +160,7 @@ v1 does not create records:
 
 ```typescript
 export const Website = Fly.Website.StaticSite("Website", {
-  command: "hugo --minify",
-  outdir: "public",
+  build: { command: "hugo --minify", output: "public" },
   domain: "blog.example.com",
 });
 ```

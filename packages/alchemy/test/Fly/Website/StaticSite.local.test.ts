@@ -30,9 +30,8 @@ describe("Fly.Website.StaticSite local", () => {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const site = yield* Fly.Website.StaticSite("Blog", {
-              cwd,
-              command: "bash build.sh",
-              outdir: "dist",
+              path: cwd,
+              build: { command: "bash build.sh", output: "dist" },
             });
             return { site };
           }),

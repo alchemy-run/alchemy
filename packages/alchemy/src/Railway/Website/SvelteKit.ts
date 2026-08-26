@@ -34,7 +34,6 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* Railway.Website.SvelteKit("Web", {
  *   rootDir: "./app",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -46,7 +45,6 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *   env: {
  *     API_BASE: "https://api.example.com",
  *   },
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *

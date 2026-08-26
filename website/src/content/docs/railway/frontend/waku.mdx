@@ -12,9 +12,8 @@ export const devDeps = "@alchemy.run/frontend-frameworks";
 `Railway.Website.Waku` deploys a [Waku](https://waku.gg) app (React
 Server Components) to Railway. It builds the project programmatically:
 the RSC server plus SSG pages run on one
-[`Railway.Service`](/railway/compute/services). Pass `registry` (a
-GHCR or Docker Hub prefix Railway can pull) on deploy; Alchemy
-creates a [`Railway.Project`](/railway/compute/projects) if you omit
+[`Railway.Service`](/railway/compute/services). Alchemy creates a
+[`Railway.Project`](/railway/compute/projects) if you omit
 `project`. The URL is the generated `*.up.railway.app` hostname. No
 `waku.config.ts` edits are required — if you have one it loads
 natively — and there is no adapter to configure and no build command
@@ -75,16 +74,13 @@ a standalone `vite.config.ts` is not loaded, same as Waku's own CLI.
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is required on deploy and unused under
-`alchemy dev`:
+Stack):
 
 ```typescript
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.Waku("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.Waku("Website");
 ```
 
 Pass `project` to put the Service in an existing `Railway.Project`.
@@ -131,7 +127,6 @@ Process environment is a top-level `env` map — plain strings, or
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.Waku("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    GREETING: "Hello from alchemy",
 +    API_BASE: "https://api.example.com",
@@ -167,20 +162,17 @@ bun alchemy dev
 
 `alchemy dev` runs Waku's own dev server (native HMR) instead of
 deploying; `site.url` is the local address and no Railway resources
-are created. `registry` is unused. Wrap the site in
+are created. Wrap the site in
 `Alchemy.remote()` to deploy the live Service even during dev:
 
 ```typescript
-export const Website = Railway.Website.Waku("Website", {
-  registry: "ghcr.io/acme",
-}).pipe(Alchemy.remote());
+export const Website = Railway.Website.Waku("Website").pipe(Alchemy.remote());
 ```
 
 ## Custom domain
 
 ```typescript
 const site = yield* Railway.Website.Waku("Web", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

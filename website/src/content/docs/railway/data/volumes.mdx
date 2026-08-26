@@ -37,7 +37,7 @@ to a path and use it as a plain directory at runtime:
 ```typescript
 export default class Api extends Railway.Service<Api>()(
   "Api",
-  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", port: 3000 },
+  { project: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
     const disk = yield* Railway.MountVolume(Data, { path: "/data" });
     const fs = yield* FileSystem.FileSystem;

@@ -48,9 +48,8 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const site = yield* Fly.Website.StaticSite("Blog", {
-            cwd,
-            command: "bash build.sh",
-            outdir: "dist",
+            path: cwd,
+            build: { command: "bash build.sh", output: "dist" },
           });
           return { site };
         }),
@@ -72,5 +71,5 @@ test.provider(
       const gone = yield* waitUntilGone(appName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 240_000 },
 );

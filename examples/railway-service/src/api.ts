@@ -30,9 +30,7 @@ const runtime = Layer.mergeAll(
 
 /**
  * HTTP Service. Binds Postgres, Redis, and the Bucket. Reads the
- * shared {@link Marker} variable from env. Set `RAILWAY_REGISTRY` to
- * a prefix Railway can pull (GHCR / Docker Hub) so Alchemy can push
- * the bundled image.
+ * shared {@link Marker} variable from env.
  */
 export default class Api extends Railway.Service<Api>()(
   "Api",
@@ -40,7 +38,6 @@ export default class Api extends Railway.Service<Api>()(
     project: Site,
     main: import.meta.url,
     port: API_PORT,
-    registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/example",
     build: { install: ["pg"] },
     healthcheck: "/health",
   },

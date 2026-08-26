@@ -20,9 +20,6 @@ creates a `Railway.Project` if you omit `project`, then a
 there is no `svelte.config.js` to write (kit v3 dropped it) and no
 adapter to install.
 
-`registry` is required on deploy (`ghcr.io/org`, `docker.io/user`)
-and unused under `alchemy dev`.
-
 ## Install
 
 The build integration is not bundled with alchemy. Install
@@ -67,9 +64,7 @@ Stack):
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.SvelteKit("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.SvelteKit("Website");
 ```
 
 Omit `project` to create a `Railway.Project` under the site
@@ -108,7 +103,6 @@ Process environment is a top-level `env` map:
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.SvelteKit("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    GREETING: "Hello from alchemy",
 +    API_BASE: "https://api.example.com",
@@ -161,7 +155,6 @@ over those options (the override wins). It must be JSON-serializable:
 ```typescript
 // alchemy.run.ts
 export const Website = Railway.Website.SvelteKit("Website", {
-  registry: "ghcr.io/acme",
   kit: {
     paths: { base: "/docs" },
   },
@@ -181,14 +174,13 @@ bun alchemy dev
 `alchemy dev` runs SvelteKit's own Vite dev server — Node SSR with
 full HMR — instead of deploying; `site.url` is the local address and
 no Railway resources are created (`service` and `project` are
-`undefined`). `registry` is unused. Wrap the site in
+`undefined`). Wrap the site in
 `Alchemy.remote()` to deploy the live Service even during dev.
 
 ## Custom domain
 
 ```typescript
 const site = yield* Railway.Website.SvelteKit("Web", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

@@ -2,6 +2,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
+import * as Output from "../Output.ts";
 import type { Url } from "../Redis/index.ts";
 import { UrlMissing as RedisUrlMissing } from "../Redis/index.ts";
 import { isRailwayHost } from "./MountVolume.ts";
@@ -31,13 +32,17 @@ const asPlain = (value: unknown): string | undefined => {
 
 const resolveName = (redis: Redis): Effect.Effect<string> =>
   Effect.gen(function* () {
-    const direct = asPlain(redis.name);
-    if (direct !== undefined) return direct;
     const value = redis.name as unknown;
+    const direct = asPlain(value);
+    if (direct !== undefined) return direct;
+    if (Output.isOutput(value)) {
+      const accessor = yield* value as Output.Output<string>;
+      return asPlain(yield* accessor) ?? "";
+    }
     if (Effect.isEffect(value)) {
       return asPlain(yield* value as Effect.Effect<unknown>) ?? "";
     }
-    return "";
+    return redis.LogicalId;
   });
 
 const redisUrlFromEnv = Config.redacted(REDIS_URL_ENV).pipe(
@@ -52,14 +57,17 @@ export const makeRedisBinding = <Client>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isRailwayHost(host)) {
-          const name = yield* resolveName(redis);
-          if (name.length > 0) {
-            yield* host.bind`${redis}`({
-              env: {
-                [REDIS_URL_ENV]: `\${{${name}.${REDIS_URL_ENV}}}`,
-              },
-            });
-          }
+          // Resolve the physical service name at apply, not at Service
+          // init — LogicalId (`Cache`) is not a Railway variable
+          // reference. Same Output-in-env pattern as ConnectPostgres.
+          yield* host.bind`${redis}`({
+            env: {
+              [REDIS_URL_ENV]: Output.map(
+                Output.asOutput(redis.name as Output.Output<string>),
+                (name) => `\${{${name}.${REDIS_URL_ENV}}}`,
+              ),
+            },
+          });
         }
       }
 

@@ -9,7 +9,6 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { canPushRailwayImage, railwayRegistry } from "../fixtures/registry.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -40,7 +39,7 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-test.provider.skipIf(!canPushRailwayImage)(
+test.provider(
   "Vite SPA: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {
@@ -56,7 +55,6 @@ test.provider.skipIf(!canPushRailwayImage)(
         Effect.gen(function* () {
           const site = yield* Railway.Website.Vite("Web", {
             rootDir,
-            registry: railwayRegistry!,
             memo: {
               include: ["index.html", "src/**", "package.json"],
             },
@@ -104,5 +102,5 @@ test.provider.skipIf(!canPushRailwayImage)(
       const gone = yield* waitUntilGone(serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 240_000 },
 );

@@ -20,9 +20,7 @@ takes over.
 Deploy creates a [`Railway.Project`](/railway/compute/projects)
 (unless you pass `project`) and a
 [`Railway.Service`](/railway/compute/services) from a container
-image. `registry` is required on the live path (`ghcr.io/org`,
-`docker.io/user`) and unused under `alchemy dev`. The URL is
-`https://{name}.up.railway.app`.
+image. The URL is `https://{name}.up.railway.app`.
 
 ## Install
 
@@ -76,15 +74,13 @@ manager — Alchemy imposes no Effect version on your frontend.
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is required on deploy:
+Stack):
 
 ```typescript
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.Foldkit("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.Foldkit("Website");
 ```
 
 For an app in a subdirectory of a monorepo, point `rootDir` at it:
@@ -92,7 +88,6 @@ For an app in a subdirectory of a monorepo, point `rootDir` at it:
 ```typescript
 export const Website = Railway.Website.Foldkit("Website", {
   rootDir: "applications/web",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -132,7 +127,6 @@ a `VITE_`-prefixed key in top-level `env`. Values must be strings (or
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.Foldkit("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    VITE_API_URL: "https://api.example.com",
 +  },
@@ -170,7 +164,6 @@ unmatched paths so the Foldkit runtime can resolve the route. Pass
 export const Website = Railway.Website.Foldkit("Website", {
   spa: false,
   errorPage: "404.html",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -180,7 +173,7 @@ export const Website = Railway.Website.Foldkit("Website", {
 
 `alchemy dev` runs Vite's own dev server (native HMR, Foldkit
 devtools) instead of deploying; `site.url` is the local address and
-no Project or Service is created. `registry` is unused. Wrap the
+no Project or Service is created. Wrap the
 site in `Alchemy.remote()` to deploy the live Service even during
 dev.
 
@@ -188,7 +181,6 @@ Pin the dev server's address when several apps run in one Stack:
 
 ```typescript
 export const Website = Railway.Website.Foldkit("Website", {
-  registry: "ghcr.io/acme",
   dev: { host: "127.0.0.1", port: 5180, strictPort: true },
 });
 ```
@@ -201,7 +193,6 @@ Pass a hostname to attach a
 
 ```typescript
 const site = yield* Railway.Website.Foldkit("Web", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

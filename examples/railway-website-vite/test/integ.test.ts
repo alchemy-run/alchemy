@@ -8,18 +8,6 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
-const present = (value: string | undefined): boolean =>
-  value !== undefined && value.length > 0;
-
-const canPushRailwayImage =
-  present(process.env.RAILWAY_REGISTRY) &&
-  ((present(process.env.RAILWAY_REGISTRY_USERNAME) &&
-    present(process.env.RAILWAY_REGISTRY_PASSWORD)) ||
-    (present(process.env.GITHUB_ACTOR) && present(process.env.GITHUB_TOKEN)) ||
-    (present(process.env.DOCKERHUB_USERNAME) &&
-      (present(process.env.DOCKERHUB_TOKEN) ||
-        present(process.env.DOCKER_PASSWORD))));
-
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
   state: Alchemy.localState(),
@@ -42,46 +30,42 @@ const executeOk = (request: HttpClientRequest.HttpClientRequest) =>
     );
   });
 
-if (!canPushRailwayImage) {
-  test.skip("skipped without RAILWAY_REGISTRY push credentials", Effect.void);
-} else {
-  const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
 
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-    timeout: 180_000,
-  });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 180_000,
+});
 
-  test(
-    "SPA renders the Notes heading",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-      if (!url) throw new Error("expected the site to expose a url");
-      const base = url.replace(/\/+$/, "");
-      const response = yield* executeOk(HttpClientRequest.get(`${base}/`));
-      const body = yield* response.text;
-      expect(body).toContain("Notes — Railway");
-    }),
-    { timeout: 180_000 },
-  );
+test(
+  "SPA renders the Notes heading",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    if (!url) throw new Error("expected the site to expose a url");
+    const base = url.replace(/\/+$/, "");
+    const response = yield* executeOk(HttpClientRequest.get(`${base}/`));
+    const body = yield* response.text;
+    expect(body).toContain("Notes — Railway");
+  }),
+  { timeout: 180_000 },
+);
 
-  test(
-    "API persists a note in Postgres",
-    Effect.gen(function* () {
-      const { apiUrl } = yield* stack;
-      if (!apiUrl) throw new Error("expected the API url");
-      const base = String(apiUrl).replace(/\/+$/, "");
-      const marker = `railway-note-${crypto.randomUUID()}`;
-      yield* executeOk(
-        HttpClientRequest.post(`${base}/notes`).pipe(
-          HttpClientRequest.bodyJsonUnsafe({ body: marker }),
-        ),
-      );
-      const listed = yield* executeOk(HttpClientRequest.get(`${base}/notes`));
-      const payload = (yield* listed.json) as {
-        notes: Array<{ body: string }>;
-      };
-      expect(payload.notes.some((note) => note.body === marker)).toBe(true);
-    }),
-    { timeout: 180_000 },
-  );
-}
+test(
+  "API persists a note in Postgres",
+  Effect.gen(function* () {
+    const { apiUrl } = yield* stack;
+    if (!apiUrl) throw new Error("expected the API url");
+    const base = String(apiUrl).replace(/\/+$/, "");
+    const marker = `railway-note-${crypto.randomUUID()}`;
+    yield* executeOk(
+      HttpClientRequest.post(`${base}/notes`).pipe(
+        HttpClientRequest.bodyJsonUnsafe({ body: marker }),
+      ),
+    );
+    const listed = yield* executeOk(HttpClientRequest.get(`${base}/notes`));
+    const payload = (yield* listed.json) as {
+      notes: Array<{ body: string }>;
+    };
+    expect(payload.notes.some((note) => note.body === marker)).toBe(true);
+  }),
+  { timeout: 180_000 },
+);

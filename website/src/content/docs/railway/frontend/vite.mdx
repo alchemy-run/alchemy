@@ -12,9 +12,7 @@ export const devDeps = "@alchemy.run/frontend-frameworks";
 `Railway.Website.Vite` deploys a [Vite](https://vite.dev) project to
 Railway. It runs `vite build` and serves the output from a generated
 Node static-file server on one
-[`Railway.Service`](/railway/compute/services). `registry` is
-required on deploy (the GHCR / Docker Hub prefix Railway pulls
-from). Omit `project` and Alchemy creates a
+[`Railway.Service`](/railway/compute/services). Omit `project` and Alchemy creates a
 [`Railway.Project`](/railway/compute/projects). Live `url` is
 `https://{name}.up.railway.app`. Your `vite.config.*` loads natively
 — plugins included. There is no framework server module.
@@ -76,16 +74,13 @@ framework server module — it only ships the client build.
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is required on `alchemy deploy` and unused under
-`alchemy dev`:
+Stack):
 
 ```typescript
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.Vite("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.Vite("Website");
 ```
 
 Pass `project` to put the Service in a Project you already have.
@@ -97,7 +92,6 @@ export const Site = Railway.Project("Site");
 
 export const Website = Railway.Website.Vite("Website", {
   project: Site,
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -140,7 +134,6 @@ not Worker bindings:
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.Vite("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    VITE_GREETING: "Hello from Alchemy!",
 +  },
@@ -171,7 +164,6 @@ mutually exclusive:
 export const Website = Railway.Website.Vite("Docs", {
   spa: false,
   errorPage: "404.html",
-  registry: "ghcr.io/acme",
 });
 ```
 
@@ -186,7 +178,6 @@ config file:
 ```typescript
 export const Website = Railway.Website.Vite("Website", {
   rootDir: "./app",
-  registry: "ghcr.io/acme",
   outDir: "build",
   base: "/docs/",
 });
@@ -200,7 +191,7 @@ base path.
 
 `alchemy dev` runs Vite's own dev server (native HMR) instead of
 deploying; `site.url` is the local address and no Project or Service
-is created. `registry` is not used. Wrap the site in
+is created. Wrap the site in
 `Alchemy.remote()` to deploy the real infrastructure even during
 dev.
 
@@ -212,7 +203,6 @@ and `url` becomes `https://{domain}`:
 
 ```typescript
 export const Website = Railway.Website.Vite("Website", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

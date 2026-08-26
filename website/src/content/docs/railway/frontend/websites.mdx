@@ -20,10 +20,9 @@ Omit `project` and Alchemy creates a
 [`Railway.Project`](/railway/compute/projects). Pass `project` to
 put the site next to other Services in an existing Project.
 
-**`registry` is required on deploy** (`ghcr.io/org`,
-`docker.io/user`) — the live path pushes an image. It is unused
-under `alchemy dev`. Missing `registry` on deploy fails with
-`RegistryRequired`.
+The live path generates a Dockerfile and uploads it; Railway
+builds the image. No GHCR. No Docker daemon on your machine.
+`alchemy dev` never creates a Project or Service.
 
 The live URL is the generated `https://{name}.up.railway.app`,
 or `https://{domain}` when you pass `domain` (a
@@ -60,9 +59,9 @@ The return is `{ url, service, project }` — `service` and
 `project` are `undefined` under `alchemy dev`.
 
 Shared props: `rootDir`, `memo`, `env` (process environment on
-the Service — not Worker bindings), `dev`, `domain`, `project`,
-`registry`. Builds are memoized by content-hashing the input
-files — an unchanged project skips the build.
+the Service — not Worker bindings), `dev`, `domain`, `project`.
+Builds are memoized by content-hashing the input files — an
+unchanged project skips the build.
 
 ## What's supported
 
@@ -109,7 +108,6 @@ not Worker bindings and not AWS `server.environment`.
 ```typescript
 const site = yield* Railway.Website.Vite("Web", {
   project,
-  registry: "ghcr.io/acme",
   env: {
     VITE_API_URL: api.url,
   },
@@ -124,16 +122,14 @@ way you would any other Service.
 
 `alchemy dev` runs the framework's own dev server (native HMR)
 instead of deploying. `site.url` is the local address and no
-Project, Service, or image push happens — `registry` is not
-required. Wrap the site in `Alchemy.remote()` to deploy the live
-path even during dev.
+Project or Service is created. Wrap the site in
+`Alchemy.remote()` to deploy the live path even during dev.
 
 ## Custom domain
 
 ```typescript
 const site = yield* Railway.Website.Astro("Web", {
   project,
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```
@@ -144,8 +140,7 @@ const site = yield* Railway.Website.Astro("Web", {
 
 ## Where next
 
-- [The Vite resource](/railway/frontend/vite) — assets-only SPA,
-  `spa` / `errorPage`, `registry`.
+- [The Vite resource](/railway/frontend/vite) — assets-only SPA
 - [The StaticSite resource](/railway/frontend/static-site) — build
   commands, SPA/404 handling.
 - Framework guides:

@@ -36,7 +36,6 @@ export interface OctaneProps extends FrameworkSiteProps {}
  * ```typescript
  * const site = yield* Railway.Website.Octane("Web", {
  *   rootDir: "./app",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -48,7 +47,6 @@ export interface OctaneProps extends FrameworkSiteProps {}
  *   env: {
  *     API_BASE: "https://api.example.com",
  *   },
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *

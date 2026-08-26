@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
 import {
@@ -20,7 +19,6 @@ import {
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
 import { hashDirectory } from "../Command/Memo.ts";
-import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import { safeHttpEffect } from "../Http.ts";
 import { Self } from "../Self.ts";
@@ -30,6 +28,13 @@ import {
 } from "../Server/Process.ts";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  CONTEXT_ROOT_DEST,
+  EXTRA_FILES_HASH_EXCLUDE,
+  contextRootOf,
+  isContextRootDest,
+  posixRelUnder,
+} from "../Server/externalProgram.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
@@ -90,7 +95,6 @@ export const createRailwayFunctionRuntimeContext =
 
 export const DEFAULT_BASE_IMAGE = "oven/bun:1";
 export const DEFAULT_PORT = 3000;
-export const MACHINE_PLATFORM = "linux/amd64";
 
 export interface RailwayBuildOptions extends Bundle.BundleConfig {
   /**
@@ -134,11 +138,6 @@ export interface HostedProgramProps {
   isExternal?: boolean;
   build?: RailwayBuildOptions;
   /**
-   * Registry prefix Railway can pull from after we push the bundled
-   * image (`ghcr.io/org`, `docker.io/user`). Required when `main` is set.
-   */
-  registry?: string;
-  /**
    * Extra files/directories copied into `/app` after the bundled entry.
    * Hashed into `code.hash` so asset-only changes rebuild the image.
    */
@@ -161,12 +160,6 @@ const matchesConfiguredExternal = (
   );
 };
 
-export class RegistryRequired extends Data.TaggedError(
-  "Railway.RegistryRequired",
-)<{
-  message: string;
-}> {}
-
 export class ExtraFileMissing extends Data.TaggedError(
   "Railway.ExtraFileMissing",
 )<{
@@ -176,6 +169,7 @@ export class ExtraFileMissing extends Data.TaggedError(
 
 const sanitizeCopyDest = (dest: string): string | undefined => {
   const normalized = dest.replaceAll("\\", "/").replace(/^\/+/, "");
+  if (isContextRootDest(normalized)) return CONTEXT_ROOT_DEST;
   if (normalized.length === 0 || normalized.split("/").includes("..")) {
     return undefined;
   }
@@ -185,7 +179,8 @@ const sanitizeCopyDest = (dest: string): string | undefined => {
 const dockerfileCopyLines = (files: ReadonlyArray<ExtraFile> | undefined) =>
   (files ?? []).flatMap((file) => {
     const dest = sanitizeCopyDest(file.dest);
-    return dest === undefined ? [] : [`COPY ${dest} /app/${dest}`];
+    if (dest === undefined || isContextRootDest(dest)) return [];
+    return [`COPY ${dest} /app/${dest}`];
   });
 
 const copyDirectory = (
@@ -228,7 +223,10 @@ const hashExtraFiles = Effect.fn(function* (
           stat.type === "Directory"
             ? yield* hashDirectory({
                 cwd: source,
-                memo: { exclude: [], lockfile: false },
+                memo: {
+                  exclude: EXTRA_FILES_HASH_EXCLUDE,
+                  lockfile: false,
+                },
               })
             : yield* sha256(yield* fs.readFile(source));
         return { dest: file.dest, hash };
@@ -252,6 +250,17 @@ const copyExtraFiles = Effect.fn(function* (
     if (!(yield* fs.exists(source))) {
       return yield* new ExtraFileMissing({ source, dest });
     }
+    if (isContextRootDest(dest)) {
+      const stat = yield* fs.stat(source);
+      if (stat.type === "Directory") {
+        yield* copyDirectory(source, contextDir);
+      } else {
+        const destPath = path.join(contextDir, path.basename(source));
+        const contents = yield* fs.readFile(source);
+        yield* fs.writeFile(destPath, contents);
+      }
+      continue;
+    }
     const destPath = path.join(contextDir, dest);
     if (yield* fs.exists(destPath)) {
       yield* fs.remove(destPath, { recursive: true });
@@ -266,12 +275,6 @@ const copyExtraFiles = Effect.fn(function* (
     }
   }
 });
-
-export class RegistryCredentialsMissing extends Data.TaggedError(
-  "Railway.RegistryCredentialsMissing",
-)<{
-  registry: string;
-}> {}
 
 const makeBunBootstrap =
   (handler: string) =>
@@ -560,21 +563,15 @@ const wrapCanvasListener = (
       ...extraPins,
     ].join("\n");
     return `${pins}
-const g = globalThis;
-const port = Number(process.env.PORT ?? 3000);
-g.__ALCHEMY_FUNCTION_FETCH__ ??= async () => new Response("");
-Bun.serve({
-  hostname: "0.0.0.0",
-  port,
-  fetch: (r) => g.__ALCHEMY_FUNCTION_FETCH__(r),
-});
-try {
-  const innerUrl = new URL("./i.mjs", import.meta.url);
-  await Bun.write(innerUrl, ${JSON.stringify(inner)});
-  await import(innerUrl.href);
-} catch (error) {
-  g.__ALCHEMY_FUNCTION_FETCH__ = async () =>
-    new Response(String(error), { status: 500 });
+const g=globalThis,port=Number(process.env.PORT??3000);
+g.__ALCHEMY_FUNCTION_FETCH__??=async()=>new Response("");
+Bun.serve({hostname:"0.0.0.0",port,fetch:r=>g.__ALCHEMY_FUNCTION_FETCH__(r)});
+try{
+const u=new URL("./i.mjs",import.meta.url);
+await Bun.write(u,${JSON.stringify(inner)});
+await import(u.href);
+}catch(e){
+g.__ALCHEMY_FUNCTION_FETCH__=async()=>new Response(String(e),{status:500});
 }
 await new Promise(()=>{});
 `;
@@ -721,9 +718,21 @@ const createBundleProgram = (
       );
     });
 
-    const bundleOutput = props.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
+    if (props.isExternal === true) {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const bytes = yield* fs.readFile(realMain);
+      const hash = yield* sha256(bytes);
+      return {
+        files: [{ path: path.basename(realMain), content: bytes }],
+        hash,
+      };
+    }
+
+    const bundleOutput = yield* buildBundle(
+      realMain,
+      virtualEntryPlugin(bootstrap),
+    );
 
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
@@ -790,18 +799,11 @@ export const createRailwayFunctionSupport = ({
   return { alchemyEnv, bundleProgram, bundleToSource, hash };
 };
 
-const sanitizeImageRepo = (id: string): string => {
-  const lowered = id
-    .toLowerCase()
-    .replace(/[^a-z0-9_.-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return lowered.length === 0 ? "service" : lowered;
-};
-
 const generateDockerfile = (
   props: HostedProgramProps,
   hasChunks: boolean,
   install?: Record<string, string>,
+  entryRel?: string,
 ) => {
   const port = props.port ?? DEFAULT_PORT;
   const lines = [`FROM ${props.image ?? DEFAULT_BASE_IMAGE}`, `WORKDIR /app`];
@@ -810,6 +812,19 @@ const generateDockerfile = (
       `COPY package.json /app/package.json`,
       `RUN bun install --production`,
     );
+  }
+  if (props.isExternal === true) {
+    lines.push(`COPY . /app`);
+    const entry =
+      entryRel !== undefined && entryRel.length > 0
+        ? entryRel
+        : "serve-node.mjs";
+    lines.push(
+      `ENV PORT=${String(port)}`,
+      `EXPOSE ${String(port)}`,
+      `ENTRYPOINT ["bun", ${JSON.stringify(`/app/${entry}`)}]`,
+    );
+    return `${lines.join("\n")}\n`;
   }
   lines.push(`COPY index.mjs /app/index.mjs`);
   if (hasChunks) {
@@ -831,21 +846,10 @@ const installManifest = (dependencies: Record<string, string>) =>
     2,
   )}\n`;
 
-const registryHost = (registry: string): string => {
-  const trimmed = registry.replace(/\/+$/, "");
-  const host = trimmed.split("/")[0] ?? trimmed;
-  if (host === "docker.io" || host === "index.docker.io") {
-    return "https://index.docker.io/v1/";
-  }
-  if (host.includes(".")) return host;
-  return "https://index.docker.io/v1/";
-};
-
 export const createRailwayHostedSupport = ({
   stackName,
   stage,
   virtualEntryPlugin,
-  docker,
   dotAlchemy,
 }: {
   stackName: string;
@@ -853,7 +857,6 @@ export const createRailwayHostedSupport = ({
   virtualEntryPlugin: (
     content: (importPath: string) => string,
   ) => rolldown.Plugin;
-  docker: Docker["Service"];
   dotAlchemy: string;
 }) => {
   const alchemyEnv = {
@@ -879,10 +882,23 @@ export const createRailwayHostedSupport = ({
         : undefined;
     const packageJson =
       install === undefined ? undefined : installManifest(install);
+    const path = yield* Path.Path;
+    const extras = (props.extraFiles ?? []).map((file) => ({
+      source: file.source,
+      dest: file.dest,
+    }));
+    const root = contextRootOf(realMain, extras, path, (source) =>
+      path.resolve(initialCwd, source),
+    );
+    const entryRel =
+      props.isExternal === true
+        ? (posixRelUnder(root, realMain, path) ?? path.basename(realMain))
+        : undefined;
     const dockerfile = generateDockerfile(
       props,
       bundled.files.length > 1,
       install,
+      entryRel,
     );
     const extraFilesHash = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
@@ -894,118 +910,76 @@ export const createRailwayHostedSupport = ({
     return { bundled, dockerfile, codeHash, packageJson };
   });
 
-  const imageExists = (imageRef: string) =>
-    docker.image.inspect(imageRef).pipe(
-      Effect.map(() => true),
-      Effect.catchReason("PlatformError", "NotFound", () =>
-        Effect.succeed(false),
-      ),
-    );
-
-  const pushBackoff = Schedule.exponential("2 seconds");
-
   /**
-   * Bundle `main`, content-hash the image, build it when missing, and
-   * push to `{registry}/{logicalId}:{hash}`. When `previousHash` matches,
-   * skip build and push.
+   * Write the generated Dockerfile + bundled entry + extraFiles into a
+   * stable context directory. Railway builds this; Alchemy does not.
    */
-  const resolveImage = Effect.fn(function* (input: {
+  const writeContext = Effect.fn(function* (input: {
     id: string;
     props: HostedProgramProps;
-    previousHash?: string;
-    session?: { note: (message: string) => Effect.Effect<void> };
-  }) {
-    const registry = input.props.registry?.replace(/\/+$/, "");
-    if (registry === undefined || registry.length === 0) {
-      return yield* new RegistryRequired({
-        message:
-          "Railway.Service with `main` requires `registry` (GHCR / Docker Hub prefix Railway can pull).",
-      });
-    }
-    const note = input.session?.note ?? ((_message: string) => Effect.void);
-    yield* note(`Bundling ${input.id} program...`);
-    const { bundled, dockerfile, codeHash, packageJson } =
-      yield* computeCodeHash(input.props);
-    const repo = sanitizeImageRepo(input.id);
-    const imageRef = `${registry}/${repo}:${codeHash}`;
-
-    if (input.previousHash === codeHash) {
-      return { imageRef, codeHash, registryCredentials: undefined };
-    }
-
-    if (!(yield* imageExists(imageRef))) {
-      const realMain = yield* resolveMainPath(input.props.main);
-      const contextDir = yield* getStableContextDir(
-        realMain,
-        dotAlchemy,
-        `${input.id}-image`,
-      );
-      const files = bundled.files.map((file, index) => ({
-        path: index === 0 ? "index.mjs" : file.path,
-        content: file.content,
-      }));
-      if (packageJson !== undefined) {
-        files.push({
-          path: "package.json",
-          content: new TextEncoder().encode(packageJson),
-        });
-      }
-      yield* docker.materialize({
-        context: contextDir,
-        dockerfile,
-        files,
-      });
-      yield* copyExtraFiles(input.props.extraFiles, contextDir);
-      yield* note(`Building container image ${imageRef}...`);
-      yield* docker.image.build({
-        context: contextDir,
-        tag: imageRef,
-        platform: MACHINE_PLATFORM,
-      });
-      yield* note(`Built ${imageRef}`);
-    }
-
-    const username = yield* Effect.sync(
-      () =>
-        process.env.RAILWAY_REGISTRY_USERNAME ??
-        process.env.GITHUB_ACTOR ??
-        process.env.DOCKERHUB_USERNAME,
-    );
-    const passwordPlain = yield* Effect.sync(
-      () =>
-        process.env.RAILWAY_REGISTRY_PASSWORD ??
-        process.env.GITHUB_TOKEN ??
-        process.env.DOCKERHUB_TOKEN ??
-        process.env.DOCKER_PASSWORD,
-    );
-    if (
-      username === undefined ||
-      username.length === 0 ||
-      passwordPlain === undefined ||
-      passwordPlain.length === 0
-    ) {
-      return yield* new RegistryCredentialsMissing({ registry });
-    }
-
-    yield* note(`Pushing ${imageRef}...`);
-    yield* docker.image
-      .push(imageRef, {
-        server: registryHost(registry),
-        username,
-        password: Redacted.make(passwordPlain),
-      })
-      .pipe(
-        Effect.retry({
-          times: 3,
-          schedule: pushBackoff,
-        }),
-      );
-    yield* note(`Pushed ${imageRef}`);
-    return {
-      imageRef,
-      codeHash,
-      registryCredentials: { username, password: passwordPlain },
+    hashed: {
+      bundled: {
+        files: ReadonlyArray<{ path: string; content: string | Uint8Array }>;
+      };
+      dockerfile: string;
+      packageJson: string | undefined;
     };
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const realMain = yield* resolveMainPath(input.props.main);
+    const contextDir = yield* getStableContextDir(
+      realMain,
+      dotAlchemy,
+      `${input.id}-image`,
+    );
+    if (yield* fs.exists(contextDir)) {
+      yield* fs.remove(contextDir, { recursive: true });
+    }
+    yield* fs.makeDirectory(contextDir, { recursive: true });
+    const files: Array<{ path: string; content: string | Uint8Array }> = [
+      { path: "Dockerfile", content: input.hashed.dockerfile },
+      ...(input.props.isExternal === true
+        ? []
+        : input.hashed.bundled.files.map((file, index) => ({
+            path: index === 0 ? "index.mjs" : file.path,
+            content: file.content,
+          }))),
+    ];
+    if (input.hashed.packageJson !== undefined) {
+      files.push({
+        path: "package.json",
+        content: input.hashed.packageJson,
+      });
+    }
+    for (const file of files) {
+      const fullPath = path.join(contextDir, file.path);
+      yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
+      if (typeof file.content === "string") {
+        yield* fs.writeFileString(fullPath, file.content);
+      } else {
+        yield* fs.writeFile(fullPath, file.content);
+      }
+    }
+    yield* copyExtraFiles(input.props.extraFiles, contextDir);
+    if (input.props.isExternal === true) {
+      const extras = (input.props.extraFiles ?? []).map((file) => ({
+        source: file.source,
+        dest: file.dest,
+      }));
+      const root = contextRootOf(realMain, extras, path, (source) =>
+        path.resolve(initialCwd, source),
+      );
+      const entryRel =
+        posixRelUnder(root, realMain, path) ?? path.basename(realMain);
+      const dest = path.join(contextDir, entryRel);
+      if (!(yield* fs.exists(dest))) {
+        yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+        const contents = yield* fs.readFile(realMain);
+        yield* fs.writeFile(dest, contents);
+      }
+    }
+    return contextDir;
   });
 
   const hash = Effect.fn(function* (props: HostedProgramProps) {
@@ -1017,7 +991,7 @@ export const createRailwayHostedSupport = ({
     alchemyEnv,
     bundleProgram,
     computeCodeHash,
-    resolveImage,
+    writeContext,
     hash,
   };
 };

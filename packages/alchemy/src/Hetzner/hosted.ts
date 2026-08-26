@@ -14,6 +14,13 @@ import {
   type PackageInstall,
 } from "../Bundle/InstalledPackages.ts";
 import { findCwdForBundle, resolveMainPath } from "../Bundle/TempRoot.ts";
+import {
+  CONTEXT_ROOT_DEST,
+  EXTRA_FILES_HASH_EXCLUDE,
+  contextRootOf,
+  isContextRootDest,
+  posixRelUnder,
+} from "../Server/externalProgram.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import {
   createHostRuntimeContext,
@@ -22,7 +29,7 @@ import {
 import { hashDirectory } from "../Command/Memo.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import { zipCode, type ZipFile } from "../Util/zip.ts";
+import { zipCode, zipFiles, type ZipFile } from "../Util/zip.ts";
 import { waitForAction } from "./actions.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 import { openSshClient, type SshClient } from "./Ssh.ts";
@@ -83,11 +90,11 @@ const matchesConfiguredExternal = (
   );
 };
 
-/** Normalize a zip destination so it cannot escape the unit root. */
+/** Normalize a zip destination so it cannot escape the unit root. `"."` is the unit root. */
 export const extraFileDestination = (destination: string): string => {
-  const parts = destination
-    .replaceAll("\\", "/")
-    .replace(/^\/+/, "")
+  const normalized = destination.replaceAll("\\", "/").replace(/^\/+/, "");
+  if (isContextRootDest(normalized)) return CONTEXT_ROOT_DEST;
+  const parts = normalized
     .split("/")
     .filter((part) => part.length > 0 && part !== "." && part !== "..");
   return parts.length === 0 ? "dist" : parts.join("/");
@@ -139,53 +146,6 @@ const skipExtraPath = (relative: string) =>
         segment.startsWith(".alchemy-hetzner"),
     );
 
-const skipSiblingPath = (relative: string) =>
-  relative
-    .replaceAll("\\", "/")
-    .split("/")
-    .some(
-      (segment) => segment === ".git" || segment.startsWith(".alchemy-hetzner"),
-    );
-
-/**
- * Pack files next to an `isExternal` serve entry so relative imports
- * resolve in the unit. The serve file itself becomes zip `index.mjs`.
- *
- * Nitro/kit emit `index.mjs` + `chunks/` + a trimmed `node_modules`
- * (Vue SSR) beside the serve entry, and resolve `../public` from that
- * file — nest those siblings under `server/` so that layout survives.
- * Octane's `entry.js` stays at the zip root (the serve file imports
- * `./entry.js`). Do not skip `node_modules` here: nitro's Vue renderer
- * is not bundled into the chunks.
- */
-const collectSiblingFiles = Effect.fn(function* (entry: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const dir = path.dirname(entry);
-  const entryBase = path.basename(entry);
-  if (!(yield* fs.exists(dir))) return [] as ZipFile[];
-  const names = yield* fs.readDirectory(dir, { recursive: true });
-  const nestUnderServer =
-    entryBase !== "index.mjs" &&
-    names.some((name) => name.replaceAll("\\", "/") === "index.mjs");
-  const files: ZipFile[] = [];
-  for (const name of names) {
-    if (skipSiblingPath(name)) continue;
-    const posix = name.replaceAll("\\", "/");
-    const base = posix.split("/").pop() ?? posix;
-    if (base === entryBase || base.startsWith("serve-")) continue;
-    if (base.endsWith(".map")) continue;
-    const full = path.join(dir, name);
-    const stat = yield* fs.stat(full);
-    if (stat.type !== "File") continue;
-    files.push({
-      path: nestUnderServer ? `server/${posix}` : posix,
-      content: yield* fs.readFile(full),
-    });
-  }
-  return files;
-});
-
 const resolveExtraSource = (
   source: string,
   path: {
@@ -215,7 +175,10 @@ const hashExtraFiles = Effect.fn(function* (
       stat.type === "Directory"
         ? yield* hashDirectory({
             cwd: source,
-            memo: { exclude: [], lockfile: false },
+            memo: {
+              exclude: EXTRA_FILES_HASH_EXCLUDE,
+              lockfile: false,
+            },
           }).pipe(Effect.orElseSucceed(() => ""))
         : yield* sha256(yield* fs.readFile(source));
   }
@@ -236,21 +199,34 @@ const collectExtraFiles = Effect.fn(function* (
     const source = resolveExtraSource(extra.source, path);
     if (!(yield* fs.exists(source))) continue;
     const rootStat = yield* fs.stat(source);
+    const skip = isContextRootDest(dest)
+      ? (relative: string) =>
+          relative
+            .replaceAll("\\", "/")
+            .split("/")
+            .some(
+              (segment) =>
+                segment === ".git" || segment.startsWith(".alchemy-hetzner"),
+            )
+      : skipExtraPath;
     if (rootStat.type === "File") {
       files.push({
-        path: dest,
+        path: isContextRootDest(dest) ? path.basename(source) : dest,
         content: yield* fs.readFile(source),
       });
       continue;
     }
     const names = yield* fs.readDirectory(source, { recursive: true });
     for (const name of names) {
-      if (skipExtraPath(name)) continue;
+      if (skip(name)) continue;
       const full = path.join(source, name);
       const stat = yield* fs.stat(full);
       if (stat.type !== "File") continue;
+      const posixName = name.replaceAll("\\", "/");
       files.push({
-        path: `${dest}/${name.replaceAll("\\", "/")}`.replaceAll(/\/+/g, "/"),
+        path: isContextRootDest(dest)
+          ? posixName
+          : `${dest}/${posixName}`.replaceAll(/\/+/g, "/"),
         content: yield* fs.readFile(full),
       });
     }
@@ -373,37 +349,41 @@ export const createHetznerHostedSupport = ({
           ]
         : [];
 
-    // `isExternal` mains are already complete bun/node programs (generated
-    // serve entries + nitro/kit/octane siblings). Rolldown-flattening
-    // nitro into one file hangs Vue SSR on bun (Hetzner hits the unit
-    // directly; Fly's proxy hid this). Pack the entry as index.mjs and
-    // keep relative imports on disk.
+    // `isExternal` mains are already complete bun/node programs. Pack the
+    // dist tree as-built so relative imports (`../client`, nitro chunks)
+    // survive. Do not rolldown-flatten — that hangs Vue SSR on bun.
     if (props.isExternal) {
       const fs = yield* FileSystem.FileSystem;
+      const pathMod = yield* Path.Path;
+      const extras = (props.extraFiles ?? []).map((file) => ({
+        source: file.source,
+        dest: file.destination,
+      }));
+      const root = contextRootOf(realMain, extras, pathMod, (source) =>
+        resolveExtraSource(source, pathMod),
+      );
+      const entryRel =
+        posixRelUnder(root, realMain, pathMod) ?? pathMod.basename(realMain);
       const entryBytes = yield* fs.readFile(realMain);
-      const siblings = yield* collectSiblingFiles(realMain);
-      const zipExtras = [
-        ...siblings.filter(
+      const zipEntries: ZipFile[] = [
+        ...extraFiles.filter(
           (file) =>
             !(file.path === "package.json" && packageJson !== undefined),
         ),
-        ...extraFiles,
         ...installFiles,
       ];
-      const archive = yield* zipCode(entryBytes, zipExtras);
-      const extraHash = yield* hashExtraFiles(props.extraFiles);
-      const siblingHashes: Record<string, string> = {};
-      for (const file of siblings) {
-        siblingHashes[file.path] = yield* sha256(file.content);
+      if (!zipEntries.some((file) => file.path === entryRel)) {
+        zipEntries.push({ path: entryRel, content: entryBytes });
       }
-      const siblingHash = yield* sha256Object(siblingHashes);
+      const archive = yield* zipFiles(zipEntries);
+      const extraHash = yield* hashExtraFiles(props.extraFiles);
       const hash = yield* sha256Object({
         bundle: yield* sha256(entryBytes),
-        siblings: siblingHash,
         extra: extraHash,
         packageJson: packageJson ?? "",
+        entryRel,
       });
-      return { archive, hash };
+      return { archive, hash, entryRel };
     }
 
     const bundleOutput = yield* buildBundle(
@@ -426,10 +406,14 @@ export const createHetznerHostedSupport = ({
       extra: extraHash,
       packageJson: packageJson ?? "",
     });
-    return { archive, hash };
+    return { archive, hash, entryRel: "index.mjs" };
   });
 
-  const renderUnit = (unitName: string, appDir: string) => `[Unit]
+  const renderUnit = (
+    unitName: string,
+    appDir: string,
+    entryRel: string,
+  ) => `[Unit]
 Description=Alchemy Hetzner Service ${unitName}
 After=network-online.target
 Wants=network-online.target
@@ -438,7 +422,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${appDir}
 EnvironmentFile=-${appDir}/env
-ExecStart=/root/.bun/bin/bun --no-install ${appDir}/index.mjs
+ExecStart=/root/.bun/bin/bun --no-install ${appDir}/${entryRel}
 Restart=always
 RestartSec=5
 
@@ -458,6 +442,14 @@ WantedBy=multi-user.target
       }),
     );
 
+  const hetznerTransient = (e: { readonly _tag: string }): boolean =>
+    e._tag === "TooManyRequests" ||
+    e._tag === "ServiceUnavailable" ||
+    e._tag === "InternalServerError" ||
+    e._tag === "BadGateway" ||
+    e._tag === "GatewayTimeout" ||
+    e._tag === "Locked";
+
   const attachAndMount = Effect.fn(function* (input: {
     ssh: SshClient;
     serverId: number;
@@ -466,6 +458,14 @@ WantedBy=multi-user.target
     for (const { volumeId, path } of input.volumes) {
       let volume = yield* Services.volumes.getVolume({ id: volumeId }).pipe(
         Effect.map(({ volume }) => volume),
+        Effect.retry({
+          while: hetznerTransient,
+          times: 8,
+          schedule: Schedule.min([
+            Schedule.exponential(Duration.millis(500), 1.5),
+            Schedule.spaced(Duration.seconds(5)),
+          ]),
+        }),
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       if (volume === undefined) continue;
@@ -491,6 +491,14 @@ WantedBy=multi-user.target
             automount: true,
           })
           .pipe(
+            Effect.retry({
+              while: hetznerTransient,
+              times: 8,
+              schedule: Schedule.min([
+                Schedule.exponential(Duration.millis(500), 1.5),
+                Schedule.spaced(Duration.seconds(5)),
+              ]),
+            }),
             Effect.tap(({ action }) =>
               waitForAction(action).pipe(
                 Effect.catchTag("ActionTimeout", () => Effect.void),
@@ -561,6 +569,7 @@ WantedBy=multi-user.target
     unitName: string;
     archive: Uint8Array<ArrayBufferLike>;
     env: Record<string, unknown>;
+    entryRel?: string;
   }) {
     const appDir = `/opt/${input.unitName}`;
     yield* waitForSsh(input.ssh);
@@ -593,7 +602,9 @@ WantedBy=multi-user.target
       `${appDir}/env`,
     );
     yield* input.ssh.scp(
-      new TextEncoder().encode(renderUnit(input.unitName, appDir)),
+      new TextEncoder().encode(
+        renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs"),
+      ),
       `/etc/systemd/system/${input.unitName}.service`,
     );
     yield* input.ssh.exec(

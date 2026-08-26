@@ -300,7 +300,10 @@ export const ServiceProvider = () =>
             ...news.env,
           };
 
-          const { archive, hash } = yield* hosted.bundleProgram(id, news);
+          const { archive, hash, entryRel } = yield* hosted.bundleProgram(
+            id,
+            news,
+          );
 
           const ssh = yield* openSession(news);
           yield* Effect.ensuring(
@@ -319,6 +322,7 @@ export const ServiceProvider = () =>
                 unitName,
                 archive,
                 env,
+                entryRel,
               });
             }),
             ssh.close,

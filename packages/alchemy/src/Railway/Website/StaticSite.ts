@@ -1,3 +1,8 @@
+import {
+  NODE_SERVE_ENTRY_FILE_NAME,
+  relativeClientDirExpression,
+  writeNodeServeEntry,
+} from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -9,11 +14,9 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { asEffect } from "../../Util/types.ts";
 import { CustomDomain } from "../CustomDomain.ts";
-import { RegistryRequired } from "../hosted.ts";
 import { Project } from "../Project.ts";
 import { Service } from "../Service.ts";
 import {
-  makeStaticServeSource,
   WEBSITE_PORT,
   type FrameworkSiteProps,
   type Website,
@@ -22,10 +25,7 @@ import {
 export interface StaticSiteProps
   extends
     Command.BuildProps,
-    Pick<
-      FrameworkSiteProps,
-      "project" | "registry" | "domain" | "tags" | "env"
-    > {
+    Pick<FrameworkSiteProps, "project" | "domain" | "tags" | "env"> {
   /**
    * Local dev configuration. When `alchemy dev` runs with `dev.command`,
    * the build is skipped and `command` is spawned as a long-lived child
@@ -65,13 +65,6 @@ export interface StaticSiteProps
   errorPage?: string;
 }
 
-const relativeToCwd = (abs: string): string => {
-  const relative = abs.startsWith(initialCwd)
-    ? abs.slice(initialCwd.length).replace(/^[/\\]+/, "")
-    : abs;
-  return relative.length > 0 ? relative : ".";
-};
-
 const envRecord = (
   env: Record<string, string | Redacted.Redacted<string>> | undefined,
 ): Record<string, string> | undefined => {
@@ -110,7 +103,6 @@ const envRecord = (
  * const site = yield* Railway.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
  *   outdir: "public",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -120,7 +112,6 @@ const envRecord = (
  *   command: "npm run build",
  *   outdir: "dist",
  *   spa: true,
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -131,7 +122,6 @@ const envRecord = (
  *   cwd: "apps/web",
  *   command: "npm run build",
  *   outdir: "dist",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -182,16 +172,30 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const clientAbs = path.resolve(cwd, props.outdir);
 
+    const servePath = path.join(
+      path.dirname(clientAbs),
+      NODE_SERVE_ENTRY_FILE_NAME,
+    );
+    yield* writeNodeServeEntry({
+      output: {
+        clientDirectory: clientAbs,
+        serverModules: [],
+        externalWorkspaces: new Set<string>(),
+      },
+      servePath,
+      serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
+      clientDirExpression: relativeClientDirExpression(servePath, clientAbs),
+      notFoundHandling:
+        props.errorPage !== undefined
+          ? "404-page"
+          : props.spa === true
+            ? "spa"
+            : "none",
+      printUrl: isLocal,
+      platform: "node",
+    });
+
     if (isLocal) {
-      const servePath = path.join(path.dirname(clientAbs), "alchemy-serve.mjs");
-      yield* fs.writeFileString(
-        servePath,
-        makeStaticServeSource({
-          clientDirExpression: JSON.stringify(clientAbs),
-          spa: props.spa,
-          errorPage: props.errorPage,
-        }),
-      );
       const runtime = yield* Effect.sync(() => process.execPath);
       const dev = yield* Command.Dev("Dev", {
         command: `${runtime} ${servePath}`,
@@ -209,37 +213,17 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       } satisfies Website;
     }
 
-    const registry = props.registry;
-    if (registry === undefined || registry.length === 0) {
-      return yield* new RegistryRequired({
-        message:
-          "Railway.Website.StaticSite requires `registry` " +
-          "(GHCR / Docker Hub prefix Railway can pull) on deploy.",
-      });
-    }
-
-    const servePath = path.join(path.dirname(clientAbs), "alchemy-serve.mjs");
-    yield* fs.writeFileString(
-      servePath,
-      makeStaticServeSource({
-        clientDirExpression: `fileURLToPath(new URL("./dist/", import.meta.url))`,
-        spa: props.spa,
-        errorPage: props.errorPage,
-      }),
-    );
-
     const project = yield* asEffect(
       props.project ?? Project("Project").pipe(Namespace.push(id)),
     );
     const service = yield* Service(id, {
       project,
-      main: relativeToCwd(servePath),
-      registry,
+      main: servePath,
       port: WEBSITE_PORT,
       healthcheck: "/health",
       isExternal: true,
       env: envRecord(props.env),
-      extraFiles: [{ source: relativeToCwd(clientAbs), dest: "dist" }],
+      extraFiles: [{ source: clientAbs, dest: path.basename(clientAbs) }],
     });
 
     if (props.domain !== undefined && props.domain.length > 0) {

@@ -12,7 +12,6 @@ import Api, { ApiLive } from "./fixtures/rpc-api.ts";
 import Caller from "./fixtures/rpc-caller.ts";
 import Greeter from "./fixtures/rpc-greeter.ts";
 import Query from "./fixtures/rpc-query.ts";
-import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -105,7 +104,7 @@ test.provider(
   { timeout: 480_000 },
 );
 
-test.provider.skipIf(!canPushRailwayImage)(
+test.provider(
   "Service and Function bind each other in tagged form over the private mesh",
   (stack) =>
     Effect.gen(function* () {

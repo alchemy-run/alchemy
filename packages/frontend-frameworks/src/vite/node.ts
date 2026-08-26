@@ -2,16 +2,24 @@
  * `@alchemy.run/frontend-frameworks/vite/node` — the Node container deploy
  * target for the plain Vite integration.
  *
- * A plain Vite build is assets-only (client bundle + `index.html`), so
- * there is no server entry and no finishing pass. The container composite
- * generates a tiny static-file server from `clientDirectory` when
- * `serverModules` is empty. The target owns exactly one seam: the wholesale
- * `build` hook runs the project's `vite build` in a disposable child process
- * whose working directory IS the project root (see `core/BuildChild.ts`).
+ * A plain Vite build is assets-only (client bundle + `index.html`). The
+ * finishing pass writes a Node HTTP program (`serve-node.mjs`) into
+ * `clientDirectory` that serves those files, answers `GET /health`, and
+ * applies SPA / 404-page fallback. Platform composites deploy that file
+ * as-is (`isExternal`) — they do not generate a second static server.
+ *
+ * The wholesale `build` hook runs the project's `vite build` in a
+ * disposable child process whose working directory IS the project root
+ * (see `core/BuildChild.ts`).
  */
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import { runBuildChild } from "../core/BuildChild.ts";
-import { NODE_BUNDLE_CONDITIONS } from "../core/NodeServe.ts";
+import {
+  NODE_BUNDLE_CONDITIONS,
+  NODE_SERVE_ENTRY_FILE_NAME,
+  writeNodeServeEntry,
+} from "../core/NodeServe.ts";
 import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import { make, type ViteTarget, type ViteTargetConfig } from "./Vite.ts";
 
@@ -20,7 +28,7 @@ const fail = (message: string, cause?: unknown) =>
 
 /**
  * The in-child target: no wholesale `build` hook, so the child runs the
- * regular vite-build pipeline (no recursion).
+ * regular vite-build pipeline (no recursion) then this finish.
  */
 const makeNodeChildTarget = (config: ViteTargetConfig = {}): ViteTarget =>
   makeDeployTarget({
@@ -29,6 +37,30 @@ const makeNodeChildTarget = (config: ViteTargetConfig = {}): ViteTarget =>
     bundle: {
       conditions: [...NODE_BUNDLE_CONDITIONS],
     },
+    finish: (output) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        if (output.clientDirectory === undefined) {
+          return yield* Effect.fail(
+            fail(
+              "The Vite build produced no client directory for the Node serve entry",
+            ),
+          );
+        }
+        const servePath = path.join(
+          output.clientDirectory,
+          NODE_SERVE_ENTRY_FILE_NAME,
+        );
+        return yield* writeNodeServeEntry({
+          output,
+          servePath,
+          serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
+          clientDirExpression: `fileURLToPath(new URL("./", import.meta.url))`,
+          notFoundHandling: config.notFoundHandling ?? "spa",
+          htmlHandling: config.htmlHandling ?? "none",
+          platform: "node",
+        });
+      }),
   });
 
 /** The runner's JSON payload for the build child (see `core/BuildChild.ts`). */

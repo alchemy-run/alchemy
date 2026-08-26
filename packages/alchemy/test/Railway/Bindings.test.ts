@@ -23,7 +23,6 @@ import BucketApi, {
 } from "./fixtures/bucket-api.ts";
 import RedisApi, { Cache, REDIS_VALUE } from "./fixtures/redis-api.ts";
 import { Site } from "./fixtures/bindings-shared.ts";
-import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -159,7 +158,7 @@ const Stack = Alchemy.Stack(
       bucketId: bucket.bucketId,
       bucketUrl: bucketApi.url,
       bucketServiceId: bucketApi.serviceId,
-      mode: canPushRailwayImage ? ("effect" as const) : ("image" as const),
+      mode: "effect" as const,
     };
   }),
 );
@@ -175,6 +174,7 @@ const retryTransient = {
     e._tag === "NotReady" &&
     (e.status === 0 ||
       e.status === 404 ||
+      e.status === 500 ||
       e.status === 502 ||
       e.status === 503),
   schedule: Schedule.exponential("500 millis").pipe(

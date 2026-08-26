@@ -1,5 +1,9 @@
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  makeFrameworkSite,
+  staticConfigFromAssets,
+  type FrameworkSiteProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Vite build. */
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
@@ -9,42 +13,19 @@ export const VITE_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/vite/node";
 
 const viteOptions = (props: ViteProps) =>
-  props.outDir !== undefined || props.base !== undefined
-    ? {
-        vite: {
-          ...(props.outDir !== undefined ? { outDir: props.outDir } : {}),
-          ...(props.base !== undefined ? { base: props.base } : {}),
-        },
-      }
+  props.vite !== undefined &&
+  (props.vite.outDir !== undefined || props.vite.base !== undefined)
+    ? { vite: props.vite }
     : undefined;
 
 export interface ViteProps extends FrameworkSiteProps {
   /**
-   * Vite build output directory, relative to {@link rootDir}. Setting this
-   * overrides `build.outDir` in the project's `vite.config.*`.
-   * @default the project config's `build.outDir` (vite's default: "dist")
+   * Serializable Vite config merged OVER the project's own `vite.config.*`.
    */
-  outDir?: string;
-  /**
-   * Public base path the site deploys under (vite's `base`). Setting this
-   * overrides `base` in the project's `vite.config.*`.
-   */
-  base?: string;
-  /**
-   * Answer misses with the index page (200) instead of a 404, so
-   * client-side routes deep-link correctly. Plain Vite apps are typically
-   * single-page applications, so this defaults on; set `false` for
-   * multi-page (`index.html`-per-route) projects. Mutually exclusive with
-   * {@link errorPage}.
-   * @default true unless `errorPage` is set
-   */
-  spa?: boolean;
-  /**
-   * Serve the built error page (e.g. `404.html`) with a real `404` status
-   * for requests that match no uploaded file. Mutually exclusive with
-   * {@link spa}.
-   */
-  errorPage?: string;
+  vite?: {
+    outDir?: string;
+    base?: string;
+  };
 }
 
 /**
@@ -71,16 +52,13 @@ export interface ViteProps extends FrameworkSiteProps {
  * ### Creating Vite Sites
  * **Example:** Basic Vite SPA
  * ```typescript
- * const site = yield* Railway.Website.Vite("Web", {
- *   registry: "ghcr.io/acme",
- * });
+ * const site = yield* Railway.Website.Vite("Web");
  * ```
  *
  * **Example:** Project in a Subdirectory
  * ```typescript
  * const site = yield* Railway.Website.Vite("Web", {
  *   rootDir: "./app",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -89,7 +67,6 @@ export interface ViteProps extends FrameworkSiteProps {
  * const project = yield* Railway.Project("Site");
  * const site = yield* Railway.Website.Vite("Web", {
  *   project,
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -97,9 +74,7 @@ export interface ViteProps extends FrameworkSiteProps {
  * **Example:** Per-Route HTML Pages with a 404 Page
  * ```typescript
  * const site = yield* Railway.Website.Vite("Docs", {
- *   spa: false,
- *   errorPage: "404.html",
- *   registry: "ghcr.io/acme",
+ *   assets: { notFoundHandling: "404-page" },
  * });
  * ```
  *
@@ -107,9 +82,7 @@ export interface ViteProps extends FrameworkSiteProps {
  * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* Railway.Website.Vite("Docs", {
- *   outDir: "build",
- *   base: "/docs/",
- *   registry: "ghcr.io/acme",
+ *   vite: { outDir: "build", base: "/docs/" },
  * });
  * ```
  *
@@ -129,9 +102,12 @@ export const Vite = (id: string, props: ViteProps = {}) =>
     name: "Vite",
     framework: VITE_FRAMEWORK_SPECIFIER,
     target: VITE_NODE_TARGET_SPECIFIER,
-    options: viteOptions(props),
-    static: {
-      spa: props.spa ?? (props.errorPage === undefined ? true : undefined),
-      errorPage: props.errorPage,
+    options: {
+      ...viteOptions(props),
+      notFoundHandling: "spa",
+      htmlHandling: props.assets?.htmlHandling,
     },
+    static: staticConfigFromAssets(props.assets, {
+      notFoundHandling: "single-page-application",
+    }),
   }).pipe(Namespace.push(id));

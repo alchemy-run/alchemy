@@ -226,7 +226,7 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme", build: { install: ["pg"] } },
+ *   { project: Site, main: import.meta.url, build: { install: ["pg"] } },
  *   Effect.gen(function* () {
  *     const conn = yield* Railway.ConnectPostgres(Db);
  *     const db = yield* Drizzle.Postgres(conn.connectionString);
@@ -1117,9 +1117,11 @@ export const PostgresProvider = () =>
           .pipe(
             RailwayRetry.none,
             Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
+              while: (e) =>
+                e._tag === "RailwayRateLimited" ||
+                e._tag === "RailwayInternalError",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 4,
             }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),

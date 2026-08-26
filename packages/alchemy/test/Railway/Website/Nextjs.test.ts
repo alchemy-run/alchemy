@@ -8,7 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { canPushRailwayImage, railwayRegistry } from "../fixtures/registry.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -21,7 +21,6 @@ const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../AWS/Website/fixtures/nextjs-app",
 );
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
   "package.json",
@@ -46,23 +45,25 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-test.provider.skipIf(!canPushRailwayImage)(
+test.provider(
   "Nextjs: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // Clone OUTSIDE the repo (OS temp dir): an in-workspace clone makes
+      // Next treat the alchemy monorepo as the workspace root and look up
+      // the root's typescript (catalog:build = tsgo, which has no JS compiler).
       const rootDir = yield* cloneFixture(fixtureDir, {
         prefix: "alchemy-nextjs-railway-",
-        tempRoot,
         entries: fixtureEntries,
       });
+      yield* prepareNextjsFixture(rootDir);
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const site = yield* Railway.Website.Nextjs("Web", {
             rootDir,
-            registry: railwayRegistry!,
             memo: {
               include: [
                 "app/**",

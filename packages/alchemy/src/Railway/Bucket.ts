@@ -214,7 +214,7 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const putObject = yield* Railway.PutObject(Data);
  *     const getObject = yield* Railway.GetObject(Data);

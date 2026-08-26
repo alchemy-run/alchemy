@@ -42,6 +42,7 @@ import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
+import { Cdn, CdnProvider } from "./Website/Cdn.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
@@ -90,6 +91,7 @@ export const providers = () =>
       PrivateNetworkEndpoint,
       MySQL,
       Mongo,
+      Cdn,
       CustomDomain,
       Environment,
       Function,
@@ -116,6 +118,7 @@ export const providers = () =>
         PrivateNetworkEndpointProvider(),
         MySQLProvider(),
         MongoProvider(),
+        CdnProvider(),
         CustomDomainProvider(),
         EnvironmentProvider(),
         FunctionProvider(),

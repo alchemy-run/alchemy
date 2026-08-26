@@ -9,7 +9,6 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { canPushRailwayImage, railwayRegistry } from "../fixtures/registry.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -39,7 +38,7 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-test.provider.skipIf(!canPushRailwayImage)(
+test.provider(
   "StaticSite: build command + outdir, GET index",
   (stack) =>
     Effect.gen(function* () {
@@ -58,7 +57,6 @@ test.provider.skipIf(!canPushRailwayImage)(
             command: "bash build.sh",
             shell: true,
             outdir: "dist",
-            registry: railwayRegistry!,
           });
           return { site };
         }),
@@ -93,5 +91,5 @@ test.provider.skipIf(!canPushRailwayImage)(
       const gone = yield* waitUntilGone(serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 240_000 },
 );

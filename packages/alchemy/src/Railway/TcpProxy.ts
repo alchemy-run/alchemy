@@ -363,9 +363,11 @@ export const TcpProxyProvider = () =>
           .pipe(
             RailwayRetry.none,
             Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
+              while: (e) =>
+                e._tag === "RailwayRateLimited" ||
+                e._tag === "RailwayInternalError",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 4,
             }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),

@@ -12,8 +12,7 @@ export const devDeps = "@alchemy.run/frontend-frameworks";
 `Railway.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app to
 Railway. It builds the app through your project's own `@nuxt/kit`
 with nitro's `node` preset: the nitro Node server plus prerendered
-assets run on one `Railway.Service`. `registry` is required on
-deploy (the image push); it is unused under `alchemy dev`. Omit
+assets run on one `Railway.Service`. Omit
 `project` to create a `Railway.Project`. The URL is
 `https://{name}.up.railway.app` unless you set `domain`. There is
 no `nitro.preset` to edit and no build command to run.
@@ -65,16 +64,13 @@ Don't set `nitro.preset` — the Node deploy target owns the preset
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack). `registry` is required on deploy (`ghcr.io/org` or
-`docker.io/user`):
+Stack):
 
 ```typescript
 // alchemy.run.ts
 import * as Railway from "alchemy/Railway";
 
-export const Website = Railway.Website.Nuxt("Website", {
-  registry: "ghcr.io/acme",
-});
+export const Website = Railway.Website.Nuxt("Website");
 ```
 
 Pass `rootDir` if `package.json` is not at `.`. Pass `project` to
@@ -116,7 +112,6 @@ and `alchemy dev`, and onto the Service at deploy:
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = Railway.Website.Nuxt("Website", {
-  registry: "ghcr.io/acme",
 +  env: {
 +    GREETING: "Hello from Alchemy!",
 +    NUXT_PUBLIC_API_BASE: "https://api.example.com",
@@ -149,7 +144,6 @@ handler:
 
 ```typescript
 export const Website = Railway.Website.Nuxt("Website", {
-  registry: "ghcr.io/acme",
   nuxt: {
     routeRules: {
       "/about": { prerender: true },
@@ -172,8 +166,7 @@ bun alchemy dev
 
 `alchemy dev` runs Nuxt's own dev server (nitro dev, full HMR)
 instead of deploying; `site.url` is the local address and no
-Railway resources are created. `registry` is unused in this mode.
-Wrap the site in `Alchemy.remote()` to deploy the live Project and
+Railway resources are created. Wrap the site in `Alchemy.remote()` to deploy the live Project and
 Service even during dev.
 
 ## Custom domain
@@ -185,7 +178,6 @@ the generated `*.up.railway.app`:
 
 ```typescript
 export const Website = Railway.Website.Nuxt("Website", {
-  registry: "ghcr.io/acme",
   domain: "app.example.com",
 });
 ```

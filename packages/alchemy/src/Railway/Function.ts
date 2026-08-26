@@ -275,9 +275,9 @@ const resolveFunctionProps = (
  * the Service with that image, and writes the source as `startCommand`
  * (`./run.sh` + base64).
  *
- * Distinct from Effect-native {@link Service} (`main` + `registry`),
- * which bundles with Rolldown and **pushes a Docker image**. Functions
- * are capped at 96KB once encoded.
+ * Distinct from Effect-native {@link Service} (`main`), which bundles
+ * with Rolldown and uploads a generated Dockerfile for Railway to
+ * build. Functions are capped at 96KB once encoded.
  *
  * @see https://docs.railway.com/reference/functions
  *
@@ -388,7 +388,7 @@ const resolveFunctionProps = (
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const query = yield* Railway.bindFunction(Query);
  *     return {

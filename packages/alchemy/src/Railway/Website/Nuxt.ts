@@ -31,7 +31,6 @@ export interface NuxtProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* Railway.Website.Nuxt("Web", {
  *   rootDir: "./app",
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
@@ -43,7 +42,6 @@ export interface NuxtProps extends FrameworkSiteProps {
  *   env: {
  *     NUXT_PUBLIC_API_BASE: "https://api.example.com",
  *   },
- *   registry: "ghcr.io/acme",
  * });
  * ```
  *
