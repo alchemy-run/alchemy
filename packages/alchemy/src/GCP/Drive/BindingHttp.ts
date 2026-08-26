@@ -23,12 +23,7 @@ export const makeFileHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (file: File) {
       const fileId = yield* file.fileId;
       return Effect.fn(`${options.tag}(${file.LogicalId})`)(function* (

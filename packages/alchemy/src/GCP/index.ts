@@ -51,6 +51,7 @@ export * as Classroom from "./Classroom/index.ts";
 export * as Cloudasset from "./Cloudasset/index.ts";
 export * as CloudBuild from "./CloudBuild/index.ts";
 export * as CloudFunctions from "./CloudFunctions/index.ts";
+export { Service as Function } from "./Run/Service.ts";
 export * as CloudScheduler from "./CloudScheduler/index.ts";
 export * as Cloudsearch from "./Cloudsearch/index.ts";
 export * as Cloudsupport from "./Cloudsupport/index.ts";

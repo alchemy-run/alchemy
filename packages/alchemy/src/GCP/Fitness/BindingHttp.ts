@@ -23,12 +23,7 @@ export const makeUsersDataSourceHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (source: UsersDataSource) {
       const userId = yield* source.userId;
       const dataStreamId = yield* source.dataStreamId;

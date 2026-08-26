@@ -29,12 +29,7 @@ const makeNamedHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (resource: Resource) {
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (

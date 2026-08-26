@@ -1,7 +1,4 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import type { GcpOpContext } from "@distilled.cloud/gcp/cloudfunctions_v2";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { makeNamedHttpBinding, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Function as CloudFunction } from "./Function.ts";
 
 /**
@@ -14,29 +11,11 @@ export const makeFunctionHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: Effect.Effect<
-    (input: I) => Effect.Effect<A, E>,
-    never,
-    GcpOpContext
-  > &
-    ((input: I) => Effect.Effect<A, E, GcpOpContext>);
+  operation: GcpHttpOp<I, A, E>;
 }) =>
-  Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
-    return Effect.fn(function* (fn: CloudFunction) {
-      const name = yield* fn.name;
-      return Effect.fn(`${options.tag}(${fn.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
-        return yield* run({
-          ...(request as I),
-          name: yield* name,
-        } as I);
-      });
-    });
+  makeNamedHttpBinding<CloudFunction, I, A, E>({
+    tag: options.tag,
+    operation: options.operation,
+    role: "roles/cloudfunctions.viewer",
+    resourceName: (fn) => fn.name,
   });

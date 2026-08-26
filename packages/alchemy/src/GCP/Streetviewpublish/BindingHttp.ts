@@ -24,12 +24,7 @@ export const makePhotoHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (photo: Photo) {
       const photoId = yield* photo.photoId;
       return Effect.fn(`${options.tag}(${photo.LogicalId})`)(function* (
@@ -56,12 +51,7 @@ export const makePhotoSequenceHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (sequence: PhotoSequence) {
       const sequenceId = yield* sequence.sequenceId;
       return Effect.fn(`${options.tag}(${sequence.LogicalId})`)(function* (

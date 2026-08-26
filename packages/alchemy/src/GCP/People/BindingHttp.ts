@@ -22,12 +22,7 @@ export const makeContactGroupHttpBinding = <A, E>(options: {
   operation: GcpHttpOp<people.GetContactGroupsRequest, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (group: ContactGroup) {
       const resourceName = yield* group.resourceName;
       return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (
@@ -51,12 +46,7 @@ export const makeContactPeopleHttpBinding = <A, E>(options: {
   operation: GcpHttpOp<people.GetPeopleRequest, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (person: ContactPeople) {
       const resourceName = yield* person.resourceName;
       return Effect.fn(`${options.tag}(${person.LogicalId})`)(function* (

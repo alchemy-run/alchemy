@@ -21,12 +21,7 @@ export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
     ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (job: Job) {
       const name = yield* job.name;
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (

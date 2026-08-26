@@ -793,6 +793,9 @@ import {
 import { GetAclPolicyHttp } from "./Redis/GetAclPolicyHttp.ts";
 import { GetAuthStringHttp } from "./Redis/GetAuthStringHttp.ts";
 import { GetInstanceHttp as GetRedisInstanceHttp } from "./Redis/GetInstanceHttp.ts";
+import { ReadRedisHttp } from "./Redis/ReadRedisHttp.ts";
+import { ReadWriteRedisHttp } from "./Redis/ReadWriteRedisHttp.ts";
+import { WriteRedisHttp } from "./Redis/WriteRedisHttp.ts";
 import { AclPolicy, AclPolicyProvider } from "./Redis/AclPolicy.ts";
 import {
   Instance as RedisInstance,
@@ -6423,6 +6426,9 @@ export const providers = () =>
           GetAclPolicyHttp,
           GetAuthStringHttp,
           GetRedisInstanceHttp,
+          ReadRedisHttp,
+          ReadWriteRedisHttp,
+          WriteRedisHttp,
           GetMemcacheInstanceHttp,
           GetMlModelHttp,
           GetMlVersionHttp,

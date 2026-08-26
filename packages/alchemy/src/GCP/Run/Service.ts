@@ -1,15 +1,29 @@
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
+import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  applyHostBindings,
+  defaultComputeServiceAccount,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -138,7 +152,7 @@ export type ServiceScaling = {
   manualInstanceCount?: number;
 };
 
-export type ServiceProps = {
+export type ServiceProps = PlatformProps & {
   /**
    * Service id (the `{service}` segment of
    * `projects/{project}/locations/{location}/services/{service}`). If
@@ -201,9 +215,37 @@ export type ServiceProps = {
   traffic?: TrafficTarget[];
   /**
    * Revision template. If omitted, a single container runs the public
-   * Cloud Run hello image.
+   * Cloud Run hello image. The Effect-native `main` form fills `image`
+   * for you.
    */
   template?: RevisionTemplate;
+  /**
+   * Module entrypoint for an Effect-native service (typically
+   * `import.meta.url`). Alchemy bundles the program, builds a container
+   * image, pushes it to Artifact Registry, and deploys Cloud Run.
+   * Bindings attach env + IAM onto the runtime service account.
+   */
+  main?: string;
+  /**
+   * Named export to load from `main`.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * HTTP port the Effect-native program listens on (Cloud Run injects
+   * `PORT`). Only used with `main`.
+   * @default 8080
+   */
+  port?: number;
+  /**
+   * Additional environment variables for the Effect-native container.
+   * Merged after binding-injected `env`.
+   */
+  env?: Record<string, any>;
+  /**
+   * Bundler configuration for `main`.
+   */
+  build?: Bundle.BundleConfig;
 };
 
 export type Service = Resource<
@@ -249,15 +291,25 @@ export type Service = Resource<
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
   },
-  never,
+  GcpHostBinding,
   Providers
 >;
+
+export type ServiceRuntimeContext = HostRuntimeContext;
+export type ServiceServices = Credentials | GcpEnvironment | ServerHost;
+export type ServiceShape = Main<ServiceServices>;
 
 /**
  * A Cloud Run service (Knative serving revision + traffic).
  *
  * Changing `serviceId` or `location` replaces the service. Updates to
  * `template` create a new revision.
+ *
+ * This is GCP's effectful HTTP platform — the analog of
+ * `AWS.Lambda.Function` / `Cloudflare.Worker`. Pass `main` plus an
+ * Effect implementation; bindings grant IAM onto the runtime service
+ * account and inject env, the way AWS `policyStatements` land on the
+ * execution role.
  *
  * ### Creating a Service
  * **Example:** Generated name, default hello image
@@ -285,6 +337,32 @@ export type Service = Resource<
  * });
  * ```
  *
+ * ### Effect-native Function with bindings
+ * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
+ * ```typescript
+ * const tweets = yield* GCP.PubSub.Topic("tweets", {});
+ * const cache = yield* GCP.Redis.Instance("Cache", { memorySizeGb: 1 });
+ *
+ * export class TweetBot extends GCP.Run.Service<TweetBot>()(
+ *   "TweetBot",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const publish = yield* GCP.PubSub.Publish(tweets);
+ *     const redis = yield* GCP.Redis.ReadWriteRedis(cache);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const body = yield* redis.get("last-tweet");
+ *         yield* publish({ json: { text: body ?? "hello twitter" } });
+ *         return HttpServerResponse.text("queued");
+ *       }),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(GCP.PubSub.PublishHttp),
+ *     Effect.provide(GCP.Redis.ReadWriteRedisHttp),
+ *   ),
+ * ) {}
+ * ```
+ *
  * ### Reading a Service
  * **Example:** Get the live service
  * ```typescript
@@ -296,7 +374,16 @@ export type Service = Resource<
  * @product GCP
  * @category Run
  */
-export const Service = Resource<Service>("GCP.Run.Service");
+export const Service: Platform<
+  Service,
+  ServiceServices,
+  ServiceShape,
+  ServiceRuntimeContext
+> = Platform("GCP.Run.Service", {
+  createRuntimeContext: createHostRuntimeContext("GCP.Run.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+});
 
 export class ServiceNotResolved extends Data.TaggedError(
   "GCP.Run.ServiceNotResolved",
@@ -884,7 +971,7 @@ export const ServiceProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
       const location = normalizeLocation(news.location ?? output?.location);
@@ -896,6 +983,70 @@ export const ServiceProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
+      const serviceAccount =
+        template.serviceAccount && template.serviceAccount.length > 0
+          ? template.serviceAccount
+          : yield* defaultComputeServiceAccount(env.project);
+      template.serviceAccount = serviceAccount;
+      const collected = yield* applyHostBindings({
+        project: env.project,
+        serviceAccount,
+        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+      });
+      const runtimeEnv = { ...collected.env, ...news.env };
+      if (news.main !== undefined) {
+        const images = yield* makeImageSource;
+        const handler = news.handler ?? "default";
+        const port = news.port ?? 8080;
+        const image = yield* images.resolve({
+          id,
+          source: {
+            main: news.main,
+            handler,
+            build: news.build,
+          },
+          repositoryName: rfc1035(`${serviceId}-src`),
+          location,
+          port,
+          isExternal: news.isExternal,
+          bootstrap: (importPath: string) => `
+import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRun";
+
+globalThis.__ALCHEMY_RUNTIME__ = true;
+const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
+
+await bootstrap(entrypoint);
+`,
+          session,
+        });
+        const existing = template.containers?.[0] ?? {};
+        template.containers = [
+          {
+            ...existing,
+            image: image.imageUri,
+            ports: existing.ports ?? [{ containerPort: port }],
+            env: [
+              ...(existing.env ?? []),
+              ...Object.entries(runtimeEnv).map(([envName, value]) => ({
+                name: envName,
+                value:
+                  typeof value === "string" ? value : JSON.stringify(value),
+              })),
+            ],
+          },
+        ];
+      } else if (Object.keys(runtimeEnv).length > 0) {
+        const existing = template.containers?.[0];
+        if (existing !== undefined) {
+          existing.env = [
+            ...(existing.env ?? []),
+            ...Object.entries(runtimeEnv).map(([envName, value]) => ({
+              name: envName,
+              value: typeof value === "string" ? value : JSON.stringify(value),
+            })),
+          ];
+        }
+      }
 
       let current = yield* getByName(name);
       if (current?.deleteTime !== undefined) {

@@ -24,12 +24,7 @@ export const makeGitRepositoryLinkHttpBinding = <
   >;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* <T extends ConnectionsGitRepositoryLink>(
       link: T,
     ) {

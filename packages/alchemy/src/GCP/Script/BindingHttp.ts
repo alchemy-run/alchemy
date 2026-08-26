@@ -23,12 +23,7 @@ export const makeDeploymentHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (deployment: Deployment) {
       const scriptId = yield* deployment.scriptId;
       const deploymentId = yield* deployment.deploymentId;
@@ -53,12 +48,7 @@ export const makeRunScriptsHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (deployment: Deployment) {
       const deploymentId = yield* deployment.deploymentId;
       return Effect.fn(`${options.tag}(${deployment.LogicalId})`)(function* (

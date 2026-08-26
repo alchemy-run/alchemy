@@ -6,10 +6,22 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
 import { tagRecord } from "../../Tags.ts";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  applyHostBindings,
+  defaultComputeServiceAccount,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -220,7 +232,7 @@ export type EventTrigger = {
   service?: string;
 };
 
-export type FunctionProps = {
+export type FunctionProps = PlatformProps & {
   /**
    * Function id (the `{function}` segment of
    * `projects/{project}/locations/{location}/functions/{function}`).
@@ -312,9 +324,13 @@ export type Function = Resource<
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
   },
-  never,
+  GcpHostBinding,
   Providers
 >;
+
+export type FunctionRuntimeContext = HostRuntimeContext;
+export type FunctionServices = Credentials | GcpEnvironment | ServerHost;
+export type FunctionShape = Main<FunctionServices>;
 
 /**
  * A Google Cloud Function (2nd gen) that builds source into a Cloud Run
@@ -395,11 +411,23 @@ export type Function = Resource<
  * const { downloadUrl } = yield* download();
  * ```
  *
+ * Effect-native HTTP functions with bindings use `GCP.Run.Service`
+ * (also exported as `GCP.Function`) — Cloud Run is the gen2 runtime.
+ *
  * @resource
  * @product GCP
  * @category CloudFunctions
  */
-export const Function = Resource<Function>("GCP.CloudFunctions.Function");
+export const Function: Platform<
+  Function,
+  FunctionServices,
+  FunctionShape,
+  FunctionRuntimeContext
+> = Platform("GCP.CloudFunctions.Function", {
+  createRuntimeContext: createHostRuntimeContext(
+    "GCP.CloudFunctions.Function",
+  ) as (id: string) => FunctionRuntimeContext,
+});
 
 export class FunctionNotResolved extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionNotResolved",
@@ -853,7 +881,7 @@ export const FunctionProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const env = yield* GcpEnvironment.current;
       const functionId = yield* toId(id, news.functionId, output?.functionId);
       const location = normalizeLocation(news.location ?? output?.location);
@@ -864,6 +892,29 @@ export const FunctionProvider = () =>
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
+      };
+      const serviceAccount =
+        news.serviceConfig?.serviceAccountEmail &&
+        news.serviceConfig.serviceAccountEmail.length > 0
+          ? news.serviceConfig.serviceAccountEmail
+          : yield* defaultComputeServiceAccount(env.project);
+      const collected = yield* applyHostBindings({
+        project: env.project,
+        serviceAccount,
+        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+      });
+      const serviceConfig = {
+        ...news.serviceConfig,
+        serviceAccountEmail: serviceAccount,
+        environmentVariables: {
+          ...news.serviceConfig?.environmentVariables,
+          ...Object.fromEntries(
+            Object.entries(collected.env).map(([key, value]) => [
+              key,
+              typeof value === "string" ? value : JSON.stringify(value),
+            ]),
+          ),
+        },
       };
 
       let current = yield* getByName(name);
@@ -884,7 +935,7 @@ export const FunctionProvider = () =>
               kmsKeyName: news.kmsKeyName,
               environment,
               buildConfig: mergeBuildConfig(news.buildConfig, undefined),
-              serviceConfig: news.serviceConfig,
+              serviceConfig,
               eventTrigger: news.eventTrigger,
             },
           })
@@ -915,7 +966,7 @@ export const FunctionProvider = () =>
         desiredBuild !== undefined &&
         !sameBuildConfig(desiredBuild, current.buildConfig);
 
-      const desiredService = news.serviceConfig;
+      const desiredService = serviceConfig;
       const serviceConfigChanged =
         desiredService !== undefined &&
         ((desiredService.availableMemory !== undefined &&

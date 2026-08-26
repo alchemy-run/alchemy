@@ -26,12 +26,7 @@ export const makeTransferJobHttpBinding = <
   projectInBody?: boolean;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (job: TransferJob) {
       const name = yield* job.name;
       const project = yield* job.project;

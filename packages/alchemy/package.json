@@ -227,6 +227,12 @@
       "worker": "./src/Hetzner/*.ts",
       "import": "./lib/Hetzner/*.js"
     },
+    "./Redis": {
+      "types": "./lib/Redis/index.d.ts",
+      "bun": "./src/Redis/index.ts",
+      "worker": "./src/Redis/index.ts",
+      "import": "./lib/Redis/index.js"
+    },
     "./GCP": {
       "types": "./lib/GCP/index.d.ts",
       "bun": "./src/GCP/index.ts",
