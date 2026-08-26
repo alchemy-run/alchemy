@@ -262,10 +262,17 @@ const waitGlobal = (project: string, operation: compute.Operation) =>
   Effect.gen(function* () {
     let current = operation;
     if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: current.name,
-      });
+      current = yield* waitGlobalOperations(
+        {
+          project,
+          operation: current.name,
+        },
+        { times: 18 },
+      ).pipe(
+        Effect.catchTag("GCP.Compute.OperationPending", () =>
+          Effect.succeed(current),
+        ),
+      );
     }
     if (current.status !== "DONE" && current.name !== undefined) {
       current = yield* compute

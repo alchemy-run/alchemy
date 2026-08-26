@@ -687,6 +687,15 @@ export const InstanceProvider = () =>
           zone,
           instance,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      ).pipe(
+        Effect.retry({
+          while: (error) =>
+            error._tag === "Conflict" ||
+            error._tag === "GCP.Compute.InstanceOperationFailed",
+          times: 8,
+          schedule: Schedule.spaced("3 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });
