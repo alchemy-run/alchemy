@@ -21,7 +21,6 @@ import {
   ownedByAlchemy,
   parseOwnership,
   sameText,
-  toResourceId,
   updateMaskOf,
 } from "./ownership.ts";
 
@@ -318,16 +317,13 @@ export const PhraseMatcherProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const phraseMatcherId = yield* toResourceId(
-        id,
-        olds?.phraseMatcherId,
-        output?.phraseMatcherId,
-      );
       const location = normalizeLocation(olds?.location ?? output?.location);
+      const knownId = olds?.phraseMatcherId ?? output?.phraseMatcherId;
       const name =
-        output?.name ?? resourceName(env.project, location, phraseMatcherId);
+        output?.name ??
+        (knownId ? resourceName(env.project, location, knownId) : "");
       let existing = yield* getByName(name);
-      if (existing === undefined && output?.name === undefined) {
+      if (existing === undefined) {
         const ownership = yield* createInternalLabels(id);
         existing = yield* findByDisplayName(
           locationParent(env.project, location),
@@ -356,13 +352,10 @@ export const PhraseMatcherProvider = () =>
         news.location ?? output?.location ?? DEFAULT_LOCATION,
       );
       const parent = locationParent(env.project, location);
-      const phraseMatcherId = yield* toResourceId(
-        id,
-        news.phraseMatcherId,
-        output?.phraseMatcherId,
-      );
+      const knownId = news.phraseMatcherId ?? output?.phraseMatcherId;
       const name =
-        output?.name ?? resourceName(env.project, location, phraseMatcherId);
+        output?.name ??
+        (knownId ? resourceName(env.project, location, knownId) : "");
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
       const type = news.type ?? DEFAULT_TYPE;

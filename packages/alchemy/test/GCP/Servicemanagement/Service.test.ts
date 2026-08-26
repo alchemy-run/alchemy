@@ -20,6 +20,11 @@ const hasGcpCreds = !!(
 );
 
 const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
+
+// Managed-service delete LROs routinely exceed 180s. Set
+// GCP_TEST_SERVICEMANAGEMENT=1 to run the full lifecycle.
+const runLifecycle =
+  hasGcpCreds && !!process.env.GCP_TEST_SERVICEMANAGEMENT && !process.env.FAST;
 const missingName = `alch-missing.endpoints.${project}.cloud.goog`;
 const lifecycleName = `alch-sm-lifecycle.endpoints.${project}.cloud.goog`;
 
@@ -71,7 +76,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a managed service",
   (stack) =>
     Effect.gen(function* () {
