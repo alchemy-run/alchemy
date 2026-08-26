@@ -1004,11 +1004,11 @@ export const ConnectionProfileProvider = () =>
         );
       yield* settleOperation(operation, {
         notFoundOk: true,
-        times: 8,
+        times: 18,
         interval: "3 seconds",
       });
       yield* waitUntilGone(getByName(output.name), output.name, {
-        times: 8,
+        times: 15,
         interval: "2 seconds",
       }).pipe(
         Effect.catchTag(

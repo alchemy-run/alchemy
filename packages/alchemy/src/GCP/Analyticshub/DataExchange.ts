@@ -1,5 +1,6 @@
 import * as analyticshub from "@distilled.cloud/gcp/analyticshub_v1";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -382,6 +383,13 @@ export const DataExchangeProvider = () =>
             }),
           ),
         { concurrency: 2 },
+      );
+      yield* listListings(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (items) => items.length === 0,
+          times: 12,
+        }),
       );
       const templates = yield* listQueryTemplates(output.name);
       yield* Effect.forEach(

@@ -228,18 +228,36 @@ export const ignoreGone = <A, E extends { readonly _tag: string }, R>(
 
 const noRetryLayer = Layer.succeed(GcpRetry, { while: () => false });
 
+const unavailableMessage = (error: { readonly _tag: string }) => {
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : "";
+  return (
+    message.includes("unavailable") ||
+    message.includes("replica") ||
+    message.includes("internal error")
+  );
+};
+
+const isUnavailable = (error: { readonly _tag: string }) =>
+  error._tag === "Conflict" ||
+  error._tag === "InternalServerError" ||
+  error._tag === "ServiceUnavailable" ||
+  error._tag === "BadGateway" ||
+  error._tag === "GatewayTimeout" ||
+  error._tag === "UnknownGCPError" ||
+  (error._tag === "BadRequest" && unavailableMessage(error));
+
 export const deleteRetry = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(
     Effect.provide(noRetryLayer),
     Effect.retry({
-      while: (error) =>
-        error._tag === "Conflict" ||
-        error._tag === "InternalServerError" ||
-        error._tag === "UnknownGCPError",
-      times: 8,
-      schedule: Schedule.spaced("2 seconds"),
+      while: isUnavailable,
+      times: 12,
+      schedule: Schedule.spaced("3 seconds"),
     }),
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } =>
@@ -282,7 +300,12 @@ export const listDataExchanges = (parent: string) =>
         }),
         (page) => page.dataExchanges,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden", "InternalServerError"], () =>
+        Effect.retry({
+          while: isUnavailable,
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           emptyList<analyticshub.DataExchange>(),
         ),
       );
@@ -297,7 +320,12 @@ export const listListings = (parent: string) =>
         }),
         (page) => page.listings,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden", "InternalServerError"], () =>
+        Effect.retry({
+          while: isUnavailable,
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           emptyList<analyticshub.Listing>(),
         ),
       );
@@ -312,7 +340,12 @@ export const listQueryTemplates = (parent: string) =>
         }),
         (page) => page.queryTemplates,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden", "InternalServerError"], () =>
+        Effect.retry({
+          while: isUnavailable,
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "Forbidden"], () =>
           emptyList<analyticshub.QueryTemplate>(),
         ),
       );

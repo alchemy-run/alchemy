@@ -26,7 +26,7 @@ const waitUntilGone = (project: string, image: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
-      times: 10,
+      times: 18,
     }),
   );
 
@@ -114,5 +114,5 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 240_000 },
 );

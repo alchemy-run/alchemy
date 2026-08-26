@@ -196,6 +196,14 @@ export class InstanceOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
+export class InstanceStillExists extends Data.TaggedError(
+  "GCP.Compute.InstanceStillExists",
+)<{
+  instanceName: string;
+  zone: string;
+  status: string;
+}> {}
+
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_MACHINE_TYPE = "e2-micro";
 const DEFAULT_SOURCE_IMAGE =
@@ -298,6 +306,26 @@ const getByName = (project: string, zone: string, instance: string) =>
     .getInstances({ project, zone, instance })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+const waitUntilGone = (project: string, zone: string, instanceName: string) =>
+  getByName(project, zone, instanceName).pipe(
+    Effect.flatMap((instance) =>
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(
+            new InstanceStillExists({
+              instanceName,
+              zone,
+              status: instance.status ?? "UNKNOWN",
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Compute.InstanceStillExists",
+      times: 18,
+      schedule: Schedule.spaced("3 seconds"),
+    }),
+  );
+
 const operationCodes = (operation: compute.Operation) =>
   (operation.error?.errors ?? []).map((item) => item.code ?? "");
 
@@ -351,7 +379,7 @@ const waitZoneOperation = (
         Effect.repeat({
           schedule: Schedule.exponential("500 millis"),
           until: (next) => next.status === "DONE",
-          times: 8,
+          times: 18,
         }),
       );
     }
@@ -691,11 +719,14 @@ export const InstanceProvider = () =>
         Effect.retry({
           while: (error) =>
             error._tag === "Conflict" ||
-            error._tag === "GCP.Compute.InstanceOperationFailed",
+            error._tag === "GCP.Compute.InstanceOperationFailed" ||
+            error._tag === "GCP.Compute.OperationPending",
           times: 8,
           schedule: Schedule.spaced("3 seconds"),
         }),
         Effect.catchTag("NotFound", () => Effect.void),
+        Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
       );
+      yield* waitUntilGone(env.project, zone, instance);
     }),
   });
