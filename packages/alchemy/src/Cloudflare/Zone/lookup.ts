@@ -6,6 +6,7 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 
 /**
  * Reference to an existing Cloudflare Zone. Accepts:
@@ -44,6 +45,61 @@ export const resolveZoneId = ({
     return yield* Effect.fail(
       new Error(`Cloudflare zone not found for ${lookup}`),
     );
+  });
+
+/**
+ * The caller's memo for {@link inferZoneIdForHostname} — one map per reconcile
+ * pass. It holds the *lookup effect* rather than the resolved id so that
+ * concurrent inferences of the same hostname share one in-flight lookup.
+ */
+export type ZoneCache = Map<
+  string,
+  Effect.Effect<string, never, CloudflareEnvironment | Credentials>
+>;
+
+/**
+ * {@link resolveZoneId} against the ambient account, for callers that only
+ * have a hostname: no explicit zone reference, a memo, and an unresolvable
+ * hostname as a defect rather than a typed failure.
+ *
+ * Listing the account's zones and matching locally is a trap: the list
+ * endpoint paginates (20 zones per page), so a hostname whose zone sits on a
+ * later page silently fails to resolve. `resolveZoneId` walks the label
+ * hierarchy with exact `?name=` lookups instead, which makes the account's
+ * zone count irrelevant.
+ *
+ * The memo holds the lookup effect, built with `Effect.cached`, so concurrent
+ * inferences of the same hostname share one in-flight walk rather than each
+ * starting their own. Installing it is not strictly atomic — worst case two
+ * fibers interleave before the `set` and one duplicate GET goes out.
+ */
+export const inferZoneIdForHostname = (
+  hostname: string,
+  zoneCache: ZoneCache,
+): Effect.Effect<string, never, CloudflareEnvironment | Credentials> =>
+  Effect.gen(function* () {
+    let lookup = zoneCache.get(hostname);
+    if (!lookup) {
+      lookup = yield* Effect.cached(
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          return yield* resolveZoneId({
+            accountId,
+            zone: undefined,
+            hostname,
+          }).pipe(
+            Effect.catch(() =>
+              Effect.die(
+                `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
+                  "Ensure the parent zone exists in this account.",
+              ),
+            ),
+          );
+        }),
+      );
+      zoneCache.set(hostname, lookup);
+    }
+    return yield* lookup;
   });
 
 type ZoneListItem = {

@@ -31,8 +31,10 @@ import { localRuntimeServices } from "../LocalRuntime.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import {
+  inferZoneIdForHostname,
   resolveZoneId,
   type Reference as ZoneReference,
+  type ZoneCache,
 } from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
@@ -1174,7 +1176,6 @@ export const LiveWorkerProvider = () =>
       // const putDomain = yield* workers.putDomain;
       // const listDomains = yield* workers.listDomains;
       // const deleteDomain = yield* workers.deleteDomain;
-      // const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
 
       // Account subdomain is invariant for the life of a provider layer —
@@ -1316,7 +1317,7 @@ export const LiveWorkerProvider = () =>
        * hostname up with {@link resolveZoneId} (`GET /zones?name=` per
        * parent label) — never by listing the account's first page of zones.
        */
-      const inferZoneIdForHostname = (
+      const resolvePinnedZoneId = (
         hostname: string,
         zoneCache: Map<string, string>,
         zone?: ZoneReference,
@@ -1387,7 +1388,8 @@ export const LiveWorkerProvider = () =>
 
           if (desired.length === 0) return [];
 
-          const zoneCache = new Map<string, string>();
+          const inferredZoneCache: ZoneCache = new Map();
+          const pinnedZoneCache = new Map<string, string>();
 
           // Attach `hostname` to this Worker. Skip the PUT entirely if
           // the hostname is already attached to *this* Worker — that's a
@@ -1399,7 +1401,7 @@ export const LiveWorkerProvider = () =>
             const desiredZoneId =
               zone === undefined
                 ? undefined
-                : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
+                : yield* resolvePinnedZoneId(hostname, pinnedZoneCache, zone);
             if (
               live &&
               !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
@@ -1448,7 +1450,7 @@ export const LiveWorkerProvider = () =>
 
             const zoneId =
               desiredZoneId ??
-              (yield* inferZoneIdForHostname(hostname, zoneCache));
+              (yield* inferZoneIdForHostname(hostname, inferredZoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
@@ -1823,7 +1825,7 @@ export const LiveWorkerProvider = () =>
         Effect.gen(function* () {
           if (!routes?.length) return [] as NormalizedWorkerRoute[];
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const zoneCache = new Map<string, string>();
+          const zoneCache: ZoneCache = new Map();
           const normalized: NormalizedWorkerRoute[] = [];
           const seen = new Set<string>();
           for (const route of routes) {
