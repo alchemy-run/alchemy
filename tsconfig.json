@@ -203,6 +203,69 @@
       "path": "./examples/railway-website-vite/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-foldkit/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-waku/tsconfig.json"
+    },
+    {
+      "path": "./examples/fly-website-vocs/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-foldkit/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-waku/tsconfig.json"
+    },
+    {
+      "path": "./examples/hetzner-website-vocs/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-foldkit/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-waku/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-vocs/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-sprite/tsconfig.json"
     },
     {
