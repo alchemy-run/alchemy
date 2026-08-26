@@ -82,7 +82,7 @@ const uploadFile = (repositoryName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
   "create, replace, and delete a repository attachment",
   (stack) =>
     Effect.gen(function* () {

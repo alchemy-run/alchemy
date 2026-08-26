@@ -30,7 +30,7 @@ const waitUntilGone = (project: string, firewall: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
   "create, update, replace, and delete a firewall",
   (stack) =>
     Effect.gen(function* () {

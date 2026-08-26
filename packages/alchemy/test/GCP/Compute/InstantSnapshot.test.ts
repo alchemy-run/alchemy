@@ -38,7 +38,7 @@ const waitUntilGone = (
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
   "create, update labels, replace, and delete an instant snapshot",
   (stack) =>
     Effect.gen(function* () {
