@@ -3,6 +3,7 @@ import type { GcpOpContext } from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Database } from "./Database.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * Distilled ops are OperationMethods: yield them once at Layer construction
@@ -26,16 +27,17 @@ export const makeDocumentHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const run = yield* options.operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const run = yield* options.operation;
     return Effect.fn(function* (database: Database) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: database,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* database.name;
       return Effect.fn(`${options.tag}(${database.LogicalId})`)(function* (
         request: Omit<I, "name"> & { documentPath: string },

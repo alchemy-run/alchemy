@@ -8,6 +8,7 @@ import {
   type StartManualRunsRequest,
 } from "./StartManualRuns.ts";
 import type { TransferConfig } from "./TransferConfig.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link StartManualRuns}.
@@ -18,22 +19,24 @@ import type { TransferConfig } from "./TransferConfig.ts";
 export const StartManualRunsHttp = Layer.effect(
   StartManualRuns,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const startManualRunsProjectsLocationsTransferConfigs =
+      yield* bqdt.startManualRunsProjectsLocationsTransferConfigs;
     return Effect.fn(function* (config: TransferConfig) {
+      yield* bindGcpHost({
+        tag: "GCP.BigQueryDataTransfer.StartManualRuns",
+        resource: config,
+        iam: [
+          { role: defaultRoleFor("GCP.BigQueryDataTransfer.StartManualRuns") },
+        ],
+      });
       const name = yield* config.name;
       return Effect.fn(
         `GCP.BigQueryDataTransfer.StartManualRuns(${config.LogicalId})`,
       )(function* (request?: StartManualRunsRequest) {
-        return yield* bqdt
-          .startManualRunsProjectsLocationsTransferConfigs({
-            ...request,
-            parent: yield* name,
-          })
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* startManualRunsProjectsLocationsTransferConfigs({
+          ...request,
+          parent: yield* name,
+        });
       });
     });
   }),

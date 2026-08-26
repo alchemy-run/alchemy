@@ -17,6 +17,7 @@ export const makeGitRepositoryLinkHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: Effect.Effect<
     (input: I) => Effect.Effect<A, E>,
     never,

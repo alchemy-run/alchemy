@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Database } from "./Database.ts";
 import { GetDdl, type GetDdlRequest } from "./GetDdl.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetDdl}.
@@ -15,22 +16,22 @@ import { GetDdl, type GetDdlRequest } from "./GetDdl.ts";
 export const GetDdlHttp = Layer.effect(
   GetDdl,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const getDdlProjectsInstancesDatabases =
+      yield* spanner.getDdlProjectsInstancesDatabases;
     return Effect.fn(function* (database: Database) {
+      yield* bindGcpHost({
+        tag: "GCP.Spanner.GetDdl",
+        resource: database,
+        iam: [{ role: defaultRoleFor("GCP.Spanner.GetDdl") }],
+      });
       const name = yield* database.name;
       return Effect.fn(`GCP.Spanner.GetDdl(${database.LogicalId})`)(function* (
         request?: GetDdlRequest,
       ) {
-        return yield* spanner
-          .getDdlProjectsInstancesDatabases({
-            ...request,
-            database: yield* name,
-          })
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* getDdlProjectsInstancesDatabases({
+          ...request,
+          database: yield* name,
+        });
       });
     });
   }),

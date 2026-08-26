@@ -8,6 +8,7 @@ import {
   type GetPlatformsPolicyRequest,
 } from "./GetPlatformsPolicy.ts";
 import type { PlatformsPolicy } from "./PlatformsPolicy.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetPlatformsPolicy}.
@@ -18,14 +19,17 @@ import type { PlatformsPolicy } from "./PlatformsPolicy.ts";
 export const GetPlatformsPolicyHttp = Layer.effect(
   GetPlatformsPolicy,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const getPolicy =
-      yield* binaryauthorization.getProjectsPlatformsPolicies.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+    const getPolicy = yield* binaryauthorization.getProjectsPlatformsPolicies;
     return Effect.fn(function* (policy: PlatformsPolicy) {
+      yield* bindGcpHost({
+        tag: "GCP.Binaryauthorization.GetPlatformsPolicy",
+        resource: policy,
+        iam: [
+          {
+            role: defaultRoleFor("GCP.Binaryauthorization.GetPlatformsPolicy"),
+          },
+        ],
+      });
       const name = yield* policy.name;
       return Effect.fn(
         `GCP.Binaryauthorization.GetPlatformsPolicy(${policy.LogicalId})`,

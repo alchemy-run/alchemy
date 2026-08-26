@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Instance } from "./Instance.ts";
 import type { User } from "./User.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -24,11 +25,17 @@ export const makeSqlInstanceHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (instance: Instance) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: instance,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const instanceName = yield* instance.instanceName;
       const project = yield* instance.project;
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
@@ -54,11 +61,17 @@ export const makeSqlUserHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (user: User) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: user,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const userName = yield* user.userName;
       const instance = yield* user.instance;
       const project = yield* user.project;

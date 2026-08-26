@@ -6,6 +6,7 @@ import type { Output } from "../../Output.ts";
 import type { Environment } from "./Environment.ts";
 import type { EnvironmentsUserWorkloadsConfigMap } from "./EnvironmentsUserWorkloadsConfigMap.ts";
 import type { EnvironmentsUserWorkloadsSecret } from "./EnvironmentsUserWorkloadsSecret.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -34,6 +35,7 @@ export const makeNamedHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   nameKey?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
@@ -41,6 +43,11 @@ export const makeNamedHttpBinding = <
     const run = yield* options.operation;
     const nameKey = options.nameKey ?? "name";
     return Effect.fn(function* (resource: Resource) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: resource,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: object,
@@ -60,6 +67,7 @@ export const makeNamedHttpBinding = <
  */
 export const makeEnvironmentHttpBinding = <I, A, E>(options: {
   tag: string;
+  role?: string;
   nameKey: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
@@ -71,6 +79,7 @@ export const makeEnvironmentHttpBinding = <I, A, E>(options: {
 
 export const makeUserWorkloadsConfigMapHttpBinding = <I, A, E>(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<EnvironmentsUserWorkloadsConfigMap, I, A, E>({
@@ -81,6 +90,7 @@ export const makeUserWorkloadsConfigMapHttpBinding = <I, A, E>(options: {
 
 export const makeUserWorkloadsSecretHttpBinding = <I, A, E>(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   makeNamedHttpBinding<EnvironmentsUserWorkloadsSecret, I, A, E>({

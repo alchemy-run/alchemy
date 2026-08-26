@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Domain } from "./Domain.ts";
 import type { DomainsUser } from "./DomainsUser.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -21,11 +22,17 @@ export const makeDomainHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (domain: Domain) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: domain,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* domain.name;
       return Effect.fn(`${options.tag}(${domain.LogicalId})`)(function* (
         request: Omit<I, "name">,
@@ -48,11 +55,17 @@ export const makeDomainParentHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (domain: Domain) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: domain,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const parent = yield* domain.name;
       return Effect.fn(`${options.tag}(${domain.LogicalId})`)(function* (
         request: Omit<I, "parent">,
@@ -75,11 +88,17 @@ export const makeDomainsUserHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (user: DomainsUser) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: user,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* user.name;
       return Effect.fn(`${options.tag}(${user.LogicalId})`)(function* (
         request: Omit<I, "name">,

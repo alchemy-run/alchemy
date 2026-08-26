@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ParametersVersion } from "./ParametersVersion.ts";
 import { RenderParameterVersion } from "./RenderParameterVersion.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link RenderParameterVersion}.
@@ -15,14 +16,18 @@ import { RenderParameterVersion } from "./RenderParameterVersion.ts";
 export const RenderParameterVersionHttp = Layer.effect(
   RenderParameterVersion,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
     const render =
-      yield* parametermanager.renderProjectsLocationsParametersVersions.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+      yield* parametermanager.renderProjectsLocationsParametersVersions;
     return Effect.fn(function* (version: ParametersVersion) {
+      yield* bindGcpHost({
+        tag: "GCP.Parametermanager.RenderParameterVersion",
+        resource: version,
+        iam: [
+          {
+            role: defaultRoleFor("GCP.Parametermanager.RenderParameterVersion"),
+          },
+        ],
+      });
       const name = yield* version.name;
       return Effect.fn(
         `GCP.Parametermanager.RenderParameterVersion(${version.LogicalId})`,

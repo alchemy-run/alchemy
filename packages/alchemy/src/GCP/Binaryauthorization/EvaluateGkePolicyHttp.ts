@@ -8,6 +8,7 @@ import {
   type EvaluateGkePolicyRequest,
 } from "./EvaluateGkePolicy.ts";
 import type { PlatformsPolicy } from "./PlatformsPolicy.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link EvaluateGkePolicy}.
@@ -18,14 +19,16 @@ import type { PlatformsPolicy } from "./PlatformsPolicy.ts";
 export const EvaluateGkePolicyHttp = Layer.effect(
   EvaluateGkePolicy,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
     const evaluate =
-      yield* binaryauthorization.evaluateProjectsPlatformsGkePolicies.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+      yield* binaryauthorization.evaluateProjectsPlatformsGkePolicies;
     return Effect.fn(function* (policy: PlatformsPolicy) {
+      yield* bindGcpHost({
+        tag: "GCP.Binaryauthorization.EvaluateGkePolicy",
+        resource: policy,
+        iam: [
+          { role: defaultRoleFor("GCP.Binaryauthorization.EvaluateGkePolicy") },
+        ],
+      });
       const name = yield* policy.name;
       return Effect.fn(
         `GCP.Binaryauthorization.EvaluateGkePolicy(${policy.LogicalId})`,

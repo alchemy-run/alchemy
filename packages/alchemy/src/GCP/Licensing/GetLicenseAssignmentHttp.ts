@@ -8,6 +8,7 @@ import {
   type GetLicenseAssignmentRequest,
 } from "./GetLicenseAssignment.ts";
 import type { LicenseAssignment } from "./LicenseAssignment.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetLicenseAssignment}.
@@ -18,13 +19,13 @@ import type { LicenseAssignment } from "./LicenseAssignment.ts";
 export const GetLicenseAssignmentHttp = Layer.effect(
   GetLicenseAssignment,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const get = yield* licensing.getLicenseAssignments.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const get = yield* licensing.getLicenseAssignments;
     return Effect.fn(function* (assignment: LicenseAssignment) {
+      yield* bindGcpHost({
+        tag: "GCP.Licensing.GetLicenseAssignment",
+        resource: assignment,
+        iam: [{ role: defaultRoleFor("GCP.Licensing.GetLicenseAssignment") }],
+      });
       const productId = yield* assignment.productId;
       const skuId = yield* assignment.skuId;
       const userId = yield* assignment.userId;

@@ -5,6 +5,7 @@ import type { AdaptiveMtDataset } from "./AdaptiveMtDataset.ts";
 import type { GlossariesGlossaryEntry } from "./GlossariesGlossaryEntry.ts";
 import { locationParentOf } from "./internal.ts";
 import type { Model } from "./Model.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -13,15 +14,7 @@ type GcpHttpOp<I, A, E> = Effect.Effect<
 > &
   ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 
-const closeOver = <I, A, E>(operation: GcpHttpOp<I, A, E>) =>
-  Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    return yield* operation.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
-  });
+const closeOver = <I, A, E>(operation: GcpHttpOp<I, A, E>) => operation;
 
 const makeNamedHttpBinding = <
   Resource extends AdaptiveMtDataset | GlossariesGlossaryEntry | Model,
@@ -30,11 +23,17 @@ const makeNamedHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* closeOver(options.operation);
     return Effect.fn(function* (resource: Resource) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: resource,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -54,12 +53,18 @@ const makeLocationParentHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
   withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
 }) =>
   Effect.gen(function* () {
     const run = yield* closeOver(options.operation);
     return Effect.fn(function* (resource: Resource) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: resource,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "parent">,
@@ -79,6 +84,7 @@ export const makeAdaptiveMtDatasetHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<AdaptiveMtDataset, I, A, E>(options);
 
@@ -88,6 +94,7 @@ export const makeGlossaryEntryHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<GlossariesGlossaryEntry, I, A, E>(options);
 
@@ -97,6 +104,7 @@ export const makeModelHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<Model, I, A, E>(options);
 
@@ -106,6 +114,7 @@ export const makeAdaptiveMtTranslateBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
   withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
 }) => makeLocationParentHttpBinding<AdaptiveMtDataset, I, A, E>(options);
@@ -116,6 +125,7 @@ export const makeTranslateTextBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
   withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
 }) => makeLocationParentHttpBinding<Model, I, A, E>(options);

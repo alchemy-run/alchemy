@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Calendar } from "./Calendar.ts";
 import type { Event } from "./Event.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -21,11 +22,17 @@ export const makeCalendarHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (cal: Calendar) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: cal,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const calendarId = yield* cal.calendarId;
       return Effect.fn(`${options.tag}(${cal.LogicalId})`)(function* (
         request: Omit<I, "calendarId">,
@@ -44,11 +51,17 @@ export const makeEventHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (event: Event) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: event,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const calendarId = yield* event.calendarId;
       const eventId = yield* event.eventId;
       return Effect.fn(`${options.tag}(${event.LogicalId})`)(function* (

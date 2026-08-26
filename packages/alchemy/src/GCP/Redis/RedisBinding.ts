@@ -4,7 +4,7 @@ import * as Redacted from "effect/Redacted";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
 import type { Url } from "../../Redis/index.ts";
 import { UrlMissing as RedisUrlMissing } from "../../Redis/index.ts";
-import { bindGcpHost } from "../Host.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 import type { Instance } from "./Instance.ts";
 
 export const REDIS_URL_ENV = "REDIS_URL";

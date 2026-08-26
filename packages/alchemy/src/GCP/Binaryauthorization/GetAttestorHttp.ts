@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Attestor } from "./Attestor.ts";
 import { GetAttestor, type GetAttestorRequest } from "./GetAttestor.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link GetAttestor}.
@@ -15,13 +16,13 @@ import { GetAttestor, type GetAttestorRequest } from "./GetAttestor.ts";
 export const GetAttestorHttp = Layer.effect(
   GetAttestor,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
-    const getAttestor = yield* binaryauthorization.getProjectsAttestors.pipe(
-      Effect.provideService(Credentials, credentials),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+    const getAttestor = yield* binaryauthorization.getProjectsAttestors;
     return Effect.fn(function* (attestor: Attestor) {
+      yield* bindGcpHost({
+        tag: "GCP.Binaryauthorization.GetAttestor",
+        resource: attestor,
+        iam: [{ role: defaultRoleFor("GCP.Binaryauthorization.GetAttestor") }],
+      });
       const name = yield* attestor.name;
       return Effect.fn(
         `GCP.Binaryauthorization.GetAttestor(${attestor.LogicalId})`,

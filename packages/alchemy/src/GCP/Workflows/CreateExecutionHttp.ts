@@ -8,6 +8,7 @@ import {
   type CreateExecutionRequest,
 } from "./CreateExecution.ts";
 import type { Workflow } from "./Workflow.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 /**
  * HTTP implementation of {@link CreateExecution}.
@@ -18,14 +19,14 @@ import type { Workflow } from "./Workflow.ts";
 export const CreateExecutionHttp = Layer.effect(
   CreateExecution,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
     const createExecution =
-      yield* workflowexecutions.createProjectsLocationsWorkflowsExecutions.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+      yield* workflowexecutions.createProjectsLocationsWorkflowsExecutions;
     return Effect.fn(function* (workflow: Workflow) {
+      yield* bindGcpHost({
+        tag: "GCP.Workflows.CreateExecution",
+        resource: workflow,
+        iam: [{ role: defaultRoleFor("GCP.Workflows.CreateExecution") }],
+      });
       const name = yield* workflow.name;
       return Effect.fn(`GCP.Workflows.CreateExecution(${workflow.LogicalId})`)(
         function* (request?: CreateExecutionRequest) {

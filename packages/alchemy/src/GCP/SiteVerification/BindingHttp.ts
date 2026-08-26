@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { toPathId } from "./internal.ts";
 import type { WebResource } from "./WebResource.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -21,11 +22,17 @@ export const makeWebResourceHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (resource: WebResource) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: resource,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const webResourceId = yield* resource.webResourceId;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request: Omit<I, "id">,

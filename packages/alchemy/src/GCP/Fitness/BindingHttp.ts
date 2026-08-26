@@ -2,6 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { UsersDataSource } from "./UsersDataSource.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -20,11 +21,17 @@ export const makeUsersDataSourceHttpBinding = <
   E,
 >(options: {
   tag: string;
+  role?: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (source: UsersDataSource) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: source,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const userId = yield* source.userId;
       const dataStreamId = yield* source.dataStreamId;
       return Effect.fn(`${options.tag}(${source.LogicalId})`)(function* (

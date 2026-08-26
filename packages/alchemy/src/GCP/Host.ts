@@ -38,8 +38,76 @@ export type GcpHostBinding = {
 const GCP_HOST_TYPES = new Set([
   "GCP.Run.Service",
   "GCP.Run.Job",
+  "GCP.Run.WorkerPool",
   "GCP.CloudFunctions.Function",
 ]);
+
+/**
+ * Default IAM role for a binding tag (`GCP.KMS.Decrypt` → KMS).
+ * Bindings may override with an explicit `role`.
+ */
+const ROLE_BY_SERVICE: Record<string, string> = {
+  aiplatform: "roles/aiplatform.user",
+  alloydb: "roles/alloydb.client",
+  apikeys: "roles/serviceusage.apiKeysViewer",
+  artifactregistry: "roles/artifactregistry.reader",
+  bigquery: "roles/bigquery.user",
+  bigqueryconnection: "roles/bigquery.connectionUser",
+  bigquerydatatransfer: "roles/bigquery.admin",
+  bigtable: "roles/bigtable.user",
+  binaryauthorization: "roles/binaryauthorization.attestorsViewer",
+  cloudbuild: "roles/cloudbuild.builds.editor",
+  cloudfunctions: "roles/cloudfunctions.developer",
+  cloudscheduler: "roles/cloudscheduler.jobRunner",
+  cloudtasks: "roles/cloudtasks.enqueuer",
+  composer: "roles/composer.user",
+  compute: "roles/compute.instanceAdmin.v1",
+  connectors: "roles/connectors.viewer",
+  container: "roles/container.developer",
+  containeranalysis: "roles/containeranalysis.occurrences.viewer",
+  contentwarehouse: "roles/contentwarehouse.documentAdmin",
+  datapipelines: "roles/datapipelines.viewer",
+  dataproc: "roles/dataproc.editor",
+  datastore: "roles/datastore.user",
+  documentai: "roles/documentai.apiUser",
+  drive: "roles/drive.readonly",
+  filestore: "roles/file.editor",
+  firebaseappcheck: "roles/firebaseappcheck.admin",
+  firebasedataconnect: "roles/firebasedataconnect.cloudSqlClient",
+  firebaserules: "roles/firebaserules.system",
+  firestore: "roles/datastore.user",
+  kms: "roles/cloudkms.cryptoOperator",
+  licensing: "roles/licensing.user",
+  managedkafka: "roles/managedkafka.client",
+  memcache: "roles/memcache.editor",
+  ml: "roles/ml.developer",
+  oracledatabase: "roles/oracledatabase.admin",
+  parametermanager: "roles/parametermanager.parameterAccessor",
+  privateca: "roles/privateca.certificateManager",
+  pubsub: "roles/pubsub.editor",
+  pubsublite: "roles/pubsublite.publisher",
+  recaptchaenterprise: "roles/recaptchaenterprise.agent",
+  redis: "roles/redis.editor",
+  retail: "roles/retail.admin",
+  run: "roles/run.developer",
+  secretmanager: "roles/secretmanager.secretAccessor",
+  servicedirectory: "roles/servicedirectory.editor",
+  spanner: "roles/spanner.databaseUser",
+  speech: "roles/speech.client",
+  sql: "roles/cloudsql.client",
+  storage: "roles/storage.objectAdmin",
+  storagetransfer: "roles/storagetransfer.user",
+  tpu: "roles/tpu.admin",
+  translate: "roles/cloudtranslate.user",
+  transcoder: "roles/transcoder.admin",
+  workflows: "roles/workflows.invoker",
+  workstations: "roles/workstations.user",
+};
+
+export const defaultRoleFor = (tag: string): string => {
+  const service = tag.split(".")[1]?.toLowerCase() ?? "";
+  return ROLE_BY_SERVICE[service] ?? "roles/viewer";
+};
 
 /**
  * True for any Alchemy GCP host that accepts {@link GcpHostBinding}.

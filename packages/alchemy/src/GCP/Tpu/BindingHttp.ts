@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Node } from "./Node.ts";
 import type { QueuedResource } from "./QueuedResource.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud TPU node bindings.
@@ -14,27 +16,25 @@ export const makeTpuNodeHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (node: Node) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: node,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* node.name;
       return Effect.fn(`${options.tag}(${node.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });
@@ -49,27 +49,25 @@ export const makeTpuQueuedResourceHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (resource: QueuedResource) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: resource,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });

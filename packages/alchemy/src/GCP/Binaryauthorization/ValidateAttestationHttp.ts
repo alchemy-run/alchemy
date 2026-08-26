@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Attestor } from "./Attestor.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
 import {
   ValidateAttestation,
   type ValidateAttestationRequest,
@@ -18,14 +19,18 @@ import {
 export const ValidateAttestationHttp = Layer.effect(
   ValidateAttestation,
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
     const validate =
-      yield* binaryauthorization.validateAttestationOccurrenceProjectsAttestors.pipe(
-        Effect.provideService(Credentials, credentials),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
+      yield* binaryauthorization.validateAttestationOccurrenceProjectsAttestors;
     return Effect.fn(function* (attestor: Attestor) {
+      yield* bindGcpHost({
+        tag: "GCP.Binaryauthorization.ValidateAttestation",
+        resource: attestor,
+        iam: [
+          {
+            role: defaultRoleFor("GCP.Binaryauthorization.ValidateAttestation"),
+          },
+        ],
+      });
       const project = yield* attestor.project;
       const attestorId = yield* attestor.attestorId;
       const noteReference = yield* attestor.noteReference;

@@ -4,6 +4,8 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { WorkstationCluster } from "./WorkstationCluster.ts";
 import type { WorkstationClustersWorkstationConfig } from "./WorkstationClustersWorkstationConfig.ts";
 import type { WorkstationClustersWorkstationConfigsWorkstation } from "./WorkstationClustersWorkstationConfigsWorkstation.ts";
+import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import { type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Workstations bindings.
@@ -15,27 +17,25 @@ export const makeClusterHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (cluster: WorkstationCluster) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: cluster,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* cluster.name;
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });
@@ -46,27 +46,25 @@ export const makeConfigHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (config: WorkstationClustersWorkstationConfig) {
+      yield* bindGcpHost({
+        tag: options.tag,
+        resource: config,
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+      });
       const name = yield* config.name;
       return Effect.fn(`${options.tag}(${config.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });
@@ -77,13 +75,11 @@ export const makeWorkstationHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (
       workstation: WorkstationClustersWorkstationConfigsWorkstation,
     ) {
@@ -91,15 +87,10 @@ export const makeWorkstationHttpBinding = <
       return Effect.fn(`${options.tag}(${workstation.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            name: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          name: yield* name,
+        } as I);
       });
     });
   });
@@ -110,13 +101,11 @@ export const makeGenerateAccessTokenHttpBinding = <
   E,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const credentials = yield* Credentials;
-    const httpClient = yield* HttpClient.HttpClient;
+    const run = yield* options.operation;
     return Effect.fn(function* (
       workstation: WorkstationClustersWorkstationConfigsWorkstation,
     ) {
@@ -124,15 +113,10 @@ export const makeGenerateAccessTokenHttpBinding = <
       return Effect.fn(`${options.tag}(${workstation.LogicalId})`)(function* (
         request?: Omit<I, "workstation">,
       ) {
-        return yield* options
-          .operation({
-            ...(request as I),
-            workstation: yield* name,
-          } as I)
-          .pipe(
-            Effect.provideService(Credentials, credentials),
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-          );
+        return yield* run({
+          ...(request as I),
+          workstation: yield* name,
+        } as I);
       });
     });
   });
