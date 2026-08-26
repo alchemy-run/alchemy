@@ -8,8 +8,12 @@ import {
   hasGcpCreds,
   logLevel,
   probePhotoAccess,
+  probeSequenceAccess,
 } from "./common.ts";
-import { EQUIRECTANGULAR_JPEG_BASE64 } from "./fixtures/equirectangular.ts";
+import {
+  EQUIRECTANGULAR_JPEG_BASE64,
+  MINIMAL_MP4_BASE64,
+} from "./fixtures/equirectangular.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,6 +53,52 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
       );
 
       expect(out.metadata.photoId?.id).toEqual(out.photo.photoId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+  "GetPhotoSequence round-trip",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const access = yield* probeSequenceAccess;
+      if (access !== "ok") {
+        expect(entitlementTags).toContain(access._tag);
+        yield* stack.destroy();
+        return;
+      }
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const sequence = yield* GCP.Streetviewpublish.PhotoSequence("Walk", {
+            sequenceBytes: MINIMAL_MP4_BASE64,
+            inputType: "VIDEO",
+            rawGpsTimeline: [
+              {
+                latLngPair: { latitude: 37.422, longitude: -122.084 },
+              },
+            ],
+          });
+          const Probe = Action(
+            "Probe",
+            Effect.gen(function* () {
+              yield* sequence.sequenceId;
+              const getSequence =
+                yield* GCP.Streetviewpublish.GetPhotoSequence(sequence);
+              return Effect.fn(function* () {
+                return yield* getSequence({ view: "BASIC" });
+              });
+            }),
+          );
+          return { sequence, operation: yield* Probe({}) };
+        }),
+      );
+
+      expect(out.operation).toEqual(expect.any(Object));
 
       yield* stack.destroy();
     }).pipe(logLevel),

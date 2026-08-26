@@ -29,16 +29,43 @@ test.provider.skipIf(!runLifecycle)(
             Effect.gen(function* () {
               yield* model.name;
               const getModel = yield* GCP.Ml.GetModel(model);
+              const predict = yield* GCP.Ml.Predict(model);
               return Effect.fn(function* () {
-                return yield* getModel();
+                const live = yield* getModel();
+                const prediction = yield* predict({
+                  body: {
+                    httpBody: {
+                      contentType: "application/json",
+                      data: btoa(JSON.stringify({ instances: [{ f1: 1 }] })),
+                    },
+                  },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return { live, prediction };
               });
             }),
           );
-          return { model, live: yield* Probe({}) };
+          return { model, probe: yield* Probe({}) };
         }),
       );
 
-      expect(out.live.name).toEqual(out.model.name);
+      expect(out.probe.live.name).toEqual(out.model.name);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.probe.prediction.tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

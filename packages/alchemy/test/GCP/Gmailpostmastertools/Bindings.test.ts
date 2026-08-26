@@ -29,10 +29,35 @@ test.provider.skipIf(!runLifecycle)(
                 yield* GCP.Gmailpostmastertools.GetDomain(domain);
               const getUser =
                 yield* GCP.Gmailpostmastertools.GetDomainsUser(user);
+              const queryStats =
+                yield* GCP.Gmailpostmastertools.QueryDomainStats(domain);
               return Effect.fn(function* () {
                 const domainMeta = yield* getDomain({});
                 const userMeta = yield* getUser({});
-                return { domainMeta, userMeta };
+                const stats = yield* queryStats({
+                  body: {
+                    metricDefinitions: [
+                      {
+                        name: "spam",
+                        baseMetric: { standardMetric: "SPAM_RATE" },
+                      },
+                    ],
+                    timeQuery: {
+                      dateList: { dates: [{ year: 2026, month: 1, day: 1 }] },
+                    },
+                  },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return { domainMeta, userMeta, stats };
               });
             }),
           );
@@ -42,12 +67,20 @@ test.provider.skipIf(!runLifecycle)(
             user,
             domainMeta: probe.domainMeta,
             userMeta: probe.userMeta,
+            stats: probe.stats,
           };
         }),
       );
 
       expect(out.domainMeta.name).toEqual(out.domain.name);
       expect(out.userMeta.permission).toEqual("READER");
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.stats.tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

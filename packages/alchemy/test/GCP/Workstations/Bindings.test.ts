@@ -67,11 +67,58 @@ test.provider.skipIf(!runLifecycle)(
                 yield* GCP.Workstations.GetWorkstationConfig(config);
               const getWorkstation =
                 yield* GCP.Workstations.GetWorkstation(workstation);
+              const generateToken =
+                yield* GCP.Workstations.GenerateAccessToken(workstation);
+              const start =
+                yield* GCP.Workstations.StartWorkstation(workstation);
+              const stop = yield* GCP.Workstations.StopWorkstation(workstation);
               return Effect.fn(function* () {
                 const liveCluster = yield* getCluster();
                 const liveConfig = yield* getConfig();
                 const liveWorkstation = yield* getWorkstation();
-                return { liveCluster, liveConfig, liveWorkstation };
+                const token = yield* generateToken({
+                  body: { ttl: "3600s" },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                const started = yield* start().pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                const stopped = yield* stop().pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return {
+                  liveCluster,
+                  liveConfig,
+                  liveWorkstation,
+                  token,
+                  started,
+                  stopped,
+                };
               });
             }),
           );
@@ -87,6 +134,27 @@ test.provider.skipIf(!runLifecycle)(
       expect(out.probe.liveCluster.name).toEqual(out.cluster.name);
       expect(out.probe.liveConfig.name).toEqual(out.config.name);
       expect(out.probe.liveWorkstation.name).toEqual(out.workstation.name);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.probe.token.tag);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.probe.started.tag);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.probe.stopped.tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

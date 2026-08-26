@@ -30,10 +30,31 @@ test.provider.skipIf(!runLifecycle)(
               yield* hints.name;
               const getClass = yield* GCP.Speech.GetCustomClasse(ships);
               const getPhraseSet = yield* GCP.Speech.GetPhraseSet(hints);
+              const recognize = yield* GCP.Speech.Recognize(hints);
               return Effect.fn(function* () {
                 const customClass = yield* getClass();
                 const phraseSet = yield* getPhraseSet();
-                return { customClass, phraseSet };
+                const recognized = yield* recognize({
+                  body: {
+                    config: {
+                      languageCode: "en-US",
+                      encoding: "LINEAR16",
+                      sampleRateHertz: 16000,
+                    },
+                    audio: { content: "" },
+                  },
+                }).pipe(
+                  Effect.map((result) => ({ tag: "ok" as const, result })),
+                  Effect.catchTag(
+                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
+                    (error) =>
+                      Effect.succeed({
+                        tag: error._tag,
+                        message: error.message,
+                      }),
+                  ),
+                );
+                return { customClass, phraseSet, recognized };
               });
             }),
           );
@@ -51,6 +72,13 @@ test.provider.skipIf(!runLifecycle)(
           (phrase) => phrase.value === "weather",
         ),
       ).toEqual(true);
+      expect([
+        "ok",
+        "Forbidden",
+        "BadRequest",
+        "NotFound",
+        "Conflict",
+      ]).toContain(out.recognized.tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
