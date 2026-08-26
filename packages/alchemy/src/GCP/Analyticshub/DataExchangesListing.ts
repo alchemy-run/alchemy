@@ -341,6 +341,9 @@ const getByName = (name: string) =>
 
 export const DataExchangesListingProvider = () =>
   Provider.succeed(DataExchangesListing, {
+    nuke: {
+      dependsOn: ["GCP.Analyticshub.DataExchange", "GCP.BigQuery.Dataset"],
+    },
     stables: ["name", "listingId", "dataExchange", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
@@ -636,11 +639,11 @@ export const DataExchangesListingProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
+    delete: Effect.fn(function* ({ output }) {
       yield* deleteRetry(
         analyticshub.deleteProjectsLocationsDataExchangesListings({
           name: output.name,
-          deleteCommercial: olds?.deleteCommercial === true ? true : undefined,
+          deleteCommercial: true,
         }),
       );
     }),

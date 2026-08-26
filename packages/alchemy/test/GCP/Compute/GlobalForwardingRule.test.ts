@@ -77,6 +77,9 @@ test.provider.skipIf(!hasGcpCreds)(
       expect(created.ipProtocol).toEqual("TCP");
       expect(created.loadBalancingScheme).toEqual("EXTERNAL");
       expect(created.labels).toMatchObject({ env: "test" });
+      expect(created.description).toEqual(
+        "alchemy test global forwarding rule",
+      );
       expect(resourceTail(created.target).length).toBeGreaterThan(0);
 
       const fetched = yield* compute.getGlobalForwardingRules({
@@ -85,6 +88,10 @@ test.provider.skipIf(!hasGcpCreds)(
       });
       expect(fetched.name).toEqual(created.forwardingRuleName);
       expect(fetched.IPAddress).toEqual(created.ipAddress);
+      expect(fetched.description).toContain("alchemy-id=");
+      expect(fetched.description).toContain(
+        "alchemy test global forwarding rule",
+      );
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
       expect(resourceTail(fetched.target)).toEqual(
