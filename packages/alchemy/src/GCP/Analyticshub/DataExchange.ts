@@ -211,6 +211,9 @@ const getByName = missingGet;
 
 export const DataExchangeProvider = () =>
   Provider.succeed(DataExchange, {
+    nuke: {
+      dependsOn: ["GCP.BigQuery.Dataset"],
+    },
     stables: ["name", "dataExchangeId", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
@@ -375,6 +378,7 @@ export const DataExchangeProvider = () =>
           deleteRetry(
             analyticshub.deleteProjectsLocationsDataExchangesListings({
               name: listing.name!,
+              deleteCommercial: true,
             }),
           ),
         { concurrency: 2 },

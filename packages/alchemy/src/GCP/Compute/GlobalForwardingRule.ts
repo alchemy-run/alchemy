@@ -18,6 +18,12 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  parseDescription,
+} from "./internal.ts";
 import { waitGlobalOperations } from "./operations.ts";
 
 const DEFAULT_PROTOCOL = "TCP";
@@ -34,6 +40,9 @@ export type GlobalForwardingRuleProps = {
   forwardingRuleName?: string;
   /**
    * Optional description. Immutable — changing it replaces the rule.
+   * Alchemy stamps ownership into the stored description so `list` /
+   * nuke can find a rule even if `setLabels` never ran (labels cannot
+   * be set on insert).
    */
   description?: string;
   /**
@@ -181,7 +190,10 @@ export type GlobalForwardingRule = Resource<
  * proxy (or SSL/TCP/gRPC proxy, or a Private Service Connect bundle).
  *
  * Labels cannot be set on insert — Alchemy applies them with
- * `setLabels` after the rule exists. `target` and `networkTier` update
+ * `setLabels` after the rule exists and also stamps ownership into the
+ * description so `list` / `pnpm nuke:gcp` can find a rule if labeling
+ * is interrupted. `list` also includes unlabeled rules whose `target`
+ * is an Alchemy-owned HTTP(S) proxy. `target` and `networkTier` update
  * in place (`setTarget` / `patch`). Name, IP, protocol, port range,
  * description, network, and load-balancing scheme replace the rule.
  *
@@ -276,10 +288,60 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       : `f${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-const resourceTail = (value: string | undefined): string => {
-  if (value === undefined || value.length === 0) return "";
-  const parts = value.split("/").filter((part) => part.length > 0);
-  return (parts[parts.length - 1] ?? "").toLowerCase();
+const resourceTail = (value: string | undefined): string =>
+  lastSegment(value).toLowerCase();
+
+const proxyName = (proxy: { name?: string; description?: string }) =>
+  hasOwnershipMarker(proxy.description)
+    ? lastSegment(proxy.name).toLowerCase()
+    : "";
+
+const ownedProxyNames = (project: string) =>
+  Effect.gen(function* () {
+    const http = yield* compute.listTargetHttpProxies
+      .items({ project, maxResults: 500 })
+      .pipe(
+        Stream.map(proxyName),
+        Stream.filter((name) => name.length > 0),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag(["NotFound", "Forbidden", "UnknownGCPError"], () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
+    const https = yield* compute.listTargetHttpsProxies
+      .items({ project, maxResults: 500 })
+      .pipe(
+        Stream.map(proxyName),
+        Stream.filter((name) => name.length > 0),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag(["NotFound", "Forbidden", "UnknownGCPError"], () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
+    return new Set<string>([...http, ...https]);
+  });
+
+const isOwnedForwardingRule = (
+  rule: compute.ForwardingRule,
+  ownedTargets: ReadonlySet<string>,
+) => {
+  if (
+    Object.keys(rule.labels ?? {}).some((key) => key.startsWith("alchemy-"))
+  ) {
+    return true;
+  }
+  if (hasOwnershipMarker(rule.description)) return true;
+  const target = resourceTail(rule.target);
+  if (target.length > 0 && ownedTargets.has(target)) return true;
+  // Insert cannot set labels; a crash before setLabels leaves an unlabeled
+  // rule whose name is still the engine physical name (`gcp-…` in tests).
+  const name = (rule.name ?? "").toLowerCase();
+  return (
+    name.startsWith("gcp-") &&
+    (rule.description === undefined || rule.description.length === 0)
+  );
 };
 
 const normalizePortRange = (value: string | undefined): string => {
@@ -317,7 +379,7 @@ const toAttrs = (rule: compute.ForwardingRule, project: string) => ({
   loadBalancingScheme: rule.loadBalancingScheme,
   networkTier: rule.networkTier,
   network: rule.network,
-  description: rule.description,
+  description: parseDescription(rule.description).description,
   labels: userLabels(rule.labels),
   fingerprint: rule.fingerprint,
   labelFingerprint: rule.labelFingerprint,
@@ -331,15 +393,16 @@ const toAttrs = (rule: compute.ForwardingRule, project: string) => ({
 const toInsertBody = (
   forwardingRuleName: string,
   news: GlobalForwardingRuleProps,
+  description: string,
 ): compute.ForwardingRule => {
   const body: compute.ForwardingRule = {
     name: forwardingRuleName,
     target: news.target,
+    description,
     IPProtocol: news.ipProtocol ?? DEFAULT_PROTOCOL,
     loadBalancingScheme: news.loadBalancingScheme ?? DEFAULT_SCHEME,
     networkTier: news.networkTier ?? DEFAULT_TIER,
   };
-  if (news.description !== undefined) body.description = news.description;
   if (news.ipAddress !== undefined) body.IPAddress = news.ipAddress;
   if (news.ipVersion !== undefined) body.ipVersion = news.ipVersion;
   if (news.portRange !== undefined) body.portRange = news.portRange;
@@ -479,6 +542,12 @@ const waitUntilGone = (project: string, forwardingRuleName: string) =>
 
 export const GlobalForwardingRuleProvider = () =>
   Provider.succeed(GlobalForwardingRule, {
+    nuke: {
+      dependsOn: [
+        "GCP.Compute.TargetHttpProxy",
+        "GCP.Compute.TargetHttpsProxy",
+      ],
+    },
     stables: [
       "forwardingRuleName",
       "project",
@@ -581,7 +650,13 @@ export const GlobalForwardingRuleProvider = () =>
       const existing = yield* getByName(env.project, forwardingRuleName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+      const { labels: descriptionLabels } = parseDescription(
+        existing.description,
+      );
+      return (yield* hasAlchemyLabels(id, {
+        ...descriptionLabels,
+        ...tagRecord(existing.labels),
+      }))
         ? attrs
         : Unowned(attrs);
     }),
@@ -589,17 +664,17 @@ export const GlobalForwardingRuleProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
+        const ownedTargets = yield* ownedProxyNames(env.project);
         return yield* compute.listGlobalForwardingRules
           .items({ project: env.project, maxResults: 500 })
           .pipe(
-            Stream.filter((rule) =>
-              Object.keys(rule.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
-            ),
+            Stream.filter((rule) => isOwnedForwardingRule(rule, ownedTargets)),
             Stream.map((rule) => toAttrs(rule, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag(["NotFound", "Forbidden", "UnknownGCPError"], () =>
+              Effect.succeed([] as GlobalForwardingRule["Attributes"][]),
+            ),
           );
       }),
 
@@ -610,9 +685,11 @@ export const GlobalForwardingRuleProvider = () =>
         news.forwardingRuleName,
         output?.forwardingRuleName,
       );
+      const ownership = yield* createInternalLabels(id);
+      const desiredDescription = encodeDescription(ownership, news.description);
       const desiredLabels = {
         ...toLabels(news.labels),
-        ...(yield* createInternalLabels(id)),
+        ...ownership,
       };
 
       let current = yield* getByName(env.project, forwardingRuleName);
@@ -621,7 +698,7 @@ export const GlobalForwardingRuleProvider = () =>
         const created = yield* compute
           .insertGlobalForwardingRules({
             project: env.project,
-            body: toInsertBody(forwardingRuleName, news),
+            body: toInsertBody(forwardingRuleName, news, desiredDescription),
           })
           .pipe(
             Effect.flatMap((operation) =>

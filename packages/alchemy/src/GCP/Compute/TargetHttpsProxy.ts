@@ -362,6 +362,9 @@ const waitUntilDone = (
 
 export const TargetHttpsProxyProvider = () =>
   Provider.succeed(TargetHttpsProxy, {
+    nuke: {
+      dependsOn: ["GCP.Compute.UrlMap"],
+    },
     stables: [
       "targetHttpsProxyName",
       "project",
