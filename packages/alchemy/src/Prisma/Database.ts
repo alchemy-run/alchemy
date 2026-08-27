@@ -248,7 +248,7 @@ export interface Database extends Resource<
  * Standalone `Prisma.Database` resources cannot be the project's default
  * database. Use `Prisma.Project` when the project should own a default
  * database. Omit `branchId` and `branchGitName` to attach the database to the
- * project's current default branch — a database is always attached to a
+ * project's current default branch. A database is always attached to a
  * branch; an unassigned database is not representable as desired state.
  * Project, region, and source changes require replacement; display
  * name and branch attachment can converge in place. Destroying this resource
@@ -715,13 +715,9 @@ const ProviderLive = () =>
             recoverCreateSecrets = result.recoverSecrets;
           }
 
-          // Determine whether a PATCH is needed and what branch ID to use.
-          // For branchId: compare directly (no API call).
-          // For branchGitName: skip the API call unless the database is unattached
-          //   or the gitName changed from olds — the caller's branchId is already
-          //   authoritative when neither condition is true.
-          // For both omitted: resolve the default branch via desiredBranchId (one
-          //   call, reusing resolvedBranch from the create path when available).
+          // Skip listBranches for branchGitName when the observed attachment is
+          // already present; only resolve when the database is unattached or the
+          // gitName changed.
           let patchBranchId: string | undefined;
           let needsPatch: boolean;
           if (news.branchId !== undefined && !isPrismaDevId(news.branchId)) {
