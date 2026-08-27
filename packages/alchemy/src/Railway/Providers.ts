@@ -1,3 +1,4 @@
+import { GraphQlHttpGate } from "@distilled.cloud/railway";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
@@ -159,7 +160,9 @@ export const providers = () =>
     Layer.provideMerge(RailwayAuth),
     Layer.provideMerge(ProfileLive),
     Layer.provideMerge(CredentialsStoreLive),
-    Layer.provideMerge(FetchHttpClient.layer),
+    Layer.provideMerge(
+      GraphQlHttpGate.pipe(Layer.provide(FetchHttpClient.layer)),
+    ),
     Layer.provideMerge(Command.providers()),
     Layer.orDie,
   );

@@ -57,7 +57,7 @@ const anonymousRailwayCredentials = (apiBaseUrl?: string) =>
 const anonymousRailway = (apiBaseUrl?: string) =>
   Layer.mergeAll(
     anonymousRailwayCredentials(apiBaseUrl),
-    FetchHttpClient.layer,
+    railway.GraphQlHttpGate.pipe(Layer.provide(FetchHttpClient.layer)),
   );
 
 export const provideAnonymousRailway = <A, E>(

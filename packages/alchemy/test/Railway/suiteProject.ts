@@ -7,6 +7,7 @@
  */
 import {
   CredentialsFromEnv,
+  GraphQlHttpGate,
   Retry as RailwayRetry,
 } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
@@ -14,6 +15,7 @@ import { resolveWorkspace } from "@/Railway/Environment.ts";
 import type { Project } from "@/Railway/Project.ts";
 import { isRailwayTransient } from "@/Railway/transient.ts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -104,7 +106,7 @@ const acquire = Effect.gen(function* () {
     );
 }).pipe(
   Effect.provide(CredentialsFromEnv),
-  Effect.provide(FetchHttpClient.layer),
+  Effect.provide(GraphQlHttpGate.pipe(Layer.provide(FetchHttpClient.layer))),
 );
 
 /**
