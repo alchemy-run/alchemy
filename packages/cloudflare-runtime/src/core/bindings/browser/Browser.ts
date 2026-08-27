@@ -176,6 +176,7 @@ export const BrowserLive = Layer.effect(
               name: SERVICE_BROWSER,
               worker: {
                 compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityFlags: ["web_socket_manual_reply_to_close"],
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(BrowserWorker.worker),
                 ),
