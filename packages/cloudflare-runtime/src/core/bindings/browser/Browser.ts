@@ -27,6 +27,7 @@ const BrowserWorker = {
 };
 import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
+import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook, PluginContext } from "../../PluginContext.ts";
@@ -174,7 +175,7 @@ export const BrowserLive = Layer.effect(
             const browserService: WorkerdConfig.Service = {
               name: SERVICE_BROWSER,
               worker: {
-                compatibilityDate: "2025-01-01",
+                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(BrowserWorker.worker),
                 ),

@@ -31,7 +31,7 @@ const workerConfig = (
   // depth limit, so bridge through `unknown`.
   plugins: [
     cloudflare({
-      compatibilityDate: "2026-03-10",
+      compatibilityDate: "2026-07-04",
       compatibilityFlags: options.compatibilityFlags,
     }),
     InternalWorkerExportPlugin(),
@@ -123,7 +123,7 @@ export default defineConfig([
       mangle: false,
     },
     plugins: [
-      cloudflare({ compatibilityDate: "2026-03-10" }),
+      cloudflare({ compatibilityDate: "2026-07-04" }),
       InternalWorkerExportPlugin(),
     ],
     deps: {
