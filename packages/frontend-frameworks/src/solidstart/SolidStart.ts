@@ -301,7 +301,11 @@ export const make: (
     function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
-      const targetContext = { root, framework: "solidstart" };
+      const targetContext = {
+        root,
+        framework: "solidstart",
+        env: buildOptions?.env,
+      };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
       // build in a disposable child process — vite.config.* executes user
@@ -361,6 +365,12 @@ export const make: (
           try: async () => {
             const builder = await vite.createBuilder({
               root,
+              // Fixture clones have no local node_modules, so Vite would
+              // otherwise share `packages/alchemy/node_modules/.vite` with
+              // every other website test. Vocs writes shiki there; the
+              // SolidStart nitro graph then emits 11MB of grammars and
+              // SSR GET `/` hangs. Pin the cache under this project.
+              cacheDir: path.join(root, "node_modules", ".vite"),
               // Warn-level: rolldown-vite's native progress reporter writes
               // straight to the fd, corrupting hosting-process reporters
               // that can only intercept JS-level writers.
@@ -415,6 +425,7 @@ export const make: (
           try: async () => {
             const server = await vite.createServer({
               root,
+              cacheDir: path.join(root, "node_modules", ".vite"),
               logLevel: "warn",
               server: {
                 port,

@@ -519,7 +519,11 @@ export const make: (
     function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
-      const targetContext = { root, framework: "sveltekit" };
+      const targetContext = {
+        root,
+        framework: "sveltekit",
+        env: buildOptions?.env,
+      };
 
       // Wholesale build takeover (targets that own the entire pipeline).
       if (target.build !== undefined) {

@@ -214,6 +214,7 @@ interface FrameworkModule {
     {
       readonly build: (options?: {
         readonly root?: string;
+        readonly env?: Record<string, string>;
       }) => Effect.Effect<FrameworkBuildOutputSlice, unknown>;
       readonly dev: (options?: {
         readonly root?: string;
@@ -328,17 +329,17 @@ const resolveDevPort = Effect.fn(function* (options: {
   );
 });
 
-const applyProcessEnv = (
+const envRecord = (
   env: Record<string, string | Redacted.Redacted<string>> | undefined,
-) =>
-  Effect.sync(() => {
-    if (env === undefined) return;
-    for (const [key, value] of Object.entries(env)) {
-      process.env[key] = Redacted.isRedacted(value)
-        ? Redacted.value(value)
-        : value;
-    }
-  });
+): Record<string, string> | undefined => {
+  if (env === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [
+      key,
+      Redacted.isRedacted(value) ? Redacted.value(value) : value,
+    ]),
+  );
+};
 
 const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   _id: string,
@@ -363,7 +364,6 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   }
 
   if (isLocal) {
-    yield* applyProcessEnv(props.env);
     const framework = yield* makeFramework(config, root, props.memo);
     const dev = props.dev;
     const resolvedPort =
@@ -397,10 +397,9 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     } satisfies FrameworkSite;
   }
 
-  yield* applyProcessEnv(props.env);
   const framework = yield* makeFramework(config, root, props.memo);
   const built = yield* Effect.mapError(
-    framework.build({ root }),
+    framework.build({ root, env: envRecord(props.env) }),
     (cause) =>
       new FrameworkSiteError({
         framework: config.framework,

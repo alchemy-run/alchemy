@@ -348,7 +348,7 @@ export const make = (
           const target = yield* resolveTarget(root);
           if (target.build !== undefined) {
             return yield* target
-              .build({ root, framework: "vocs" })
+              .build({ root, framework: "vocs", env: buildOptions?.env })
               .pipe(
                 Effect.provideService(FileSystem.FileSystem, fs),
                 Effect.provideService(Path.Path, path),

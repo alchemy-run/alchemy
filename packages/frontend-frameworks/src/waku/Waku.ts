@@ -758,7 +758,12 @@ export const make = (
           // The inline waku options ride along so a child-process build can
           // reconstruct the framework with the same options.
           return yield* target
-            .build({ root, framework: "waku", waku: options?.waku })
+            .build({
+              root,
+              framework: "waku",
+              env: buildOptions?.env,
+              waku: options?.waku,
+            })
             .pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),

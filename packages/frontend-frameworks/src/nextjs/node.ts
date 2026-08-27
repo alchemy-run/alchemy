@@ -250,6 +250,7 @@ export const makeNodeTarget = (
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "nextjs",
       config: {
         rootDir: context.root,

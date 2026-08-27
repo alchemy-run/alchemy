@@ -219,7 +219,11 @@ export const make: (
     function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
-      const targetContext = { root, framework: "tanstack-start" };
+      const targetContext = {
+        root,
+        framework: "tanstack-start",
+        env: buildOptions?.env,
+      };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
       // build in a disposable child process — vite.config.* executes user

@@ -214,6 +214,7 @@ interface FrameworkModule {
     {
       readonly build: (options?: {
         readonly root?: string;
+        readonly env?: Record<string, string>;
       }) => Effect.Effect<FrameworkBuildOutputSlice, unknown>;
       readonly dev: (options?: {
         readonly root?: string;
@@ -252,18 +253,6 @@ export const unwrapEnv = (
     ]),
   );
 };
-
-const applyProcessEnv = (
-  env: Record<string, string | Redacted.Redacted<string>> | undefined,
-) =>
-  Effect.sync(() => {
-    if (env === undefined) return;
-    for (const [key, value] of Object.entries(env)) {
-      process.env[key] = Redacted.isRedacted(value)
-        ? Redacted.value(value)
-        : value;
-    }
-  });
 
 export const resolveWebsiteServer = Effect.fn(function* (props: {
   readonly server?: Ref<Server> | undefined;
@@ -443,7 +432,6 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
   const framework = yield* makeFramework(config, root, props.memo);
 
   if (isLocal) {
-    yield* applyProcessEnv(props.env);
     const dev = props.dev;
     const resolvedPort =
       dev && dev.mode !== "external" && dev.port !== undefined
@@ -474,9 +462,8 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     };
   }
 
-  yield* applyProcessEnv(props.env);
   const built = yield* Effect.mapError(
-    framework.build({ root }),
+    framework.build({ root, env: unwrapEnv(props.env) }),
     (cause) =>
       new FrameworkSiteError({
         framework: config.framework,

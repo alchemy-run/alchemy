@@ -172,6 +172,7 @@ export const makeNodeTarget = (
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "react-router",
       config: {
         rootDir: context.root,

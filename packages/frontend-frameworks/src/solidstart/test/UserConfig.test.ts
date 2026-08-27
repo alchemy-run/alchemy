@@ -54,6 +54,7 @@ describe("resolveNitroConfig", () => {
     });
     expect(config.preset).toBe("aws-lambda");
     expect(config.rootDir).toBe("/project");
+    expect(config.buildDir).toBe("/project/.nitro");
     // Everything the integration does not own is preserved.
     expect(config["prerender"]).toEqual({ crawlLinks: true });
   });

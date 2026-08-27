@@ -259,7 +259,12 @@ export const make = <TargetConfig = unknown>(
           // absolute `configFile`) so a child-process build can
           // reconstruct the framework with the same options.
           return yield* target
-            .build({ root, framework: "astro", astro: resolveUserAstro(root) })
+            .build({
+              root,
+              framework: "astro",
+              env: buildOptions?.env,
+              astro: resolveUserAstro(root),
+            })
             .pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),

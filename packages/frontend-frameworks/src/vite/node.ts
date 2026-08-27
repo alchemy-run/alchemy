@@ -91,6 +91,7 @@ export const makeNodeTarget = (config: ViteTargetConfig = {}): ViteTarget => ({
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "vite",
       config: {
         rootDir: context.root,

@@ -104,5 +104,5 @@ test.provider.skipIf(!hasHetznerCreds)(
         Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
       ),
     ),
-  { timeout: 420000, exclusive: true },
+  { timeout: 420000 },
 );
