@@ -240,8 +240,16 @@ export const makeSandboxPty: Effect.Effect<SandboxPtyRpc, never, Workspace> =
       if (unavailable !== undefined) return yield* Effect.fail(unavailable);
       const existing = ptys.get(id);
       if (existing !== undefined) {
-        // reattach: adopt the caller's dimensions, keep the shell
-        yield* withPty(id, (entry) => entry.proc.terminal.resize(cols, rows));
+        // Reattach: adopt the caller's dimensions, keep the shell — and
+        // force a repaint. The replayed ring is a byte tail, not a screen
+        // snapshot: a full-screen TUI (alternate screen, cursor-addressed
+        // draws) renders corrupted from it. SIGWINCH makes the app redraw
+        // from its own model, but the kernel only delivers it on an ACTUAL
+        // size change — so jiggle through an off-by-one size first.
+        yield* withPty(id, (entry) => {
+          entry.proc.terminal.resize(cols, Math.max(1, rows - 1));
+          entry.proc.terminal.resize(cols, rows);
+        });
         return;
       }
       const cwd = yield* workspace.root;
