@@ -16,7 +16,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -932,72 +932,33 @@ export const GroupProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  Effect.gen(function* () {
-                    const config = yield* getEnvironmentConfig(
-                      environmentId,
-                      project.projectId,
-                    );
-                    const live = yield* getProject(project.projectId);
-                    const fromConfig = Object.entries(
-                      config.groups ?? {},
-                    ).flatMap(([groupId, row]) => {
-                      if (row === null || row.isDeleted === true) return [];
-                      const name = row.name ?? "";
-                      if (!matchesAlchemyPhysicalName(name)) return [];
-                      return [{ groupId, name }];
-                    });
-                    const fromProject = projectGroups(live).flatMap((group) => {
-                      const name = group.name ?? "";
-                      if (!matchesAlchemyPhysicalName(name)) return [];
-                      return [{ groupId: group.id, name }];
-                    });
-                    const seen = new Set<string>();
-                    const ids = [...fromConfig, ...fromProject].filter(
-                      (row) => {
-                        if (seen.has(row.groupId)) return false;
-                        seen.add(row.groupId);
-                        return true;
-                      },
-                    );
-                    const observed = yield* Effect.forEach(
-                      ids,
-                      (row) =>
-                        observe({
-                          projectId: project.projectId,
-                          environmentId,
-                          groupId: row.groupId,
-                          name: row.name,
-                        }).pipe(
-                          Effect.map((group) =>
-                            group === undefined
-                              ? []
-                              : [
-                                  toAttrs(group, {
-                                    projectId: project.projectId,
-                                    environmentId,
-                                  }),
-                                ],
-                          ),
-                        ),
-                      { concurrency: 4 },
-                    );
-                    return observed.flat();
-                  }),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+      const cloud = yield* listOwnedCloud();
+      const rows = cloud.map((project) => {
+        const environmentId =
+          project.environments[0]?.id ?? project.attrs.environmentId;
+        return project.groups.flatMap((group) => {
+          const name = group.name ?? "";
+          if (!matchesAlchemyPhysicalName(name)) return [];
+          return [
+            toAttrs(
+              {
+                groupId: group.id,
+                name,
+                color: group.color ?? undefined,
+                icon: group.icon ?? undefined,
+                collapsed: group.isCollapsed === true,
+                serviceIds: [] as string[],
+                volumeIds: [] as string[],
+                bucketIds: [] as string[],
+              },
+              {
+                projectId: project.attrs.projectId,
+                environmentId,
+              },
             ),
-          ),
-        { concurrency: 8 },
-      );
+          ];
+        });
+      });
       const seen = new Set<string>();
       const unique: Group["Attributes"][] = [];
       for (const row of rows.flat()) {

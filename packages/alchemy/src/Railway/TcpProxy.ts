@@ -10,6 +10,8 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { listGraphql, listOwnedCloud } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -289,6 +291,36 @@ export const TcpProxyProvider = () =>
   Provider.succeed(TcpProxy, {
     stables: ["id", "domain", "proxyPort", "serviceId", "environmentId"],
     nuke: { dependsOn: ["Railway.Project"] },
+
+    list: Effect.fn(function* () {
+      const cloud = yield* listOwnedCloud();
+      const rows = yield* Effect.forEach(
+        cloud,
+        (project) =>
+          Effect.forEach(
+            project.environments,
+            (env) =>
+              Effect.forEach(
+                project.services.filter((service) =>
+                  matchesAlchemyPhysicalName(service.name),
+                ),
+                (service) =>
+                  listGraphql(
+                    listProxies(env.id, service.id),
+                    [] as TcpProxiesResultItem[],
+                  ).pipe(
+                    Effect.map((proxies) =>
+                      proxies.map((proxy) => toAttrs(proxy)),
+                    ),
+                  ),
+                { concurrency: 1 },
+              ).pipe(Effect.map((nested) => nested.flat())),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;

@@ -17,7 +17,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { type Project } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -626,57 +626,7 @@ export const RedisProvider = () =>
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
     }),
 
-    list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listProjectServices(project.projectId).pipe(
-            Effect.flatMap((services) =>
-              Effect.forEach(
-                services.filter((service) =>
-                  matchesAlchemyPhysicalName(service.name),
-                ),
-                (service) =>
-                  Effect.gen(function* () {
-                    const instance = yield* getInstance(
-                      project.environmentId,
-                      service.id,
-                    );
-                    const image = instance?.source?.image ?? undefined;
-                    if (image !== undefined && !isRedisImage(image)) {
-                      return undefined;
-                    }
-                    if (!isRedisImage(image)) {
-                      const vars = yield* listVariableMap(
-                        project.projectId,
-                        project.environmentId,
-                        service.id,
-                      );
-                      if (vars[REDIS_PASSWORD_ENV] === undefined) {
-                        return undefined;
-                      }
-                    }
-                    return toAttrs({
-                      service,
-                      instance,
-                      projectId: project.projectId,
-                      environmentId: project.environmentId,
-                      image: image ?? DEFAULT_REDIS_IMAGE,
-                    });
-                  }),
-                { concurrency: 8 },
-              ).pipe(
-                Effect.map((items) =>
-                  items.filter((item) => item !== undefined),
-                ),
-              ),
-            ),
-          ),
-        { concurrency: 8 },
-      );
-      return rows.flat();
-    }),
+    list: () => Effect.succeed([]),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? ({} as RedisProps);

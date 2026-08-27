@@ -21,7 +21,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedProjects } from "./Project.ts";
+import { listGraphql, listOwnedCloud } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -368,36 +368,35 @@ export const CloudAgentProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listAgents(environmentId).pipe(
-                    Effect.map((agents) =>
-                      agents
-                        .filter(
-                          (agent) =>
-                            !isGone(agent) &&
-                            matchesAlchemyPhysicalName(agent.name),
-                        )
-                        .map((agent) =>
-                          toAttrs(agent, {
-                            environmentId,
-                            projectId: project.projectId,
-                          }),
-                        ),
+          Effect.forEach(
+            project.environments,
+            (env) =>
+              listGraphql(
+                listAgents(env.id),
+                [] as CloudAgentsResultItem[],
+              ).pipe(
+                Effect.map((agents) =>
+                  agents
+                    .filter(
+                      (agent) =>
+                        !isGone(agent) &&
+                        matchesAlchemyPhysicalName(agent.name),
+                    )
+                    .map((agent) =>
+                      toAttrs(agent, {
+                        environmentId: env.id,
+                        projectId: project.attrs.projectId,
+                      }),
                     ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
+                ),
+              ),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
       );
       const seen = new Set<string>();
       const unique: CloudAgent["Attributes"][] = [];

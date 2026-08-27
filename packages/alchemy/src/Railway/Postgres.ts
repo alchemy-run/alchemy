@@ -22,7 +22,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { type Project } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -864,58 +864,7 @@ export const PostgresProvider = () =>
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
     }),
 
-    list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listProjectServices(project.projectId).pipe(
-            Effect.flatMap((services) =>
-              Effect.forEach(
-                services.filter((service) =>
-                  matchesAlchemyPhysicalName(service.name),
-                ),
-                (service) =>
-                  Effect.gen(function* () {
-                    const instance = yield* getInstance(
-                      project.environmentId,
-                      service.id,
-                    );
-                    if (!isPostgresImage(instance?.source?.image)) {
-                      return [] as Postgres["Attributes"][];
-                    }
-                    const volume = yield* findVolume(
-                      project.environmentId,
-                      project.projectId,
-                      (row) => (row.serviceId ?? undefined) === service.id,
-                    );
-                    const proxy = yield* findProxy(
-                      project.environmentId,
-                      service.id,
-                      POSTGRES_PORT,
-                    );
-                    return [
-                      toAttrs({
-                        service,
-                        instance,
-                        volume,
-                        proxy,
-                        projectId: project.projectId,
-                        environmentId: project.environmentId,
-                        user: DEFAULT_POSTGRES_USER,
-                        password: "",
-                        database: DEFAULT_POSTGRES_DATABASE,
-                      }),
-                    ];
-                  }),
-                { concurrency: 8 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
-      );
-      return rows.flat();
-    }),
+    list: () => Effect.succeed([]),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? ({} as PostgresProps);

@@ -11,7 +11,12 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import {
+  listGraphql,
+  listOwnedCloud,
+  listOwnedProjects,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -512,42 +517,41 @@ export const VariableProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listVariableMap(project.projectId, environmentId).pipe(
-                    Effect.flatMap((vars) =>
-                      Effect.forEach(
-                        Object.keys(vars).filter((name) =>
-                          matchesAlchemyPhysicalName(name),
-                        ),
-                        (name) =>
-                          digestOf(vars[name]!).pipe(
-                            Effect.map((digest) =>
-                              toAttrs({
-                                projectId: project.projectId,
-                                environmentId,
-                                serviceId: undefined,
-                                name,
-                                digest,
-                              }),
-                            ),
-                          ),
-                        { concurrency: 8 },
-                      ),
+          Effect.forEach(
+            project.environments,
+            (env) =>
+              listGraphql(
+                listVariableMap(project.attrs.projectId, env.id),
+                {} as Record<string, string>,
+              ).pipe(
+                Effect.flatMap((vars) =>
+                  Effect.forEach(
+                    Object.keys(vars).filter((name) =>
+                      matchesAlchemyPhysicalName(name),
                     ),
+                    (name) =>
+                      digestOf(vars[name]!).pipe(
+                        Effect.map((digest) =>
+                          toAttrs({
+                            projectId: project.attrs.projectId,
+                            environmentId: env.id,
+                            serviceId: undefined,
+                            name,
+                            digest,
+                          }),
+                        ),
+                      ),
+                    { concurrency: 1 },
                   ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
+                ),
+              ),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
       );
       return rows.flat();
     }),

@@ -20,7 +20,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -624,40 +624,17 @@ export const BucketProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          Effect.gen(function* () {
-            const buckets = yield* listProjectBuckets(project.projectId);
-            const owned = buckets.filter((bucket) =>
-              matchesAlchemyPhysicalName(bucket.name),
-            );
-            if (owned.length === 0) return [] as Bucket["Attributes"][];
-            const environmentIds = yield* environmentIdsOf(project);
-            const perEnv = yield* Effect.forEach(
-              environmentIds,
-              (environmentId) =>
-                getEnvironmentConfig(environmentId, project.projectId).pipe(
-                  Effect.map((config) =>
-                    owned.flatMap((bucket) => {
-                      if (!isDeployed(config, bucket.id)) return [];
-                      return [
-                        toAttrs(bucket, {
-                          environmentId,
-                          region:
-                            instanceOf(config, bucket.id)?.region ?? undefined,
-                        }),
-                      ];
-                    }),
-                  ),
-                ),
-              { concurrency: 4 },
-            );
-            return perEnv.flat();
-          }),
-        { concurrency: 8 },
-      );
+      const cloud = yield* listOwnedCloud();
+      const rows = cloud.map((project) => {
+        const owned = project.buckets.filter((bucket) =>
+          matchesAlchemyPhysicalName(bucket.name),
+        );
+        const environmentId =
+          project.environments[0]?.id ?? project.attrs.environmentId;
+        return owned.map((bucket) =>
+          toAttrs(bucket, { environmentId, region: undefined }),
+        );
+      });
       const seen = new Set<string>();
       const unique: Bucket["Attributes"][] = [];
       for (const row of rows.flat()) {

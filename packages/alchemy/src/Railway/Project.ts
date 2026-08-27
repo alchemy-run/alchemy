@@ -1,7 +1,12 @@
 import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
+  EnvironmentResponseVolumeInstancesEdgesItemNode,
+  EnvironmentsResponseEdgesItemNode,
   ProjectCreateResponse,
   ProjectResponse,
+  ProjectResponseBucketsEdgesItemNode,
+  ProjectResponseGroupsEdgesItemNode,
+  ProjectResponseServicesEdgesItemNode,
   ProjectUpdateResponse,
   ProjectsResponseEdgesItemNode,
 } from "@distilled.cloud/railway";
@@ -277,28 +282,156 @@ const findByName = (workspaceId: string, name: string) =>
       ),
     );
 
-type OwnedProjects = ReturnType<typeof toAttrs>[];
+/**
+ * List-path GraphQL: distilled retry stays default (mutations need it).
+ * Nuke `list()` must not sit on Retry-After — fail fast and return
+ * `fallback`. One in-flight list call at a time so 16 provider scans
+ * do not stampede the same workspace.
+ */
+const listGraphqlSlot = Semaphore.makeUnsafe(1);
+
+export const listGraphql = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  fallback: A,
+): Effect.Effect<A, never, R> =>
+  Semaphore.withPermits(
+    listGraphqlSlot,
+    1,
+  )(
+    effect.pipe(
+      RailwayRetry.none,
+      Effect.timeout("8 seconds"),
+      Effect.result,
+      Effect.map((result) =>
+        Result.isSuccess(result) ? result.success : fallback,
+      ),
+    ),
+  );
 
 const fetchOwnedProjects = Effect.fn(function* () {
   const workspaceId = yield* currentWorkspaceId();
-  const projects = yield* railway.projects
-    .items({ workspaceId, first: 50, includeDeleted: false })
-    .pipe(Stream.runCollect);
-  return Array.from(projects)
+  const projects = yield* listGraphql(
+    railway.projects
+      .items({ workspaceId, first: 50, includeDeleted: false })
+      .pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      ),
+    [] as ProjectsResponseEdgesItemNode[],
+  );
+  return projects
     .filter(
       (project) => !isGone(project) && matchesAlchemyPhysicalName(project.name),
     )
     .map((project) => toAttrs(project, { workspaceId }));
 });
 
+const volumeInstancesOf = (
+  env: EnvironmentsResponseEdgesItemNode,
+): EnvironmentResponseVolumeInstancesEdgesItemNode[] =>
+  env.volumeInstances.edges.map((edge) => edge.node);
+
 /**
- * Concurrent `list()` (nuke scans every Railway resource type) coalesces
- * to one `projects` query. Sequential calls refetch so create/delete
- * tests see fresh rows.
+ * One cloud snapshot per owned project. Concurrent `list()` (nuke) shares
+ * this so every resource type does not re-hit `project({id})` /
+ * `environments`. Distilled retry is off — list must not sit on Retry-After.
+ *
+ * Do not `environment({id})` here: that query still selects
+ * `canvasGroupRefs` / `meta` and is what made nuke spin.
  */
-const ownedProjectsInflight = Ref.makeUnsafe<
-  Deferred.Deferred<OwnedProjects, unknown> | undefined
+export interface OwnedEnv {
+  id: string;
+  name: string;
+  projectId: string;
+  deletedAt: string | null;
+  isEphemeral: boolean;
+  volumeInstances: EnvironmentResponseVolumeInstancesEdgesItemNode[];
+}
+
+export interface OwnedCloud {
+  attrs: Project["Attributes"];
+  services: ProjectResponseServicesEdgesItemNode[];
+  buckets: ProjectResponseBucketsEdgesItemNode[];
+  groups: ProjectResponseGroupsEdgesItemNode[];
+  environments: OwnedEnv[];
+}
+
+const fetchOwnedCloud = Effect.fn(function* () {
+  const projects = yield* fetchOwnedProjects();
+  return yield* Effect.forEach(
+    projects,
+    (attrs) =>
+      Effect.gen(function* () {
+        const live = yield* listGraphql(
+          railway.project({ id: attrs.projectId }).pipe(
+            Effect.map((project) =>
+              project.deletedAt != null ? undefined : project,
+            ),
+            Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+          undefined,
+        );
+        const envRows = yield* listGraphql(
+          railway.environments
+            .items({ projectId: attrs.projectId, first: 50 })
+            .pipe(
+              Stream.filter((env) => env.deletedAt == null),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed([] as EnvironmentsResponseEdgesItemNode[]),
+              ),
+            ),
+          [] as EnvironmentsResponseEdgesItemNode[],
+        );
+        return {
+          attrs,
+          services:
+            live?.services.edges
+              .map((edge) => edge.node)
+              .filter((node) => node.deletedAt == null) ?? [],
+          buckets: live?.buckets.edges.map((edge) => edge.node) ?? [],
+          groups: live?.groups.edges.map((edge) => edge.node) ?? [],
+          environments: envRows.map((env) => ({
+            id: env.id,
+            name: env.name,
+            projectId: env.projectId,
+            deletedAt: env.deletedAt,
+            isEphemeral: env.isEphemeral,
+            volumeInstances: volumeInstancesOf(env),
+          })),
+        } satisfies OwnedCloud;
+      }),
+    { concurrency: 1 },
+  );
+});
+
+/**
+ * Concurrent `list()` coalesces to one scan. Sequential calls refetch so
+ * create/delete tests see fresh rows. Always complete the deferred and
+ * clear inflight — a timed-out leader must not leave waiters parked.
+ */
+const ownedCloudInflight = Ref.makeUnsafe<
+  Deferred.Deferred<OwnedCloud[], unknown> | undefined
 >(undefined);
+
+export const listOwnedCloud = Effect.fn(function* () {
+  const [leader, deferred] = yield* Ref.modify(ownedCloudInflight, (cur) => {
+    if (cur !== undefined) return [[false, cur] as const, cur];
+    const next = Deferred.makeUnsafe<OwnedCloud[], unknown>();
+    return [[true, next] as const, next];
+  });
+  if (!leader) {
+    return yield* Deferred.await(deferred);
+  }
+  const exit = yield* Effect.exit(fetchOwnedCloud()).pipe(
+    Effect.tap((next) => Deferred.done(deferred, next)),
+    Effect.ensuring(Ref.set(ownedCloudInflight, undefined)),
+  );
+  return yield* exit;
+});
 
 /**
  * Projects in the current token's workspace that Alchemy owns. Used by
@@ -306,22 +439,8 @@ const ownedProjectsInflight = Ref.makeUnsafe<
  * the whole workspace unfiltered.
  */
 export const listOwnedProjects = Effect.fn(function* () {
-  const [leader, deferred] = yield* Ref.modify(ownedProjectsInflight, (cur) => {
-    if (cur !== undefined) return [[false, cur] as const, cur];
-    const next = Deferred.makeUnsafe<OwnedProjects, unknown>();
-    return [[true, next] as const, next];
-  });
-  if (!leader) {
-    return yield* Deferred.await(deferred);
-  }
-  const result = yield* Effect.result(fetchOwnedProjects());
-  yield* Ref.set(ownedProjectsInflight, undefined);
-  if (Result.isSuccess(result)) {
-    yield* Deferred.succeed(deferred, result.success);
-    return result.success;
-  }
-  yield* Deferred.fail(deferred, result.failure);
-  return yield* Effect.fail(result.failure);
+  const cloud = yield* listOwnedCloud();
+  return cloud.map((row) => row.attrs);
 });
 
 export const ProjectProvider = () =>

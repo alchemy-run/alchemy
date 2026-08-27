@@ -1,5 +1,5 @@
 import type { Config } from "@distilled.cloud/railway";
-import { Credentials } from "@distilled.cloud/railway";
+import { Credentials, Retry as RailwayRetry } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -52,6 +52,7 @@ export class RailwayEnvironment extends Context.Service<
  */
 export const resolveWorkspace = Effect.fn(function* () {
   const fromMe = yield* railway.me({}).pipe(
+    RailwayRetry.none,
     Effect.map((me) => me.workspace ?? me.workspaces[0]),
     Effect.catchTag(["RailwayForbidden", "RailwayUnauthenticated"], () =>
       Effect.succeed(undefined),
@@ -64,7 +65,7 @@ export const resolveWorkspace = Effect.fn(function* () {
     } satisfies RailwayWorkspace;
   }
 
-  const token = yield* railway.apiToken({});
+  const token = yield* railway.apiToken({}).pipe(RailwayRetry.none);
   const workspace = token.workspaces[0];
   if (workspace === undefined || workspace.id.length === 0) {
     return yield* new RailwayWorkspaceNotFound({

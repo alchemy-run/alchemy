@@ -19,7 +19,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -253,22 +253,21 @@ export const EnvironmentProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listProjectEnvironments(project.projectId).pipe(
-            Effect.map((envs) =>
-              envs
-                .filter(
-                  (env) => !isGone(env) && matchesAlchemyPhysicalName(env.name),
-                )
-                .map((env) => toAttrs(env, { projectId: project.projectId })),
-            ),
-          ),
-        { concurrency: 8 },
+      const cloud = yield* listOwnedCloud();
+      return cloud.flatMap((project) =>
+        project.environments
+          .filter((env) => matchesAlchemyPhysicalName(env.name))
+          .map((env) => {
+            const projectId = env.projectId || project.attrs.projectId;
+            return {
+              environmentId: env.id,
+              name: env.name,
+              projectId,
+              isEphemeral: env.isEphemeral,
+              url: `https://railway.com/project/${projectId}?environmentId=${env.id}`,
+            };
+          }),
       );
-      return rows.flat();
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

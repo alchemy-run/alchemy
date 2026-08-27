@@ -16,7 +16,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects } from "./Project.ts";
+import { listGraphql, listOwnedCloud } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -740,44 +740,41 @@ export const VolumeBackupProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listVolumeInstances(environmentId, project.projectId).pipe(
-                    Effect.flatMap((instances) =>
-                      Effect.forEach(
-                        instances.filter((instance) =>
-                          matchesAlchemyPhysicalName(instance.volume.name),
-                        ),
-                        (instance) =>
-                          Effect.gen(function* () {
-                            const backups = yield* listBackups(instance.id);
-                            const schedules = yield* listSchedules(instance.id);
-                            return backups.map((backup) =>
-                              toAttrs(backup, {
-                                volumeInstanceId: instance.id,
-                                volumeId: instance.volumeId,
-                                projectId: instance.volume.projectId,
-                                environmentId: instance.environmentId,
-                                schedules,
-                              }),
-                            );
-                          }),
-                        { concurrency: 4 },
-                      ).pipe(Effect.map((nested) => nested.flat())),
-                    ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+          Effect.forEach(
+            project.environments.flatMap((env) =>
+              env.volumeInstances.filter(
+                (instance) =>
+                  instance.deletedAt == null &&
+                  matchesAlchemyPhysicalName(instance.volume.name),
+              ),
             ),
-          ),
-        { concurrency: 8 },
+            (instance) =>
+              Effect.gen(function* () {
+                const backups = yield* listGraphql(
+                  listBackups(instance.id),
+                  [] as VolumeInstanceBackupListResultItem[],
+                );
+                const schedules = yield* listGraphql(
+                  listSchedules(instance.id),
+                  [] as VolumeBackupScheduleKind[],
+                );
+                return backups.map((backup) =>
+                  toAttrs(backup, {
+                    volumeInstanceId: instance.id,
+                    volumeId: instance.volumeId,
+                    projectId: instance.volume.projectId,
+                    environmentId: instance.environmentId,
+                    schedules,
+                  }),
+                );
+              }),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
       );
       const seen = new Set<string>();
       const unique: VolumeBackup["Attributes"][] = [];

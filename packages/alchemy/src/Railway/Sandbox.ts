@@ -22,7 +22,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { listOwnedProjects } from "./Project.ts";
+import { listGraphql, listOwnedCloud } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -674,27 +674,26 @@ export const SandboxProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listSandboxes(environmentId).pipe(
-                    Effect.map((items) =>
-                      items.map((item) =>
-                        toAttrs(item, { projectId: project.projectId }),
-                      ),
-                    ),
+          Effect.forEach(
+            project.environments,
+            (env) =>
+              listGraphql(
+                listSandboxes(env.id),
+                [] as SandboxesResponseEdgesItemNode[],
+              ).pipe(
+                Effect.map((items) =>
+                  items.map((item) =>
+                    toAttrs(item, { projectId: project.attrs.projectId }),
                   ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
+                ),
+              ),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
       );
       const seen = new Set<string>();
       const unique: Sandbox["Attributes"][] = [];

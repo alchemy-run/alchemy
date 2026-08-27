@@ -14,6 +14,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment, resolveWorkspace } from "./Environment.ts";
+import { listGraphql } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -380,13 +381,12 @@ const currentWorkspaceId = Effect.fn(function* () {
 });
 
 const getWorkspace = (workspaceId: string) =>
-  railway
-    .workspace({ workspaceId })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  railway.workspace({ workspaceId }).pipe(
+    RailwayRetry.none,
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.succeed(undefined),
+    ),
+  );
 
 const toAttrs = (
   limit: CloudLimit,
@@ -502,7 +502,7 @@ export const UsageLimitProvider = () =>
 
     list: Effect.fn(function* () {
       const workspaceId = yield* currentWorkspaceId();
-      const found = yield* observe(workspaceId);
+      const found = yield* listGraphql(observe(workspaceId), undefined);
       if (found?.limit === undefined) return [];
       return [
         toAttrs(found.limit, {

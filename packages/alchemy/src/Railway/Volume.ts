@@ -16,7 +16,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { MultipleVolumes } from "./MountVolume.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -668,29 +668,17 @@ export const VolumeProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listVolumeInstances(environmentId, project.projectId).pipe(
-                    Effect.map((instances) =>
-                      instances
-                        .filter((instance) =>
-                          matchesAlchemyPhysicalName(instance.volume.name),
-                        )
-                        .map((instance) => toAttrs(instance)),
-                    ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
+      const cloud = yield* listOwnedCloud();
+      const rows = cloud.map((project) =>
+        project.environments.flatMap((env) =>
+          env.volumeInstances
+            .filter(
+              (instance) =>
+                instance.deletedAt == null &&
+                matchesAlchemyPhysicalName(instance.volume.name),
+            )
+            .map((instance) => toAttrs(instance)),
+        ),
       );
       const seen = new Set<string>();
       const unique: Volume["Attributes"][] = [];

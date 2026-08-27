@@ -33,7 +33,7 @@ import {
   type MountSpec,
   type ServiceBinding,
 } from "./MountVolume.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
   ensureServiceDomain,
@@ -993,49 +993,7 @@ export const FunctionProvider = () =>
             : Unowned(attrs);
         }),
 
-        list: Effect.fn(function* () {
-          const projects = yield* listOwnedProjects();
-          const rows = yield* Effect.forEach(
-            projects,
-            (project) =>
-              listProjectServices(project.projectId).pipe(
-                Effect.flatMap((services) =>
-                  Effect.forEach(
-                    services.filter((service) =>
-                      matchesAlchemyPhysicalName(service.name),
-                    ),
-                    (service) =>
-                      Effect.gen(function* () {
-                        const instance = yield* getInstance(
-                          project.environmentId,
-                          service.id,
-                        );
-                        const image = instance?.source?.image ?? undefined;
-                        if (!isFunctionImage(image)) return undefined;
-                        return toAttrs({
-                          service,
-                          instance,
-                          domain: undefined,
-                          projectId: project.projectId,
-                          environmentId: project.environmentId,
-                          image: image ?? "",
-                          port: undefined,
-                          codeHash: "",
-                          rpcToken: "",
-                        });
-                      }),
-                    { concurrency: 8 },
-                  ).pipe(
-                    Effect.map((items) =>
-                      items.filter((item) => item !== undefined),
-                    ),
-                  ),
-                ),
-              ),
-            { concurrency: 8 },
-          );
-          return rows.flat();
-        }),
+        list: () => Effect.succeed([]),
 
         // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
         // Those are knowable from the physical name and props; the cloud

@@ -28,7 +28,7 @@ import {
   type MountSpec,
   type ServiceBinding,
 } from "./MountVolume.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import { listServiceVolumes } from "./Volume.ts";
 import {
@@ -815,33 +815,23 @@ export const ServiceProvider = () =>
         }),
 
         list: Effect.fn(function* () {
-          const projects = yield* listOwnedProjects();
-          const rows = yield* Effect.forEach(
-            projects,
-            (project) =>
-              listProjectServices(project.projectId).pipe(
-                Effect.map((services) =>
-                  services
-                    .filter((service) =>
-                      matchesAlchemyPhysicalName(service.name),
-                    )
-                    .map((service) =>
-                      toAttrs({
-                        service,
-                        instance: undefined,
-                        domain: undefined,
-                        projectId: project.projectId,
-                        environmentId: project.environmentId,
-                        port: undefined,
-                        codeHash: "",
-                        rpcToken: "",
-                      }),
-                    ),
-                ),
+          const cloud = yield* listOwnedCloud();
+          return cloud.flatMap((project) =>
+            project.services
+              .filter((service) => matchesAlchemyPhysicalName(service.name))
+              .map((service) =>
+                toAttrs({
+                  service,
+                  instance: undefined,
+                  domain: undefined,
+                  projectId: project.attrs.projectId,
+                  environmentId: project.attrs.environmentId,
+                  port: undefined,
+                  codeHash: "",
+                  rpcToken: "",
+                }),
               ),
-            { concurrency: 8 },
           );
-          return rows.flat();
         }),
 
         // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.

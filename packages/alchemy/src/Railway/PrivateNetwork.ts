@@ -22,7 +22,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedProjects } from "./Project.ts";
+import { listGraphql, listOwnedCloud } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -387,33 +387,32 @@ export const PrivateNetworkProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listNetworks(environmentId).pipe(
-                    Effect.map((networks) =>
-                      networks
-                        .filter((network) =>
-                          matchesAlchemyPhysicalName(network.name),
-                        )
-                        .map((network) =>
-                          toNetworkAttrs(network, {
-                            projectId: project.projectId,
-                          }),
-                        ),
+          Effect.forEach(
+            project.environments,
+            (env) =>
+              listGraphql(
+                listNetworks(env.id),
+                [] as PrivateNetworksResultItem[],
+              ).pipe(
+                Effect.map((networks) =>
+                  networks
+                    .filter((network) =>
+                      matchesAlchemyPhysicalName(network.name),
+                    )
+                    .map((network) =>
+                      toNetworkAttrs(network, {
+                        projectId: project.attrs.projectId,
+                      }),
                     ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 8 },
+                ),
+              ),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
       );
       const seen = new Set<string>();
       const unique: PrivateNetwork["Attributes"][] = [];
@@ -838,67 +837,63 @@ export const PrivateNetworkEndpointProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
-          Effect.all(
-            {
-              environmentIds: listEnvironmentIds(project),
-              services: listProjectServices(project.projectId),
-            },
-            { concurrency: 2 },
-          ).pipe(
-            Effect.flatMap(({ environmentIds, services }) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listNetworks(environmentId).pipe(
-                    Effect.flatMap((networks) =>
+          Effect.forEach(
+            project.environments,
+            (env) =>
+              listGraphql(
+                listNetworks(env.id),
+                [] as PrivateNetworksResultItem[],
+              ).pipe(
+                Effect.flatMap((networks) =>
+                  Effect.forEach(
+                    networks.filter((network) =>
+                      matchesAlchemyPhysicalName(network.name),
+                    ),
+                    (network) =>
                       Effect.forEach(
-                        networks.filter((network) =>
-                          matchesAlchemyPhysicalName(network.name),
-                        ),
-                        (network) =>
-                          Effect.forEach(
-                            services,
-                            (service) =>
-                              getEndpoint({
-                                environmentId,
-                                privateNetworkId: network.publicId,
-                                serviceId: service.id,
-                              }).pipe(
-                                Effect.map((endpoint) =>
-                                  endpoint === undefined
-                                    ? undefined
-                                    : toEndpointAttrs(endpoint, {
-                                        serviceId: service.id,
-                                        privateNetworkId: network.publicId,
-                                        environmentId,
-                                        projectId: project.projectId,
-                                      }),
-                                ),
-                              ),
-                            { concurrency: 4 },
+                        project.services,
+                        (service) =>
+                          listGraphql(
+                            getEndpoint({
+                              environmentId: env.id,
+                              privateNetworkId: network.publicId,
+                              serviceId: service.id,
+                            }),
+                            undefined,
                           ).pipe(
-                            Effect.map((items) =>
-                              items.filter(
-                                (
-                                  item,
-                                ): item is PrivateNetworkEndpoint["Attributes"] =>
-                                  item !== undefined,
-                              ),
+                            Effect.map((endpoint) =>
+                              endpoint === undefined
+                                ? undefined
+                                : toEndpointAttrs(endpoint, {
+                                    serviceId: service.id,
+                                    privateNetworkId: network.publicId,
+                                    environmentId: env.id,
+                                    projectId: project.attrs.projectId,
+                                  }),
                             ),
                           ),
-                        { concurrency: 4 },
-                      ).pipe(Effect.map((nested) => nested.flat())),
-                    ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
-          ),
-        { concurrency: 4 },
+                        { concurrency: 1 },
+                      ).pipe(
+                        Effect.map((items) =>
+                          items.filter(
+                            (
+                              item,
+                            ): item is PrivateNetworkEndpoint["Attributes"] =>
+                              item !== undefined,
+                          ),
+                        ),
+                      ),
+                    { concurrency: 1 },
+                  ).pipe(Effect.map((nested) => nested.flat())),
+                ),
+              ),
+            { concurrency: 1 },
+          ).pipe(Effect.map((nested) => nested.flat())),
+        { concurrency: 1 },
       );
       return rows.flat();
     }),

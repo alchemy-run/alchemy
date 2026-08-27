@@ -27,7 +27,8 @@ import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
   createProject,
   environmentIdOf as projectEnvironmentId,
-  listOwnedProjects,
+  listGraphql,
+  listOwnedCloud,
   workspaceIdOf as projectWorkspaceId,
 } from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
@@ -697,63 +698,35 @@ export const TemplateProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
+      const cloud = yield* listOwnedCloud();
       const rows = yield* Effect.forEach(
-        projects,
+        cloud,
         (project) =>
           Effect.gen(function* () {
-            const source = yield* sourceForProject(project.projectId);
-            const listed = yield* listProjectServices(project.projectId);
-            const services = yield* hydrateServices(listed);
-            const groups = new Map<string, ServiceResponse[]>();
-            if (source !== undefined) {
-              const matched = matchingServices({
-                services,
-                templateId: source.id,
-                sourceId: source.id,
-                ownsProject: true,
-              });
-              if (matched.length > 0) {
-                groups.set(source.id, matched);
-              }
-            }
-            for (const service of services) {
-              if (
-                service.templateId == null ||
-                service.templateId.length === 0
-              ) {
-                continue;
-              }
-              const existing = groups.get(service.templateId) ?? [];
-              if (!existing.some((row) => row.id === service.id)) {
-                existing.push(service);
-              }
-              groups.set(service.templateId, existing);
-            }
-            const live = yield* getProject(project.projectId);
-            if (live === undefined) return [] as Template["Attributes"][];
-            const attrs: Template["Attributes"][] = [];
-            for (const [templateId, group] of groups) {
-              const marketplace =
-                source?.id === templateId
-                  ? source
-                  : yield* resolveMarketplaceTemplate(templateId);
-              if (marketplace === undefined) continue;
-              attrs.push(
-                toAttrs({
-                  template: marketplace,
-                  project: live,
-                  environmentId: project.environmentId,
-                  workspaceId: project.workspaceId,
-                  serviceIds: group.map((service) => service.id),
-                  workflowId: undefined,
-                  ownsProject: false,
-                }),
-              );
-            }
-            return attrs;
+            const source = yield* listGraphql(
+              sourceForProject(project.attrs.projectId),
+              undefined,
+            );
+            if (source === undefined) return [] as Template["Attributes"][];
+            const live = {
+              id: project.attrs.projectId,
+              name: project.attrs.name,
+              workspaceId: project.attrs.workspaceId,
+              primaryEnvironmentId: project.attrs.environmentId,
+            };
+            return [
+              toAttrs({
+                template: source,
+                project: live,
+                environmentId: project.attrs.environmentId,
+                workspaceId: project.attrs.workspaceId,
+                serviceIds: project.services.map((service) => service.id),
+                workflowId: undefined,
+                ownsProject: false,
+              }),
+            ];
           }),
-        { concurrency: 8 },
+        { concurrency: 1 },
       );
       const seen = new Set<string>();
       const unique: Template["Attributes"][] = [];
