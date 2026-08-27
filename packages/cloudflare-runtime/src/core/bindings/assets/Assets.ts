@@ -312,8 +312,10 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:worker",
               worker: {
-                compatibilityDate: "2024-07-31",
-                compatibilityFlags: ["nodejs_compat", "enable_ctx_exports"],
+                compatibilityDate: "2026-07-04",
+                // enable_ctx_exports is default-on since 2025-11-17; listing it
+                // explicitly is a workerd config error for later compat dates.
+                compatibilityFlags: ["nodejs_compat"],
                 bindings: [
                   {
                     name: "ASSETS_KV_NAMESPACE",
@@ -338,12 +340,8 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:router",
               worker: {
-                compatibilityDate: "2024-07-31",
-                compatibilityFlags: [
-                  "nodejs_compat",
-                  "no_nodejs_compat_v2",
-                  "enable_ctx_exports",
-                ],
+                compatibilityDate: "2026-07-04",
+                compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
                 bindings: [
                   {
                     name: "ASSET_WORKER",

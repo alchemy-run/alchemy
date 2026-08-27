@@ -144,6 +144,13 @@ export interface HttpServerFactoryOptions {
    * Omit to use Bun's default.
    */
   hostname?: string;
+  /**
+   * Bun's per-request idle timeout, in SECONDS (`0` disables). Bun
+   * reaps requests idle for 10s by default — long-lived streaming
+   * responses (a sandbox PTY between keystrokes) need it disabled.
+   * Bun-only (Node's server has no such default).
+   */
+  idleTimeout?: number;
 }
 
 export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
@@ -162,6 +169,9 @@ export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
               ...(factoryOptions?.hostname === undefined
                 ? {}
                 : { hostname: factoryOptions.hostname }),
+              ...(factoryOptions?.idleTimeout === undefined
+                ? {}
+                : { idleTimeout: factoryOptions.idleTimeout }),
             });
             if (
               factoryOptions?.onListen &&

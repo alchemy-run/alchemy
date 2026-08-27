@@ -34,13 +34,17 @@
  * activating DO parses its own name and becomes that session.
  */
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Actor, SessionRef } from "../../AI/Agent.ts";
+import { Sandbox, type SandboxPty } from "../../AI/Sandbox.ts";
+import { Thread, type ThreadService } from "../../AI/Thread.ts";
 import { Driver, type Charter, type Interpretable } from "../../AI/Driver.ts";
 import {
   makeSessionEngine,
@@ -66,7 +70,11 @@ import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { SessionContainerImage } from "./SessionContainer.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
-import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
+import {
+  upgrade,
+  type RawWebSocket,
+  type WebSocket,
+} from "../Workers/WebSocket.ts";
 import { Worker } from "../Workers/Worker.ts";
 import {
   makeThreadStorageDurableObject,
@@ -88,6 +96,55 @@ interface RegisteredCharter {
 
 /** The DO name addressing one session of one term: `${term}/${key}`. */
 const sessionName = (termName: string, key: string) => `${termName}/${key}`;
+
+/**
+ * A TERMINAL socket's hibernation-surviving identity, stamped on the
+ * socket at accept (`serializeAttachment`). The dimensions ride along
+ * (updated on open/resize) so a wake after hibernation — or a machine
+ * that lost its PTY (idle suspend, image recycle) — can reopen the
+ * shell at the viewer's real size without asking the client anything.
+ */
+interface TerminalAttachment {
+  readonly kind: "terminal";
+  /** The PTY id on the session's machine (one shared shell: "main"). */
+  readonly id: string;
+  readonly cols: number;
+  readonly rows: number;
+}
+
+/** Hibernation-surviving accept tags: chat views vs terminal views —
+ *  so the session-frame broadcast never writes into a terminal. */
+const SESSION_SOCKET_TAG = "session";
+const TERMINAL_SOCKET_TAG = "terminal";
+
+const isTerminalAttachment = (value: unknown): value is TerminalAttachment =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  value.kind === "terminal" &&
+  "id" in value;
+
+/** Control frames the terminal client sends as TEXT (keystrokes are
+ *  BINARY frames — raw stdin, no envelope). */
+type TerminalClientFrame =
+  | { readonly t: "open"; readonly cols: number; readonly rows: number }
+  | { readonly t: "resize"; readonly cols: number; readonly rows: number };
+
+/**
+ * A PHANTOM thread identity — just enough `AI.Thread` for the sandbox
+ * layer to derive the session's MACHINE (it only reads `key`). The
+ * terminal bridge is out-of-session by nature: no round is running
+ * when an operator types, so the session's machine is addressed by
+ * key alone — the same trick the org's worker-level exec door uses.
+ */
+const phantomThread = (key: string): ThreadService => ({
+  key,
+  tokens: Effect.succeed(0),
+  entries: Effect.succeed([]),
+  compact: () => Effect.void,
+  reply: () => Effect.void,
+  remind: () => Effect.void,
+});
 
 /** Split a DO name back into its term and key halves. The key may
  *  itself contain slashes (session keys are `${parent}/${agent}/${s}`),
@@ -283,7 +340,7 @@ export const DurableObjectHost: Layer.Layer<
         const broadcast = (frame: SessionSocketServerFrame) =>
           sealed(
             Effect.gen(function* () {
-              const attached = yield* state.getWebSockets();
+              const attached = yield* state.getWebSockets(SESSION_SOCKET_TAG);
               if (attached.length === 0) return;
               const data = JSON.stringify(frame);
               for (const socket of attached) {
@@ -291,6 +348,201 @@ export const DurableObjectHost: Layer.Layer<
               }
             }),
           );
+
+        // ------------------------------------------------------------------
+        // THE TERMINAL BRIDGE — hibernatable browser socket ⇄ the session
+        // machine's PTY. The only in-RAM state is the map of live output
+        // PUMPS (one per attached terminal socket, forwarding the guest's
+        // pty stream to that viewer); everything durable — which socket is
+        // a terminal, which PTY id, the viewer's dimensions — rides the
+        // socket's attachment. A wake after hibernation rebuilds the pump
+        // on the first frame; the guest's ring buffer repaints the screen.
+        // ------------------------------------------------------------------
+        const pumps = new Map<RawWebSocket, Deferred.Deferred<void>>();
+
+        /**
+         * The session machine's PTY surface, resolved from the charter's
+         * captured Layer context — the SAME `AI.Sandbox` build the tools
+         * use (deduped by the layer MemoMap), so the terminal lands on
+         * the session's own machine. Absent when the placement's sandbox
+         * has no PTY (or the term registered no sandbox at all).
+         *
+         * TODO(placement): the terminal bridge living in the DRIVER
+         * couples it to "the one `AI.Sandbox` of the term" — a charter
+         * with two sandboxes (or none at the term level) has no say in
+         * which machine an operator terminal reaches. The driver should
+         * stay generic; the bridge wants to be its own seam (a charter-
+         * declared door, like tools) once the end-to-end shape settles.
+         */
+        const sandboxPty = (): SandboxPty | undefined => {
+          const registration = registrations.get(me.term);
+          if (registration === undefined) return undefined;
+          return Option.getOrUndefined(
+            Context.getOption(registration.context, Sandbox),
+          )?.pty;
+        };
+
+        /** Out-of-session machine addressing: the sandbox layer reads
+         *  only `Thread.key` to derive the machine — provide the
+         *  session's own key (the org's worker-level exec door does the
+         *  same). */
+        const asSession = <A, E>(
+          effect: Effect.Effect<A, E>,
+        ): Effect.Effect<A, E> =>
+          Effect.provideService(effect, Thread, phantomThread(me.key));
+
+        /** Surface a terminal failure to the viewer as a control frame —
+         *  never into the DO's error channel. */
+        const notify = (socket: WebSocket, message: string) =>
+          Effect.ignore(socket.send(JSON.stringify({ t: "error", message })));
+
+        const haltPump = (socket: WebSocket) =>
+          Effect.suspend(() => {
+            const halt = pumps.get(socket.ws);
+            if (halt === undefined) return Effect.void;
+            pumps.delete(socket.ws);
+            return Effect.asVoid(Deferred.succeed(halt, void 0));
+          });
+
+        /**
+         * Guarantee ONE live pump for this viewer: the guest's
+         * `pty.stream` (retained tail first, then live) forwarded to the
+         * socket as binary frames. Rides `waitUntil` exactly like the
+         * engine's kick — an ACTIVE terminal pins the DO awake, an idle
+         * (closed-pump) one hibernates. A guest-side failure ends the
+         * pump and tells the viewer; the next keystroke reopens.
+         */
+        const ensurePump = (
+          socket: WebSocket,
+          pty: SandboxPty,
+          tag: TerminalAttachment,
+          options?: { readonly restart?: boolean },
+        ) =>
+          Effect.gen(function* () {
+            if (pumps.has(socket.ws)) {
+              if (options?.restart !== true) return;
+              yield* haltPump(socket);
+            }
+            const halt = yield* Deferred.make<void>();
+            pumps.set(socket.ws, halt);
+            let chunks = 0;
+            const pump = Effect.raceFirst(
+              pty.stream(tag.id).pipe(
+                Stream.runForEach((chunk) =>
+                  Effect.gen(function* () {
+                    if (chunks++ === 0) {
+                      yield* Effect.logDebug(
+                        `[terminal-debug] pump(${tag.id}): first chunk (${(chunk as Uint8Array).byteLength}b)`,
+                      );
+                    }
+                    yield* socket.send(chunk);
+                  }),
+                ),
+                asSession,
+                Effect.tap(() =>
+                  Effect.logDebug(
+                    `[terminal-debug] pump(${tag.id}): stream ended after ${chunks} chunks`,
+                  ),
+                ),
+                Effect.catch((error) =>
+                  Effect.gen(function* () {
+                    yield* Effect.logDebug(
+                      `[terminal-debug] pump(${tag.id}): failed: ${String(error)}`,
+                    );
+                    yield* notify(socket, String(error));
+                  }),
+                ),
+                Effect.catchDefect((defect) =>
+                  Effect.logDebug(
+                    `[terminal-debug] pump(${tag.id}): died: ${
+                      defect instanceof Error
+                        ? (defect.stack ?? defect.message)
+                        : String(defect)
+                    }`,
+                  ),
+                ),
+              ),
+              Deferred.await(halt),
+            ).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (pumps.get(socket.ws) === halt) pumps.delete(socket.ws);
+                }),
+              ),
+            );
+            yield* sealed(state.waitUntil(pump));
+          });
+
+        /**
+         * One terminal frame: TEXT is a control frame (open/resize),
+         * BINARY is raw keystrokes. Keystrokes double as the WAKE
+         * signal: if the machine lost its PTY (idle suspend, image
+         * recycle) or this isolate lost its pump (hibernation), the
+         * attachment's dimensions reopen the shell right here — the
+         * viewer just types and the terminal comes back.
+         */
+        const terminalFrame = (
+          socket: WebSocket,
+          tag: TerminalAttachment,
+          message: string | ArrayBuffer,
+        ) =>
+          Effect.gen(function* () {
+            const pty = sandboxPty();
+            if (pty === undefined) {
+              yield* notify(
+                socket,
+                "terminal unavailable: this placement's sandbox has no PTY surface",
+              );
+              yield* Effect.ignore(socket.close(1011, "terminal unavailable"));
+              return;
+            }
+            if (typeof message === "string") {
+              const frame = JSON.parse(message) as TerminalClientFrame;
+              if (frame.t === "open") {
+                const next: TerminalAttachment = {
+                  ...tag,
+                  cols: frame.cols,
+                  rows: frame.rows,
+                };
+                socket.serializeAttachment(next);
+                yield* Effect.logDebug(
+                  `[terminal-debug] pty.open(${next.id}) starting`,
+                );
+                yield* asSession(pty.open(next.id, next.cols, next.rows)).pipe(
+                  Effect.catch((error) => notify(socket, error)),
+                );
+                yield* Effect.logDebug(
+                  `[terminal-debug] pty.open(${next.id}) done — starting pump`,
+                );
+                // (re)attach this viewer's pump — the retained tail
+                // repaints the screen
+                yield* ensurePump(socket, pty, next, { restart: true });
+              } else if (frame.t === "resize") {
+                socket.serializeAttachment({
+                  ...tag,
+                  cols: frame.cols,
+                  rows: frame.rows,
+                } satisfies TerminalAttachment);
+                yield* asSession(
+                  pty.resize(tag.id, frame.cols, frame.rows),
+                ).pipe(Effect.catch((error) => notify(socket, error)));
+              }
+              return;
+            }
+            const data = new TextDecoder().decode(message);
+            yield* asSession(pty.input(tag.id, data)).pipe(
+              Effect.andThen(ensurePump(socket, pty, tag)),
+              // no shell (fresh machine) or stale pump: reopen at the
+              // attachment's dimensions and retry the keystroke once
+              Effect.catch(() =>
+                Effect.gen(function* () {
+                  yield* asSession(pty.open(tag.id, tag.cols, tag.rows));
+                  yield* ensurePump(socket, pty, tag, { restart: true });
+                  yield* asSession(pty.input(tag.id, data));
+                }).pipe(Effect.catch((error) => notify(socket, error))),
+              ),
+            );
+          });
 
         /**
          * The engine, built lazily on the first REQUEST-time touch
@@ -372,17 +624,45 @@ export const DurableObjectHost: Layer.Layer<
 
         return Effect.succeed<SessionRpc>({
           /**
-           * The LIVE VIEW attaches here (via {@link Sessions.attach}):
+           * The LIVE VIEWS attach here (via {@link Sessions.attach}):
            * accept the WebSocket and hibernate freely — there is no
            * in-memory session state to lose, because `broadcast`
            * re-reads the attached sockets from the runtime every time.
+           * TWO kinds of view share the seam, told apart by pathname:
+           * chat sockets (`/attach/...`) speak session-socket frames;
+           * terminal sockets (`/terminal/...`) are stamped with a
+           * hibernation-surviving attachment and bridge to the session
+           * machine's PTY.
            */
           fetch: Effect.gen(function* () {
-            const [response] = yield* upgrade();
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            const url = new URL(request.url, "http://durable-object");
+            const isTerminal = url.pathname.startsWith("/terminal/");
+            yield* Effect.logDebug(
+              `[terminal-debug] DO fetch url=${request.url} pathname=${url.pathname} isTerminal=${isTerminal}`,
+            );
+            const [response, socket] = yield* upgrade({
+              tags: [isTerminal ? TERMINAL_SOCKET_TAG : SESSION_SOCKET_TAG],
+            });
+            if (isTerminal) {
+              socket.serializeAttachment({
+                kind: "terminal",
+                id: url.searchParams.get("id") ?? "main",
+                cols: 80,
+                rows: 24,
+              } satisfies TerminalAttachment);
+            }
             return response;
           }),
           webSocketMessage: (socket, message) =>
             Effect.gen(function* () {
+              const attachment = socket.deserializeAttachment<unknown>();
+              yield* Effect.logDebug(
+                `[terminal-debug] DO message attachment=${JSON.stringify(attachment)} kind=${typeof message}`,
+              );
+              if (isTerminalAttachment(attachment)) {
+                return yield* terminalFrame(socket, attachment, message);
+              }
               const host = yield* (yield* engine).socketHost(me.key);
               yield* handleSessionSocketFrame(host, (frame) =>
                 Effect.ignore(socket.send(JSON.stringify(frame))),
@@ -407,7 +687,11 @@ export const DurableObjectHost: Layer.Layer<
               Effect.provide(RuntimeContext.phantom),
             ) as Effect.Effect<void>,
           webSocketClose: (socket, code, reason) =>
-            Effect.ignore(socket.close(code, reason)),
+            Effect.gen(function* () {
+              // a departed terminal viewer's pump must not pin the DO
+              yield* haltPump(socket);
+              yield* Effect.ignore(socket.close(code, reason));
+            }),
           deliver: (
             input: unknown,
             options?: { parent?: SessionRef; wake?: boolean },

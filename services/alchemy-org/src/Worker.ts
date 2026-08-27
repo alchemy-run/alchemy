@@ -185,11 +185,14 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://worker").pathname;
-        // keys may contain `/` (owner/repo#n) — rest-join after term
-        if (path.startsWith("/attach/")) {
+        // keys may contain `/` (owner/repo#n) — rest-join after term.
+        // BOTH live views ride the same forward into the session's DO:
+        // /attach/… is the chat socket, /terminal/… the PTY bridge —
+        // the DO tells them apart by pathname (the request rides along).
+        if (path.startsWith("/attach/") || path.startsWith("/terminal/")) {
           const [, , term, ...rest] = path.split("/");
           if (!term || rest.length === 0) {
-            return HttpServerResponse.text("bad attach path", {
+            return HttpServerResponse.text("bad session socket path", {
               status: 400,
             });
           }

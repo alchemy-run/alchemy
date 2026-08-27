@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { makeSandboxLocal } from "../../AI/SandboxLocal.ts";
+import { makeSandboxPty } from "../../AI/SandboxPty.ts";
 import { fixed } from "../../Workspace/Workspace.ts";
 import { Role } from "../IAM/Role.ts";
 import { MICROVM_BASE_DOCKER_IMAGE } from "../Lambda/MicrovmBundle.ts";
@@ -70,6 +71,9 @@ export const SandboxMicrovmRuntime = SandboxMicrovmImage.make(
   ),
   Effect.gen(function* () {
     const sandbox = yield* makeSandboxLocal;
+    // the interactive shell surface (`Bun.Terminal`), flattened onto
+    // the same RPC dispatch as the sandbox physics
+    const pty = yield* makeSandboxPty;
     return {
       exec: sandbox.exec,
       readFile: sandbox.readFile,
@@ -78,6 +82,7 @@ export const SandboxMicrovmRuntime = SandboxMicrovmImage.make(
       mkdir: sandbox.mkdir,
       listFiles: sandbox.listFiles,
       exists: sandbox.exists,
+      ...pty,
       // the RPC surface is the product; fetch only answers health checks
       fetch: HttpServerResponse.json({ ok: true }),
     };

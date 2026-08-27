@@ -127,8 +127,12 @@ export const SandboxMicrovmRuntime = AWS.AI.SandboxMicrovmImage.make(
   }),
   Effect.gen(function* () {
     const sandbox = yield* AI.makeSandboxLocal;
+    // the interactive shell surface (`Bun.Terminal`) — terminals open
+    // in the baked checkout, exactly where the tools work
+    const pty = yield* AI.makeSandboxPty;
     return {
       ...sandbox,
+      ...pty,
       // the RPC surface is the product; fetch only answers health checks
       fetch: HttpServerResponse.json({ ok: true }),
     };

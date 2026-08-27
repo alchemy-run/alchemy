@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Stream from "effect/Stream";
 
 /**
  * Options for {@link Sandbox}'s `exec`. The shape follows the
@@ -43,6 +44,39 @@ export interface SandboxExecResult {
 export interface SandboxEntry {
   readonly name: string;
   readonly type: "file" | "directory" | "other";
+}
+
+/**
+ * An interactive PTY on the sandbox machine — the seam an operator
+ * terminal (ghostty in the org UI) attaches through. OPTIONAL on the
+ * contract: only machines that can hold a real PTY expose it (the
+ * MicroVM guest via `Bun.Terminal`); implementations without one
+ * simply omit it and terminal attach reports unavailability.
+ *
+ * The PTY belongs to the MACHINE, not the connection: `open` is
+ * idempotent (an existing `id` just adopts the caller's dimensions),
+ * and `stream` replays the retained tail of output before going live —
+ * so a dropped viewer reattaches and repaints instead of respawning
+ * the shell.
+ */
+export interface SandboxPty {
+  /** Ensure PTY `id` exists (spawn a login shell on first open). */
+  readonly open: (
+    id: string,
+    cols: number,
+    rows: number,
+  ) => Effect.Effect<void, string>;
+  /** Retained tail (repaint), then live output until the shell exits. */
+  readonly stream: (id: string) => Stream.Stream<Uint8Array, string>;
+  /** Keystrokes — UTF-8 text, escape sequences included. */
+  readonly input: (id: string, data: string) => Effect.Effect<void, string>;
+  readonly resize: (
+    id: string,
+    cols: number,
+    rows: number,
+  ) => Effect.Effect<void, string>;
+  /** Kill the shell and drop the PTY. */
+  readonly close: (id: string) => Effect.Effect<void, string>;
 }
 
 /**
@@ -104,5 +138,7 @@ export class Sandbox extends Context.Service<
     ) => Effect.Effect<ReadonlyArray<SandboxEntry>, string>;
     /** Whether a file or directory exists. */
     readonly exists: (path: string) => Effect.Effect<boolean, string>;
+    /** Interactive PTY surface — only on machines that can hold one. */
+    readonly pty?: SandboxPty;
   }
 >()("alchemy/AI/Sandbox") {}

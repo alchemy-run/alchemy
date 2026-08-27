@@ -1360,7 +1360,7 @@ export const sampleTick = (options: {
     // where the time goes: one line per sampling (model
     // round-trip INCLUDING the tool handlers that ran
     // inside it) — the timing profile of every session
-    yield* Effect.logInfo(
+    yield* Effect.logDebug(
       `Driver session '${ops.key}' of '${ops.term}': sampling #${ops.tick()} took ${Date.now() - startedAt}ms` +
         (response.toolCalls.length > 0
           ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`

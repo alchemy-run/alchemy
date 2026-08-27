@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -10,6 +11,7 @@ import {
   type SandboxExecOptions,
   type SandboxExecResult,
 } from "../../AI/Sandbox.ts";
+import type { SandboxPtyRpc } from "../../AI/SandboxPty.ts";
 import { Thread } from "../../AI/Thread.ts";
 import { CreateAuthToken } from "../Lambda/CreateAuthToken.ts";
 import { GetMicrovm } from "../Lambda/GetMicrovm.ts";
@@ -23,9 +25,10 @@ import type { Providers } from "../Providers.ts";
  * mirror of the {@link Sandbox} contract, so a connected MicroVM stub
  * satisfies the seam directly. Identical to the Cloudflare
  * `SandboxContainerShape`: the SAME guest physics on a different
- * machine.
+ * machine. The {@link SandboxPtyRpc} half is the contract's nested
+ * `pty` group flattened for the by-name RPC dispatcher.
  */
-export interface SandboxMicrovmShape {
+export interface SandboxMicrovmShape extends SandboxPtyRpc {
   readonly exec: (
     command: string,
     args?: ReadonlyArray<string>,
@@ -226,12 +229,21 @@ export const SandboxMicrovmSession = (
           if (cached !== undefined && cached.expiresAt > Date.now()) {
             return cached.stub;
           }
+          yield* Effect.logDebug(
+            `[terminal-debug] stubFor(${token}): launching/attaching VM`,
+          );
           const vm = yield* vmFor(token);
+          yield* Effect.logDebug(
+            `[terminal-debug] stubFor(${token}): vm=${vm.microvmId} endpoint=${vm.endpoint} — minting token`,
+          );
           const { authToken } = yield* createAuthToken({
             microvmIdentifier: vm.microvmId,
             expirationInMinutes: tokenMinutes,
             allowedPorts: [{ port }],
           }).pipe(Effect.orDie);
+          yield* Effect.logDebug(
+            `[terminal-debug] stubFor(${token}): token minted — connecting`,
+          );
           const stub = yield* connectMicrovm(SandboxMicrovmImage, {
             endpoint: vm.endpoint,
             authToken,
@@ -297,6 +309,35 @@ export const SandboxMicrovmSession = (
           );
         }) as unknown as Effect.Effect<A, E>;
 
+      /** Render any wire-layer error as the contract's string. */
+      const errorText = (error: unknown): string =>
+        typeof error === "string" ? error : String(error);
+
+      const fromBase64 = (b64: string): Uint8Array => {
+        const binary = atob(b64);
+        const out = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+        return out;
+      };
+
+      /** Concatenate one poll's chunks into a single write. */
+      const joinChunks = (b64: ReadonlyArray<string>): Uint8Array => {
+        const parts = b64.map(fromBase64);
+        const total = parts.reduce((n, p) => n + p.byteLength, 0);
+        const out = new Uint8Array(total);
+        let offset = 0;
+        for (const part of parts) {
+          out.set(part, offset);
+          offset += part.byteLength;
+        }
+        return out;
+      };
+
+      /** How long the guest holds an idle `ptyRead` before answering
+       *  empty. Under the guest's own 8s ceiling and every proxy's
+       *  idle-reap window. */
+      const PTY_POLL_WAIT_MS = 7_000;
+
       return {
         exec: (command, args, execOptions) =>
           withBox((stub) => stub.exec(command, args, execOptions)),
@@ -307,6 +348,33 @@ export const SandboxMicrovmSession = (
         mkdir: (path) => withBox((stub) => stub.mkdir(path)),
         listFiles: (path) => withBox((stub) => stub.listFiles(path)),
         exists: (path) => withBox((stub) => stub.exists(path)),
+        pty: {
+          open: (id, cols, rows) =>
+            withBox((stub) => stub.ptyOpen(id, cols, rows)),
+          // LONG-POLL, not a streaming response: ingress proxies on
+          // the path to the guest fully buffer response bodies, which
+          // would hold an infinite stream's bytes hostage until EOF.
+          // Each `ptyRead` is finite (ends the instant output exists,
+          // or empty after ~7s of silence), so every hop forwards it;
+          // the unfold splices the polls back into one Stream.
+          stream: (id) =>
+            Stream.unfold(0, (cursor: number) =>
+              withBox((stub) =>
+                stub.ptyRead(id, cursor, PTY_POLL_WAIT_MS),
+              ).pipe(
+                Effect.map((result) =>
+                  result.done
+                    ? undefined
+                    : ([joinChunks(result.b64), result.nextSeq] as const),
+                ),
+                Effect.mapError(errorText),
+              ),
+            ).pipe(Stream.filter((bytes) => bytes.byteLength > 0)),
+          input: (id, data) => withBox((stub) => stub.ptyInput(id, data)),
+          resize: (id, cols, rows) =>
+            withBox((stub) => stub.ptyResize(id, cols, rows)),
+          close: (id) => withBox((stub) => stub.ptyClose(id)),
+        },
       };
     }),
   ).pipe(Layer.provide(FetchHttpClient.layer));

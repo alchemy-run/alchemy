@@ -23,6 +23,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RefHoverCard } from "@/components/ref-hover-card";
+import { GhosttyTerminal } from "@/components/terminal";
 import { hasToolCard, ToolCard } from "@/components/tool-card";
 import {
   Tooltip,
@@ -86,17 +87,6 @@ interface RepoInfo {
   name: string;
   sessions: boolean;
   reviews: boolean;
-}
-
-/** One command's collected output from the session's machine. */
-interface ExecResult {
-  success: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  stdoutTruncated: boolean;
-  stderrTruncated: boolean;
-  durationMs: number;
 }
 
 /**
@@ -848,7 +838,7 @@ export const App = () => {
                     shown ? "visible" : "pointer-events-none invisible",
                   )}
                 >
-                  <TerminalView
+                  <GhosttyTerminal
                     sessionId={`Engineer:${session}`}
                     active={shown}
                   />
@@ -955,139 +945,6 @@ export const App = () => {
   );
 };
 
-
-interface TerminalEntry {
-  command: string;
-  /** undefined while the command is in flight. */
-  result: ExecResult | undefined;
-}
-
-/**
- * The TERMINAL tab — a shared REPL into the session's machine (the
- * same MicroVM its threads work on). One command per round trip via
- * `/api/sessions/:id/exec` with collected output; not a PTY (yet) —
- * no vim, no interactive prompts, but the whole point is `git status`,
- * `pnpm test`, `ls` against the tree the agent is editing.
- */
-const TerminalView = ({
-  sessionId,
-  active,
-}: {
-  sessionId: string;
-  active: boolean;
-}) => {
-  const [entries, setEntries] = useState<TerminalEntry[]>([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [entries]);
-  useEffect(() => {
-    if (active) inputRef.current?.focus();
-  }, [active]);
-
-  const run = () => {
-    const command = input.trim();
-    if (command.length === 0 || busy) return;
-    setInput("");
-    setBusy(true);
-    setEntries((current) => [...current, { command, result: undefined }]);
-    const failed = (stderr: string): ExecResult => ({
-      success: false,
-      exitCode: -1,
-      stdout: "",
-      stderr,
-      stdoutTruncated: false,
-      stderrTruncated: false,
-      durationMs: 0,
-    });
-    void fetch(`/api/sessions/${encodeURIComponent(sessionId)}/exec`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ command }),
-    })
-      .then(async (response) =>
-        response.ok
-          ? ((await response.json()) as ExecResult)
-          : failed(`HTTP ${response.status}`),
-      )
-      .catch((error) => failed(String(error)))
-      .then((result) => {
-        setEntries((current) =>
-          current.map((entry, index) =>
-            index === current.length - 1 ? { ...entry, result } : entry,
-          ),
-        );
-        setBusy(false);
-      });
-  };
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background font-mono text-xs">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
-        {entries.length === 0 && (
-          <div className="text-muted-foreground">
-            The session's machine — same tree the threads edit. One
-            command per line; output is collected (not a PTY).
-          </div>
-        )}
-        {entries.map((entry, index) => (
-          <div key={index} className="mb-2">
-            <div className="text-foreground">
-              <span className="text-moss">$</span> {entry.command}
-            </div>
-            {entry.result === undefined ? (
-              <div className="animate-pulse text-muted-foreground">
-                running…
-              </div>
-            ) : (
-              <>
-                {entry.result.stdout.length > 0 && (
-                  <pre className="whitespace-pre-wrap text-muted-foreground">
-                    {entry.result.stdout}
-                  </pre>
-                )}
-                {entry.result.stderr.length > 0 && (
-                  <pre className="whitespace-pre-wrap text-terracotta">
-                    {entry.result.stderr}
-                  </pre>
-                )}
-                {(entry.result.stdoutTruncated ||
-                  entry.result.stderrTruncated) && (
-                  <div className="text-muted-foreground">
-                    …output truncated (oldest dropped)
-                  </div>
-                )}
-                {entry.result.exitCode !== 0 && (
-                  <div className="text-terracotta">
-                    exit {entry.result.exitCode}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center gap-2 border-t border-border px-3 py-2">
-        <span className="text-moss">$</span>
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") run();
-          }}
-          disabled={busy}
-          placeholder={busy ? "running…" : "command (Enter to run)"}
-          className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
-        />
-      </div>
-    </div>
-  );
-};
 
 interface ChatContext {
   /** The channel's dispatched workers — dispatch cards link to them. */

@@ -8,7 +8,13 @@ export const bootstrap = (
   options: MicrovmBootstrapOptions,
 ): Promise<void> =>
   bootstrapMicrovm(
-    { services: BunServices.layer, httpServer: BunHttpServer() },
+    {
+      services: BunServices.layer,
+      // idle reaping OFF: the guest serves long-lived streaming
+      // responses (the sandbox PTY between keystrokes) that Bun's
+      // 10-second default would kill mid-session
+      httpServer: BunHttpServer({ idleTimeout: 0 }),
+    },
     entrypoint,
     options,
   );
