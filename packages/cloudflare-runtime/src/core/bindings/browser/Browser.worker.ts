@@ -34,11 +34,6 @@ function isClosed(ws: WebSocket | undefined): boolean {
   return !ws || ws.readyState === WebSocket.READY_STATE_CLOSED;
 }
 
-/** Half-open so CDP proxying can forward Close frames after auto-reply-to-close (2026-04-07). */
-function acceptProxyWebSocket(ws: WebSocket) {
-  ws.accept({ allowHalfOpen: true });
-}
-
 function chromeBaseUrl(wsEndpoint: string): string {
   const u = new URL(wsEndpoint.replace("ws://", "http://"));
   return `http://${u.host}`;
@@ -265,7 +260,7 @@ export class BrowserSession implements DurableObject {
     });
     assert(resp.webSocket !== null, "Expected a WebSocket response");
     this.chromeWs = resp.webSocket;
-    acceptProxyWebSocket(this.chromeWs);
+    this.chromeWs.accept();
     // Forward Chrome messages to whatever legacyServerWs is currently
     // connected. Set up once here so reconnects don't accumulate duplicate
     // listeners.
@@ -314,7 +309,7 @@ export class BrowserSession implements DurableObject {
     const webSocketPair = new WebSocketPair();
     const [client, server] = Object.values(webSocketPair);
 
-    acceptProxyWebSocket(server);
+    server.accept();
 
     server.addEventListener("message", (m) => {
       if (m.data === "ping") {
@@ -424,11 +419,11 @@ export class BrowserSession implements DurableObject {
 
     assert(response.webSocket !== null, "Expected a WebSocket response");
     const chrome = response.webSocket;
-    acceptProxyWebSocket(chrome);
+    chrome.accept();
 
     const webSocketPair = new WebSocketPair();
     const [client, server] = Object.values(webSocketPair);
-    acceptProxyWebSocket(server);
+    server.accept();
 
     const pair = { chrome, server };
     this.wss.push(pair);
