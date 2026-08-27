@@ -1,4 +1,5 @@
 import * as Railway from "@/Railway";
+import { suiteProject } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -37,7 +38,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           return { project };
         }),
       );

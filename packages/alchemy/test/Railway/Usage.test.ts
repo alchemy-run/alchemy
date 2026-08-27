@@ -31,7 +31,7 @@ const waitUntilLimitGone = (workspaceId: string, usageLimitId: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
-      times: 10,
+      times: 30,
     }),
   );
 

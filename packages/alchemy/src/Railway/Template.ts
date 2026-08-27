@@ -24,7 +24,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment } from "./Environment.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { createProject, listOwnedProjects } from "./Project.ts";
+import {
+  createProject,
+  environmentIdOf as projectEnvironmentId,
+  listOwnedProjects,
+  workspaceIdOf as projectWorkspaceId,
+} from "./Project.ts";
 import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -325,10 +330,7 @@ const currentWorkspaceId = Effect.fn(function* () {
 });
 
 const environmentIdFromProject = (project: CloudProject) =>
-  project.primaryEnvironmentId ??
-  project.baseEnvironmentId ??
-  project.baseEnvironment?.id ??
-  "";
+  projectEnvironmentId(project);
 
 const toAttrs = (input: {
   template: CloudTemplate;
@@ -344,11 +346,7 @@ const toAttrs = (input: {
   name: input.template.name,
   projectId: input.project.id,
   environmentId: input.environmentId,
-  workspaceId:
-    input.workspaceId ||
-    input.project.workspaceId ||
-    input.project.workspace?.id ||
-    "",
+  workspaceId: input.workspaceId || projectWorkspaceId(input.project) || "",
   workflowId: input.workflowId,
   serviceIds: input.serviceIds,
   ownsProject: input.ownsProject,
@@ -682,9 +680,7 @@ export const TemplateProvider = () =>
       const workspaceId =
         output?.workspaceId ??
         (olds !== undefined ? workspaceIdOf(olds.project) : undefined) ??
-        observed.project.workspaceId ??
-        observed.project.workspace?.id ??
-        "";
+        projectWorkspaceId(observed.project);
       const attrs = toAttrs({
         template,
         project: observed.project,
@@ -824,7 +820,7 @@ export const TemplateProvider = () =>
         environmentId && environmentId.length > 0
           ? environmentId
           : environmentIdFromProject(current);
-      workspaceId = current.workspaceId ?? current.workspace?.id ?? workspaceId;
+      workspaceId = projectWorkspaceId(current, workspaceId);
 
       const observed = yield* observeDeployment({
         projectId,

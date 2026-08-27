@@ -4,8 +4,10 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
+import { adopt } from "@/AdoptPolicy.ts";
 import * as Alchemy from "@/index.ts";
 import * as Railway from "@/Railway";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -135,7 +137,7 @@ const Stack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const project = yield* Site;
+    const project = yield* Site.pipe(adopt(true), RemovalPolicy.retain());
     const cache = yield* Cache;
     const proxy = yield* Railway.TcpProxy("CacheProxy", {
       redis: cache,

@@ -1,12 +1,13 @@
 import * as Drizzle from "@/Drizzle/MySQL.ts";
 import * as Railway from "@/Railway";
+import { SUITE_PROJECT_NAME } from "../suiteProjectName.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export const MYSQL_API_PORT = 3000;
 
-export const Site = Railway.Project("Site");
+export const Site = Railway.Project("Suite", { name: SUITE_PROJECT_NAME });
 
 export const Db = Railway.MySQL("Db", { project: Site });
 

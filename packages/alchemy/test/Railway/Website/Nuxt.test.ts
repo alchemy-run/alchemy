@@ -1,5 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
+import { suiteProject } from "../suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -60,6 +61,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const site = yield* Railway.Website.Nuxt("Web", {
+            project: suiteProject,
             rootDir,
             memo: {
               include: [
@@ -107,5 +109,5 @@ test.provider(
       const gone = yield* waitUntilGone(serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240000, exclusive: true },
+  { timeout: 240000 },
 );

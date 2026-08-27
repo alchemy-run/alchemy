@@ -1,4 +1,6 @@
+import { adopt } from "@/AdoptPolicy.ts";
 import * as Railway from "@/Railway";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { RPC_PATH_PREFIX, RPC_TOKEN_HEADER } from "@/Railway/rpc-token.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -12,6 +14,7 @@ import { Api, ApiLive } from "./fixtures/rpc-api.ts";
 import Caller from "./fixtures/rpc-caller.ts";
 import Greeter from "./fixtures/rpc-greeter.ts";
 import Query from "./fixtures/rpc-query.ts";
+import { Site } from "./fixtures/rpc-shared.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -60,6 +63,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* Site.pipe(adopt(true), RemovalPolicy.retain());
           const greeter = yield* Greeter;
           const caller = yield* Caller;
           return { greeter, caller };
@@ -101,7 +105,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000, exclusive: true },
+  { timeout: 480_000 },
 );
 
 test.provider(
@@ -112,6 +116,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* Site.pipe(adopt(true), RemovalPolicy.retain());
           const query = yield* Query;
           const api = yield* Api;
           return { query, api };
@@ -163,5 +168,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 720_000, exclusive: true },
+  { timeout: 720_000 },
 );

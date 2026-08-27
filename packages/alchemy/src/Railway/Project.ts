@@ -7,7 +7,10 @@ import type {
 } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -163,23 +166,36 @@ type CloudProject =
   | ProjectUpdateResponse
   | ProjectsResponseEdgesItemNode;
 
+/** Workspace id from a get-by-id or list-node Project payload. */
+export const workspaceIdOf = (
+  project: {
+    readonly workspaceId?: string | null;
+    readonly workspace?: { readonly id?: string | null } | null;
+  },
+  fallback?: string,
+): string => project.workspaceId ?? project.workspace?.id ?? fallback ?? "";
+
+/** Primary environment id from a get-by-id or list-node Project payload. */
+export const environmentIdOf = (project: {
+  readonly primaryEnvironmentId?: string | null;
+  readonly baseEnvironmentId?: string | null;
+  readonly baseEnvironment?: { readonly id?: string | null } | null;
+}): string =>
+  project.primaryEnvironmentId ??
+  project.baseEnvironmentId ??
+  project.baseEnvironment?.id ??
+  "";
+
 const toAttrs = (
   project: CloudProject,
   fallback?: { name?: string; workspaceId?: string },
 ): Project["Attributes"] => {
   const name = project.name || fallback?.name || "";
-  const workspaceId =
-    project.workspaceId ?? project.workspace?.id ?? fallback?.workspaceId ?? "";
-  const environmentId =
-    project.primaryEnvironmentId ??
-    project.baseEnvironmentId ??
-    project.baseEnvironment?.id ??
-    "";
   return {
     projectId: project.id,
     name,
-    workspaceId,
-    environmentId,
+    workspaceId: workspaceIdOf(project, fallback?.workspaceId),
+    environmentId: environmentIdOf(project),
     url: `https://railway.com/project/${project.id}`,
   };
 };
@@ -261,12 +277,9 @@ const findByName = (workspaceId: string, name: string) =>
       ),
     );
 
-/**
- * Projects in the current token's workspace that Alchemy owns. Used by
- * {@link Project} `list()` and by child resources so nuke never enumerates
- * the whole workspace unfiltered.
- */
-export const listOwnedProjects = Effect.fn(function* () {
+type OwnedProjects = ReturnType<typeof toAttrs>[];
+
+const fetchOwnedProjects = Effect.fn(function* () {
   const workspaceId = yield* currentWorkspaceId();
   const projects = yield* railway.projects
     .items({ workspaceId, first: 50, includeDeleted: false })
@@ -276,6 +289,39 @@ export const listOwnedProjects = Effect.fn(function* () {
       (project) => !isGone(project) && matchesAlchemyPhysicalName(project.name),
     )
     .map((project) => toAttrs(project, { workspaceId }));
+});
+
+/**
+ * Concurrent `list()` (nuke scans every Railway resource type) coalesces
+ * to one `projects` query. Sequential calls refetch so create/delete
+ * tests see fresh rows.
+ */
+const ownedProjectsInflight = Ref.makeUnsafe<
+  Deferred.Deferred<OwnedProjects, unknown> | undefined
+>(undefined);
+
+/**
+ * Projects in the current token's workspace that Alchemy owns. Used by
+ * {@link Project} `list()` and by child resources so nuke never enumerates
+ * the whole workspace unfiltered.
+ */
+export const listOwnedProjects = Effect.fn(function* () {
+  const [leader, deferred] = yield* Ref.modify(ownedProjectsInflight, (cur) => {
+    if (cur !== undefined) return [[false, cur] as const, cur];
+    const next = Deferred.makeUnsafe<OwnedProjects, unknown>();
+    return [[true, next] as const, next];
+  });
+  if (!leader) {
+    return yield* Deferred.await(deferred);
+  }
+  const result = yield* Effect.result(fetchOwnedProjects());
+  yield* Ref.set(ownedProjectsInflight, undefined);
+  if (Result.isSuccess(result)) {
+    yield* Deferred.succeed(deferred, result.success);
+    return result.success;
+  }
+  yield* Deferred.fail(deferred, result.failure);
+  return yield* Effect.fail(result.failure);
 });
 
 export const ProjectProvider = () =>

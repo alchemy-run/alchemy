@@ -1,6 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { suiteProject } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -48,7 +49,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const volume = yield* Railway.Volume("Data", {
             project,
             mountPath: "/data",
@@ -97,7 +98,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const volume = yield* Railway.Volume("Data", {
             project,
             mountPath: "/app/data",
@@ -140,7 +141,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const api = yield* Railway.Service("Api", {
             project,
             image: "hashicorp/http-echo",
@@ -158,7 +159,7 @@ test.provider(
       const result = yield* Effect.result(
         stack.deploy(
           Effect.gen(function* () {
-            const project = yield* Railway.Project("Site");
+            const project = yield* suiteProject;
             const api = yield* Railway.Service("Api", {
               project,
               image: "hashicorp/http-echo",

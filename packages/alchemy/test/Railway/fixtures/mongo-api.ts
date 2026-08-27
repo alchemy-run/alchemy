@@ -1,4 +1,5 @@
 import * as Railway from "@/Railway";
+import { SUITE_PROJECT_NAME } from "../suiteProjectName.ts";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -6,7 +7,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export const MONGO_HTTP_PORT = 3000;
 
-export const Site = Railway.Project("Site");
+export const Site = Railway.Project("Suite", { name: SUITE_PROJECT_NAME });
 
 export const Db = Railway.mongo("Db", { project: Site });
 

@@ -1,5 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
+import { suiteProject } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -62,21 +63,6 @@ const waitUntilVariableGone = (
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 const isPostgresUri = (value: string | undefined) =>
   value !== undefined &&
   (value.startsWith("postgres://") || value.startsWith("postgresql://"));
@@ -96,7 +82,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const db = yield* Railway.Postgres("Db", {
             project,
             public: false,
@@ -157,10 +143,6 @@ test.provider(
         created.databaseUrl.name,
       );
       expect(variableGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 480_000 },
 );

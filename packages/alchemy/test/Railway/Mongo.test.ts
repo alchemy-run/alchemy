@@ -1,8 +1,11 @@
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
+import { adopt } from "@/AdoptPolicy.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import { suiteProject } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -43,81 +46,6 @@ const waitUntilServiceGone = (serviceId: string) =>
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const waitUntilVolumeGone = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
-    Effect.map((instance) =>
-      instance.deletedAt != null ||
-      instance.isPendingDeletion ||
-      instance.state === "DELETED" ||
-      instance.state === "DELETING"
-        ? ("gone" as const)
-        : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const ping = (url: string) =>
-  Railway.pingMongo(url).pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("4 seconds"),
-      times: 10,
-    }),
-  );
-
-const asVariableMap = (value: unknown): Record<string, string> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-  const out: Record<string, string> = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (typeof item === "string") {
-      out[key] = item;
-    }
-  }
-  return out;
-};
-
-const readServiceVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
-  railway
-    .variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    })
-    .pipe(
-      Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
-    );
-
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
   body?: unknown;
@@ -136,7 +64,7 @@ const FixtureStack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const project = yield* Site;
+    const project = yield* Site.pipe(adopt(true), RemovalPolicy.retain());
     const db = yield* Db;
     const api = yield* MongoApi;
     return {
@@ -152,12 +80,10 @@ const FixtureStack = Alchemy.Stack(
 
 const fixture = beforeAll(deploy(FixtureStack), {
   timeout: 720_000,
-  exclusive: true,
 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
   timeout: 720_000,
-  exclusive: true,
 });
 
 test.provider(
@@ -168,7 +94,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const db = yield* Railway.mongo("Db", { project });
           return { project, db };
         }),
@@ -265,7 +191,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const db = yield* Railway.mongo("Db", {
             project,
             name: nextName,
@@ -299,12 +225,8 @@ test.provider(
         created.db.volumeInstanceId,
       );
       expect(volumeGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 720_000, exclusive: true },
+  { timeout: 720_000 },
 );
 
 test(
@@ -394,5 +316,5 @@ test(
     const pong = yield* ping(out.publicConnectionUri);
     expect(pong.ok).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 720_000, exclusive: true },
+  { timeout: 720_000 },
 );

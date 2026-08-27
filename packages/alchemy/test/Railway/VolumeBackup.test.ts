@@ -1,6 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { suiteProject } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -22,7 +23,7 @@ const logLevel = Effect.provideService(
 const backupEntitled = !!process.env.RAILWAY_TEST_VOLUME_BACKUP;
 
 const VolumeStack = Effect.gen(function* () {
-  const project = yield* Railway.Project("Site");
+  const project = yield* suiteProject;
   const api = yield* Railway.Service("Api", {
     project,
     image: "hashicorp/http-echo",
@@ -85,21 +86,6 @@ const waitUntilBackupGone = (
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 test.provider(
   "volume backup create surfaces a typed entitlement error",
   (stack) =>
@@ -147,10 +133,6 @@ test.provider(
       expect(result.failure._tag).toEqual("RailwayForbidden");
 
       yield* stack.destroy();
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 480_000 },
 );
@@ -166,7 +148,7 @@ test.provider.skipIf(!backupEntitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const project = yield* suiteProject;
           const api = yield* Railway.Service("Api", {
             project,
             image: "hashicorp/http-echo",
@@ -224,10 +206,6 @@ test.provider.skipIf(!backupEntitled)(
         created.backup.volumeInstanceBackupId,
       );
       expect(backupGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 480_000 },
 );

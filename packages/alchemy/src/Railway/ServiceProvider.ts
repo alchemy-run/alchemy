@@ -1048,10 +1048,12 @@ export const ServiceProvider = () =>
               // Effect-native images must answer HTTP before Railway
               // stamps SUCCESS — otherwise waitForDeploymentById returns
               // while `/up` is still building and public GET hangs.
+              // Default `/health`, not `/`: user fetch handlers often 404
+              // `/` (BucketApi) and Railway treats that as FAILED.
               healthcheckPath:
                 props.healthcheckPath ??
                 props.healthcheck ??
-                (hostedMain !== undefined ? "/" : undefined),
+                (hostedMain !== undefined ? "/health" : undefined),
               healthcheckTimeout:
                 props.healthcheckTimeout ??
                 (hostedMain !== undefined ? 300 : undefined),

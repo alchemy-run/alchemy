@@ -321,12 +321,13 @@ const sameIds = (left: readonly string[], right: readonly string[]) =>
   uniqueSorted(left).join("\0") === uniqueSorted(right).join("\0");
 
 const classifyMember = (
-  member: GroupMember,
+  member: GroupMember | null | undefined,
 ):
   | { kind: "service"; id: string }
   | { kind: "volume"; id: string }
   | { kind: "bucket"; id: string }
   | undefined => {
+  if (member == null) return undefined;
   if (typeof member.serviceId === "string" && member.serviceId.length > 0) {
     return { kind: "service", id: member.serviceId };
   }
