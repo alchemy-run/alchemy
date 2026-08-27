@@ -142,13 +142,13 @@ const findApp = Effect.fn(function* (
     limit: 100,
   })).filter((app) => app.name === displayName);
   if (candidates.length === 0) return undefined;
-  const branch = yield* desiredBranchId(client, projectId, props);
-  if (!branch.resolved) return undefined;
-  const matches = candidates.filter((app) => app.branchId === branch.id);
+  const branchId = yield* desiredBranchId(client, projectId, props);
+  if (branchId === undefined) return undefined;
+  const matches = candidates.filter((app) => app.branchId === branchId);
   if (matches.length > 1) {
     return yield* Effect.fail(
       new Error(
-        `Prisma returned multiple Apps named '${displayName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
+        `Prisma returned multiple Apps named '${displayName}' on branch '${branchId}' in project '${projectId}'; refusing an ambiguous ownership match.`,
       ),
     );
   }
@@ -176,11 +176,11 @@ const branchNeedsSync = Effect.fn(function* (
     return app.branchId !== props.branchId;
   }
   if (props.branchGitName === undefined) {
-    const branch = yield* desiredBranchId(client, projectId, props);
-    return !branch.resolved || app.branchId !== branch.id;
+    const branchId = yield* desiredBranchId(client, projectId, props);
+    return branchId === undefined || app.branchId !== branchId;
   }
-  const branch = yield* desiredBranchId(client, projectId, props);
-  return !branch.resolved || branch.id !== app.branchId;
+  const branchId = yield* desiredBranchId(client, projectId, props);
+  return branchId === undefined || branchId !== app.branchId;
 });
 
 const validateAppProps = (props: AppProps) =>
@@ -262,12 +262,12 @@ const ProviderLive = () =>
           if (output.name !== resolvedUpdateProps.displayName) {
             return { action: "update" } as const;
           }
-          const branch = yield* desiredBranchId(
+          const branchId = yield* desiredBranchId(
             client,
             newProjectId ?? output.projectId,
             resolvedUpdateProps,
           );
-          return !branch.resolved || output.branchId !== branch.id
+          return branchId === undefined || output.branchId !== branchId
             ? ({ action: "update" } as const)
             : undefined;
         }),
@@ -300,8 +300,8 @@ const ProviderLive = () =>
           yield* validateAppProps(news);
           const projectId = yield* resolveProjectId(news.project);
           const displayName = yield* createDisplayName(id, news.displayName);
-          const branch = yield* desiredBranchId(client, projectId, news);
-          if (!branch.resolved) {
+          const branchId = yield* desiredBranchId(client, projectId, news);
+          if (branchId === undefined) {
             return yield* Effect.fail(
               new Error(
                 news.branchGitName === undefined
@@ -326,7 +326,7 @@ const ProviderLive = () =>
                 projectId,
                 displayName,
                 regionId: news.regionId,
-                branchId: branch.id,
+                branchId: branchId,
                 branchGitName: undefined,
               })
               .pipe(
@@ -367,14 +367,14 @@ const ProviderLive = () =>
           if (app.name !== displayName || needsBranchSync) {
             app = yield* client.updateApp(app.id, {
               displayName,
-              branchId: branch.id,
+              branchId: branchId,
               branchGitName: undefined,
             });
           }
-          if (app.name !== displayName || app.branchId !== branch.id) {
+          if (app.name !== displayName || app.branchId !== branchId) {
             return yield* Effect.fail(
               new Error(
-                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
+                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branchId ?? "null"}'. Refusing to persist mismatched App state.`,
               ),
             );
           }

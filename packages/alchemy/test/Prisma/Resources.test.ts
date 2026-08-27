@@ -2153,7 +2153,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { gitName: "main", limit: 2 },
             },
           ],
         ]);
@@ -3471,7 +3471,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { gitName: "main", limit: 2 },
             },
           ],
           ["getApp", "service-1"],
@@ -3479,7 +3479,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { gitName: "main", limit: 2 },
             },
           ],
         ]);

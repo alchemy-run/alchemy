@@ -643,12 +643,27 @@ const ProviderLive = () =>
             database = yield* findDatabaseByName(client, projectId, name);
           }
 
+          // Resolve the default branch once for generated-name creates (both
+          // branch props omitted) — the same id is used in the create body and
+          // the patch arm below.
+          let createBranchId: string | undefined;
+          if (
+            news.branchId === undefined &&
+            news.branchGitName === undefined &&
+            news.name === undefined
+          ) {
+            createBranchId = yield* desiredBranchId(client, projectId, news);
+            if (createBranchId === undefined) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma project '${projectId}' has no default branch to attach database '${name}'. Create or promote a default branch, or specify branchId/branchGitName.`,
+                ),
+              );
+            }
+          }
+
           let secrets: PrismaSecretConnection = {};
           let recoverCreateSecrets = false;
-          let resolvedBranch:
-            | { resolved: true; id: string }
-            | { resolved: false }
-            | undefined;
           if (!database) {
             if (
               news.name !== undefined &&
@@ -660,16 +675,6 @@ const ProviderLive = () =>
                 ),
               );
             }
-            if (news.name === undefined) {
-              resolvedBranch = yield* desiredBranchId(client, projectId, news);
-              if (!resolvedBranch.resolved) {
-                return yield* Effect.fail(
-                  new Error(
-                    `Prisma project '${projectId}' has no default branch to attach database '${name}'. Create or promote a default branch, or specify branchId/branchGitName.`,
-                  ),
-                );
-              }
-            }
             // The Management API cannot create a named database with a branch attachment, so named creates attach via PATCH below.
             const result = yield* client
               .createDatabase({
@@ -678,10 +683,7 @@ const ProviderLive = () =>
                 region,
                 isDefault: news.isDefault ?? false,
                 source: news.source,
-                branchId:
-                  news.name === undefined
-                    ? (resolvedBranch as { resolved: true; id: string }).id
-                    : undefined,
+                branchId: createBranchId,
                 branchGitName: undefined,
               })
               .pipe(
@@ -700,6 +702,10 @@ const ProviderLive = () =>
                         Effect.map((database) => ({
                           database,
                           secrets: {},
+                          // The generated physical name is owned by this
+                          // resource instance. A conflict after the POST can
+                          // be a lost successful response, so recover the
+                          // write-only default credentials below.
                           recoverSecrets: true,
                         })),
                       )
@@ -715,9 +721,6 @@ const ProviderLive = () =>
             recoverCreateSecrets = result.recoverSecrets;
           }
 
-          // Skip listBranches for branchGitName when the observed attachment is
-          // already present; only resolve when the database is unattached or the
-          // gitName changed.
           let patchBranchId: string | undefined;
           let needsPatch: boolean;
           if (news.branchId !== undefined && !isPrismaDevId(news.branchId)) {
@@ -730,30 +733,30 @@ const ProviderLive = () =>
             const unattached = database.branchId === null;
             needsPatch = database.name !== name || unattached || gitNameChanged;
             if (needsPatch) {
-              const branch = yield* desiredBranchId(client, projectId, news);
-              if (!branch.resolved) {
+              const branchId = yield* desiredBranchId(client, projectId, news);
+              if (branchId === undefined) {
                 return yield* Effect.fail(
                   new Error(
                     `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach database '${name}'.`,
                   ),
                 );
               }
-              patchBranchId = branch.id;
+              patchBranchId = branchId;
             }
           } else {
-            const branch =
-              resolvedBranch ??
+            const branchId =
+              createBranchId ??
               (yield* desiredBranchId(client, projectId, news));
-            if (!branch.resolved) {
+            if (branchId === undefined) {
               return yield* Effect.fail(
                 new Error(
                   `Prisma project '${projectId}' has no default branch to attach database '${name}'. Create or promote a default branch, or specify branchId/branchGitName.`,
                 ),
               );
             }
-            patchBranchId = branch.id;
+            patchBranchId = branchId;
             needsPatch =
-              database.name !== name || database.branchId !== branch.id;
+              database.name !== name || database.branchId !== branchId;
           }
 
           if (database.project.id !== projectId) {

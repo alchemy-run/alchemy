@@ -9,12 +9,12 @@ export const desiredBranchId = Effect.fn(function* (
   props: { branchId?: string; branchGitName?: string },
 ) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
-    return { resolved: true as const, id: props.branchId };
+    return props.branchId;
   }
   if (props.branchGitName !== undefined) {
     const branches = yield* client.listBranches(projectId, {
       gitName: props.branchGitName,
-      limit: 100,
+      limit: 2,
     });
     if (branches.length > 1) {
       return yield* Effect.fail(
@@ -23,9 +23,7 @@ export const desiredBranchId = Effect.fn(function* (
         ),
       );
     }
-    return branches[0]
-      ? { resolved: true as const, id: branches[0].id }
-      : { resolved: false as const };
+    return branches[0]?.id;
   }
   const branches = yield* client.listBranches(projectId, { limit: 100 });
   const defaults = branches.filter((branch) => branch.isDefault);
@@ -36,8 +34,5 @@ export const desiredBranchId = Effect.fn(function* (
       ),
     );
   }
-  const defaultBranch = defaults[0];
-  return defaultBranch
-    ? { resolved: true as const, id: defaultBranch.id }
-    : { resolved: false as const };
+  return defaults[0]?.id;
 });
