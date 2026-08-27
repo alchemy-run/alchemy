@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EstimatedUsageResultItem,
   MetricMeasurement,
@@ -14,7 +13,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment, resolveWorkspace } from "./Environment.ts";
-import { listGraphql } from "./Project.ts";
+
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -381,12 +380,13 @@ const currentWorkspaceId = Effect.fn(function* () {
 });
 
 const getWorkspace = (workspaceId: string) =>
-  railway.workspace({ workspaceId }).pipe(
-    RailwayRetry.none,
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  railway
+    .workspace({ workspaceId })
+    .pipe(
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toAttrs = (
   limit: CloudLimit,
@@ -420,24 +420,15 @@ const setLimit = (input: {
   softLimitDollars: number;
   hardLimitDollars?: number | null;
 }) =>
-  railway
-    .usageLimitSet({
-      input: {
-        customerId: input.customerId,
-        softLimitDollars: input.softLimitDollars,
-        ...(input.hardLimitDollars !== undefined
-          ? { hardLimitDollars: input.hardLimitDollars }
-          : {}),
-      },
-    })
-    .pipe(
-      RailwayRetry.none,
-      Effect.retry({
-        while: (e) => e._tag === "RailwayRateLimited",
-        schedule: Schedule.spaced("2 seconds"),
-        times: 4,
-      }),
-    );
+  railway.usageLimitSet({
+    input: {
+      customerId: input.customerId,
+      softLimitDollars: input.softLimitDollars,
+      ...(input.hardLimitDollars !== undefined
+        ? { hardLimitDollars: input.hardLimitDollars }
+        : {}),
+    },
+  });
 
 const resolveScope = Effect.fn(function* (input: {
   news?: UsageLimitProps;
@@ -502,7 +493,7 @@ export const UsageLimitProvider = () =>
 
     list: Effect.fn(function* () {
       const workspaceId = yield* currentWorkspaceId();
-      const found = yield* listGraphql(observe(workspaceId), undefined);
+      const found = yield* observe(workspaceId);
       if (found?.limit === undefined) return [];
       return [
         toAttrs(found.limit, {

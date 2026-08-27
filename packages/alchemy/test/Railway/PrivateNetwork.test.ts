@@ -21,18 +21,6 @@ const listLive = (environmentId: string) =>
     Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.succeed([])),
   );
 
-const waitUntilNetworksGone = (environmentId: string) =>
-  listLive(environmentId).pipe(
-    Effect.map((items) =>
-      items.length === 0 ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 const waitUntilEndpointGone = (input: {
   environmentId: string;
   privateNetworkId: string;
@@ -141,7 +129,6 @@ test.provider(
         input: {
           projectId: created.project.projectId,
           environmentId: created.project.environmentId,
-          name: "pn-target",
           source: { image: "hashicorp/http-echo" },
         },
       });
@@ -221,10 +208,11 @@ test.provider(
         serviceId: service.id,
       });
       expect(endpointGone).toEqual("gone");
-      const networksGone = yield* waitUntilNetworksGone(
-        created.project.environmentId,
-      );
-      expect(networksGone).toEqual("gone");
+      // Named networks have no delete API — tearing them down would
+      // also drop the environment's default mesh. They leave with the
+      // parent Project / Environment.
+      const networks = yield* listLive(created.project.environmentId);
+      expect(networks.length).toBeGreaterThan(0);
     }).pipe(logLevel),
   { timeout: 480_000 },
 );

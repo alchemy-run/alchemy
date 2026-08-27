@@ -1,6 +1,6 @@
 /**
  * Gzipped ustar of a directory. Used to upload a generated Docker
- * context to Railway's `/up` endpoint (`railway up`).
+ * context (Railway `/up`, and any other gzip-tarball consumer).
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

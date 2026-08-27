@@ -53,7 +53,6 @@ const createTargetService = (projectId: string, environmentId: string) =>
     input: {
       projectId,
       environmentId,
-      name: "web",
       source: { image: "hashicorp/http-echo" },
     },
   });

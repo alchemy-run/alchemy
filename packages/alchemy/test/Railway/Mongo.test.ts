@@ -6,6 +6,7 @@ import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { suiteProject } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -30,6 +31,43 @@ const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.provide(CredentialsFromEnv),
     Effect.provide(FetchHttpClient.layer),
   );
+
+const ping = (url: string) =>
+  Railway.pingMongo(url).pipe(
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+  );
+
+const asVariableMap = (value: unknown): Record<string, string> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "string") {
+      out[key] = item;
+    }
+  }
+  return out;
+};
+
+const readServiceVariables = (
+  projectId: string,
+  environmentId: string,
+  serviceId: string,
+) =>
+  railway
+    .variables({
+      projectId,
+      environmentId,
+      serviceId,
+      unrendered: true,
+    })
+    .pipe(
+      Effect.map(asVariableMap),
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed({} as Record<string, string>),
+      ),
+    );
 
 const waitUntilServiceGone = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(

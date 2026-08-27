@@ -23,8 +23,8 @@ export default class PostgresFn extends Function<PostgresFn>()(
     const conn = yield* ConnectPostgres(Db);
     const db = yield* Drizzle.Postgres(conn.connectionString);
     return {
-      fetch: db.execute("select 1 as ok").pipe(
-        Effect.flatMap(HttpServerResponse.json),
+      fetch: db.execute("select 1 as ok", "objects").pipe(
+        Effect.flatMap((rows) => HttpServerResponse.json({ rows })),
         Effect.catch((error) =>
           HttpServerResponse.json(
             { ok: false, error: String(error) },

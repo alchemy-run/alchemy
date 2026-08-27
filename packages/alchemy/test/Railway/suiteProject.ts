@@ -5,16 +5,11 @@
  * Named so `matchesAlchemyPhysicalName` still lists it (service `list()`
  * walks owned projects) and `pnpm nuke` can reclaim it.
  */
-import {
-  CredentialsFromEnv,
-  Retry as RailwayRetry,
-} from "@distilled.cloud/railway";
+import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import { resolveWorkspace } from "@/Railway/Environment.ts";
 import type { Project } from "@/Railway/Project.ts";
-import { isRailwayTransient } from "@/Railway/transient.ts";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { SUITE_PROJECT_NAME } from "./suiteProjectName.ts";
@@ -66,12 +61,24 @@ const acquire = Effect.gen(function* () {
   const existing = yield* findByName(workspace.id);
   const resolve = (project: Parameters<typeof toProject>[0]) =>
     Effect.gen(function* () {
-      const attrs = toProject(project, workspace.id);
+      let attrs = toProject(project, workspace.id);
+      if (attrs.environmentId.length === 0) {
+        const fresh = yield* railway.project({ id: attrs.projectId });
+        attrs = toProject(fresh, workspace.id);
+      }
       if (attrs.environmentId.length > 0) {
         return attrs;
       }
-      const fresh = yield* railway.project({ id: attrs.projectId });
-      return toProject(fresh, workspace.id);
+      const env = yield* railway.environments
+        .items({ projectId: attrs.projectId, first: 5 })
+        .pipe(
+          Stream.filter((item) => item.deletedAt == null),
+          Stream.take(1),
+          Stream.runHead,
+        );
+      return env._tag === "Some"
+        ? { ...attrs, environmentId: env.value.id }
+        : attrs;
     });
 
   if (existing !== undefined) {
@@ -87,12 +94,6 @@ const acquire = Effect.gen(function* () {
       },
     })
     .pipe(
-      RailwayRetry.none,
-      Effect.retry({
-        while: isRailwayTransient,
-        schedule: Schedule.spaced("31 seconds"),
-        times: 8,
-      }),
       Effect.flatMap((project) => resolve(project)),
       Effect.catch((error) =>
         findByName(workspace.id).pipe(

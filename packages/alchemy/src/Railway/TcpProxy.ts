@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   TcpProxiesResultItem,
   TcpProxyCreateResponse,
@@ -11,7 +10,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listGraphql, listOwnedCloud } from "./Project.ts";
+import { ownedProjects } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -293,31 +292,30 @@ export const TcpProxyProvider = () =>
     nuke: { dependsOn: ["Railway.Project"] },
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = yield* Effect.forEach(
-        cloud,
-        (project) =>
-          Effect.forEach(
-            project.environments,
-            (env) =>
-              Effect.forEach(
-                project.services.filter((service) =>
-                  matchesAlchemyPhysicalName(service.name),
-                ),
-                (service) =>
-                  listGraphql(
-                    listProxies(env.id, service.id),
-                    [] as TcpProxiesResultItem[],
-                  ).pipe(
-                    Effect.map((proxies) =>
-                      proxies.map((proxy) => toAttrs(proxy)),
-                    ),
-                  ),
-                { concurrency: 1 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            { concurrency: 1 },
-          ).pipe(Effect.map((nested) => nested.flat())),
-        { concurrency: 1 },
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const live = yield* railway
+            .project({ id: project.projectId })
+            .pipe(
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const services = (
+            live?.services.edges.map((edge) => edge.node) ?? []
+          ).filter(
+            (service) =>
+              service.deletedAt == null &&
+              matchesAlchemyPhysicalName(service.name),
+          );
+          const nested = yield* Effect.forEach(services, (service) =>
+            listProxies(project.environmentId, service.id).pipe(
+              Effect.map((proxies) => proxies.map((proxy) => toAttrs(proxy))),
+            ),
+          );
+          return nested.flat();
+        }),
       );
       return rows.flat();
     }),
@@ -393,14 +391,6 @@ export const TcpProxyProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) =>
-                e._tag === "RailwayRateLimited" ||
-                e._tag === "RailwayInternalError",
-              schedule: Schedule.spaced("5 seconds"),
-              times: 4,
-            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),

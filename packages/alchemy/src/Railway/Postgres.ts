@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EnvironmentResponseVolumeInstancesEdgesItemNode,
   ProjectResponseServicesEdgesItemNode,
@@ -17,13 +16,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { type Project } from "./Project.ts";
-import { isRailwayTransient } from "./transient.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -418,12 +417,6 @@ const deployReady = (status: string | undefined) => status === "SUCCESS";
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("15 seconds"),
-  times: 10 as const,
-};
-
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
@@ -536,10 +529,8 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
-    RailwayRetry.none,
-    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -570,11 +561,15 @@ const getVolumeByInstanceId = (volumeInstanceId: string) =>
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environment({ id: environmentId, projectId }).pipe(
-    Effect.map((env) =>
-      env.volumeInstances.edges
-        .map((edge) => edge.node)
-        .filter((node) => !isGoneVolume(node)),
+  railway.environments.items({ projectId, first: 50 }).pipe(
+    Stream.filter((env) => env.id === environmentId && env.deletedAt == null),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((env) =>
+        env.volumeInstances.edges
+          .map((edge) => edge.node)
+          .filter((node) => !isGoneVolume(node)),
+      ),
     ),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
@@ -648,18 +643,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const syncEnv = Effect.fn(function* (input: {
   projectId: string;
@@ -737,12 +730,17 @@ const waitForVolume = (
   environmentId: string,
   projectId: string,
   volumeId: string,
-) =>
-  findVolume(
-    environmentId,
-    projectId,
-    (instance) => instance.volumeId === volumeId,
-  ).pipe(
+  volumeInstanceId?: string,
+) => {
+  const observe =
+    volumeInstanceId !== undefined && volumeInstanceId.length > 0
+      ? getVolumeByInstanceId(volumeInstanceId)
+      : findVolume(
+          environmentId,
+          projectId,
+          (instance) => instance.volumeId === volumeId,
+        );
+  return observe.pipe(
     Effect.flatMap((instance) => {
       if (instance === undefined || transientVolumeState(instance.state)) {
         return Effect.fail(
@@ -756,17 +754,12 @@ const waitForVolume = (
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.PostgresVolumePending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresVolumePending", () =>
-      findVolume(
-        environmentId,
-        projectId,
-        (instance) => instance.volumeId === volumeId,
-      ),
-    ),
+    Effect.catchTag("Railway.PostgresVolumePending", () => observe),
   );
+};
 
 const stampVolumeName = (volumeId: string, name: string) =>
   railway.volumeUpdate({
@@ -864,7 +857,58 @@ export const PostgresProvider = () =>
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
     }),
 
-    list: () => Effect.succeed([]),
+    list: Effect.fn(function* () {
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const services = yield* listProjectServices(project.projectId);
+          const envRows = yield* railway.environments
+            .items({ projectId: project.projectId, first: 50 })
+            .pipe(
+              Stream.filter((env) => env.deletedAt == null),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed([]),
+              ),
+            );
+          const volumes = envRows.flatMap((env) =>
+            env.volumeInstances.edges.map((edge) => edge.node),
+          );
+          const items = yield* Effect.forEach(
+            services.filter((service) =>
+              matchesAlchemyPhysicalName(service.name),
+            ),
+            (service) =>
+              Effect.gen(function* () {
+                const instance = yield* getInstance(
+                  project.environmentId,
+                  service.id,
+                );
+                if (!isPostgresImage(instance?.source?.image)) {
+                  return undefined;
+                }
+                const volume = volumes.find(
+                  (row) => (row.serviceId ?? undefined) === service.id,
+                );
+                return toAttrs({
+                  service,
+                  instance,
+                  volume,
+                  proxy: undefined,
+                  projectId: project.projectId,
+                  environmentId: project.environmentId,
+                  user: DEFAULT_POSTGRES_USER,
+                  password: "",
+                  database: DEFAULT_POSTGRES_DATABASE,
+                });
+              }),
+          );
+          return items.filter((item) => item !== undefined);
+        }),
+      );
+      return rows.flat();
+    }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? ({} as PostgresProps);
@@ -925,8 +969,6 @@ export const PostgresProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
             Effect.catchTag("RailwayValidationError", (e) =>
               alreadyExists(e.message)
                 ? Effect.succeed(undefined)
@@ -959,17 +1001,15 @@ export const PostgresProvider = () =>
         props.region !== undefined && props.region !== observedRegion;
       const sleepOn = instance?.sleepApplication !== false;
       if (imageChanged || regionChanged || sleepOn) {
-        yield* railway
-          .serviceInstanceUpdate({
-            environmentId,
-            serviceId: current.id,
-            input: {
-              ...(imageChanged ? { source: { image: sourceImage } } : {}),
-              ...(regionChanged ? { region: props.region } : {}),
-              ...(sleepOn ? { sleepApplication: false } : {}),
-            },
-          })
-          .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+        yield* railway.serviceInstanceUpdate({
+          environmentId,
+          serviceId: current.id,
+          input: {
+            ...(imageChanged ? { source: { image: sourceImage } } : {}),
+            ...(regionChanged ? { region: props.region } : {}),
+            ...(sleepOn ? { sleepApplication: false } : {}),
+          },
+        });
         needsDeploy = true;
         instance = (yield* getInstance(environmentId, current.id)) ?? instance;
       }
@@ -1004,28 +1044,32 @@ export const PostgresProvider = () =>
         );
       }
       if (volume === undefined) {
-        const created = yield* railway
-          .volumeCreate({
-            input: {
-              projectId,
-              environmentId,
-              mountPath: POSTGRES_MOUNT_PATH,
-              serviceId: current.id,
-              ...(props.region !== undefined ? { region: props.region } : {}),
-            },
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: isRailwayTransient,
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-          );
+        const created = yield* railway.volumeCreate({
+          input: {
+            projectId,
+            environmentId,
+            mountPath: POSTGRES_MOUNT_PATH,
+            serviceId: current.id,
+            ...(props.region !== undefined ? { region: props.region } : {}),
+          },
+        });
         if (created.name !== volumeName) {
           yield* stampVolumeName(created.id, volumeName);
         }
-        volume = yield* waitForVolume(environmentId, projectId, created.id);
+        const createdNode = created.volumeInstances.edges
+          .map((edge) => edge.node)
+          .find(
+            (node) =>
+              (node.volumeId === created.id || node.volume.id === created.id) &&
+              (node.deletedAt == null || node.deletedAt.length === 0) &&
+              !goneVolumeState(node.state),
+          );
+        volume = yield* waitForVolume(
+          environmentId,
+          projectId,
+          created.id,
+          createdNode?.id,
+        );
         needsDeploy = true;
       }
       if (volume === undefined || isGoneVolume(volume)) {
@@ -1067,14 +1111,6 @@ export const PostgresProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) =>
-                e._tag === "RailwayRateLimited" ||
-                e._tag === "RailwayInternalError",
-              schedule: Schedule.spaced("5 seconds"),
-              times: 4,
-            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),
@@ -1099,11 +1135,7 @@ export const PostgresProvider = () =>
             environmentId,
             serviceId: current.id,
           })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
-            Effect.catchTag("RailwayValidationError", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
       }
 
       instance =

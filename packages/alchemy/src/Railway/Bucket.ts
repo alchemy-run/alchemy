@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   BucketCreateResponse,
   BucketS3CredentialsResultItem,
@@ -20,8 +19,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
-import { isRailwayTransient } from "./transient.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -415,6 +413,11 @@ const findInProject = (
 const getEnvironmentConfig = (environmentId: string, projectId: string) =>
   railway.environment({ id: environmentId, projectId }).pipe(
     Effect.map((env) => parseEnvironmentConfig(env.config)),
+    Effect.retry({
+      while: (e) => e._tag === "RailwayNotFound" || e._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("1 second"),
+    }),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed({} as EnvironmentConfigShape),
     ),
@@ -442,24 +445,16 @@ const environmentIdsOf = (project: {
     ),
   );
 
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("15 seconds"),
-  times: 10 as const,
-};
-
 const commitBucketPatch = (input: {
   environmentId: string;
   commitMessage: string;
   patch: Record<string, unknown>;
 }) =>
-  railway
-    .environmentPatchCommit({
-      environmentId: input.environmentId,
-      commitMessage: input.commitMessage,
-      patch: input.patch,
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.environmentPatchCommit({
+    environmentId: input.environmentId,
+    commitMessage: input.commitMessage,
+    patch: input.patch,
+  });
 
 const ensureDeployed = Effect.fn(function* (input: {
   bucketId: string;
@@ -486,7 +481,13 @@ const ensureDeployed = Effect.fn(function* (input: {
         },
       },
     },
-  });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "RailwayNotFound" || e._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("1 second"),
+    }),
+  );
   const synced = yield* getEnvironmentConfig(
     input.environmentId,
     input.projectId,
@@ -612,7 +613,7 @@ export const BucketProvider = () =>
           ? yield* getEnvironmentConfig(envId, projectId)
           : ({} as EnvironmentConfigShape);
       if (envId.length > 0 && !isDeployed(config, found.id)) {
-        if (output === undefined) return undefined;
+        return undefined;
       }
       const attrs = toAttrs(found, {
         environmentId: envId,
@@ -624,17 +625,28 @@ export const BucketProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = cloud.map((project) => {
-        const owned = project.buckets.filter((bucket) =>
-          matchesAlchemyPhysicalName(bucket.name),
-        );
-        const environmentId =
-          project.environments[0]?.id ?? project.attrs.environmentId;
-        return owned.map((bucket) =>
-          toAttrs(bucket, { environmentId, region: undefined }),
-        );
-      });
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const config = yield* getEnvironmentConfig(
+            project.environmentId,
+            project.projectId,
+          );
+          const buckets = yield* listProjectBuckets(project.projectId);
+          return buckets
+            .filter(
+              (bucket) =>
+                matchesAlchemyPhysicalName(bucket.name) &&
+                isDeployed(config, bucket.id),
+            )
+            .map((bucket) =>
+              toAttrs(bucket, {
+                environmentId: project.environmentId,
+                region: instanceOf(config, bucket.id)?.region,
+              }),
+            );
+        }),
+      );
       const seen = new Set<string>();
       const unique: Bucket["Attributes"][] = [];
       for (const row of rows.flat()) {
@@ -690,8 +702,12 @@ export const BucketProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "RailwayNotFound" || e._tag === "NotFound",
+              times: 8,
+              schedule: Schedule.spaced("1 second"),
+            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),

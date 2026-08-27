@@ -2,12 +2,12 @@ import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { suiteProject } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
@@ -15,31 +15,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const isGoneInstance = (instance: {
-  deletedAt: string | null;
-  isPendingDeletion: boolean;
-  state: string | null;
-}) =>
-  instance.deletedAt != null ||
-  instance.isPendingDeletion ||
-  instance.state === "DELETED" ||
-  instance.state === "DELETING";
-
-const waitUntilGone = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
-    Effect.map((instance) =>
-      isGoneInstance(instance) ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
 
 test.provider(
   "create, update, list, and delete a volume",
@@ -127,7 +102,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(created.volume.volumeInstanceId);
+      const gone = yield* waitUntilVolumeGone(created.volume.volumeInstanceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 480_000 },

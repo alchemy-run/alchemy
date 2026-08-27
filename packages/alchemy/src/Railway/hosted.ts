@@ -68,11 +68,9 @@ export const createRailwayFunctionRuntimeContext =
           );
           (
             globalThis as typeof globalThis & {
-              __ALCHEMY_FUNCTION_FETCH__?: (
-                request: Request,
-              ) => Promise<Response>;
+              __aFF?: (request: Request) => Promise<Response>;
             }
-          ).__ALCHEMY_FUNCTION_FETCH__ = async (request: Request) => {
+          ).__aFF = async (request: Request) => {
             try {
               const response = await Effect.runPromise(
                 run.pipe(
@@ -302,8 +300,8 @@ await bootstrap(entrypoint);
 
 /**
  * Inner Function module: builds the class layer so `serve` registers
- * `globalThis.__ALCHEMY_FUNCTION_FETCH__`. The canvas wrapper listens
- * first, then import()s this file.
+ * `globalThis.__aFF`. The canvas wrapper listens first, then import()s
+ * this file.
  */
 const makeFunctionBootstrap =
   (handler: string) =>
@@ -316,17 +314,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 const tag = Context.Service(${JSON.stringify(Self.key)});
 const layer = makeEntrypointLayer(tag, entrypoint);
-const platform = Layer.mergeAll(
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
+const platform = FetchHttpClient.layer;
 const stack = Layer.effect(
   Stack,
   Effect.all([
@@ -514,23 +508,24 @@ const wrapCanvasListener = (
     });
     const pins = [
       pinImport("effect", effectVersion),
-      pinImport("@effect/platform-bun", bunVersion),
+      ...(inner.includes("@effect/platform-bun")
+        ? [pinImport("@effect/platform-bun", bunVersion)]
+        : []),
       ...extraPins,
     ].join("\n");
     return `${pins}
 import { setDefaultResultOrder } from "node:dns";
 setDefaultResultOrder("ipv4first");
 const g=globalThis,port=Number(process.env.PORT??3000);
-g.__ALCHEMY_FUNCTION_FETCH__??=async()=>new Response("");
-Bun.serve({hostname:"0.0.0.0",port,fetch:r=>g.__ALCHEMY_FUNCTION_FETCH__(r)});
+g.__aFF??=async()=>new Response("");
+Bun.serve({port,fetch:r=>g.__aFF(r)});
 try{
 const u=new URL("./i.mjs",import.meta.url);
 await Bun.write(u,${JSON.stringify(inner)});
 await import(u.href);
 }catch(e){
-g.__ALCHEMY_FUNCTION_FETCH__=async()=>new Response(String(e),{status:500});
+g.__aFF=async()=>new Response(String(e),{status:500});
 }
-await new Promise(()=>{});
 `;
   });
 
@@ -671,7 +666,7 @@ const createBundleProgram = (
             output?.sourcemap ?? props.build?.output?.sourcemap ?? false,
           entryFileNames: "index.mjs",
           strictExecutionOrder: true,
-          keepNames: true,
+          keepNames: !canvasExternals,
         },
         props.build,
       );

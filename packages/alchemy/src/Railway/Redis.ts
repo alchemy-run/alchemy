@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   ProjectResponseServicesEdgesItemNode,
   ServiceCreateResponse,
@@ -17,8 +16,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { type Project } from "./Project.ts";
-import { isRailwayTransient } from "./transient.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -361,12 +359,6 @@ const deployFailed = (status: string | undefined) =>
 const alreadyExists = (message: string) =>
   /already exists|already in use|duplicate/i.test(message);
 
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("15 seconds"),
-  times: 10 as const,
-};
-
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
@@ -377,10 +369,8 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
-    RailwayRetry.none,
-    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -489,18 +479,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const redisUrlTemplate = `redis://default:\${{${REDIS_PASSWORD_ENV}}}@\${{RAILWAY_PRIVATE_DOMAIN}}:${REDIS_PORT}`;
 
@@ -626,7 +614,37 @@ export const RedisProvider = () =>
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
     }),
 
-    list: () => Effect.succeed([]),
+    list: Effect.fn(function* () {
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const services = yield* listProjectServices(project.projectId);
+          const items = yield* Effect.forEach(
+            services.filter((service) =>
+              matchesAlchemyPhysicalName(service.name),
+            ),
+            (service) =>
+              Effect.gen(function* () {
+                const instance = yield* getInstance(
+                  project.environmentId,
+                  service.id,
+                );
+                const image = instance?.source?.image ?? undefined;
+                if (!isRedisImage(image)) return undefined;
+                return toAttrs({
+                  service,
+                  instance,
+                  projectId: project.projectId,
+                  environmentId: project.environmentId,
+                  image: image ?? DEFAULT_REDIS_IMAGE,
+                });
+              }),
+          );
+          return items.filter((item) => item !== undefined);
+        }),
+      );
+      return rows.flat();
+    }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? ({} as RedisProps);
@@ -684,8 +702,6 @@ export const RedisProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
             Effect.catchTag("RailwayValidationError", (e) =>
               alreadyExists(e.message)
                 ? Effect.succeed(undefined)
@@ -718,17 +734,15 @@ export const RedisProvider = () =>
       const observedStart = instance?.startCommand ?? undefined;
       const startChanged = (observedStart ?? undefined) !== startCommand;
       if (imageChanged || regionChanged || startChanged) {
-        yield* railway
-          .serviceInstanceUpdate({
-            environmentId,
-            serviceId: current.id,
-            input: {
-              ...(imageChanged ? { source: { image } } : {}),
-              ...(regionChanged ? { region: props.region } : {}),
-              ...(startChanged ? { startCommand: startCommand ?? null } : {}),
-            },
-          })
-          .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+        yield* railway.serviceInstanceUpdate({
+          environmentId,
+          serviceId: current.id,
+          input: {
+            ...(imageChanged ? { source: { image } } : {}),
+            ...(regionChanged ? { region: props.region } : {}),
+            ...(startChanged ? { startCommand: startCommand ?? null } : {}),
+          },
+        });
         needsDeploy = true;
         instance = (yield* getInstance(environmentId, current.id)) ?? instance;
       }
@@ -747,11 +761,7 @@ export const RedisProvider = () =>
             environmentId,
             serviceId: current.id,
           })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
-            Effect.catchTag("RailwayValidationError", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
       }
 
       instance =

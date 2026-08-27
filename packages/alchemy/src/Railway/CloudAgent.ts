@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   CloudAgentCreateResponse,
   CloudAgentResponse,
@@ -21,7 +20,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listGraphql, listOwnedCloud } from "./Project.ts";
+import { ownedProjects } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -368,35 +367,23 @@ export const CloudAgentProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = yield* Effect.forEach(
-        cloud,
-        (project) =>
-          Effect.forEach(
-            project.environments,
-            (env) =>
-              listGraphql(
-                listAgents(env.id),
-                [] as CloudAgentsResultItem[],
-              ).pipe(
-                Effect.map((agents) =>
-                  agents
-                    .filter(
-                      (agent) =>
-                        !isGone(agent) &&
-                        matchesAlchemyPhysicalName(agent.name),
-                    )
-                    .map((agent) =>
-                      toAttrs(agent, {
-                        environmentId: env.id,
-                        projectId: project.attrs.projectId,
-                      }),
-                    ),
-                ),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        listAgents(project.environmentId).pipe(
+          Effect.map((agents) =>
+            agents
+              .filter(
+                (agent) =>
+                  !isGone(agent) && matchesAlchemyPhysicalName(agent.name),
+              )
+              .map((agent) =>
+                toAttrs(agent, {
+                  environmentId: project.environmentId,
+                  projectId: project.projectId,
+                }),
               ),
-            { concurrency: 1 },
-          ).pipe(Effect.map((nested) => nested.flat())),
-        { concurrency: 1 },
+          ),
+        ),
       );
       const seen = new Set<string>();
       const unique: CloudAgent["Attributes"][] = [];
@@ -442,12 +429,6 @@ export const CloudAgentProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),

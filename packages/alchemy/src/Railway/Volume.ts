@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EnvironmentResponseVolumeInstancesEdgesItemNode,
   VolumeInstanceResponse,
@@ -16,7 +15,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { MultipleVolumes } from "./MountVolume.ts";
-import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -362,10 +361,12 @@ const transientState = (state: VolumeState | null | undefined) =>
   state === "MIGRATION_PENDING" ||
   state === "RESTORING";
 
+const isDeletedAt = (value: string | null | undefined) =>
+  typeof value === "string" && value.length > 0;
+
 const isGone = (instance: CloudInstance | undefined) =>
   instance === undefined ||
-  instance.deletedAt != null ||
-  instance.isPendingDeletion ||
+  isDeletedAt(instance.deletedAt) ||
   goneState(instance.state);
 
 const toAttrs = (
@@ -400,11 +401,15 @@ const getByInstanceId = (volumeInstanceId: string) =>
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environment({ id: environmentId, projectId }).pipe(
-    Effect.map((env) =>
-      env.volumeInstances.edges
-        .map((edge) => edge.node)
-        .filter((node) => !isGone(node)),
+  railway.environments.items({ projectId, first: 50 }).pipe(
+    Stream.filter((env) => env.id === environmentId && env.deletedAt == null),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((env) =>
+        env.volumeInstances.edges
+          .map((edge) => edge.node)
+          .filter((node) => !isGone(node)),
+      ),
     ),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
@@ -525,8 +530,8 @@ const waitUntilSynced = (
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.VolumePending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
     }),
     Effect.catchTag("Railway.VolumePending", () =>
       getByInstanceId(volumeInstanceId),
@@ -556,8 +561,8 @@ const waitForInstance = (
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.VolumePending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
     }),
     Effect.catchTag("Railway.VolumePending", () =>
       findInEnvironment(
@@ -668,17 +673,29 @@ export const VolumeProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = cloud.map((project) =>
-        project.environments.flatMap((env) =>
-          env.volumeInstances
-            .filter(
-              (instance) =>
-                instance.deletedAt == null &&
-                matchesAlchemyPhysicalName(instance.volume.name),
-            )
-            .map((instance) => toAttrs(instance)),
-        ),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        railway.environments
+          .items({ projectId: project.projectId, first: 50 })
+          .pipe(
+            Stream.filter((env) => env.deletedAt == null),
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((env) =>
+                env.volumeInstances.edges
+                  .map((edge) => edge.node)
+                  .filter(
+                    (instance) =>
+                      instance.deletedAt == null &&
+                      matchesAlchemyPhysicalName(instance.volume.name),
+                  )
+                  .map((instance) => toAttrs(instance)),
+              ),
+            ),
+            Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+              Effect.succeed([] as Volume["Attributes"][]),
+            ),
+          ),
       );
       const seen = new Set<string>();
       const unique: Volume["Attributes"][] = [];
@@ -761,12 +778,6 @@ export const VolumeProvider = () =>
                 },
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry({
-                  while: (e) => e._tag === "RailwayRateLimited",
-                  schedule: Schedule.spaced("30 seconds"),
-                  times: 1,
-                }),
                 Effect.catchTag("RailwayInternalError", (error) =>
                   desiredServiceId === undefined
                     ? Effect.fail(error)
@@ -782,11 +793,21 @@ export const VolumeProvider = () =>
             if (created.name !== name) {
               yield* stampName(created.id, name);
             }
-            current = yield* waitForInstance(
-              environmentId,
-              projectId,
-              created.id,
-            );
+            const createdNode = created.volumeInstances.edges
+              .map((edge) => edge.node)
+              .find(
+                (node) =>
+                  (node.volumeId === created.id ||
+                    node.volume.id === created.id) &&
+                  !isGone(node),
+              );
+            current =
+              createdNode !== undefined
+                ? ((yield* waitUntilSynced(createdNode.id, created.id, {
+                    mountPath: props.mountPath,
+                    serviceId: desiredServiceId,
+                  })) ?? createdNode)
+                : yield* waitForInstance(environmentId, projectId, created.id);
           }
 
           if (current === undefined || isGone(current)) {

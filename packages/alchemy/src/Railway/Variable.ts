@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,12 +10,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import {
-  listGraphql,
-  listOwnedCloud,
-  listOwnedProjects,
-  type Project,
-} from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -405,27 +399,16 @@ const upsertVariable = (input: {
   value: string;
   serviceId?: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-        ...(input.serviceId !== undefined
-          ? { serviceId: input.serviceId }
-          : {}),
-      },
-    })
-    .pipe(
-      RailwayRetry.none,
-      Effect.retry({
-        while: (e) => e._tag === "RailwayRateLimited",
-        schedule: Schedule.spaced("30 seconds"),
-        times: 1,
-      }),
-    );
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+      ...(input.serviceId !== undefined ? { serviceId: input.serviceId } : {}),
+    },
+  });
 
 const listEnvironmentIds = (project: {
   projectId: string;
@@ -517,41 +500,29 @@ export const VariableProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = yield* Effect.forEach(
-        cloud,
-        (project) =>
-          Effect.forEach(
-            project.environments,
-            (env) =>
-              listGraphql(
-                listVariableMap(project.attrs.projectId, env.id),
-                {} as Record<string, string>,
-              ).pipe(
-                Effect.flatMap((vars) =>
-                  Effect.forEach(
-                    Object.keys(vars).filter((name) =>
-                      matchesAlchemyPhysicalName(name),
-                    ),
-                    (name) =>
-                      digestOf(vars[name]!).pipe(
-                        Effect.map((digest) =>
-                          toAttrs({
-                            projectId: project.attrs.projectId,
-                            environmentId: env.id,
-                            serviceId: undefined,
-                            name,
-                            digest,
-                          }),
-                        ),
-                      ),
-                    { concurrency: 1 },
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        listVariableMap(project.projectId, project.environmentId).pipe(
+          Effect.flatMap((vars) =>
+            Effect.forEach(
+              Object.keys(vars).filter((name) =>
+                matchesAlchemyPhysicalName(name),
+              ),
+              (name) =>
+                digestOf(vars[name]!).pipe(
+                  Effect.map((digest) =>
+                    toAttrs({
+                      projectId: project.projectId,
+                      environmentId: project.environmentId,
+                      serviceId: undefined,
+                      name,
+                      digest,
+                    }),
                   ),
                 ),
-              ),
-            { concurrency: 1 },
-          ).pipe(Effect.map((nested) => nested.flat())),
-        { concurrency: 1 },
+            ),
+          ),
+        ),
       );
       return rows.flat();
     }),

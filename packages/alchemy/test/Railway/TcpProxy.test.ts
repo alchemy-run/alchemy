@@ -52,7 +52,6 @@ const createTargetService = (projectId: string, environmentId: string) =>
     input: {
       projectId,
       environmentId,
-      name: "tcp-target",
       source: { image: "redis:7-alpine" },
     },
   });

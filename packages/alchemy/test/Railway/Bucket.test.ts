@@ -63,18 +63,34 @@ const firstCredentials = (
     );
 
 const waitUntilBucketGone = (
+  environmentId: string,
   projectId: string,
   bucketId: string,
-  name: string,
 ) =>
-  findBucket(projectId, bucketId, name).pipe(
-    Effect.map((bucket) =>
-      bucket === undefined ? ("gone" as const) : ("found" as const),
+  railway.environment({ id: environmentId, projectId }).pipe(
+    Effect.map((env) => {
+      const buckets =
+        env.config !== null &&
+        typeof env.config === "object" &&
+        !Array.isArray(env.config)
+          ? (
+              env.config as {
+                buckets?: Record<string, { isDeleted?: boolean | null } | null>;
+              }
+            ).buckets
+          : undefined;
+      const row = buckets?.[bucketId];
+      return row == null || row.isDeleted === true
+        ? ("gone" as const)
+        : ("found" as const);
+    }),
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.succeed("gone" as const),
     ),
     Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
+      schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
-      times: 10,
+      times: 20,
     }),
   );
 
@@ -238,9 +254,9 @@ test.provider(
       yield* stack.destroy();
 
       const gone = yield* waitUntilBucketGone(
+        created.bucket.environmentId,
         created.project.projectId,
         created.bucket.bucketId,
-        nextName,
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),

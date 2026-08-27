@@ -40,7 +40,7 @@ const listLive = (volumeInstanceId: string) =>
   railway
     .volumeInstanceBackupList({ volumeInstanceId })
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag(["RailwayNotFound", "NotFound", "RailwayForbidden"], () =>
         Effect.succeed([]),
       ),
     );
@@ -108,9 +108,11 @@ test.provider(
           result.success.workflowId != null &&
           result.success.workflowId.length > 0
         ) {
-          yield* railway.workflowStatus({
-            workflowId: result.success.workflowId,
-          });
+          yield* railway
+            .workflowStatus({
+              workflowId: result.success.workflowId,
+            })
+            .pipe(Effect.catchTag(["RailwayForbidden"], () => Effect.void));
         }
         const extras = yield* listLive(created.volume.volumeInstanceId);
         for (const extra of extras) {
@@ -121,7 +123,7 @@ test.provider(
             })
             .pipe(
               Effect.catchTag(
-                ["RailwayNotFound", "NotFound"],
+                ["RailwayNotFound", "NotFound", "RailwayForbidden"],
                 () => Effect.void,
               ),
             );

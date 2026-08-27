@@ -1,23 +1,13 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
-  EnvironmentResponseVolumeInstancesEdgesItemNode,
-  EnvironmentsResponseEdgesItemNode,
   ProjectCreateResponse,
   ProjectResponse,
-  ProjectResponseBucketsEdgesItemNode,
-  ProjectResponseGroupsEdgesItemNode,
-  ProjectResponseServicesEdgesItemNode,
   ProjectUpdateResponse,
   ProjectsResponseEdgesItemNode,
 } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Ref from "effect/Ref";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -30,7 +20,6 @@ import {
   sanitizeRailwayName,
 } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
-import { isRailwayTransient } from "./transient.ts";
 
 export interface ProjectProps {
   /**
@@ -193,16 +182,37 @@ export const environmentIdOf = (project: {
 
 const toAttrs = (
   project: CloudProject,
-  fallback?: { name?: string; workspaceId?: string },
+  fallback?: { name?: string; workspaceId?: string; environmentId?: string },
 ): Project["Attributes"] => {
   const name = project.name || fallback?.name || "";
   return {
     projectId: project.id,
     name,
     workspaceId: workspaceIdOf(project, fallback?.workspaceId),
-    environmentId: environmentIdOf(project),
+    environmentId: environmentIdOf(project) || fallback?.environmentId || "",
     url: `https://railway.com/project/${project.id}`,
   };
+};
+
+const fillEnvironmentId = (
+  attrs: Project["Attributes"],
+): Effect.Effect<Project["Attributes"]> => {
+  if (attrs.environmentId.length > 0) return Effect.succeed(attrs);
+  return railway.environments
+    .items({ projectId: attrs.projectId, first: 5 })
+    .pipe(
+      Stream.filter((env) => env.deletedAt == null),
+      Stream.take(1),
+      Stream.runHead,
+      Effect.map((option) =>
+        option._tag === "Some"
+          ? { ...attrs, environmentId: option.value.id }
+          : attrs,
+      ),
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed(attrs),
+      ),
+    );
 };
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
@@ -228,47 +238,24 @@ const currentWorkspaceId = Effect.fn(function* () {
   return env.workspaceId;
 });
 
-/**
- * Railway allows one project create per workspace every 30 seconds.
- * Concurrent stacks (the live suite) stampede that cap; hold a process
- * slot, retry the typed tag, and wait out the window after a success
- * so the next waiter does not 429.
- */
-const projectCreateSlot = Semaphore.makeUnsafe(1);
-
 export const createProject = (input: {
   name: string;
   workspaceId: string;
   description?: string;
   defaultEnvironmentName?: string;
 }) =>
-  Semaphore.withPermits(
-    projectCreateSlot,
-    1,
-  )(
-    railway
-      .projectCreate({
-        input: {
-          name: input.name,
-          workspaceId: input.workspaceId,
-          ...(input.description !== undefined
-            ? { description: input.description }
-            : {}),
-          ...(input.defaultEnvironmentName !== undefined
-            ? { defaultEnvironmentName: input.defaultEnvironmentName }
-            : {}),
-        },
-      })
-      .pipe(
-        RailwayRetry.none,
-        Effect.retry({
-          while: isRailwayTransient,
-          schedule: Schedule.spaced("31 seconds"),
-          times: 8,
-        }),
-        Effect.tap(() => Effect.sleep("31 seconds")),
-      ),
-  );
+  railway.projectCreate({
+    input: {
+      name: input.name,
+      workspaceId: input.workspaceId,
+      ...(input.description !== undefined
+        ? { description: input.description }
+        : {}),
+      ...(input.defaultEnvironmentName !== undefined
+        ? { defaultEnvironmentName: input.defaultEnvironmentName }
+        : {}),
+    },
+  });
 
 const findByName = (workspaceId: string, name: string) =>
   railway.projects
@@ -283,165 +270,22 @@ const findByName = (workspaceId: string, name: string) =>
     );
 
 /**
- * List-path GraphQL: distilled retry stays default (mutations need it).
- * Nuke `list()` must not sit on Retry-After — fail fast and return
- * `fallback`. One in-flight list call at a time so 16 provider scans
- * do not stampede the same workspace.
+ * Workspace projects Alchemy owns. Distilled `projects.items` plus the
+ * physical-name filter — Railway has no tags. No lock, no retry override.
  */
-const listGraphqlSlot = Semaphore.makeUnsafe(1);
-
-export const listGraphql = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  fallback: A,
-): Effect.Effect<A, never, R> =>
-  Semaphore.withPermits(
-    listGraphqlSlot,
-    1,
-  )(
-    effect.pipe(
-      RailwayRetry.none,
-      Effect.timeout("8 seconds"),
-      Effect.result,
-      Effect.map((result) =>
-        Result.isSuccess(result) ? result.success : fallback,
-      ),
-    ),
-  );
-
-const fetchOwnedProjects = Effect.fn(function* () {
+export const ownedProjects = Effect.fn(function* () {
   const workspaceId = yield* currentWorkspaceId();
-  const projects = yield* listGraphql(
-    railway.projects
-      .items({ workspaceId, first: 50, includeDeleted: false })
-      .pipe(
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      ),
-    [] as ProjectsResponseEdgesItemNode[],
-  );
-  return projects
+  const projects = yield* railway.projects
+    .items({ workspaceId, first: 50, includeDeleted: false })
+    .pipe(Stream.runCollect);
+  return Array.from(projects)
     .filter(
       (project) => !isGone(project) && matchesAlchemyPhysicalName(project.name),
     )
     .map((project) => toAttrs(project, { workspaceId }));
 });
 
-const volumeInstancesOf = (
-  env: EnvironmentsResponseEdgesItemNode,
-): EnvironmentResponseVolumeInstancesEdgesItemNode[] =>
-  env.volumeInstances.edges.map((edge) => edge.node);
-
-/**
- * One cloud snapshot per owned project. Concurrent `list()` (nuke) shares
- * this so every resource type does not re-hit `project({id})` /
- * `environments`. Distilled retry is off — list must not sit on Retry-After.
- *
- * Do not `environment({id})` here: that query still selects
- * `canvasGroupRefs` / `meta` and is what made nuke spin.
- */
-export interface OwnedEnv {
-  id: string;
-  name: string;
-  projectId: string;
-  deletedAt: string | null;
-  isEphemeral: boolean;
-  volumeInstances: EnvironmentResponseVolumeInstancesEdgesItemNode[];
-}
-
-export interface OwnedCloud {
-  attrs: Project["Attributes"];
-  services: ProjectResponseServicesEdgesItemNode[];
-  buckets: ProjectResponseBucketsEdgesItemNode[];
-  groups: ProjectResponseGroupsEdgesItemNode[];
-  environments: OwnedEnv[];
-}
-
-const fetchOwnedCloud = Effect.fn(function* () {
-  const projects = yield* fetchOwnedProjects();
-  return yield* Effect.forEach(
-    projects,
-    (attrs) =>
-      Effect.gen(function* () {
-        const live = yield* listGraphql(
-          railway.project({ id: attrs.projectId }).pipe(
-            Effect.map((project) =>
-              project.deletedAt != null ? undefined : project,
-            ),
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-              Effect.succeed(undefined),
-            ),
-          ),
-          undefined,
-        );
-        const envRows = yield* listGraphql(
-          railway.environments
-            .items({ projectId: attrs.projectId, first: 50 })
-            .pipe(
-              Stream.filter((env) => env.deletedAt == null),
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed([] as EnvironmentsResponseEdgesItemNode[]),
-              ),
-            ),
-          [] as EnvironmentsResponseEdgesItemNode[],
-        );
-        return {
-          attrs,
-          services:
-            live?.services.edges
-              .map((edge) => edge.node)
-              .filter((node) => node.deletedAt == null) ?? [],
-          buckets: live?.buckets.edges.map((edge) => edge.node) ?? [],
-          groups: live?.groups.edges.map((edge) => edge.node) ?? [],
-          environments: envRows.map((env) => ({
-            id: env.id,
-            name: env.name,
-            projectId: env.projectId,
-            deletedAt: env.deletedAt,
-            isEphemeral: env.isEphemeral,
-            volumeInstances: volumeInstancesOf(env),
-          })),
-        } satisfies OwnedCloud;
-      }),
-    { concurrency: 1 },
-  );
-});
-
-/**
- * Concurrent `list()` coalesces to one scan. Sequential calls refetch so
- * create/delete tests see fresh rows. Always complete the deferred and
- * clear inflight — a timed-out leader must not leave waiters parked.
- */
-const ownedCloudInflight = Ref.makeUnsafe<
-  Deferred.Deferred<OwnedCloud[], unknown> | undefined
->(undefined);
-
-export const listOwnedCloud = Effect.fn(function* () {
-  const [leader, deferred] = yield* Ref.modify(ownedCloudInflight, (cur) => {
-    if (cur !== undefined) return [[false, cur] as const, cur];
-    const next = Deferred.makeUnsafe<OwnedCloud[], unknown>();
-    return [[true, next] as const, next];
-  });
-  if (!leader) {
-    return yield* Deferred.await(deferred);
-  }
-  const exit = yield* Effect.exit(fetchOwnedCloud()).pipe(
-    Effect.tap((next) => Deferred.done(deferred, next)),
-    Effect.ensuring(Ref.set(ownedCloudInflight, undefined)),
-  );
-  return yield* exit;
-});
-
-/**
- * Projects in the current token's workspace that Alchemy owns. Used by
- * {@link Project} `list()` and by child resources so nuke never enumerates
- * the whole workspace unfiltered.
- */
-export const listOwnedProjects = Effect.fn(function* () {
-  const cloud = yield* listOwnedCloud();
-  return cloud.map((row) => row.attrs);
-});
+export const listOwnedProjects = ownedProjects;
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
@@ -470,7 +314,13 @@ export const ProjectProvider = () =>
           ? yield* getById(output.projectId)
           : undefined) ?? (yield* findByName(workspaceId, name));
       if (found === undefined) return undefined;
-      const attrs = toAttrs(found, { name, workspaceId });
+      const attrs = yield* fillEnvironmentId(
+        toAttrs(found, {
+          name,
+          workspaceId,
+          environmentId: output?.environmentId,
+        }),
+      );
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
     }),
@@ -530,7 +380,13 @@ export const ProjectProvider = () =>
         });
       }
 
-      return toAttrs(current, { name, workspaceId });
+      return yield* fillEnvironmentId(
+        toAttrs(current, {
+          name,
+          workspaceId,
+          environmentId: output?.environmentId,
+        }),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {

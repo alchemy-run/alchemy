@@ -32,7 +32,7 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
         if (path === "/ping") {
           return yield* HttpServerResponse.json({ ok: true });
         }
-        const rows = yield* db.execute("select 1 as ok");
+        const rows = yield* db.execute("select 1 as ok", "objects");
         if (path === "/health" || path === "/") {
           return yield* HttpServerResponse.json({ rows });
         }

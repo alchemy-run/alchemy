@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EnvironmentResponse,
   ProjectResponse,
@@ -16,8 +15,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
-import { isRailwayTransient } from "./transient.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -514,12 +512,6 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
     return yield* createRailwayName(id);
   });
 
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("15 seconds"),
-  times: 10 as const,
-};
-
 const getProject = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => (project.deletedAt != null ? undefined : project)),
@@ -580,8 +572,6 @@ const commitPatch = (input: {
       patch: input.patch,
     })
     .pipe(
-      RailwayRetry.none,
-      Effect.retry(rateLimited),
       Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () =>
         Effect.succeed(""),
       ),
@@ -615,8 +605,6 @@ const mergeCanvas = (
       targetEnvironmentId,
     })
     .pipe(
-      RailwayRetry.none,
-      Effect.retry(rateLimited),
       Effect.catchTag(
         [
           "RailwayNotFound",
@@ -932,33 +920,39 @@ export const GroupProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = cloud.map((project) => {
-        const environmentId =
-          project.environments[0]?.id ?? project.attrs.environmentId;
-        return project.groups.flatMap((group) => {
-          const name = group.name ?? "";
-          if (!matchesAlchemyPhysicalName(name)) return [];
-          return [
-            toAttrs(
-              {
-                groupId: group.id,
-                name,
-                color: group.color ?? undefined,
-                icon: group.icon ?? undefined,
-                collapsed: group.isCollapsed === true,
-                serviceIds: [] as string[],
-                volumeIds: [] as string[],
-                bucketIds: [] as string[],
-              },
-              {
-                projectId: project.attrs.projectId,
-                environmentId,
-              },
-            ),
-          ];
-        });
-      });
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        railway.project({ id: project.projectId }).pipe(
+          Effect.map((live) =>
+            live.groups.edges.flatMap((edge) => {
+              const group = edge.node;
+              const name = group.name ?? "";
+              if (!matchesAlchemyPhysicalName(name)) return [];
+              return [
+                toAttrs(
+                  {
+                    groupId: group.id,
+                    name,
+                    color: group.color ?? undefined,
+                    icon: group.icon ?? undefined,
+                    collapsed: group.isCollapsed === true,
+                    serviceIds: [] as string[],
+                    volumeIds: [] as string[],
+                    bucketIds: [] as string[],
+                  },
+                  {
+                    projectId: project.projectId,
+                    environmentId: project.environmentId,
+                  },
+                ),
+              ];
+            }),
+          ),
+          Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+            Effect.succeed([] as Group["Attributes"][]),
+          ),
+        ),
+      );
       const seen = new Set<string>();
       const unique: Group["Attributes"][] = [];
       for (const row of rows.flat()) {

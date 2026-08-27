@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   ProjectResponseServicesEdgesItemNode,
   ServiceCreateResponse,
@@ -33,7 +32,7 @@ import {
   type MountSpec,
   type ServiceBinding,
 } from "./MountVolume.ts";
-import { type Project } from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
   ensureServiceDomain,
@@ -51,7 +50,6 @@ import {
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
-import { isRailwayTransient } from "./transient.ts";
 
 export { FunctionBundleNotSingleFile } from "./hosted.ts";
 
@@ -597,12 +595,6 @@ const deployFailed = (status: string | undefined) =>
 const alreadyExists = (message: string) =>
   /already exists|already in use|duplicate/i.test(message);
 
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("15 seconds"),
-  times: 10 as const,
-};
-
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
@@ -613,10 +605,8 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
-    RailwayRetry.none,
-    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -742,18 +732,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const hostedProgramProps = (
   props: FunctionProps,
@@ -815,8 +803,6 @@ const syncMounts = Effect.fn(function* (input: {
         },
       })
       .pipe(
-        RailwayRetry.none,
-        Effect.retry(rateLimited),
         Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
       );
   }
@@ -993,7 +979,41 @@ export const FunctionProvider = () =>
             : Unowned(attrs);
         }),
 
-        list: () => Effect.succeed([]),
+        list: Effect.fn(function* () {
+          const projects = yield* ownedProjects();
+          const rows = yield* Effect.forEach(projects, (project) =>
+            Effect.gen(function* () {
+              const services = yield* listProjectServices(project.projectId);
+              const items = yield* Effect.forEach(
+                services.filter((service) =>
+                  matchesAlchemyPhysicalName(service.name),
+                ),
+                (service) =>
+                  Effect.gen(function* () {
+                    const instance = yield* getInstance(
+                      project.environmentId,
+                      service.id,
+                    );
+                    const image = instance?.source?.image ?? undefined;
+                    if (!isFunctionImage(image)) return undefined;
+                    return toAttrs({
+                      service,
+                      instance,
+                      domain: undefined,
+                      projectId: project.projectId,
+                      environmentId: project.environmentId,
+                      image: image ?? "",
+                      port: undefined,
+                      codeHash: "",
+                      rpcToken: "",
+                    });
+                  }),
+              );
+              return items.filter((item) => item !== undefined);
+            }),
+          );
+          return rows.flat();
+        }),
 
         // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
         // Those are knowable from the physical name and props; the cloud
@@ -1102,8 +1122,6 @@ export const FunctionProvider = () =>
                 },
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
                 Effect.catchTag("RailwayValidationError", (e) =>
                   alreadyExists(e.message)
                     ? Effect.succeed(undefined)
@@ -1119,12 +1137,10 @@ export const FunctionProvider = () =>
           }
 
           if (current.name !== name) {
-            current = yield* railway
-              .serviceUpdate({
-                id: current.id,
-                input: { name },
-              })
-              .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+            current = yield* railway.serviceUpdate({
+              id: current.id,
+              input: { name },
+            });
           }
 
           let instance = yield* waitForInstance(environmentId, current.id);
@@ -1137,13 +1153,11 @@ export const FunctionProvider = () =>
             props,
           });
           if (instanceDelta !== undefined) {
-            yield* railway
-              .serviceInstanceUpdate({
-                environmentId,
-                serviceId: current.id,
-                input: instanceDelta,
-              })
-              .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+            yield* railway.serviceInstanceUpdate({
+              environmentId,
+              serviceId: current.id,
+              input: instanceDelta,
+            });
             needsDeploy = true;
             instance =
               (yield* getInstance(environmentId, current.id)) ?? instance;
@@ -1179,8 +1193,6 @@ export const FunctionProvider = () =>
                 serviceId: current.id,
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
                 Effect.catchTag("RailwayValidationError", () => Effect.void),
               );
           }

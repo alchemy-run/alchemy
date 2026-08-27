@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EnvironmentResponseVolumeInstancesEdgesItemNode,
   VolumeInstanceBackupListResultItem,
@@ -16,7 +15,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listGraphql, listOwnedCloud } from "./Project.ts";
+import { ownedProjects } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -431,11 +430,15 @@ const getByInstanceId = (volumeInstanceId: string) =>
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environment({ id: environmentId, projectId }).pipe(
-    Effect.map((env) =>
-      env.volumeInstances.edges
-        .map((edge) => edge.node)
-        .filter((node) => !isGoneInstance(node)),
+  railway.environments.items({ projectId, first: 50 }).pipe(
+    Stream.filter((env) => env.id === environmentId && env.deletedAt == null),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((env) =>
+        env.volumeInstances.edges
+          .map((edge) => edge.node)
+          .filter((node) => !isGoneInstance(node)),
+      ),
     ),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
@@ -740,41 +743,45 @@ export const VolumeBackupProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = yield* Effect.forEach(
-        cloud,
-        (project) =>
-          Effect.forEach(
-            project.environments.flatMap((env) =>
-              env.volumeInstances.filter(
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const envRows = yield* railway.environments
+            .items({ projectId: project.projectId, first: 50 })
+            .pipe(
+              Stream.filter((env) => env.deletedAt == null),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed([]),
+              ),
+            );
+          const instances = envRows.flatMap((env) =>
+            env.volumeInstances.edges
+              .map((edge) => edge.node)
+              .filter(
                 (instance) =>
                   instance.deletedAt == null &&
                   matchesAlchemyPhysicalName(instance.volume.name),
               ),
-            ),
-            (instance) =>
-              Effect.gen(function* () {
-                const backups = yield* listGraphql(
-                  listBackups(instance.id),
-                  [] as VolumeInstanceBackupListResultItem[],
-                );
-                const schedules = yield* listGraphql(
-                  listSchedules(instance.id),
-                  [] as VolumeBackupScheduleKind[],
-                );
-                return backups.map((backup) =>
-                  toAttrs(backup, {
-                    volumeInstanceId: instance.id,
-                    volumeId: instance.volumeId,
-                    projectId: instance.volume.projectId,
-                    environmentId: instance.environmentId,
-                    schedules,
-                  }),
-                );
-              }),
-            { concurrency: 1 },
-          ).pipe(Effect.map((nested) => nested.flat())),
-        { concurrency: 1 },
+          );
+          const nested = yield* Effect.forEach(instances, (instance) =>
+            Effect.gen(function* () {
+              const backups = yield* listBackups(instance.id);
+              const schedules = yield* listSchedules(instance.id);
+              return backups.map((backup) =>
+                toAttrs(backup, {
+                  volumeInstanceId: instance.id,
+                  volumeId: instance.volumeId,
+                  projectId: instance.volume.projectId,
+                  environmentId: instance.environmentId,
+                  schedules,
+                }),
+              );
+            }),
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: VolumeBackup["Attributes"][] = [];
@@ -834,19 +841,10 @@ export const VolumeBackupProvider = () =>
           });
         }
         const previousIds = new Set(existing.map((backup) => backup.id));
-        const created = yield* railway
-          .volumeInstanceBackupCreate({
-            volumeInstanceId,
-            name,
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-          );
+        const created = yield* railway.volumeInstanceBackupCreate({
+          volumeInstanceId,
+          name,
+        });
         if (created.workflowId != null && created.workflowId.length > 0) {
           yield* waitForWorkflow(
             created.workflowId,

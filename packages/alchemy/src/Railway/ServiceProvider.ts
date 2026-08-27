@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   Builder,
   DeploymentTriggersResponseEdgesItemNode,
@@ -28,8 +27,7 @@ import {
   type MountSpec,
   type ServiceBinding,
 } from "./MountVolume.ts";
-import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
-import { isRailwayTransient } from "./transient.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import { listServiceVolumes } from "./Volume.ts";
 import {
   ensureServiceDomain,
@@ -43,7 +41,7 @@ import {
   toEnvRecord,
 } from "./hosted.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
-import { tarGzipDirectory } from "./tarGzip.ts";
+import { tarGzipDirectory } from "../Util/tarGzip.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import {
   Service,
@@ -146,10 +144,8 @@ const getById = (serviceId: string) =>
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
-    RailwayRetry.none,
-    Effect.timeout("20 seconds"),
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound", "TimeoutError"], () =>
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed(undefined),
     ),
   );
@@ -190,12 +186,6 @@ const deployReady = (status: string | undefined) =>
 
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
-
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("15 seconds"),
-  times: 10 as const,
-};
 
 const undef = <T>(value: T | null | undefined): T | undefined =>
   value == null ? undefined : value;
@@ -408,32 +398,28 @@ const syncBranch = Effect.fn(function* (input: {
   );
   const current = triggers[0];
   if (current === undefined) {
-    yield* railway
-      .deploymentTriggerCreate({
-        input: {
-          branch: input.branch,
-          environmentId: input.environmentId,
-          projectId: input.projectId,
-          provider: "github",
-          repository: input.repo,
-          serviceId: input.serviceId,
-        },
-      })
-      .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+    yield* railway.deploymentTriggerCreate({
+      input: {
+        branch: input.branch,
+        environmentId: input.environmentId,
+        projectId: input.projectId,
+        provider: "github",
+        repository: input.repo,
+        serviceId: input.serviceId,
+      },
+    });
     return true;
   }
   const branchChanged = current.branch !== input.branch;
   const repoChanged = current.repository !== input.repo;
   if (!branchChanged && !repoChanged) return false;
-  yield* railway
-    .deploymentTriggerUpdate({
-      id: current.id,
-      input: {
-        ...(branchChanged ? { branch: input.branch } : {}),
-        ...(repoChanged ? { repository: input.repo } : {}),
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  yield* railway.deploymentTriggerUpdate({
+    id: current.id,
+    input: {
+      ...(branchChanged ? { branch: input.branch } : {}),
+      ...(repoChanged ? { repository: input.repo } : {}),
+    },
+  });
   return true;
 });
 
@@ -456,16 +442,14 @@ const syncAutoUpdates = Effect.fn(function* (input: {
       ),
     );
   if (status?.enabled === input.enabled) return;
-  yield* railway
-    .serviceInstanceAutoDeployUpdate({
-      input: {
-        enabled: input.enabled,
-        environmentId: input.environmentId,
-        projectId: input.projectId,
-        serviceId: input.serviceId,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  yield* railway.serviceInstanceAutoDeployUpdate({
+    input: {
+      enabled: input.enabled,
+      environmentId: input.environmentId,
+      projectId: input.projectId,
+      serviceId: input.serviceId,
+    },
+  });
 });
 
 const waitForInstance = (environmentId: string, serviceId: string) =>
@@ -587,18 +571,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -677,8 +659,6 @@ const syncMounts = Effect.fn(function* (input: {
         },
       })
       .pipe(
-        RailwayRetry.none,
-        Effect.retry(rateLimited),
         Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
       );
   }
@@ -815,23 +795,28 @@ export const ServiceProvider = () =>
         }),
 
         list: Effect.fn(function* () {
-          const cloud = yield* listOwnedCloud();
-          return cloud.flatMap((project) =>
-            project.services
-              .filter((service) => matchesAlchemyPhysicalName(service.name))
-              .map((service) =>
-                toAttrs({
-                  service,
-                  instance: undefined,
-                  domain: undefined,
-                  projectId: project.attrs.projectId,
-                  environmentId: project.attrs.environmentId,
-                  port: undefined,
-                  codeHash: "",
-                  rpcToken: "",
-                }),
+          const projects = yield* ownedProjects();
+          const rows = yield* Effect.forEach(projects, (project) =>
+            listProjectServices(project.projectId).pipe(
+              Effect.map((services) =>
+                services
+                  .filter((service) => matchesAlchemyPhysicalName(service.name))
+                  .map((service) =>
+                    toAttrs({
+                      service,
+                      instance: undefined,
+                      domain: undefined,
+                      projectId: project.projectId,
+                      environmentId: project.environmentId,
+                      port: undefined,
+                      codeHash: "",
+                      rpcToken: "",
+                    }),
+                  ),
               ),
+            ),
           );
+          return rows.flat();
         }),
 
         // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
@@ -987,8 +972,6 @@ export const ServiceProvider = () =>
                 },
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
                 Effect.catchTag("RailwayValidationError", (e) =>
                   alreadyExists(e.message)
                     ? Effect.succeed(undefined)
@@ -1050,13 +1033,11 @@ export const ServiceProvider = () =>
             },
           });
           if (instanceDelta !== undefined) {
-            yield* railway
-              .serviceInstanceUpdate({
-                environmentId,
-                serviceId: current.id,
-                input: instanceDelta,
-              })
-              .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+            yield* railway.serviceInstanceUpdate({
+              environmentId,
+              serviceId: current.id,
+              input: instanceDelta,
+            });
             needsDeploy = true;
             instance =
               (yield* getInstance(environmentId, current.id)) ?? instance;
@@ -1153,8 +1134,6 @@ export const ServiceProvider = () =>
                 serviceId: current.id,
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
                 Effect.catchTag("RailwayValidationError", () => Effect.void),
               );
             instance =
@@ -1169,8 +1148,6 @@ export const ServiceProvider = () =>
                 serviceId: current.id,
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
                 Effect.catchTag("RailwayValidationError", () => Effect.void),
               );
             instance =

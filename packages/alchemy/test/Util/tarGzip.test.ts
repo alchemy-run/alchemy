@@ -1,4 +1,4 @@
-import { tarGzipDirectory } from "@/Railway/tarGzip.ts";
+import { tarGzipDirectory } from "@/Util/tarGzip.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";

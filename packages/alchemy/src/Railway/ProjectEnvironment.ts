@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EnvironmentCreateResponse,
   EnvironmentRenameResponse,
@@ -19,7 +18,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedCloud, listOwnedProjects, type Project } from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -253,21 +252,34 @@ export const EnvironmentProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      return cloud.flatMap((project) =>
-        project.environments
-          .filter((env) => matchesAlchemyPhysicalName(env.name))
-          .map((env) => {
-            const projectId = env.projectId || project.attrs.projectId;
-            return {
-              environmentId: env.id,
-              name: env.name,
-              projectId,
-              isEphemeral: env.isEphemeral,
-              url: `https://railway.com/project/${projectId}?environmentId=${env.id}`,
-            };
-          }),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        railway.environments
+          .items({ projectId: project.projectId, first: 50 })
+          .pipe(
+            Stream.filter(
+              (env) =>
+                env.deletedAt == null && matchesAlchemyPhysicalName(env.name),
+            ),
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).map((env) => {
+                const projectId = env.projectId || project.projectId;
+                return {
+                  environmentId: env.id,
+                  name: env.name,
+                  projectId,
+                  isEphemeral: env.isEphemeral,
+                  url: `https://railway.com/project/${projectId}?environmentId=${env.id}`,
+                };
+              }),
+            ),
+            Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+              Effect.succeed([] as Environment["Attributes"][]),
+            ),
+          ),
       );
+      return rows.flat();
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -300,12 +312,6 @@ export const EnvironmentProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),

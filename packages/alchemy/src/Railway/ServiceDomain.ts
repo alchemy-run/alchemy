@@ -1,10 +1,7 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type { DomainsResponseServiceDomainsItem } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { isRailwayTransient } from "./transient.ts";
 
 /**
  * A Railway-generated `*.up.railway.app` hostname on a Service. Created
@@ -93,12 +90,6 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
         },
       })
       .pipe(
-        RailwayRetry.none,
-        Effect.retry({
-          while: isRailwayTransient,
-          schedule: Schedule.spaced("15 seconds"),
-          times: 10,
-        }),
         Effect.catchTag("RailwayValidationError", (e) =>
           alreadyExists(e.message) ? Effect.void : Effect.fail(e),
         ),
@@ -121,24 +112,15 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
   const observedPort = current.targetPort ?? undefined;
   const desiredPort = input.targetPort;
   if (desiredPort !== undefined && desiredPort !== observedPort) {
-    yield* railway
-      .serviceDomainUpdate({
-        input: {
-          domain: current.domain,
-          environmentId: current.environmentId,
-          serviceDomainId: current.id,
-          serviceId: current.serviceId,
-          targetPort: desiredPort,
-        },
-      })
-      .pipe(
-        RailwayRetry.none,
-        Effect.retry({
-          while: isRailwayTransient,
-          schedule: Schedule.spaced("15 seconds"),
-          times: 10,
-        }),
-      );
+    yield* railway.serviceDomainUpdate({
+      input: {
+        domain: current.domain,
+        environmentId: current.environmentId,
+        serviceDomainId: current.id,
+        serviceId: current.serviceId,
+        targetPort: desiredPort,
+      },
+    });
     current =
       (yield* listServiceDomains(
         input.projectId,

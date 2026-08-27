@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   ProjectCreateResponse,
   ProjectResponse,
@@ -27,11 +26,9 @@ import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
   createProject,
   environmentIdOf as projectEnvironmentId,
-  listGraphql,
-  listOwnedCloud,
+  ownedProjects,
   workspaceIdOf as projectWorkspaceId,
 } from "./Project.ts";
-import { isRailwayTransient } from "./transient.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -505,12 +502,6 @@ const normalizeConfig = (config: unknown): unknown => {
   return { ...config, services };
 };
 
-const rateLimited = {
-  while: isRailwayTransient,
-  schedule: Schedule.spaced("31 seconds"),
-  times: 8 as const,
-};
-
 const waitForWorkflow = (workflowId: string, projectId: string) =>
   Effect.gen(function* () {
     const result = yield* railway.workflowStatus({ workflowId }).pipe(
@@ -698,35 +689,41 @@ export const TemplateProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const cloud = yield* listOwnedCloud();
-      const rows = yield* Effect.forEach(
-        cloud,
-        (project) =>
-          Effect.gen(function* () {
-            const source = yield* listGraphql(
-              sourceForProject(project.attrs.projectId),
-              undefined,
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const live = yield* railway
+            .project({ id: project.projectId })
+            .pipe(
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed(undefined),
+              ),
             );
-            if (source === undefined) return [] as Template["Attributes"][];
-            const live = {
-              id: project.attrs.projectId,
-              name: project.attrs.name,
-              workspaceId: project.attrs.workspaceId,
-              primaryEnvironmentId: project.attrs.environmentId,
-            };
-            return [
-              toAttrs({
-                template: source,
-                project: live,
-                environmentId: project.attrs.environmentId,
-                workspaceId: project.attrs.workspaceId,
-                serviceIds: project.services.map((service) => service.id),
-                workflowId: undefined,
-                ownsProject: false,
-              }),
-            ];
-          }),
-        { concurrency: 1 },
+          if (live === undefined || live.deletedAt != null) {
+            return [] as Template["Attributes"][];
+          }
+          const services = live.services.edges
+            .map((edge) => edge.node)
+            .filter((service) => service.deletedAt == null);
+          const stampedId = services.find(
+            (service) => service.templateId != null,
+          )?.templateId;
+          const source =
+            (yield* sourceForProject(project.projectId)) ??
+            (stampedId != null ? yield* getTemplateById(stampedId) : undefined);
+          if (source === undefined) return [] as Template["Attributes"][];
+          return [
+            toAttrs({
+              template: source,
+              project: live,
+              environmentId: project.environmentId,
+              workspaceId: project.workspaceId,
+              serviceIds: services.map((service) => service.id),
+              workflowId: undefined,
+              ownsProject: false,
+            }),
+          ];
+        }),
       );
       const seen = new Set<string>();
       const unique: Template["Attributes"][] = [];
@@ -813,17 +810,15 @@ export const TemplateProvider = () =>
         }
         const parsed = yield* parseConfig(rawConfig);
         const serializedConfig = normalizeConfig(parsed);
-        const deployed = yield* railway
-          .templateDeployV2({
-            input: {
-              templateId: marketplace.id,
-              serializedConfig,
-              projectId,
-              ...(environmentId.length > 0 ? { environmentId } : {}),
-              workspaceId,
-            },
-          })
-          .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+        const deployed = yield* railway.templateDeployV2({
+          input: {
+            templateId: marketplace.id,
+            serializedConfig,
+            projectId,
+            ...(environmentId.length > 0 ? { environmentId } : {}),
+            workspaceId,
+          },
+        });
         projectId = deployed.projectId || projectId;
         workflowId = deployed.workflowId ?? workflowId;
         if (
