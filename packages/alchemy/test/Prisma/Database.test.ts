@@ -373,9 +373,6 @@ describe("Prisma Database", () => {
           "createDatabase",
           "updateDatabase",
         ]);
-        // The Management API cannot create an explicitly named database with
-        // an attachment atomically, so the create body carries no branch and
-        // the PATCH in the same reconcile attaches the default branch.
         expect(calls[0]?.[1]).toMatchObject({ branchId: undefined });
         expect(calls[1]?.[1]).toMatchObject({
           input: { branchId: "branch-main" },

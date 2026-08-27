@@ -2067,10 +2067,6 @@ describe("Prisma resource providers", () => {
               branchGitName: undefined,
             },
           ],
-          // The explicitly named create cannot carry a branch attachment, so
-          // the same reconcile converges the fresh database onto the
-          // project's default branch via PATCH.
-          ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
           ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
           [
             "updateDatabase",
@@ -3471,10 +3467,6 @@ describe("Prisma resource providers", () => {
         expect(service.branchId).toBe("branch-main");
         expect(calls).toEqual([
           ["getDatabase", "database-1"],
-          [
-            "listBranches",
-            { projectId: "project-1", query: { gitName: "main", limit: 2 } },
-          ],
           [
             "listBranches",
             {

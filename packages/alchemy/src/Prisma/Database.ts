@@ -22,6 +22,7 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
+import { desiredBranchId } from "./Branches.ts";
 import type { Project } from "./Project.ts";
 import {
   hasCanonicalConnectionSecrets,
@@ -400,75 +401,8 @@ const desiredSourcesMatch = (
   right: DatabaseSourceInput | undefined,
 ) => deepEqual(normalizeDatabaseSource(left), normalizeDatabaseSource(right));
 
-const branchIdForGitName = (
-  client: PrismaManagementClient,
-  projectId: string,
-  gitName: string,
-) =>
-  client
-    .listBranches(projectId, { gitName, limit: 2 })
-    .pipe(
-      Effect.flatMap((branches) =>
-        branches.length > 1
-          ? Effect.fail(
-              new Error(
-                `Prisma project '${projectId}' has multiple branches named '${gitName}'; refusing to select one arbitrarily.`,
-              ),
-            )
-          : Effect.succeed(branches[0]?.id),
-      ),
-    );
-
-/**
- * The project's default branch id, or `undefined` when the project has none —
- * the branch omitted `branchId`/`branchGitName` props resolve to, mirroring
- * `Prisma.App`'s `desiredBranchId`.
- */
-const defaultBranchIdOf = Effect.fn(function* (
-  client: PrismaManagementClient,
-  projectId: string,
-) {
-  const branches = yield* client.listBranches(projectId, { limit: 100 });
-  const defaults = branches.filter((branch) => branch.isDefault);
-  if (defaults.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma returned multiple default branches for project '${projectId}'; refusing an ambiguous Database attachment.`,
-      ),
-    );
-  }
-  return defaults[0]?.id;
-});
-
-/**
- * The branch attachment reconcile writes: the explicit `branchId`, the
- * explicit `branchGitName`, or — when both are omitted — the project's
- * resolved default branch id. Never `branchId: null`: an unassigned database
- * is not representable as desired state, so this fails when the project has
- * no default branch instead of detaching, mirroring `Prisma.App`.
- */
-const resolvedBranchAttachment = Effect.fn(function* (
-  client: PrismaManagementClient,
-  projectId: string,
-  props: Pick<DatabaseProps, "branchId" | "branchGitName">,
-  databaseName: string,
-) {
-  if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
-    return { branchId: props.branchId, branchGitName: undefined };
-  }
-  if (props.branchGitName !== undefined) {
-    return { branchId: undefined, branchGitName: props.branchGitName };
-  }
-  const branchId = yield* defaultBranchIdOf(client, projectId);
-  if (branchId === undefined) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma project '${projectId}' has no default branch to attach database '${databaseName}'. Create or promote a default branch, or specify branchId/branchGitName.`,
-      ),
-    );
-  }
-  return { branchId, branchGitName: undefined };
-});
+const UNATTACHED_BRANCH_ERROR =
+  "Prisma.Database requires an attached branch because an unassigned database is not representable as desired state. Omit both fields to use the project default branch, or provide branchId/branchGitName.";
 
 const attrsFrom = (
   database: ApiDatabase,
@@ -491,30 +425,6 @@ const attrsFrom = (
   password: secrets.password,
 });
 
-const branchNeedsSync = Effect.fn(function* (
-  client: PrismaManagementClient,
-  projectId: string,
-  database: ApiDatabase,
-  props: DatabaseProps,
-) {
-  if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
-    return database.branchId !== props.branchId;
-  }
-  if (props.branchGitName === undefined) {
-    // Omitted branch props mean the project's default branch, mirroring
-    // Prisma.App: a pre-existing unassigned database converges onto the
-    // default branch, and an attached one is never detached.
-    const branchId = yield* defaultBranchIdOf(client, projectId);
-    return branchId === undefined || database.branchId !== branchId;
-  }
-  const branchId = yield* branchIdForGitName(
-    client,
-    projectId,
-    props.branchGitName,
-  );
-  return branchId === undefined || branchId !== database.branchId;
-});
-
 const validateDatabaseProps = (props: DatabaseProps) =>
   Effect.gen(function* () {
     if ((props as { isDefault?: boolean }).isDefault === true) {
@@ -530,11 +440,7 @@ const validateDatabaseProps = (props: DatabaseProps) =>
       );
     }
     if (props.branchId === null || props.branchGitName === null) {
-      return yield* Effect.fail(
-        new Error(
-          "Prisma.Database requires an attached branch because an unassigned database is not representable as desired state. Omit both fields to use the project default branch, or provide branchId/branchGitName.",
-        ),
-      );
+      return yield* Effect.fail(new Error(UNATTACHED_BRANCH_ERROR));
     }
   });
 
@@ -576,11 +482,7 @@ const ProviderLive = () =>
             (isResolved(news.branchId) && news.branchId === null) ||
             (isResolved(news.branchGitName) && news.branchGitName === null)
           ) {
-            return yield* Effect.fail(
-              new Error(
-                "Prisma.Database requires an attached branch because an unassigned database is not representable as desired state. Omit both fields to use the project default branch, or provide branchId/branchGitName.",
-              ),
-            );
+            return yield* Effect.fail(new Error(UNATTACHED_BRANCH_ERROR));
           }
           if (isPrismaDevId(output?.databaseId)) {
             return { action: "update" } as const;
@@ -653,39 +555,11 @@ const ProviderLive = () =>
             isResolved(news.branchGitName) &&
             news.branchGitName !== undefined
           ) {
-            if (output && newProjectId !== undefined) {
-              const desiredBranchId = yield* branchIdForGitName(
-                client,
-                newProjectId,
-                news.branchGitName,
-              );
-              branchMismatch =
-                desiredBranchId === undefined ||
-                desiredBranchId !== output.branchId;
-            } else {
-              branchMismatch = news.branchGitName !== olds.branchGitName;
-            }
-          } else if (
-            isResolved(news.branchId) &&
-            isResolved(news.branchGitName)
-          ) {
-            // Both omitted: the desired branch is the project's default
-            // branch, mirroring Prisma.App. An unassigned database converges
-            // onto it in place; a database already attached to it is left
-            // untouched (never detached).
-            const branchProjectId = newProjectId ?? oldProjectId;
-            if (output && branchProjectId !== undefined) {
-              const defaultBranchId = yield* defaultBranchIdOf(
-                client,
-                branchProjectId,
-              );
-              branchMismatch =
-                defaultBranchId === undefined ||
-                output.branchId !== defaultBranchId;
-            } else if (!output) {
-              branchMismatch =
-                olds.branchId !== undefined || olds.branchGitName !== undefined;
-            }
+            branchMismatch =
+              news.branchGitName !== (olds.branchGitName ?? null) ||
+              output?.branchId === null;
+          } else {
+            branchMismatch = output?.branchId === null;
           }
           if (desiredName !== observedName || branchMismatch) {
             return { action: "update" } as const;
@@ -771,6 +645,10 @@ const ProviderLive = () =>
 
           let secrets: PrismaSecretConnection = {};
           let recoverCreateSecrets = false;
+          let resolvedBranch:
+            | { resolved: true; id: string }
+            | { resolved: false }
+            | undefined;
           if (!database) {
             if (
               news.name !== undefined &&
@@ -782,16 +660,17 @@ const ProviderLive = () =>
                 ),
               );
             }
-            // A generated-name create is born attached: omitted branch props
-            // resolve to the project's default branch and the id rides the
-            // create body. An explicitly named create cannot carry an
-            // attachment (the refusal above), so it is created project-scoped
-            // and converges onto the default branch via the PATCH below in
-            // this same reconcile.
-            const attach =
-              news.name === undefined
-                ? yield* resolvedBranchAttachment(client, projectId, news, name)
-                : { branchId: undefined, branchGitName: undefined };
+            if (news.name === undefined) {
+              resolvedBranch = yield* desiredBranchId(client, projectId, news);
+              if (!resolvedBranch.resolved) {
+                return yield* Effect.fail(
+                  new Error(
+                    `Prisma project '${projectId}' has no default branch to attach database '${name}'. Create or promote a default branch, or specify branchId/branchGitName.`,
+                  ),
+                );
+              }
+            }
+            // The Management API cannot create a named database with a branch attachment, so named creates attach via PATCH below.
             const result = yield* client
               .createDatabase({
                 projectId,
@@ -799,8 +678,11 @@ const ProviderLive = () =>
                 region,
                 isDefault: news.isDefault ?? false,
                 source: news.source,
-                branchId: attach.branchId,
-                branchGitName: attach.branchGitName,
+                branchId:
+                  news.name === undefined
+                    ? (resolvedBranch as { resolved: true; id: string }).id
+                    : undefined,
+                branchGitName: undefined,
               })
               .pipe(
                 Effect.map((database) => ({
@@ -818,10 +700,6 @@ const ProviderLive = () =>
                         Effect.map((database) => ({
                           database,
                           secrets: {},
-                          // The generated physical name is owned by this
-                          // resource instance. A conflict after the POST can
-                          // be a lost successful response, so recover the
-                          // write-only default credentials below.
                           recoverSecrets: true,
                         })),
                       )
@@ -835,6 +713,51 @@ const ProviderLive = () =>
             database = result.database;
             secrets = result.secrets;
             recoverCreateSecrets = result.recoverSecrets;
+          }
+
+          // Determine whether a PATCH is needed and what branch ID to use.
+          // For branchId: compare directly (no API call).
+          // For branchGitName: skip the API call unless the database is unattached
+          //   or the gitName changed from olds — the caller's branchId is already
+          //   authoritative when neither condition is true.
+          // For both omitted: resolve the default branch via desiredBranchId (one
+          //   call, reusing resolvedBranch from the create path when available).
+          let patchBranchId: string | undefined;
+          let needsPatch: boolean;
+          if (news.branchId !== undefined && !isPrismaDevId(news.branchId)) {
+            patchBranchId = news.branchId;
+            needsPatch =
+              database.name !== name || database.branchId !== news.branchId;
+          } else if (news.branchGitName !== undefined) {
+            const gitNameChanged =
+              olds !== undefined && olds.branchGitName !== news.branchGitName;
+            const unattached = database.branchId === null;
+            needsPatch = database.name !== name || unattached || gitNameChanged;
+            if (needsPatch) {
+              const branch = yield* desiredBranchId(client, projectId, news);
+              if (!branch.resolved) {
+                return yield* Effect.fail(
+                  new Error(
+                    `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach database '${name}'.`,
+                  ),
+                );
+              }
+              patchBranchId = branch.id;
+            }
+          } else {
+            const branch =
+              resolvedBranch ??
+              (yield* desiredBranchId(client, projectId, news));
+            if (!branch.resolved) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma project '${projectId}' has no default branch to attach database '${name}'. Create or promote a default branch, or specify branchId/branchGitName.`,
+                ),
+              );
+            }
+            patchBranchId = branch.id;
+            needsPatch =
+              database.name !== name || database.branchId !== branch.id;
           }
 
           if (database.project.id !== projectId) {
@@ -874,24 +797,11 @@ const ProviderLive = () =>
           const ownedGeneratedIdentity =
             news.name === undefined && database.name === name;
 
-          const desired = { ...news, name };
-          const needsPatch =
-            database.name !== name ||
-            (yield* branchNeedsSync(client, projectId, database, desired));
           if (needsPatch) {
-            // Omitted branch props resolve to the project's default branch —
-            // never `branchId: null`. A pre-existing unassigned database is
-            // attached in place; an attached database is never detached.
-            const updateAttachment = yield* resolvedBranchAttachment(
-              client,
-              projectId,
-              desired,
-              name,
-            );
             database = yield* client.updateDatabase(database.id, {
               name,
-              branchId: updateAttachment.branchId,
-              branchGitName: updateAttachment.branchGitName,
+              branchId: patchBranchId,
+              branchGitName: undefined,
             });
           }
 

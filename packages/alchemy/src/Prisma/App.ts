@@ -21,6 +21,7 @@ import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { desiredBranchId } from "./Branches.ts";
 import {
   concreteIdsChanged,
   isInputObject,
@@ -124,45 +125,6 @@ export interface App extends Resource<
  * @resource
  */
 export const App = Resource<App>("Prisma.App");
-
-const desiredBranchId = Effect.fn(function* (
-  client: PrismaManagementClient,
-  projectId: string,
-  props: Pick<AppProps, "branchId" | "branchGitName">,
-) {
-  if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
-    return { resolved: true as const, id: props.branchId };
-  }
-  if (props.branchGitName !== undefined) {
-    const branches = yield* client.listBranches(projectId, {
-      gitName: props.branchGitName,
-      limit: 100,
-    });
-    if (branches.length > 1) {
-      return yield* Effect.fail(
-        new Error(
-          `Prisma returned multiple branches named '${props.branchGitName}' in project '${projectId}'; refusing an ambiguous App match.`,
-        ),
-      );
-    }
-    return branches[0]
-      ? { resolved: true as const, id: branches[0].id }
-      : { resolved: false as const };
-  }
-  const branches = yield* client.listBranches(projectId, { limit: 100 });
-  const defaults = branches.filter((branch) => branch.isDefault);
-  if (defaults.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma returned multiple default branches for project '${projectId}'; refusing an ambiguous App match.`,
-      ),
-    );
-  }
-  const defaultBranch = defaults[0];
-  return defaultBranch
-    ? { resolved: true as const, id: defaultBranch.id }
-    : { resolved: false as const };
-});
 
 const createDisplayName = (id: string, displayName: string | undefined) =>
   displayName === undefined
