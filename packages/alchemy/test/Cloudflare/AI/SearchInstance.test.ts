@@ -4,13 +4,34 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+const textCustomMetadata: Cloudflare.AI.CustomMetadata = [
+  { fieldName: "title", dataType: "text" },
+];
+
+const customMetadata: Cloudflare.AI.CustomMetadata = [
+  ...textCustomMetadata,
+  { fieldName: "priority", dataType: "number" },
+  { fieldName: "published", dataType: "boolean" },
+  { fieldName: "published_at", dataType: "datetime" },
+];
+
+const invalidCustomMetadata: Cloudflare.AI.CustomMetadata = [
+  {
+    fieldName: "route",
+    // @ts-expect-error Cloudflare calls textual custom metadata "text", not "string".
+    dataType: "string",
+  },
+];
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -74,8 +95,12 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Create — engine-generated instance id, default settings.
-      const initial = yield* stack.deploy(program());
+      // Create with Cloudflare's textual metadata type. The live readback
+      // proves the camelCase resource input reached the snake_case REST body
+      // as `data_type: "text"` and was accepted by Cloudflare.
+      const initial = yield* stack.deploy(
+        program({ customMetadata: textCustomMetadata }),
+      );
 
       expect(initial.instance.instanceId).toBeTruthy();
       expect(initial.instance.accountId).toEqual(accountId);
@@ -86,14 +111,17 @@ test.provider(
       expect(live.id).toEqual(initial.instance.instanceId);
       expect(live.source).toEqual(initial.bucket.bucketName);
       expect(live.type).toEqual("r2");
+      expect(live.customMetadata).toEqual(textCustomMetadata);
 
-      // Update mutable props in place — same instance id.
+      // Update mutable props in place — same instance id. Exercise every
+      // remaining documented metadata type through the real provider.
       const updated = yield* stack.deploy(
         program({
           aiSearchModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
           maxNumResults: 20,
           chunkSize: 512,
           chunkOverlap: 15,
+          customMetadata,
         }),
       );
 
@@ -127,6 +155,7 @@ test.provider(
       expect(liveUpdated.maxNumResults).toEqual(20);
       expect(liveUpdated.chunkSize).toEqual(512);
       expect(liveUpdated.chunkOverlap).toEqual(15);
+      expect(liveUpdated.customMetadata).toEqual(customMetadata);
 
       // Redeploying identical props is a no-op (still the same instance).
       const noop = yield* stack.deploy(
@@ -135,6 +164,7 @@ test.provider(
           maxNumResults: 20,
           chunkSize: 512,
           chunkOverlap: 15,
+          customMetadata,
         }),
       );
       expect(noop.instance.instanceId).toEqual(initial.instance.instanceId);
@@ -147,6 +177,42 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 240_000 },
+);
+
+test.provider(
+  'rejects custom metadata type "string" before creating an instance',
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const instanceId = `invalid-metadata-${crypto.randomUUID().slice(0, 8)}`;
+
+      yield* stack.destroy();
+
+      const exit = yield* Effect.exit(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AI.SearchInstance("InvalidSearch", {
+              instanceId,
+              source: "validation-must-run-before-source-lookup",
+              customMetadata: invalidCustomMetadata,
+            });
+          }),
+        ),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(String(Cause.squash(exit.cause))).toContain(
+          'customMetadata[0].dataType must be one of "text", "number", "boolean", or "datetime"',
+        );
+      }
+
+      // A real Cloudflare read verifies the failed deployment never created
+      // the requested instance.
+      yield* expectGone(accountId, instanceId);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider(
