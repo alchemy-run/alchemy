@@ -1505,8 +1505,9 @@ interface EngineSession {
   busy?: { readonly attempts: number; readonly since: number };
   settledOutcome?: { readonly outcome: unknown };
   /** The park race for a resident fiber; late verbs read
-   *  `settledOutcome`. */
-  readonly settledSignal: Deferred.Deferred<unknown>;
+   *  `settledOutcome`. Replaced by `resume` (a Deferred is one-shot,
+   *  so a reopened session needs a fresh signal to park on). */
+  settledSignal: Deferred.Deferred<unknown>;
   turn?: Turn | TurnFn;
   /** Spawn workers sample a CONSTANT tick — no charter, no turn. */
   fixedTick?: TickResult;
@@ -1567,6 +1568,15 @@ export interface SessionEngine {
     outcome: unknown,
     options?: { readonly admit?: boolean },
   ) => Effect.Effect<void>;
+  /** REOPEN a settled session — the operator's undo for `stop`. The
+   *  settled tombstone is cleared (RAM + persisted meta) and a fresh
+   *  settled signal minted; the next input opens a round exactly as
+   *  on a parked session. Resolves `true` when a tombstone was
+   *  actually cleared — a live or never-seen key is a no-op `false`
+   *  (the latter admits, mirroring `settle`'s `admit` semantics).
+   *  Children settled by the cascade stay settled — resume them
+   *  explicitly. */
+  readonly resume: (key: string) => Effect.Effect<boolean>;
   /** Settle every RAM-resident session (process shutdown). */
   readonly interrupt: Effect.Effect<void>;
   /** Drop one session's RAM entry (after `settle`) so the key can be
@@ -2333,6 +2343,25 @@ export const makeSessionEngine = (
       yield* settleChildren(s);
     });
 
+  const resume: SessionEngine["resume"] = (key) =>
+    Effect.gen(function* () {
+      // admit-or-rehydrate: a hibernated placement's RAM shell is
+      // gone but the settled tombstone lives in meta — ensureSession
+      // reads it back before we clear it
+      const s = yield* ensureSession(key);
+      if (s.settledOutcome === undefined) return false;
+      s.settledOutcome = undefined;
+      // a settled session's busy died with it; a resumed one starts
+      // parked, not owing a round
+      s.busy = undefined;
+      // the old signal already fired (one-shot) — resident placements
+      // park their fresh fiber on this new one
+      s.settledSignal = yield* Deferred.make<unknown>();
+      yield* putMeta(s);
+      yield* observe(s, { type: "resumed" });
+      return true;
+    });
+
   const send: SessionEngine["send"] = (input, sendOptions) =>
     Effect.gen(function* () {
       const s = yield* ensureSession(sendOptions?.key, sendOptions?.parent);
@@ -2436,6 +2465,7 @@ export const makeSessionEngine = (
     dispatch,
     steer,
     settle,
+    resume,
     interrupt: Effect.suspend(() =>
       Effect.forEach(
         [...sessions.keys()],

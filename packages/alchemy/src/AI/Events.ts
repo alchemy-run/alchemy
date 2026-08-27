@@ -194,6 +194,14 @@ export type SessionObservation = ObservationEnvelope &
     | { readonly type: "settled" }
     | {
         /**
+         * A settled session was REOPENED by the operator
+         * (`Sessions.resume`) — the tombstone cleared; the next input
+         * opens a round as on a parked session.
+         */
+        readonly type: "resumed";
+      }
+    | {
+        /**
          * The current round FAILED. `fatal` distinguishes the two
          * §11b lanes this observation covers: a non-retryable typed
          * failure abandoned on the spot (`fatal: true`) vs a defect

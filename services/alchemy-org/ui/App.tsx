@@ -25,6 +25,17 @@ import {
 import { RefHoverCard } from "@/components/ref-hover-card";
 import { GhosttyTerminal } from "@/components/terminal";
 import { hasToolCard, ToolCard } from "@/components/tool-card";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -41,6 +52,7 @@ import {
   GitMerge,
   GitPullRequestArrow,
   MessageSquare,
+  Play,
   Square,
   Trash2,
   Zap,
@@ -106,19 +118,20 @@ const splitThreadKey = (
     : { session: key.slice(0, at), thread: key.slice(at + 2) };
 };
 
-const sessionOfId = (id: string): string | undefined =>
-  id.startsWith("Engineer:")
+const sessionOfId = (id: string | undefined): string | undefined =>
+  id !== undefined && id.startsWith("Engineer:")
     ? splitThreadKey(id.slice("Engineer:".length)).session
     : undefined;
 
-/** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
-const DEFAULT_THREAD = "Engineer:main";
-
-const threadFromHash = (): string => {
+/** The hash names a thread, or nothing — there is NO default session:
+ *  merely mounting a chat view attaches a socket, which ADMITS the
+ *  session server-side, so a default here would resurrect itself on
+ *  every load (and after every delete). */
+const threadFromHash = (): string | undefined => {
   const raw = decodeURIComponent(window.location.hash.slice(1));
   return raw.startsWith("Engineer:") || raw.startsWith("ReviewBot:")
     ? raw
-    : DEFAULT_THREAD;
+    : undefined;
 };
 
 const ISSUE_STATE: Record<BoardPullRequest["state"], string> = {
@@ -253,25 +266,28 @@ export const App = () => {
   const [threads, setThreads] = useState<BoardThread[]>([]);
   const [board, setBoard] = useState<Board>({ repo: "", prs: [] });
   const [repos, setRepos] = useState<RepoInfo[]>([]);
-  const [activeId, setActiveId] = useState<string>(threadFromHash);
+  const [activeId, setActiveId] = useState<string | undefined>(threadFromHash);
   // visited threads stay MOUNTED (visibility-hidden) so switching
   // back preserves scroll position and the streaming tail
-  const [visited, setVisited] = useState<string[]>(() => [threadFromHash()]);
+  const [visited, setVisited] = useState<string[]>(() => {
+    const id = threadFromHash();
+    return id === undefined ? [] : [id];
+  });
   // PRs whose review the user requested — auto-select when the
   // session lands on the board stream
   const [requested, setRequested] = useState<Set<number>>(() => new Set());
   // the two ACTIVITIES (Code | Review) each remember their last
   // selection, so flipping tabs restores where you were
   const [activity, setActivity] = useState<"code" | "review">(() =>
-    threadFromHash().startsWith("ReviewBot:") ? "review" : "code",
+    threadFromHash()?.startsWith("ReviewBot:") ? "review" : "code",
   );
-  const [codeId, setCodeId] = useState<string>(() => {
+  const [codeId, setCodeId] = useState<string | undefined>(() => {
     const id = threadFromHash();
-    return id.startsWith("Engineer:") ? id : DEFAULT_THREAD;
+    return id?.startsWith("Engineer:") ? id : undefined;
   });
   const [reviewId, setReviewId] = useState<string | undefined>(() => {
     const id = threadFromHash();
-    return id.startsWith("ReviewBot:") ? id : undefined;
+    return id?.startsWith("ReviewBot:") ? id : undefined;
   });
   // per-session TERMINAL tab selection + lazy mounting (a terminal
   // mounts on first visit and stays mounted, like chat views)
@@ -280,9 +296,13 @@ export const App = () => {
 
   /** Route to a thread id — updates the hash, the activity, and the
    *  per-activity memory. Selecting a thread deselects the session's
-   *  terminal tab. */
-  const apply = (id: string) => {
+   *  terminal tab; `undefined` clears the selection (empty state). */
+  const apply = (id: string | undefined) => {
     setActiveId(id);
+    if (id === undefined) {
+      setCodeId(undefined);
+      return;
+    }
     setVisited((current) =>
       current.includes(id) ? current : [...current, id],
     );
@@ -302,6 +322,12 @@ export const App = () => {
   const open = (id: string) => {
     window.location.hash = encodeURIComponent(id);
     apply(id);
+  };
+
+  /** Clear the code selection (after deleting the current session). */
+  const closeCode = () => {
+    window.location.hash = "";
+    apply(undefined);
   };
 
   /** A PR with no review session: clicking REQUESTS its review — the
@@ -439,13 +465,24 @@ export const App = () => {
   const randomSuffix = () =>
     `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
-  /** A new SESSION under a connected repo — one sandbox MicroVM. */
-  const newSession = (repo: string | undefined) => {
-    const name = window
-      .prompt("Session name", `s-${randomSuffix()}`)
-      ?.trim()
-      .replace(/\s+/g, "-");
-    if (!name) return;
+  /** The new-session prompt (dialog subject): the target repo and the
+   *  editable name, pre-filled with a generated one. */
+  const [newSessionPrompt, setNewSessionPrompt] = useState<
+    { repo: string | undefined; name: string } | undefined
+  >(undefined);
+
+  /** A new SESSION under a connected repo — one sandbox MicroVM. The
+   *  dialog opens with a generated name selected: type to replace it,
+   *  or just press Enter to take it. */
+  const newSession = (repo: string | undefined) =>
+    setNewSessionPrompt({ repo, name: `s-${randomSuffix()}` });
+
+  const commitNewSession = () => {
+    if (newSessionPrompt === undefined) return;
+    const name = newSessionPrompt.name.trim().replace(/\s+/g, "-");
+    if (name.length === 0) return;
+    const { repo } = newSessionPrompt;
+    setNewSessionPrompt(undefined);
     open(`Engineer:${repo === undefined ? name : `${repo}/${name}`}`);
   };
 
@@ -483,31 +520,61 @@ export const App = () => {
     }
   };
 
-  /** The eraser: stop + purge every thread of the session. Its name
-   *  is fresh after — reusable by a new session. */
-  const deleteSession = (group: SessionGroup) => {
-    if (
-      !window.confirm(
-        `Delete session '${group.label}' (${group.threads.length} thread${
-          group.threads.length === 1 ? "" : "s"
-        }) and its transcripts?`,
-      )
-    ) {
-      return;
+  /** The undo for stop: reopen a settled thread in place — the
+   *  transcript continues. Optimistic; the poll corrects. */
+  const resumeThread = (id: string) => {
+    setThreads((current) =>
+      current.map((thread) =>
+        thread.id === id ? { ...thread, status: "idle" } : thread,
+      ),
+    );
+    void fetch(`/api/chats/${encodeURIComponent(id)}/resume`, {
+      method: "POST",
+    }).catch(() => {});
+  };
+
+  /** Resume every settled thread of a session. */
+  const resumeSession = (group: SessionGroup) => {
+    for (const thread of group.threads) {
+      if (thread.status === "settled") {
+        resumeThread(thread.id);
+      }
     }
+  };
+
+  /** The session awaiting delete confirmation (the dialog's subject). */
+  const [confirmDelete, setConfirmDelete] = useState<SessionGroup | undefined>(
+    undefined,
+  );
+  /** Sessions mid-delete: the row stays listed with a spinner until
+   *  the server confirms — deleting settles the session, purges its
+   *  transcripts, and terminates its machine, which takes seconds. */
+  const [deleting, setDeleting] = useState<Set<string>>(() => new Set());
+
+  /** The eraser, once confirmed: stop + purge every thread of the
+   *  session and terminate its machine. The row unlists only when the
+   *  server is DONE — no optimistic vanish that snaps back. */
+  const deleteSession = async (group: SessionGroup) => {
+    setConfirmDelete(undefined);
+    setDeleting((current) => new Set(current).add(group.session));
     const ids = new Set(group.threads.map((thread) => thread.id));
-    setThreads((current) => current.filter((thread) => !ids.has(thread.id)));
-    // unmount its chat views (closes the sockets client-side too)
+    // navigate away + unmount its views first (closes sockets client-side)
     setVisited((current) => current.filter((id) => !ids.has(id)));
     setTerminalVisited((current) =>
       current.filter((session) => session !== group.session),
     );
-    for (const id of ids) {
-      void fetch(`/api/chats/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      }).catch(() => {});
-    }
-    if (sessionOfId(codeId) === group.session) open(DEFAULT_THREAD);
+    if (sessionOfId(codeId) === group.session) closeCode();
+    await Promise.allSettled(
+      [...ids].map((id) =>
+        fetch(`/api/chats/${encodeURIComponent(id)}`, { method: "DELETE" }),
+      ),
+    );
+    setThreads((current) => current.filter((thread) => !ids.has(thread.id)));
+    setDeleting((current) => {
+      const next = new Set(current);
+      next.delete(group.session);
+      return next;
+    });
   };
 
   // the active/code thread is listed even before the board knows it
@@ -516,7 +583,7 @@ export const App = () => {
   const list = useMemo(() => {
     const byId = new Map(threads.map((thread) => [thread.id, thread]));
     for (const id of [activeId, codeId]) {
-      if (!byId.has(id) && id.startsWith("Engineer:")) {
+      if (id !== undefined && !byId.has(id) && id.startsWith("Engineer:")) {
         byId.set(id, {
           id,
           term: "Engineer",
@@ -566,6 +633,117 @@ export const App = () => {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
+      {/* NEW SESSION — a generated name, pre-selected: type to replace,
+          Enter to take it. The commonest action gets the fastest path. */}
+      <Dialog
+        open={newSessionPrompt !== undefined}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setNewSessionPrompt(undefined);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="max-w-sm">
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitNewSession();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>New session</DialogTitle>
+              <DialogDescription>
+                {newSessionPrompt?.repo !== undefined ? (
+                  <>
+                    A machine of its own under{" "}
+                    <span className="font-mono">{newSessionPrompt.repo}</span>{" "}
+                    — threads and terminal share it.
+                  </>
+                ) : (
+                  "A machine of its own — threads and terminal share it."
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              autoFocus
+              value={newSessionPrompt?.name ?? ""}
+              onChange={(event) =>
+                setNewSessionPrompt((current) =>
+                  current === undefined
+                    ? current
+                    : { ...current, name: event.target.value },
+                )
+              }
+              onFocus={(event) => event.currentTarget.select()}
+              spellCheck={false}
+              autoComplete="off"
+              className="font-mono text-sm"
+              aria-label="Session name"
+            />
+            <DialogFooter showCloseButton={false}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setNewSessionPrompt(undefined)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={(newSessionPrompt?.name.trim() ?? "") === ""}
+              >
+                Create session
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {/* DELETE CONFIRMATION — the eraser is irreversible (transcripts +
+          machine), so it asks first; the row then spins until the server
+          confirms. */}
+      <Dialog
+        open={confirmDelete !== undefined}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setConfirmDelete(undefined);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete session</DialogTitle>
+            <DialogDescription>
+              {confirmDelete !== undefined && (
+                <>
+                  <span className="font-mono text-foreground">
+                    {confirmDelete.label}
+                  </span>{" "}
+                  — {confirmDelete.threads.length} thread
+                  {confirmDelete.threads.length === 1 ? "" : "s"}, its
+                  transcripts, and its machine will be permanently deleted.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton={false}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDelete(undefined)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirmDelete !== undefined) void deleteSession(confirmDelete);
+              }}
+            >
+              <Trash2 /> Delete session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <aside className="flex w-72 shrink-0 flex-col border-r border-border">
         {/* THE ACTIVITIES: Code (sessions) | Review (pull requests) */}
         <div className="flex border-b border-border">
@@ -616,57 +794,81 @@ export const App = () => {
                 {bucket.groups.map((group) => (
                   <div
                     key={group.session}
-                    onClick={() =>
+                    onClick={() => {
+                      // a session mid-delete is not navigable
+                      if (deleting.has(group.session)) return;
                       open(
                         [...group.threads].sort(
                           (a, b) => b.updatedAt - a.updatedAt,
                         )[0]!.id,
-                      )
-                    }
+                      );
+                    }}
                     className={cn(
                       "group flex w-full cursor-pointer flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
                       group.session === currentSession && "bg-accent",
                     )}
                   >
                     <span className="flex items-center gap-1.5">
-                      <span
-                        className={cn(
-                          "inline-block size-1.5 shrink-0 rounded-full",
-                          statusDot[group.status] ?? statusDot.idle,
-                        )}
-                      />
+                      {deleting.has(group.session) ? (
+                        <Spinner className="size-3 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <span
+                          className={cn(
+                            "inline-block size-1.5 shrink-0 rounded-full",
+                            statusDot[group.status] ?? statusDot.idle,
+                          )}
+                        />
+                      )}
                       <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
                         {group.label}
                       </span>
-                      {(group.status === "running" ||
-                        group.status === "idle") && (
-                        <button
-                          type="button"
-                          title="Stop session (terminal)"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            stopSession(group);
-                          }}
-                          className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
-                        >
-                          <Square className="size-3" />
-                        </button>
+                      {!deleting.has(group.session) && (
+                        <>
+                          {(group.status === "running" ||
+                            group.status === "idle") && (
+                            <button
+                              type="button"
+                              title="Stop session"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                stopSession(group);
+                              }}
+                              className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
+                            >
+                              <Square className="size-3" />
+                            </button>
+                          )}
+                          {group.status === "settled" && (
+                            <button
+                              type="button"
+                              title="Resume session"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                resumeSession(group);
+                              }}
+                              className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
+                            >
+                              <Play className="size-3" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            title="Delete session"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setConfirmDelete(group);
+                            }}
+                            className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
+                          >
+                            <Trash2 className="size-3" />
+                          </button>
+                        </>
                       )}
-                      <button
-                        type="button"
-                        title="Delete session"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteSession(group);
-                        }}
-                        className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
                     </span>
                     <span className="flex items-center gap-1.5 pl-3 font-mono text-[10px] text-muted-foreground">
                       {group.threads.length} thread
-                      {group.threads.length === 1 ? "" : "s"} · {group.status}
+                      {group.threads.length === 1 ? "" : "s"} ·{" "}
+                      {deleting.has(group.session) ? "deleting…" : group.status}
                       <span className="ml-auto">
                         <AtTooltip at={group.updatedAt}>
                           <span className="cursor-default">
@@ -802,6 +1004,22 @@ export const App = () => {
             </div>
           )}
           <div className="relative min-h-0 flex-1">
+            {codeId === undefined && !terminalActive && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <span className="font-mono text-xs text-muted-foreground">
+                  no session selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    newSession(repos.find((repo) => repo.sessions)?.name)
+                  }
+                  className="rounded border border-border px-3 py-1 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  + new session
+                </button>
+              </div>
+            )}
             {visited
               .filter((id) => id.startsWith("Engineer:"))
               .map((id) => {

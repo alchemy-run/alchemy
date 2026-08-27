@@ -124,10 +124,22 @@ export const emulateWebhook = (
       }
     }).pipe(
       Effect.catch((error) =>
-        Effect.logWarning(
-          `GitHub.Webhook (dev) poll of ${config.owner}/${config.repository} failed`,
-          error,
-        ),
+        Effect.gen(function* () {
+          yield* Effect.logWarning(
+            `GitHub.Webhook (dev) poll of ${config.owner}/${config.repository} failed`,
+            error,
+          );
+          // A RATE-LIMITED poll must not keep hammering: GitHub's
+          // secondary limits clear on the order of a minute, and the
+          // spaced schedule measures from COMPLETION — holding this
+          // tick stretches the loop to ~70s until the window resets.
+          if (/rate limit/i.test(String(error))) {
+            yield* Effect.logWarning(
+              `GitHub.Webhook (dev): rate limited — backing off for 60 seconds`,
+            );
+            yield* Effect.sleep("60 seconds");
+          }
+        }),
       ),
     );
 

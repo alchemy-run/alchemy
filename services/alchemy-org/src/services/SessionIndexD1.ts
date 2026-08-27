@@ -39,22 +39,37 @@ export const SessionIndexD1 = Layer.effect(
         Effect.gen(function* () {
           yield* ensured;
           const id = AI.sessionId(observation.term, observation.key);
-          yield* inWorker(
-            db
-              .prepare(
-                `INSERT INTO session_index (id, term, key, status, ticks, created_at, updated_at)
-                 VALUES (?, ?, ?, 'running', 0, ?, ?)
-                 ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at`,
-              )
-              .bind(
-                id,
-                observation.term,
-                observation.key,
-                observation.at,
-                observation.at,
-              )
-              .run(),
-          );
+          // Only ADMISSION creates a row; every other observation
+          // updates in place (a no-op when the row is gone). An
+          // unconditional upsert here resurrects deleted sessions:
+          // a remove's own trailing observations (the settle inside
+          // destroy) raced the row's deletion and re-inserted it —
+          // the "deleted session pops back on the board" bug.
+          if (observation.type === "admitted") {
+            yield* inWorker(
+              db
+                .prepare(
+                  `INSERT INTO session_index (id, term, key, status, ticks, created_at, updated_at)
+                   VALUES (?, ?, ?, 'running', 0, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at`,
+                )
+                .bind(
+                  id,
+                  observation.term,
+                  observation.key,
+                  observation.at,
+                  observation.at,
+                )
+                .run(),
+            );
+          } else {
+            yield* inWorker(
+              db
+                .prepare("UPDATE session_index SET updated_at = ? WHERE id = ?")
+                .bind(observation.at, id)
+                .run(),
+            );
+          }
           switch (observation.type) {
             case "admitted":
               if (observation.parent !== undefined) {
@@ -108,6 +123,17 @@ export const SessionIndexD1 = Layer.effect(
                 db
                   .prepare(
                     "UPDATE session_index SET status = 'settled' WHERE id = ?",
+                  )
+                  .bind(id)
+                  .run(),
+              );
+              return;
+            // reopened by the operator: parked until the next input
+            case "resumed":
+              yield* inWorker(
+                db
+                  .prepare(
+                    "UPDATE session_index SET status = 'idle' WHERE id = ?",
                   )
                   .bind(id)
                   .run(),

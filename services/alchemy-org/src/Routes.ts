@@ -88,18 +88,25 @@ export const routes = Effect.gen(function* () {
   const identity = yield* GitHub.resolveRepository(testAlchemy);
   const repoName = `${identity.owner}/${identity.repository}`;
 
+  // GitHub's PR list rides ONE process-wide TTL cache: the board SSE
+  // stream ticks once per second PER CLIENT, and every tick hitting
+  // GitHub live blew through the secondary rate limit (403 storms)
+  // with a handful of open tabs. Session rows stay tick-fresh — only
+  // the GitHub half is capped, at one call per window.
+  const openPullsCached = yield* Effect.cachedWithTTL(
+    listPullRequests({ state: "open" }).pipe(
+      Effect.map((list) =>
+        list.map((pull) => ({ number: pull.number, title: pull.title })),
+      ),
+      // GitHub down ≠ board down: states degrade to "unknown"
+      Effect.catch(() => Effect.succeed(undefined)),
+    ),
+    "15 seconds",
+  );
+
   const readBoard = Effect.gen(function* () {
     const [summaries, openPrs] = yield* Effect.all(
-      [
-        sessions.list(),
-        listPullRequests({ state: "open" }).pipe(
-          Effect.map((list) =>
-            list.map((pull) => ({ number: pull.number, title: pull.title })),
-          ),
-          // GitHub down ≠ board down: states degrade to "unknown"
-          Effect.catch(() => Effect.succeed(undefined)),
-        ),
-      ] as const,
+      [sessions.list(), openPullsCached] as const,
       { concurrency: 2 },
     );
     return buildBoard(repoName, summaries, openPrs);
@@ -284,6 +291,22 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /** The operator's undo for stop: reopen a settled session in place —
+   *  the transcript continues where it left off. Idempotent. */
+  const resumeSession = HttpRouter.add(
+    "POST",
+    "/api/chats/:id/resume",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const { term, key } = parseSessionId(id);
+      yield* sessions
+        .resume(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ resumed: id });
+    }),
+  );
+
   /** The operator's eraser: stop the session, purge its transcript,
    *  drop it from the directory. Idempotent. */
   const removeSession = HttpRouter.add(
@@ -414,6 +437,7 @@ export const routes = Effect.gen(function* () {
     sessionMessages,
     sessionLog,
     stopSession,
+    resumeSession,
     removeSession,
     requestReview,
     approvalsPending,

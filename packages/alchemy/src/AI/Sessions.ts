@@ -58,6 +58,17 @@ export class Sessions extends Context.Service<
       key: string,
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
+     * RESUME a stopped session — the operator's undo for `stop`: the
+     * settled tombstone is cleared and the session accepts input
+     * again (its machine, if suspended, wakes on the next call).
+     * Idempotent on a live or never-seen key. Children settled by the
+     * stop's cascade stay settled.
+     */
+    readonly resume: (
+      term: string,
+      key: string,
+    ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
      * DELETE one session — stop it, then erase it: the transcript
      * (its `ThreadStorage` rows), its clock, and its index row. After
      * `remove` the session no longer lists and its history is gone.

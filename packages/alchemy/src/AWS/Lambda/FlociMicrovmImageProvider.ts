@@ -35,6 +35,7 @@
  * outside-context Dockerfile).
  */
 
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Artifacts from "../../Artifacts.ts";
@@ -91,6 +92,69 @@ const rewriteBaseImage = (dockerfile: string): string =>
       return `FROM ${LOCAL_MICROVM_BASE_IMAGE}${suffix}`;
     })
     .join("\n");
+
+/** MicroVM states that still hold a container in the local emulator. */
+const ACTIVE_STATES = new Set<string>([
+  "PENDING",
+  "RUNNING",
+  "SUSPENDING",
+  "SUSPENDED",
+]);
+
+/**
+ * Terminate ORPHANED MicroVMs in the local emulator — VMs whose image no
+ * longer EXISTS. Dev state loss (a run killed mid-create, a cleared state
+ * store) re-creates the image resource under a fresh physical name and
+ * orphans the previous image's VMs: recycle and delete are image-scoped,
+ * so nothing ever lists the old image's machines again and they
+ * accumulate as zombie containers across reloads. Swept once per watch
+ * start (every `alchemy dev` boot). VMs of images that still exist —
+ * this resource's or any other stack's — are never touched.
+ */
+const sweepOrphanMicrovms = Effect.fn(function* (
+  id: string,
+  currentImageArn: string,
+) {
+  const all = yield* microvms.listMicrovms.items({}).pipe(Stream.runCollect);
+  const foreign = Array.from(all).filter(
+    (m) => m.imageArn !== currentImageArn && ACTIVE_STATES.has(m.state),
+  );
+  if (foreign.length === 0) return;
+  const byImage = new Map<string, Array<microvms.MicrovmItem>>();
+  for (const m of foreign) {
+    byImage.set(m.imageArn, [...(byImage.get(m.imageArn) ?? []), m]);
+  }
+  for (const [imageArn, vms] of byImage) {
+    const exists = yield* microvms
+      .getMicrovmImage({ imageIdentifier: imageArn })
+      .pipe(
+        Effect.as(true),
+        Effect.catchTag("ResourceNotFoundException", () =>
+          Effect.succeed(false),
+        ),
+      );
+    if (exists) continue;
+    yield* Effect.logInfo(
+      `[alchemy dev] ${id}: sweeping ${vms.length} orphaned microvm(s) of deleted image ${imageArn}`,
+    );
+    yield* Effect.forEach(
+      vms,
+      (m) =>
+        microvms.terminateMicrovm({ microvmIdentifier: m.microvmId }).pipe(
+          // already gone or mid-transition — either way it converges
+          Effect.catchTag(
+            [
+              "ResourceNotFoundException",
+              "ConflictException",
+              "ValidationException",
+            ],
+            () => Effect.void,
+          ),
+        ),
+      { concurrency: 5, discard: true },
+    );
+  }
+});
 
 /**
  * A dev-terminal session for `docker.image.build`: BuildKit's progress
@@ -286,6 +350,16 @@ export const FlociMicrovmImageProvider = () =>
       }),
     startWatch: (ctx) =>
       Effect.gen(function* () {
+        // reload hygiene: reap zombie machines left by dev state loss
+        // (best-effort — a failed sweep must never kill the watch loop)
+        yield* sweepOrphanMicrovms(ctx.id, ctx.attrs.imageArn).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `[alchemy dev] ${ctx.id}: orphaned-microvm sweep failed (contained)`,
+              cause,
+            ),
+          ),
+        );
         const trigger = yield* imageSourceTrigger({
           id: ctx.id,
           source: ctx.news as ImageSourceLike,

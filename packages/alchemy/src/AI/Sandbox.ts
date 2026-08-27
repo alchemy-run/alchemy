@@ -80,6 +80,41 @@ export interface SandboxPty {
 }
 
 /**
+ * The MACHINE lifecycle — only on sandboxes backed by a real, ownable
+ * machine (a MicroVM, a container). OPTIONAL on the contract: an
+ * implementation whose "machine" is the trusted host omits it, and
+ * drivers treat a missing lifecycle as a no-op.
+ *
+ * Both verbs resolve the machine from the calling session's identity
+ * (`Thread.key`, through the implementation's machine keying), exactly
+ * like every other sandbox method — and both are best-effort session
+ * hygiene, never correctness: an unsuspended machine still reaps
+ * itself through its own idle policy.
+ */
+export interface SandboxLifecycle {
+  /**
+   * Suspend the session's machine (snapshot memory + disk, stop
+   * compute); the next sandbox call or terminal keystroke resumes it.
+   * Drivers call this when the session SETTLES — a settled session's
+   * machine should not keep burning.
+   */
+  readonly suspend: Effect.Effect<void, string>;
+  /**
+   * Eagerly WAKE the session's suspended machine. OPTIONAL — absent,
+   * the machine still wakes lazily on the next sandbox call; present,
+   * drivers call it when a stopped session is RESUMED so the machine
+   * is warm before the operator's next message.
+   */
+  readonly resume?: Effect.Effect<void, string>;
+  /**
+   * Terminate the session's machine and discard its disk. Idempotent.
+   * Drivers call this when the session is REMOVED — an erased
+   * session's machine has nothing left to hold.
+   */
+  readonly destroy: Effect.Effect<void, string>;
+}
+
+/**
  * THE SANDBOX COMPUTER — the pluggable machine an agent's tools work
  * on: run commands and read/write files. Tool implementations only
  * ever `yield* Sandbox`; WHERE the machine lives is a Layer decision:
@@ -140,5 +175,7 @@ export class Sandbox extends Context.Service<
     readonly exists: (path: string) => Effect.Effect<boolean, string>;
     /** Interactive PTY surface — only on machines that can hold one. */
     readonly pty?: SandboxPty;
+    /** Machine lifecycle — only on sandboxes backed by a real machine. */
+    readonly lifecycle?: SandboxLifecycle;
   }
 >()("alchemy/AI/Sandbox") {}

@@ -17,7 +17,10 @@ import { CreateAuthToken } from "../Lambda/CreateAuthToken.ts";
 import { GetMicrovm } from "../Lambda/GetMicrovm.ts";
 import { MicrovmImage } from "../Lambda/MicrovmImage.ts";
 import { connectMicrovm } from "../Lambda/MicrovmRpc.ts";
+import { ResumeMicrovm } from "../Lambda/ResumeMicrovm.ts";
 import { RunMicrovm } from "../Lambda/RunMicrovm.ts";
+import { SuspendMicrovm } from "../Lambda/SuspendMicrovm.ts";
+import { TerminateMicrovm } from "../Lambda/TerminateMicrovm.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -137,8 +140,10 @@ export const sessionToken = (key: string): string => {
  * - **connect** — waits for `RUNNING`, mints an auth token
  *   (re-minted before expiry), and speaks the image's typed RPC
  *   ({@link SandboxMicrovmShape}) over the VM endpoint;
- * - **reap** — no explicit terminate: the idle policy suspends and
- *   then expires an abandoned session's VM on its own.
+ * - **reap** — three tiers: the idle policy suspends and then expires
+ *   an ABANDONED session's VM on its own; a SETTLED session's VM is
+ *   suspended immediately (the driver calls `lifecycle.suspend`); a
+ *   REMOVED session's VM is terminated (`lifecycle.destroy`).
  *
  * The VM's disk is EPHEMERAL, exactly like the container sandbox:
  * work that must outlive the machine leaves through git (push), not
@@ -165,7 +170,13 @@ export const SandboxMicrovmSession = (
   never,
   // Providers are ambient in every stack program; the binding services
   // come from the HTTP/token impl layers the caller pipes underneath
-  RunMicrovm | GetMicrovm | CreateAuthToken | Providers
+  | RunMicrovm
+  | GetMicrovm
+  | CreateAuthToken
+  | SuspendMicrovm
+  | ResumeMicrovm
+  | TerminateMicrovm
+  | Providers
 > =>
   Layer.effect(
     Sandbox,
@@ -175,6 +186,9 @@ export const SandboxMicrovmSession = (
       const runMicrovm = yield* RunMicrovm(SandboxMicrovmImage);
       const getMicrovm = yield* GetMicrovm(SandboxMicrovmImage);
       const createAuthToken = yield* CreateAuthToken(SandboxMicrovmImage);
+      const suspendMicrovm = yield* SuspendMicrovm(SandboxMicrovmImage);
+      const resumeMicrovm = yield* ResumeMicrovm(SandboxMicrovmImage);
+      const terminateMicrovm = yield* TerminateMicrovm(SandboxMicrovmImage);
       const httpClient = yield* HttpClient.HttpClient;
 
       const port = options?.port ?? 8080;
@@ -281,21 +295,29 @@ export const SandboxMicrovmSession = (
       // The session context carries Thread at call time (every driver
       // provides it); the contract's R stays clean — same cast the
       // container session layer makes for DurableObjectState.
-      const withBox = <A, E>(
-        use: (stub: SandboxMicrovmShape) => Effect.Effect<A, E>,
+      const withToken = <A, E>(
+        use: (token: string) => Effect.Effect<A, E>,
       ): Effect.Effect<A, E> =>
         Effect.gen(function* () {
           const thread = yield* Thread;
-          const token = sessionToken(
-            options?.machineKey === undefined
-              ? thread.key
-              : options.machineKey(thread.key),
+          return yield* use(
+            sessionToken(
+              options?.machineKey === undefined
+                ? thread.key
+                : options.machineKey(thread.key),
+            ),
           );
+        }) as unknown as Effect.Effect<A, E>;
+
+      const withBox = <A, E>(
+        use: (stub: SandboxMicrovmShape) => Effect.Effect<A, E>,
+      ): Effect.Effect<A, E> =>
+        withToken((token) => {
           const attempt = Effect.gen(function* () {
             const stub = yield* stubFor(token);
             return yield* use(stub);
           });
-          return yield* attempt.pipe(
+          return attempt.pipe(
             Effect.catch((error) =>
               Effect.gen(function* () {
                 if (!(yield* isMachineGone(token))) {
@@ -307,7 +329,7 @@ export const SandboxMicrovmSession = (
               }),
             ),
           );
-        }) as unknown as Effect.Effect<A, E>;
+        });
 
       /** Render any wire-layer error as the contract's string. */
       const errorText = (error: unknown): string =>
@@ -374,6 +396,91 @@ export const SandboxMicrovmSession = (
           resize: (id, cols, rows) =>
             withBox((stub) => stub.ptyResize(id, cols, rows)),
           close: (id) => withBox((stub) => stub.ptyClose(id)),
+        },
+        lifecycle: {
+          /**
+           * Snapshot the session's machine on settle. Only a machine
+           * THIS isolate launched/attached is suspended: an uncached
+           * machine (the isolate restarted since the session's last
+           * activity) has already been idle that long and its own idle
+           * policy owns it — suspending would first have to launch one.
+           */
+          suspend: withToken((token) =>
+            Effect.gen(function* () {
+              const launched = vms.get(token);
+              if (launched === undefined) return;
+              const vm = yield* launched;
+              yield* suspendMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
+                Effect.mapError(errorText),
+              );
+              // a suspend/resume cycle invalidates the connected stub
+              stubs.delete(token);
+            }),
+          ),
+          /**
+           * Eagerly wake the machine on session resume. Cached-only,
+           * like suspend: an unknown machine wakes lazily (or launches
+           * fresh) on the session's next sandbox call anyway — the
+           * eager wake is warmth, not correctness. A machine that is
+           * not suspended (already running, mid-transition) is a
+           * no-op; a machine that is GONE drops the caches so the
+           * next call relaunches cleanly.
+           */
+          resume: withToken((token) =>
+            Effect.gen(function* () {
+              const launched = vms.get(token);
+              if (launched === undefined) return;
+              const vm = yield* launched;
+              yield* resumeMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
+                Effect.catchTag(
+                  ["ConflictException", "ValidationException"],
+                  () => Effect.void,
+                ),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.sync(() => {
+                    vms.delete(token);
+                    stubs.delete(token);
+                  }),
+                ),
+                Effect.mapError(errorText),
+                Effect.asVoid,
+              );
+            }),
+          ),
+          /**
+           * Terminate the session's machine on remove. The CACHED id is
+           * authoritative when this isolate knows the machine — a
+           * just-suspended VM is INVISIBLE to `RunMicrovm`'s
+           * clientToken reattach (it only matches running instances),
+           * so a blind reattach would mint a fresh machine, terminate
+           * that, and leak the suspended one. Only a cold isolate
+           * (no cache) falls back to the reattach: it finds the live
+           * machine, or pays one throwaway launch — the price of
+           * guaranteeing "removed session ⇒ no machine".
+           */
+          destroy: withToken((token) =>
+            Effect.gen(function* () {
+              const launched = vms.get(token);
+              const vm =
+                launched !== undefined
+                  ? yield* launched
+                  : yield* runMicrovm({
+                      clientToken: token,
+                      idlePolicy,
+                      ...(options?.maximumDurationInSeconds !== undefined
+                        ? {
+                            maximumDurationInSeconds:
+                              options.maximumDurationInSeconds,
+                          }
+                        : {}),
+                    }).pipe(Effect.mapError(errorText));
+              yield* terminateMicrovm({
+                microvmIdentifier: vm.microvmId,
+              }).pipe(Effect.mapError(errorText));
+              vms.delete(token);
+              stubs.delete(token);
+            }),
+          ),
         },
       };
     }),

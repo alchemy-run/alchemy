@@ -193,6 +193,8 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly settle: (
     outcome: unknown,
   ) => Effect.Effect<void, unknown, RuntimeContext>;
+  /** Reopen a settled session (the operator's undo for `stop`). */
+  readonly resume: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** Erase this session: settle, detach views, purge storage. */
   readonly destroy: () => Effect.Effect<void, unknown, RuntimeContext>;
   readonly alarm: () => Effect.Effect<void, unknown, RuntimeContext>;
@@ -381,6 +383,45 @@ export const DurableObjectHost: Layer.Layer<
             Context.getOption(registration.context, Sandbox),
           )?.pty;
         };
+
+        /**
+         * The session machine's LIFECYCLE, resolved like
+         * {@link sandboxPty} from the charter's captured context: a
+         * SETTLED session's machine is suspended (snapshot — the idle
+         * policy reaps it from there), a REMOVED session's machine is
+         * terminated. Both hooks are BEST-EFFORT and contained —
+         * machine hygiene must never block the session's own
+         * lifecycle, and a sandbox without a `lifecycle` (the trusted
+         * host) is a no-op.
+         */
+        const machineLifecycle = (
+          verb: "suspend" | "resume" | "destroy",
+        ): Effect.Effect<void> =>
+          Effect.suspend(() => {
+            const registration = registrations.get(me.term);
+            const lifecycle =
+              registration === undefined
+                ? undefined
+                : Option.getOrUndefined(
+                    Context.getOption(registration.context, Sandbox),
+                  )?.lifecycle;
+            const effect =
+              lifecycle === undefined
+                ? undefined
+                : verb === "suspend"
+                  ? lifecycle.suspend
+                  : verb === "resume"
+                    ? lifecycle.resume
+                    : lifecycle.destroy;
+            if (effect === undefined) return Effect.void;
+            return asSession(effect).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `sandbox ${verb} for '${me.term}/${me.key}' failed (contained): ${error}`,
+                ),
+              ),
+            );
+          });
 
         /** Out-of-session machine addressing: the sandbox layer reads
          *  only `Thread.key` to derive the machine — provide the
@@ -719,6 +760,15 @@ export const DurableObjectHost: Layer.Layer<
           ): Effect.Effect<void, never, RuntimeContext> =>
             Effect.gen(function* () {
               yield* (yield* engine).settle(me.key, outcome, { admit: true });
+              // a settled session's machine snapshots itself away
+              yield* machineLifecycle("suspend");
+            }),
+          resume: (): Effect.Effect<void, never, RuntimeContext> =>
+            Effect.gen(function* () {
+              yield* (yield* engine).resume(me.key);
+              // eagerly wake the suspended machine (best-effort —
+              // lazily waking on the next sandbox call is the fallback)
+              yield* machineLifecycle("resume");
             }),
           /**
            * The ERASER (`Sessions.remove`): settle first (idempotent —
@@ -731,16 +781,17 @@ export const DurableObjectHost: Layer.Layer<
            */
           destroy: () =>
             Effect.gen(function* () {
-              // settle is BEST-EFFORT: `admit: true` runs the charter's
-              // INIT when no session is live, and a session whose INIT
-              // can no longer run (e.g. its sandbox image was replaced
-              // out from under it) must still be erasable — the purge
-              // below is the point of destroy, not the settle.
+              // settle is BEST-EFFORT and NON-ADMITTING: admitting runs
+              // the charter's per-session INIT, whose side effects
+              // (checkouts, machine launches) are the OPPOSITE of an
+              // erase — deleting a hibernated session must not boot a
+              // fresh machine just to settle a tombstone. A RAM-live
+              // session still settles properly (children cascade,
+              // views see the end); a dormant one has nothing to
+              // settle — the purge below is the point of destroy.
               yield* Effect.catchCause(
                 Effect.gen(function* () {
-                  yield* (yield* engine).settle(me.key, stoppedByOperator, {
-                    admit: true,
-                  });
+                  yield* (yield* engine).settle(me.key, stoppedByOperator);
                 }),
                 (cause) =>
                   Effect.logWarning(
@@ -751,6 +802,8 @@ export const DurableObjectHost: Layer.Layer<
               for (const socket of yield* state.getWebSockets()) {
                 yield* Effect.ignore(socket.close(1000, "session removed"));
               }
+              // a removed session's machine is terminated, not idled out
+              yield* machineLifecycle("destroy");
               yield* storage.deleteAlarm();
               yield* storage.deleteAll();
               engineRef = undefined;
@@ -875,6 +928,11 @@ export const DurableObjectHost: Layer.Layer<
           sessions
             .getByName(sessionName(term, key))
             .settle(stoppedByOperator)
+            .pipe(Effect.orDie, Effect.asVoid),
+        resume: (term, key) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .resume()
             .pipe(Effect.orDie, Effect.asVoid),
         remove: (term, key) =>
           Effect.gen(function* () {

@@ -286,6 +286,17 @@ export const DriverLocal: Layer.Layer<
             onSome: (index) => index.list(),
           }),
         stop,
+        // the operator's undo for stop: clear the settled tombstone;
+        // the settled resident fiber exited its loop, so drop its
+        // start marker too — the next kick forks a fresh one parked
+        // on the fresh settled signal
+        resume: (term, key) =>
+          Effect.gen(function* () {
+            const engine = engines.get(term);
+            if (engine === undefined) return;
+            const reopened = yield* engine.resume(key);
+            if (reopened) residents.get(term)?.(key);
+          }),
         remove: (term, key) =>
           Effect.gen(function* () {
             yield* stop(term, key);

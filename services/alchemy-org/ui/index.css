@@ -115,3 +115,22 @@
     background: color-mix(in srgb, var(--moss) 25%, transparent);
   }
 }
+
+/* The terminal's block cursor IS the caret — suppress the browser's
+   I-beam that ghostty-web inlines (`cursor: text`) over the canvas.
+   Scoped to the exact inline value so link hover (ghostty inlines
+   `cursor: pointer`) keeps its affordance; `!important` is required
+   to beat an inline style. */
+.ghostty-host[style*="cursor: text"],
+.ghostty-host [style*="cursor: text"] {
+  cursor: default !important;
+}
+
+/* ghostty-web marks the host `contenteditable` (IME + screen-reader
+   input), so focusing it makes the browser draw its blinking text
+   caret on top of the terminal's own block cursor — hide the
+   browser's, everywhere inside the host. */
+.ghostty-host,
+.ghostty-host * {
+  caret-color: transparent;
+}

@@ -53,7 +53,16 @@ export const SessionIndexMemory = (
     return {
       ingest: (observation) =>
         Effect.sync(() => {
-          const row = ensure(observation.term, observation.key);
+          // Only ADMISSION creates a row — a removed session's trailing
+          // observations (the settle inside destroy) must not resurrect
+          // its directory entry.
+          const existing = rows.get(
+            sessionId(observation.term, observation.key),
+          );
+          if (existing === undefined && observation.type !== "admitted") {
+            return;
+          }
+          const row = existing ?? ensure(observation.term, observation.key);
           row.updatedAt = observation.at;
           switch (observation.type) {
             case "admitted":
@@ -79,6 +88,10 @@ export const SessionIndexMemory = (
               return;
             case "settled":
               row.status = "settled";
+              return;
+            // reopened by the operator: parked until the next input
+            case "resumed":
+              row.status = "idle";
               return;
             case "crashed":
               row.status = "crashed";

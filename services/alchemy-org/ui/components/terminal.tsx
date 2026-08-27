@@ -156,7 +156,10 @@ export const GhosttyTerminal = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#0c0c0d]">
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden" />
+      <div
+        ref={containerRef}
+        className="ghostty-host min-h-0 flex-1 overflow-hidden"
+      />
       <div className="flex items-center gap-2 border-t border-border px-3 py-1 font-mono text-[10px] text-muted-foreground">
         <span
           className={cn(

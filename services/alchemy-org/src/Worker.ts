@@ -58,6 +58,12 @@ const SandboxSession = AWS.AI.SandboxMicrovmSession({
       AWS.Lambda.RunMicrovmHttp,
       AWS.Lambda.GetMicrovmHttp,
       AWS.Lambda.CreateAuthTokenHttp,
+      // session lifecycle → machine lifecycle: settle suspends the
+      // session's VM, resume wakes it, remove terminates it (wired in
+      // the driver)
+      AWS.Lambda.SuspendMicrovmHttp,
+      AWS.Lambda.ResumeMicrovmHttp,
+      AWS.Lambda.TerminateMicrovmHttp,
     ),
   ),
 );
