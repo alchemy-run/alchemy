@@ -13,6 +13,13 @@ import type { Providers } from "../Providers.ts";
 const TypeId = "Cloudflare.AI.Search" as const;
 type TypeId = typeof TypeId;
 
+const customMetadataDataTypes = [
+  "text",
+  "number",
+  "boolean",
+  "datetime",
+] as const;
+
 /**
  * The kind of data source an AI Search instance indexes.
  */
@@ -63,11 +70,28 @@ export type IndexingOptions = NonNullable<
 >;
 
 /**
- * Custom metadata fields extracted at indexing time.
+ * Data type of a custom metadata field extracted at indexing time.
+ *
+ * Cloudflare accepts exactly these four values. In particular, textual
+ * metadata uses `"text"`, not `"string"`.
  */
-export type CustomMetadata = NonNullable<
-  aisearch.CreateInstanceRequest["customMetadata"]
->;
+export type CustomMetadataDataType = (typeof customMetadataDataTypes)[number];
+
+/**
+ * A custom metadata field extracted at indexing time.
+ */
+export interface CustomMetadataField {
+  /** Metadata field name. */
+  fieldName: string;
+  /** Value type Cloudflare uses to index and filter the field. */
+  dataType: CustomMetadataDataType;
+}
+
+/**
+ * Custom metadata fields extracted at indexing time. Cloudflare supports up
+ * to five fields per AI Search instance.
+ */
+export type CustomMetadata = CustomMetadataField[];
 
 /**
  * Retrieval-time options (boosting and keyword match mode).
@@ -559,8 +583,9 @@ export const SearchInstanceProvider = () =>
       "createdAt",
     ],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
+      yield* validateCustomMetadata(news.customMetadata);
+      const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -664,6 +689,7 @@ export const SearchInstanceProvider = () =>
       return rows.flat();
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
+      yield* validateCustomMetadata(news.customMetadata);
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const namespace = resolveNamespace(news.namespace);
@@ -784,6 +810,35 @@ export const SearchInstanceProvider = () =>
         );
     }),
   });
+
+const isCustomMetadataDataType = (
+  value: unknown,
+): value is CustomMetadataDataType =>
+  customMetadataDataTypes.some((dataType) => dataType === value);
+
+/**
+ * Distilled intentionally keeps request enums open for forward compatibility,
+ * so validate Alchemy's closed resource contract before any provider call.
+ */
+const validateCustomMetadata = (
+  customMetadata:
+    | readonly {
+        readonly fieldName: string;
+        readonly dataType: unknown;
+      }[]
+    | undefined,
+): Effect.Effect<void> => {
+  for (const [index, field] of (customMetadata ?? []).entries()) {
+    if (!isCustomMetadataDataType(field.dataType)) {
+      return Effect.die(
+        new Error(
+          `Cloudflare AI Search customMetadata[${index}].dataType must be one of "text", "number", "boolean", or "datetime"; received ${JSON.stringify(field.dataType)}.`,
+        ),
+      );
+    }
+  }
+  return Effect.void;
+};
 
 /**
  * Ride out the two eventual-consistency windows Cloudflare opens when an
