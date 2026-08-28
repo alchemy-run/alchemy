@@ -14,19 +14,17 @@ import {
   type PackageInstall,
 } from "../Bundle/InstalledPackages.ts";
 import { findCwdForBundle, resolveMainPath } from "../Bundle/TempRoot.ts";
-import {
-  contextRootOf,
-  isContextRootDest,
-  posixRelUnder,
-} from "../Server/externalProgram.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
 } from "../Server/Process.ts";
 import {
+  contextRootOf,
   extraFileDestination,
   hashExtraFiles,
+  isContextRootDest,
+  posixRelUnder,
   resolveExtraSource,
 } from "../Util/extraFiles.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";

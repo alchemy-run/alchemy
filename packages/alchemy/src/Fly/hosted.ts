@@ -26,14 +26,12 @@ import {
   type HostRuntimeContext,
 } from "../Server/Process.ts";
 import {
-  contextRootOf,
-  isContextRootDest,
-  posixRelUnder,
-} from "../Server/externalProgram.ts";
-import {
   copyExtraFiles,
+  contextRootOf,
   extraFileDestination,
   hashExtraFiles,
+  isContextRootDest,
+  posixRelUnder,
   resolveExtraSource,
   type ExtraFile,
 } from "../Util/extraFiles.ts";

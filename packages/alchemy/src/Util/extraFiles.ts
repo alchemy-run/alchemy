@@ -1,16 +1,41 @@
+/**
+ * Extra files packed next to a Fly/Hetzner/Railway program (Docker
+ * context or unit zip).
+ *
+ * `dest: "."` means "this directory IS the image/unit root" (`COPY . /app`),
+ * not a subfolder. {@link contextRootOf} then treats that source as the
+ * context, and {@link posixRelUnder} places `main` relative to it so
+ * `isExternal` ENTRYPOINT is `node /app/serve-node.mjs` instead of
+ * bundling `index.mjs`. Hashing skips gitignore (a parent `dist` rule
+ * would empty the hash) but still excludes `node_modules` / `.git` /
+ * `.next/cache` / `.alchemy` so the glob stays bounded.
+ */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { hashDirectory } from "../Command/Memo.ts";
-import {
-  CONTEXT_ROOT_DEST,
-  EXTRA_FILES_HASH_EXCLUDE,
-  isContextRootDest,
-} from "../Server/externalProgram.ts";
 import { initialCwd } from "./Node.ts";
 import { sha256 } from "./sha256.ts";
 
 const ioConcurrency = 16;
+
+/** Extra-file dest that means "merge this directory into the image/unit root". */
+export const CONTEXT_ROOT_DEST = ".";
+
+export const isContextRootDest = (dest: string): boolean =>
+  dest === "." || dest === "";
+
+/**
+ * Hash extra-file trees without gitignore (a parent `dist` rule would
+ * empty the hash) but skip the directories that make a recursive glob
+ * unbounded.
+ */
+export const EXTRA_FILES_HASH_EXCLUDE = [
+  "**/node_modules/**",
+  "**/.git/**",
+  "**/.next/cache/**",
+  "**/.alchemy/**",
+];
 
 /**
  * Extra file or directory copied next to a bundled program (Docker
@@ -25,6 +50,46 @@ export interface ExtraFile {
    */
   readonly dest: string;
 }
+
+const posix = (value: string): string => value.replaceAll("\\", "/");
+
+/**
+ * Path of `file` relative to `root`, POSIX. Empty string if they are the
+ * same directory. Returns `undefined` when `file` is not under `root`.
+ */
+export const posixRelUnder = (
+  root: string,
+  file: string,
+  path: {
+    readonly resolve: (...segments: string[]) => string;
+    readonly relative: (from: string, to: string) => string;
+    readonly isAbsolute: (value: string) => boolean;
+  },
+): string | undefined => {
+  const from = posix(path.resolve(root));
+  const to = posix(path.resolve(file));
+  const rel = posix(path.relative(from, to));
+  if (rel === "") return "";
+  if (path.isAbsolute(rel) || rel === ".." || rel.startsWith("../")) {
+    return undefined;
+  }
+  return rel;
+};
+
+/**
+ * Docker/zip context root for an unbundled (`isExternal`) program. If
+ * some extraFile is `dest: "."`, that source is the context; otherwise
+ * the context is `dirname(main)`.
+ */
+export const contextRootOf = (
+  main: string,
+  extraFiles: ReadonlyArray<{ source: string; dest: string }>,
+  path: Path.Path,
+  resolveSource: (source: string) => string,
+): string => {
+  const root = extraFiles.find((file) => isContextRootDest(file.dest));
+  return root !== undefined ? resolveSource(root.source) : path.dirname(main);
+};
 
 /** Normalize a COPY destination so it cannot escape the root. `"."` is the root. */
 export const extraFileDestination = (destination: string): string => {
