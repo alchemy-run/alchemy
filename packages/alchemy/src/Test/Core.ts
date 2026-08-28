@@ -181,8 +181,8 @@ interface SidecarSingleton {
 
 const sidecarSingletons = new Map<string, SidecarSingleton>();
 
-export const makeSidecarHandle = (
-  options: MakeOptions,
+export const makeSidecarHandle = <ROut = any>(
+  options: MakeOptions<ROut>,
 ): SidecarHandle | undefined => {
   if (!resolveSidecar(options)) return undefined;
   const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
@@ -337,9 +337,9 @@ const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
  * When `scope` is omitted, the effect runs with `Effect.scoped` and any
  * scoped resources are torn down as soon as it resolves.
  */
-export const toEffect = <A>(
+export const toEffect = <A, ROut = any>(
   effect: TestEffect<A>,
-  options: MakeOptions,
+  options: MakeOptions<ROut>,
   scope?: Scope.Scope,
   sidecar?: SidecarHandle,
 ): Effect.Effect<A, any, never> => {
@@ -379,9 +379,9 @@ export const toEffect = <A>(
 };
 
 /** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
-export const run = <A>(
+export const run = <A, ROut = any>(
   effect: TestEffect<A>,
-  options: MakeOptions,
+  options: MakeOptions<ROut>,
   scope?: Scope.Scope,
   sidecar?: SidecarHandle,
 ): Promise<A> => Effect.runPromise(toEffect(effect, options, scope, sidecar));
