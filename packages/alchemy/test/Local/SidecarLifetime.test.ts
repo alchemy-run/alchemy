@@ -16,7 +16,7 @@ import * as Scope from "effect/Scope";
  */
 
 const options: Core.MakeOptions = {
-  providers: Layer.empty as Core.MakeOptions["providers"],
+  providers: Layer.empty as unknown as Core.MakeOptions["providers"],
   dev: true,
 };
 
@@ -32,7 +32,7 @@ const dummyStack = (name: string) =>
     resources: {},
     bindings: {},
     actions: {},
-  }) as Stack;
+  }) as unknown as Stack;
 
 const runAsFile = <A, E, R>(
   handle: NonNullable<ReturnType<typeof Core.makeSidecarHandle>>,
@@ -41,7 +41,9 @@ const runAsFile = <A, E, R>(
 ) => {
   const sharedScope = Scope.makeUnsafe("sequential");
   return Core.toEffect(
-    body.pipe(Effect.provideService(Stack, dummyStack(stackName))),
+    body.pipe(
+      Effect.provideService(Stack, dummyStack(stackName)),
+    ) as Core.TestEffect<A>,
     options,
     sharedScope,
     handle,

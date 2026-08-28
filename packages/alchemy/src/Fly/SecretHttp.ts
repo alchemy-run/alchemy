@@ -171,6 +171,7 @@ const flyMachineApiHttp: Layer.Layer<HttpClient.HttpClient> =
   NodeHttpClient.layerNodeHttpNoAgent.pipe(
     Layer.provide(
       NodeHttpClient.layerAgentOptions({
+        // @ts-expect-error Node Agent accepts unix socketPath; Https.AgentOptions omits it
         socketPath: FLY_MACHINE_API_SOCKET,
         keepAlive: false,
       }),

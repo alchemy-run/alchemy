@@ -3,7 +3,6 @@
  * serving the bundled program). The generated entry imports this module
  * and the user's `main`, nothing else — see {@link ./Process.ts} for why.
  */
-import { setDefaultResultOrder } from "node:dns";
 import { NodeServices } from "@effect/platform-node";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -18,8 +17,6 @@ import {
   runProcess,
   stackFromEnv,
 } from "./Process.ts";
-
-setDefaultResultOrder("ipv4first");
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /
