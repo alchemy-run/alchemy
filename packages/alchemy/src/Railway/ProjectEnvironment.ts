@@ -67,6 +67,20 @@ export type Environment = Resource<
   Providers
 >;
 
+const EnvironmentResource = Resource<Environment>("Railway.Environment");
+
+const resolveEnvironmentProps = (
+  props: EnvironmentProps | Effect.Effect<EnvironmentProps, never, Providers>,
+): Effect.Effect<EnvironmentProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const project = Effect.isEffect(resolved.project)
+      ? yield* resolved.project as Effect.Effect<Project, never, Providers>
+      : resolved.project;
+    return { ...resolved, project };
+  });
+
 /**
  * A Railway.Environment is an extra deploy environment under a Project
  * (staging, preview, …). The production environment is created with the
@@ -132,20 +146,6 @@ export type Environment = Resource<
  *
  * @resource
  */
-const EnvironmentResource = Resource<Environment>("Railway.Environment");
-
-const resolveEnvironmentProps = (
-  props: EnvironmentProps | Effect.Effect<EnvironmentProps, never, Providers>,
-): Effect.Effect<EnvironmentProps, never, Providers> =>
-  Effect.gen(function* () {
-    const resolved = Effect.isEffect(props) ? yield* props : props;
-    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
-    const project = Effect.isEffect(resolved.project)
-      ? yield* resolved.project as Effect.Effect<Project, never, Providers>
-      : resolved.project;
-    return { ...resolved, project };
-  });
-
 export const Environment: typeof EnvironmentResource = Object.assign(
   (
     id: string,
