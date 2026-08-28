@@ -161,7 +161,7 @@ export const providers = () =>
         ExecHttp,
       ),
     ),
-    Layer.provideMerge(RailwayRetryPolicy),
+    Layer.provide(RailwayRetryPolicy),
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),

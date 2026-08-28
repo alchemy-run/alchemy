@@ -1025,10 +1025,8 @@ export const ServerProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) =>
-                (e._tag === "Forbidden" &&
-                  e.message.includes("server limit")) ||
-                (e._tag === "PreconditionFailed" &&
-                  e.message.includes("placement")),
+                e._tag === "ServerLimitExceeded" ||
+                e._tag === "ServerPlacementError",
               schedule: Schedule.spaced("5 seconds"),
               times: 8,
             }),

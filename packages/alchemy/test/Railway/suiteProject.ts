@@ -31,18 +31,17 @@ const toProject = (
     deletedAt?: string | null;
   },
   workspaceId: string,
-): Project =>
-  ({
-    projectId: project.id,
-    name: project.name || SUITE_PROJECT_NAME,
-    workspaceId: project.workspaceId ?? project.workspace?.id ?? workspaceId,
-    environmentId:
-      project.primaryEnvironmentId ??
-      project.baseEnvironmentId ??
-      project.baseEnvironment?.id ??
-      "",
-    url: `https://railway.com/project/${project.id}`,
-  }) as Project;
+): Project["Attributes"] => ({
+  projectId: project.id,
+  name: project.name || SUITE_PROJECT_NAME,
+  workspaceId: project.workspaceId ?? project.workspace?.id ?? workspaceId,
+  environmentId:
+    project.primaryEnvironmentId ??
+    project.baseEnvironmentId ??
+    project.baseEnvironment?.id ??
+    "",
+  url: `https://railway.com/project/${project.id}`,
+});
 
 const findByName = (workspaceId: string) =>
   railway.projects
@@ -120,7 +119,12 @@ const acquire = Effect.gen(function* () {
  * Effect as `project:` (resource-valued props accept Effects).
  */
 export const suiteProject: Effect.Effect<Project> = Effect.runSync(
-  Effect.cached(acquire),
+  Effect.cached(
+    acquire.pipe(
+      Effect.map((attrs) => attrs as unknown as Project),
+      Effect.orDie,
+    ),
+  ),
 );
 
 /**

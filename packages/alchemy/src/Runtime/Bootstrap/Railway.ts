@@ -6,7 +6,6 @@
  * Railway canvas Functions stay on bun (`functionRuntime(bun)` + the
  * inline canvas wrapper). This module is the Docker/Service path only.
  */
-import { setDefaultResultOrder } from "node:dns";
 import { NodeServices } from "@effect/platform-node";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -21,8 +20,6 @@ import {
   runProcess,
   stackFromEnv,
 } from "./Process.ts";
-
-setDefaultResultOrder("ipv4first");
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /

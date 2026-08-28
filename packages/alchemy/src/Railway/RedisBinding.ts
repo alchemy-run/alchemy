@@ -30,7 +30,7 @@ const asPlain = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const resolveName = (redis: Redis): Effect.Effect<string> =>
+const resolveName = (redis: Redis) =>
   Effect.gen(function* () {
     const value = redis.name as unknown;
     const direct = asPlain(value);

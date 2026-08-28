@@ -1,3 +1,4 @@
+import * as railway from "@distilled.cloud/railway";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -37,15 +38,17 @@ const projectAndEnvironmentCreateGate = Semaphore.makeUnsafe(1);
 
 const retryCreateRateLimit = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, Exclude<E, { readonly _tag: "RailwayRateLimited" }>, R> =>
+): Effect.Effect<A, E, R> =>
   effect.pipe(
-    Effect.catchTag("RailwayRateLimited", (error) =>
-      Effect.sleep(
-        Duration.sum(
-          error.retryAfter ?? createRateLimitWait,
-          jitterUpTo(Duration.seconds(30)),
-        ),
-      ).pipe(Effect.zipRight(retryCreateRateLimit(effect))),
+    Effect.catch((error) =>
+      error instanceof railway.RailwayRateLimited
+        ? Effect.sleep(
+            Duration.sum(
+              error.retryAfter ?? createRateLimitWait,
+              jitterUpTo(Duration.seconds(30)),
+            ),
+          ).pipe(Effect.andThen(retryCreateRateLimit(effect)))
+        : Effect.fail(error),
     ),
   );
 
@@ -58,7 +61,7 @@ const retryCreateRateLimit = <A, E, R>(
  */
 export const waitOutCreateRateLimit = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, Exclude<E, { readonly _tag: "RailwayRateLimited" }>, R> =>
+): Effect.Effect<A, E, R> =>
   Semaphore.withPermits(
     projectAndEnvironmentCreateGate,
     1,

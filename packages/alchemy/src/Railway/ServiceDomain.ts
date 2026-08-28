@@ -144,6 +144,17 @@ const createViaMutation = (input: {
   serviceId: string;
 }) => {
   const listed = listedOrUndefined(input);
+  const missing = () =>
+    new ServiceDomainNotCreated({
+      serviceId: input.serviceId,
+      environmentId: input.environmentId,
+    });
+  const listedOrFail = <E>(error: E) =>
+    listed.pipe(
+      Effect.flatMap((row) =>
+        row !== undefined ? Effect.succeed(row) : Effect.fail(error),
+      ),
+    );
   const create = railway
     .serviceDomainCreate({
       input: {
@@ -153,36 +164,14 @@ const createViaMutation = (input: {
     })
     .pipe(domainCreateRetry)
     .pipe(
+      Effect.flatMap(() => listedOrFail(missing())),
       Effect.catchTag("RailwayServiceDomainCreateFailed", (error) =>
-        listed.pipe(
-          Effect.flatMap((row) =>
-            row !== undefined ? Effect.succeed(row) : Effect.fail(error),
-          ),
-        ),
+        listedOrFail(error),
       ),
       Effect.catchTag("RailwayValidationError", (error) =>
-        alreadyExists(error.message)
-          ? listed.pipe(
-              Effect.flatMap((row) =>
-                row !== undefined ? Effect.succeed(row) : Effect.fail(error),
-              ),
-            )
-          : Effect.fail(error),
+        alreadyExists(error.message) ? listedOrFail(error) : Effect.fail(error),
       ),
-      Effect.catchTag("Conflict", () =>
-        listed.pipe(
-          Effect.flatMap((row) =>
-            row !== undefined
-              ? Effect.succeed(row)
-              : Effect.fail(
-                  new ServiceDomainNotCreated({
-                    serviceId: input.serviceId,
-                    environmentId: input.environmentId,
-                  }),
-                ),
-          ),
-        ),
-      ),
+      Effect.catchTag("Conflict", () => listedOrFail(missing())),
     );
 
   return withEnvironmentConfigLock(input.environmentId, create).pipe(
@@ -275,7 +264,7 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
   subdomain?: string;
   targetPort?: number;
 }) {
-  let current = (yield* listServiceDomains(
+  let current: CloudDomain | undefined = (yield* listServiceDomains(
     input.projectId,
     input.environmentId,
     input.serviceId,

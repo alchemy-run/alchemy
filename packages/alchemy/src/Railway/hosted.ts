@@ -514,8 +514,6 @@ const wrapCanvasListener = (
       ...extraPins,
     ].join("\n");
     return `${pins}
-import { setDefaultResultOrder } from "node:dns";
-setDefaultResultOrder("ipv4first");
 const g=globalThis,port=Number(process.env.PORT??3000);
 g.__aFF??=async()=>new Response("");
 Bun.serve({hostname:"0.0.0.0",port,fetch:r=>g.__aFF(r)});
@@ -551,8 +549,6 @@ const wrapAsyncCanvasListener = (
     const pins = extraPins.join("\n");
     const handlerLit = JSON.stringify(handler);
     return `${pins}
-import { setDefaultResultOrder } from "node:dns";
-setDefaultResultOrder("ipv4first");
 const port=Number(process.env.PORT??3000);
 const fail=e=>new Response(String(e),{status:500});
 try{

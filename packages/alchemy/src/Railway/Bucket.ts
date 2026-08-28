@@ -650,7 +650,8 @@ export const BucketProvider = () =>
                   .map((bucket) =>
                     toAttrs(bucket, {
                       environmentId,
-                      region: instanceOf(config, bucket.id)?.region,
+                      region:
+                        instanceOf(config, bucket.id)?.region ?? undefined,
                     }),
                   ),
               ),

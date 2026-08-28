@@ -195,9 +195,7 @@ const toAttrs = (
   };
 };
 
-const fillEnvironmentId = (
-  attrs: Project["Attributes"],
-): Effect.Effect<Project["Attributes"]> => {
+const fillEnvironmentId = (attrs: Project["Attributes"]) => {
   if (attrs.environmentId.length > 0) return Effect.succeed(attrs);
   return railway.environments
     .items({ projectId: attrs.projectId, first: 5 })
