@@ -1,5 +1,5 @@
 import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
-import { Stack } from "@/Stack";
+import { Stack, type StackSpec } from "@/Stack";
 import * as Core from "@/Test/Core.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -15,8 +15,8 @@ import * as Scope from "effect/Scope";
  * "Welcome to Bun!" instead of a websocket URL.
  */
 
-const options: Core.MakeOptions = {
-  providers: Layer.empty as unknown as Core.MakeOptions["providers"],
+const options = {
+  providers: Layer.empty,
   dev: true,
 };
 
@@ -25,14 +25,15 @@ const COMMAND_LOCAL = import.meta.resolve(
   import.meta.url,
 );
 
-const dummyStack = (name: string) =>
-  ({
-    name,
-    stage: "test",
-    resources: {},
-    bindings: {},
-    actions: {},
-  }) as unknown as Stack;
+type StackShape = Omit<StackSpec, "output">;
+
+const dummyStack = (name: string): StackShape => ({
+  name,
+  stage: "test",
+  resources: {},
+  bindings: {},
+  actions: {},
+});
 
 const runAsFile = <A, E, R>(
   handle: NonNullable<ReturnType<typeof Core.makeSidecarHandle>>,

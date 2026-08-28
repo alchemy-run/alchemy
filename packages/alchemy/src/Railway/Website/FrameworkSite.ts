@@ -13,6 +13,7 @@ import { Server as FrameworkServer } from "../../Website/Server.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import type { ExtraFile } from "../hosted.ts";
 import { Project, type Project as ProjectResource } from "../Project.ts";
+import type { Environment as EnvironmentResource } from "../ProjectEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { Service, type Service as ServiceResource } from "../Service.ts";
 import { Cdn } from "./Cdn.ts";
@@ -111,7 +112,9 @@ export interface FrameworkSiteProps {
    * (primary environment), a `Railway.Environment`, or `{ environmentId }`.
    * Defaults to the project's primary environment.
    */
-  environment?: Ref<{ readonly environmentId: string }>;
+  environment?: Ref<
+    EnvironmentResource | ProjectResource | { readonly environmentId: string }
+  >;
   /**
    * Project root directory (the directory containing `package.json`).
    * @default "."
