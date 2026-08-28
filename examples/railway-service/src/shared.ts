@@ -27,8 +27,8 @@ export const Staging = Railway.Environment("Staging", {
 });
 
 /**
- * Shared project variable. Railway injects it as env
- * {@link SECRET_NAME}. {@link Api} reads it with `Config.string`.
+ * Shared project variable. {@link Api} pulls it into service env with
+ * `Railway.ref("shared", SECRET_NAME)` and reads it via `Config.string`.
  */
 export const Marker = Railway.Variable("Marker", {
   project: Site,
@@ -80,20 +80,11 @@ export const Cleanup = Railway.Function("Cleanup", {
 });
 
 /**
- * Redis. {@link CacheProxy} exposes it on `*.proxy.rlwy.net`.
- * {@link Api} binds {@link Railway.ReadWriteRedis}.
+ * Redis. The stack attaches a {@link Railway.TcpProxy} so it's
+ * reachable on `*.proxy.rlwy.net`. {@link Api} binds
+ * {@link Railway.ReadWriteRedis}.
  */
 export const Cache = Railway.Redis("Cache", { project: Site });
-
-/**
- * Public TCP proxy for {@link Cache} (Postgres already creates one
- * when `public` is true).
- */
-export const CacheProxy = Railway.TcpProxy("CacheProxy", {
-  redis: Cache,
-  environment: Site,
-  applicationPort: 6379,
-});
 
 /**
  * S3-compatible bucket. {@link Api} binds Put/Get/Head/List/Delete.

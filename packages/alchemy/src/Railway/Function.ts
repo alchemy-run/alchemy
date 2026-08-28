@@ -1275,8 +1275,29 @@ export const FunctionProvider = () =>
               );
           }
 
-          instance =
-            (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+          // Cron-only Functions sleep until the schedule. Waiting for
+          // SUCCESS queues behind sibling Docker builds and can sit in
+          // QUEUED/BUILDING for the full retry budget. HTTP Functions
+          // still wait — they have a public URL to serve.
+          if (wantsHttp(props)) {
+            instance =
+              (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+          } else {
+            instance =
+              (yield* getInstance(environmentId, current.id)) ?? instance;
+            const status = instance?.latestDeployment?.status;
+            if (status !== undefined && deployFailed(status)) {
+              const logs = yield* fetchDeployLogs(
+                instance?.latestDeployment?.id,
+              );
+              return yield* new FunctionDeployFailed({
+                serviceId: current.id,
+                status,
+                deploymentId: instance?.latestDeployment?.id,
+                logs,
+              });
+            }
+          }
 
           return toAttrs({
             service: current,

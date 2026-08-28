@@ -70,9 +70,13 @@ export interface FrameworkSiteProps {
   memo?: MemoOptions | boolean;
   /**
    * Process environment for the deployed Service (and, under
-   * `alchemy dev`, the framework dev server).
+   * `alchemy dev`, the framework dev server). Accepts `Output`s
+   * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<
+    string,
+    string | Redacted.Redacted<string> | Output.Output<string | undefined>
+  >;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`). Railway
    * CDN caches hashed files by Content-Type regardless of this bag.
@@ -178,8 +182,13 @@ export class FrameworkServerError extends Data.TaggedError(
 }> {}
 
 const envRecord = (
-  env: Record<string, string | Redacted.Redacted<string>> | undefined,
-): Record<string, string> | undefined => {
+  env:
+    | Record<
+        string,
+        string | Redacted.Redacted<string> | Output.Output<string | undefined>
+      >
+    | undefined,
+): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(env).map(([key, value]) => [

@@ -1,5 +1,6 @@
 import * as Hetzner from "alchemy/Hetzner";
 import * as Neon from "alchemy/Neon";
+import * as Effect from "effect/Effect";
 
 export const API_PORT = 3001;
 
@@ -21,6 +22,13 @@ export const NeonProject = Neon.Project("NotesDb", {
   region: "aws-us-east-1",
 });
 
-export const NeonBranch = Neon.Branch("NotesBranch", {
-  project: NeonProject,
+/**
+ * Feature branch of {@link NeonProject}. Yield the project first so
+ * Branch reconcile sees a resolved `{ projectId }` — a module-scope
+ * `project: NeonProject` is planned in parallel and fails with
+ * "Invalid Neon project source".
+ */
+export const NeonBranch = Effect.gen(function* () {
+  const project = yield* NeonProject;
+  return yield* Neon.Branch("NotesBranch", { project });
 });

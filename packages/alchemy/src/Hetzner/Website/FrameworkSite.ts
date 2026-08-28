@@ -8,7 +8,6 @@ import type { MemoOptions } from "../../Command/Memo.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import { asEffect } from "../../Util/types.ts";
 import {
   staticConfigFromAssets,
   type WebsiteAssetsProps,
@@ -30,6 +29,9 @@ import type { Zone } from "../Zone.ts";
  * it (so `yield* Server(...)` and `Server(...)` both type-check).
  */
 export type Ref<T> = T | Effect.Effect<T, never, Providers>;
+
+const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
+  Effect.isEffect(ref) ? ref : Effect.succeed(ref);
 
 /** Default listen port. Hetzner `deployUnit` curls `/health` whenever `PORT` is set. */
 export const DEFAULT_WEBSITE_PORT = 3000;
@@ -58,9 +60,13 @@ export interface FrameworkSiteProps {
   dev?: ServerDevProps;
   /**
    * Process environment for the hosted unit (and the local framework
-   * dev server). Not Cloudflare Worker bindings.
+   * dev server). Not Cloudflare Worker bindings. Accepts `Output`s
+   * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<
+    string,
+    string | Redacted.Redacted<string> | Output.Output<string | undefined>
+  >;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`).
    */
@@ -150,8 +156,13 @@ export class FrameworkSiteError extends Data.TaggedError(
 }> {}
 
 export const unwrapEnv = (
-  env: Record<string, string | Redacted.Redacted<string>> | undefined,
-): Record<string, string> | undefined => {
+  env:
+    | Record<
+        string,
+        string | Redacted.Redacted<string> | Output.Output<string | undefined>
+      >
+    | undefined,
+): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(env).map(([key, value]) => [
@@ -166,7 +177,7 @@ export const resolveWebsiteServer = Effect.fn(function* (props: {
   readonly tags?: Record<string, string> | undefined;
 }) {
   if (props.server !== undefined) {
-    return yield* asEffect(props.server);
+    return yield* resolveRef(props.server);
   }
   return yield* Server("Server", {
     serverType: "cpx12",
@@ -182,7 +193,7 @@ export const bindWebsiteDomain = Effect.fn(function* (props: {
   readonly server: Server;
   readonly tags?: Record<string, string> | undefined;
 }) {
-  const zone = yield* asEffect(props.zone);
+  const zone = yield* resolveRef(props.zone);
   const name = Output.map((apex: string | undefined) => {
     const domain = props.domain;
     if (apex === undefined || domain === apex) return "@";
@@ -296,7 +307,7 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
   const main = Output.map(buildOut, (out) => out.main);
 
   const server = yield* resolveWebsiteServer(props);
-  const env: Record<string, string> = {
+  const env = {
     ...unwrapEnv(props.env),
     PORT: String(port),
   };

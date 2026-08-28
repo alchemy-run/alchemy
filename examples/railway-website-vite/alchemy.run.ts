@@ -1,4 +1,5 @@
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import * as Railway from "alchemy/Railway";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -22,12 +23,11 @@ export default Alchemy.Stack(
     const project = yield* Site;
     const db = yield* Db;
     const api = yield* Api;
-    const apiUrl = (yield* yield* api.url) ?? "";
     const web = yield* Railway.Website.Vite("Web", {
       project,
       domain,
       env: {
-        VITE_API_URL: apiUrl,
+        VITE_API_URL: Output.map(api.url, (url) => url ?? ""),
       },
       memo: {
         include: [

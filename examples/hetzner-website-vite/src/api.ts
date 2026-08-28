@@ -35,46 +35,43 @@ export default class Api extends Hetzner.Service<Api>()(
       },
     };
   }),
-  Effect.gen(function* () {
-    const databaseUrl = yield* Config.redacted("DATABASE_URL");
-    const db = yield* Drizzle.Postgres(Effect.succeed(databaseUrl));
-
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const path = new URL(request.url, "http://service").pathname;
-        if (request.method === "OPTIONS") {
-          return yield* json({}, 204);
+  Effect.succeed({
+    fetch: Effect.gen(function* () {
+      const databaseUrl = yield* Config.redacted("DATABASE_URL");
+      const db = yield* Drizzle.Postgres(Effect.succeed(databaseUrl));
+      const request = yield* HttpServerRequest;
+      const path = new URL(request.url, "http://service").pathname;
+      if (request.method === "OPTIONS") {
+        return yield* json({}, 204);
+      }
+      yield* db.execute(sql.raw(ENSURE_NOTES_SQL));
+      if (path === "/health") {
+        return yield* json({ ok: true });
+      }
+      if (path === "/notes" && request.method === "GET") {
+        const notes = yield* db
+          .select()
+          .from(Notes)
+          .orderBy(desc(Notes.createdAt));
+        return yield* json({ notes });
+      }
+      if (path === "/notes" && request.method === "POST") {
+        const raw = yield* request.text.pipe(Effect.orDie);
+        const payload = JSON.parse(raw) as { body?: unknown };
+        const body =
+          typeof payload.body === "string" ? payload.body.trim() : "";
+        if (body.length === 0) {
+          return yield* json({ error: "body required" }, 400);
         }
-        yield* db.execute(sql.raw(ENSURE_NOTES_SQL));
-        if (path === "/health") {
-          return yield* json({ ok: true });
-        }
-        if (path === "/notes" && request.method === "GET") {
-          const notes = yield* db
-            .select()
-            .from(Notes)
-            .orderBy(desc(Notes.createdAt));
-          return yield* json({ notes });
-        }
-        if (path === "/notes" && request.method === "POST") {
-          const raw = yield* request.text.pipe(Effect.orDie);
-          const payload = JSON.parse(raw) as { body?: unknown };
-          const body =
-            typeof payload.body === "string" ? payload.body.trim() : "";
-          if (body.length === 0) {
-            return yield* json({ error: "body required" }, 400);
-          }
-          const [note] = yield* db.insert(Notes).values({ body }).returning();
-          return yield* json({ note }, 201);
-        }
-        return yield* json({ error: "not found" }, 404);
-      }).pipe(
-        Effect.catch((cause: unknown) =>
-          json({ ok: false, error: String(cause) }, 500),
-        ),
-        Effect.orDie,
+        const [note] = yield* db.insert(Notes).values({ body }).returning();
+        return yield* json({ note }, 201);
+      }
+      return yield* json({ error: "not found" }, 404);
+    }).pipe(
+      Effect.catch((cause: unknown) =>
+        json({ ok: false, error: String(cause) }, 500),
       ),
-    };
+      Effect.orDie,
+    ),
   }),
 ) {}

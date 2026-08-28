@@ -17,15 +17,17 @@ const json = (value: unknown, status = 200) =>
   HttpServerResponse.json(value, { status, headers: cors });
 
 /**
- * Effect-native canvas Function. No Docker / registry. Binds
- * {@link Db} via {@link Railway.ConnectPostgres} and serves `/notes`.
+ * HTTP Service. Binds {@link Db} via {@link Railway.ConnectPostgres}
+ * and serves `/notes`.
  */
-export default class Api extends Railway.Function<Api>()(
+export default class Api extends Railway.Service<Api>()(
   "Api",
   {
     project: Site,
     main: import.meta.url,
+    port: 3000,
     build: { install: ["pg"] },
+    healthcheck: "/health",
   },
   Effect.gen(function* () {
     const conn = yield* Railway.ConnectPostgres(Db);

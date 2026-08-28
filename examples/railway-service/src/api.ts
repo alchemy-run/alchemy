@@ -40,6 +40,9 @@ export default class Api extends Railway.Service<Api>()(
     port: API_PORT,
     build: { install: ["pg"] },
     healthcheck: "/health",
+    env: {
+      [SECRET_NAME]: Railway.ref("shared", SECRET_NAME),
+    },
   },
   Effect.gen(function* () {
     yield* Marker;

@@ -57,9 +57,13 @@ export interface FrameworkSiteProps {
   app?: Ref<App>;
   /**
    * Process environment for the hosted server. Not Cloudflare Worker
-   * bindings — values become Machine env vars.
+   * bindings — values become Machine env vars. Accepts `Output`s
+   * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<
+    string,
+    string | Redacted.Redacted<string> | Output.Output<string | undefined>
+  >;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`). Hashed
    * client files are uploaded to Tigris regardless of this bag.
@@ -145,8 +149,13 @@ const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
   Effect.isEffect(ref) ? ref : Effect.succeed(ref);
 
 const envRecord = (
-  env: Record<string, string | Redacted.Redacted<string>> | undefined,
-): Record<string, string> | undefined => {
+  env:
+    | Record<
+        string,
+        string | Redacted.Redacted<string> | Output.Output<string | undefined>
+      >
+    | undefined,
+): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(env).map(([key, value]) => [

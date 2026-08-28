@@ -538,18 +538,27 @@ const waitForDeploymentById = (input: {
         : (instance?.activeDeployments ?? []).find(
             (deployment) => deployment.id === input.deploymentId,
           );
-    const watched = match ?? latest;
-    const status = watched?.status;
+    // Hosted `main` creates the service with a public-image placeholder
+    // (`hashicorp/http-echo`). That first deploy often FAILED (wrong
+    // port / no `/health`) before `railway up` replaces it. Do not
+    // inherit `latest` — only the upload we queued can fail this wait.
+    if (match === undefined) {
+      return yield* new ServiceDeployPending({
+        serviceId: input.serviceId,
+        status: latest?.status ?? "pending",
+      });
+    }
+    const status = match.status;
     if (status !== undefined && deployFailed(status)) {
-      const logs = yield* fetchDeployLogs(watched?.id);
+      const logs = yield* fetchDeployLogs(match.id);
       return yield* new ServiceDeployFailed({
         serviceId: input.serviceId,
         status,
-        deploymentId: watched?.id,
+        deploymentId: match.id,
         logs,
       });
     }
-    if (match !== undefined && instance !== undefined && deployReady(status)) {
+    if (instance !== undefined && deployReady(status)) {
       return instance;
     }
     return yield* new ServiceDeployPending({
