@@ -464,8 +464,10 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.ServicePending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      // serviceCreate fans the instance out to each environment
+      // asynchronously; under full-suite load the fan-out can take minutes.
+      times: 60,
+      schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.catchTag("Railway.ServicePending", () =>
       getInstance(environmentId, serviceId),
@@ -512,12 +514,10 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 36,
+      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
+      times: 96,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.ServiceDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const waitForDeploymentById = (input: {
@@ -962,13 +962,14 @@ export const ServiceProvider = () =>
                   name,
                   ...(sourceRepo !== undefined
                     ? { source: { repo: sourceRepo } }
-                    : sourceImage !== undefined
-                      ? { source: { image: sourceImage } }
-                      : {}),
+                    : {
+                        source: {
+                          image: sourceImage ?? "hashicorp/http-echo",
+                        },
+                      }),
                   ...(sourceRepo !== undefined && props.branch !== undefined
                     ? { branch: props.branch }
                     : {}),
-                  ...(Object.keys(env).length > 0 ? { variables: env } : {}),
                 },
               })
               .pipe(
@@ -993,7 +994,25 @@ export const ServiceProvider = () =>
             });
           }
 
+          // The service instance must exist in this environment before a
+          // domain can be generated (`railway domain` / Terraform both
+          // operate on a live service instance). Extra non-fork
+          // environments lag — `serviceCreate` fans out to every
+          // non-fork env and `serviceInstance` 404s until it lands.
           let instance = yield* waitForInstance(environmentId, current.id);
+
+          // Railway's generated-domain API refuses a service that already
+          // has PORT (or other env) set — it returns "please try again"
+          // forever. Create the hostname on a bare service, then sync env.
+          yield* (session?.note ?? ((_message: string) => Effect.void))(
+            `Creating service domain for ${id}...`,
+          );
+          let domain = yield* ensureServiceDomain({
+            projectId,
+            environmentId,
+            serviceId: current.id,
+          });
+
           const attached = yield* listServiceVolumes(
             environmentId,
             projectId,
@@ -1069,17 +1088,19 @@ export const ServiceProvider = () =>
           });
           if (envChanged) needsDeploy = true;
 
+          if (port !== undefined) {
+            domain = yield* ensureServiceDomain({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              targetPort: port,
+            });
+          }
+
           yield* syncMounts({
             environmentId,
             serviceId: current.id,
             mounts: bound.mounts,
-          });
-
-          const domain = yield* ensureServiceDomain({
-            projectId,
-            environmentId,
-            serviceId: current.id,
-            targetPort: port,
           });
 
           const latestOk = deployReady(instance?.latestDeployment?.status);

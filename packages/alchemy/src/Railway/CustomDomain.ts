@@ -11,7 +11,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { ownedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -346,21 +346,24 @@ export const CustomDomainProvider = () =>
               service.deletedAt == null &&
               matchesAlchemyPhysicalName(service.name),
           );
+          const envIds = yield* projectEnvironmentIds(project);
           const nested = yield* Effect.forEach(services, (service) =>
-            listServiceDomains(
-              project.projectId,
-              project.environmentId,
-              service.id,
-            ).pipe(
-              Effect.map((domains) =>
-                domains.map((domain) =>
-                  toAttrs(domain, {
-                    projectId: project.projectId,
-                    environmentId: project.environmentId,
-                  }),
+            Effect.forEach(envIds, (environmentId) =>
+              listServiceDomains(
+                project.projectId,
+                environmentId,
+                service.id,
+              ).pipe(
+                Effect.map((domains) =>
+                  domains.map((domain) =>
+                    toAttrs(domain, {
+                      projectId: project.projectId,
+                      environmentId,
+                    }),
+                  ),
                 ),
               ),
-            ),
+            ).pipe(Effect.map((rows) => rows.flat())),
           );
           return nested.flat();
         }),

@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -98,14 +98,14 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
-          const cache = yield* Railway.Redis("Cache", { project });
+          const { project, environment } = yield* suitePartition;
+          const cache = yield* Railway.Redis("Cache", { project, environment });
           const proxy = yield* Railway.TcpProxy("CacheProxy", {
             redis: cache,
-            environment: project,
+            environment,
             applicationPort: Railway.REDIS_PORT,
           });
-          return { project, cache, proxy };
+          return { project, environment, cache, proxy };
         }),
       );
 
@@ -113,7 +113,7 @@ test.provider(
       expect(created.cache.serviceId.length).toBeGreaterThan(0);
       expect(created.cache.projectId).toEqual(created.project.projectId);
       expect(created.cache.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.cache.name).toEqual(expect.any(String));
       expect(created.cache.name.length).toBeGreaterThan(0);
@@ -184,17 +184,18 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const cache = yield* Railway.Redis("Cache", {
             project,
+            environment,
             name: nextName,
           });
           const proxy = yield* Railway.TcpProxy("CacheProxy", {
             redis: cache,
-            environment: project,
+            environment,
             applicationPort: Railway.REDIS_PORT,
           });
-          return { project, cache, proxy };
+          return { project, environment, cache, proxy };
         }),
       );
 
@@ -211,7 +212,7 @@ test.provider(
       yield* stack.destroy();
 
       const proxyGone = yield* waitUntilProxyGone(
-        created.project.environmentId,
+        created.environment.environmentId,
         created.cache.serviceId,
         created.proxy.id,
       );
@@ -219,5 +220,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.cache.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

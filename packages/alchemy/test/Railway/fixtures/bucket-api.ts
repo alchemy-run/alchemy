@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Site } from "./bindings-shared.ts";
+import { Partition, Site } from "./suite-env.ts";
 
 export { Site };
 
@@ -11,7 +11,10 @@ export const BUCKET_PORT = 3000;
 export const OBJECT_KEY = "alchemy-marker.txt";
 export const OBJECT_BODY = "hello-from-railway";
 
-export const Data = Railway.Bucket("Data", { project: Site });
+export const Data = Railway.Bucket("Data", {
+  project: Site,
+  environment: Partition,
+});
 
 /**
  * HTTP Service that puts and gets an object on a Railway bucket via
@@ -23,6 +26,7 @@ export default class BucketApi extends Railway.Service<BucketApi>()(
     const bucket = yield* Data;
     return {
       project: Site,
+      environment: Partition,
       main: import.meta.url,
       port: BUCKET_PORT,
       env: {

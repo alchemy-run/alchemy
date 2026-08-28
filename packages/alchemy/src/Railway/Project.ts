@@ -14,6 +14,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment } from "./Environment.ts";
+import { waitOutCreateRateLimit } from "./transient.ts";
 import {
   createRailwayName,
   matchesAlchemyPhysicalName,
@@ -244,18 +245,20 @@ export const createProject = (input: {
   description?: string;
   defaultEnvironmentName?: string;
 }) =>
-  railway.projectCreate({
-    input: {
-      name: input.name,
-      workspaceId: input.workspaceId,
-      ...(input.description !== undefined
-        ? { description: input.description }
-        : {}),
-      ...(input.defaultEnvironmentName !== undefined
-        ? { defaultEnvironmentName: input.defaultEnvironmentName }
-        : {}),
-    },
-  });
+  waitOutCreateRateLimit(
+    railway.projectCreate({
+      input: {
+        name: input.name,
+        workspaceId: input.workspaceId,
+        ...(input.description !== undefined
+          ? { description: input.description }
+          : {}),
+        ...(input.defaultEnvironmentName !== undefined
+          ? { defaultEnvironmentName: input.defaultEnvironmentName }
+          : {}),
+      },
+    }),
+  );
 
 const findByName = (workspaceId: string, name: string) =>
   railway.projects
@@ -286,6 +289,32 @@ export const ownedProjects = Effect.fn(function* () {
 });
 
 export const listOwnedProjects = ownedProjects;
+
+/**
+ * Live environment ids under a project, including the stamped primary.
+ * `list()` walks these so partition environments are not invisible.
+ */
+export const projectEnvironmentIds = (project: {
+  projectId: string;
+  environmentId: string;
+}) =>
+  railway.environments.items({ projectId: project.projectId, first: 50 }).pipe(
+    Stream.filter((env) => env.deletedAt == null),
+    Stream.map((env) => env.id),
+    Stream.runCollect,
+    Effect.map((ids) => {
+      const set = new Set(Array.from(ids));
+      if (project.environmentId.length > 0) {
+        set.add(project.environmentId);
+      }
+      return Array.from(set);
+    }),
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.succeed(
+        project.environmentId.length > 0 ? [project.environmentId] : [],
+      ),
+    ),
+  );
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {

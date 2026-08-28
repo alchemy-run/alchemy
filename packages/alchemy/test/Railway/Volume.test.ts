@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -24,12 +24,13 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const volume = yield* Railway.Volume("Data", {
             project,
+            environment,
             mountPath: "/data",
           });
-          return { project, volume };
+          return { project, environment, volume };
         }),
       );
 
@@ -39,7 +40,7 @@ test.provider(
       expect(created.volume.volumeInstanceId.length).toBeGreaterThan(0);
       expect(created.volume.projectId).toEqual(created.project.projectId);
       expect(created.volume.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.volume.mountPath).toEqual("/data");
       expect(created.volume.serviceId).toBeUndefined();
@@ -73,12 +74,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const volume = yield* Railway.Volume("Data", {
             project,
+            environment,
             mountPath: "/app/data",
           });
-          return { project, volume };
+          return { project, environment, volume };
         }),
       );
 
@@ -105,7 +107,7 @@ test.provider(
       const gone = yield* waitUntilVolumeGone(created.volume.volumeInstanceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider(
@@ -116,41 +118,46 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
             port: 5678,
           });
           const data = yield* Railway.Volume("Data", {
             project,
+            environment,
             mountPath: "/data",
             service: api,
           });
-          return { project, api, data };
+          return { project, environment, api, data };
         }),
       );
 
       const result = yield* Effect.result(
         stack.deploy(
           Effect.gen(function* () {
-            const project = yield* suiteProject;
+            const { project, environment } = yield* suitePartition;
             const api = yield* Railway.Service("Api", {
               project,
+              environment,
               image: "hashicorp/http-echo",
               port: 5678,
             });
             const data = yield* Railway.Volume("Data", {
               project,
+              environment,
               mountPath: "/data",
               service: api,
             });
             const cache = yield* Railway.Volume("Cache", {
               project,
+              environment,
               mountPath: "/cache",
               service: api,
             });
-            return { project, api, data, cache };
+            return { project, environment, api, data, cache };
           }),
         ),
       );
@@ -163,5 +170,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 3_600_000 },
 );

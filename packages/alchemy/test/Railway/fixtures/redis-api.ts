@@ -2,6 +2,7 @@ import * as Railway from "@/Railway";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Partition } from "./suite-env.ts";
 import { Cache, REDIS_KEY, REDIS_VALUE, Site } from "./redis-shared.ts";
 
 export { Cache, REDIS_KEY, REDIS_VALUE, Site };
@@ -16,6 +17,7 @@ export default class RedisApi extends Railway.Service<RedisApi>()(
   "RedisApi",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
     port: REDIS_PORT,
   },

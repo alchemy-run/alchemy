@@ -34,6 +34,10 @@ import {
   VolumeAttachmentProvider,
 } from "./VolumeAttachment.ts";
 import { Zone, ZoneProvider } from "./Zone.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Hetzner",
@@ -86,6 +90,7 @@ export const providers = () =>
       SshKey,
       Volume,
       VolumeAttachment,
+      WebsiteServer,
       Zone,
     ]),
   ).pipe(
@@ -106,6 +111,7 @@ export const providers = () =>
         SshKeyProvider(),
         VolumeProvider(),
         VolumeAttachmentProvider(),
+        WebsiteServerProvider(),
         ZoneProvider(),
       ),
     ),

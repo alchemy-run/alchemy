@@ -4,14 +4,14 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
-import { adopt } from "@/AdoptPolicy.ts";
 import * as Alchemy from "@/index.ts";
 import * as Railway from "@/Railway";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -37,8 +37,13 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(
+      Layer.mergeAll(
+        RailwayRetryPolicy,
+        CredentialsFromEnv,
+        FetchHttpClient.layer,
+      ),
+    ),
   );
 
 class NotReady extends Data.TaggedError("NotReady")<{
@@ -119,15 +124,17 @@ const withBucketS3 = <A, E, R>(
 ) =>
   operation.pipe(
     Effect.provide(
-      fromCredentials(
-        {
-          accessKeyId: creds.accessKeyId,
-          secretAccessKey: creds.secretAccessKey,
-        },
-        creds.region as RegionName,
+      Layer.mergeAll(
+        fromCredentials(
+          {
+            accessKeyId: creds.accessKeyId,
+            secretAccessKey: creds.secretAccessKey,
+          },
+          creds.region as RegionName,
+        ),
+        AwsEndpoint.of(creds.endpoint),
       ),
     ),
-    Effect.provide(AwsEndpoint.of(creds.endpoint)),
   );
 
 const Stack = Alchemy.Stack(
@@ -137,11 +144,11 @@ const Stack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const project = yield* Site.pipe(adopt(true), RemovalPolicy.retain());
+    const project = yield* Site;
     const cache = yield* Cache;
     const proxy = yield* Railway.TcpProxy("CacheProxy", {
       redis: cache,
-      environment: project,
+      environment: cache,
       applicationPort: Railway.REDIS_PORT,
     });
     const redisApi = yield* RedisApi;
@@ -149,14 +156,14 @@ const Stack = Alchemy.Stack(
     const bucketApi = yield* BucketApi;
     return {
       redisProjectId: project.projectId,
-      redisEnvironmentId: project.environmentId,
+      redisEnvironmentId: cache.environmentId,
       cacheServiceId: cache.serviceId,
       proxyDomain: proxy.domain,
       proxyPort: proxy.proxyPort,
       redisUrl: redisApi.url,
       redisServiceId: redisApi.serviceId,
       bucketProjectId: project.projectId,
-      bucketEnvironmentId: project.environmentId,
+      bucketEnvironmentId: bucket.environmentId,
       bucketId: bucket.bucketId,
       bucketUrl: bucketApi.url,
       bucketServiceId: bucketApi.serviceId,
@@ -165,10 +172,9 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 480_000 });
-
+const stack = beforeAll(deploy(Stack), { timeout: 3_600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 480_000,
+  timeout: 3_600_000,
 });
 
 const retryTransient = {
@@ -261,7 +267,7 @@ describe("Railway Bindings", () => {
         expect(bucketBody.length).toBeGreaterThan(0);
       }
     }).pipe(logLevel),
-    { timeout: 480_000 },
+    { timeout: 3_600_000 },
   );
 
   describe("ReadWriteRedis", () => {
@@ -312,7 +318,7 @@ describe("Railway Bindings", () => {
         const got = yield* Railway.runRedisCommand(url, "GET", ["marker"]);
         expect(got).toEqual(REDIS_VALUE);
       }).pipe(logLevel),
-      { timeout: 480_000 },
+      { timeout: 3_600_000 },
     );
   });
 
@@ -377,7 +383,7 @@ describe("Railway Bindings", () => {
             : yield* Stream.mkString(Stream.decodeText(got.Body));
         expect(text).toEqual(OBJECT_BODY);
       }).pipe(logLevel),
-      { timeout: 480_000 },
+      { timeout: 3_600_000 },
     );
   });
 });

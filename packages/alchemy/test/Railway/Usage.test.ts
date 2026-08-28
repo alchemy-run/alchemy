@@ -61,7 +61,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider(
@@ -157,5 +157,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

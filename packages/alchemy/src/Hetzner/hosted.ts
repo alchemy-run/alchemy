@@ -490,7 +490,11 @@ WantedBy=multi-user.target
           .attachVolume({
             id: volumeId,
             server: input.serverId,
-            automount: true,
+            // No automount: Hetzner would mount the device at
+            // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
+            // our own `mount` at the service path fail with
+            // "already mounted". We own the mount + fstab below.
+            automount: false,
           })
           .pipe(
             Effect.retry({
@@ -560,14 +564,29 @@ WantedBy=multi-user.target
           `  udevadm settle --timeout=10 2>/dev/null || true`,
           `  mounted=0`,
           `  for i in 1 2 3 4 5 6 7 8 9 10; do`,
-          `    if [ -e ${deviceLit} ] && mount -t ${fsLit} ${deviceLit} ${pathLit}; then`,
+          // A sibling Service sharing the same (volume, path) may have
+          // mounted it between iterations — that IS the desired state.
+          `    if findmnt -n ${pathLit} >/dev/null 2>&1; then`,
           `      mounted=1`,
           `      break`,
+          `    fi`,
+          `    if [ -e ${deviceLit} ]; then`,
+          // A previous attach with automount (or a leaked mount from an
+          // interrupted run) may hold the device at /mnt/HC_Volume_* —
+          // "already mounted" would fail our mount at the service path.
+          `      current="$(findmnt -n -o TARGET ${deviceLit} 2>/dev/null || true)"`,
+          `      if [ -n "$current" ] && [ "$current" != ${pathLit} ]; then`,
+          `        umount ${deviceLit} 2>/dev/null || true`,
+          `      fi`,
+          `      if mount -t ${fsLit} ${deviceLit} ${pathLit}; then`,
+          `        mounted=1`,
+          `        break`,
+          `      fi`,
           `    fi`,
           `    sleep 2`,
           `  done`,
           `  if [ "$mounted" != 1 ]; then`,
-          `    echo "volume device ${deviceLit} did not appear" >&2`,
+          `    echo "volume ${deviceLit} could not be mounted at ${pathLit}" >&2`,
           `    ls -l /dev/disk/by-id 2>/dev/null || true`,
           `    exit 1`,
           `  fi`,

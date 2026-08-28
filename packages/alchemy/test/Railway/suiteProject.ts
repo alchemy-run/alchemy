@@ -8,8 +8,11 @@
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import { resolveWorkspace } from "@/Railway/Environment.ts";
-import type { Project } from "@/Railway/Project.ts";
+import { Environment } from "@/Railway/ProjectEnvironment.ts";
+import { createProject, type Project } from "@/Railway/Project.ts";
+import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { SUITE_PROJECT_NAME } from "./suiteProjectName.ts";
@@ -85,27 +88,31 @@ const acquire = Effect.gen(function* () {
     return yield* resolve(existing);
   }
 
-  return yield* railway
-    .projectCreate({
-      input: {
-        name: SUITE_PROJECT_NAME,
-        workspaceId: workspace.id,
-        description: "alchemy railway live-test suite (shared)",
-      },
-    })
-    .pipe(
-      Effect.flatMap((project) => resolve(project)),
-      Effect.catch((error) =>
-        findByName(workspace.id).pipe(
-          Effect.flatMap((found) =>
-            found !== undefined ? resolve(found) : Effect.fail(error),
-          ),
+  return yield* createProject({
+    name: SUITE_PROJECT_NAME,
+    workspaceId: workspace.id,
+    description: "alchemy railway live-test suite (shared)",
+  }).pipe(
+    Effect.flatMap((project) => resolve(project)),
+    Effect.catch((error) =>
+      findByName(workspace.id).pipe(
+        Effect.flatMap((found) =>
+          found !== undefined ? resolve(found) : Effect.fail(error),
         ),
       ),
-    );
+    ),
+  );
 }).pipe(
-  Effect.provide(CredentialsFromEnv),
-  Effect.provide(FetchHttpClient.layer),
+  Effect.provide(
+    // The retry policy matters here: every Railway test file's beforeAll
+    // resolves the suite project at once, and that burst alone can trip
+    // Railway's rate limit — the SDK default gives up after ~20s.
+    Layer.mergeAll(
+      RailwayRetryPolicy,
+      CredentialsFromEnv,
+      FetchHttpClient.layer,
+    ),
+  ),
 );
 
 /**
@@ -115,3 +122,14 @@ const acquire = Effect.gen(function* () {
 export const suiteProject: Effect.Effect<Project> = Effect.runSync(
   Effect.cached(acquire),
 );
+
+/**
+ * Empty extra environment on {@link suiteProject}. Yield inside
+ * `stack.deploy` so destroy deletes the partition. Does not fork
+ * production (`sourceEnvironmentId` omitted).
+ */
+export const suitePartition = Effect.gen(function* () {
+  const project = yield* suiteProject;
+  const environment = yield* Environment("Partition", { project });
+  return { project, environment };
+});

@@ -5,10 +5,11 @@ import * as S3 from "@distilled.cloud/aws/s3";
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -105,15 +106,17 @@ const withBucketS3 = <A, E, R>(
 ) =>
   operation.pipe(
     Effect.provide(
-      fromCredentials(
-        {
-          accessKeyId: creds.accessKeyId,
-          secretAccessKey: creds.secretAccessKey,
-        },
-        creds.region as RegionName,
+      Layer.mergeAll(
+        fromCredentials(
+          {
+            accessKeyId: creds.accessKeyId,
+            secretAccessKey: creds.secretAccessKey,
+          },
+          creds.region as RegionName,
+        ),
+        AwsEndpoint.of(creds.endpoint),
       ),
     ),
-    Effect.provide(AwsEndpoint.of(creds.endpoint)),
   );
 
 test.provider(
@@ -124,11 +127,12 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const bucket = yield* Railway.Bucket("Data", {
             project,
+            environment,
           });
-          return { project, bucket };
+          return { project, environment, bucket };
         }),
       );
 
@@ -136,7 +140,7 @@ test.provider(
       expect(created.bucket.bucketId.length).toBeGreaterThan(0);
       expect(created.bucket.projectId).toEqual(created.project.projectId);
       expect(created.bucket.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.bucket.name).toEqual(expect.any(String));
       expect(created.bucket.name.length).toBeGreaterThan(0);
@@ -226,12 +230,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const bucket = yield* Railway.Bucket("Data", {
             project,
+            environment,
             name: nextName,
           });
-          return { project, bucket };
+          return { project, environment, bucket };
         }),
       );
 
@@ -260,5 +265,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

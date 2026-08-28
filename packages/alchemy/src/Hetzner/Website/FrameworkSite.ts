@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as NodeNet from "node:net";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { asEffect } from "../../Util/types.ts";
+import { Server as FrameworkServer } from "../../Website/Server.ts";
 import type { Providers } from "../Providers.ts";
 import { RecordSet } from "../RecordSet.ts";
 import { Server } from "../Server.ts";
@@ -203,37 +203,6 @@ export interface Website {
   readonly service: Service | undefined;
 }
 
-/**
- * The structural slice of a framework-integration module this composite
- * drives. Typed structurally so alchemy carries no dependency on
- * `@distilled.cloud/framework-core` — the *project's* install is always
- * the one loaded.
- */
-interface FrameworkModule {
-  readonly make: (options: Record<string, unknown>) => Effect.Effect<
-    {
-      readonly build: (options?: {
-        readonly root?: string;
-        readonly env?: Record<string, string>;
-      }) => Effect.Effect<FrameworkBuildOutputSlice, unknown>;
-      readonly dev: (options?: {
-        readonly root?: string;
-        readonly port?: number;
-        readonly host?: string;
-      }) => Effect.Effect<{ readonly url: string }, unknown>;
-    },
-    unknown,
-    FileSystem.FileSystem | Path.Path
-  >;
-}
-
-/** The structural slice of framework-core's `BuildOutput` this composite reads. */
-interface FrameworkBuildOutputSlice {
-  readonly distDirectory?: string | undefined;
-  readonly clientDirectory: string | undefined;
-  readonly serverModules: Array<{ readonly name: string }> | undefined;
-}
-
 export class FrameworkSiteError extends Data.TaggedError(
   "Hetzner.Website.FrameworkSiteError",
 )<{
@@ -303,91 +272,6 @@ export const websiteUrl = (args: {
     ? `http://${args.domain}:${String(args.port)}`
     : args.service.url;
 
-const importFrameworkModule = (specifier: string) =>
-  Effect.tryPromise({
-    try: () => import(specifier) as Promise<Partial<FrameworkModule>>,
-    catch: (cause) =>
-      new FrameworkSiteError({
-        framework: specifier,
-        message:
-          `Failed to import the framework integration "${specifier}". ` +
-          "It must be installed in your project (it is loaded dynamically at deploy time).",
-        cause,
-      }),
-  }).pipe(
-    Effect.flatMap((module_) =>
-      typeof module_.make === "function"
-        ? Effect.succeed(module_ as FrameworkModule)
-        : Effect.fail(
-            new FrameworkSiteError({
-              framework: specifier,
-              message: `"${specifier}" does not export the framework-integration contract (a "make" function)`,
-            }),
-          ),
-    ),
-  );
-
-const makeFramework = (
-  config: FrameworkSiteConfig,
-  root: string,
-  memo?: MemoOptions | boolean,
-) =>
-  importFrameworkModule(config.framework).pipe(
-    Effect.flatMap((module_) =>
-      Effect.mapError(
-        module_.make({
-          ...config.options,
-          root,
-          target: config.target,
-          ...(memo !== undefined ? { memo } : {}),
-        }),
-        (cause) =>
-          new FrameworkSiteError({
-            framework: config.framework,
-            message: "Failed to initialize the framework integration",
-            cause,
-          }),
-      ),
-    ),
-  );
-
-const isPortFree = (port: number, host: string) =>
-  Effect.callback<boolean>((resume) => {
-    const server = NodeNet.createServer();
-    server.unref();
-    server.once("error", () => resume(Effect.succeed(false)));
-    server.listen(port, host, () => {
-      server.close(() => resume(Effect.succeed(true)));
-    });
-  });
-
-const resolveDevPort = Effect.fn(function* (options: {
-  readonly framework: string;
-  readonly port: number;
-  readonly host: string;
-  readonly strictPort: boolean;
-}) {
-  const { framework, port, host, strictPort } = options;
-  if (yield* isPortFree(port, host)) return port;
-  if (strictPort) {
-    return yield* Effect.fail(
-      new FrameworkSiteError({
-        framework,
-        message: `Port ${port} is already in use and \`dev.strictPort\` is set`,
-      }),
-    );
-  }
-  for (let candidate = port + 1; candidate <= port + 100; candidate++) {
-    if (yield* isPortFree(candidate, host)) return candidate;
-  }
-  return yield* Effect.fail(
-    new FrameworkSiteError({
-      framework,
-      message: `No free port found between ${port} and ${port + 100}`,
-    }),
-  );
-});
-
 /**
  * Shared implementation behind the Hetzner framework website composites:
  * build through the Node deploy target, then host one Service on a
@@ -407,7 +291,6 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
   const isLocal = ctx.dev && remoted !== true;
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
-  const root = path.resolve(initialCwd, props.rootDir ?? ".");
   const port = DEFAULT_WEBSITE_PORT;
 
   if (config.static?.spa && config.static.errorPage) {
@@ -421,78 +304,58 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     );
   }
 
-  if (isLocal && props.dev?.mode === "external") {
-    return {
-      url: props.dev.url,
-      server: undefined,
-      service: undefined,
-    };
-  }
-
-  const framework = yield* makeFramework(config, root, props.memo);
+  const build = yield* FrameworkServer("Build", {
+    framework: config.framework,
+    target: config.target,
+    root: props.rootDir,
+    env: unwrapEnv(props.env),
+    options: config.options,
+    memo: props.memo,
+    dev: props.dev,
+  });
 
   if (isLocal) {
-    const dev = props.dev;
-    const resolvedPort =
-      dev && dev.mode !== "external" && dev.port !== undefined
-        ? yield* resolveDevPort({
-            framework: config.framework,
-            port: dev.port,
-            host: dev.host ?? "127.0.0.1",
-            strictPort: dev.strictPort ?? false,
-          })
-        : undefined;
-    const { url } = yield* Effect.mapError(
-      framework.dev({
-        root,
-        port: resolvedPort,
-        host: dev && dev.mode !== "external" ? dev.host : undefined,
-      }),
-      (cause) =>
-        new FrameworkSiteError({
-          framework: config.framework,
-          message: `The ${config.framework} dev server failed to start`,
-          cause,
-        }),
-    );
     return {
-      url,
+      url: build.url,
       server: undefined,
       service: undefined,
     };
   }
 
-  const built = yield* Effect.mapError(
-    framework.build({ root, env: unwrapEnv(props.env) }),
-    (cause) =>
-      new FrameworkSiteError({
-        framework: config.framework,
-        message: `The ${config.framework} build failed`,
-        cause,
+  // The build runs at APPLY time (`Website.Server` is a resource), so its
+  // attributes are Outputs here — derive every deploy input lazily and let
+  // the engine resolve them once the build has produced real paths. Reading
+  // `build.distDir` eagerly in the composite body would observe an Output
+  // proxy, not a string.
+  const buildOut = Output.mapEffect(
+    ([serverEntry, distDir]: [string | undefined, string | undefined]) =>
+      Effect.gen(function* () {
+        if (serverEntry === undefined || distDir === undefined) {
+          return yield* Effect.die(
+            new FrameworkSiteError({
+              framework: config.framework,
+              message: `The ${config.name} build produced no Node serve entry (serverModules[0]). The Node deploy target should write serve-node.mjs.`,
+            }),
+          );
+        }
+        const main = path.resolve(initialCwd, serverEntry);
+        if (!(yield* fs.exists(main).pipe(Effect.orElseSucceed(() => false)))) {
+          return yield* Effect.die(
+            new FrameworkSiteError({
+              framework: config.framework,
+              message: `The ${config.name} build produced no server entry at ${main}`,
+            }),
+          );
+        }
+        return { distDir: path.resolve(initialCwd, distDir), main };
       }),
+  )(
+    Output.all(
+      build.serverEntry as unknown as Output.Output<string | undefined>,
+      build.distDir as unknown as Output.Output<string | undefined>,
+    ) as unknown as Output.Output<[string | undefined, string | undefined]>,
   );
-
-  const distDir = path.resolve(
-    built.distDirectory ?? built.clientDirectory ?? path.join(root, "dist"),
-  );
-  const entryName = built.serverModules?.[0]?.name;
-  if (entryName === undefined || entryName.length === 0) {
-    return yield* Effect.fail(
-      new FrameworkSiteError({
-        framework: config.framework,
-        message: `The ${config.name} build produced no Node serve entry (serverModules[0]). The Node deploy target should write serve-node.mjs.`,
-      }),
-    );
-  }
-  const main = path.resolve(distDir, entryName);
-  if (!(yield* fs.exists(main))) {
-    return yield* Effect.fail(
-      new FrameworkSiteError({
-        framework: config.framework,
-        message: `The ${config.name} build produced no server entry at ${main}`,
-      }),
-    );
-  }
+  const main = Output.map(buildOut, (out) => out.main);
 
   const server = yield* resolveWebsiteServer(props);
   const env: Record<string, string> = {
@@ -500,37 +363,52 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     PORT: String(port),
   };
 
-  const extraFiles: Array<{ source: string; destination: string }> = [];
-  if (config.skipClientAssets) {
-    const nextDir = path.join(distDir, ".next");
-    if (yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))) {
-      extraFiles.push({ source: nextDir, destination: ".next" });
-    }
-    const publicDir = path.join(distDir, "public");
-    if (yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))) {
-      extraFiles.push({ source: publicDir, destination: "public" });
-    }
-    for (const name of [
-      "next.config.js",
-      "next.config.mjs",
-      "next.config.cjs",
-      "next.config.ts",
-    ] as const) {
-      const configPath = path.join(distDir, name);
-      if (
-        yield* fs.exists(configPath).pipe(Effect.orElseSucceed(() => false))
-      ) {
-        extraFiles.push({ source: configPath, destination: name });
-      }
-    }
-  } else {
-    extraFiles.push({ source: distDir, destination: "." });
-  }
+  const extraFiles = Output.mapEffect(
+    (out: { distDir: string; main: string }) =>
+      Effect.gen(function* () {
+        const files: Array<{ source: string; destination: string }> = [];
+        if (config.skipClientAssets) {
+          const nextDir = path.join(out.distDir, ".next");
+          if (
+            yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))
+          ) {
+            files.push({ source: nextDir, destination: ".next" });
+          }
+          const publicDir = path.join(out.distDir, "public");
+          if (
+            yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))
+          ) {
+            files.push({ source: publicDir, destination: "public" });
+          }
+          for (const name of [
+            "next.config.js",
+            "next.config.mjs",
+            "next.config.cjs",
+            "next.config.ts",
+          ] as const) {
+            const configPath = path.join(out.distDir, name);
+            if (
+              yield* fs
+                .exists(configPath)
+                .pipe(Effect.orElseSucceed(() => false))
+            ) {
+              files.push({ source: configPath, destination: name });
+            }
+          }
+        } else {
+          files.push({ source: out.distDir, destination: "." });
+        }
+        return files.length > 0 ? files : undefined;
+      }),
+  )(buildOut);
 
   const service = yield* Service("Service", {
     server,
-    main,
-    extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
+    main: main as unknown as string,
+    extraFiles: extraFiles as unknown as Array<{
+      source: string;
+      destination: string;
+    }>,
     port,
     env,
     isExternal: true,

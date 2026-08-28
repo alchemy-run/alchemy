@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Api } from "./rpc-api-tag.ts";
-import { Site } from "./rpc-shared.ts";
+import { Partition, Site } from "./rpc-shared.ts";
 
 /**
  * Tagged Function that hosts `greet` and binds the tagged {@link Api}
@@ -14,7 +14,7 @@ import { Site } from "./rpc-shared.ts";
  */
 export default class Query extends Function<Query>()(
   "Query",
-  { project: Site, main: import.meta.url },
+  { project: Site, environment: Partition, main: import.meta.url },
   Effect.gen(function* () {
     enableRailwayRpc();
     const api = yield* bindService(Api);

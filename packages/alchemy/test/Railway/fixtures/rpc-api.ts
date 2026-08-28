@@ -4,7 +4,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Api } from "./rpc-api-tag.ts";
 import Query from "./rpc-query.ts";
-import { Site } from "./rpc-shared.ts";
+import { Partition, Site } from "./rpc-shared.ts";
 
 export { Api };
 
@@ -18,6 +18,7 @@ export { Api };
 export const ApiLive = Api.make(
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
     port: 3000,
   },

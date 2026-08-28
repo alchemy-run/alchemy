@@ -518,13 +518,53 @@ import { setDefaultResultOrder } from "node:dns";
 setDefaultResultOrder("ipv4first");
 const g=globalThis,port=Number(process.env.PORT??3000);
 g.__aFF??=async()=>new Response("");
-Bun.serve({port,fetch:r=>g.__aFF(r)});
+Bun.serve({hostname:"0.0.0.0",port,fetch:r=>g.__aFF(r)});
 try{
 const u=new URL("./i.mjs",import.meta.url);
 await Bun.write(u,${JSON.stringify(inner)});
 await import(u.href);
 }catch(e){
 g.__aFF=async()=>new Response(String(e),{status:500});
+}
+`;
+  });
+
+/**
+ * Canvas wrapper for async (non-Effect) Functions. No Effect pin, no
+ * `__aFF` bridge — the user's `export default { fetch }` is the handler,
+ * with `process.env` as the second argument (Cloudflare `env`).
+ */
+const wrapAsyncCanvasListener = (
+  inner: string,
+  handler: string,
+  install: Readonly<Record<string, string>> = {},
+) =>
+  Effect.sync(() => {
+    const extraPins = collectCanvasPackageRoots(inner, install).map((name) => {
+      const requested = install[name];
+      const version =
+        requested !== undefined && requested !== "*"
+          ? requested
+          : readPackageVersion(name);
+      return pinImport(name, version);
+    });
+    const pins = extraPins.join("\n");
+    const handlerLit = JSON.stringify(handler);
+    return `${pins}
+import { setDefaultResultOrder } from "node:dns";
+setDefaultResultOrder("ipv4first");
+const port=Number(process.env.PORT??3000);
+const fail=e=>new Response(String(e),{status:500});
+try{
+const u=new URL("./i.mjs",import.meta.url);
+await Bun.write(u,${JSON.stringify(inner)});
+const m=await import(u.href);
+const e=m[${handlerLit}];
+const f=typeof e==="function"?e:e?.fetch;
+if(typeof f!=="function")throw new Error("async Function missing fetch");
+Bun.serve({hostname:"0.0.0.0",port,fetch:r=>f(r,process.env)});
+}catch(e){
+Bun.serve({hostname:"0.0.0.0",port,fetch:()=>fail(e)});
 }
 `;
   });
@@ -607,6 +647,11 @@ const createBundleProgram = (
      */
     canvasExternals?: boolean;
     bootstrap?: (handler: string) => (importPath: string) => string;
+    /**
+     * Bundle `main` as the entry with no virtual bootstrap. Used for
+     * async (non-Effect) canvas Functions (`isExternal`).
+     */
+    skipVirtualEntry?: boolean;
   },
 ) =>
   Effect.fn(function* (props: HostedProgramProps) {
@@ -672,7 +717,7 @@ const createBundleProgram = (
       );
     });
 
-    if (props.isExternal === true) {
+    if (props.isExternal === true && options?.skipVirtualEntry !== true) {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const bytes = yield* fs.readFile(realMain);
@@ -685,7 +730,9 @@ const createBundleProgram = (
 
     const bundleOutput = yield* buildBundle(
       realMain,
-      virtualEntryPlugin(bootstrap),
+      options?.skipVirtualEntry === true
+        ? undefined
+        : virtualEntryPlugin(bootstrap),
     );
 
     const files = bundleOutput.files.map((file) => ({
@@ -732,8 +779,17 @@ export const createRailwayFunctionSupport = ({
     },
   });
 
+  const asyncBundleProgram = createBundleProgram(virtualEntryPlugin, {
+    canvasExternals: true,
+    skipVirtualEntry: true,
+    output: { codeSplitting: false },
+  });
+
   const bundleToSource = Effect.fn(function* (props: HostedProgramProps) {
-    const bundled = yield* bundleProgram(props);
+    const bundled =
+      props.isExternal === true
+        ? yield* asyncBundleProgram(props)
+        : yield* bundleProgram(props);
     if (bundled.files.length !== 1) {
       return yield* new FunctionBundleNotSingleFile({
         files: bundled.files.map((file) => file.path),
@@ -741,7 +797,14 @@ export const createRailwayFunctionSupport = ({
     }
     const inner = decodeBundleText(bundled.files[0]!.content);
     const install = yield* normalizeInstallTargets(props.build?.install);
-    const source = yield* wrapCanvasListener(inner, install);
+    const source =
+      props.isExternal === true
+        ? yield* wrapAsyncCanvasListener(
+            inner,
+            props.handler ?? "default",
+            install,
+          )
+        : yield* wrapCanvasListener(inner, install);
     const hash = yield* sha256(source);
     return { source, hash };
   });

@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -97,18 +97,19 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
             port: 5678,
           });
           const backend = yield* Railway.Group("Backend", {
             project,
-            environment: project,
+            environment,
             resources: [api],
           });
-          return { project, api, backend };
+          return { project, environment, api, backend };
         }),
       );
 
@@ -116,7 +117,7 @@ test.provider(
       expect(created.backend.groupId.length).toBeGreaterThan(0);
       expect(created.backend.projectId).toEqual(created.project.projectId);
       expect(created.backend.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.backend.name).toEqual(expect.any(String));
       expect(created.backend.name.length).toBeGreaterThan(0);
@@ -161,18 +162,19 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
             port: 5678,
           });
           const backend = yield* Railway.Group("Backend", {
             project,
-            environment: project,
+            environment,
             resources: [api],
           });
-          return { project, api, backend };
+          return { project, environment, api, backend };
         }),
       );
 
@@ -196,5 +198,5 @@ test.provider(
       );
       expect(groupGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

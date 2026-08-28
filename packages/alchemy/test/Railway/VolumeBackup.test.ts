@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -23,17 +23,19 @@ const logLevel = Effect.provideService(
 const backupEntitled = !!process.env.RAILWAY_TEST_VOLUME_BACKUP;
 
 const VolumeStack = Effect.gen(function* () {
-  const project = yield* suiteProject;
+  const { project, environment } = yield* suitePartition;
   const api = yield* Railway.Service("Api", {
     project,
+    environment,
     image: "hashicorp/http-echo",
   });
   const volume = yield* Railway.Volume("Data", {
     project,
+    environment,
     mountPath: "/data",
     service: api,
   });
-  return { project, api, volume };
+  return { project, environment, api, volume };
 });
 
 const listLive = (volumeInstanceId: string) =>
@@ -136,7 +138,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider.skipIf(!backupEntitled)(
@@ -150,21 +152,23 @@ test.provider.skipIf(!backupEntitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
           });
           const volume = yield* Railway.Volume("Data", {
             project,
+            environment,
             mountPath: "/data",
             service: api,
           });
           const backup = yield* Railway.VolumeBackup("Snapshot", {
             volume,
-            environment: project,
+            environment,
           });
-          return { project, api, volume, backup };
+          return { project, environment, api, volume, backup };
         }),
       );
 
@@ -176,7 +180,7 @@ test.provider.skipIf(!backupEntitled)(
       expect(created.backup.volumeId).toEqual(created.volume.volumeId);
       expect(created.backup.projectId).toEqual(created.project.projectId);
       expect(created.backup.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.backup.name).toEqual(expect.any(String));
       expect(created.backup.name.length).toBeGreaterThan(0);
@@ -209,5 +213,5 @@ test.provider.skipIf(!backupEntitled)(
       );
       expect(backupGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

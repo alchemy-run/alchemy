@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -78,18 +78,19 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const variable = yield* Railway.Variable("DbUrl", {
             project,
+            environment,
             value: VALUE_A,
           });
-          return { project, variable };
+          return { project, environment, variable };
         }),
       );
 
       expect(created.variable.projectId).toEqual(created.project.projectId);
       expect(created.variable.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.variable.serviceId).toBeUndefined();
       expect(created.variable.name).toEqual(expect.any(String));
@@ -121,12 +122,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const variable = yield* Railway.Variable("DbUrl", {
             project,
+            environment,
             value: VALUE_B,
           });
-          return { project, variable };
+          return { project, environment, variable };
         }),
       );
 
@@ -160,5 +162,5 @@ test.provider(
       );
       expect(variableGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

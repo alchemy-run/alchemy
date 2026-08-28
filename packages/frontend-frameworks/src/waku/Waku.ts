@@ -749,7 +749,7 @@ export const make = (
         );
       });
 
-    return FrameworkCore.Framework.of({
+    const inProcess = FrameworkCore.Framework.of({
       build: Effect.fn(function* (buildOptions) {
         const root = yield* resolveRoot(buildOptions?.root);
         const target = yield* resolveTarget(root);
@@ -928,6 +928,39 @@ export const make = (
         return { url };
       }),
     });
+
+    // Waku's toolchain assumes `cwd === root` at dev startup (the html shell
+    // and relative inputs resolve from the cwd), so its startup window
+    // chdirs — which must not happen in a process hosting other sites' dev
+    // servers (the alchemy dev sidecar). Run the dev server in a dedicated
+    // child whose cwd IS the root instead (see core/DevChild.ts). Inside
+    // that child — or when the options cannot cross the process boundary
+    // (e.g. a deploy-target VALUE from the e2e harness) — the in-process
+    // path runs directly.
+    const dev: FrameworkCore.Framework["Service"]["dev"] = (devOptions) => {
+      if (
+        FrameworkCore.isInsideDevChild() ||
+        !FrameworkCore.isJsonSerializable(options)
+      ) {
+        return inProcess.dev(devOptions);
+      }
+      const root = devOptions?.root ?? options?.root ?? process.cwd();
+      const port = devOptions?.port ?? options?.port;
+      return FrameworkCore.runDevChild({
+        framework: "waku",
+        module: "@alchemy.run/frontend-frameworks/waku",
+        callerUrl: import.meta.url,
+        rootDir: root,
+        makeOptions: { ...options, root },
+        devOptions: {
+          root,
+          ...(port !== undefined ? { port } : {}),
+          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
+        },
+      });
+    };
+
+    return FrameworkCore.Framework.of({ build: inProcess.build, dev });
   });
 
 /**

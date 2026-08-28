@@ -12,7 +12,6 @@ import * as Command from "../../Command/index.ts";
 import * as Namespace from "../../Namespace.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import { asEffect } from "../../Util/types.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import { Project } from "../Project.ts";
 import { Service } from "../Service.ts";
@@ -25,7 +24,10 @@ import {
 export interface StaticSiteProps
   extends
     Command.BuildProps,
-    Pick<FrameworkSiteProps, "project" | "domain" | "tags" | "env"> {
+    Pick<
+      FrameworkSiteProps,
+      "project" | "environment" | "domain" | "tags" | "env"
+    > {
   /**
    * Local dev configuration. When `alchemy dev` runs with `dev.command`,
    * the build is skipped and `command` is spawned as a long-lived child
@@ -213,11 +215,15 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       } satisfies Website;
     }
 
-    const project = yield* asEffect(
-      props.project ?? Project("Project").pipe(Namespace.push(id)),
-    );
+    const project = Effect.isEffect(props.project)
+      ? yield* props.project
+      : (props.project ?? (yield* Project("Project").pipe(Namespace.push(id))));
+    const environment = Effect.isEffect(props.environment)
+      ? yield* props.environment
+      : (props.environment ?? project);
     const service = yield* Service(id, {
       project,
+      environment,
       main: servePath,
       port: WEBSITE_PORT,
       healthcheck: "/health",
@@ -229,7 +235,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     if (props.domain !== undefined && props.domain.length > 0) {
       yield* CustomDomain("Domain", {
         service,
-        environment: project,
+        environment,
         domain: props.domain,
         targetPort: WEBSITE_PORT,
       }).pipe(Namespace.push(id));

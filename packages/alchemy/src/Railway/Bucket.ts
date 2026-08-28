@@ -19,8 +19,13 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { ownedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -450,11 +455,14 @@ const commitBucketPatch = (input: {
   commitMessage: string;
   patch: Record<string, unknown>;
 }) =>
-  railway.environmentPatchCommit({
-    environmentId: input.environmentId,
-    commitMessage: input.commitMessage,
-    patch: input.patch,
-  });
+  withEnvironmentConfigLock(
+    input.environmentId,
+    railway.environmentPatchCommit({
+      environmentId: input.environmentId,
+      commitMessage: input.commitMessage,
+      patch: input.patch,
+    }),
+  );
 
 const ensureDeployed = Effect.fn(function* (input: {
   bucketId: string;
@@ -628,23 +636,27 @@ export const BucketProvider = () =>
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const config = yield* getEnvironmentConfig(
-            project.environmentId,
-            project.projectId,
-          );
+          const envIds = yield* projectEnvironmentIds(project);
           const buckets = yield* listProjectBuckets(project.projectId);
-          return buckets
-            .filter(
-              (bucket) =>
-                matchesAlchemyPhysicalName(bucket.name) &&
-                isDeployed(config, bucket.id),
-            )
-            .map((bucket) =>
-              toAttrs(bucket, {
-                environmentId: project.environmentId,
-                region: instanceOf(config, bucket.id)?.region,
-              }),
-            );
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            getEnvironmentConfig(environmentId, project.projectId).pipe(
+              Effect.map((config) =>
+                buckets
+                  .filter(
+                    (bucket) =>
+                      matchesAlchemyPhysicalName(bucket.name) &&
+                      isDeployed(config, bucket.id),
+                  )
+                  .map((bucket) =>
+                    toAttrs(bucket, {
+                      environmentId,
+                      region: instanceOf(config, bucket.id)?.region,
+                    }),
+                  ),
+              ),
+            ),
+          );
+          return nested.flat();
         }),
       );
       const seen = new Set<string>();

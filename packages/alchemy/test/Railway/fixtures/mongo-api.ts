@@ -1,15 +1,18 @@
 import * as Railway from "@/Railway";
-import { SUITE_PROJECT_NAME } from "../suiteProjectName.ts";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Partition, Site } from "./suite-env.ts";
 
 export const MONGO_HTTP_PORT = 3000;
 
-export const Site = Railway.Project("Suite", { name: SUITE_PROJECT_NAME });
+export { Site };
 
-export const Db = Railway.mongo("Db", { project: Site });
+export const Db = Railway.mongo("Db", {
+  project: Site,
+  environment: Partition,
+});
 
 /**
  * HTTP Service that binds Mongo via {@link Railway.ConnectMongo}
@@ -19,6 +22,7 @@ export default class MongoApi extends Railway.Service<MongoApi>()(
   "MongoApi",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
     port: MONGO_HTTP_PORT,
     build: { install: ["mongodb"] },

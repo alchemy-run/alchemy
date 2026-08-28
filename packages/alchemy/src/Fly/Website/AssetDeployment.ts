@@ -3,6 +3,7 @@ import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -152,16 +153,18 @@ const withTigris = <A, E>(
 ) =>
   operation.pipe(
     Effect.provide(
-      fromCredentials(
-        {
-          accessKeyId: scope.accessKeyId,
-          secretAccessKey: scope.secretAccessKey,
-        },
-        scope.region,
+      Layer.mergeAll(
+        fromCredentials(
+          {
+            accessKeyId: scope.accessKeyId,
+            secretAccessKey: scope.secretAccessKey,
+          },
+          scope.region,
+        ),
+        AwsEndpoint.of(scope.endpoint),
+        FetchHttpClient.layer,
       ),
     ),
-    Effect.provide(AwsEndpoint.of(scope.endpoint)),
-    Effect.provide(FetchHttpClient.layer),
   );
 
 const walkFiles = Effect.fn(function* (root: string) {

@@ -17,6 +17,7 @@ import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -565,17 +566,18 @@ const commitPatch = (input: {
   commitMessage: string;
   patch: Record<string, unknown>;
 }) =>
-  railway
-    .environmentPatchCommit({
+  withEnvironmentConfigLock(
+    input.environmentId,
+    railway.environmentPatchCommit({
       environmentId: input.environmentId,
       commitMessage: input.commitMessage,
       patch: input.patch,
-    })
-    .pipe(
-      Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () =>
-        Effect.succeed(""),
-      ),
-    );
+    }),
+  ).pipe(
+    Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () =>
+      Effect.succeed(""),
+    ),
+  );
 
 const previewCanvas = (environmentId: string) =>
   railway

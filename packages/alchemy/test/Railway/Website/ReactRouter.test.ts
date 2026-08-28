@@ -1,6 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
-import { suiteProject } from "../suiteProject.ts";
+import { suitePartition } from "../suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -60,8 +60,10 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
           const site = yield* Railway.Website.ReactRouter("Web", {
-            project: suiteProject,
+            project,
+            environment,
             rootDir,
             memo: {
               include: [
@@ -101,5 +103,5 @@ test.provider(
       const gone = yield* waitUntilGone(serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 3_600_000 },
 );

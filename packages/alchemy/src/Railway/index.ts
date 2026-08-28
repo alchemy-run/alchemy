@@ -19,6 +19,7 @@ export * from "./Credentials.ts";
 export * from "./CustomDomain.ts";
 export * from "./Environment.ts";
 export * from "./Function.ts";
+export type { InferEnv } from "./InferEnv.ts";
 export * from "./Group.ts";
 export * from "./Metadata.ts";
 export * from "./MountVolume.ts";

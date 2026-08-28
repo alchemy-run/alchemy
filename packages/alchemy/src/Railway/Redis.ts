@@ -16,7 +16,11 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { ownedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -432,7 +436,8 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisDeployPending",
-      times: 36,
+      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
+      times: 96,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.RedisDeployPending", () =>
@@ -619,25 +624,29 @@ export const RedisProvider = () =>
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
           const services = yield* listProjectServices(project.projectId);
+          const envIds = yield* projectEnvironmentIds(project);
           const items = yield* Effect.forEach(
             services.filter((service) =>
               matchesAlchemyPhysicalName(service.name),
             ),
             (service) =>
               Effect.gen(function* () {
-                const instance = yield* getInstance(
-                  project.environmentId,
-                  service.id,
-                );
-                const image = instance?.source?.image ?? undefined;
-                if (!isRedisImage(image)) return undefined;
-                return toAttrs({
-                  service,
-                  instance,
-                  projectId: project.projectId,
-                  environmentId: project.environmentId,
-                  image: image ?? DEFAULT_REDIS_IMAGE,
-                });
+                for (const environmentId of envIds) {
+                  const instance = yield* getInstance(
+                    environmentId,
+                    service.id,
+                  );
+                  const image = instance?.source?.image ?? undefined;
+                  if (!isRedisImage(image)) continue;
+                  return toAttrs({
+                    service,
+                    instance,
+                    projectId: project.projectId,
+                    environmentId,
+                    image: image ?? DEFAULT_REDIS_IMAGE,
+                  });
+                }
+                return undefined;
               }),
           );
           return items.filter((item) => item !== undefined);

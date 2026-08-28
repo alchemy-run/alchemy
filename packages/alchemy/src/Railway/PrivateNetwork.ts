@@ -21,7 +21,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { ownedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -379,15 +379,23 @@ export const PrivateNetworkProvider = () =>
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
-        listNetworks(project.environmentId).pipe(
-          Effect.map((networks) =>
-            networks
-              .filter((network) => matchesAlchemyPhysicalName(network.name))
-              .map((network) =>
-                toNetworkAttrs(network, { projectId: project.projectId }),
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listNetworks(environmentId).pipe(
+              Effect.map((networks) =>
+                networks
+                  .filter((network) => matchesAlchemyPhysicalName(network.name))
+                  .map((network) =>
+                    toNetworkAttrs(network, {
+                      projectId: project.projectId,
+                    }),
+                  ),
               ),
-          ),
-        ),
+            ),
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: PrivateNetwork["Attributes"][] = [];

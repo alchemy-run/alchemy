@@ -430,15 +430,13 @@ const getByInstanceId = (volumeInstanceId: string) =>
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environments.items({ projectId, first: 50 }).pipe(
-    Stream.filter((env) => env.id === environmentId && env.deletedAt == null),
-    Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((env) =>
-        env.volumeInstances.edges
-          .map((edge) => edge.node)
-          .filter((node) => !isGoneInstance(node)),
-      ),
+  railway.environment({ id: environmentId, projectId }).pipe(
+    Effect.map((env) =>
+      env.deletedAt != null
+        ? []
+        : env.volumeInstances.edges
+            .map((edge) => edge.node)
+            .filter((node) => !isGoneInstance(node)),
     ),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),

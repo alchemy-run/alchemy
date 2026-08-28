@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as NodeNet from "node:net";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import * as Namespace from "../../Namespace.ts";
-import type { Output } from "../../Output.ts";
+import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { Server as FrameworkServer } from "../../Website/Server.ts";
 import { App } from "../App.ts";
 import { Bucket } from "../Bucket.ts";
 import { Certificate } from "../Certificate.ts";
@@ -192,7 +192,7 @@ export interface FrameworkSite {
    * Public site URL. Local framework URL under `alchemy dev`;
    * `https://{app}.fly.dev` (or `https://{domain}`) on deploy.
    */
-  url: string | Output<string | undefined> | undefined;
+  url: string | Output.Output<string | undefined> | undefined;
   /** Parent Fly App. `undefined` during `alchemy dev`. */
   app: App | undefined;
   /** Hosted Fly Service. `undefined` during `alchemy dev`. */
@@ -201,36 +201,6 @@ export interface FrameworkSite {
   ip: IpAssignment | undefined;
   /** ACME certificate when {@link FrameworkSiteProps.domain} is set. */
   certificate: Certificate | undefined;
-}
-
-/**
- * The structural slice of a framework-integration module this composite
- * drives. Typed structurally so alchemy carries no dependency on
- * `@alchemy.run/frontend-frameworks` — the *project's* install is always
- * the one loaded.
- */
-interface FrameworkModule {
-  readonly make: (options: Record<string, unknown>) => Effect.Effect<
-    {
-      readonly build: (options?: {
-        readonly root?: string;
-        readonly env?: Record<string, string>;
-      }) => Effect.Effect<FrameworkBuildOutputSlice, unknown>;
-      readonly dev: (options?: {
-        readonly root?: string;
-        readonly port?: number;
-        readonly host?: string;
-      }) => Effect.Effect<{ readonly url: string }, unknown>;
-    },
-    unknown,
-    FileSystem.FileSystem | Path.Path
-  >;
-}
-
-interface FrameworkBuildOutputSlice {
-  readonly distDirectory?: string | undefined;
-  readonly clientDirectory: string | undefined;
-  readonly serverModules: Array<{ readonly name: string }> | undefined;
 }
 
 export class FrameworkSiteError extends Data.TaggedError("FrameworkSiteError")<{
@@ -243,91 +213,6 @@ const DEFAULT_PORT = 3000;
 
 const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
   Effect.isEffect(ref) ? ref : Effect.succeed(ref);
-
-const importFrameworkModule = (specifier: string) =>
-  Effect.tryPromise({
-    try: () => import(specifier) as Promise<Partial<FrameworkModule>>,
-    catch: (cause) =>
-      new FrameworkSiteError({
-        framework: specifier,
-        message:
-          `Failed to import the framework integration "${specifier}". ` +
-          "It must be installed in your project (it is loaded dynamically at deploy time).",
-        cause,
-      }),
-  }).pipe(
-    Effect.flatMap((module_) =>
-      typeof module_.make === "function"
-        ? Effect.succeed(module_ as FrameworkModule)
-        : Effect.fail(
-            new FrameworkSiteError({
-              framework: specifier,
-              message: `"${specifier}" does not export the framework-integration contract (a "make" function)`,
-            }),
-          ),
-    ),
-  );
-
-const makeFramework = (
-  config: FrameworkSiteConfig,
-  root: string,
-  memo?: MemoOptions | boolean,
-) =>
-  importFrameworkModule(config.framework).pipe(
-    Effect.flatMap((module_) =>
-      Effect.mapError(
-        module_.make({
-          ...config.options,
-          root,
-          target: config.target,
-          ...(memo !== undefined ? { memo } : {}),
-        }),
-        (cause) =>
-          new FrameworkSiteError({
-            framework: config.framework,
-            message: "Failed to initialize the framework integration",
-            cause,
-          }),
-      ),
-    ),
-  );
-
-const isPortFree = (port: number, host: string) =>
-  Effect.callback<boolean>((resume) => {
-    const server = NodeNet.createServer();
-    server.unref();
-    server.once("error", () => resume(Effect.succeed(false)));
-    server.listen(port, host, () => {
-      server.close(() => resume(Effect.succeed(true)));
-    });
-  });
-
-const resolveDevPort = Effect.fn(function* (options: {
-  readonly framework: string;
-  readonly port: number;
-  readonly host: string;
-  readonly strictPort: boolean;
-}) {
-  const { framework, port, host, strictPort } = options;
-  if (yield* isPortFree(port, host)) return port;
-  if (strictPort) {
-    return yield* Effect.fail(
-      new FrameworkSiteError({
-        framework,
-        message: `Port ${port} is already in use and \`dev.strictPort\` is set`,
-      }),
-    );
-  }
-  for (let candidate = port + 1; candidate <= port + 100; candidate++) {
-    if (yield* isPortFree(candidate, host)) return candidate;
-  }
-  return yield* Effect.fail(
-    new FrameworkSiteError({
-      framework,
-      message: `No free port found between ${port} and ${port + 100}`,
-    }),
-  );
-});
 
 const envRecord = (
   env: Record<string, string | Redacted.Redacted<string>> | undefined,
@@ -351,45 +236,20 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   const isLocal = ctx.dev && remoted !== true;
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
-  const root = path.resolve(initialCwd, props.rootDir ?? ".");
 
-  if (isLocal && props.dev?.mode === "external") {
-    return {
-      url: props.dev.url,
-      app: undefined,
-      service: undefined,
-      ip: undefined,
-      certificate: undefined,
-    } satisfies FrameworkSite;
-  }
+  const build = yield* FrameworkServer("Build", {
+    framework: config.framework,
+    target: config.target,
+    root: props.rootDir,
+    env: envRecord(props.env),
+    options: config.options,
+    memo: props.memo,
+    dev: props.dev,
+  });
 
   if (isLocal) {
-    const framework = yield* makeFramework(config, root, props.memo);
-    const dev = props.dev;
-    const resolvedPort =
-      dev && dev.mode !== "external" && dev.port !== undefined
-        ? yield* resolveDevPort({
-            framework: config.framework,
-            port: dev.port,
-            host: dev.host ?? "127.0.0.1",
-            strictPort: dev.strictPort ?? false,
-          })
-        : undefined;
-    const { url } = yield* Effect.mapError(
-      framework.dev({
-        root,
-        port: resolvedPort,
-        host: dev && dev.mode !== "external" ? dev.host : undefined,
-      }),
-      (cause) =>
-        new FrameworkSiteError({
-          framework: config.framework,
-          message: `The ${config.name} dev server failed to start`,
-          cause,
-        }),
-    );
     return {
-      url,
+      url: build.url,
       app: undefined,
       service: undefined,
       ip: undefined,
@@ -397,69 +257,79 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     } satisfies FrameworkSite;
   }
 
-  const framework = yield* makeFramework(config, root, props.memo);
-  const built = yield* Effect.mapError(
-    framework.build({ root, env: envRecord(props.env) }),
-    (cause) =>
-      new FrameworkSiteError({
-        framework: config.framework,
-        message: `The ${config.name} build failed`,
-        cause,
+  // The build runs at APPLY time (`Website.Server` is a resource), so its
+  // attributes are Outputs here — derive every deploy input lazily and let
+  // the engine resolve them once the build has produced real paths. Reading
+  // `build.distDir` eagerly in the composite body would observe an Output
+  // proxy, not a string.
+  const buildOut = Output.mapEffect(
+    ([serverEntry, distDir]: [string | undefined, string | undefined]) =>
+      Effect.gen(function* () {
+        if (serverEntry === undefined || distDir === undefined) {
+          return yield* Effect.die(
+            new FrameworkSiteError({
+              framework: config.framework,
+              message: `The ${config.name} build produced no Node serve entry (serverModules[0]). The Node deploy target should write serve-node.mjs.`,
+            }),
+          );
+        }
+        const main = path.resolve(initialCwd, serverEntry);
+        if (!(yield* fs.exists(main).pipe(Effect.orElseSucceed(() => false)))) {
+          return yield* Effect.die(
+            new FrameworkSiteError({
+              framework: config.framework,
+              message: `The ${config.name} build produced no server entry at ${main}`,
+            }),
+          );
+        }
+        return { distDir: path.resolve(initialCwd, distDir), main };
       }),
+  )(
+    Output.all(
+      build.serverEntry as unknown as Output.Output<string | undefined>,
+      build.distDir as unknown as Output.Output<string | undefined>,
+    ) as unknown as Output.Output<[string | undefined, string | undefined]>,
   );
+  const main = Output.map(buildOut, (out) => out.main);
 
-  const distDir = path.resolve(
-    built.distDirectory ?? built.clientDirectory ?? path.join(root, "dist"),
-  );
-  const clientDir =
-    built.clientDirectory !== undefined
-      ? path.resolve(built.clientDirectory)
-      : undefined;
-  const entryName = built.serverModules?.[0]?.name;
-  if (entryName === undefined || entryName.length === 0) {
-    return yield* Effect.fail(
-      new FrameworkSiteError({
-        framework: config.framework,
-        message: `The ${config.name} build produced no Node serve entry (serverModules[0]). The Node deploy target should write serve-node.mjs.`,
+  const extraFiles = Output.mapEffect(
+    (out: { distDir: string; main: string }) =>
+      Effect.gen(function* () {
+        const files: Array<{ source: string; dest: string }> = [];
+        if (config.skipClientAssets) {
+          const nextDir = path.join(out.distDir, ".next");
+          if (
+            yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))
+          ) {
+            files.push({ source: nextDir, dest: ".next" });
+          }
+          const publicDir = path.join(out.distDir, "public");
+          if (
+            yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))
+          ) {
+            files.push({ source: publicDir, dest: "public" });
+          }
+          for (const name of [
+            "next.config.js",
+            "next.config.mjs",
+            "next.config.cjs",
+            "next.config.ts",
+          ] as const) {
+            const configPath = path.join(out.distDir, name);
+            if (
+              yield* fs
+                .exists(configPath)
+                .pipe(Effect.orElseSucceed(() => false))
+            ) {
+              files.push({ source: configPath, dest: name });
+            }
+          }
+        } else {
+          files.push({ source: out.distDir, dest: "." });
+        }
+        return files.length > 0 ? files : undefined;
       }),
-    );
-  }
-  const main = path.resolve(distDir, entryName);
-  if (!(yield* fs.exists(main))) {
-    return yield* Effect.fail(
-      new FrameworkSiteError({
-        framework: config.framework,
-        message: `The ${config.name} build produced no server entry at ${main}`,
-      }),
-    );
-  }
-
-  const extraFiles: Array<{ source: string; dest: string }> = [];
-  if (config.skipClientAssets) {
-    const nextDir = path.join(distDir, ".next");
-    if (yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))) {
-      extraFiles.push({ source: nextDir, dest: ".next" });
-    }
-    const publicDir = path.join(distDir, "public");
-    if (yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))) {
-      extraFiles.push({ source: publicDir, dest: "public" });
-    }
-    for (const name of [
-      "next.config.js",
-      "next.config.mjs",
-      "next.config.cjs",
-      "next.config.ts",
-    ] as const) {
-      const configPath = path.join(distDir, name);
-      if (
-        yield* fs.exists(configPath).pipe(Effect.orElseSucceed(() => false))
-      ) {
-        extraFiles.push({ source: configPath, dest: name });
-      }
-    }
-  } else {
-    extraFiles.push({ source: distDir, dest: "." });
-  }
+  )(buildOut);
 
   const app =
     props.app !== undefined ? yield* resolveRef(props.app) : yield* App("App");
@@ -474,42 +344,79 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   // Tigris hangs SPA fallbacks — Fly does not rewrite `/counter/42` to
   // `index.html`.
   let statics:
-    | Array<{
-        guestPath: string;
-        urlPrefix: string;
-        tigrisBucket?: string;
-        indexDocument?: string;
-      }>
+    | Output.Output<
+        | Array<{
+            guestPath: string;
+            urlPrefix: string;
+            tigrisBucket?: string;
+            indexDocument?: string;
+          }>
+        | undefined
+      >
     | undefined;
-  if (config.static?.spa === true && clientDir !== undefined) {
+  if (config.static?.spa === true) {
+    const clientDir = Output.map(
+      build.clientDir as unknown as Output.Output<string | undefined>,
+      (dir) => {
+        if (dir === undefined) {
+          throw new FrameworkSiteError({
+            framework: config.framework,
+            message: `The ${config.name} build produced no client assets directory`,
+          });
+        }
+        return path.resolve(initialCwd, dir);
+      },
+    );
     const bucket = yield* Bucket("Assets", { public: true });
     yield* AssetDeployment("Files", {
       bucket,
-      sourcePath: clientDir,
+      sourcePath: clientDir as unknown as string,
       purge: true,
     });
-    const assetsDir = path.join(clientDir, "assets");
-    if (yield* fs.exists(assetsDir).pipe(Effect.orElseSucceed(() => false))) {
-      statics = [
-        {
-          guestPath: "/assets",
-          urlPrefix: "/assets",
-          tigrisBucket: bucket.name as unknown as string,
-        },
-      ];
-    }
+    statics = Output.mapEffect(([clientDir, bucketName]: [string, string]) =>
+      Effect.gen(function* () {
+        const assetsDir = path.join(clientDir, "assets");
+        const exists = yield* fs
+          .exists(assetsDir)
+          .pipe(Effect.orElseSucceed(() => false));
+        return exists
+          ? [
+              {
+                guestPath: "/assets",
+                urlPrefix: "/assets",
+                tigrisBucket: bucketName,
+              },
+            ]
+          : undefined;
+      }),
+    )(
+      Output.all(
+        clientDir,
+        bucket.name as unknown as Output.Output<string>,
+      ) as unknown as Output.Output<[string, string]>,
+    );
   }
 
   const service = yield* Service("Service", {
     app,
-    main,
+    main: main as unknown as string,
     port: DEFAULT_PORT,
     // Node + nitro SSR needs more than the Machine default 256MB.
     guest: { memoryMb: 512 },
     isExternal: true,
     env: props.env,
-    extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
-    statics,
+    extraFiles: extraFiles as unknown as Array<{
+      source: string;
+      dest: string;
+    }>,
+    statics: statics as unknown as
+      | Array<{
+          guestPath: string;
+          urlPrefix: string;
+          tigrisBucket?: string;
+          indexDocument?: string;
+        }>
+      | undefined,
     build:
       config.install !== undefined && config.install.length > 0
         ? { install: config.install }
@@ -532,9 +439,8 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
 
 /**
  * Shared implementation behind the Fly framework website composites:
- * load the framework + node target, run `dev()` under `alchemy dev`
- * (no cloud Service), otherwise `build()` and deploy one Fly.Service
- * with the framework's `serve-node.mjs` as `main` (dist packed as-built).
+ * `Website.Server` runs the framework toolchain (dev sidecar / production
+ * build), then a live deploy hosts `serve-node.mjs` on a Fly.Service.
  *
  * Callers pipe `Namespace.push(id)` themselves (the composites do).
  *

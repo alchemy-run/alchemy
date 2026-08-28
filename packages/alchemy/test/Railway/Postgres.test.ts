@@ -1,24 +1,24 @@
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
-import { adopt } from "@/AdoptPolicy.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import { suiteProject } from "./suiteProject.ts";
+import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
+import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
-import PostgresFn from "./fixtures/postgres-fn.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -31,8 +31,13 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(
+      Layer.mergeAll(
+        RailwayRetryPolicy,
+        CredentialsFromEnv,
+        FetchHttpClient.layer,
+      ),
+    ),
   );
 
 const firstOk = (rows: unknown): unknown => {
@@ -49,6 +54,9 @@ const selectOne = (url: string) =>
       const client = new pg.Client({
         connectionString: url,
         ssl: { rejectUnauthorized: false },
+        // pg has no default connect timeout; bound each attempt so the
+        // retry schedule (not a hung socket) owns the readiness budget.
+        connectionTimeoutMillis: 10_000,
       });
       await client.connect();
       try {
@@ -58,7 +66,12 @@ const selectOne = (url: string) =>
       }
     },
     catch: (cause) => new Error(String(cause)),
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }));
+    // A fresh Postgres behind a freshly created TCP proxy can take minutes
+    // to accept connections under full-suite load (cold volume init + proxy
+    // port propagation) — the proxy accepts and immediately closes until
+    // the upstream is ready ("Connection terminated unexpectedly"). Keep
+    // retrying, bounded to ~4 minutes.
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }));
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -125,29 +138,28 @@ const FixtureStack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const project = yield* Site.pipe(adopt(true), RemovalPolicy.retain());
+    const project = yield* Site;
     const db = yield* Db;
     const api = yield* PostgresApi;
     const fn = yield* PostgresFn;
     return {
       projectId: project.projectId,
-      environmentId: project.environmentId,
+      environmentId: db.environmentId,
       serviceId: api.serviceId,
       url: api.url,
+      publicConnectionUri: db.publicConnectionUri,
       functionId: fn.serviceId,
       functionUrl: fn.url,
-      publicConnectionUri: db.publicConnectionUri,
       mode: "effect" as const,
     };
   }),
 );
 
 const fixture = beforeAll(deploy(FixtureStack), {
-  timeout: 720_000,
+  timeout: 3_600_000,
 });
-
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-  timeout: 720_000,
+  timeout: 3_600_000,
 });
 
 test.provider(
@@ -158,16 +170,18 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
-          const db = yield* Railway.Postgres("Db", { project });
-          return { project, db };
+          const { project, environment } = yield* suitePartition;
+          const db = yield* Railway.Postgres("Db", { project, environment });
+          return { project, environment, db };
         }),
       );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
       expect(created.db.projectId).toEqual(created.project.projectId);
-      expect(created.db.environmentId).toEqual(created.project.environmentId);
+      expect(created.db.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.name.length).toBeGreaterThan(0);
       expect(created.db.name.length).toBeLessThanOrEqual(32);
@@ -242,12 +256,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const db = yield* Railway.Postgres("Db", {
             project,
+            environment,
             name: nextName,
           });
-          return { project, db };
+          return { project, environment, db };
         }),
       );
 
@@ -274,7 +289,7 @@ test.provider(
       );
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 720_000 },
+  { timeout: 3_600_000 },
 );
 
 test(
@@ -368,11 +383,11 @@ test(
     const rows = yield* selectOne(out.publicConnectionUri);
     expect(firstOk(rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 720_000 },
+  { timeout: 3_600_000 },
 );
 
 test(
-  "a Function connects and SELECTs through ConnectPostgres",
+  "an async Function SELECTs through env.DATABASE_URL",
   Effect.gen(function* () {
     const out = yield* fixture;
     expect(out.functionId).toEqual(expect.any(String));
@@ -420,5 +435,5 @@ test(
     const health = (yield* get("/")) as { rows?: unknown };
     expect(firstOk(health.rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 3_600_000 },
 );

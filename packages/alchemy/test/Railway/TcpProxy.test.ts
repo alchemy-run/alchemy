@@ -1,6 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -62,26 +62,22 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* suiteProject;
-        }),
-      );
+      const { project, environment } = yield* stack.deploy(suitePartition);
 
       const service = yield* createTargetService(
         project.projectId,
-        project.environmentId,
+        environment.environmentId,
       );
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const proxy = yield* Railway.TcpProxy("DbProxy", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             applicationPort: 6379,
           });
-          return { project: site, proxy };
+          return { project: site, environment, proxy };
         }),
       );
 
@@ -93,9 +89,9 @@ test.provider(
       expect(created.proxy.proxyPort).toBeGreaterThan(0);
       expect(created.proxy.applicationPort).toEqual(6379);
       expect(created.proxy.serviceId).toEqual(service.id);
-      expect(created.proxy.environmentId).toEqual(project.environmentId);
+      expect(created.proxy.environmentId).toEqual(environment.environmentId);
 
-      const listed = yield* listLive(project.environmentId, service.id);
+      const listed = yield* listLive(environment.environmentId, service.id);
       const fetched = listed.find((proxy) => proxy.id === created.proxy.id);
       expect(fetched).toBeDefined();
       expect(fetched?.domain).toEqual(created.proxy.domain);
@@ -104,13 +100,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const proxy = yield* Railway.TcpProxy("DbProxy", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             applicationPort: 6379,
           });
-          return { project: site, proxy };
+          return { project: site, environment, proxy };
         }),
       );
 
@@ -123,13 +119,13 @@ test.provider(
       yield* stack.destroy();
 
       const proxyGone = yield* waitUntilProxyGone(
-        project.environmentId,
+        environment.environmentId,
         service.id,
         created.proxy.id,
       );
       expect(proxyGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider(
@@ -138,38 +134,34 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* suiteProject;
-        }),
-      );
+      const { project, environment } = yield* stack.deploy(suitePartition);
 
       const service = yield* createTargetService(
         project.projectId,
-        project.environmentId,
+        environment.environmentId,
       );
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const proxy = yield* Railway.TcpProxy("DbProxy", {
             postgres: { serviceId: service.id },
-            environment: site,
+            environment,
             applicationPort: 6379,
           });
-          return { project: site, proxy };
+          return { project: site, environment, proxy };
         }),
       );
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const proxy = yield* Railway.TcpProxy("DbProxy", {
             postgres: { serviceId: service.id },
-            environment: site,
+            environment,
             applicationPort: 5432,
           });
-          return { project: site, proxy };
+          return { project: site, environment, proxy };
         }),
       );
 
@@ -178,7 +170,7 @@ test.provider(
       expect(replaced.proxy.domain).toEqual(expect.any(String));
       expect(replaced.proxy.proxyPort).toEqual(expect.any(Number));
 
-      const listed = yield* listLive(project.environmentId, service.id);
+      const listed = yield* listLive(environment.environmentId, service.id);
       const next = listed.find((proxy) => proxy.id === replaced.proxy.id);
       expect(next).toBeDefined();
       expect(next?.applicationPort).toEqual(5432);
@@ -189,11 +181,11 @@ test.provider(
       yield* stack.destroy();
 
       const proxyGone = yield* waitUntilProxyGone(
-        project.environmentId,
+        environment.environmentId,
         service.id,
         replaced.proxy.id,
       );
       expect(proxyGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

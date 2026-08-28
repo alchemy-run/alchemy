@@ -309,7 +309,7 @@ export const ServiceProvider = () =>
           yield* Effect.ensuring(
             Effect.gen(function* () {
               yield* hosted.waitForSsh(ssh);
-              // Attach (automount ok) then mkdir+mount+fstab. The same
+              // Attach (no automount) then mkdir+mount+fstab. The same
               // (volume, server, path) from two Services is one attach
               // and one mount — both steps are independently idempotent.
               yield* hosted.attachAndMount({

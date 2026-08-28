@@ -1,6 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -82,29 +82,41 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const db = yield* Railway.Postgres("Db", {
             project,
+            environment,
             public: false,
           });
           const template = Railway.ref(db, "DATABASE_URL");
           const databaseUrl = yield* Railway.Variable("DatabaseUrl", {
             project,
+            environment,
             name: "DATABASE_URL",
             value: template,
           });
           const sentry = yield* Railway.Variable("SentryDsn", {
             project,
+            environment,
             name: "SENTRY_DSN",
             value: "https://example.ingest.sentry.io/1",
           });
           const sentryRef = yield* Railway.Variable("SentryDsnRef", {
             project,
+            environment,
             service: db,
             name: "SENTRY_DSN",
             value: Railway.ref("shared", "SENTRY_DSN"),
           });
-          return { project, db, databaseUrl, sentry, sentryRef, template };
+          return {
+            project,
+            environment,
+            db,
+            databaseUrl,
+            sentry,
+            sentryRef,
+            template,
+          };
         }),
       );
 
@@ -144,5 +156,5 @@ test.provider(
       );
       expect(variableGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

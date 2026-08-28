@@ -197,14 +197,19 @@ export const makeSidecarHandle = (
         // Capture the ambient platform context (provided by `toEffect`) so
         // the deferred spawner build can run inside a provider's `get`
         // without leaking platform requirements onto the RpcProviderProxy
-        // interface. The shared MemoMap dedupes concurrent first calls, so
-        // the PROCESS gets exactly one spawner no matter how many files race.
-        const context = yield* Effect.context<never>();
+        // interface. Omit Scope: that key is the calling file's sharedScope
+        // (closed in afterAll). Merging it in would pin the process-wide
+        // spawner HTTP server to a file that exits while others still need
+        // it. Provide the sidecar singleton scope instead.
+        const ambient = Context.omit(Scope.Scope)(
+          yield* Effect.context<never>(),
+        );
         const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
           Effect.map((built) =>
             Context.get(built, RpcProviderProxy.RpcProviderProxy),
           ),
-          Effect.provideContext(context as Context.Context<any>),
+          Effect.provideContext(ambient as Context.Context<any>),
+          Scope.provide(scope),
           Effect.orDie,
         );
         return RpcProviderProxy.RpcProviderProxy.of({

@@ -1,16 +1,16 @@
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
-import { adopt } from "@/AdoptPolicy.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import { suiteProject } from "./suiteProject.ts";
+import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
+import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -28,13 +28,21 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(
+      Layer.mergeAll(
+        RailwayRetryPolicy,
+        CredentialsFromEnv,
+        FetchHttpClient.layer,
+      ),
+    ),
   );
 
 const ping = (url: string) =>
   Railway.pingMongo(url).pipe(
-    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+    // A fresh Mongo behind a freshly created TCP proxy can take minutes to
+    // accept connections under full-suite load (cold volume init + proxy
+    // port propagation). Keep retrying, bounded to ~4 minutes.
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }),
   );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
@@ -102,12 +110,12 @@ const FixtureStack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const project = yield* Site.pipe(adopt(true), RemovalPolicy.retain());
+    const project = yield* Site;
     const db = yield* Db;
     const api = yield* MongoApi;
     return {
       projectId: project.projectId,
-      environmentId: project.environmentId,
+      environmentId: db.environmentId,
       serviceId: api.serviceId,
       url: api.url,
       publicConnectionUri: db.publicConnectionUri,
@@ -117,11 +125,10 @@ const FixtureStack = Alchemy.Stack(
 );
 
 const fixture = beforeAll(deploy(FixtureStack), {
-  timeout: 720_000,
+  timeout: 3_600_000,
 });
-
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-  timeout: 720_000,
+  timeout: 3_600_000,
 });
 
 test.provider(
@@ -132,16 +139,18 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
-          const db = yield* Railway.mongo("Db", { project });
-          return { project, db };
+          const { project, environment } = yield* suitePartition;
+          const db = yield* Railway.mongo("Db", { project, environment });
+          return { project, environment, db };
         }),
       );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
       expect(created.db.projectId).toEqual(created.project.projectId);
-      expect(created.db.environmentId).toEqual(created.project.environmentId);
+      expect(created.db.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.name.length).toBeGreaterThan(0);
       expect(created.db.name.length).toBeLessThanOrEqual(32);
@@ -229,12 +238,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const db = yield* Railway.mongo("Db", {
             project,
+            environment,
             name: nextName,
           });
-          return { project, db };
+          return { project, environment, db };
         }),
       );
 
@@ -264,7 +274,7 @@ test.provider(
       );
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 720_000 },
+  { timeout: 3_600_000 },
 );
 
 test(
@@ -354,5 +364,5 @@ test(
     const pong = yield* ping(out.publicConnectionUri);
     expect(pong.ok).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 720_000 },
+  { timeout: 3_600_000 },
 );

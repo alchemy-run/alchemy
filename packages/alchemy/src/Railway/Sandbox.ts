@@ -21,7 +21,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { ownedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -675,13 +675,19 @@ export const SandboxProvider = () =>
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
-        listSandboxes(project.environmentId).pipe(
-          Effect.map((items) =>
-            items.map((item) =>
-              toAttrs(item, { projectId: project.projectId }),
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listSandboxes(environmentId).pipe(
+              Effect.map((items) =>
+                items.map((item) =>
+                  toAttrs(item, { projectId: project.projectId }),
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: Sandbox["Attributes"][] = [];

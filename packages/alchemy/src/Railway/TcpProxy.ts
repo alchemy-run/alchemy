@@ -10,7 +10,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { ownedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -309,10 +309,13 @@ export const TcpProxyProvider = () =>
               service.deletedAt == null &&
               matchesAlchemyPhysicalName(service.name),
           );
+          const envIds = yield* projectEnvironmentIds(project);
           const nested = yield* Effect.forEach(services, (service) =>
-            listProxies(project.environmentId, service.id).pipe(
-              Effect.map((proxies) => proxies.map((proxy) => toAttrs(proxy))),
-            ),
+            Effect.forEach(envIds, (environmentId) =>
+              listProxies(environmentId, service.id).pipe(
+                Effect.map((proxies) => proxies.map((proxy) => toAttrs(proxy))),
+              ),
+            ).pipe(Effect.map((rows) => rows.flat())),
           );
           return nested.flat();
         }),
@@ -419,11 +422,19 @@ export const TcpProxyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const id = output.id;
       if (id.length === 0) return;
-      yield* railway
-        .tcpProxyDelete({ id })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+      yield* railway.tcpProxyDelete({ id }).pipe(
+        // Railway serializes proxy mutations per environment: a delete
+        // racing an in-flight deploy fails with "Cannot delete TCP proxy:
+        // an operation is already in progress".
+        Effect.retry({
+          while: (e) =>
+            e._tag === "RailwayInternalError" &&
+            e.message.includes("operation is already in progress"),
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+      );
       if (output.environmentId.length > 0 && output.serviceId.length > 0) {
         yield* waitUntilGone(output.environmentId, output.serviceId, id);
       }

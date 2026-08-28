@@ -3,7 +3,8 @@ import * as Railway from "@/Railway";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Db, Site } from "./postgres-shared.ts";
+import { Partition, Site } from "./suite-env.ts";
+import { Db } from "./postgres-shared.ts";
 
 export { Db, Site };
 
@@ -17,6 +18,7 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
   "PostgresApi",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
     port: POSTGRES_PORT,
     build: { install: ["pg"] },

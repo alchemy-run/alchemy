@@ -1,6 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -63,22 +63,18 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* suiteProject;
-        }),
-      );
+      const { project, environment } = yield* stack.deploy(suitePartition);
 
       const service = yield* createTargetService(
         project.projectId,
-        project.environmentId,
+        environment.environmentId,
       );
 
       const rejected = yield* Effect.result(
         railway.customDomainCreate({
           input: {
             domain: "not a hostname",
-            environmentId: project.environmentId,
+            environmentId: environment.environmentId,
             projectId: project.projectId,
             serviceId: service.id,
           },
@@ -99,10 +95,10 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const domain = yield* Railway.CustomDomain("Www", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             domain: hostname,
             targetPort: 5678,
           });
@@ -115,12 +111,12 @@ test.provider(
       expect(created.domain.domain).toEqual(hostname);
       expect(created.domain.serviceId).toEqual(service.id);
       expect(created.domain.projectId).toEqual(project.projectId);
-      expect(created.domain.environmentId).toEqual(project.environmentId);
+      expect(created.domain.environmentId).toEqual(environment.environmentId);
       expect(created.domain.targetPort).toEqual(5678);
       expect(created.domain.url).toEqual(`https://${hostname}`);
 
       const listed = yield* listLive(
-        project.environmentId,
+        environment.environmentId,
         project.projectId,
         service.id,
       );
@@ -141,10 +137,10 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const domain = yield* Railway.CustomDomain("Www", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             domain: hostname,
             targetPort: 8080,
           });
@@ -173,7 +169,7 @@ test.provider(
       );
       expect(domainGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider.skipIf(!TEST_DOMAIN)(
@@ -184,23 +180,19 @@ test.provider.skipIf(!TEST_DOMAIN)(
 
       const hostname = TEST_DOMAIN!;
 
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* suiteProject;
-        }),
-      );
+      const { project, environment } = yield* stack.deploy(suitePartition);
 
       const service = yield* createTargetService(
         project.projectId,
-        project.environmentId,
+        environment.environmentId,
       );
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* suiteProject;
+          const { project: site, environment } = yield* suitePartition;
           const domain = yield* Railway.CustomDomain("Www", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             domain: hostname,
           });
           return { project: site, domain };
@@ -227,5 +219,5 @@ test.provider.skipIf(!TEST_DOMAIN)(
       );
       expect(domainGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

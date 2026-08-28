@@ -10,7 +10,11 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { ownedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -502,27 +506,33 @@ export const VariableProvider = () =>
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
-        listVariableMap(project.projectId, project.environmentId).pipe(
-          Effect.flatMap((vars) =>
-            Effect.forEach(
-              Object.keys(vars).filter((name) =>
-                matchesAlchemyPhysicalName(name),
-              ),
-              (name) =>
-                digestOf(vars[name]!).pipe(
-                  Effect.map((digest) =>
-                    toAttrs({
-                      projectId: project.projectId,
-                      environmentId: project.environmentId,
-                      serviceId: undefined,
-                      name,
-                      digest,
-                    }),
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listVariableMap(project.projectId, environmentId).pipe(
+              Effect.flatMap((vars) =>
+                Effect.forEach(
+                  Object.keys(vars).filter((name) =>
+                    matchesAlchemyPhysicalName(name),
                   ),
+                  (name) =>
+                    digestOf(vars[name]!).pipe(
+                      Effect.map((digest) =>
+                        toAttrs({
+                          projectId: project.projectId,
+                          environmentId,
+                          serviceId: undefined,
+                          name,
+                          digest,
+                        }),
+                      ),
+                    ),
                 ),
+              ),
             ),
-          ),
-        ),
+          );
+          return nested.flat();
+        }),
       );
       return rows.flat();
     }),

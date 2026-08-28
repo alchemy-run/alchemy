@@ -37,6 +37,10 @@ import {
   AssetDeployment,
   AssetDeploymentProvider,
 } from "./Website/AssetDeployment.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import { SignHttp } from "./SignHttp.ts";
 import { Sprite, SpriteProvider } from "./Sprite.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
@@ -93,6 +97,7 @@ export const providers = () =>
       Service,
       Sprite,
       VolumeSnapshot,
+      WebsiteServer,
     ]),
   ).pipe(
     Layer.provide(
@@ -110,6 +115,7 @@ export const providers = () =>
         ServiceProvider(),
         SpriteProvider(),
         VolumeSnapshotProvider(),
+        WebsiteServerProvider(),
       ),
     ),
     // The binding layers are mutually independent — they all draw on the

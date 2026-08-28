@@ -1,10 +1,9 @@
 import { Function } from "@/Railway/Function.ts";
-import { Project } from "@/Railway/Project.ts";
-import { SUITE_PROJECT_NAME } from "../suiteProjectName.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Partition, Site } from "./suite-env.ts";
 
-export const Site = Project("Suite", { name: SUITE_PROJECT_NAME });
+export { Site };
 
 /**
  * Effect-native Railway.Function: bundled into a single file and
@@ -14,6 +13,7 @@ export default class Ping extends Function<Ping>()(
   "Ping",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
   },
   Effect.gen(function* () {

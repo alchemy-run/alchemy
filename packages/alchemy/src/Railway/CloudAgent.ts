@@ -20,7 +20,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { ownedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -369,21 +369,27 @@ export const CloudAgentProvider = () =>
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
-        listAgents(project.environmentId).pipe(
-          Effect.map((agents) =>
-            agents
-              .filter(
-                (agent) =>
-                  !isGone(agent) && matchesAlchemyPhysicalName(agent.name),
-              )
-              .map((agent) =>
-                toAttrs(agent, {
-                  environmentId: project.environmentId,
-                  projectId: project.projectId,
-                }),
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listAgents(environmentId).pipe(
+              Effect.map((agents) =>
+                agents
+                  .filter(
+                    (agent) =>
+                      !isGone(agent) && matchesAlchemyPhysicalName(agent.name),
+                  )
+                  .map((agent) =>
+                    toAttrs(agent, {
+                      environmentId,
+                      projectId: project.projectId,
+                    }),
+                  ),
               ),
-          ),
-        ),
+            ),
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: CloudAgent["Attributes"][] = [];

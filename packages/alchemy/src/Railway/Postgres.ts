@@ -561,15 +561,13 @@ const getVolumeByInstanceId = (volumeInstanceId: string) =>
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environments.items({ projectId, first: 50 }).pipe(
-    Stream.filter((env) => env.id === environmentId && env.deletedAt == null),
-    Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((env) =>
-        env.volumeInstances.edges
-          .map((edge) => edge.node)
-          .filter((node) => !isGoneVolume(node)),
-      ),
+  railway.environment({ id: environmentId, projectId }).pipe(
+    Effect.map((env) =>
+      env.deletedAt != null
+        ? []
+        : env.volumeInstances.edges
+            .map((edge) => edge.node)
+            .filter((node) => !isGoneVolume(node)),
     ),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
@@ -602,6 +600,24 @@ const findProxy = (
     Effect.map((items) =>
       items.find((proxy) => proxy.applicationPort === applicationPort),
     ),
+  );
+
+/**
+ * Delete a TCP proxy, riding out Railway's per-environment mutation lock: a
+ * delete racing an in-flight deploy fails with "Cannot delete TCP proxy: an
+ * operation is already in progress". Already-gone proxies are a no-op.
+ */
+const deleteProxy = (id: string) =>
+  railway.tcpProxyDelete({ id }).pipe(
+    Effect.retry({
+      while: (e) =>
+        e._tag === "RailwayInternalError" &&
+        e.message.includes("operation is already in progress"),
+      schedule: Schedule.spaced("3 seconds"),
+      times: 20,
+    }),
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+    Effect.asVoid,
   );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
@@ -718,7 +734,8 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.PostgresDeployPending",
-      times: 36,
+      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
+      times: 96,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.PostgresDeployPending", () =>
@@ -881,23 +898,33 @@ export const PostgresProvider = () =>
             ),
             (service) =>
               Effect.gen(function* () {
-                const instance = yield* getInstance(
-                  project.environmentId,
-                  service.id,
-                );
-                if (!isPostgresImage(instance?.source?.image)) {
-                  return undefined;
-                }
                 const volume = volumes.find(
                   (row) => (row.serviceId ?? undefined) === service.id,
                 );
+                const envIds =
+                  volume !== undefined
+                    ? [volume.environmentId]
+                    : envRows.map((env) => env.id);
+                let instance: ServiceInstanceResponse | undefined;
+                let environmentId = project.environmentId;
+                for (const id of envIds) {
+                  const candidate = yield* getInstance(id, service.id);
+                  if (isPostgresImage(candidate?.source?.image)) {
+                    instance = candidate;
+                    environmentId = id;
+                    break;
+                  }
+                }
+                if (!isPostgresImage(instance?.source?.image)) {
+                  return undefined;
+                }
                 return toAttrs({
                   service,
                   instance,
                   volume,
                   proxy: undefined,
                   projectId: project.projectId,
-                  environmentId: project.environmentId,
+                  environmentId,
                   user: DEFAULT_POSTGRES_USER,
                   password: "",
                   database: DEFAULT_POSTGRES_DATABASE,
@@ -1121,11 +1148,7 @@ export const PostgresProvider = () =>
             : yield* findProxy(environmentId, current.id, POSTGRES_PORT);
       }
       if (!wantPublic && proxy !== undefined) {
-        yield* railway
-          .tcpProxyDelete({ id: proxy.id })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
+        yield* deleteProxy(proxy.id);
         proxy = undefined;
       }
 
@@ -1140,8 +1163,24 @@ export const PostgresProvider = () =>
 
       instance =
         (yield* waitForDeployment(environmentId, current.id)) ?? instance;
-      const finalStatus = instance?.latestDeployment?.status;
-      if (deployFailed(finalStatus)) {
+      let finalStatus = instance?.latestDeployment?.status;
+      // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
+      // container may serve, but Railway keeps its per-environment operation
+      // lock and the TCP proxy's routing is not committed. Converge: cancel
+      // the wedged deployment, redeploy once, and insist on SUCCESS.
+      if (!deployFailed(finalStatus) && !deployReady(finalStatus)) {
+        const wedged = instance?.latestDeployment?.id;
+        if (wedged != null && wedged.length > 0) {
+          yield* railway.deploymentCancel({ id: wedged }).pipe(Effect.ignore);
+        }
+        yield* railway
+          .serviceInstanceDeployV2({ environmentId, serviceId: current.id })
+          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
+        instance =
+          (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+        finalStatus = instance?.latestDeployment?.status;
+      }
+      if (deployFailed(finalStatus) || !deployReady(finalStatus)) {
         return yield* new PostgresDeployFailed({
           serviceId: current.id,
           status: finalStatus ?? "failed",
@@ -1164,35 +1203,31 @@ export const PostgresProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const serviceId = output.serviceId;
-      if (output.tcpProxyId !== undefined && output.tcpProxyId.length > 0) {
-        yield* railway
-          .tcpProxyDelete({ id: output.tcpProxyId })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
-      } else if (output.environmentId.length > 0 && serviceId.length > 0) {
-        const proxies = yield* listProxies(output.environmentId, serviceId);
-        yield* Effect.forEach(
-          proxies,
-          (proxy) =>
-            railway
-              .tcpProxyDelete({ id: proxy.id })
-              .pipe(
-                Effect.catchTag(
-                  ["RailwayNotFound", "NotFound"],
-                  () => Effect.void,
-                ),
-              ),
-          { concurrency: 4 },
-        );
+      const environmentId = output.environmentId;
+      // Cancel a still-running deployment first: it holds Railway's
+      // per-environment operation lock ("Cannot delete TCP proxy: an
+      // operation is already in progress") and can stall the service
+      // teardown indefinitely. A finished deployment makes this a no-op.
+      if (environmentId.length > 0 && serviceId.length > 0) {
+        const instance = yield* getInstance(environmentId, serviceId);
+        const latest = instance?.latestDeployment;
+        if (
+          latest?.id != null &&
+          latest.id.length > 0 &&
+          !deployReady(latest.status) &&
+          !deployFailed(latest.status)
+        ) {
+          yield* railway
+            .deploymentCancel({ id: latest.id })
+            .pipe(Effect.ignore);
+        }
       }
+      // Delete the SERVICE next — its teardown cascades onto the proxies.
       if (serviceId.length > 0) {
         yield* railway
           .serviceDelete({
             id: serviceId,
-            ...(output.environmentId.length > 0
-              ? { environmentId: output.environmentId }
-              : {}),
+            ...(environmentId.length > 0 ? { environmentId } : {}),
           })
           .pipe(
             Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
@@ -1205,6 +1240,26 @@ export const PostgresProvider = () =>
             times: 8,
           }),
         );
+      }
+      // Proxies usually disappear with the service; wait for the cascade
+      // instead of fighting the teardown's lock, then force-delete any
+      // survivor (which no-ops on NotFound).
+      if (environmentId.length > 0 && serviceId.length > 0) {
+        const leftover = yield* listProxies(environmentId, serviceId).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (rows) => rows.length === 0,
+            times: 20,
+          }),
+        );
+        yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), {
+          concurrency: 4,
+        });
+      } else if (
+        output.tcpProxyId !== undefined &&
+        output.tcpProxyId.length > 0
+      ) {
+        yield* deleteProxy(output.tcpProxyId);
       }
       if (output.volumeId.length > 0) {
         yield* railway

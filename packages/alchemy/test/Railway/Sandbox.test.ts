@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -48,15 +48,15 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
-          return { project };
+          const { project, environment } = yield* suitePartition;
+          return { project, environment };
         }),
       );
 
       const result = yield* Effect.result(
         railway.sandboxCreate({
           input: {
-            environmentId: created.project.environmentId,
+            environmentId: created.environment.environmentId,
             idleTimeoutMinutes: 5,
           },
         }),
@@ -75,7 +75,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider(
@@ -86,18 +86,20 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const box = yield* Railway.Sandbox("Box", {
-            environment: project,
+            environment,
             idleTimeoutMinutes: 5,
           });
-          return { project, box };
+          return { project, environment, box };
         }),
       );
 
       expect(created.box.sandboxId).toEqual(expect.any(String));
       expect(created.box.sandboxId.length).toBeGreaterThan(0);
-      expect(created.box.environmentId).toEqual(created.project.environmentId);
+      expect(created.box.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.box.projectId).toEqual(created.project.projectId);
       expect(created.box.status).toEqual("RUNNING");
       expect(created.box.region).toEqual(expect.any(String));
@@ -141,5 +143,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

@@ -407,72 +407,107 @@ export const make: (
     },
   );
 
-  const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+  const devInProcess: Framework["Service"]["dev"] = Effect.fn(
+    function* (devOptions) {
+      const root = devOptions?.root ?? baseRoot;
+      const vite = yield* loadVite(root);
+      // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
+      // on older Vite — see `resolveViteDevPort`.
+      const port = yield* FrameworkCore.resolveViteDevPort(
+        vite.version,
+        devOptions?.port ?? options?.dev?.port,
+      );
+      const host = devOptions?.host;
+
+      const server = yield* Effect.acquireRelease(
+        inProjectCwd(
+          root,
+          Effect.tryPromise({
+            try: async () => {
+              const server = await vite.createServer({
+                root,
+                cacheDir: path.join(root, "node_modules", ".vite"),
+                logLevel: "warn",
+                server: {
+                  port,
+                  ...(host !== undefined ? { host } : undefined),
+                },
+              });
+              await server.listen();
+              return server;
+            },
+            catch: (error) =>
+              fail("Failed to start the SolidStart dev server", error),
+          }),
+        ),
+        (server) =>
+          Effect.promise(async () => {
+            try {
+              await server.close();
+            } catch {
+              // teardown is best-effort
+            }
+          }),
+      );
+
+      const resolved = server.resolvedUrls?.local[0];
+      if (resolved === undefined) {
+        return yield* Effect.fail(
+          fail("Could not determine the dev server URL"),
+        );
+      }
+      // Vite reports its local URL with a trailing slash. SolidStart runs with
+      // `appType: "custom"`, so its router sees the raw pathname and a caller
+      // that appends a path (`${url}/about`) would request `//about` and get a
+      // 404. Hand back an origin that concatenates correctly.
+      const url = resolved.endsWith("/") ? resolved.slice(0, -1) : resolved;
+
+      // Bounded readiness probe: any HTTP response counts (vite serves
+      // lazily; we only need the listener to answer).
+      yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(url, { redirect: "manual" });
+          await response.arrayBuffer().catch(() => {});
+        },
+        catch: (error) =>
+          fail("The dev server did not become reachable", error),
+      }).pipe(
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
+
+      return { url };
+    },
+  );
+
+  // SolidStart's `solidStart()` plugin resolves the app from `process.cwd()`
+  // at config-load time, so its startup needs `cwd === root`. That must not
+  // happen in a process hosting other sites (the alchemy dev sidecar) — run
+  // the dev server in a dedicated child whose cwd IS the root instead (see
+  // core/DevChild.ts). Inside that child (or when the options cannot cross
+  // the process boundary, e.g. a deploy-target VALUE from the e2e harness)
+  // the in-process path runs directly.
+  const dev: Framework["Service"]["dev"] = (devOptions) => {
     const root = devOptions?.root ?? baseRoot;
-    const vite = yield* loadVite(root);
-    // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-    // on older Vite — see `resolveViteDevPort`.
-    const port = yield* FrameworkCore.resolveViteDevPort(
-      vite.version,
-      devOptions?.port ?? options?.dev?.port,
-    );
-    const host = devOptions?.host;
-
-    const server = yield* Effect.acquireRelease(
-      inProjectCwd(
-        root,
-        Effect.tryPromise({
-          try: async () => {
-            const server = await vite.createServer({
-              root,
-              cacheDir: path.join(root, "node_modules", ".vite"),
-              logLevel: "warn",
-              server: {
-                port,
-                ...(host !== undefined ? { host } : undefined),
-              },
-            });
-            await server.listen();
-            return server;
-          },
-          catch: (error) =>
-            fail("Failed to start the SolidStart dev server", error),
-        }),
-      ),
-      (server) =>
-        Effect.promise(async () => {
-          try {
-            await server.close();
-          } catch {
-            // teardown is best-effort
-          }
-        }),
-    );
-
-    const resolved = server.resolvedUrls?.local[0];
-    if (resolved === undefined) {
-      return yield* Effect.fail(fail("Could not determine the dev server URL"));
+    const port = devOptions?.port ?? options?.dev?.port;
+    if (
+      FrameworkCore.isInsideDevChild() ||
+      !FrameworkCore.isJsonSerializable(options)
+    ) {
+      return devInProcess(devOptions);
     }
-    // Vite reports its local URL with a trailing slash. SolidStart runs with
-    // `appType: "custom"`, so its router sees the raw pathname and a caller
-    // that appends a path (`${url}/about`) would request `//about` and get a
-    // 404. Hand back an origin that concatenates correctly.
-    const url = resolved.endsWith("/") ? resolved.slice(0, -1) : resolved;
-
-    // Bounded readiness probe: any HTTP response counts (vite serves
-    // lazily; we only need the listener to answer).
-    yield* Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(url, { redirect: "manual" });
-        await response.arrayBuffer().catch(() => {});
+    return FrameworkCore.runDevChild({
+      framework: "solidstart",
+      module: "@alchemy.run/frontend-frameworks/solidstart",
+      callerUrl: import.meta.url,
+      rootDir: root,
+      makeOptions: { ...options, root },
+      devOptions: {
+        root,
+        ...(port !== undefined ? { port } : {}),
+        ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
       },
-      catch: (error) => fail("The dev server did not become reachable", error),
-    }).pipe(
-      Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
-    );
-
-    return { url };
-  });
+    });
+  };
 
   return Framework.of({ build, dev });
 });

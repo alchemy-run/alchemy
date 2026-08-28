@@ -17,6 +17,17 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
+
+// Captured at module evaluation, BEFORE any user code can run. Framework
+// tooling loaded later in this process (e.g. Vite dev/build pulled in by a
+// Website provider) replaces `globalThis.Response`/`globalThis.ReadableStream`
+// with non-native "lightweight" implementations. Bun.serve rejects a
+// lightweight Response (`nativeResponse: undefined`) and falls back to its
+// default "Welcome to Bun!" page — which the RpcProviderProxy client then
+// receives instead of a websocket URL. Constructing responses from the
+// captured natives makes the spawner immune to that global swap.
+const NativeResponse = globalThis.Response;
+const NativeReadableStream = globalThis.ReadableStream;
 import { transformTypesFlags } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
@@ -183,19 +194,85 @@ export const make = Effect.fn(function* ({
     return yield* register(serverEntryUrl, attempt + 1);
   });
 
-  const server = yield* HttpServer.HttpServer;
-
   const encoder = new TextEncoder();
+
+  if (typeof globalThis.Bun !== "undefined") {
+    // Bun: serve with our own Bun.serve and the module-captured native
+    // Response/ReadableStream (see the note on `NativeResponse` above) —
+    // routing through the generic Effect HttpServer would construct
+    // responses from the CURRENT `globalThis.Response`, which framework
+    // tooling (Vite) may have swapped for a lightweight one by the time a
+    // later test file POSTs here.
+    const ambient = yield* Effect.context<never>();
+    const runPromise = Effect.runPromiseWith(ambient);
+    const registerAsync = (payload: RpcSpawnPayload): Promise<string> =>
+      runPromise(register(payload.serverEntryUrl));
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          // Disable Bun's default 10s request idle timeout: `/logs` is a
+          // long-lived NDJSON stream that can sit idle between lines.
+          idleTimeout: 0,
+          fetch: async (request: Request): Promise<Response> => {
+            if (new URL(request.url).pathname.startsWith(LOGS_PATH)) {
+              // Long-lived NDJSON stream of sidecar output. The subscriber
+              // (exec child) prints these lines through its own console,
+              // which the Ink renderer patches — inserting them above the
+              // progress region instead of tearing it. Client disconnect
+              // cancels the stream and unregisters the subscriber.
+              let notify: ((line: SidecarLogLine) => void) | undefined;
+              const stream = new NativeReadableStream<Uint8Array>({
+                start: (controller) => {
+                  notify = (line) => {
+                    try {
+                      controller.enqueue(
+                        encoder.encode(`${JSON.stringify(line)}\n`),
+                      );
+                    } catch {
+                      if (notify !== undefined) subscribers.delete(notify);
+                    }
+                  };
+                  subscribers.add(notify);
+                },
+                cancel: () => {
+                  if (notify !== undefined) subscribers.delete(notify);
+                },
+              });
+              return new NativeResponse(stream, {
+                headers: { "content-type": "application/x-ndjson" },
+              });
+            }
+            try {
+              const payload = (await request.json()) as RpcSpawnPayload;
+              const url = await registerAsync(payload);
+              return new NativeResponse(url, { status: 200 });
+            } catch (error) {
+              return new NativeResponse(String(error), { status: 500 });
+            }
+          },
+        }),
+      ),
+      (server) => Effect.promise(async () => void (await server.stop(true))),
+    );
+    return RpcSpawner.of({
+      url: `http://${server.hostname}:${server.port}`,
+    });
+  }
+
+  // Node: the Effect platform HttpServer (no Bun.serve to appease; Node's
+  // http server accepts whatever body we hand it).
+  const server = Context.get(
+    yield* Layer.build(httpServer()),
+    HttpServer.HttpServer,
+  );
 
   yield* server.serve(
     Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       if (request.url.startsWith(LOGS_PATH)) {
-        // Long-lived NDJSON stream of sidecar output. The subscriber (exec
-        // child) prints these lines through its own console, which the Ink
-        // renderer patches — inserting them above the progress region
-        // instead of tearing it. Client disconnect interrupts the stream
-        // and unregisters the subscriber.
+        // See the Bun branch for why `/logs` is a long-lived NDJSON stream.
         const queue = yield* Queue.make<Uint8Array, Cause.Done>();
         const notify = (line: SidecarLogLine) => {
           Queue.offerUnsafe(queue, encoder.encode(`${JSON.stringify(line)}\n`));
@@ -221,8 +298,7 @@ export const make = Effect.fn(function* ({
 
 export const layerServer = (
   environment: Pick<RpcServerEnvironment, "profile" | "envFile">,
-) =>
-  Layer.effect(RpcSpawner, make(environment)).pipe(Layer.provide(httpServer()));
+) => Layer.effect(RpcSpawner, make(environment));
 
 const RPC_ADDRESS_REGEX =
   /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;

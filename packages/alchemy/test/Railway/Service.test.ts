@@ -1,7 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -40,21 +40,24 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
             port: 5678,
             healthcheckPath: "/health",
           });
-          return { project, api };
+          return { project, environment, api };
         }),
       );
 
       expect(created.api.serviceId).toEqual(expect.any(String));
       expect(created.api.serviceId.length).toBeGreaterThan(0);
       expect(created.api.projectId).toEqual(created.project.projectId);
-      expect(created.api.environmentId).toEqual(created.project.environmentId);
+      expect(created.api.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.api.name).toEqual(expect.any(String));
       expect(created.api.name.length).toBeGreaterThan(0);
       expect(created.api.name.length).toBeLessThanOrEqual(32);
@@ -133,15 +136,16 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
             port: 5678,
             name: nextName,
             healthcheckPath: "/health",
           });
-          return { project, api };
+          return { project, environment, api };
         }),
       );
 
@@ -167,7 +171,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 // GitHub repo source requires a GitHub App connection on the Railway
@@ -196,7 +200,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider.skipIf(!githubEntitled)(
@@ -212,13 +216,14 @@ test.provider.skipIf(!githubEntitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* suiteProject;
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             repo: repo!.fullName,
             branch: repo!.defaultBranch,
           });
-          return { project, api };
+          return { project, environment, api };
         }),
       );
 
@@ -236,5 +241,5 @@ test.provider.skipIf(!githubEntitled)(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

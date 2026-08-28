@@ -1,15 +1,18 @@
 import * as Drizzle from "@/Drizzle/MySQL.ts";
 import * as Railway from "@/Railway";
-import { SUITE_PROJECT_NAME } from "../suiteProjectName.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Partition, Site } from "./suite-env.ts";
 
 export const MYSQL_API_PORT = 3000;
 
-export const Site = Railway.Project("Suite", { name: SUITE_PROJECT_NAME });
+export { Site };
 
-export const Db = Railway.MySQL("Db", { project: Site });
+export const Db = Railway.MySQL("Db", {
+  project: Site,
+  environment: Partition,
+});
 
 /**
  * HTTP Service that binds MySQL via {@link Railway.ConnectMySQL}
@@ -19,6 +22,7 @@ export default class MySQLApi extends Railway.Service<MySQLApi>()(
   "MySQLApi",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
     port: MYSQL_API_PORT,
     build: { install: ["mysql2"] },

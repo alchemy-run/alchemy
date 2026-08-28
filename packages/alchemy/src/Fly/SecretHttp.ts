@@ -150,8 +150,9 @@ export const makeSecretAuth = (
   ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return eff.pipe(
-        Effect.provide(CredentialsFromEnv),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(
+          Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer),
+        ),
         Effect.timeout("8 seconds"),
       ) as Effect.Effect<A, E, RuntimeContext>;
     }
@@ -191,13 +192,15 @@ export const makeKmsAuth = (
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return Effect.scoped(
         eff.pipe(
-          Effect.provide(Layer.succeed(MachineIdentity, true)),
-          Effect.provide(flyMachineApiHttp),
           Effect.provide(
-            credentials({
-              apiKey: "unused",
-              apiBaseUrl: "http://localhost/v1",
-            }),
+            Layer.mergeAll(
+              Layer.succeed(MachineIdentity, true),
+              flyMachineApiHttp,
+              credentials({
+                apiKey: "unused",
+                apiBaseUrl: "http://localhost/v1",
+              }),
+            ),
           ),
         ),
       ).pipe(Effect.timeout("8 seconds")) as Effect.Effect<
