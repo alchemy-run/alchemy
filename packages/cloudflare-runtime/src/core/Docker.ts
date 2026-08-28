@@ -11,9 +11,23 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as NodeHttp from "node:http";
 import * as NodeStream from "node:stream";
+import {
+  attachLoopbackNetnsForwarder,
+  CONTAINER_LOOPBACK_ALIAS,
+  containerIdFromPath,
+  detachLoopbackNetnsForwarder,
+  ensureLoopbackUnixSockets,
+  isContainerStartPath,
+  loopbackPortsFromEnv,
+  mergeSidecarLoopbackHostConfig,
+  ufwAllowHint,
+  usesUnixSocketLoopback,
+} from "./DockerLoopback.ts";
 import { getAddress } from "./internal/get-address.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
+
+export { CONTAINER_LOOPBACK_ALIAS };
 
 export class Docker extends Context.Service<
   Docker,
@@ -93,28 +107,6 @@ export const toPullRef = (imageUri: string) =>
   imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
 
 /**
- * Hostname dev containers use to reach services listening on the developer's
- * machine. Inside a container, `localhost` is the container itself, so env
- * values that point at host-side services (a local dev database, another dev
- * server) are rewritten to this alias, which is mapped to Docker's
- * `host-gateway` on the container's network (see `makeDockerProxyServer`).
- *
- * Deliberately NOT `host.docker.internal`: several dev-oriented clients gate
- * "insecure local mode" on a localhost-looking hostname — notably Prisma's
- * client, which flips `prisma+postgres://` URLs to TLS unless the host
- * contains `localhost`/`127.0.0.1`/`[::1]` — and the local `@prisma/dev`
- * server only speaks plain HTTP. An alias under `.localhost` keeps those
- * heuristics intact while `/etc/hosts` (which `getaddrinfo` consults before
- * DNS) routes it to the host machine.
- *
- * Platform note: on Docker Desktop (macOS/Windows) `host-gateway` forwards
- * into the host's loopback, so services bound to `127.0.0.1` are reachable.
- * On native Linux Docker it resolves to the bridge gateway IP, so a host
- * service must listen on `0.0.0.0` (or the bridge address) to be reachable.
- */
-export const CONTAINER_LOOPBACK_ALIAS = "host.docker.localhost";
-
-/**
  * Matches a loopback host (`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`)
  * where it denotes a connection target inside an env value: at the start of
  * the value, after a `scheme://` (with optional userinfo), after `=` (DSN
@@ -127,13 +119,54 @@ const LOOPBACK_HOST =
 /**
  * Rewrite loopback hosts in a container env value to
  * {@link CONTAINER_LOOPBACK_ALIAS} so the value keeps meaning "the developer's
- * machine" from inside the container. Applied to the env the Docker proxy
- * injects at container create (the deployment-level env registered via
- * `registerImageEnv`) — in production these values point at real cloud hosts,
- * so the rewrite only ever fires against local dev emulators.
+ * machine" from inside the container. Prisma's `prisma+postgres://` client
+ * only speaks plain HTTP when the host looks local (contains `localhost`).
+ * Applied at container create; production URLs are cloud hosts, so this
+ * only fires against local emulators.
+ *
+ * Native Linux: the alias is `/etc/hosts`-mapped to `127.0.0.1` in the
+ * sidecar netns, and a unix-socket tunnel reaches the host process — a
+ * SYN to Docker's bridge IP would hit UFW INPUT. Docker Desktop: mapped
+ * to `host-gateway`, which already forwards to host loopback.
  */
 export const rewriteLoopbackHosts = (value: string) =>
   value.replace(LOOPBACK_HOST, `$1${CONTAINER_LOOPBACK_ALIAS}`);
+
+/**
+ * Merge workerd's create-body `Env` with the deployment env alchemy injects,
+ * rewriting loopback hosts and **replacing by name**.
+ *
+ * Appending would leave the original `DATABASE_URL=…127.0.0.1…` in place and
+ * add a rewritten copy. glibc/`os.Getenv` (Go, C, Python, Node on Linux)
+ * return the first match, so the container would still dial `127.0.0.1`
+ * inside its own netns.
+ */
+export const mergeContainerCreateEnv = (
+  originalEnv: ReadonlyArray<string> | undefined,
+  imageEnv: Record<string, string> | undefined,
+): string[] => {
+  const order: string[] = [];
+  const values = new Map<string, string | undefined>();
+  const set = (name: string, value: string | undefined) => {
+    if (!values.has(name)) order.push(name);
+    values.set(name, value);
+  };
+  for (const entry of originalEnv ?? []) {
+    const eq = entry.indexOf("=");
+    if (eq === -1) {
+      set(entry, undefined);
+    } else {
+      set(entry.slice(0, eq), rewriteLoopbackHosts(entry.slice(eq + 1)));
+    }
+  }
+  for (const [name, value] of Object.entries(imageEnv ?? {})) {
+    set(name, rewriteLoopbackHosts(value));
+  }
+  return order.map((name) => {
+    const value = values.get(name);
+    return value === undefined ? name : `${name}=${value}`;
+  });
+};
 
 export const DockerLive = Layer.effect(
   Docker,
@@ -149,6 +182,14 @@ export const DockerLive = Layer.effect(
       string,
       { tag: string; env: Record<string, string> }
     >();
+
+    const registeredLoopbackPorts = () => {
+      const ports = new Set<number>();
+      for (const { env } of registeredImages.values()) {
+        for (const port of loopbackPortsFromEnv(env)) ports.add(port);
+      }
+      return [...ports];
+    };
 
     const getSocketPathFromContext = () =>
       ChildProcess.make(bin, ["context", "ls", "--format", "json"], {
@@ -208,12 +249,7 @@ export const DockerLive = Layer.effect(
           const transformed = JSON.stringify({
             ...original,
             Image: image?.tag ?? original.Image,
-            Env: [
-              ...(original.Env ?? []),
-              ...Object.entries(image?.env ?? {}).map(
-                ([name, value]) => `${name}=${rewriteLoopbackHosts(value)}`,
-              ),
-            ],
+            Env: mergeContainerCreateEnv(original.Env, image?.env),
           });
           const proxy = sendProxyRequest({
             socketPath,
@@ -227,21 +263,21 @@ export const DockerLive = Layer.effect(
           });
           proxy.end(transformed);
         } else if (isSidecarCreateRequest) {
-          // Map the loopback alias to the host machine in the shared network
-          // namespace, alongside the `host.docker.internal:host-gateway`
-          // entry workerd already sets on the sidecar.
+          // Shared netns with the user container. Docker Desktop maps the
+          // alias through host-gateway (reaches host 127.0.0.1). Native
+          // Linux maps it to 127.0.0.1 in this netns and bind-mounts unix
+          // sockets; a SYN to the bridge IP is host INPUT (UFW).
           const original = await extractJsonBody<{
-            HostConfig?: { ExtraHosts?: Array<string> };
+            HostConfig?: { ExtraHosts?: Array<string>; Binds?: Array<string> };
           }>(req);
+          const ports = registeredLoopbackPorts();
+          ensureLoopbackUnixSockets(ports);
           const transformed = JSON.stringify({
             ...original,
-            HostConfig: {
-              ...original.HostConfig,
-              ExtraHosts: [
-                ...(original.HostConfig?.ExtraHosts ?? []),
-                `${CONTAINER_LOOPBACK_ALIAS}:host-gateway`,
-              ],
-            },
+            HostConfig: mergeSidecarLoopbackHostConfig(
+              original.HostConfig,
+              ports,
+            ),
           });
           const proxy = sendProxyRequest({
             socketPath,
@@ -254,6 +290,36 @@ export const DockerLive = Layer.effect(
             res,
           });
           proxy.end(transformed);
+        } else if (req.method === "POST" && isContainerStartPath(req.url)) {
+          const id = containerIdFromPath(req.url);
+          const proxy = sendProxyRequest({
+            socketPath,
+            path: req.url,
+            method: req.method,
+            headers: req.headers,
+            res,
+            afterSuccess:
+              id === undefined
+                ? undefined
+                : () =>
+                    attachSidecarLoopback(
+                      socketPath,
+                      id,
+                      registeredLoopbackPorts(),
+                    ),
+          });
+          req.pipe(proxy, { end: true });
+        } else if (req.method === "DELETE") {
+          const id = containerIdFromPath(req.url);
+          if (id !== undefined) detachLoopbackNetnsForwarder(id);
+          const proxy = sendProxyRequest({
+            socketPath,
+            path: req.url,
+            method: req.method,
+            headers: req.headers,
+            res,
+          });
+          req.pipe(proxy, { end: true });
         } else {
           const proxy = sendProxyRequest({
             socketPath,
@@ -405,7 +471,10 @@ export const DockerLive = Layer.effect(
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(
-          Effect.sync(() => registeredImages.set(alias, { tag, env })),
+          Effect.sync(() => {
+            registeredImages.set(alias, { tag, env });
+            ensureLoopbackUnixSockets(loopbackPortsFromEnv(env));
+          }),
           () => Effect.sync(() => registeredImages.delete(alias)),
         ).pipe(Effect.as(alias));
       },
@@ -529,6 +598,7 @@ const sendProxyRequest = (input: {
   method: string | undefined;
   headers: NodeHttp.OutgoingHttpHeaders;
   res: NodeHttp.ServerResponse;
+  afterSuccess?: () => Promise<void>;
 }) => {
   // `transfer-encoding` is a hop-by-hop header and must not be forwarded
   // verbatim. workerd sends its `DELETE /containers/<name>-proxy?force=true`
@@ -549,8 +619,23 @@ const sendProxyRequest = (input: {
     },
     (res) => {
       delete res.headers["transfer-encoding"];
-      input.res.writeHead(res.statusCode || 500, res.headers);
-      res.pipe(input.res, { end: true });
+      const succeed =
+        (res.statusCode ?? 500) < 300 && input.afterSuccess !== undefined;
+      if (!succeed) {
+        input.res.writeHead(res.statusCode || 500, res.headers);
+        res.pipe(input.res, { end: true });
+        return;
+      }
+      const chunks: Array<Buffer> = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        void input.afterSuccess!().finally(() => {
+          const status = res.statusCode || 500;
+          input.res.writeHead(status, res.headers);
+          if (status === 204 || chunks.length === 0) input.res.end();
+          else input.res.end(Buffer.concat(chunks));
+        });
+      });
     },
   );
   req.on("error", (err) => {
@@ -559,6 +644,78 @@ const sendProxyRequest = (input: {
   });
   return req;
 };
+
+const attachSidecarLoopback = async (
+  socketPath: string,
+  containerId: string,
+  ports: readonly number[],
+) => {
+  if (!usesUnixSocketLoopback() || ports.length === 0) return;
+  let inspect: {
+    Id?: string;
+    Name?: string;
+    State?: { Pid?: number };
+  };
+  try {
+    inspect = await dockerApiJson(
+      socketPath,
+      "GET",
+      `/containers/${containerId}/json`,
+    );
+  } catch (error) {
+    console.warn(
+      `alchemy: could not inspect ${containerId} for loopback forwards (${String(error)})`,
+    );
+    return;
+  }
+  const name = inspect.Name?.replace(/^\//, "") ?? "";
+  if (!name.endsWith("-proxy")) return;
+  const result = attachLoopbackNetnsForwarder({
+    keys: [containerId, inspect.Id ?? "", name],
+    pid: inspect.State?.Pid ?? 0,
+    ports,
+  });
+  if (!result.ok) {
+    console.warn(
+      `alchemy: could not attach loopback unix-socket forwards in container netns (${result.error}). ` +
+        `A SYN to host-gateway is host INPUT and UFW may drop it. Do not set DEFAULT_INPUT_POLICY=ACCEPT. ` +
+        `If you must punch a hole: ${ufwAllowHint(ports)}`,
+    );
+  }
+};
+
+const dockerApiJson = <T>(
+  socketPath: string,
+  method: string,
+  path: string,
+): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const req = NodeHttp.request(
+      {
+        socketPath: socketPath.replace(/^unix:/, ""),
+        path,
+        method,
+      },
+      (res) => {
+        const chunks: Array<Buffer> = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const body = Buffer.concat(chunks).toString();
+          if ((res.statusCode ?? 500) >= 300) {
+            reject(new Error(`docker ${method} ${path}: ${res.statusCode}`));
+            return;
+          }
+          try {
+            resolve(JSON.parse(body) as T);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
 
 const extractJsonBody = <T>(req: NodeHttp.IncomingMessage) => {
   const promise = Promise.withResolvers<T>();

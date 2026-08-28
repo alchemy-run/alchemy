@@ -9,6 +9,7 @@ import {
   CONTAINER_LOOPBACK_ALIAS,
   Docker,
   DockerLive,
+  mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
 } from "../Docker.ts";
@@ -123,6 +124,64 @@ describe("Docker", () => {
         "http://notlocalhost:3000",
       );
       expect(rewriteLoopbackHosts("8080")).toBe("8080");
+    });
+
+    it("leaves Neon and PlanetScale cloud URLs untouched", () => {
+      const neon =
+        "postgres://neondb_owner:secret@ep-cool-name-123456-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require";
+      const neonDirect =
+        "postgresql://neondb_owner:secret@ep-cool-name-123456.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+      const planetscalePg =
+        "postgresql://user:secret@xxxx.pg.psdb.cloud:6432/postgres?sslmode=verify-full";
+      const planetscaleMysql =
+        "mysql://user:secret@aws.connect.psdb.cloud:3306/db?sslaccept=strict";
+      expect(rewriteLoopbackHosts(neon)).toBe(neon);
+      expect(rewriteLoopbackHosts(neonDirect)).toBe(neonDirect);
+      expect(rewriteLoopbackHosts(planetscalePg)).toBe(planetscalePg);
+      expect(rewriteLoopbackHosts(planetscaleMysql)).toBe(planetscaleMysql);
+      expect(
+        mergeContainerCreateEnv(["DATABASE_URL=" + neon], {
+          DATABASE_URL: neon,
+        }),
+      ).toEqual([`DATABASE_URL=${neon}`]);
+    });
+  });
+
+  describe("mergeContainerCreateEnv", () => {
+    it("rewrites and replaces by name instead of appending a second value", () => {
+      expect(
+        mergeContainerCreateEnv(
+          [
+            "PATH=/usr/bin",
+            "DATABASE_URL=postgres://postgres@127.0.0.1:5432/db",
+          ],
+          {
+            DATABASE_URL: "postgres://postgres@127.0.0.1:5432/db",
+            PPG_URL: "prisma+postgres://localhost:51216/?api_key=test",
+          },
+        ),
+      ).toEqual([
+        "PATH=/usr/bin",
+        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+        `PPG_URL=prisma+postgres://${CONTAINER_LOOPBACK_ALIAS}:51216/?api_key=test`,
+      ]);
+    });
+
+    it("rewrites loopback hosts already present on the create body", () => {
+      expect(
+        mergeContainerCreateEnv(
+          ["DATABASE_URL=postgres://postgres@127.0.0.1:5432/db"],
+          undefined,
+        ),
+      ).toEqual([
+        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+      ]);
+    });
+
+    it("preserves flag-style entries that have no value", () => {
+      expect(
+        mergeContainerCreateEnv(["DEBUG", "FOO=bar"], { FOO: "baz" }),
+      ).toEqual(["DEBUG", "FOO=baz"]);
     });
   });
 });
