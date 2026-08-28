@@ -50,16 +50,18 @@ missing.
 
 ## Configure Vite
 
-Your `vite.config.ts` stays exactly what the React Router scaffold gives
-you — no adapter, no server preset:
+Your `vite.config.ts` stays what the React Router scaffold gives
+you — no adapter, no server preset. Vite plugins like Tailwind go in
+`plugins` as usual:
 
 ```typescript
 // vite.config.ts
 import { reactRouter } from "@react-router/dev/vite";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [reactRouter()],
+  plugins: [tailwindcss(), reactRouter()],
 });
 ```
 

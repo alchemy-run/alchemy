@@ -63,6 +63,20 @@ export default defineConfig({
 A missing or foreign adapter fails the deploy with an actionable
 error.
 
+Vite plugins like Tailwind go in `vite.config.ts` next to it,
+alongside the Octane plugin:
+
+```typescript
+// vite.config.ts
+import { octane } from "@octanejs/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [octane(), tailwindcss()],
+});
+```
+
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the

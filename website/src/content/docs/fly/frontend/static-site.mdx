@@ -15,8 +15,8 @@ For Vite-based projects, prefer [`Fly.Website.Vite`](/fly/frontend/vite).
 
 ## Declare the Website
 
-`command` and `outdir` are required. Declare the site as a
-module-level const:
+`build.command` and `build.output` are required. Declare the site
+as a module-level const:
 
 ```typescript
 // alchemy.run.ts
@@ -30,7 +30,7 @@ export const Website = Fly.Website.StaticSite("Website", {
 The build is a [`Command.Build`](/providers/command/build) —
 memoized, so unchanged inputs skip the rebuild
 ([details](/command/memoization)). By default every non-gitignored
-file in `cwd` (plus the nearest lockfile) is hashed. Narrow it with
+file in `path` (plus the nearest lockfile) is hashed. Narrow it with
 `memo: { include: [...] }`, or set `memo: false` to rebuild on every
 deploy.
 
@@ -175,11 +175,16 @@ produces a directory of files. Frameworks with dedicated resources
 have a better path: [Astro](/fly/frontend/astro),
 [Foldkit](/fly/frontend/foldkit), [Next.js](/fly/frontend/nextjs),
 [Nuxt](/fly/frontend/nuxt), [Octane](/fly/frontend/octane),
-[SvelteKit](/fly/frontend/sveltekit), [Vite](/fly/frontend/vite),
+[React Router](/fly/frontend/react-router),
+[SolidStart](/fly/frontend/solidstart),
+[SvelteKit](/fly/frontend/sveltekit),
+[TanStack Start](/fly/frontend/tanstack-start),
+[Vite](/fly/frontend/vite),
 [Vocs](/fly/frontend/vocs), and [Waku](/fly/frontend/waku). Those
 resources run the framework's own programmatic build and skip the
-`command` / `outdir` contract. Reach for `StaticSite` when there is
-no dedicated resource — Zola, Hugo, or any other generator.
+`build.command` / `build.output` contract. Reach for `StaticSite`
+when there is no dedicated resource — Zola, Hugo, or any other
+generator.
 
 ## Where next
 

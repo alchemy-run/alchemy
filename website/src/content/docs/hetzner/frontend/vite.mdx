@@ -24,7 +24,10 @@ deploy through their own composites —
 [`Astro`](/hetzner/frontend/astro),
 [`Nextjs`](/hetzner/frontend/nextjs),
 [`Nuxt`](/hetzner/frontend/nuxt),
+[`ReactRouter`](/hetzner/frontend/react-router),
+[`SolidStart`](/hetzner/frontend/solidstart),
 [`SvelteKit`](/hetzner/frontend/sveltekit),
+[`TanStackStart`](/hetzner/frontend/tanstack-start),
 [`Waku`](/hetzner/frontend/waku),
 [`Octane`](/hetzner/frontend/octane).
 
@@ -157,16 +160,14 @@ const greeting = import.meta.env.VITE_GREETING ?? "hello";
 
 ## Single-page vs multi-page
 
-Plain Vite apps are typically SPAs, so `spa` defaults on: unmatched
-paths get `index.html` with status 200 so client-side routes
-deep-link. Set `spa: false` for multi-page (`index.html`-per-route)
-projects. `errorPage` serves that file with a real 404. The two are
-mutually exclusive:
+Plain Vite apps are typically SPAs, so `assets.notFoundHandling`
+defaults to `"single-page-application"`: unmatched paths get
+`index.html` with status 200 so client-side routes deep-link. Use
+`"404-page"` for multi-page sites that ship a `404.html`:
 
 ```typescript
 export const Website = Hetzner.Website.Vite("Docs", {
-  spa: false,
-  errorPage: "404.html",
+  assets: { notFoundHandling: "404-page" },
 });
 ```
 
@@ -175,14 +176,13 @@ export const Website = Hetzner.Website.Vite("Docs", {
 `rootDir` is the project root (the directory containing
 `package.json`). Default `"."`.
 
-`outDir` and `base` are serializable overrides merged *over* the
-config file:
+`vite.outDir` and `vite.base` are serializable overrides merged
+*over* the config file:
 
 ```typescript
 export const Website = Hetzner.Website.Vite("Website", {
   rootDir: "./app",
-  outDir: "build",
-  base: "/docs/",
+  vite: { outDir: "build", base: "/docs/" },
 });
 ```
 

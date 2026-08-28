@@ -154,13 +154,14 @@ static-file server as the systemd unit:
 ```typescript
 export const Website = Hetzner.Website.Astro("Website", {
   astro: { output: "static" },
-  errorPage: "404.html",
+  assets: { notFoundHandling: "404-page" },
 });
 ```
 
-`errorPage` and `spa` apply only to `output: "static"`. `errorPage`
-serves the built `404.html` for unmatched routes; `spa` answers
-misses with the index page (200) instead. Do not pass both.
+`assets.notFoundHandling` applies only to `output: "static"`.
+`"404-page"` serves the built `404.html` for unmatched routes;
+`"single-page-application"` answers misses with the index page
+(200) instead.
 
 ## Astro configuration
 

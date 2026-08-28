@@ -142,13 +142,14 @@ static-file server on the Machine:
 ```typescript
 export const Website = Fly.Website.Astro("Website", {
   astro: { output: "static" },
-  errorPage: "404.html",
+  assets: { notFoundHandling: "404-page" },
 });
 ```
 
-`errorPage` and `spa` apply only to `output: "static"`. `errorPage`
-serves the built `404.html` for unmatched routes; `spa` answers
-misses with the index page (200) instead.
+`assets.notFoundHandling` applies only to `output: "static"`.
+`"404-page"` serves the built `404.html` for unmatched routes;
+`"single-page-application"` answers misses with the index page
+(200) instead.
 
 ## Astro configuration
 

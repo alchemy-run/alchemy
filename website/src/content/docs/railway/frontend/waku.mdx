@@ -50,13 +50,13 @@ config — including Vite plugins under its `vite` field:
 
 ```typescript
 // waku.config.ts
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "waku/config";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   basePath: "/",
   vite: {
-    plugins: [tsconfigPaths()],
+    plugins: [tailwindcss()],
   },
 });
 ```

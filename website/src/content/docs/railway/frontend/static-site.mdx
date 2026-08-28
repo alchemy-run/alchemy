@@ -136,9 +136,9 @@ SSR runtime.
 
 During `alchemy dev`, `dev.command` replaces the build with that
 process as a long-lived child. No Project or Service is created,
- url` is the local address detected
-from stdout (`dev.url` pins it when detection fails). `dev` also
-accepts `cwd` and `env` overrides:
+and `site.url` is the local address detected from stdout
+(`dev.url` pins it when detection fails). `dev` also accepts `cwd`
+and `env` overrides:
 
 ```typescript
 export const Website = Railway.Website.StaticSite("Website", {
@@ -184,7 +184,10 @@ have a better path: [Astro](/railway/frontend/astro),
 [Foldkit](/railway/frontend/foldkit),
 [Next.js](/railway/frontend/nextjs), [Nuxt](/railway/frontend/nuxt),
 [Octane](/railway/frontend/octane),
+[React Router](/railway/frontend/react-router),
+[SolidStart](/railway/frontend/solidstart),
 [SvelteKit](/railway/frontend/sveltekit),
+[TanStack Start](/railway/frontend/tanstack-start),
 [Vite](/railway/frontend/vite), [Vocs](/railway/frontend/vocs), and
 [Waku](/railway/frontend/waku). Those resources run the framework's
 own programmatic build and skip the `command` / `outdir` contract.

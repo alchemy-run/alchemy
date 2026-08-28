@@ -23,7 +23,10 @@ deploy through their own composites —
 [`Astro`](/railway/frontend/astro),
 [`Nextjs`](/railway/frontend/nextjs),
 [`Nuxt`](/railway/frontend/nuxt),
+[`ReactRouter`](/railway/frontend/react-router),
+[`SolidStart`](/railway/frontend/solidstart),
 [`SvelteKit`](/railway/frontend/sveltekit),
+[`TanStackStart`](/railway/frontend/tanstack-start),
 [`Waku`](/railway/frontend/waku),
 [`Octane`](/railway/frontend/octane).
 
@@ -154,16 +157,14 @@ const greeting = import.meta.env.VITE_GREETING ?? "hello";
 
 ## Single-page vs multi-page
 
-Plain Vite apps are typically SPAs, so `spa` defaults on: unmatched
-paths get `index.html` with status 200 so client-side routes
-deep-link. Set `spa: false` for multi-page (`index.html`-per-route)
-projects. `errorPage` serves that file with a real 404. The two are
-mutually exclusive:
+Plain Vite apps are typically SPAs, so `assets.notFoundHandling`
+defaults to `"single-page-application"`: unmatched paths get
+`index.html` with status 200 so client-side routes deep-link. Use
+`"404-page"` for multi-page sites that ship a `404.html`:
 
 ```typescript
 export const Website = Railway.Website.Vite("Docs", {
-  spa: false,
-  errorPage: "404.html",
+  assets: { notFoundHandling: "404-page" },
 });
 ```
 
@@ -172,14 +173,13 @@ export const Website = Railway.Website.Vite("Docs", {
 `rootDir` is the project root (the directory containing
 `package.json`). Default `"."`.
 
-`outDir` and `base` are serializable overrides merged *over* the
-config file:
+`vite.outDir` and `vite.base` are serializable overrides merged
+*over* the config file:
 
 ```typescript
 export const Website = Railway.Website.Vite("Website", {
   rootDir: "./app",
-  outDir: "build",
-  base: "/docs/",
+  vite: { outDir: "build", base: "/docs/" },
 });
 ```
 
