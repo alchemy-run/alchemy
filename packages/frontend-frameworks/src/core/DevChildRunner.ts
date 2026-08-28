@@ -18,6 +18,7 @@
  * that owns the dev server).
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import type * as FileSystem from "effect/FileSystem";
@@ -71,11 +72,16 @@ process.once("SIGINT", () => controller.abort());
 
 void Effect.runPromiseExit(program, { signal: controller.signal }).then(
   (exit) => {
-    const interrupted = Exit.hasInterrupts(exit);
-    if (Exit.isFailure(exit) && !interrupted) {
-      console.error(exit.cause);
-    }
-    const code = Exit.isSuccess(exit) || interrupted ? 0 : 1;
+    const code = Exit.match(exit, {
+      onSuccess: () => 0,
+      onFailure: (cause) => {
+        if (Cause.hasInterrupts(cause)) {
+          return 0;
+        }
+        console.error(cause);
+        return 1;
+      },
+    });
     // The macrotask hop lets buffered stdout/stderr drain before exiting.
     setTimeout(() => process.exit(code), 0);
   },

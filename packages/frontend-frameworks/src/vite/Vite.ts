@@ -39,6 +39,14 @@ export interface ResolvedViteConfigSlice {
 export interface ViteDevServer {
   readonly listen: () => Promise<unknown>;
   readonly close: () => Promise<void>;
+  /**
+   * Native Node HTTP server. `null` in middleware mode; optional so older
+   * vite slices without the field still typecheck.
+   */
+  readonly httpServer?:
+    | { readonly closeAllConnections?: () => void }
+    | null
+    | undefined;
   readonly resolvedUrls?:
     | { readonly local: ReadonlyArray<string> }
     | null
@@ -303,12 +311,7 @@ export const make: (
       (server) =>
         Effect.promise(async () => {
           try {
-            (
-              server.httpServer as
-                | { closeAllConnections?: () => void }
-                | null
-                | undefined
-            )?.closeAllConnections?.();
+            server.httpServer?.closeAllConnections?.();
             await server.close();
           } catch {
             // teardown is best-effort
