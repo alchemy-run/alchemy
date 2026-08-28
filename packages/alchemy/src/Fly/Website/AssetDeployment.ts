@@ -14,60 +14,19 @@ import { createHash } from "node:crypto";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { cacheControlOf, contentTypeOf } from "../../Website/assets.ts";
 import type { Bucket } from "../Bucket.ts";
 import { TigrisCredentialsMissing } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
-const htmlCacheControl = "max-age=0,no-cache,no-store,must-revalidate";
-const assetCacheControl = "max-age=31536000,public,immutable";
-const ioConcurrency = 16;
+const s3Concurrency = 16;
 
-const contentTypeOf = (relative: string): string => {
-  const ext = relative.split(".").pop()?.toLowerCase() ?? "";
-  switch (ext) {
-    case "html":
-    case "htm":
-      return "text/html; charset=utf-8";
-    case "js":
-    case "mjs":
-      return "text/javascript; charset=utf-8";
-    case "css":
-      return "text/css; charset=utf-8";
-    case "json":
-      return "application/json";
-    case "svg":
-      return "image/svg+xml";
-    case "png":
-      return "image/png";
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "gif":
-      return "image/gif";
-    case "webp":
-      return "image/webp";
-    case "ico":
-      return "image/x-icon";
-    case "woff":
-      return "font/woff";
-    case "woff2":
-      return "font/woff2";
-    case "txt":
-      return "text/plain; charset=utf-8";
-    case "wasm":
-      return "application/wasm";
-    case "map":
-      return "application/json";
-    default:
-      return "application/octet-stream";
-  }
-};
-
-const cacheControlOf = (relative: string): string =>
-  relative.endsWith(".html") || relative.endsWith(".htm")
-    ? htmlCacheControl
-    : assetCacheControl;
-
+/**
+ * Unwrap Tigris {@link Bucket} attrs for the S3 client. Credentials and
+ * the endpoint are `Redacted<string>`; names are plain strings. This is
+ * Fly Bucket plumbing, not website MIME — it stays here because this
+ * resource is the only Website helper that speaks Tigris.
+ */
 const asPlain = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;
   if (Redacted.isRedacted(value)) {
@@ -182,7 +141,7 @@ const walkFiles = Effect.fn(function* (root: string) {
         return stat.type === "File" ? name.replaceAll("\\", "/") : undefined;
       }),
     ),
-    { concurrency: ioConcurrency },
+    { concurrency: "unbounded" },
   );
   return files
     .filter((name): name is string => name !== undefined)
@@ -267,7 +226,7 @@ export const AssetDeploymentProvider = () =>
               return { relative, key, body, contentType, cacheControl };
             }),
           ),
-          { concurrency: ioConcurrency },
+          { concurrency: "unbounded" },
         );
         const version = yield* Effect.sync(() => {
           const hash = createHash("sha256");
@@ -298,7 +257,7 @@ export const AssetDeploymentProvider = () =>
               ),
             ];
           }),
-          { concurrency: ioConcurrency },
+          { concurrency: s3Concurrency },
         );
 
         if (news.purge ?? true) {
@@ -306,7 +265,7 @@ export const AssetDeploymentProvider = () =>
             [...observed.keys()]
               .filter((key) => !desired.has(key))
               .map((key) => deleteObject(scope, key)),
-            { concurrency: ioConcurrency },
+            { concurrency: s3Concurrency },
           );
         }
 
@@ -328,7 +287,7 @@ export const AssetDeploymentProvider = () =>
         const observed = yield* listObserved(scope, output.prefix);
         yield* Effect.all(
           [...observed.keys()].map((key) => deleteObject(scope, key)),
-          { concurrency: ioConcurrency },
+          { concurrency: s3Concurrency },
         );
       }),
     }),

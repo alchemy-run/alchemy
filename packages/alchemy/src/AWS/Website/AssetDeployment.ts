@@ -1,11 +1,11 @@
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
-import path from "node:path";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { initialCwd } from "../../Util/Node.ts";
@@ -163,6 +163,8 @@ export const AssetDeploymentProvider = () =>
     AssetDeployment,
     Effect.gen(function* () {
       const reconcileSync = Effect.fn(function* (news: AssetDeploymentProps) {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
         const bucketName = news.bucket.bucketName;
         const prefix = normalizePrefix(news.prefix);
         // Resolve against the process's INITIAL cwd, never the live cwd:
@@ -170,9 +172,7 @@ export const AssetDeploymentProvider = () =>
         // framework build may transiently chdir this shared process while
         // the upload walks the tree.
         const root = path.resolve(initialCwd, news.sourcePath);
-        const files = (yield* Effect.tryPromise(() => walk(root))).sort(
-          (a, b) => a.localeCompare(b),
-        );
+        const files = yield* walkFiles(root);
         const observed = yield* listObjects(
           bucketName,
           prefix ? `${prefix}/` : prefix,
@@ -180,9 +180,7 @@ export const AssetDeploymentProvider = () =>
         const prepared = yield* Effect.all(
           files.map((relativePath) =>
             Effect.gen(function* () {
-              const body = yield* Effect.tryPromise(() =>
-                readFile(path.join(root, relativePath)),
-              );
+              const body = yield* fs.readFile(path.join(root, relativePath));
               const normalizedRelativePath = toPosix(relativePath);
               const key = prefix
                 ? `${prefix}/${normalizedRelativePath}`
@@ -201,7 +199,7 @@ export const AssetDeploymentProvider = () =>
               };
             }),
           ),
-          { concurrency: 16 },
+          { concurrency: "unbounded" },
         );
         const version = yield* Effect.sync(() => {
           const hash = createHash("sha256");
@@ -286,7 +284,13 @@ export const AssetDeploymentProvider = () =>
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";
 
-const toPosix = (value: string) => value.split(path.sep).join("/");
+const toPosix = (value: string) => value.replaceAll("\\", "/");
+
+const extname = (file: string) => {
+  const base = toPosix(file).split("/").pop() ?? file;
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(dot).toLowerCase() : "";
+};
 
 const withCharset = (mimeType: string, textEncoding: WebsiteTextEncoding) =>
   textEncoding === "none" ? mimeType : `${mimeType}; charset=${textEncoding}`;
@@ -295,7 +299,7 @@ const inferContentType = (
   file: string,
   textEncoding: WebsiteTextEncoding = "utf-8",
 ) => {
-  const ext = path.extname(file).toLowerCase();
+  const ext = extname(file);
   switch (ext) {
     case ".html":
       return withCharset("text/html", textEncoding);
@@ -333,7 +337,7 @@ const inferContentType = (
 };
 
 const defaultCacheControlFor = (file: string) =>
-  path.extname(file).toLowerCase() === ".html"
+  extname(file) === ".html"
     ? defaultHtmlCacheControl
     : defaultAssetCacheControl;
 
@@ -376,19 +380,25 @@ const getFileOptions = (
   };
 };
 
-const walk = async (root: string, dir = ""): Promise<string[]> => {
-  const entries = await readdir(path.join(root, dir), { withFileTypes: true });
-  const files = await Promise.all(
-    entries.map(async (entry) => {
-      const relative = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        return walk(root, relative);
-      }
-      return [relative];
-    }),
+const walkFiles = Effect.fn(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (!(yield* fs.exists(root))) return [] as string[];
+  const names = yield* fs.readDirectory(root, { recursive: true });
+  const files = yield* Effect.all(
+    names.map((name) =>
+      Effect.gen(function* () {
+        const full = path.join(root, name);
+        const stat = yield* fs.stat(full);
+        return stat.type === "File" ? toPosix(name) : undefined;
+      }),
+    ),
+    { concurrency: "unbounded" },
   );
-  return files.flat();
-};
+  return files
+    .filter((name): name is string => name !== undefined)
+    .sort((a, b) => a.localeCompare(b));
+});
 
 const listObjectPages = (bucketName: string, prefix: string) =>
   s3.listObjectsV2
