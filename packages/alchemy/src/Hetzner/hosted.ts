@@ -15,8 +15,6 @@ import {
 } from "../Bundle/InstalledPackages.ts";
 import { findCwdForBundle, resolveMainPath } from "../Bundle/TempRoot.ts";
 import {
-  CONTEXT_ROOT_DEST,
-  EXTRA_FILES_HASH_EXCLUDE,
   contextRootOf,
   isContextRootDest,
   posixRelUnder,
@@ -26,8 +24,11 @@ import {
   createHostRuntimeContext,
   type HostRuntimeContext,
 } from "../Server/Process.ts";
-import { hashDirectory } from "../Command/Memo.ts";
-import { initialCwd } from "../Util/Node.ts";
+import {
+  extraFileDestination,
+  hashExtraFiles,
+  resolveExtraSource,
+} from "../Util/extraFiles.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { zipCode, zipFiles, type ZipFile } from "../Util/zip.ts";
 import { waitForAction } from "./actions.ts";
@@ -90,15 +91,7 @@ const matchesConfiguredExternal = (
   );
 };
 
-/** Normalize a zip destination so it cannot escape the unit root. `"."` is the unit root. */
-export const extraFileDestination = (destination: string): string => {
-  const normalized = destination.replaceAll("\\", "/").replace(/^\/+/, "");
-  if (isContextRootDest(normalized)) return CONTEXT_ROOT_DEST;
-  const parts = normalized
-    .split("/")
-    .filter((part) => part.length > 0 && part !== "." && part !== "..");
-  return parts.length === 0 ? "dist" : parts.join("/");
-};
+export { extraFileDestination };
 
 const quoteEnvValue = (value: unknown) => {
   const text =
@@ -146,44 +139,11 @@ const skipExtraPath = (relative: string) =>
         segment.startsWith(".alchemy-hetzner"),
     );
 
-const resolveExtraSource = (
-  source: string,
-  path: {
-    readonly isAbsolute: (value: string) => boolean;
-    readonly resolve: (...segments: string[]) => string;
-  },
-) => (path.isAbsolute(source) ? source : path.resolve(initialCwd, source));
-
-const hashExtraFiles = Effect.fn(function* (
-  extraFiles: ReadonlyArray<ExtraFile> | undefined,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const hashes: Record<string, string> = {};
-  for (const extra of extraFiles ?? []) {
-    const dest = extraFileDestination(extra.destination);
-    const source = resolveExtraSource(extra.source, path);
-    const exists = yield* fs
-      .exists(source)
-      .pipe(Effect.orElseSucceed(() => false));
-    if (!exists) {
-      hashes[dest] = "";
-      continue;
-    }
-    const stat = yield* fs.stat(source);
-    hashes[dest] =
-      stat.type === "Directory"
-        ? yield* hashDirectory({
-            cwd: source,
-            memo: {
-              exclude: EXTRA_FILES_HASH_EXCLUDE,
-              lockfile: false,
-            },
-          }).pipe(Effect.orElseSucceed(() => ""))
-        : yield* sha256(yield* fs.readFile(source));
-  }
-  return hashes;
-});
+const toSharedExtraFiles = (extraFiles: ReadonlyArray<ExtraFile> | undefined) =>
+  extraFiles?.map((file) => ({
+    source: file.source,
+    dest: file.destination,
+  }));
 
 const collectExtraFiles = Effect.fn(function* (
   extraFiles: ReadonlyArray<ExtraFile> | undefined,
@@ -356,10 +316,7 @@ export const createHetznerHostedSupport = ({
     if (props.isExternal) {
       const fs = yield* FileSystem.FileSystem;
       const pathMod = yield* Path.Path;
-      const extras = (props.extraFiles ?? []).map((file) => ({
-        source: file.source,
-        dest: file.destination,
-      }));
+      const extras = toSharedExtraFiles(props.extraFiles) ?? [];
       const root = contextRootOf(realMain, extras, pathMod, (source) =>
         resolveExtraSource(source, pathMod),
       );
@@ -377,7 +334,9 @@ export const createHetznerHostedSupport = ({
         zipEntries.push({ path: entryRel, content: entryBytes });
       }
       const archive = yield* zipFiles(zipEntries);
-      const extraHash = yield* hashExtraFiles(props.extraFiles);
+      const extraHash = yield* hashExtraFiles(
+        toSharedExtraFiles(props.extraFiles),
+      );
       const hash = yield* sha256Object({
         bundle: yield* sha256(entryBytes),
         extra: extraHash,
@@ -401,7 +360,9 @@ export const createHetznerHostedSupport = ({
       ...installFiles,
     ];
     const archive = yield* zipCode(toBytes(entryFile.content), zipExtras);
-    const extraHash = yield* hashExtraFiles(props.extraFiles);
+    const extraHash = yield* hashExtraFiles(
+      toSharedExtraFiles(props.extraFiles),
+    );
     const hash = yield* sha256Object({
       bundle: bundleOutput.hash,
       extra: extraHash,

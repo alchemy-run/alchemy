@@ -18,7 +18,6 @@ import {
   getStableContextDir,
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
-import { hashDirectory } from "../Command/Memo.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import { safeHttpEffect } from "../Http.ts";
 import { Self } from "../Self.ts";
@@ -29,13 +28,17 @@ import {
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
-  CONTEXT_ROOT_DEST,
-  EXTRA_FILES_HASH_EXCLUDE,
   contextRootOf,
   isContextRootDest,
   posixRelUnder,
 } from "../Server/externalProgram.ts";
-import { initialCwd } from "../Util/Node.ts";
+import {
+  copyExtraFiles,
+  extraFileDestination,
+  hashExtraFiles,
+  resolveExtraSource,
+  type ExtraFile,
+} from "../Util/extraFiles.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
 
@@ -111,17 +114,7 @@ export interface RailwayBuildOptions extends Bundle.BundleConfig {
   readonly install?: PackageInstall;
 }
 
-/**
- * Extra file or directory copied into the Effect-native image next to
- * `index.mjs` (`COPY dest /app/dest`). Used by Website composites to bake
- * `clientDirectory` (or Next.js `.next` + `public`) into the image.
- */
-export interface ExtraFile {
-  /** Local file or directory (absolute, or relative to `initialCwd`). */
-  source: string;
-  /** Destination path relative to `/app` (e.g. `"dist"`, `".next"`). */
-  dest: string;
-}
+export type { ExtraFile };
 
 export interface HostedProgramProps {
   main: string;
@@ -167,119 +160,12 @@ export class ExtraFileMissing extends Data.TaggedError(
   dest: string;
 }> {}
 
-const sanitizeCopyDest = (dest: string): string | undefined => {
-  const normalized = dest.replaceAll("\\", "/").replace(/^\/+/, "");
-  if (isContextRootDest(normalized)) return CONTEXT_ROOT_DEST;
-  if (normalized.length === 0 || normalized.split("/").includes("..")) {
-    return undefined;
-  }
-  return normalized;
-};
-
 const dockerfileCopyLines = (files: ReadonlyArray<ExtraFile> | undefined) =>
   (files ?? []).flatMap((file) => {
-    const dest = sanitizeCopyDest(file.dest);
-    if (dest === undefined || isContextRootDest(dest)) return [];
+    const dest = extraFileDestination(file.dest);
+    if (isContextRootDest(dest)) return [];
     return [`COPY ${dest} /app/${dest}`];
   });
-
-const copyDirectory = (
-  from: string,
-  to: string,
-): Effect.Effect<void, unknown, Path.Path | FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
-    yield* fs.makeDirectory(to, { recursive: true });
-    const entries = yield* fs.readDirectory(from);
-    for (const entry of entries) {
-      // Keep nested `node_modules`: nitro's node preset emits runtime
-      // deps there (`solid-js`, `seroval`, …) and the container imports them.
-      if (entry === ".git" || entry === ".alchemy") {
-        continue;
-      }
-      const source = path.join(from, entry);
-      const target = path.join(to, entry);
-      const stat = yield* fs.stat(source);
-      if (stat.type === "Directory") {
-        yield* copyDirectory(source, target);
-      } else {
-        const contents = yield* fs.readFile(source);
-        yield* fs.writeFile(target, contents);
-      }
-    }
-  });
-
-const hashExtraFiles = Effect.fn(function* (
-  files: ReadonlyArray<ExtraFile> | undefined,
-) {
-  if (files === undefined || files.length === 0) return undefined;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const hashes = yield* Effect.forEach(
-    files,
-    (file) =>
-      Effect.gen(function* () {
-        const source = path.resolve(initialCwd, file.source);
-        const exists = yield* fs.exists(source);
-        if (!exists) return { dest: file.dest, hash: "" };
-        const stat = yield* fs.stat(source);
-        const hash =
-          stat.type === "Directory"
-            ? yield* hashDirectory({
-                cwd: source,
-                memo: {
-                  exclude: EXTRA_FILES_HASH_EXCLUDE,
-                  lockfile: false,
-                },
-              })
-            : yield* sha256(yield* fs.readFile(source));
-        return { dest: file.dest, hash };
-      }),
-    { concurrency: "unbounded" },
-  );
-  return yield* sha256Object(hashes);
-});
-
-const copyExtraFiles = Effect.fn(function* (
-  files: ReadonlyArray<ExtraFile> | undefined,
-  contextDir: string,
-) {
-  if (files === undefined || files.length === 0) return;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  for (const file of files) {
-    const dest = sanitizeCopyDest(file.dest);
-    if (dest === undefined) continue;
-    const source = path.resolve(initialCwd, file.source);
-    if (!(yield* fs.exists(source))) {
-      return yield* new ExtraFileMissing({ source, dest });
-    }
-    if (isContextRootDest(dest)) {
-      const stat = yield* fs.stat(source);
-      if (stat.type === "Directory") {
-        yield* copyDirectory(source, contextDir);
-      } else {
-        const destPath = path.join(contextDir, path.basename(source));
-        const contents = yield* fs.readFile(source);
-        yield* fs.writeFile(destPath, contents);
-      }
-      continue;
-    }
-    const destPath = path.join(contextDir, dest);
-    if (yield* fs.exists(destPath)) {
-      yield* fs.remove(destPath, { recursive: true });
-    }
-    const stat = yield* fs.stat(source);
-    if (stat.type === "Directory") {
-      yield* copyDirectory(source, destPath);
-    } else {
-      yield* fs.makeDirectory(path.dirname(destPath), { recursive: true });
-      const contents = yield* fs.readFile(source);
-      yield* fs.writeFile(destPath, contents);
-    }
-  }
-});
 
 /**
  * The generated entry for `Railway.Service` containers: a shim importing
@@ -900,12 +786,9 @@ export const createRailwayHostedSupport = ({
     const packageJson =
       install === undefined ? undefined : installManifest(install);
     const path = yield* Path.Path;
-    const extras = (props.extraFiles ?? []).map((file) => ({
-      source: file.source,
-      dest: file.dest,
-    }));
+    const extras = props.extraFiles ?? [];
     const root = contextRootOf(realMain, extras, path, (source) =>
-      path.resolve(initialCwd, source),
+      resolveExtraSource(source, path),
     );
     const entryRel =
       props.isExternal === true
@@ -917,13 +800,13 @@ export const createRailwayHostedSupport = ({
       install,
       entryRel,
     );
-    const extraFilesHash = yield* hashExtraFiles(props.extraFiles);
+    const extraFiles = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
       packageJson,
+      extraFiles,
       extraFilesIncludesNodeModules: true,
-      ...(extraFilesHash !== undefined ? { extraFilesHash } : {}),
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash, packageJson };
   });
@@ -979,14 +862,13 @@ export const createRailwayHostedSupport = ({
         yield* fs.writeFile(fullPath, file.content);
       }
     }
-    yield* copyExtraFiles(input.props.extraFiles, contextDir);
+    yield* copyExtraFiles(contextDir, input.props.extraFiles, {
+      onMissing: (file) => new ExtraFileMissing(file),
+    });
     if (input.props.isExternal === true) {
-      const extras = (input.props.extraFiles ?? []).map((file) => ({
-        source: file.source,
-        dest: file.dest,
-      }));
+      const extras = input.props.extraFiles ?? [];
       const root = contextRootOf(realMain, extras, path, (source) =>
-        path.resolve(initialCwd, source),
+        resolveExtraSource(source, path),
       );
       const entryRel =
         posixRelUnder(root, realMain, path) ?? path.basename(realMain);

@@ -19,7 +19,6 @@ import {
 } from "../Bundle/TempRoot.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { hashDirectory } from "../Command/Memo.ts";
 import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import {
@@ -27,13 +26,17 @@ import {
   type HostRuntimeContext,
 } from "../Server/Process.ts";
 import {
-  CONTEXT_ROOT_DEST,
-  EXTRA_FILES_HASH_EXCLUDE,
   contextRootOf,
   isContextRootDest,
   posixRelUnder,
 } from "../Server/externalProgram.ts";
-import { initialCwd } from "../Util/Node.ts";
+import {
+  copyExtraFiles,
+  extraFileDestination,
+  hashExtraFiles,
+  resolveExtraSource,
+  type ExtraFile,
+} from "../Util/extraFiles.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { DiskSpec, ServiceBinding } from "./MountVolume.ts";
 
@@ -61,15 +64,7 @@ export interface FlyBuildOptions extends Bundle.BundleConfig {
   readonly install?: PackageInstall;
 }
 
-export interface ExtraFile {
-  /** Local file or directory (absolute, or relative to `initialCwd`). */
-  source: string;
-  /**
-   * Destination path relative to `/app` in the image (and the Docker
-   * build context). `dist` becomes `COPY dist /app/dist`.
-   */
-  dest: string;
-}
+export type { ExtraFile };
 
 export interface HostedProgramProps {
   main: string;
@@ -87,15 +82,7 @@ export interface HostedProgramProps {
   extraFiles?: ReadonlyArray<ExtraFile>;
 }
 
-/** Normalize a COPY destination so it cannot escape `/app`. `"."` is the image root. */
-export const extraFileDestination = (destination: string): string => {
-  const normalized = destination.replaceAll("\\", "/").replace(/^\/+/, "");
-  if (isContextRootDest(normalized)) return CONTEXT_ROOT_DEST;
-  const parts = normalized
-    .split("/")
-    .filter((part) => part.length > 0 && part !== "." && part !== "..");
-  return parts.length === 0 ? "dist" : parts.join("/");
-};
+export { extraFileDestination };
 
 const matchesConfiguredExternal = (
   external: rolldown.InputOptions["external"],
@@ -355,122 +342,6 @@ const generateDockerfile = (
   );
   return `${lines.join("\n")}\n`;
 };
-
-const resolveExtraSource = (
-  source: string,
-  path: {
-    readonly isAbsolute: (value: string) => boolean;
-    readonly resolve: (...segments: string[]) => string;
-  },
-) => (path.isAbsolute(source) ? source : path.resolve(initialCwd, source));
-
-const hashExtraFiles = Effect.fn(function* (
-  extraFiles: ReadonlyArray<ExtraFile> | undefined,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const hashes: Record<string, string> = {};
-  for (const extra of extraFiles ?? []) {
-    const dest = extraFileDestination(extra.dest);
-    const source = resolveExtraSource(extra.source, path);
-    const exists = yield* fs
-      .exists(source)
-      .pipe(Effect.orElseSucceed(() => false));
-    if (!exists) {
-      hashes[dest] = "";
-      continue;
-    }
-    const stat = yield* fs.stat(source);
-    hashes[dest] =
-      stat.type === "Directory"
-        ? yield* hashDirectory({
-            cwd: source,
-            memo: {
-              exclude: EXTRA_FILES_HASH_EXCLUDE,
-              lockfile: false,
-            },
-          }).pipe(Effect.orElseSucceed(() => ""))
-        : yield* sha256(yield* fs.readFile(source));
-  }
-  return hashes;
-});
-
-/**
- * Copy a file or directory without macOS `clonefile`. Nitro/Nuxt
- * `.output/server` trees (and their nested `node_modules`) fail
- * `fs.copy` with `EINVAL: invalid argument, clonefile`. Nested
- * `node_modules` are copied — nitro's node preset emits runtime
- * deps there (`solid-js`, `seroval`, …) and the Machine imports them.
- */
-const copyTree = Effect.fn(function* (from: string, to: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const stat = yield* fs
-    .stat(from)
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
-  if (stat === undefined) return;
-  if (stat.type !== "Directory") {
-    if (stat.type !== "File") return;
-    yield* fs.makeDirectory(path.dirname(to), { recursive: true });
-    const contents = yield* fs.readFile(from);
-    yield* fs.writeFile(to, contents);
-    return;
-  }
-  yield* fs.makeDirectory(to, { recursive: true });
-  const names = yield* fs.readDirectory(from, { recursive: true });
-  for (const name of names) {
-    if (
-      name
-        .split(/[\\/]/)
-        .some((segment) => segment === ".git" || segment === ".alchemy")
-    ) {
-      continue;
-    }
-    const src = path.join(from, name);
-    const item = yield* fs
-      .stat(src)
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    if (item === undefined || item.type !== "File") continue;
-    const dst = path.join(to, name);
-    yield* fs.makeDirectory(path.dirname(dst), { recursive: true });
-    const contents = yield* fs.readFile(src);
-    yield* fs.writeFile(dst, contents);
-  }
-});
-
-const copyExtraFiles = Effect.fn(function* (
-  contextDir: string,
-  extraFiles: ReadonlyArray<ExtraFile> | undefined,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  for (const extra of extraFiles ?? []) {
-    const source = resolveExtraSource(extra.source, path);
-    const exists = yield* fs
-      .exists(source)
-      .pipe(Effect.orElseSucceed(() => false));
-    if (!exists) continue;
-    const destName = extraFileDestination(extra.dest);
-    if (isContextRootDest(destName)) {
-      const stat = yield* fs.stat(source);
-      if (stat.type === "Directory") {
-        const names = yield* fs.readDirectory(source);
-        for (const name of names) {
-          yield* copyTree(path.join(source, name), path.join(contextDir, name));
-        }
-      } else {
-        yield* copyTree(source, path.join(contextDir, path.basename(source)));
-      }
-      continue;
-    }
-    const dest = path.join(contextDir, destName);
-    if (yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))) {
-      yield* fs.remove(dest, { recursive: true });
-    }
-    yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
-    yield* copyTree(source, dest);
-  }
-});
 
 const installManifest = (dependencies: Record<string, string>) =>
   `${JSON.stringify(
