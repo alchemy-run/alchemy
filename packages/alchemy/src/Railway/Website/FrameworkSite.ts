@@ -9,7 +9,16 @@ import type { MemoOptions } from "../../Command/Memo.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import { Server as FrameworkServer } from "../../Website/Server.ts";
+import {
+  staticConfigFromAssets,
+  type WebsiteAssetsProps,
+  type WebsiteNotFoundHandling,
+} from "../../Website/assets.ts";
+import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
+import {
+  Server as FrameworkServer,
+  type ServerDevProps,
+} from "../../Website/Server.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import type { ExtraFile } from "../hosted.ts";
 import { Project, type Project as ProjectResource } from "../Project.ts";
@@ -27,75 +36,8 @@ export const WEBSITE_PORT = 3000;
  */
 export type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-/**
- * Options for the local dev server that runs a framework site under
- * `alchemy dev`.
- */
-export type ServerDevProps =
-  | {
-      /**
-       * Run the framework's own dev server locally (the default).
-       * @default "server"
-       */
-      mode?: "server";
-      /**
-       * Host the dev server binds to. Defaults to the framework's own
-       * choice (localhost).
-       */
-      host?: string;
-      /**
-       * Preferred port for the dev server. Defaults to an ephemeral port.
-       * If the port is unavailable, the next free port is used unless
-       * {@link strictPort} is `true`.
-       */
-      port?: number;
-      /**
-       * When `true`, fail instead of falling back to another port if
-       * {@link port} is already in use.
-       * @default false
-       */
-      strictPort?: boolean;
-    }
-  | {
-      /**
-       * Don't start a dev server; an external dev server is running instead.
-       */
-      mode: "external";
-      /**
-       * URL the external dev server is reachable at, if applicable.
-       */
-      url?: string;
-    };
-
-/**
- * How unmatched GET paths are answered. Same names as Cloudflare
- * Workers `assets.notFoundHandling`.
- */
-export type WebsiteNotFoundHandling =
-  | "none"
-  | "single-page-application"
-  | "404-page";
-
-/**
- * Static-asset routing. Hashed files are cached by Railway's CDN
- * (enabled on the Service); this bag describes miss/HTML handling on
- * the origin.
- */
-export interface WebsiteAssetsProps {
-  notFoundHandling?: WebsiteNotFoundHandling;
-  htmlHandling?: "none" | "drop-trailing-slash";
-}
-
-export const staticConfigFromAssets = (
-  assets: WebsiteAssetsProps | undefined,
-  defaults?: { notFoundHandling?: WebsiteNotFoundHandling },
-): { spa?: boolean; errorPage?: string } => {
-  const handling = assets?.notFoundHandling ?? defaults?.notFoundHandling;
-  if (handling === "single-page-application") return { spa: true };
-  if (handling === "404-page") return { errorPage: "404.html" };
-  if (handling === "none") return { spa: false };
-  return {};
-};
+export type { ServerDevProps, WebsiteAssetsProps, WebsiteNotFoundHandling };
+export { staticConfigFromAssets };
 
 /**
  * Props shared by every Railway framework website composite.
@@ -330,38 +272,10 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   // must be derived from `buildOut`: the artifacts only exist once the
   // build has run at apply — probing the root here (pre-build) would miss
   // a fresh project's `.next` entirely.
-  let extraFiles: Output.Output<ExtraFile[] | undefined>;
-  if (bake === "next") {
-    extraFiles = Output.mapEffect(() =>
-      Effect.gen(function* () {
-        const files: ExtraFile[] = [];
-        const nextDir = path.join(root, ".next");
-        if (yield* fs.exists(nextDir)) {
-          files.push({ source: nextDir, dest: ".next" });
-        }
-        const publicDir = path.join(root, "public");
-        if (yield* fs.exists(publicDir)) {
-          files.push({ source: publicDir, dest: "public" });
-        }
-        for (const name of [
-          "next.config.js",
-          "next.config.mjs",
-          "next.config.cjs",
-          "next.config.ts",
-        ] as const) {
-          const configPath = path.join(root, name);
-          if (yield* fs.exists(configPath)) {
-            files.push({ source: configPath, dest: name });
-          }
-        }
-        return files.length > 0 ? files : undefined;
-      }).pipe(Effect.orDie),
-    )(buildOut);
-  } else {
-    extraFiles = Output.map(buildOut, (out) => [
-      { source: out.distDir, dest: "." } satisfies ExtraFile,
-    ]);
-  }
+  const extraFiles = Output.mapEffect(
+    (out: { distDir: string; main: string }) =>
+      packSiteExtraFiles(bake === "next" ? root : out.distDir, bake),
+  )(buildOut);
 
   const project = Effect.isEffect(props.project)
     ? yield* props.project

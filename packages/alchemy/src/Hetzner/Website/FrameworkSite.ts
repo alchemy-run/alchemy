@@ -9,7 +9,16 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { asEffect } from "../../Util/types.ts";
-import { Server as FrameworkServer } from "../../Website/Server.ts";
+import {
+  staticConfigFromAssets,
+  type WebsiteAssetsProps,
+  type WebsiteNotFoundHandling,
+} from "../../Website/assets.ts";
+import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
+import {
+  Server as FrameworkServer,
+  type ServerDevProps,
+} from "../../Website/Server.ts";
 import type { Providers } from "../Providers.ts";
 import { RecordSet } from "../RecordSet.ts";
 import { Server } from "../Server.ts";
@@ -25,79 +34,8 @@ export type Ref<T> = T | Effect.Effect<T, never, Providers>;
 /** Default listen port. Hetzner `deployUnit` curls `/health` whenever `PORT` is set. */
 export const DEFAULT_WEBSITE_PORT = 3000;
 
-/**
- * Options for the local dev server that runs a framework site under
- * `alchemy dev`.
- *
- * Use `{ mode: "external" }` to skip starting a dev server entirely —
- * useful when an external dev server (e.g. one you run yourself in
- * another terminal) is serving the site instead.
- */
-export type ServerDevProps =
-  | {
-      /**
-       * Run the framework's own dev server locally (the default).
-       * @default "server"
-       */
-      mode?: "server";
-      /**
-       * Host the dev server binds to. Defaults to the framework's own
-       * choice (localhost).
-       */
-      host?: string;
-      /**
-       * Preferred port for the dev server. Defaults to an ephemeral port.
-       * If the port is unavailable, the next free port is used unless
-       * {@link strictPort} is `true`.
-       */
-      port?: number;
-      /**
-       * When `true`, fail instead of falling back to another port if
-       * {@link port} is already in use.
-       * @default false
-       */
-      strictPort?: boolean;
-    }
-  | {
-      /**
-       * Don't start a dev server; an external dev server is running instead.
-       */
-      mode: "external";
-      /**
-       * URL the external dev server is reachable at, if applicable.
-       */
-      url?: string;
-    };
-
-/**
- * How unmatched GET paths are answered. Same names as Cloudflare
- * Workers `assets.notFoundHandling`.
- */
-export type WebsiteNotFoundHandling =
-  | "none"
-  | "single-page-application"
-  | "404-page";
-
-/**
- * Static-asset routing (the Hetzner half of the shared Website
- * vocabulary). Hetzner has no CDN; this only describes miss/HTML
- * handling on the origin unit.
- */
-export interface WebsiteAssetsProps {
-  notFoundHandling?: WebsiteNotFoundHandling;
-  htmlHandling?: "none" | "drop-trailing-slash";
-}
-
-export const staticConfigFromAssets = (
-  assets: WebsiteAssetsProps | undefined,
-  defaults?: { notFoundHandling?: WebsiteNotFoundHandling },
-): { spa?: boolean; errorPage?: string } => {
-  const handling = assets?.notFoundHandling ?? defaults?.notFoundHandling;
-  if (handling === "single-page-application") return { spa: true };
-  if (handling === "404-page") return { errorPage: "404.html" };
-  if (handling === "none") return { spa: false };
-  return {};
-};
+export type { ServerDevProps, WebsiteAssetsProps, WebsiteNotFoundHandling };
+export { staticConfigFromAssets };
 
 /**
  * Props shared by every Hetzner framework website composite.
@@ -365,41 +303,17 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
 
   const extraFiles = Output.mapEffect(
     (out: { distDir: string; main: string }) =>
-      Effect.gen(function* () {
-        const files: Array<{ source: string; destination: string }> = [];
-        if (config.skipClientAssets) {
-          const nextDir = path.join(out.distDir, ".next");
-          if (
-            yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false))
-          ) {
-            files.push({ source: nextDir, destination: ".next" });
-          }
-          const publicDir = path.join(out.distDir, "public");
-          if (
-            yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false))
-          ) {
-            files.push({ source: publicDir, destination: "public" });
-          }
-          for (const name of [
-            "next.config.js",
-            "next.config.mjs",
-            "next.config.cjs",
-            "next.config.ts",
-          ] as const) {
-            const configPath = path.join(out.distDir, name);
-            if (
-              yield* fs
-                .exists(configPath)
-                .pipe(Effect.orElseSucceed(() => false))
-            ) {
-              files.push({ source: configPath, destination: name });
-            }
-          }
-        } else {
-          files.push({ source: out.distDir, destination: "." });
-        }
-        return files.length > 0 ? files : undefined;
-      }),
+      packSiteExtraFiles(
+        out.distDir,
+        config.skipClientAssets === true ? "next" : "client",
+      ).pipe(
+        Effect.map((files) =>
+          files?.map((file) => ({
+            source: file.source,
+            destination: file.dest,
+          })),
+        ),
+      ),
   )(buildOut);
 
   const service = yield* Service("Service", {
