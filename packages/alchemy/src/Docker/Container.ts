@@ -62,7 +62,7 @@ export declare namespace Container {
     | "removing"
     | "exited"
     | "dead";
-  type Image = string | { imageRef: string };
+  type Image = string | { imageRef: string; imageId?: string };
   interface PortMapping {
     /** External port on the host. */
     external: number | string;
@@ -333,55 +333,100 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          instanceId,
+          news,
+          olds,
+          output,
+        }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const live = yield* docker.container
-            .inspect(args.name, context)
-            .pipe(
+          const oldContext = dockerContextName(olds?.context);
+          const oldArgs =
+            olds?.image === undefined
+              ? undefined
+              : yield* makeCreateArgs(id, olds, instanceId);
+          const inspect = (name: string, engineContext?: string) =>
+            docker.container
+              .inspect(name, engineContext)
+              .pipe(
+                Effect.catchReason(
+                  "PlatformError",
+                  "NotFound",
+                  () => Effect.undefined,
+                ),
+              );
+          const remove = (
+            container: Docker.Container,
+            engineContext?: string,
+          ) =>
+            docker.container.stop(container.Id, engineContext).pipe(
+              Effect.andThen(
+                docker.container.remove(container.Id, true, engineContext),
+              ),
               Effect.catchReason(
                 "PlatformError",
                 "NotFound",
-                () => Effect.undefined,
+                () => Effect.void,
               ),
             );
 
-          if (live) {
-            yield* reconcileNetworks(live, news);
-            if (news.start && live.State.Status !== "running") {
-              yield* docker.container.start(live.Id, context);
-            } else if (!news.start && live.State.Status === "running") {
-              yield* docker.container.stop(live.Id, context);
-            }
-            return yield* docker.container
-              .inspect(live.Id, context)
-              .pipe(
-                Effect.map((info) => toContainerAttributes(info, args.image)),
-              );
+          const live = yield* inspect(args.name, context);
+          const previous =
+            output && (output.name !== args.name || oldContext !== context)
+              ? yield* inspect(output.name, oldContext)
+              : undefined;
+          if (previous) {
+            yield* remove(previous, oldContext);
           }
 
-          const internalTags = yield* createInternalTags(id);
-          const { stdout: containerId } = yield* docker.container.create({
-            ...args,
-            context,
-            label: { ...args.label, ...internalTags },
-          });
-          yield* Effect.forEach(
-            news.networks ?? [],
-            (network) =>
-              docker.network.connect({
-                network: network.name,
-                container: containerId,
-                alias: network.aliases,
-                context,
-              }),
-            { concurrency: "unbounded" },
-          );
-          if (news.start) {
-            yield* docker.container.start(containerId, context);
+          const recreate =
+            live !== undefined &&
+            ((oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
+              normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
+              !matchesDesiredCreateConfiguration(live, args, news.image));
+          if (recreate) {
+            yield* remove(live, context);
           }
-          const info = yield* docker.container.inspect(containerId, context);
-          return toContainerAttributes(info, args.image);
+
+          const current = recreate ? undefined : live;
+          if (!current) {
+            const internalTags = yield* createInternalTags(id);
+            const { stdout: containerId } = yield* docker.container.create({
+              ...args,
+              context,
+              label: { ...args.label, ...internalTags },
+            });
+            yield* Effect.forEach(
+              news.networks ?? [],
+              (network) =>
+                docker.network.connect({
+                  network: network.name,
+                  container: containerId,
+                  alias: network.aliases,
+                  context,
+                }),
+              { concurrency: "unbounded" },
+            );
+            if (news.start) {
+              yield* docker.container.start(containerId, context);
+            }
+            const info = yield* docker.container.inspect(containerId, context);
+            return toContainerAttributes(info, args.image);
+          }
+
+          yield* reconcileNetworks(current, news);
+          if (news.start && current.State.Status !== "running") {
+            yield* docker.container.start(current.Id, context);
+          } else if (!news.start && current.State.Status === "running") {
+            yield* docker.container.stop(current.Id, context);
+          }
+          return yield* docker.container
+            .inspect(current.Id, context)
+            .pipe(
+              Effect.map((info) => toContainerAttributes(info, args.image)),
+            );
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.container
@@ -408,50 +453,110 @@ export const ContainerProvider = () =>
 const normalizeImageRef = (image: Container.Image): string =>
   typeof image === "string" ? image : image.imageRef;
 
+const normalizeImageId = (image: Container.Image | undefined) =>
+  typeof image === "string" ? undefined : image?.imageId;
+
+type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
+
+const matchesDesiredCreateConfiguration = (
+  live: Docker.Container,
+  desired: CreateArgs,
+  image: Container.Image,
+) =>
+  (normalizeImageId(image)
+    ? live.Image === normalizeImageId(image)
+    : live.Config.Image === desired.image) &&
+  (desired.command === undefined ||
+    Equal.equals(live.Config.Cmd, desired.command)) &&
+  Object.entries(desired.env ?? {}).every(([key, value]) =>
+    live.Config.Env?.includes(`${key}=${value}`),
+  ) &&
+  Equal.equals(
+    [...(live.HostConfig.Binds ?? [])].sort(),
+    [...(desired.volume ?? [])].sort(),
+  ) &&
+  Equal.equals(
+    Object.entries(live.HostConfig.PortBindings ?? {})
+      .flatMap(([internal, bindings]) =>
+        (bindings ?? []).map((binding) => `${binding.HostPort}:${internal}`),
+      )
+      .sort(),
+    [...(desired.p ?? [])].sort(),
+  ) &&
+  live.HostConfig.RestartPolicy.Name === desired.restart &&
+  live.HostConfig.AutoRemove === desired.rm &&
+  Object.entries(desired.label ?? {}).every(
+    ([key, value]) => live.Config.Labels?.[key] === value,
+  ) &&
+  (desired["stop-timeout"] === undefined ||
+    live.Config.StopTimeout === Number(desired["stop-timeout"])) &&
+  matchesDesiredHealthcheck(live.Config.Healthcheck, desired);
+
+const matchesDesiredHealthcheck = (
+  live: Docker.Container["Config"]["Healthcheck"],
+  desired: CreateArgs,
+) => {
+  if (desired["health-cmd"] === undefined) return true;
+  return (
+    Equal.equals(live?.Test, ["CMD-SHELL", desired["health-cmd"]]) &&
+    (desired["health-interval"] === undefined ||
+      live?.Interval === parseDockerDuration(desired["health-interval"])) &&
+    (desired["health-timeout"] === undefined ||
+      live?.Timeout === parseDockerDuration(desired["health-timeout"])) &&
+    live?.Retries === desired["health-retries"] &&
+    (desired["health-start-period"] === undefined ||
+      live?.StartPeriod ===
+        parseDockerDuration(desired["health-start-period"])) &&
+    (desired["health-start-interval"] === undefined ||
+      live?.StartInterval ===
+        parseDockerDuration(desired["health-start-interval"]))
+  );
+};
+
+const parseDockerDuration = (duration: string | undefined) =>
+  duration?.endsWith("ns") ? Number(duration.slice(0, -2)) : undefined;
+
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
-    Effect.map(
-      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
-        name,
-        image: normalizeImageRef(news.image),
-        command: news.command,
-        env: normalizeEnvironment(news.environment),
-        volume: news.volumes?.map(
-          (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-        ),
-        p: news.ports?.map(
-          (port) =>
-            `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
-        ),
-        restart: news.restart ?? "no",
-        label: news.labels,
-        "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
-        rm: news.removeOnExit ?? false,
-        ...(news.healthcheck
-          ? {
-              "health-cmd": Array.isArray(news.healthcheck.cmd)
-                ? news.healthcheck.cmd.join(" ")
-                : news.healthcheck.cmd,
-              "health-interval": normalizeDuration(news.healthcheck.interval),
-              "health-timeout": normalizeDuration(news.healthcheck.timeout),
-              "health-retries": news.healthcheck.retries ?? 0,
-              "health-start-period": normalizeDuration(
-                news.healthcheck.startPeriod,
-              ),
-              "health-start-interval": normalizeDuration(
-                news.healthcheck.startInterval,
-              ),
-            }
-          : {
-              "health-cmd": undefined,
-              "health-interval": undefined,
-              "health-timeout": undefined,
-              "health-retries": undefined,
-              "health-start-period": undefined,
-              "health-start-interval": undefined,
-            }),
-      }),
-    ),
+    Effect.map((name): CreateArgs => ({
+      name,
+      image: normalizeImageRef(news.image),
+      command: news.command,
+      env: normalizeEnvironment(news.environment),
+      volume: news.volumes?.map(
+        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+      ),
+      p: news.ports?.map(
+        (port) => `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
+      ),
+      restart: news.restart ?? "no",
+      label: news.labels,
+      "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
+      rm: news.removeOnExit ?? false,
+      ...(news.healthcheck
+        ? {
+            "health-cmd": Array.isArray(news.healthcheck.cmd)
+              ? news.healthcheck.cmd.join(" ")
+              : news.healthcheck.cmd,
+            "health-interval": normalizeDuration(news.healthcheck.interval),
+            "health-timeout": normalizeDuration(news.healthcheck.timeout),
+            "health-retries": news.healthcheck.retries ?? 0,
+            "health-start-period": normalizeDuration(
+              news.healthcheck.startPeriod,
+            ),
+            "health-start-interval": normalizeDuration(
+              news.healthcheck.startInterval,
+            ),
+          }
+        : {
+            "health-cmd": undefined,
+            "health-interval": undefined,
+            "health-timeout": undefined,
+            "health-retries": undefined,
+            "health-start-period": undefined,
+            "health-start-interval": undefined,
+          }),
+    })),
   );
 
 const toContainerAttributes = (
