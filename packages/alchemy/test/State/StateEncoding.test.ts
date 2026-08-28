@@ -96,6 +96,27 @@ describe("StateEncoding secrets", () => {
     );
   });
 
+  it("only decrypts exact single-key __secret__ envelopes", () => {
+    // A user object that merely CONTAINS the marker key alongside other
+    // fields is data, not an envelope — it must pass through untouched
+    // instead of failing the whole read.
+    const json = JSON.stringify({
+      props: { [SECRET_MARKER]: "just a value", keep: true },
+    });
+    const revived = JSON.parse(json, makeStateReviver(codec));
+    expect(revived.props[SECRET_MARKER]).toBe("just a value");
+    expect(revived.props.keep).toBe(true);
+    const recursive = reviveStateRecursive(JSON.parse(json), codec) as any;
+    expect(recursive.props[SECRET_MARKER]).toBe("just a value");
+  });
+
+  it("rejects truncated envelopes as malformed, not with raw crypto errors", () => {
+    const json = JSON.stringify({ apiKey: { [SECRET_MARKER]: "v1:AAAA" } });
+    expect(() => JSON.parse(json, makeStateReviver(codec))).toThrow(
+      /truncated/,
+    );
+  });
+
   it.effect(
     "resolveSecretCodec is undefined when ALCHEMY_PASSWORD is unset",
     () =>

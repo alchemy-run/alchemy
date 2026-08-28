@@ -2,6 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -244,7 +245,12 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     // `Redacted` values never touches KMS — no key is minted and no
     // `kms:*` permission is required, exactly as before encryption
     // existed.
-    const codecCached = yield* Effect.cached(
+    // Memoized on SUCCESS only: `Effect.cached` persists the full Exit —
+    // failures included — forever, so one transient S3/KMS/credential
+    // failure would poison every later secret read/write in this store.
+    // Invalidating on failure lets the next operation retry resolution
+    // from scratch.
+    const [codecMemo, invalidateCodec] = yield* Effect.cachedInvalidateWithTTL(
       Effect.gen(function* () {
         const password = yield* resolveSecretPassword;
         if (Option.isSome(password)) {
@@ -257,7 +263,9 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           Effect.mapError(toError),
         );
       }),
+      Duration.infinity,
     );
+    const codecCached = codecMemo.pipe(Effect.tapError(() => invalidateCodec));
 
     /** S3 key of the KMS-wrapped data key, shared by every stack. */
     const stateKeyObjectKey = `${prefix}__state_key__.json`;
@@ -273,7 +281,30 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           result.Body === undefined
             ? Effect.succeed(undefined)
             : Stream.mkString(Stream.decodeText(result.Body)).pipe(
-                Effect.map((text) => JSON.parse(text) as WrappedStateKey),
+                // A corrupt data-key object fails as a StateStoreError,
+                // never as a JSON.parse defect crashing the engine.
+                Effect.flatMap((text) =>
+                  Effect.try({
+                    try: (): WrappedStateKey => {
+                      const parsed = JSON.parse(
+                        text,
+                      ) as Partial<WrappedStateKey> | null;
+                      if (typeof parsed?.ciphertext !== "string") {
+                        throw new Error(
+                          "missing string 'ciphertext' field — the object may be corrupted",
+                        );
+                      }
+                      return {
+                        keyId:
+                          typeof parsed.keyId === "string"
+                            ? parsed.keyId
+                            : undefined,
+                        ciphertext: parsed.ciphertext,
+                      };
+                    },
+                    catch: stateDecodeError(stateKeyObjectKey),
+                  }),
+                ),
               ),
         ),
         Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
@@ -293,8 +324,31 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         // Not pending deletion (already cancelled by a racer, or only
         // disabled) — fall through to enable.
         Effect.catchTag("KMSInvalidStateException", () => Effect.void),
-        Effect.andThen(kms.enableKey({ KeyId: keyId })),
-        Effect.catchTag("KMSInvalidStateException", () => Effect.void),
+        // CancelKeyDeletion is eventually consistent: the key sits in
+        // PendingDeletion for a moment before landing on Disabled, and
+        // EnableKey rejects with KMSInvalidStateException until then.
+        // Retry through the window instead of swallowing the error —
+        // swallowing would leave the key Disabled and state unreadable.
+        Effect.andThen(
+          kms.enableKey({ KeyId: keyId }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "KMSInvalidStateException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 15,
+            }),
+          ),
+        ),
+        // Enable propagation is asynchronous too — wait until KMS
+        // reports the key usable before the caller retries Decrypt.
+        Effect.andThen(
+          kms.describeKey({ KeyId: keyId }).pipe(
+            Effect.repeat({
+              until: (r) => r.KeyMetadata?.KeyState === "Enabled",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 15,
+            }),
+          ),
+        ),
         Effect.asVoid,
       );
 
@@ -363,9 +417,24 @@ export const makeS3State = (options: S3StateOptions = {}) =>
             kms
               .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
               .pipe(
-                Effect.ignore,
+                // Best-effort cleanup of our now-orphaned key — but leave
+                // a trace when it fails (throttling, missing permission)
+                // so an enabled orphan CMK is never silently left behind.
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(
+                    `Failed to schedule orphaned KMS key ${keyId} for deletion; delete it manually`,
+                    cause,
+                  ),
+                ),
                 Effect.flatMap(() =>
-                  kms.describeKey({ KeyId: STATE_KMS_ALIAS }),
+                  kms.describeKey({ KeyId: STATE_KMS_ALIAS }).pipe(
+                    // The winner's CreateAlias may not be visible yet.
+                    Effect.retry({
+                      while: (e) => e._tag === "NotFoundException",
+                      schedule: Schedule.spaced("1 second"),
+                      times: 10,
+                    }),
+                  ),
                 ),
                 Effect.flatMap((r) =>
                   r.KeyMetadata?.KeyId === undefined
@@ -419,6 +488,15 @@ export const makeS3State = (options: S3StateOptions = {}) =>
             IfNoneMatch: "*",
           })
           .pipe(
+            // S3 documents 409 ConditionalRequestConflict on concurrent
+            // conditional writes as "retry the request": OUR put may not
+            // have been committed, so retry until it lands or a racer's
+            // object makes it fail 412 (which the read-back converges on).
+            Effect.retry({
+              while: (e) => e._tag === "ConditionalRequestConflict",
+              schedule: Schedule.spaced("1 second"),
+              times: 10,
+            }),
             Effect.catchTag(
               ["PreconditionFailed", "ConditionalRequestConflict"],
               () => Effect.void,
@@ -501,17 +579,26 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           result.Body === undefined
             ? Effect.succeed(undefined)
             : Stream.mkString(Stream.decodeText(result.Body)).pipe(
-                Effect.flatMap((text) =>
-                  Effect.flatMap(
-                    hasSecretMarker(text) ? codecCached : noCodec,
-                    (codec) =>
-                      Effect.try({
-                        try: () =>
-                          JSON.parse(text, makeStateReviver(codec)) as T,
-                        catch: stateDecodeError(key),
-                      }),
-                  ),
-                ),
+                Effect.flatMap((text) => {
+                  const parse = (codec: SecretCodec | undefined) =>
+                    Effect.try({
+                      try: () => JSON.parse(text, makeStateReviver(codec)) as T,
+                      catch: stateDecodeError(key),
+                    });
+                  if (!hasSecretMarker(text)) return parse(undefined);
+                  // The substring gate can false-positive on a plain
+                  // string value containing the quoted marker. If codec
+                  // resolution fails (KMS unreachable, no permission),
+                  // only surface that failure when the state genuinely
+                  // holds an encrypted envelope — i.e. when a codec-less
+                  // parse cannot revive it either.
+                  return codecCached.pipe(
+                    Effect.flatMap(parse),
+                    Effect.catchTag("StateStoreError", (codecError) =>
+                      parse(undefined).pipe(Effect.mapError(() => codecError)),
+                    ),
+                  );
+                }),
               ),
         ),
         Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),

@@ -1,3 +1,4 @@
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -8,14 +9,19 @@ import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import { resolveLocalSecretCodec } from "./SecretCodec.ts";
+import { resolveLocalSecretCodec, type SecretCodec } from "./SecretCodec.ts";
 import {
   State,
   stateDecodeError,
   StateStoreError,
   type StateService,
 } from "./State.ts";
-import { encodeState, makeStateReviver } from "./StateEncoding.ts";
+import {
+  containsRedacted,
+  encodeState,
+  hasSecretMarker,
+  makeStateReviver,
+} from "./StateEncoding.ts";
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -63,9 +69,11 @@ export const makeLocalState = () =>
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     // Local state is encrypted by default: ALCHEMY_PASSWORD when set,
     // otherwise the auto-generated `~/.alchemy/state.key`. Resolved
-    // lazily (cached) so store construction stays infallible and no
-    // key file is created until state is actually touched.
-    const getCodec = yield* Effect.cached(
+    // lazily so store construction stays infallible and no key file is
+    // created until a secret is actually read or written. Memoized on
+    // SUCCESS only — `Effect.cached` would persist a failure (e.g. a
+    // transiently unreadable `~/.alchemy`) for the process lifetime.
+    const [codecMemo, invalidateCodec] = yield* Effect.cachedInvalidateWithTTL(
       resolveLocalSecretCodec.pipe(
         Effect.mapError(
           (e) =>
@@ -76,7 +84,10 @@ export const makeLocalState = () =>
         ),
         Effect.provideContext(context),
       ),
+      Duration.infinity,
     );
+    const getCodec = codecMemo.pipe(Effect.tapError(() => invalidateCodec));
+    const noCodec = Effect.succeed<SecretCodec | undefined>(undefined);
     const dotAlchemy = path.join(initialCwd, ".alchemy");
     const stateDir = path.join(dotAlchemy, "state");
 
@@ -164,19 +175,29 @@ export const makeLocalState = () =>
     // (or any non-atomic external writer); treat it as "absent" rather than
     // throwing a JSON parse error that would abort the whole operation.
     // Decode failures (malformed JSON, wrong state key for `__secret__`
-    // envelopes) surface as StateStoreError, not defects.
-    const parseState = (contents: string, what: string) =>
-      getCodec.pipe(
-        Effect.flatMap((codec) =>
-          Effect.try({
-            try: () =>
-              contents.trim().length === 0
-                ? undefined
-                : JSON.parse(contents, makeStateReviver(codec)),
-            catch: stateDecodeError(what),
-          }),
+    // envelopes) surface as StateStoreError, not defects. The codec is
+    // resolved only when the file carries a `__secret__` marker, so
+    // secret-free and legacy state never needs the key file at all —
+    // and a codec failure only surfaces when the state genuinely holds
+    // an encrypted envelope (the marker gate can false-positive on a
+    // plain string containing the marker text).
+    const parseState = (contents: string, what: string) => {
+      const parse = (codec: SecretCodec | undefined) =>
+        Effect.try({
+          try: () =>
+            contents.trim().length === 0
+              ? undefined
+              : JSON.parse(contents, makeStateReviver(codec)),
+          catch: stateDecodeError(what),
+        });
+      if (!hasSecretMarker(contents)) return parse(undefined);
+      return getCodec.pipe(
+        Effect.flatMap(parse),
+        Effect.catchTag("StateStoreError", (codecError) =>
+          parse(undefined).pipe(Effect.mapError(() => codecError)),
         ),
       );
+    };
 
     const created = new Set<string>();
 
@@ -217,7 +238,11 @@ export const makeLocalState = () =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        Effect.all([getCodec, ensure(stageDir(request))]).pipe(
+        Effect.all([
+          // Secret-free values never need (or create) the key file.
+          containsRedacted(request.value) ? getCodec : noCodec,
+          ensure(stageDir(request)),
+        ]).pipe(
           Effect.flatMap(([codec]) =>
             writeAtomic(
               resource(request),
@@ -301,7 +326,10 @@ export const makeLocalState = () =>
           recover,
         ),
       setOutput: (request) =>
-        Effect.all([getCodec, ensure(stageDir(request))]).pipe(
+        Effect.all([
+          containsRedacted(request.value) ? getCodec : noCodec,
+          ensure(stageDir(request)),
+        ]).pipe(
           Effect.flatMap(([codec]) =>
             writeAtomic(
               outputFile(request),

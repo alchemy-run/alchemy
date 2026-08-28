@@ -7,6 +7,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { rootDir } from "../Auth/Profile.ts";
+import { StateStoreError } from "./State.ts";
 
 /**
  * Encrypts / decrypts the payload of a `Redacted<T>` value before it is
@@ -76,12 +77,21 @@ export const makeSecretCodecFromKey = (key: Uint8Array): SecretCodec => {
         payload.slice(VERSION_PREFIX.length),
         "base64",
       );
-      const iv = framed.subarray(0, IV_BYTES);
-      const tag = framed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
-      const ciphertext = framed.subarray(IV_BYTES + TAG_BYTES);
-      const decipher = NodeCrypto.createDecipheriv("aes-256-gcm", key, iv);
-      decipher.setAuthTag(tag);
+      // Reject truncated frames before touching the cipher: a short
+      // frame would hand a short auth tag to setAuthTag (Node accepts
+      // some non-16-byte GCM tags, weakening authentication) and
+      // surface raw crypto errors instead of a malformed-frame one.
+      if (framed.length < IV_BYTES + TAG_BYTES) {
+        throw new Error(
+          "Malformed encrypted state secret: truncated envelope.",
+        );
+      }
       try {
+        const iv = framed.subarray(0, IV_BYTES);
+        const tag = framed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
+        const ciphertext = framed.subarray(IV_BYTES + TAG_BYTES);
+        const decipher = NodeCrypto.createDecipheriv("aes-256-gcm", key, iv);
+        decipher.setAuthTag(tag);
         return Buffer.concat([
           decipher.update(ciphertext),
           decipher.final(),
@@ -119,8 +129,9 @@ export const resolveSecretPassword: Effect.Effect<
 /**
  * Resolve the state-secret codec from the `ALCHEMY_PASSWORD` config value
  * alone. Returns `undefined` when no password is configured. Used by
- * stores whose state is shared across machines (HTTP) where an automatic
- * machine-local key would break other readers.
+ * stores whose state is shared across machines (e.g. Postgres) where an
+ * automatic machine-local key would break other readers, so encryption
+ * is opt-in via the shared password.
  */
 export const resolveSecretCodec: Effect.Effect<SecretCodec | undefined> =
   resolveSecretPassword.pipe(
@@ -148,7 +159,7 @@ export const localStateKeyFileName = "state.key";
  */
 export const resolveLocalSecretCodec: Effect.Effect<
   SecretCodec,
-  PlatformError,
+  PlatformError | StateStoreError,
   FileSystem.FileSystem | Path.Path
 > = Effect.gen(function* () {
   const password = yield* resolveSecretPassword;
@@ -159,13 +170,22 @@ export const resolveLocalSecretCodec: Effect.Effect<
   const path = yield* Path.Path;
   const keyFile = path.join(rootDir, localStateKeyFileName);
 
-  const readKey = fs
-    .readFileString(keyFile)
-    .pipe(
-      Effect.map((hex) =>
-        makeSecretCodecFromKey(Buffer.from(hex.trim(), "hex")),
-      ),
-    );
+  // Corrupted key material (truncated hex, wrong length) fails as a
+  // typed StateStoreError, not a defect escaping through Effect.map.
+  const readKey = fs.readFileString(keyFile).pipe(
+    Effect.flatMap((hex) =>
+      Effect.try({
+        try: () => makeSecretCodecFromKey(Buffer.from(hex.trim(), "hex")),
+        catch: (cause) =>
+          new StateStoreError({
+            message: `Invalid state secret key at ${keyFile}: ${
+              cause instanceof Error ? cause.message : String(cause)
+            }`,
+            cause: cause instanceof Error ? cause : undefined,
+          }),
+      }),
+    ),
+  );
 
   return yield* readKey.pipe(
     Effect.catchTag("PlatformError", (e) =>

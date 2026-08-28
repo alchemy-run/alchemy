@@ -215,7 +215,12 @@ export const makeStateReviver =
       if (REDACTED_MARKER in obj) {
         return Redacted.make(obj[REDACTED_MARKER]);
       }
-      if (SECRET_MARKER in obj) {
+      // Exact single-key envelopes only: encodeState always writes
+      // `{ __secret__: <ciphertext> }` alone, so a user object that
+      // merely CONTAINS the key alongside other fields is data, not an
+      // envelope — attempting to decrypt it would fail and make the
+      // whole state unreadable.
+      if (SECRET_MARKER in obj && Object.keys(obj).length === 1) {
         return decodeSecret(obj[SECRET_MARKER], codec);
       }
       if (DURATION_MARKER in obj) {

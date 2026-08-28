@@ -10,8 +10,10 @@ import type * as SqlError from "effect/unstable/sql/SqlError";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ReplacedResourceState } from "./ResourceState.ts";
+import { resolveSecretCodec } from "./SecretCodec.ts";
 import {
   State,
+  stateDecodeError,
   StateStoreError,
   type PersistedState,
   type StateService,
@@ -478,7 +480,27 @@ export const makePostgresState = <E = never, R = never>(
         ),
       );
 
-    const jsonParam = (value: unknown) => JSON.stringify(encodeState(value));
+    // Postgres state is shared across machines, so there is no automatic
+    // key source — encryption of `Redacted` values is opt-in via the
+    // shared `ALCHEMY_PASSWORD` (a scrypt-derived AES-256 key). Without
+    // it, secrets persist as plaintext `__redacted__` markers (legacy
+    // behavior); with it, rows written elsewhere with the same password
+    // (or plaintext legacy rows) both revive.
+    const codec = yield* resolveSecretCodec;
+
+    const jsonParam = (value: unknown) =>
+      JSON.stringify(encodeState(value, codec));
+
+    /**
+     * Revive a persisted row value, surfacing decode failures (an
+     * encrypted `__secret__` envelope without/with the wrong
+     * ALCHEMY_PASSWORD) as StateStoreError rather than a defect.
+     */
+    const reviveRow = (value: unknown, what: string) =>
+      Effect.try({
+        try: () => reviveStateRecursive(value, codec),
+        catch: stateDecodeError(what),
+      });
 
     const deleteStage = (stack: string, stage: string) =>
       run(
@@ -524,13 +546,16 @@ export const makePostgresState = <E = never, R = never>(
             (sql) =>
               sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and fqn = ${request.fqn}`,
           ).pipe(
-            Effect.map((rows) => {
+            Effect.flatMap((rows) => {
               const row = rows[0];
               // Every row was written by `set` through `encodeState`, so
               // reviving it recovers a PersistedState by construction.
               return row === undefined
-                ? undefined
-                : (reviveStateRecursive(row.value) as PersistedState);
+                ? Effect.succeed(undefined)
+                : (reviveRow(row.value, request.fqn) as Effect.Effect<
+                    PersistedState,
+                    StateStoreError
+                  >);
             }),
           ),
         ),
@@ -544,10 +569,14 @@ export const makePostgresState = <E = never, R = never>(
             (sql) =>
               sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and value ->> 'status' = 'replaced'`,
           ).pipe(
-            Effect.map((rows) =>
-              rows.map(
+            Effect.flatMap((rows) =>
+              Effect.forEach(
+                rows,
                 (row) =>
-                  reviveStateRecursive(row.value) as ReplacedResourceState,
+                  reviveRow(row.value, "replaced resources") as Effect.Effect<
+                    ReplacedResourceState,
+                    StateStoreError
+                  >,
               ),
             ),
           ),
@@ -618,11 +647,11 @@ export const makePostgresState = <E = never, R = never>(
             (sql) =>
               sql`select value from alchemy_stack_output where stack = ${request.stack} and stage = ${request.stage}`,
           ).pipe(
-            Effect.map((rows) => {
+            Effect.flatMap((rows) => {
               const row = rows[0];
               return row === undefined
-                ? undefined
-                : reviveStateRecursive(row.value);
+                ? Effect.succeed(undefined)
+                : reviveRow(row.value, "__stack_output__");
             }),
           ),
         ),
