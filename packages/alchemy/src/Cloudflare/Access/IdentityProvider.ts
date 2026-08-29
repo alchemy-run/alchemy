@@ -1,11 +1,11 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import type * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -72,7 +72,7 @@ export interface OAuthClientConfig {
    * diffs against the previously declared props rather than observed
    * cloud state.
    */
-  clientSecret: string;
+  clientSecret: Redacted.Redacted<string>;
 }
 
 /**
@@ -80,6 +80,12 @@ export interface OAuthClientConfig {
  * parameters — users receive a PIN at their email address.
  */
 export interface OneTimePinConfig {}
+
+/**
+ * Configuration for the Cloudflare-managed (WARP) login method. Takes no
+ * parameters — the IdP is provisioned by Cloudflare.
+ */
+export interface CloudflareConfig {}
 
 /**
  * Configuration for the simple social OAuth providers: `github`,
@@ -473,7 +479,7 @@ export type IdentityProviderProps = IdentityProviderBaseProps &
         /** The identity provider type. Immutable — changing it triggers a replacement. */
         type: "cloudflare";
         /** The Cloudflare-managed (WARP) IdP takes no user configuration. */
-        config?: IdentityProviderConfig;
+        config?: CloudflareConfig;
       }
   );
 
@@ -519,8 +525,9 @@ export type IdentityProvider = Resource<
  * is a compile-time error. The `type` is immutable (config shapes are
  * disjoint per type — changing it replaces the IdP); name, config, and
  * SCIM settings converge in place. Cloudflare masks secret config fields
- * (`clientSecret`, API tokens) on read, so those fields diff against
- * your previously declared props instead of observed cloud state.
+ * (`clientSecret`) on read, so those fields diff against your previously
+ * declared props instead of observed cloud state. Pass secrets as
+ * `Redacted` so they never surface in plan output or logs.
  *
  * By default the IdP is created at the account level (the modern Zero
  * Trust organization scope); pass `zoneId` to scope it to a single zone
@@ -539,7 +546,7 @@ export type IdentityProvider = Resource<
  *   type: "oidc",
  *   config: {
  *     clientId: "my-client-id",
- *     clientSecret: "my-client-secret",
+ *     clientSecret: Redacted.make("my-client-secret"),
  *     authUrl: "https://idp.example.com/authorize",
  *     tokenUrl: "https://idp.example.com/token",
  *     certsUrl: "https://idp.example.com/keys",
@@ -554,7 +561,7 @@ export type IdentityProvider = Resource<
  *   type: "azureAD",
  *   config: {
  *     clientId: "my-client-id",
- *     clientSecret: "my-client-secret",
+ *     clientSecret: Redacted.make("my-client-secret"),
  *     directoryId: "my-tenant-id",
  *     supportGroups: true,
  *   },
@@ -568,7 +575,7 @@ export type IdentityProvider = Resource<
  *   type: "github",
  *   config: {
  *     clientId: "my-client-id",
- *     clientSecret: "my-client-secret",
+ *     clientSecret: Redacted.make("my-client-secret"),
  *   },
  * });
  * ```
@@ -770,7 +777,7 @@ export const IdentityProviderProvider = () =>
         const created = yield* createIdp(zoneId, accountId, {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: toWireConfig(news.config),
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
@@ -786,10 +793,12 @@ export const IdentityProviderProvider = () =>
       //    Non-secret aspects (name, SCIM enablement) diff against
       //    observed cloud state; the config diffs against the previously
       //    declared props because Cloudflare masks secrets on read.
+      //    `deepEqual` compares Redacted values by content — a plain
+      //    JSON.stringify would serialize every secret as "<redacted>"
+      //    and miss a rotation.
       const dirty =
         observed.name !== name ||
-        JSON.stringify(news.config ?? {}) !==
-          JSON.stringify(olds?.config ?? null) ||
+        !deepEqual(news.config ?? {}, olds?.config ?? {}) ||
         samlCertificateSetIdOf(news) !== samlCertificateSetIdOf(olds) ||
         (news.scimConfig !== undefined &&
           !sameScim(observed.scimConfig, news.scimConfig));
@@ -797,7 +806,7 @@ export const IdentityProviderProvider = () =>
         const updated = yield* updateIdp(zoneId, accountId, observed.id ?? "", {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: toWireConfig(news.config),
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
@@ -847,6 +856,21 @@ const samlCertificateSetIdOf = (
   props: IdentityProviderProps | undefined,
 ): string | undefined =>
   props?.type === "saml" ? props.samlCertificateSetId : undefined;
+
+/**
+ * Unwrap the declared config into Cloudflare's wire shape — the only
+ * secret member, `clientSecret`, is declared `Redacted` and must be
+ * revealed for the request body.
+ */
+const toWireConfig = (
+  config: IdentityProviderProps["config"] | undefined,
+): IdentityProviderConfig => {
+  if (config === undefined) return {};
+  if ("clientSecret" in config) {
+    return { ...config, clientSecret: Redacted.value(config.clientSecret) };
+  }
+  return config;
+};
 
 const createIdp = (
   zoneId: string | undefined,

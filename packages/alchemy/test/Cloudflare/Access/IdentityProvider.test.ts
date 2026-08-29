@@ -10,6 +10,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -79,7 +80,7 @@ const expectGone = (
 // Cloudflare validates the shape, not the reachability.
 const oidcConfig = {
   clientId: "alchemy-test-client",
-  clientSecret: "alchemy-test-secret",
+  clientSecret: Redacted.make("alchemy-test-secret"),
   authUrl: "https://idp.alchemy-test.example/authorize",
   tokenUrl: "https://idp.alchemy-test.example/token",
   certsUrl: "https://idp.alchemy-test.example/keys",
@@ -233,7 +234,7 @@ test.provider("changing the type replaces the IdP", (stack) =>
         type: "github",
         config: {
           clientId: "alchemy-test-client",
-          clientSecret: "alchemy-test-secret",
+          clientSecret: Redacted.make("alchemy-test-secret"),
         },
       }),
     );
@@ -410,7 +411,11 @@ test.provider(
             accountId,
             name: NAME,
             type: "oidc",
-            config: oidcConfig,
+            // Out-of-band create goes straight to the wire — reveal the secret.
+            config: {
+              ...oidcConfig,
+              clientSecret: Redacted.value(oidcConfig.clientSecret),
+            },
           }),
         ).pipe(Effect.map((created): LiveIdp => created as LiveIdp)));
       expect(pre.id).toBeTruthy();
@@ -703,7 +708,10 @@ type _OkSaml = Assert<
 type _BadOidc = Assert<
   Not<
     Extends<
-      { type: "oidc"; config: { clientId: string; clientSecret: string } },
+      {
+        type: "oidc";
+        config: { clientId: string; clientSecret: Redacted.Redacted<string> };
+      },
       IdpProps
     >
   >
@@ -712,7 +720,22 @@ type _BadOidc = Assert<
 type _BadAzure = Assert<
   Not<
     Extends<
-      { type: "azureAD"; config: { clientId: string; clientSecret: string } },
+      {
+        type: "azureAD";
+        config: { clientId: string; clientSecret: Redacted.Redacted<string> };
+      },
+      IdpProps
+    >
+  >
+>;
+// A plain-string client secret is rejected — secrets must be Redacted.
+type _BadPlainSecret = Assert<
+  Not<
+    Extends<
+      {
+        type: "github";
+        config: { clientId: string; clientSecret: string };
+      },
       IdpProps
     >
   >
