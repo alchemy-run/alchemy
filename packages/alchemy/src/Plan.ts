@@ -670,16 +670,27 @@ export const make = <A>(
               // return one (e.g. no diff fn, or a diff that omits `stables`).
               const stables: string[] = diff?.stables ?? provider.stables ?? [];
 
-              const withStables = (output: any) =>
-                stables.length > 0
+              const withStables = (output: any) => {
+                // Only ATTRIBUTES THAT EXIST are stable. A row without
+                // attrs (a failed create left it `replacing`/`creating`)
+                // or a declared-stable key absent from the snapshot must
+                // stay an unresolved expression — fabricating
+                // `{ imageArn: undefined }` here made the Output proxy
+                // serve `undefined` as a KNOWN value, and downstream
+                // `Output.map` lambdas crashed on it at plan time
+                // (`imageArn.replace` on undefined after a deploy died
+                // mid-replacement).
+                const known = stables
+                  .map((stable) => [stable, output?.[stable]] as const)
+                  .filter(([, value]) => value !== undefined);
+                return known.length > 0
                   ? new Output.ResourceExpr(
                       resourceExpr.src,
-                      Object.fromEntries(
-                        stables.map((stable) => [stable, output?.[stable]]),
-                      ),
+                      Object.fromEntries(known),
                     )
-                  : // if there are no stable properties, treat every property as changed
+                  : // nothing stable to show — treat every property as changed
                     resourceExpr;
+              };
 
               if (diff == null) {
                 if (havePropsChanged(oldProps, props)) {

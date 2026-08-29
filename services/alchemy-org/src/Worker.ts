@@ -128,8 +128,13 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
   release: () => Effect.void,
 });
 
-/** The review pipeline: webhook router + charter. */
-const ReviewBotWorker = ReviewBotEvents.pipe(
+/** The review pipeline: webhook router + charter.
+ *
+ * DISABLED for now — not merged into {@link Org} below, so the webhook
+ * resource, the PR polling, and the ReviewBot sessions all drop out of
+ * the stack. Kept exported (and compiling) so re-enabling is one edit:
+ * add it back to the `Org` mergeAll. */
+export const ReviewBotWorker = ReviewBotEvents.pipe(
   // provideMERGE: the HTTP edge addresses the bot too (click-to-review)
   Layer.provideMerge(ReviewBotWorkerLive),
   Layer.provide(CheckoutsRouter),
@@ -142,8 +147,9 @@ const ReviewBotWorker = ReviewBotEvents.pipe(
 /** The whole org over CLOUDFLARE physics. SandboxSession is merged in
  *  so the ROUTES see `AI.Sandbox` too (the terminal door) — the same
  *  layer reference the charters consume, deduped by the build MemoMap,
- *  so the terminal lands on the same machine registry the tools use. */
-const Org = Layer.mergeAll(EngineerWorker, ReviewBotWorker, SandboxSession).pipe(
+ *  so the terminal lands on the same machine registry the tools use.
+ *  (ReviewBotWorker deliberately absent — reviews are disabled.) */
+const Org = Layer.mergeAll(EngineerWorker, SandboxSession).pipe(
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   Layer.provideMerge(ApprovalsD1),

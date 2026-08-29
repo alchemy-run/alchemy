@@ -66,13 +66,16 @@ export class TailCollector {
   private totalBytes = 0;
   private newlineCount = 0;
   private readonly maxBufferBytes: number;
+  // an explicit field, NOT a constructor parameter property: the stack
+  // program is imported by node in strip-only TS mode, which rejects
+  // TS-only runtime syntax (`constructor(private options: …)`)
+  private readonly options: {
+    readonly maxLines: number;
+    readonly maxBytes: number;
+  };
 
-  constructor(
-    private readonly options: {
-      readonly maxLines: number;
-      readonly maxBytes: number;
-    },
-  ) {
+  constructor(options: { readonly maxLines: number; readonly maxBytes: number }) {
+    this.options = options;
     this.maxBufferBytes = options.maxBytes * 2;
   }
 
@@ -104,13 +107,15 @@ export class HeadCollector {
   private value = "";
   private totalBytes = 0;
   private newlineCount = 0;
+  // explicit field — see TailCollector on strip-only TS mode
+  private readonly options: {
+    readonly maxLines: number;
+    readonly maxBytes: number;
+  };
 
-  constructor(
-    private readonly options: {
-      readonly maxLines: number;
-      readonly maxBytes: number;
-    },
-  ) {}
+  constructor(options: { readonly maxLines: number; readonly maxBytes: number }) {
+    this.options = options;
+  }
 
   add(chunk: string): void {
     this.totalBytes += byteLength(chunk);

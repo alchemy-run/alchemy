@@ -60,7 +60,10 @@ export const routes = Effect.gen(function* () {
   // OPTIONAL: the terminal door needs the session machine seam; a
   // placement without a sandbox (pure API mirror) 404s the route.
   const sandbox = yield* Effect.serviceOption(AI.Sandbox);
-  const bot = yield* ReviewBot;
+  // OPTIONAL: the review pipeline may be dropped from the stack (it is
+  // right now — see Worker.ts) — the request-review door answers 503
+  // instead of failing the whole router build.
+  const bot = yield* Effect.serviceOption(ReviewBot);
   const approvals = yield* Approvals;
   const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
   const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
@@ -88,21 +91,38 @@ export const routes = Effect.gen(function* () {
   const identity = yield* GitHub.resolveRepository(testAlchemy);
   const repoName = `${identity.owner}/${identity.repository}`;
 
-  // GitHub's PR list rides ONE process-wide TTL cache: the board SSE
+  // GitHub's PR list rides ONE isolate-wide TTL cache: the board SSE
   // stream ticks once per second PER CLIENT, and every tick hitting
   // GitHub live blew through the secondary rate limit (403 storms)
   // with a handful of open tabs. Session rows stay tick-fresh — only
-  // the GitHub half is capped, at one call per window.
-  const openPullsCached = yield* Effect.cachedWithTTL(
-    listPullRequests({ state: "open" }).pipe(
+  // the GitHub half is capped.
+  //
+  // Hand-rolled over PLAIN DATA on purpose: `Effect.cachedWithTTL`
+  // shares the in-flight computation across callers via a Latch, and
+  // workerd pins promises to their creating request's IoContext — a
+  // second request awaiting the first request's fetch gets its
+  // continuation CANCELED when the creator completes ("promise was
+  // resolved from a different request context"), hanging the request
+  // until the runtime kills it. Caching the resolved value is safe;
+  // sharing the promise is not. A stale window may pay a few
+  // concurrent fetches — fine at this TTL.
+  type OpenPulls = ReadonlyArray<{ number: number; title: string }> | undefined;
+  let openPullsCache: { at: number; value: OpenPulls } | undefined;
+  const openPullsCached = Effect.gen(function* () {
+    const now = Date.now();
+    if (openPullsCache !== undefined && now - openPullsCache.at < 15_000) {
+      return openPullsCache.value;
+    }
+    const value: OpenPulls = yield* listPullRequests({ state: "open" }).pipe(
       Effect.map((list) =>
         list.map((pull) => ({ number: pull.number, title: pull.title })),
       ),
       // GitHub down ≠ board down: states degrade to "unknown"
       Effect.catch(() => Effect.succeed(undefined)),
-    ),
-    "15 seconds",
-  );
+    );
+    openPullsCache = { at: now, value };
+    return value;
+  });
 
   const readBoard = Effect.gen(function* () {
     const [summaries, openPrs] = yield* Effect.all(
@@ -334,6 +354,12 @@ export const routes = Effect.gen(function* () {
     "POST",
     "/api/prs/:number/review",
     Effect.gen(function* () {
+      if (Option.isNone(bot)) {
+        return yield* HttpServerResponse.json(
+          { error: "the review pipeline is disabled on this placement" },
+          { status: 503 },
+        );
+      }
       const params = yield* HttpRouter.params;
       const number = Number(params.number);
       if (!Number.isFinite(number)) {
@@ -350,7 +376,7 @@ export const routes = Effect.gen(function* () {
       if ("error" in pull) {
         return yield* HttpServerResponse.json(pull, { status: 404 });
       }
-      yield* bot
+      yield* bot.value
         .send(
           {
             _tag: "PullRequestOpened",

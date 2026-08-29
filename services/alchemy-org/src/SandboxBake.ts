@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 export const ORG_REMOTE = "https://github.com/alchemy-run/alchemy.git";
 
 /** Bump when the staging layout changes — invalidates stale stages. */
-const STAGE_VERSION = "v1";
+const STAGE_VERSION = "v3";
 
 const MARKER = ".bake-fingerprint";
 
@@ -107,14 +107,24 @@ const readHead = (checkout: string) =>
 /**
  * Stage the LOCAL repository for the sandbox image bake — no network,
  * no GitHub clone: the source of truth is the repo root this deploy
- * runs from.
+ * runs from. The stage is a SNAPSHOT of the whole workspace: checked
+ * out, compiled — so the image build does no compilation of its own.
  *
  * The literal repo cannot ship (`.git` alone is ~100GB of local object
- * store), so the stage is the local repo REDUCED to what the image
- * needs to behave as a worktree of the branch:
+ * store, and the host `node_modules` is darwin-native), so the stage
+ * is the local workspace REDUCED to what the image needs:
  *
- * - the COMMITTED tree of `HEAD` (`git archive` — no gitignored cruft,
- *   no host `node_modules`), plus distilled's committed tree;
+ * - the COMMITTED tree of `HEAD` (`git archive`), plus distilled's
+ *   committed tree;
+ * - the working tree's GITIGNORED BUILD ARTIFACTS (`lib/`, `dist/`,
+ *   tsbuildinfo, generated runtime files — enumerated by git, so
+ *   nothing hand-listed), snapshotted as they are on the host at bake
+ *   time and scoped to the workspace's own `packages/` + `services/`
+ *   (never `.vendor`'s repos or example junk). Excluded: every
+ *   `node_modules` (the host's darwin-native binaries cannot run in
+ *   the linux VM — the image re-links its own from the pnpm store),
+ *   `.env*` (secrets stay home), and machine-local state
+ *   (`.alchemy`, `.turbo`, `.wrangler`);
  * - a REAL `.git` derived from the local object store: a depth-1 pack
  *   of `HEAD` (`git clone --depth 1 file://…`), index rebuilt against
  *   the staged tree, `origin` re-pointed at {@link ORG_REMOTE} so
@@ -122,9 +132,11 @@ const readHead = (checkout: string) =>
  *
  * Fingerprinted by the HEAD commits (root + distilled, read from the
  * filesystem) and skipped when already staged, so a plan that changed
- * nothing costs two file reads, not a re-stage. File modes are
- * normalized to what the artifact zip roundtrip produces anyway,
- * keeping local (floci) docker layer caches stable across stagings.
+ * nothing costs two file reads, not a re-stage — which also means the
+ * ARTIFACTS snapshot refreshes per COMMIT, not per host rebuild. File
+ * modes are normalized to what the artifact zip roundtrip produces
+ * anyway, keeping local (floci) docker layer caches stable across
+ * stagings.
  */
 export const stageBake: Effect.Effect<
   StagedBake,
@@ -176,6 +188,88 @@ export const stageBake: Effect.Effect<
     `git -C distilled archive HEAD | tar -x -C ${q(path.join(staging, "distilled"))}`,
     root,
   );
+
+  // ── the COMPILED half of the snapshot ────────────────────────────
+  // The working tree's gitignored build artifacts (lib/, dist/,
+  // tsbuildinfo, generated runtime files) ride along so the image
+  // never compiles: enumerate them with git rather than a hand-kept
+  // allowlist, scoped to the WORKSPACE PACKAGES (never `.vendor`'s
+  // vendored repos, `examples` junk, or website builds). The listing
+  // goes through a FILE — child-process stdout capture is unreliable
+  // in the exec worker (see REPO_ROOT).
+  /** Path segments that must never ship: platform-native installs
+   *  (`node_modules` — darwin binaries cannot run in the linux VM;
+   *  the image re-links its own from the pnpm store), secrets
+   *  (`.env*`), and machine-local state/caches. */
+  const excluded = (entry: string): boolean =>
+    entry.split("/").some(
+      (segment) =>
+        segment === "node_modules" ||
+        segment === ".alchemy" ||
+        segment === ".turbo" ||
+        segment === ".wrangler" ||
+        segment === ".tmp" ||
+        segment === ".DS_Store" ||
+        segment.startsWith(".env"),
+    );
+  /** Artifacts the image wants: everything under the workspace's own
+   *  packages/services, plus root-level tsbuildinfo (the composite
+   *  build's incremental state — sessions rebuild from it, not from
+   *  scratch). */
+  const inScope = (entry: string): boolean =>
+    entry.startsWith("packages/") ||
+    entry.startsWith("services/") ||
+    (!entry.includes("/") && entry.endsWith(".tsbuildinfo"));
+  const listArtifacts = (repo: string, prefix: string) =>
+    Effect.gen(function* () {
+      const out = path.join(
+        scratch,
+        `.ignored-${prefix === "" ? "root" : "distilled"}`,
+      );
+      yield* sh(
+        `git ls-files -z --others --ignored --exclude-standard --directory > ${q(out)}`,
+        repo,
+      );
+      const raw = yield* fs.readFileString(out);
+      const entries = raw
+        .split("\0")
+        .filter(
+          (entry) => entry.length > 0 && inScope(entry) && !excluded(entry),
+        );
+      // ship TOPMOST directories only (tar recurses; git lists every
+      // nested ignored dir too) + standalone files not inside one —
+      // not the tens of thousands of per-file rows git also lists
+      const dirs = entries.filter((entry) => entry.endsWith("/"));
+      const topDirs = dirs.filter(
+        (dir) => !dirs.some((other) => other !== dir && dir.startsWith(other)),
+      );
+      const files = entries.filter(
+        (entry) =>
+          !entry.endsWith("/") &&
+          !topDirs.some((dir) => entry.startsWith(dir)) &&
+          // maps are ~30% of the compiled artifacts and sessions don't
+          // debug through them — mirrored by tar's --exclude for the
+          // files INSIDE the collapsed dirs
+          !entry.endsWith(".js.map") &&
+          !entry.endsWith(".d.ts.map"),
+      );
+      return [...topDirs, ...files].map((entry) => `${prefix}${entry}`);
+    });
+  const artifacts = [
+    ...(yield* listArtifacts(root, "")),
+    ...(yield* listArtifacts(path.join(root, "distilled"), "distilled/")),
+  ];
+  if (artifacts.length > 0) {
+    const filesFrom = path.join(scratch, ".artifact-list");
+    yield* fs.writeFileString(filesFrom, `${artifacts.join("\0")}\0`);
+    // same transport as the source trees: tar in, tar out. Source maps
+    // stay home (~107MB of the ~460MB snapshot; sessions don't debug
+    // through compiled maps).
+    yield* sh(
+      `tar -cf - --exclude='*.js.map' --exclude='*.d.ts.map' --null -T ${q(filesFrom)} | tar -x -C ${q(staging)}`,
+      root,
+    );
+  }
   // a REAL .git: depth-1 pack of HEAD from the LOCAL object store
   const cloneTmp = path.join(scratch, ".gitclone");
   yield* sh(

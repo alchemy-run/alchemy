@@ -1,4 +1,5 @@
 import * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -873,41 +874,51 @@ const buildFailureReason = Effect.fn(function* (
 
 const waitForReady = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
-    const image = yield* microvms.getMicrovmImage({
-      imageIdentifier: imageArn,
-    });
-    if (READY_STATES.has(image.state)) return image;
-    if (FAILED_STATES.has(image.state)) {
-      const reason = yield* buildFailureReason(
-        imageArn,
-        image.latestFailedImageVersion,
-      );
+    const startedAt = yield* Clock.currentTimeMillis;
+    const poll = Effect.gen(function* () {
+      const image = yield* microvms.getMicrovmImage({
+        imageIdentifier: imageArn,
+      });
+      if (READY_STATES.has(image.state)) return image;
+      if (FAILED_STATES.has(image.state)) {
+        const reason = yield* buildFailureReason(
+          imageArn,
+          image.latestFailedImageVersion,
+        );
+        yield* session.note(
+          `MicroVM image build ${image.state}: ${reason ?? "(no reason reported)"}`,
+        );
+        yield* Effect.logError(
+          `MicroVM image ${imageArn} build ${image.state}: ${reason ?? "(no reason reported)"}`,
+        );
+        return yield* new ImageFailed({ imageArn, state: image.state, reason });
+      }
+      return yield* new ImageBuilding({ imageArn, state: image.state });
+    }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "ImageBuilding",
+        // 30 minutes: image builds run a full Dockerfile server-side — an
+        // image that BAKES a repository (clone + install + type-check,
+        // e.g. the org sandbox) legitimately needs far more than a slim
+        // tools-only image.
+        schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(180)]),
+      }),
+    );
+    // The elapsed note ticks every second (a build is minutes of dead
+    // air otherwise); the API is still only polled every 10 seconds.
+    // raceFirst interrupts the infinite ticker the moment the poll
+    // settles, success or failure.
+    const tick = Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
       yield* session.note(
-        `MicroVM image build ${image.state}: ${reason ?? "(no reason reported)"}`,
+        `Waiting for MicroVM image build... (${Math.round((now - startedAt) / 1000)}s)`,
       );
-      yield* Effect.logError(
-        `MicroVM image ${imageArn} build ${image.state}: ${reason ?? "(no reason reported)"}`,
-      );
-      return yield* new ImageFailed({ imageArn, state: image.state, reason });
-    }
-    return yield* new ImageBuilding({ imageArn, state: image.state });
-  }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "ImageBuilding",
-      // 30 minutes: image builds run a full Dockerfile server-side — an
-      // image that BAKES a repository (clone + install + type-check,
-      // e.g. the org sandbox) legitimately needs far more than a slim
-      // tools-only image.
-      schedule: Schedule.max([
-        Schedule.fixed(10_000),
-        Schedule.recurs(180),
-      ]).pipe(
-        Schedule.tap(({ attempt }) =>
-          session.note(`Waiting for MicroVM image build... (${attempt * 10}s)`),
-        ),
-      ),
-    }),
-  );
+    }).pipe(
+      Effect.repeat(Schedule.spaced(1_000)),
+      Effect.andThen(Effect.never),
+    );
+    return yield* Effect.raceFirst(poll, tick);
+  });
 
 const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {

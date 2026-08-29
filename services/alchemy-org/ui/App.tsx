@@ -27,6 +27,13 @@ import { GhosttyTerminal } from "@/components/terminal";
 import { hasToolCard, ToolCard } from "@/components/tool-card";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -34,6 +41,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -54,11 +67,20 @@ import {
   MessageSquare,
   Play,
   Square,
+  SquareTerminal,
   Trash2,
+  X,
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 interface BoardThread {
   id: string;
@@ -289,14 +311,26 @@ export const App = () => {
     const id = threadFromHash();
     return id?.startsWith("ReviewBot:") ? id : undefined;
   });
-  // per-session TERMINAL tab selection + lazy mounting (a terminal
-  // mounts on first visit and stays mounted, like chat views)
-  const [terminalSel, setTerminalSel] = useState<Record<string, boolean>>({});
-  const [terminalVisited, setTerminalVisited] = useState<string[]>([]);
+  // per-session TERMINAL TABS: the open PTY ids (each tab is one shell
+  // on the session's machine, mounted on create and kept mounted like
+  // chat views) + which one is selected (`undefined` = thread view)
+  const [terminals, setTerminals] = useState<Record<string, string[]>>({});
+  const [terminalSel, setTerminalSel] = useState<
+    Record<string, string | undefined>
+  >({});
+  /** Per terminal tab (`session\u001f${ptyId}`): kills the guest shell —
+   *  registered by each mounted GhosttyTerminal, called by the tab's ×. */
+  const terminalKillers = useRef(new Map<string, () => void>());
+  // per-session LAST THREAD — a session-row click resumes here, so
+  // switching sessions and back lands exactly where you were looking
+  const [lastThread, setLastThread] = useState<Record<string, string>>({});
 
   /** Route to a thread id — updates the hash, the activity, and the
-   *  per-activity memory. Selecting a thread deselects the session's
-   *  terminal tab; `undefined` clears the selection (empty state). */
+   *  per-activity memory. Deliberately does NOT touch the session's
+   *  terminal-tab selection: hidden views stay mounted and selections
+   *  stay remembered, so returning to a session resumes its last
+   *  state (explicit thread clicks deselect via {@link openThread}).
+   *  `undefined` clears the selection (empty state). */
   const apply = (id: string | undefined) => {
     setActiveId(id);
     if (id === undefined) {
@@ -311,7 +345,9 @@ export const App = () => {
       setActivity("code");
       const session = sessionOfId(id);
       if (session !== undefined) {
-        setTerminalSel((current) => ({ ...current, [session]: false }));
+        setLastThread((current) =>
+          current[session] === id ? current : { ...current, [session]: id },
+        );
       }
     } else if (id.startsWith("ReviewBot:")) {
       setReviewId(id);
@@ -322,6 +358,34 @@ export const App = () => {
   const open = (id: string) => {
     window.location.hash = encodeURIComponent(id);
     apply(id);
+  };
+
+  /** Open a THREAD's chat view — the explicit act that deselects the
+   *  session's terminal tab. */
+  const openThread = (id: string) => {
+    const session = sessionOfId(id);
+    if (session !== undefined) {
+      setTerminalSel((current) =>
+        current[session] !== undefined
+          ? { ...current, [session]: undefined }
+          : current,
+      );
+    }
+    open(id);
+  };
+
+  /** A session-row click RESUMES the session where the operator left
+   *  it: the remembered thread (else the freshest), and the remembered
+   *  thread-vs-terminal tab — every hidden view stayed mounted, so
+   *  this is a pure visibility flip, no re-render from scratch. */
+  const openSession = (group: SessionGroup) => {
+    const remembered = lastThread[group.session];
+    const target =
+      remembered !== undefined &&
+      group.threads.some((thread) => thread.id === remembered)
+        ? remembered
+        : [...group.threads].sort((a, b) => b.updatedAt - a.updatedAt)[0]!.id;
+    open(target);
   };
 
   /** Clear the code selection (after deleting the current session). */
@@ -488,15 +552,63 @@ export const App = () => {
 
   /** A new THREAD in a session — rides the session's machine. */
   const newThread = (session: string) =>
-    open(`Engineer:${session}::t-${randomSuffix()}`);
+    openThread(`Engineer:${session}::t-${randomSuffix()}`);
 
-  /** The terminal tab: mounts on first visit, stays mounted. */
-  const openTerminal = (session: string) => {
-    setTerminalSel((current) => ({ ...current, [session]: true }));
-    setTerminalVisited((current) =>
-      current.includes(session) ? current : [...current, session],
-    );
+  /** Select a terminal tab (creating the session's first — pty id
+   *  "main" — when none is open yet). Mounts on create, stays mounted. */
+  const openTerminal = (session: string, ptyId?: string) => {
+    const target = ptyId ?? terminals[session]?.[0] ?? "main";
+    setTerminals((current) => {
+      const list = current[session] ?? [];
+      return list.includes(target)
+        ? current
+        : { ...current, [session]: [...list, target] };
+    });
+    setTerminalSel((current) => ({ ...current, [session]: target }));
   };
+
+  /** A NEW terminal tab: a fresh PTY (its own shell) on the session's
+   *  machine. The first terminal is always "main" (it reattaches to
+   *  the machine's existing shell); ids never recycle — a killed "2"
+   *  stays dead. */
+  const newTerminal = (session: string) => {
+    const list = terminals[session] ?? [];
+    if (list.length === 0) return openTerminal(session);
+    const next = `${
+      1 +
+      list.reduce(
+        (max, id) => Math.max(max, id === "main" ? 1 : Number(id) || 1),
+        1,
+      )
+    }`;
+    openTerminal(session, next);
+  };
+
+  /** Kill terminal tabs: the guest shells die, the tabs drop, and a
+   *  killed selection lands on the last surviving terminal (else the
+   *  thread view). */
+  const killTerminals = (session: string, ptyIds: ReadonlyArray<string>) => {
+    if (ptyIds.length === 0) return;
+    for (const ptyId of ptyIds) {
+      terminalKillers.current.get(`${session}\u001f${ptyId}`)?.();
+      terminalKillers.current.delete(`${session}\u001f${ptyId}`);
+    }
+    const gone = new Set(ptyIds);
+    const remaining = (terminals[session] ?? []).filter(
+      (id) => !gone.has(id),
+    );
+    setTerminals((current) => ({ ...current, [session]: remaining }));
+    setTerminalSel((current) => {
+      const selected = current[session];
+      return selected !== undefined && gone.has(selected)
+        ? { ...current, [session]: remaining[remaining.length - 1] }
+        : current;
+    });
+  };
+
+  /** The terminal tab's ×. */
+  const killTerminal = (session: string, ptyId: string) =>
+    killTerminals(session, [ptyId]);
 
   /** The off switch: settle the session in place — terminal, the
    *  transcript stays readable. Optimistic; the poll corrects. */
@@ -542,10 +654,116 @@ export const App = () => {
     }
   };
 
+  /** The thread tab awaiting kill confirmation (the dialog's subject).
+   *  The session's ROOT thread never offers a × — the session delete
+   *  is its eraser. */
+  const [confirmKillThread, setConfirmKillThread] = useState<
+    BoardThread | undefined
+  >(undefined);
+  /** The dialog's default action — focused on open so Enter confirms. */
+  const killThreadConfirmRef = useRef<HTMLButtonElement>(null);
+
+  /** The thread tab's ×, once confirmed: delete the thread (transcript
+   *  and directory row) and land on a sibling tab. The shared machine
+   *  survives — only the session's root thread owns it. */
+  const killThread = (thread: BoardThread) => {
+    setConfirmKillThread(undefined);
+    const id = thread.id;
+    const session = sessionOfId(id);
+    setVisited((current) => current.filter((visitedId) => visitedId !== id));
+    setThreads((current) => current.filter((row) => row.id !== id));
+    setLastThread((current) => {
+      if (session === undefined || current[session] !== id) return current;
+      const { [session]: _dropped, ...rest } = current;
+      return rest;
+    });
+    if (codeId === id && session !== undefined) {
+      // the root thread is unkillable, so a sibling always exists
+      const sibling = threads.find(
+        (row) => row.id !== id && sessionOfId(row.id) === session,
+      );
+      if (sibling !== undefined) open(sibling.id);
+      else closeCode();
+    }
+    void fetch(`/api/chats/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(() => {});
+  };
+
+  /** A BULK tab close awaiting confirmation ("close all", "close all
+   *  to the right") — only when threads are included: their transcripts
+   *  are destroyed. Terminal-only closes execute immediately. */
+  const [confirmCloseTabs, setConfirmCloseTabs] = useState<
+    | {
+        session: string;
+        threads: BoardThread[];
+        terminals: string[];
+      }
+    | undefined
+  >(undefined);
+  /** The dialog's default action — focused on open so Enter confirms. */
+  const closeTabsConfirmRef = useRef<HTMLButtonElement>(null);
+
+  /** Request a bulk tab close: terminal-only closes run immediately;
+   *  anything deleting thread transcripts asks first. The root thread
+   *  is never closable (it owns the session's machine). */
+  const requestCloseTabs = (
+    session: string,
+    threadRows: ReadonlyArray<BoardThread>,
+    ptyIds: ReadonlyArray<string>,
+  ) => {
+    const closable = threadRows.filter((row) => row.key.includes("::"));
+    if (closable.length === 0) {
+      killTerminals(session, ptyIds);
+      return;
+    }
+    setConfirmCloseTabs({
+      session,
+      threads: closable,
+      terminals: [...ptyIds],
+    });
+  };
+
+  /** The bulk close, once confirmed: kill the terminals, delete the
+   *  threads, and land the selection on a survivor. */
+  const closeTabs = (input: {
+    session: string;
+    threads: BoardThread[];
+    terminals: string[];
+  }) => {
+    setConfirmCloseTabs(undefined);
+    killTerminals(input.session, input.terminals);
+    const ids = new Set(input.threads.map((row) => row.id));
+    if (ids.size === 0) return;
+    setVisited((current) => current.filter((id) => !ids.has(id)));
+    setThreads((current) => current.filter((row) => !ids.has(row.id)));
+    setLastThread((current) => {
+      const remembered = current[input.session];
+      if (remembered === undefined || !ids.has(remembered)) return current;
+      const { [input.session]: _dropped, ...rest } = current;
+      return rest;
+    });
+    if (codeId !== undefined && ids.has(codeId)) {
+      // the root thread is unclosable, so a sibling always survives
+      const sibling = threads.find(
+        (row) => !ids.has(row.id) && sessionOfId(row.id) === input.session,
+      );
+      if (sibling !== undefined) open(sibling.id);
+      else closeCode();
+    }
+    for (const id of ids) {
+      void fetch(`/api/chats/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }).catch(() => {});
+    }
+  };
+
   /** The session awaiting delete confirmation (the dialog's subject). */
   const [confirmDelete, setConfirmDelete] = useState<SessionGroup | undefined>(
     undefined,
   );
+  /** The dialog's default action — focused on open so Enter confirms. */
+  const deleteSessionConfirmRef = useRef<HTMLButtonElement>(null);
   /** Sessions mid-delete: the row stays listed with a spinner until
    *  the server confirms — deleting settles the session, purges its
    *  transcripts, and terminates its machine, which takes seconds. */
@@ -560,9 +778,17 @@ export const App = () => {
     const ids = new Set(group.threads.map((thread) => thread.id));
     // navigate away + unmount its views first (closes sockets client-side)
     setVisited((current) => current.filter((id) => !ids.has(id)));
-    setTerminalVisited((current) =>
-      current.filter((session) => session !== group.session),
-    );
+    for (const ptyId of terminals[group.session] ?? []) {
+      terminalKillers.current.delete(`${group.session}\u001f${ptyId}`);
+    }
+    setTerminals((current) => {
+      const { [group.session]: _dropped, ...rest } = current;
+      return rest;
+    });
+    setTerminalSel((current) => {
+      const { [group.session]: _dropped, ...rest } = current;
+      return rest;
+    });
     if (sessionOfId(codeId) === group.session) closeCode();
     await Promise.allSettled(
       [...ids].map((id) =>
@@ -606,8 +832,9 @@ export const App = () => {
   const currentGroup = groups.find(
     (group) => group.session === currentSession,
   );
-  const terminalActive =
-    currentSession !== undefined && terminalSel[currentSession] === true;
+  const activeTerminal =
+    currentSession !== undefined ? terminalSel[currentSession] : undefined;
+  const terminalActive = activeTerminal !== undefined;
 
   /** Sidebar buckets: one per connected `sessions: true` repo, plus
    *  an unscoped bucket for legacy keys (`main`, `t-…`). */
@@ -699,6 +926,125 @@ export const App = () => {
           </form>
         </DialogContent>
       </Dialog>
+      {/* KILL-THREAD CONFIRMATION — deleting a thread purges its
+          transcript (the session's machine survives; only the root
+          thread owns it, and that tab has no ×). */}
+      <Dialog
+        open={confirmKillThread !== undefined}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setConfirmKillThread(undefined);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-sm"
+          // confirm is the DEFAULT: Enter deletes, Escape cancels
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            killThreadConfirmRef.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Delete thread</DialogTitle>
+            <DialogDescription>
+              {confirmKillThread !== undefined && (
+                <>
+                  <span className="font-mono text-foreground">
+                    {threadTitle(confirmKillThread)}
+                  </span>{" "}
+                  — its transcript will be permanently deleted. The
+                  session and its machine stay.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton={false}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmKillThread(undefined)}
+            >
+              Cancel
+            </Button>
+            <Button
+              ref={killThreadConfirmRef}
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirmKillThread !== undefined) {
+                  killThread(confirmKillThread);
+                }
+              }}
+            >
+              <Trash2 /> Delete thread
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* BULK-CLOSE CONFIRMATION — "close all" / "close all to the
+          right" that includes threads: their transcripts are destroyed
+          (terminal-only closes never ask). */}
+      <Dialog
+        open={confirmCloseTabs !== undefined}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setConfirmCloseTabs(undefined);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-sm"
+          // confirm is the DEFAULT: Enter closes, Escape cancels
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            closeTabsConfirmRef.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Close tabs</DialogTitle>
+            <DialogDescription>
+              {confirmCloseTabs !== undefined && (
+                <>
+                  {confirmCloseTabs.threads.length} thread
+                  {confirmCloseTabs.threads.length === 1 ? "" : "s"} will be
+                  permanently deleted (transcripts included)
+                  {confirmCloseTabs.terminals.length > 0 && (
+                    <>
+                      {" "}
+                      and {confirmCloseTabs.terminals.length} terminal
+                      {confirmCloseTabs.terminals.length === 1
+                        ? ""
+                        : "s"}{" "}
+                      killed
+                    </>
+                  )}
+                  . The session and its machine stay.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton={false}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmCloseTabs(undefined)}
+            >
+              Cancel
+            </Button>
+            <Button
+              ref={closeTabsConfirmRef}
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirmCloseTabs !== undefined) {
+                  closeTabs(confirmCloseTabs);
+                }
+              }}
+            >
+              <Trash2 /> Close tabs
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* DELETE CONFIRMATION — the eraser is irreversible (transcripts +
           machine), so it asks first; the row then spins until the server
           confirms. */}
@@ -708,7 +1054,15 @@ export const App = () => {
           if (!isOpen) setConfirmDelete(undefined);
         }}
       >
-        <DialogContent showCloseButton={false} className="max-w-sm">
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-sm"
+          // confirm is the DEFAULT: Enter deletes, Escape cancels
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            deleteSessionConfirmRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Delete session</DialogTitle>
             <DialogDescription>
@@ -733,6 +1087,7 @@ export const App = () => {
               Cancel
             </Button>
             <Button
+              ref={deleteSessionConfirmRef}
               variant="destructive"
               size="sm"
               onClick={() => {
@@ -792,16 +1147,13 @@ export const App = () => {
                   </button>
                 </div>
                 {bucket.groups.map((group) => (
+                  <ContextMenu key={group.session}>
+                    <ContextMenuTrigger asChild>
                   <div
-                    key={group.session}
                     onClick={() => {
                       // a session mid-delete is not navigable
                       if (deleting.has(group.session)) return;
-                      open(
-                        [...group.threads].sort(
-                          (a, b) => b.updatedAt - a.updatedAt,
-                        )[0]!.id,
-                      );
+                      openSession(group);
                     }}
                     className={cn(
                       "group flex w-full cursor-pointer flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
@@ -878,6 +1230,42 @@ export const App = () => {
                       </span>
                     </span>
                   </div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem
+                        onSelect={() => newThread(group.session)}
+                      >
+                        <MessageSquare /> New thread
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          openSession(group);
+                          newTerminal(group.session);
+                        }}
+                      >
+                        <SquareTerminal /> New terminal
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      {(group.status === "running" ||
+                        group.status === "idle") && (
+                        <ContextMenuItem onSelect={() => stopSession(group)}>
+                          <Square /> Stop session
+                        </ContextMenuItem>
+                      )}
+                      {group.status === "settled" && (
+                        <ContextMenuItem onSelect={() => resumeSession(group)}>
+                          <Play /> Resume session
+                        </ContextMenuItem>
+                      )}
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        variant="destructive"
+                        onSelect={() => setConfirmDelete(group)}
+                      >
+                        <Trash2 /> Delete session…
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 ))}
                 {bucket.groups.length === 0 && (
                   <div className="px-3 py-3 text-xs text-muted-foreground">
@@ -956,47 +1344,203 @@ export const App = () => {
         >
           {currentGroup !== undefined && (
             <div className="flex items-center gap-0.5 border-b border-border px-2">
-              {currentGroup.threads.map((thread) => (
-                <button
-                  key={thread.id}
-                  type="button"
-                  onClick={() => open(thread.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
-                    thread.id === codeId && !terminalActive
-                      ? "border-foreground text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block size-1.5 shrink-0 rounded-full",
-                      statusDot[thread.status] ?? statusDot.idle,
+              {(() => {
+                // ONE tab strip, one menu: threads then terminals, so
+                // "close all to the right" is positional across both
+                // kinds and every tab carries the identical actions.
+                const session = currentGroup.session;
+                const ptyIds = terminals[session] ?? [];
+                type Tab =
+                  | { kind: "thread"; thread: BoardThread }
+                  | { kind: "terminal"; ptyId: string; nth: number };
+                const strip: Tab[] = [
+                  ...currentGroup.threads.map((thread) => ({
+                    kind: "thread" as const,
+                    thread,
+                  })),
+                  ...ptyIds.map((ptyId, nth) => ({
+                    kind: "terminal" as const,
+                    ptyId,
+                    nth,
+                  })),
+                ];
+                const rightOf = (index: number) => {
+                  const rest = strip.slice(index + 1);
+                  return {
+                    threads: rest.flatMap((tab) =>
+                      tab.kind === "thread" ? [tab.thread] : [],
+                    ),
+                    terminals: rest.flatMap((tab) =>
+                      tab.kind === "terminal" ? [tab.ptyId] : [],
+                    ),
+                  };
+                };
+                return strip.map((tab, index) => {
+                  const right = rightOf(index);
+                  const closableRight =
+                    right.terminals.length > 0 ||
+                    right.threads.some((row) => row.key.includes("::"));
+                  return (
+                    <Fragment
+                      key={
+                        tab.kind === "thread"
+                          ? tab.thread.id
+                          : `>_${tab.ptyId}`
+                      }
+                    >
+                    {index > 0 && (
+                      // subtle divider — deliberately shorter than the tab
+                      <span
+                        aria-hidden
+                        className="h-4 w-px shrink-0 bg-border"
+                      />
                     )}
-                  />
-                  <span className="max-w-48 truncate">{tabTitle(thread)}</span>
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => openTerminal(currentGroup.session)}
-                className={cn(
-                  "border-b-2 px-3 py-2 font-mono text-xs",
-                  terminalActive
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {">_"} terminal
-              </button>
-              <button
-                type="button"
-                title="New thread (shares this session's machine)"
-                onClick={() => newThread(currentGroup.session)}
-                className="px-2 py-2 font-mono text-sm text-muted-foreground hover:text-foreground"
-              >
-                +
-              </button>
+                    <ContextMenu>
+                      <ContextMenuTrigger asChild>
+                        {tab.kind === "thread" ? (
+                          <button
+                            type="button"
+                            onClick={() => openThread(tab.thread.id)}
+                            className={cn(
+                              "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
+                              tab.thread.id === codeId && !terminalActive
+                                ? "border-foreground text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "inline-block size-1.5 shrink-0 rounded-full",
+                                statusDot[tab.thread.status] ?? statusDot.idle,
+                              )}
+                            />
+                            <span className="max-w-48 truncate">
+                              {tabTitle(tab.thread)}
+                            </span>
+                            {/* the ROOT thread owns the session's machine —
+                                the session delete is its only eraser */}
+                            {tab.thread.key.includes("::") && (
+                              <span
+                                role="button"
+                                title="Delete thread"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setConfirmKillThread(tab.thread);
+                                }}
+                                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
+                              >
+                                <X className="size-3" />
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openTerminal(session, tab.ptyId)}
+                            className={cn(
+                              "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2 font-mono text-xs",
+                              terminalActive && activeTerminal === tab.ptyId
+                                ? "border-foreground text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {">_"} {tab.nth + 1}
+                            <span
+                              role="button"
+                              title="Kill terminal (the shell dies)"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                killTerminal(session, tab.ptyId);
+                              }}
+                              className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
+                            >
+                              <X className="size-3" />
+                            </span>
+                          </button>
+                        )}
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onSelect={() => newThread(session)}>
+                          <MessageSquare /> New thread
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={() => newTerminal(session)}>
+                          <SquareTerminal /> New terminal
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          disabled={!closableRight}
+                          onSelect={() =>
+                            requestCloseTabs(
+                              session,
+                              right.threads,
+                              right.terminals,
+                            )
+                          }
+                        >
+                          Close all to the right
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          onSelect={() =>
+                            requestCloseTabs(
+                              session,
+                              currentGroup.threads,
+                              ptyIds,
+                            )
+                          }
+                        >
+                          Close all
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {tab.kind === "thread" ? (
+                          tab.thread.key.includes("::") ? (
+                            <ContextMenuItem
+                              variant="destructive"
+                              onSelect={() => setConfirmKillThread(tab.thread)}
+                            >
+                              <Trash2 /> Delete thread
+                            </ContextMenuItem>
+                          ) : (
+                            <ContextMenuItem disabled>
+                              <Trash2 /> Root thread — delete the session
+                            </ContextMenuItem>
+                          )
+                        ) : (
+                          <ContextMenuItem
+                            variant="destructive"
+                            onSelect={() => killTerminal(session, tab.ptyId)}
+                          >
+                            <X /> Kill terminal
+                          </ContextMenuItem>
+                        )}
+                      </ContextMenuContent>
+                    </ContextMenu>
+                    </Fragment>
+                  );
+                });
+              })()}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title="New thread or terminal"
+                    className="px-2 py-2 font-mono text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    +
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem
+                    onSelect={() => newThread(currentGroup.session)}
+                  >
+                    <MessageSquare /> New thread
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => newTerminal(currentGroup.session)}
+                  >
+                    <SquareTerminal /> New terminal
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <span className="ml-auto pr-2 font-mono text-[10px] text-muted-foreground">
                 one machine · {currentGroup.threads.length} thread
                 {currentGroup.threads.length === 1 ? "" : "s"}
@@ -1038,31 +1582,40 @@ export const App = () => {
                       active={shown}
                       agents={[]}
                       breadcrumb={undefined}
-                      onOpenThread={open}
+                      onOpenThread={openThread}
                     />
                   </div>
                 );
               })}
-            {terminalVisited.map((session) => {
-              const shown =
-                activity === "code" &&
-                session === currentSession &&
-                terminalActive;
-              return (
-                <div
-                  key={session}
-                  className={cn(
-                    "absolute inset-0 flex flex-col",
-                    shown ? "visible" : "pointer-events-none invisible",
-                  )}
-                >
-                  <GhosttyTerminal
-                    sessionId={`Engineer:${session}`}
-                    active={shown}
-                  />
-                </div>
-              );
-            })}
+            {Object.entries(terminals).flatMap(([session, ptyIds]) =>
+              ptyIds.map((ptyId) => {
+                const shown =
+                  activity === "code" &&
+                  session === currentSession &&
+                  activeTerminal === ptyId;
+                return (
+                  <div
+                    key={`${session}\u001f${ptyId}`}
+                    className={cn(
+                      "absolute inset-0 flex flex-col",
+                      shown ? "visible" : "pointer-events-none invisible",
+                    )}
+                  >
+                    <GhosttyTerminal
+                      sessionId={`Engineer:${session}`}
+                      ptyId={ptyId}
+                      active={shown}
+                      registerKill={(kill) =>
+                        terminalKillers.current.set(
+                          `${session}\u001f${ptyId}`,
+                          kill,
+                        )
+                      }
+                    />
+                  </div>
+                );
+              }),
+            )}
           </div>
         </div>
         {/* ── REVIEW: the pull-request surface ── */}
@@ -1107,7 +1660,7 @@ export const App = () => {
                       active={shown}
                       agents={[]}
                       breadcrumb={undefined}
-                      onOpenThread={open}
+                      onOpenThread={openThread}
                     />
                   </div>
                 );
@@ -1132,7 +1685,7 @@ export const App = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => open(`${request.session.term}:${request.session.key}`)}
+                  onClick={() => openThread(`${request.session.term}:${request.session.key}`)}
                   className="mb-2 block w-full truncate text-left font-mono text-[11px] text-muted-foreground hover:text-foreground"
                 >
                   {request.session.key}
@@ -1639,19 +2192,26 @@ const Chat = ({
     chatId: id,
     history: hydrated ? "live" : "replay",
   });
-  const { messages, sendMessage, status, stop } = useChat({
+  // The socket stays OPEN while the thread is hidden — visited tabs
+  // are never paused. Stopping on hide forced a full history REPLAY on
+  // re-select (this placement has no /messages snapshot), which
+  // rebuilt the whole conversation and snapped the scroll: the visible
+  // "re-render" switching threads. A handful of idle hibernatable
+  // sockets is far cheaper than that.
+  const { messages, sendMessage, status } = useChat({
     agent,
     messages: initial,
-    resume: active,
-    persist: active,
+    resume: true,
+    persist: true,
   });
 
-  // Pause the socket when the thread is hidden (visited tabs stay
-  // mounted). Stopping drops the transport stream; re-selecting with
-  // resume/persist opens it again.
+  // A selected thread is a thread you're about to TALK to — put the
+  // caret in the prompt (first visit and every return).
+  const promptRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!active) stop();
-  }, [active, stop]);
+    if (!active) return;
+    promptRef.current?.querySelector("textarea")?.focus();
+  }, [active]);
 
   // "IssueOwner:owner/repo#N" → "owner/repo" — the context bare `#N`
   // references in prose resolve against
@@ -1946,7 +2506,7 @@ const Chat = ({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-      <div className="mx-auto w-full max-w-3xl p-4">
+      <div ref={promptRef} className="mx-auto w-full max-w-3xl p-4">
         <PromptInput onSubmit={onSubmit}>
           <PromptInputBody>
             {/* pr-12 keeps typed text clear of the submit button */}

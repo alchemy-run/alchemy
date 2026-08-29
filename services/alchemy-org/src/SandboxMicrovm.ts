@@ -17,10 +17,13 @@ import { stageBake } from "./SandboxBake.ts";
  * at the real repository by the stager).
  *
  * The bake is a snapshot of local `HEAD` at build time — a session
- * that needs newer code runs `git fetch`/`pull` itself. No type-check
- * in the bake: `tsc -b` over this workspace needs ~8.5GB of heap and
- * gets OOM-killed inside the docker build VM — sessions run it
- * incrementally themselves.
+ * that needs newer code runs `git fetch`/`pull` itself. The image
+ * NEVER compiles: the stage carries the host's build artifacts
+ * (`lib/`, `dist/`, tsbuildinfo — see `SandboxBake.ts`), so the only
+ * in-image work is re-linking linux `node_modules` from the pnpm
+ * store (the host's darwin-native installs cannot ship). Sessions
+ * that need newer artifacts run the builds themselves, incrementally,
+ * against the shipped tsbuildinfo.
  *
  * Layer order is load-bearing for the per-commit rebuild cost:
  * lockfiles + patches are COPY'd alone and `pnpm fetch`ed BEFORE the
@@ -72,8 +75,14 @@ RUN git checkout -- . \\
   && git config user.email "org@alchemy.run" \\
   && git config user.name "alchemy-org"
 
-RUN pnpm install --frozen-lockfile --prefer-offline
-RUN cd distilled && pnpm install --frozen-lockfile --prefer-offline
+# Materialize LINUX node_modules from the fetched store. The host's
+# node_modules never ships (darwin-native binaries cannot run here);
+# everything COMPILED does — the stage carries the working tree's
+# lib/, dist/, tsbuildinfo, and generated files, so --ignore-scripts
+# skips the prepare chain (husky + turbo builds) that would only
+# recompile what the COPY above already delivered.
+RUN pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+RUN cd distilled && pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
 `;
 
 /**
@@ -118,8 +127,9 @@ export const SandboxMicrovmRuntime = AWS.AI.SandboxMicrovmImage.make(
       buildRole,
       cpuConfigurations: [{ architecture: "ARM_64" as const }],
       // a dev tree, not a stub: sessions run installs, tests, and
-      // type-checks inside the VM
-      resources: [{ minimumMemoryInMiB: 4096 }],
+      // type-checks inside the VM (tsc -b over this workspace alone
+      // wants ~8GB of heap)
+      resources: [{ minimumMemoryInMiB: 8192 }],
       // a new bake means every running machine serves a STALE tree —
       // recycle them; sessions relaunch their machine on next use
       recycleMicrovmsOnUpdate: true,

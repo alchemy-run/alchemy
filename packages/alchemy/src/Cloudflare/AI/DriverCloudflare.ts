@@ -128,7 +128,9 @@ const isTerminalAttachment = (value: unknown): value is TerminalAttachment =>
  *  BINARY frames — raw stdin, no envelope). */
 type TerminalClientFrame =
   | { readonly t: "open"; readonly cols: number; readonly rows: number }
-  | { readonly t: "resize"; readonly cols: number; readonly rows: number };
+  | { readonly t: "resize"; readonly cols: number; readonly rows: number }
+  /** Kill the shell and drop the PTY — the tab's ×, not a detach. */
+  | { readonly t: "close" };
 
 /**
  * A PHANTOM thread identity — just enough `AI.Thread` for the sandbox
@@ -437,6 +439,12 @@ export const DurableObjectHost: Layer.Layer<
         const notify = (socket: WebSocket, message: string) =>
           Effect.ignore(socket.send(JSON.stringify({ t: "error", message })));
 
+        /** PROGRESS a viewer can render (machine launching, waking from
+         *  suspend) — not an error: the client shows it until the PTY's
+         *  first output proves the machine is live. */
+        const notifyStatus = (socket: WebSocket, message: string) =>
+          Effect.ignore(socket.send(JSON.stringify({ t: "status", message })));
+
         const haltPump = (socket: WebSocket) =>
           Effect.suspend(() => {
             const halt = pumps.get(socket.ws);
@@ -546,6 +554,10 @@ export const DurableObjectHost: Layer.Layer<
                   rows: frame.rows,
                 };
                 socket.serializeAttachment(next);
+                // the machine may be COLD (fresh launch) or SUSPENDED (a
+                // stopped session) — pty.open blocks through the whole
+                // launch/resume, so tell the viewer what the wait is
+                yield* notifyStatus(socket, "starting the session's machine");
                 yield* Effect.logDebug(
                   `[terminal-debug] pty.open(${next.id}) starting`,
                 );
@@ -567,6 +579,12 @@ export const DurableObjectHost: Layer.Layer<
                 yield* asSession(
                   pty.resize(tag.id, frame.cols, frame.rows),
                 ).pipe(Effect.catch((error) => notify(socket, error)));
+              } else if (frame.t === "close") {
+                // the tab's × — KILL the shell (a detach is just the
+                // socket dropping); tolerate an already-gone PTY
+                yield* haltPump(socket);
+                yield* asSession(pty.close(tag.id)).pipe(Effect.ignore);
+                yield* Effect.ignore(socket.close(1000, "terminal closed"));
               }
               return;
             }
@@ -577,6 +595,10 @@ export const DurableObjectHost: Layer.Layer<
               // attachment's dimensions and retry the keystroke once
               Effect.catch(() =>
                 Effect.gen(function* () {
+                  // the keystroke is the WAKE signal — the machine was
+                  // suspended or recycled; the reopen blocks through the
+                  // resume, so show the viewer what the wait is
+                  yield* notifyStatus(socket, "waking the session's machine");
                   yield* asSession(pty.open(tag.id, tag.cols, tag.rows));
                   yield* ensurePump(socket, pty, tag, { restart: true });
                   yield* asSession(pty.input(tag.id, data));

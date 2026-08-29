@@ -295,19 +295,30 @@ export const SandboxMicrovmSession = (
       // The session context carries Thread at call time (every driver
       // provides it); the contract's R stays clean — same cast the
       // container session layer makes for DurableObjectState.
-      const withToken = <A, E>(
-        use: (token: string) => Effect.Effect<A, E>,
+      const withMachine = <A, E>(
+        use: (machine: {
+          readonly token: string;
+          /** Whether the calling session's key IS the machine key —
+           *  a `<session>::<thread>` key SHARES the session's machine
+           *  and must never suspend/terminate it. */
+          readonly owner: boolean;
+        }) => Effect.Effect<A, E>,
       ): Effect.Effect<A, E> =>
         Effect.gen(function* () {
           const thread = yield* Thread;
-          return yield* use(
-            sessionToken(
-              options?.machineKey === undefined
-                ? thread.key
-                : options.machineKey(thread.key),
-            ),
-          );
+          const machineKey =
+            options?.machineKey === undefined
+              ? thread.key
+              : options.machineKey(thread.key);
+          return yield* use({
+            token: sessionToken(machineKey),
+            owner: machineKey === thread.key,
+          });
         }) as unknown as Effect.Effect<A, E>;
+
+      const withToken = <A, E>(
+        use: (token: string) => Effect.Effect<A, E>,
+      ): Effect.Effect<A, E> => withMachine(({ token }) => use(token));
 
       const withBox = <A, E>(
         use: (stub: SandboxMicrovmShape) => Effect.Effect<A, E>,
@@ -399,14 +410,17 @@ export const SandboxMicrovmSession = (
         },
         lifecycle: {
           /**
-           * Snapshot the session's machine on settle. Only a machine
-           * THIS isolate launched/attached is suspended: an uncached
-           * machine (the isolate restarted since the session's last
-           * activity) has already been idle that long and its own idle
-           * policy owns it — suspending would first have to launch one.
+           * Snapshot the session's machine on settle. Only the machine
+           * OWNER acts (a `::thread` key shares the session's machine —
+           * settling one thread must not suspend what its siblings are
+           * using), and only a machine THIS isolate launched/attached
+           * is suspended: an uncached machine (the isolate restarted
+           * since the session's last activity) has already been idle
+           * that long and its own idle policy owns it.
            */
-          suspend: withToken((token) =>
+          suspend: withMachine(({ token, owner }) =>
             Effect.gen(function* () {
+              if (!owner) return;
               const launched = vms.get(token);
               if (launched === undefined) return;
               const vm = yield* launched;
@@ -448,7 +462,9 @@ export const SandboxMicrovmSession = (
             }),
           ),
           /**
-           * Terminate the session's machine on remove. The CACHED id is
+           * Terminate the session's machine on remove — machine OWNER
+           * only: deleting one `::thread` of a session must not kill
+           * the machine its siblings share. The CACHED id is
            * authoritative when this isolate knows the machine — a
            * just-suspended VM is INVISIBLE to `RunMicrovm`'s
            * clientToken reattach (it only matches running instances),
@@ -458,8 +474,9 @@ export const SandboxMicrovmSession = (
            * machine, or pays one throwaway launch — the price of
            * guaranteeing "removed session ⇒ no machine".
            */
-          destroy: withToken((token) =>
+          destroy: withMachine(({ token, owner }) =>
             Effect.gen(function* () {
+              if (!owner) return;
               const launched = vms.get(token);
               const vm =
                 launched !== undefined
