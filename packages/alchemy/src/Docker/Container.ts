@@ -50,6 +50,11 @@ export interface ContainerProps {
    * `host-gateway` alias resolves to the host machine, so
    * `"host.docker.internal:host-gateway"` reaches services listening on the
    * developer's machine from inside the container.
+   *
+   * On Linux `host-gateway` is the bridge gateway address, so those packets
+   * traverse the host's `INPUT` chain — under a default-deny firewall the
+   * name resolves and the connection then times out. See the Host Access
+   * examples.
    */
   extraHosts?: string[];
   /** Remove the container when it exits. @default false */
@@ -182,6 +187,19 @@ export interface Container extends Resource<
  * ```
  *
  * ### Host Access
+ * `extraHosts` writes lines into the container's `/etc/hosts`; it changes name
+ * resolution and nothing else. Docker's `host-gateway` alias resolves to the
+ * host machine, which is how a container reaches a service on the developer's
+ * loopback.
+ *
+ * On Linux `host-gateway` is the Docker bridge gateway (typically
+ * `172.17.0.1`), so a container's packets to it arrive on the host's `INPUT`
+ * chain. Under a default-deny firewall — ufw ships
+ * `DEFAULT_INPUT_POLICY="DROP"` — the hostname resolves correctly and the
+ * connection then times out, which reads like an application bug rather than a
+ * firewall one. Allow the bridge subnet to fix it:
+ * `sudo ufw allow from 172.16.0.0/12`.
+ *
  * **Example:** Reach a service on the developer's machine
  * ```typescript
  * const api = yield* Docker.Container("api", {
@@ -192,6 +210,16 @@ export interface Container extends Resource<
  *   environment: {
  *     DATABASE_URL: "postgres://postgres@host.docker.internal:5432/app",
  *   },
+ *   start: true,
+ * });
+ * ```
+ *
+ * **Example:** Pin a hostname to a fixed address
+ * ```typescript
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   // Any `hostname:address` pair — host access is just the common case.
+ *   extraHosts: ["payments.internal:10.1.2.3"],
  *   start: true,
  * });
  * ```
