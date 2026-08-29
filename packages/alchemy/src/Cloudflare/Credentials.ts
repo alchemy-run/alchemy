@@ -20,7 +20,11 @@ import {
   type CloudflareResolvedCredentials,
 } from "./Auth/AuthProvider.ts";
 
-export { Credentials, fromEnv } from "@distilled.cloud/cloudflare/Credentials";
+export {
+  Credentials,
+  fromApiToken,
+  fromEnv,
+} from "@distilled.cloud/cloudflare/Credentials";
 
 declare module "@distilled.cloud/cloudflare/Credentials" {
   interface Credentials {

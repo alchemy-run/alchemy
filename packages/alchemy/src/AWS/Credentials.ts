@@ -12,7 +12,10 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { AWSEnvironment } from "./Environment.ts";
+import {
+  AWSEnvironment,
+  Default as DefaultEnvironment,
+} from "./Environment.ts";
 
 /**
  * Refresh assumed-role credentials this long before they actually expire, so a
@@ -205,3 +208,60 @@ export const fromAssumeRole = (options: {
       region: options.region,
     }),
   );
+
+/**
+ * An {@link AWSEnvironment} for another account, reached by assuming a role
+ * from the account the active Alchemy profile resolves to.
+ *
+ * Built for the cross-account state store — `AWS.state({ environment })`
+ * derives its credentials, region and endpoint from the environment it is
+ * given — but it is a plain `AWSEnvironment` layer and works anywhere one
+ * is accepted.
+ *
+ * The profile's credentials sign the `AssumeRole` call; the returned
+ * temporary credentials are cached and single-flighted until shortly
+ * before they expire (see {@link makeAssumeRoleResolver}).
+ *
+ * ```typescript
+ * AWS.state({
+ *   bucketName: "my-org-alchemy-state",
+ *   environment: AWS.assumeRoleEnvironment({
+ *     roleArn: "arn:aws:iam::111122223333:role/AlchemyState",
+ *     accountId: "111122223333",
+ *     region: "us-east-1",
+ *   }),
+ * })
+ * ```
+ */
+export const assumeRoleEnvironment = (options: {
+  /** ARN of the IAM Role to assume, in the target account. */
+  readonly roleArn: string;
+  /** Account the role lives in — reported as the environment's account. */
+  readonly accountId: string;
+  /** Region every API call made against this environment targets. */
+  readonly region: string;
+  /** STS role session name. @default "alchemy-state" */
+  readonly roleSessionName?: string;
+}) =>
+  Layer.effect(
+    AWSEnvironment,
+    Effect.gen(function* () {
+      // The surrounding (profile) environment supplies the long-lived
+      // credentials that sign `AssumeRole`.
+      const base = yield* AWSEnvironment;
+      const credentials = yield* makeAssumeRoleResolver({
+        roleArn: Effect.succeed(options.roleArn),
+        base: Layer.succeed(
+          Credentials,
+          Effect.flatMap(base, (env) => env.credentials),
+        ),
+        roleSessionName: options.roleSessionName ?? "alchemy-state",
+        region: options.region,
+      });
+      return Effect.succeed({
+        accountId: options.accountId,
+        region: options.region,
+        credentials,
+      });
+    }),
+  ).pipe(Layer.provide(DefaultEnvironment), Layer.orDie);

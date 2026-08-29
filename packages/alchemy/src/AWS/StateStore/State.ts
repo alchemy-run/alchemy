@@ -3,6 +3,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -125,9 +126,85 @@ type S3Deps = Credentials | HttpClient | Region;
  * );
  * ```
  *
+ * ### Keeping state in a different account
+ * The store uses an {@link AWSEnvironment} from the surrounding context
+ * when one is provided, and falls back to the active Alchemy profile's
+ * environment otherwise. Pipe one in to keep state in another account —
+ * credentials, region and endpoint are all derived from it, so the
+ * environment is the only thing to provide.
+ *
+ * **Example:** State bucket in a dedicated account
+ * ```typescript
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   {
+ *     providers: AWS.providers(),
+ *     state: AWS.state({ bucketName: "my-org-alchemy-state" }).pipe(
+ *       Layer.provide(
+ *         AWS.assumeRoleEnvironment({
+ *           roleArn: "arn:aws:iam::111122223333:role/AlchemyState",
+ *           accountId: "111122223333",
+ *           region: "us-east-1",
+ *         }),
+ *       ),
+ *     ),
+ *   },
+ *   Effect.gen(function* () {
+ *     // ...
+ *   }),
+ * );
+ * ```
+ *
  * @resource
  */
 export const state = (options: S3StateOptions = {}) =>
+  s3State(options).pipe(
+    Layer.provide(EnvironmentOrDefault),
+    Layer.provideMerge(AwsAuth),
+    Layer.provideMerge(CredentialsStoreLive),
+    Layer.orDie,
+  );
+
+/**
+ * The {@link AWSEnvironment} the state store runs against: whatever the
+ * surrounding context provides, or the profile-derived default.
+ *
+ * `Effect.serviceOption` does not contribute to the layer's requirements,
+ * so {@link state} still satisfies the stack's `state` slot
+ * (`Layer<State, never, StackServices>`) while remaining pipe-able:
+ * `AWS.state().pipe(Layer.provide(myEnvironment))` builds `myEnvironment`
+ * into this layer's context, where the lookup finds it.
+ *
+ * Nothing is *merged* out either way — the environment stays private to
+ * the store, so an account meant for state never reaches the stack's
+ * providers.
+ */
+const EnvironmentOrDefault = Layer.unwrap(
+  Effect.map(Effect.serviceOption(AWSEnvironment), (environment) =>
+    Option.match(environment, {
+      onNone: () => DefaultEnvironment,
+      onSome: (env) => Layer.succeed(AWSEnvironment, env),
+    }),
+  ),
+);
+
+/**
+ * The S3 state store with its {@link AWSEnvironment} left **required**
+ * rather than optional — the same store as {@link state}, minus the
+ * profile fallback, for callers who want the type to demand an
+ * environment instead of silently defaulting.
+ *
+ * ```typescript
+ * AWS.s3State({ bucketName: "my-org-alchemy-state" }).pipe(
+ *   Layer.provide(myEnvironment),
+ *   Layer.orDie,
+ * )
+ * ```
+ *
+ * `Region`, `Credentials` and `Endpoint` are derived from the environment
+ * internally, so an environment layer is the only thing to provide.
+ */
+export const s3State = (options: S3StateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -142,13 +219,9 @@ export const state = (options: S3StateOptions = {}) =>
       return yield* Effect.cached(make);
     }),
   ).pipe(
-    Layer.provideMerge(AwsRegion.fromEnvironment),
-    Layer.provideMerge(AwsCredentials.fromEnvironment),
-    Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
-    Layer.provideMerge(AwsAuth),
-    Layer.provideMerge(CredentialsStoreLive),
-    Layer.orDie,
+    Layer.provide(AwsRegion.fromEnvironment),
+    Layer.provide(AwsCredentials.fromEnvironment),
+    Layer.provide(Endpoint.fromEnvironment),
   );
 
 /**

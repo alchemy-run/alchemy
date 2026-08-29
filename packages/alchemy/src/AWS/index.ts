@@ -1,6 +1,13 @@
 export * from "./Arn.ts";
 export * from "./Assets.ts";
 export * from "./Bootstrap.ts";
+// Credential *constructors* only — the module's `Credentials` re-export
+// would collide with the service tag exported by the provider barrel.
+export {
+  assumeRoleEnvironment,
+  fromAssumeRole,
+  makeAssumeRoleResolver,
+} from "./Credentials.ts";
 export * from "./Environment.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
