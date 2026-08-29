@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EstimatedUsageResultItem,
   MetricMeasurement,
@@ -14,6 +13,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment, resolveWorkspace } from "./Environment.ts";
+
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -420,24 +420,15 @@ const setLimit = (input: {
   softLimitDollars: number;
   hardLimitDollars?: number | null;
 }) =>
-  railway
-    .usageLimitSet({
-      input: {
-        customerId: input.customerId,
-        softLimitDollars: input.softLimitDollars,
-        ...(input.hardLimitDollars !== undefined
-          ? { hardLimitDollars: input.hardLimitDollars }
-          : {}),
-      },
-    })
-    .pipe(
-      RailwayRetry.none,
-      Effect.retry({
-        while: (e) => e._tag === "RailwayRateLimited",
-        schedule: Schedule.spaced("2 seconds"),
-        times: 4,
-      }),
-    );
+  railway.usageLimitSet({
+    input: {
+      customerId: input.customerId,
+      softLimitDollars: input.softLimitDollars,
+      ...(input.hardLimitDollars !== undefined
+        ? { hardLimitDollars: input.hardLimitDollars }
+        : {}),
+    },
+  });
 
 const resolveScope = Effect.fn(function* (input: {
   news?: UsageLimitProps;

@@ -6,6 +6,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -31,8 +32,7 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
   );
 
 class ApiNotReady extends Data.TaggedError("ApiNotReady")<{

@@ -340,6 +340,14 @@
       "worker": "./src/Runtime.ts",
       "import": "./lib/Runtime.js"
     },
+    "./Runtime/Bootstrap/*": {
+      "types": "./src/Runtime/Bootstrap/*.ts",
+      "bun": "./src/Runtime/Bootstrap/*.ts",
+      "node": "./src/Runtime/Bootstrap/*.ts",
+      "worker": "./src/Runtime/Bootstrap/*.ts",
+      "import": "./src/Runtime/Bootstrap/*.ts",
+      "default": "./src/Runtime/Bootstrap/*.ts"
+    },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
       "bun": "./src/Process/index.ts",

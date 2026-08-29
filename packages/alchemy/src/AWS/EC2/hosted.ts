@@ -744,7 +744,7 @@ systemctl enable --now ${unitName}.service
             Bucket: yield* Assets.BucketName,
             Key: key,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          .pipe(Effect.catchTag("NoSuchKey", () => Effect.void));
       }
     }
 

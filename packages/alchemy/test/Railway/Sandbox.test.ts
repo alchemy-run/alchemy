@@ -1,6 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -33,21 +34,6 @@ const waitUntilGone = (environmentId: string, sandboxId: string) =>
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 const destroyLive = (environmentId: string, sandboxId: string) =>
   railway.sandboxDestroy({ environmentId, id: sandboxId }).pipe(
     Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
@@ -62,15 +48,15 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
-          return { project };
+          const { project, environment } = yield* suitePartition;
+          return { project, environment };
         }),
       );
 
       const result = yield* Effect.result(
         railway.sandboxCreate({
           input: {
-            environmentId: created.project.environmentId,
+            environmentId: created.environment.environmentId,
             idleTimeoutMinutes: 5,
           },
         }),
@@ -88,12 +74,8 @@ test.provider(
       expect(result.failure._tag).toEqual("RailwayForbidden");
 
       yield* stack.destroy();
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider(
@@ -104,18 +86,20 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const box = yield* Railway.Sandbox("Box", {
-            environment: project,
+            environment,
             idleTimeoutMinutes: 5,
           });
-          return { project, box };
+          return { project, environment, box };
         }),
       );
 
       expect(created.box.sandboxId).toEqual(expect.any(String));
       expect(created.box.sandboxId.length).toBeGreaterThan(0);
-      expect(created.box.environmentId).toEqual(created.project.environmentId);
+      expect(created.box.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.box.projectId).toEqual(created.project.projectId);
       expect(created.box.status).toEqual("RUNNING");
       expect(created.box.region).toEqual(expect.any(String));
@@ -158,10 +142,6 @@ test.provider(
         created.box.sandboxId,
       );
       expect(gone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

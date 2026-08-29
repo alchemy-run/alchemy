@@ -62,8 +62,12 @@ export const fromCredentials = () =>
       return yield* creds.pipe(
         Effect.flatMap((resolved) =>
           resolveOrgSlug().pipe(
-            Effect.provideService(Credentials, creds),
-            Effect.provideService(HttpClient.HttpClient, http),
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(Credentials, creds),
+                Layer.succeed(HttpClient.HttpClient, http),
+              ),
+            ),
             Effect.map((orgSlug) => ({
               ...resolved,
               orgSlug,

@@ -39,6 +39,14 @@ export interface ResolvedViteConfigSlice {
 export interface ViteDevServer {
   readonly listen: () => Promise<unknown>;
   readonly close: () => Promise<void>;
+  /**
+   * Native Node HTTP server. `null` in middleware mode; optional so older
+   * vite slices without the field still typecheck.
+   */
+  readonly httpServer?:
+    | { readonly closeAllConnections?: () => void }
+    | null
+    | undefined;
   readonly resolvedUrls?:
     | { readonly local: ReadonlyArray<string> }
     | null
@@ -72,6 +80,17 @@ export interface ViteBuildConfig {
  */
 export interface ViteTargetConfig {
   readonly vite?: ViteBuildConfig | undefined;
+  /**
+   * Assets-only Node serve entry (`vite/node` finish). `"spa"` serves
+   * `index.html` for unmatched GET paths.
+   * @default "spa" on the Node target
+   */
+  readonly notFoundHandling?: "none" | "spa" | "404-page" | undefined;
+  /**
+   * Serve `about/index.html` at `/about`.
+   * @default "none"
+   */
+  readonly htmlHandling?: "none" | "drop-trailing-slash" | undefined;
 }
 
 /**
@@ -108,6 +127,12 @@ export interface ViteOptions {
   readonly target?: ViteTargetInput | undefined;
   /** Serializable overrides merged over the project's `vite.config.*`. */
   readonly vite?: ViteBuildConfig | undefined;
+  /**
+   * Forwarded to the Node target's static serve entry. Ignored by AWS
+   * (S3) / Cloudflare (Workers assets).
+   */
+  readonly notFoundHandling?: "none" | "spa" | "404-page" | undefined;
+  readonly htmlHandling?: "none" | "drop-trailing-slash" | undefined;
   readonly dev?:
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
@@ -148,7 +173,11 @@ export const make: (
   const path = yield* Path.Path;
   const baseRoot = options?.root ?? (yield* Effect.sync(() => process.cwd()));
 
-  const targetConfig: ViteTargetConfig = { vite: options?.vite };
+  const targetConfig: ViteTargetConfig = {
+    vite: options?.vite,
+    notFoundHandling: options?.notFoundHandling,
+    htmlHandling: options?.htmlHandling,
+  };
 
   const resolveTarget = (root: string) =>
     FrameworkCore.resolveDeployTarget<ViteTarget, ViteTargetConfig>(
@@ -211,7 +240,7 @@ export const make: (
     function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
-      const targetContext = { root, framework: "vite" };
+      const targetContext = { root, framework: "vite", env: buildOptions?.env };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
       // build in a disposable child process — vite.config.* executes user
@@ -282,11 +311,15 @@ export const make: (
       (server) =>
         Effect.promise(async () => {
           try {
+            server.httpServer?.closeAllConnections?.();
             await server.close();
           } catch {
             // teardown is best-effort
           }
-        }),
+        }).pipe(
+          Effect.timeout("3 seconds"),
+          Effect.orElseSucceed(() => undefined),
+        ),
     );
 
     const url = server.resolvedUrls?.local[0];

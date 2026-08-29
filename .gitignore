@@ -35,6 +35,9 @@ smoke
 !examples/prisma-tanstack-start/migrations/**/end-contract.d.ts
 # drizzle-kit's generated durable-sqlite migrations bundle (checked-in test fixture)
 !packages/alchemy/test/Cloudflare/Workers/fixtures/drizzle-do/drizzle/migrations.js
+# Container image contexts COPY these into the image; without the negation
+# a fresh checkout has an empty build context and the container never boots.
+!packages/alchemy/test/Cloudflare/Container/fixtures/**/*.js
 *.map
 
 packages/cloudflare-runtime/src/rolldown/.env.test

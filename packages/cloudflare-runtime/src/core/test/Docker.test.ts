@@ -6,9 +6,11 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import {
+  buildFailureHint,
   CONTAINER_LOOPBACK_ALIAS,
   Docker,
   DockerLive,
+  mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
 } from "../Docker.ts";
@@ -123,6 +125,64 @@ describe("Docker", () => {
         "http://notlocalhost:3000",
       );
       expect(rewriteLoopbackHosts("8080")).toBe("8080");
+    });
+
+    it("leaves Neon and PlanetScale cloud URLs untouched", () => {
+      const neon =
+        "postgres://neondb_owner:secret@ep-cool-name-123456-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require";
+      const neonDirect =
+        "postgresql://neondb_owner:secret@ep-cool-name-123456.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+      const planetscalePg =
+        "postgresql://user:secret@xxxx.pg.psdb.cloud:6432/postgres?sslmode=verify-full";
+      const planetscaleMysql =
+        "mysql://user:secret@aws.connect.psdb.cloud:3306/db?sslaccept=strict";
+      expect(rewriteLoopbackHosts(neon)).toBe(neon);
+      expect(rewriteLoopbackHosts(neonDirect)).toBe(neonDirect);
+      expect(rewriteLoopbackHosts(planetscalePg)).toBe(planetscalePg);
+      expect(rewriteLoopbackHosts(planetscaleMysql)).toBe(planetscaleMysql);
+      expect(
+        mergeContainerCreateEnv(["DATABASE_URL=" + neon], {
+          DATABASE_URL: neon,
+        }),
+      ).toEqual([`DATABASE_URL=${neon}`]);
+    });
+  });
+
+  describe("mergeContainerCreateEnv", () => {
+    it("rewrites and replaces by name instead of appending a second value", () => {
+      expect(
+        mergeContainerCreateEnv(
+          [
+            "PATH=/usr/bin",
+            "DATABASE_URL=postgres://postgres@127.0.0.1:5432/db",
+          ],
+          {
+            DATABASE_URL: "postgres://postgres@127.0.0.1:5432/db",
+            PPG_URL: "prisma+postgres://localhost:51216/?api_key=test",
+          },
+        ),
+      ).toEqual([
+        "PATH=/usr/bin",
+        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+        `PPG_URL=prisma+postgres://${CONTAINER_LOOPBACK_ALIAS}:51216/?api_key=test`,
+      ]);
+    });
+
+    it("rewrites loopback hosts already present on the create body", () => {
+      expect(
+        mergeContainerCreateEnv(
+          ["DATABASE_URL=postgres://postgres@127.0.0.1:5432/db"],
+          undefined,
+        ),
+      ).toEqual([
+        `DATABASE_URL=postgres://postgres@${CONTAINER_LOOPBACK_ALIAS}:5432/db`,
+      ]);
+    });
+
+    it("preserves flag-style entries that have no value", () => {
+      expect(
+        mergeContainerCreateEnv(["DEBUG", "FOO=bar"], { FOO: "baz" }),
+      ).toEqual(["DEBUG", "FOO=baz"]);
     });
   });
 });
@@ -305,3 +365,115 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))(
     );
   },
 );
+
+/**
+ * Spawner whose `docker <verb>` exits non-zero with `stderr`, so the tests
+ * below can assert that a failing docker command is reported rather than
+ * mistaken for a successful one.
+ */
+const makeFailingStub = (verb: string, stderr: string, exitCode = 1) =>
+  Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const fails =
+        command._tag === "StandardCommand" && command.args[0] === verb;
+      return Effect.succeed(
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.succeed(
+            ChildProcessSpawner.ExitCode(fails ? exitCode : 0),
+          ),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: Stream.empty,
+          stderr: fails
+            ? Stream.make(new TextEncoder().encode(stderr))
+            : Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        }),
+      );
+    }),
+  );
+
+describe("buildFailureHint", () => {
+  it("names the buildx plugin when docker only names the flag", () => {
+    expect(buildFailureHint("unknown flag: --load")).toContain("buildx");
+  });
+
+  it("stays silent for ordinary build failures", () => {
+    expect(
+      buildFailureHint("ERROR: failed to solve: dockerfile parse error"),
+    ).toBeUndefined();
+  });
+});
+
+/**
+ * `run` reports a non-zero exit in its success channel, so a command whose
+ * failure matters has to check it. When `build` did not, a failed
+ * `docker build` looked like a success: no image was ever created and the
+ * only symptom was workerd looping on `Container exited while waiting for
+ * port 8080`, with the actual docker error absent from the logs entirely.
+ */
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.merge(
+      NodeServices.layer,
+      makeFailingStub("build", "unknown flag: --load"),
+    ),
+  ),
+)((it) => {
+  it.effect("build fails when docker build exits non-zero", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      const result = yield* Effect.result(
+        docker.build("alchemy-test:latest", {
+          dockerfile: `${import.meta.dirname}/fixtures/Dockerfile.build-failure`,
+        }),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") return;
+      const error = result.failure as {
+        subtag: string;
+        hint?: string;
+        detail?: { exitCode: number; stderr: string };
+      };
+      expect(error.subtag).toBe("DockerBuildFailed");
+      // The docker output the user needs is carried, not discarded.
+      expect(error.detail?.exitCode).toBe(1);
+      expect(error.detail?.stderr).toContain("unknown flag: --load");
+      expect(error.hint).toContain("buildx");
+    }),
+  );
+});
+
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.merge(
+      NodeServices.layer,
+      makeFailingStub("tag", "Error response from daemon: no such image"),
+    ),
+  ),
+)((it) => {
+  it.effect("pull fails when the follow-up docker tag exits non-zero", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      const result = yield* Effect.result(
+        docker.pull("alchemy-test:latest", { imageUri: PINNED }),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") return;
+      const error = result.failure as {
+        subtag: string;
+        detail?: { stderr: string };
+      };
+      expect(error.subtag).toBe("DockerTagFailed");
+      expect(error.detail?.stderr).toContain("no such image");
+    }),
+  );
+});

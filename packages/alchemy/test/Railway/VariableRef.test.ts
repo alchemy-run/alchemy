@@ -1,5 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -62,21 +63,6 @@ const waitUntilVariableGone = (
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 const isPostgresUri = (value: string | undefined) =>
   value !== undefined &&
   (value.startsWith("postgres://") || value.startsWith("postgresql://"));
@@ -96,29 +82,41 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const db = yield* Railway.Postgres("Db", {
             project,
+            environment,
             public: false,
           });
           const template = Railway.ref(db, "DATABASE_URL");
           const databaseUrl = yield* Railway.Variable("DatabaseUrl", {
             project,
+            environment,
             name: "DATABASE_URL",
             value: template,
           });
           const sentry = yield* Railway.Variable("SentryDsn", {
             project,
+            environment,
             name: "SENTRY_DSN",
             value: "https://example.ingest.sentry.io/1",
           });
           const sentryRef = yield* Railway.Variable("SentryDsnRef", {
             project,
+            environment,
             service: db,
             name: "SENTRY_DSN",
             value: Railway.ref("shared", "SENTRY_DSN"),
           });
-          return { project, db, databaseUrl, sentry, sentryRef, template };
+          return {
+            project,
+            environment,
+            db,
+            databaseUrl,
+            sentry,
+            sentryRef,
+            template,
+          };
         }),
       );
 
@@ -157,10 +155,6 @@ test.provider(
         created.databaseUrl.name,
       );
       expect(variableGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

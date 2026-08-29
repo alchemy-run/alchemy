@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   PrivateNetworkCreateOrGetResponse,
   PrivateNetworkEndpointCreateOrGetResponse,
@@ -22,7 +21,7 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -32,12 +31,6 @@ import type { Providers } from "./Providers.ts";
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 const ALCHEMY_TAG = "alchemy";
-
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  times: 1,
-  schedule: Schedule.spaced("30 seconds"),
-} as const;
 
 /**
  * Environment identity a private network lives in. Accepts a
@@ -339,8 +332,6 @@ const ensureNetwork = (input: {
       },
     })
     .pipe(
-      RailwayRetry.none,
-      Effect.retry(rateLimited),
       Effect.map((network) => (isGoneNetwork(network) ? undefined : network)),
     );
 
@@ -386,33 +377,25 @@ export const PrivateNetworkProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listNetworks(environmentId).pipe(
-                    Effect.map((networks) =>
-                      networks
-                        .filter((network) =>
-                          matchesAlchemyPhysicalName(network.name),
-                        )
-                        .map((network) =>
-                          toNetworkAttrs(network, {
-                            projectId: project.projectId,
-                          }),
-                        ),
-                    ),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listNetworks(environmentId).pipe(
+              Effect.map((networks) =>
+                networks
+                  .filter((network) => matchesAlchemyPhysicalName(network.name))
+                  .map((network) =>
+                    toNetworkAttrs(network, {
+                      projectId: project.projectId,
+                    }),
                   ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+              ),
             ),
-          ),
-        { concurrency: 8 },
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: PrivateNetwork["Attributes"][] = [];
@@ -837,67 +820,52 @@ export const PrivateNetworkEndpointProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          Effect.all(
-            {
-              environmentIds: listEnvironmentIds(project),
-              services: listProjectServices(project.projectId),
-            },
-            { concurrency: 2 },
-          ).pipe(
-            Effect.flatMap(({ environmentIds, services }) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listNetworks(environmentId).pipe(
-                    Effect.flatMap((networks) =>
-                      Effect.forEach(
-                        networks.filter((network) =>
-                          matchesAlchemyPhysicalName(network.name),
-                        ),
-                        (network) =>
-                          Effect.forEach(
-                            services,
-                            (service) =>
-                              getEndpoint({
-                                environmentId,
-                                privateNetworkId: network.publicId,
-                                serviceId: service.id,
-                              }).pipe(
-                                Effect.map((endpoint) =>
-                                  endpoint === undefined
-                                    ? undefined
-                                    : toEndpointAttrs(endpoint, {
-                                        serviceId: service.id,
-                                        privateNetworkId: network.publicId,
-                                        environmentId,
-                                        projectId: project.projectId,
-                                      }),
-                                ),
-                              ),
-                            { concurrency: 4 },
-                          ).pipe(
-                            Effect.map((items) =>
-                              items.filter(
-                                (
-                                  item,
-                                ): item is PrivateNetworkEndpoint["Attributes"] =>
-                                  item !== undefined,
-                              ),
-                            ),
-                          ),
-                        { concurrency: 4 },
-                      ).pipe(Effect.map((nested) => nested.flat())),
-                    ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const networks = yield* listNetworks(project.environmentId);
+          const owned = networks.filter((network) =>
+            matchesAlchemyPhysicalName(network.name),
+          );
+          const live = yield* railway
+            .project({ id: project.projectId })
+            .pipe(
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const services = (
+            live?.services.edges.map((edge) => edge.node) ?? []
+          ).filter((service) => service.deletedAt == null);
+          const nested = yield* Effect.forEach(owned, (network) =>
+            Effect.forEach(services, (service) =>
+              getEndpoint({
+                environmentId: project.environmentId,
+                privateNetworkId: network.publicId,
+                serviceId: service.id,
+              }).pipe(
+                Effect.map((endpoint) =>
+                  endpoint === undefined
+                    ? undefined
+                    : toEndpointAttrs(endpoint, {
+                        serviceId: service.id,
+                        privateNetworkId: network.publicId,
+                        environmentId: project.environmentId,
+                        projectId: project.projectId,
+                      }),
+                ),
+              ),
+            ).pipe(
+              Effect.map((items) =>
+                items.filter(
+                  (item): item is PrivateNetworkEndpoint["Attributes"] =>
+                    item !== undefined,
+                ),
+              ),
             ),
-          ),
-        { concurrency: 4 },
+          );
+          return nested.flat();
+        }),
       );
       return rows.flat();
     }),
@@ -948,8 +916,6 @@ export const PrivateNetworkEndpointProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
             Effect.map((endpoint) =>
               isGoneEndpoint(endpoint) ? undefined : endpoint,
             ),

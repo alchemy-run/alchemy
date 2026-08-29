@@ -41,6 +41,8 @@
 export interface NitroConfigSlice extends Record<string, unknown> {
   preset?: string | undefined;
   rootDir?: string | undefined;
+  /** Nitro's work directory. Forced under `rootDir` so fixture clones don't share a parent-workspace cache. */
+  buildDir?: string | undefined;
   awsLambda?: Record<string, unknown> | undefined;
   output?: NitroOutputConfigSlice | undefined;
 }
@@ -113,6 +115,10 @@ export const resolveNitroConfig = (
   const config: NitroConfigSlice = { ...input.nitro };
   config.preset = input.preset;
   config.rootDir = input.rootDir;
+  // Keep nitro's `.nitro` cache inside this project. A fixture clone
+  // resolves nitro from the parent workspace; nitro's default cache then
+  // lands in that workspace and leaks other tests' traced modules.
+  config.buildDir = `${input.rootDir}/.nitro`;
   input.configure?.(config);
   return config;
 };

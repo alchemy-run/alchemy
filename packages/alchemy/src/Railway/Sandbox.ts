@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   SandboxCheckpointsResultItem,
   SandboxCreateResponse,
@@ -22,7 +21,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { listOwnedProjects } from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -674,27 +673,21 @@ export const SandboxProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listSandboxes(environmentId).pipe(
-                    Effect.map((items) =>
-                      items.map((item) =>
-                        toAttrs(item, { projectId: project.projectId }),
-                      ),
-                    ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listSandboxes(environmentId).pipe(
+              Effect.map((items) =>
+                items.map((item) =>
+                  toAttrs(item, { projectId: project.projectId }),
+                ),
+              ),
             ),
-          ),
-        { concurrency: 8 },
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: Sandbox["Attributes"][] = [];
@@ -724,33 +717,24 @@ export const SandboxProvider = () =>
           : undefined;
 
       if (current === undefined) {
-        const created = yield* railway
-          .sandboxCreate({
-            input: {
-              environmentId,
-              ...(props.idleTimeoutMinutes !== undefined
-                ? { idleTimeoutMinutes: props.idleTimeoutMinutes }
-                : {}),
-              ...(props.networkIsolation !== undefined
-                ? { networkIsolation: props.networkIsolation }
-                : {}),
-              ...(props.region !== undefined ? { region: props.region } : {}),
-              ...(props.template !== undefined
-                ? { template: toTemplateInput(props.template) }
-                : {}),
-              ...(props.variables !== undefined
-                ? { variables: props.variables }
-                : {}),
-            },
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-          );
+        const created = yield* railway.sandboxCreate({
+          input: {
+            environmentId,
+            ...(props.idleTimeoutMinutes !== undefined
+              ? { idleTimeoutMinutes: props.idleTimeoutMinutes }
+              : {}),
+            ...(props.networkIsolation !== undefined
+              ? { networkIsolation: props.networkIsolation }
+              : {}),
+            ...(props.region !== undefined ? { region: props.region } : {}),
+            ...(props.template !== undefined
+              ? { template: toTemplateInput(props.template) }
+              : {}),
+            ...(props.variables !== undefined
+              ? { variables: props.variables }
+              : {}),
+          },
+        });
         current = isGone(created)
           ? undefined
           : created.status === "RUNNING"

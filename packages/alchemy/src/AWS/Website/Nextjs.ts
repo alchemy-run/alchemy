@@ -18,7 +18,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
-import { Server, type ServerDevProps } from "./Server.ts";
+import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 import {
   normalizeWebsiteDomain,

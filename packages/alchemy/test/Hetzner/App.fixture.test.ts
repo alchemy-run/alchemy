@@ -5,6 +5,7 @@ import { CredentialsFromEnv, Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -36,8 +37,7 @@ const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
   );
 
 class ApiNotReady extends Data.TaggedError("ApiNotReady")<{
@@ -79,11 +79,12 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = hasHetznerCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000 })
+  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: true })
   : null;
 
 afterAll.skipIf(!hasHetznerCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
+  exclusive: true,
 });
 
 test.skipIf(!hasHetznerCreds)(
@@ -187,5 +188,5 @@ test.skipIf(!hasHetznerCreds)(
     expect(body.path).toEqual(VOLUME_PATH);
     expect(body.text).toEqual(MARKER);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );

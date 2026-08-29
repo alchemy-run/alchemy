@@ -160,8 +160,9 @@ focused regression test closer to the code:
   values injected into a dev container carry loopback URLs (locally
   emulated databases, dev servers) that dangle inside the container. The
   workerd docker proxy now rewrites loopback hosts in URL-shaped env
-  values to `host.docker.localhost` (with the `host-gateway` ExtraHosts
-  mapping on the proxy container for Linux engines).
+  values to `host.docker.localhost`. Docker Desktop maps that through
+  `host-gateway`; native Linux unix-socket-tunnels the port into the
+  sidecar netns so UFW never sees a SYN to the bridge IP.
 - **ECS tasks never rolled on prop-driven updates.** Restart/roll logic
   lived only in the file-watch trigger, so a prop change — an inline
   `dockerfile` edit, a new env var — registered a new task-definition

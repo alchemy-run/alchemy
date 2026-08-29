@@ -1,6 +1,7 @@
 import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -58,8 +59,9 @@ export const makeSpriteAuth = (
   authorize: (eff) => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return eff.pipe(
-        Effect.provide(CredentialsFromEnv),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(
+          Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer),
+        ),
       );
     }
     return eff.pipe(Effect.provideContext(ambient));

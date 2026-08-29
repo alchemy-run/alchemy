@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,7 +10,11 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -400,27 +403,16 @@ const upsertVariable = (input: {
   value: string;
   serviceId?: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-        ...(input.serviceId !== undefined
-          ? { serviceId: input.serviceId }
-          : {}),
-      },
-    })
-    .pipe(
-      RailwayRetry.none,
-      Effect.retry({
-        while: (e) => e._tag === "RailwayRateLimited",
-        schedule: Schedule.spaced("30 seconds"),
-        times: 1,
-      }),
-    );
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+      ...(input.serviceId !== undefined ? { serviceId: input.serviceId } : {}),
+    },
+  });
 
 const listEnvironmentIds = (project: {
   projectId: string;
@@ -512,42 +504,35 @@ export const VariableProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  listVariableMap(project.projectId, environmentId).pipe(
-                    Effect.flatMap((vars) =>
-                      Effect.forEach(
-                        Object.keys(vars).filter((name) =>
-                          matchesAlchemyPhysicalName(name),
-                        ),
-                        (name) =>
-                          digestOf(vars[name]!).pipe(
-                            Effect.map((digest) =>
-                              toAttrs({
-                                projectId: project.projectId,
-                                environmentId,
-                                serviceId: undefined,
-                                name,
-                                digest,
-                              }),
-                            ),
-                          ),
-                        { concurrency: 8 },
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            listVariableMap(project.projectId, environmentId).pipe(
+              Effect.flatMap((vars) =>
+                Effect.forEach(
+                  Object.keys(vars).filter((name) =>
+                    matchesAlchemyPhysicalName(name),
+                  ),
+                  (name) =>
+                    digestOf(vars[name]!).pipe(
+                      Effect.map((digest) =>
+                        toAttrs({
+                          projectId: project.projectId,
+                          environmentId,
+                          serviceId: undefined,
+                          name,
+                          digest,
+                        }),
                       ),
                     ),
-                  ),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
+                ),
+              ),
             ),
-          ),
-        { concurrency: 8 },
+          );
+          return nested.flat();
+        }),
       );
       return rows.flat();
     }),

@@ -199,7 +199,10 @@ export const NodeHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
             const port = yield* resolvePort(options);
             const server = yield* NodeHttpServerPlatform.make(
               NodeHttp.createServer,
-              { port },
+              {
+                port,
+                host: factoryOptions?.hostname ?? "0.0.0.0",
+              },
             );
             if (
               factoryOptions?.onListen &&

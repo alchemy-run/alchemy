@@ -277,6 +277,9 @@ const collectFile = (
  */
 const EXCLUSIVE_PERMITS = 100_000;
 
+const hookPermits = (hooks: ReadonlyArray<Hook>): number =>
+  hooks.some((hook) => hook.exclusive === true) ? EXCLUSIVE_PERMITS : 1;
+
 interface ExecContext {
   readonly options: RunOptions;
   readonly onlyMode: boolean;
@@ -644,10 +647,14 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
     // so the TUI can show "setting up" instead of an unexplained queue.
     if (suite.beforeAll.length > 0) {
       yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
-      const exit = yield* runHooks(suite.beforeAll, ctx.options.timeout).pipe(
-        withCapture(ctx.fileLogs),
-        Effect.exit,
-      );
+      // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
+      // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
+      // slot so unrelated files can still run concurrently.
+      const exit = yield* ctx.lock
+        .withPermits(hookPermits(suite.beforeAll))(
+          runHooks(suite.beforeAll, ctx.options.timeout),
+        )
+        .pipe(withCapture(ctx.fileLogs), Effect.exit);
       yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
       if (Exit.isFailure(exit)) {
         yield* failSubtree(suite, ctx, prettyCause(exit.cause));
@@ -676,12 +683,15 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   // Test.make's fallback hook that closes the shared scope and local
   // provider sidecar, which registers last and would otherwise leak the
   // sidecar for the rest of the process. Failures aggregate.
-  const exits = yield* Effect.forEach(suite.afterAll, (hook) =>
+  const afterAllRun = Effect.forEach(suite.afterAll, (hook) =>
     Effect.suspend(hook.body).pipe(
       Effect.timeout(Duration.millis(hook.timeout ?? ctx.options.timeout)),
       Effect.exit,
     ),
-  ).pipe(withCapture(ctx.fileLogs));
+  );
+  const exits = yield* ctx.lock
+    .withPermits(hookPermits(suite.afterAll))(afterAllRun)
+    .pipe(withCapture(ctx.fileLogs));
   yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "afterAll" });
   const failures = exits.filter(Exit.isFailure);
   if (failures.length > 0) {
