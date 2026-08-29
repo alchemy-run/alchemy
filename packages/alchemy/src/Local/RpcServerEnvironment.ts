@@ -4,6 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import {
+  FlociProfileService,
+  type FlociProfileTransport,
+} from "../AWS/Local/FlociServices.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
@@ -24,6 +28,8 @@ export interface SessionEnvironment {
     name: string;
     stage: string;
   };
+  /** Profile selected by the parent for AWS local providers in this session. */
+  flociProfile?: FlociProfileTransport;
 }
 
 export interface RpcServerEnvironment {
@@ -74,6 +80,7 @@ export const layer = (
       actions: {},
     }),
     Layer.succeed(Stage, environment.stack.stage),
+    Layer.succeed(FlociProfileService, environment.flociProfile ?? {}),
   );
 
 export const RPC_SERVER_ENVIRONMENT_KEY =

@@ -5,7 +5,9 @@ import {
   FlociProfileService,
   flociServices,
   resolveFlociProfile,
+  serializeFlociProfile,
 } from "@/AWS/Local/FlociServices.ts";
+import * as RpcServerEnvironment from "@/Local/RpcServerEnvironment.ts";
 import { Endpoint } from "@distilled.cloud/aws";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
@@ -109,6 +111,117 @@ describe("Floci local provider profiles", () => {
       expect(environment.endpoint).toBe("http://localhost:4571");
       expect(environment.region).toBe("eu-central-1");
       expect(environment.accountId).toBe("333333333333");
+    }),
+  );
+
+  it.effect("carries profiles through the sidecar session context", () =>
+    Effect.gen(function* () {
+      const readSidecar = (
+        profile: Parameters<typeof serializeFlociProfile>[0],
+      ) => {
+        const session = RpcServerEnvironment.decodeSessionEnvironment(
+          RpcServerEnvironment.encodeSessionEnvironment({
+            alchemyContext: {
+              dotAlchemy: ".alchemy",
+              dev: true,
+              adopt: false,
+            },
+            stack: { name: profile.accountId ?? "sidecar", stage: "test" },
+            flociProfile: serializeFlociProfile(profile),
+          }),
+        );
+        return Effect.gen(function* () {
+          const context = yield* Layer.build(
+            flociServices().pipe(
+              Layer.provide(
+                RpcServerEnvironment.layer({
+                  profile: undefined,
+                  envFile: undefined,
+                  ...session,
+                }),
+              ),
+            ),
+          );
+          const environment = Context.get(context, AWSEnvironment);
+          return yield* environment;
+        });
+      };
+
+      const a = yield* readSidecar({
+        endpoint: "http://localhost:4581",
+        region: "eu-central-1",
+        accountId: "444444444444",
+        credentials: {
+          accessKeyId: "444444444444",
+          secretAccessKey: "sidecar-a-secret",
+        },
+        autoStart: false,
+      });
+      const b = yield* readSidecar({
+        endpoint: "http://localhost:4582",
+        region: "ap-southeast-1",
+        accountId: "555555555555",
+        credentials: {
+          accessKeyId: "555555555555",
+          secretAccessKey: "sidecar-b-secret",
+        },
+        autoStart: false,
+      });
+
+      expect(a.endpoint).toBe("http://localhost:4581");
+      expect(a.region).toBe("eu-central-1");
+      expect(a.accountId).toBe("444444444444");
+      expect(Redacted.value((yield* a.credentials).accessKeyId)).toBe(
+        "444444444444",
+      );
+      expect(b.endpoint).toBe("http://localhost:4582");
+      expect(b.region).toBe("ap-southeast-1");
+      expect(b.accountId).toBe("555555555555");
+      expect(Redacted.value((yield* b.credentials).accessKeyId)).toBe(
+        "555555555555",
+      );
+    }),
+  );
+
+  it.effect("serializes redacted credentials without losing their values", () =>
+    Effect.gen(function* () {
+      const session = RpcServerEnvironment.decodeSessionEnvironment(
+        RpcServerEnvironment.encodeSessionEnvironment({
+          alchemyContext: {
+            dotAlchemy: ".alchemy",
+            dev: true,
+            adopt: false,
+          },
+          stack: { name: "sidecar-redacted", stage: "test" },
+          flociProfile: serializeFlociProfile({
+            endpoint: "http://localhost:4583",
+            region: "eu-central-1",
+            accountId: "666666666666",
+            credentials: {
+              accessKeyId: Redacted.make("666666666666"),
+              secretAccessKey: Redacted.make("sidecar-redacted-secret"),
+            },
+            autoStart: false,
+          }),
+        }),
+      );
+      const context = yield* Layer.build(
+        flociServices().pipe(
+          Layer.provide(
+            RpcServerEnvironment.layer({
+              profile: undefined,
+              envFile: undefined,
+              ...session,
+            }),
+          ),
+        ),
+      );
+      const environment = Context.get(context, AWSEnvironment);
+      const resolved = yield* environment;
+      expect(resolved.endpoint).toBe("http://localhost:4583");
+      expect(resolved.accountId).toBe("666666666666");
+      const credentials = yield* resolved.credentials;
+      expect(Redacted.value(credentials.accessKeyId)).toBe("666666666666");
     }),
   );
 

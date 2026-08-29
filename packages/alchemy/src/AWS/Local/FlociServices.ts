@@ -67,11 +67,45 @@ export interface FlociProfile {
   readonly autoStart?: boolean;
 }
 
+/** JSON-safe profile shape sent to an RPC sidecar for one provider context. */
+export interface FlociProfileTransport extends Omit<
+  FlociProfile,
+  "credentials"
+> {
+  readonly credentials?: {
+    readonly accessKeyId?: string;
+    readonly secretAccessKey?: string;
+    readonly sessionToken?: string;
+  };
+}
+
 /** Provider context carrying a stack's selected local Floci profile. */
 export class FlociProfileService extends Context.Service<
   FlociProfileService,
   FlociProfile
 >()("AWS::Local::FlociProfile") {}
+
+const reveal = (value: string | Redacted.Redacted<string> | undefined) =>
+  value === undefined
+    ? undefined
+    : Redacted.isRedacted(value)
+      ? Redacted.value(value)
+      : value;
+
+/** Convert a local profile to the JSON-safe form carried by RPC sessions. */
+export const serializeFlociProfile = (
+  profile: FlociProfile,
+): FlociProfileTransport => ({
+  ...profile,
+  credentials:
+    profile.credentials === undefined
+      ? undefined
+      : {
+          accessKeyId: reveal(profile.credentials.accessKeyId),
+          secretAccessKey: reveal(profile.credentials.secretAccessKey),
+          sessionToken: reveal(profile.credentials.sessionToken),
+        },
+});
 
 const DEFAULT_ACCESS_KEY_ID = "test";
 const DEFAULT_SECRET_ACCESS_KEY = "test";
@@ -79,7 +113,7 @@ const DEFAULT_SECRET_ACCESS_KEY = "test";
 const materialize = (
   value: string | Redacted.Redacted<string> | undefined,
   fallback: string,
-) =>
+): Redacted.Redacted<string> =>
   value === undefined
     ? Redacted.make(fallback)
     : Redacted.isRedacted(value)
@@ -99,10 +133,18 @@ const portOf = (endpoint: string): number => {
 /** Resolve omitted profile fields while retaining the standalone defaults. */
 export const resolveFlociProfile = (
   profile: FlociProfile = {},
-): Required<
-  Pick<FlociProfile, "endpoint" | "region" | "accountId" | "credentials">
-> &
-  Pick<FlociProfile, "floci" | "autoStart"> => {
+): {
+  readonly endpoint: string;
+  readonly region: string;
+  readonly accountId: string;
+  readonly credentials: {
+    readonly accessKeyId: Redacted.Redacted<string>;
+    readonly secretAccessKey: Redacted.Redacted<string>;
+    readonly sessionToken: Redacted.Redacted<string> | undefined;
+  };
+  readonly floci: FlociProfile["floci"];
+  readonly autoStart: FlociProfile["autoStart"];
+} => {
   const endpoint = profile.endpoint ?? DEFAULT_LOCAL_ENDPOINT;
   const region = profile.region ?? FLOCI_REGION;
   const accountId = profile.accountId ?? FLOCI_ACCOUNT_ID;

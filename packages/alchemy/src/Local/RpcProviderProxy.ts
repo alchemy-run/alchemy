@@ -4,9 +4,14 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import {
+  FlociProfileService,
+  serializeFlociProfile,
+} from "../AWS/Local/FlociServices.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
@@ -114,9 +119,14 @@ const make = Effect.fn(function* (spawnerUrl: string) {
     get: Effect.fn(function* (mainUrl, providerName) {
       const alchemyContext = yield* AlchemyContext;
       const stack = yield* Stack;
+      const context = yield* Effect.context<never>();
+      const flociProfile = Context.getOption(context, FlociProfileService);
       const sessionEnv = encodeSessionEnvironment({
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
+        ...(Option.isSome(flociProfile)
+          ? { flociProfile: serializeFlociProfile(flociProfile.value) }
+          : {}),
       });
       const key = mainUrl + SESSION_KEY_SEPARATOR + sessionEnv;
       const fetchProvider = Effect.gen(function* () {
