@@ -737,6 +737,8 @@ export const ALL_SCOPES = {
     "See all DNS Location data but can only change secure DNS Locations",
   "teams:write":
     "See and change Cloudflare Teams data such as zones, gateway, and argo tunnel details",
+  "tokens:read": "See Cloudflare API Tokens",
+  "tokens:write": "See and change Cloudflare API Tokens",
   "url_scanner:read": "Grants read level access to URL Scanner",
   "url_scanner:write": "Grants write level access to URL Scanner",
   "user:read":
@@ -782,6 +784,7 @@ export const DEFAULT_SCOPES = [
   "queues:write",
   "secrets_store:write",
   "ssl_certs:write",
+  "tokens:write",
   "user:read",
   "vectorize:write",
   "workers_kv:write",
