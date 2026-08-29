@@ -11,6 +11,7 @@ import * as RpcServerEnvironment from "@/Local/RpcServerEnvironment.ts";
 import { Endpoint } from "@distilled.cloud/aws";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
+import { NodeServices } from "@effect/platform-node";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -52,7 +53,7 @@ describe("Floci local provider profiles", () => {
       expect(profile.endpoint).toBe("http://localhost:4566");
       expect(Redacted.value(profile.credentials.accessKeyId)).toBe("test");
       expect(Redacted.value(profile.credentials.secretAccessKey)).toBe("test");
-    }),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(
@@ -111,7 +112,7 @@ describe("Floci local provider profiles", () => {
       expect(environment.endpoint).toBe("http://localhost:4571");
       expect(environment.region).toBe("eu-central-1");
       expect(environment.accountId).toBe("333333333333");
-    }),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("carries profiles through the sidecar session context", () =>
@@ -180,7 +181,7 @@ describe("Floci local provider profiles", () => {
       expect(Redacted.value((yield* b.credentials).accessKeyId)).toBe(
         "555555555555",
       );
-    }),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("serializes redacted credentials without losing their values", () =>
@@ -222,7 +223,7 @@ describe("Floci local provider profiles", () => {
       expect(resolved.accountId).toBe("666666666666");
       const credentials = yield* resolved.credentials;
       expect(Redacted.value(credentials.accessKeyId)).toBe("666666666666");
-    }),
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(
