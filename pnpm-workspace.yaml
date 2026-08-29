@@ -68,7 +68,7 @@ catalogs:
     magic-string: ^0.30.21
     mime: ^4.0.7
     miniflare: ^4.20260701.0
-    mysql2: ^3.22.3
+    mysql2: ^3.24.2
     nuxt: ">=4.5.0"
     postal-mime: ^2.4.3
     sharp: ^0.35.3
@@ -85,20 +85,20 @@ catalogs:
     drizzle-kit: 1.0.0-rc.5-ab785fc
     drizzle-orm: 1.0.0-rc.5-ab785fc
     kysely: ^0.29.4
-    mysql2: ^3.23.2
+    mysql2: ^3.24.2
     mongodb: ^6.10.0
     pg: ^8.22.0
   effect:
-    "@effect/atom-react": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/platform-bun": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/platform-node": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/platform-node-shared": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-d1": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-mysql2": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-pg": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-sqlite-do": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/vitest": ">=4.0.0-rc.111 || >=4.0.0"
-    effect: ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/atom-react": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/platform-bun": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/platform-node": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/platform-node-shared": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-d1": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-mysql2": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-pg": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-sqlite-do": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/vitest": ">=4.0.0-rc.112 || >=4.0.0"
+    effect: ">=4.0.0-rc.112 || >=4.0.0"
   frontend:
     "@astrojs/internal-helpers": 0.10.1
     "@astrojs/underscore-redirects": 1.0.3
@@ -165,8 +165,8 @@ catalogs:
     tsx: ^4.20.6
 overrides:
   "@cloudflare/workers-types": 5.20260812.1
-  effect: 4.0.0-rc.111
-  "@effect/platform-browser": 4.0.0-rc.111
+  effect: 4.0.0-rc.112
+  "@effect/platform-browser": 4.0.0-rc.112
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
@@ -174,16 +174,16 @@ patchedDependencies:
   "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
   starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
 minimumReleaseAgeExclude:
-  - '@effect/atom-react@4.0.0-rc.111'
-  - '@effect/platform-bun@4.0.0-rc.111'
-  - '@effect/platform-node-shared@4.0.0-rc.111'
-  - '@effect/platform-node@4.0.0-rc.111'
-  - '@effect/sql-d1@4.0.0-rc.111'
-  - '@effect/sql-mysql2@4.0.0-rc.111'
-  - '@effect/sql-pg@4.0.0-rc.111'
-  - '@effect/sql-sqlite-do@4.0.0-rc.111'
-  - '@effect/vitest@4.0.0-rc.111'
+  - '@effect/atom-react@4.0.0-rc.112'
+  - '@effect/platform-bun@4.0.0-rc.112'
+  - '@effect/platform-node-shared@4.0.0-rc.112'
+  - '@effect/platform-node@4.0.0-rc.112'
+  - '@effect/sql-d1@4.0.0-rc.112'
+  - '@effect/sql-mysql2@4.0.0-rc.112'
+  - '@effect/sql-pg@4.0.0-rc.112'
+  - '@effect/sql-sqlite-do@4.0.0-rc.112'
+  - '@effect/vitest@4.0.0-rc.112'
   - '@foldkit/vite-plugin@0.16.1'
-  - effect@4.0.0-rc.111
+  - effect@4.0.0-rc.112
   - foldkit@0.148.2
   - '@solidjs/start@2.0.4'
