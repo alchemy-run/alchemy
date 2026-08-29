@@ -34,9 +34,51 @@ const examples = [
   // "./examples/aws-website-vite",
   // "./examples/aws-website-waku",
   "./examples/fly-app",
-  "./examples/railway-project",
   "./examples/fly-service",
-  "./examples/railway-service",
+  "./examples/fly-website-vite",
+  "./examples/hetzner-website-vite",
+  // Railway examples are gated out of test:examples for now: repeated
+  // Railway platform outages (deployment queue backlogs, e.g. the
+  // 2026-08-28 "Deployments slow to start" incident) and general
+  // flakiness working with Railway's API make these suites too
+  // unreliable for CI. Run them from the example directory with
+  // `bun test` when Railway is healthy.
+  // "./examples/railway-project",
+  // "./examples/railway-service",
+  // "./examples/railway-website-vite",
+  // Card-app Website composites (same apps as the AWS/Cloudflare
+  // *-website-* examples). Commented so CI does not provision extra
+  // sites; run them from the example directory with `bun test`.
+  // "./examples/fly-website-astro",
+  // "./examples/fly-website-foldkit",
+  // "./examples/fly-website-nextjs",
+  // "./examples/fly-website-nuxt",
+  // "./examples/fly-website-react-router",
+  // "./examples/fly-website-solidstart",
+  // "./examples/fly-website-sveltekit",
+  // "./examples/fly-website-tanstack-start",
+  // "./examples/fly-website-waku",
+  // "./examples/fly-website-vocs",
+  // "./examples/hetzner-website-astro",
+  // "./examples/hetzner-website-foldkit",
+  // "./examples/hetzner-website-nextjs",
+  // "./examples/hetzner-website-nuxt",
+  // "./examples/hetzner-website-react-router",
+  // "./examples/hetzner-website-solidstart",
+  // "./examples/hetzner-website-sveltekit",
+  // "./examples/hetzner-website-tanstack-start",
+  // "./examples/hetzner-website-waku",
+  // "./examples/hetzner-website-vocs",
+  // "./examples/railway-website-astro",
+  // "./examples/railway-website-foldkit",
+  // "./examples/railway-website-nextjs",
+  // "./examples/railway-website-nuxt",
+  // "./examples/railway-website-react-router",
+  // "./examples/railway-website-solidstart",
+  // "./examples/railway-website-sveltekit",
+  // "./examples/railway-website-tanstack-start",
+  // "./examples/railway-website-waku",
+  // "./examples/railway-website-vocs",
   "./examples/fly-sprite",
   "./examples/fly-redis",
   "./examples/fly-bucket",

@@ -109,14 +109,21 @@ export const runProcess = (
   options?: { readonly exitOnComplete?: boolean },
 ): Promise<void> => {
   console.log(`${label} bootstrap starting...`);
+  // Node 26 exits 13 (unsettled TLA) when the event loop is empty while
+  // `await bootstrap(...)` is still pending. `host.run(Effect.never)` has
+  // no native handle; an HTTP `listen` does. Hold a timer so run-only
+  // Services stay up the same way Bun does.
+  const keepAlive = setInterval(() => undefined, 1 << 30);
   return Effect.runPromise(program).then(
     () => {
+      clearInterval(keepAlive);
       if (options?.exitOnComplete) {
         console.log(`${label} completed.`);
         process.exit(0);
       }
     },
     (err) => {
+      clearInterval(keepAlive);
       console.error(`${label} bootstrap failed:`, err);
       process.exit(1);
     },

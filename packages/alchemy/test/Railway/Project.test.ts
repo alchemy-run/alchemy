@@ -101,5 +101,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.projectId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

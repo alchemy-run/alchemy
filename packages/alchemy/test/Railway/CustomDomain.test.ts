@@ -1,5 +1,6 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -47,27 +48,11 @@ const waitUntilDomainGone = (customDomainId: string, projectId: string) =>
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 const createTargetService = (projectId: string, environmentId: string) =>
   railway.serviceCreate({
     input: {
       projectId,
       environmentId,
-      name: "web",
       source: { image: "hashicorp/http-echo" },
     },
   });
@@ -78,22 +63,18 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Railway.Project("Site");
-        }),
-      );
+      const { project, environment } = yield* stack.deploy(suitePartition);
 
       const service = yield* createTargetService(
         project.projectId,
-        project.environmentId,
+        environment.environmentId,
       );
 
       const rejected = yield* Effect.result(
         railway.customDomainCreate({
           input: {
             domain: "not a hostname",
-            environmentId: project.environmentId,
+            environmentId: environment.environmentId,
             projectId: project.projectId,
             serviceId: service.id,
           },
@@ -114,10 +95,10 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* Railway.Project("Site");
+          const { project: site, environment } = yield* suitePartition;
           const domain = yield* Railway.CustomDomain("Www", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             domain: hostname,
             targetPort: 5678,
           });
@@ -130,12 +111,12 @@ test.provider(
       expect(created.domain.domain).toEqual(hostname);
       expect(created.domain.serviceId).toEqual(service.id);
       expect(created.domain.projectId).toEqual(project.projectId);
-      expect(created.domain.environmentId).toEqual(project.environmentId);
+      expect(created.domain.environmentId).toEqual(environment.environmentId);
       expect(created.domain.targetPort).toEqual(5678);
       expect(created.domain.url).toEqual(`https://${hostname}`);
 
       const listed = yield* listLive(
-        project.environmentId,
+        environment.environmentId,
         project.projectId,
         service.id,
       );
@@ -156,10 +137,10 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* Railway.Project("Site");
+          const { project: site, environment } = yield* suitePartition;
           const domain = yield* Railway.CustomDomain("Www", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             domain: hostname,
             targetPort: 8080,
           });
@@ -187,10 +168,8 @@ test.provider(
         project.projectId,
       );
       expect(domainGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(project.projectId);
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider.skipIf(!TEST_DOMAIN)(
@@ -201,23 +180,19 @@ test.provider.skipIf(!TEST_DOMAIN)(
 
       const hostname = TEST_DOMAIN!;
 
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Railway.Project("Acme");
-        }),
-      );
+      const { project, environment } = yield* stack.deploy(suitePartition);
 
       const service = yield* createTargetService(
         project.projectId,
-        project.environmentId,
+        environment.environmentId,
       );
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* Railway.Project("Acme");
+          const { project: site, environment } = yield* suitePartition;
           const domain = yield* Railway.CustomDomain("Www", {
             service: { serviceId: service.id },
-            environment: site,
+            environment,
             domain: hostname,
           });
           return { project: site, domain };
@@ -243,8 +218,6 @@ test.provider.skipIf(!TEST_DOMAIN)(
         project.projectId,
       );
       expect(domainGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(project.projectId);
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

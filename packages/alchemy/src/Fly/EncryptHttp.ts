@@ -7,7 +7,6 @@ import { Encrypt, type EncryptRequest } from "./Encrypt.ts";
 import {
   base64ToBytes,
   bytesToBase64,
-  flyKmsPost,
   makeHttpSecretKeyBinding,
 } from "./SecretKeyHttp.ts";
 
@@ -34,25 +33,6 @@ export const EncryptHttp = Layer.effect(
     makeHttpSecretKeyBinding({
       makeClient: (auth, appName, secretName) =>
         Effect.fn("Fly.Encrypt")(function* (request: EncryptRequest) {
-          if (globalThis.__ALCHEMY_RUNTIME__) {
-            const res = yield* flyKmsPost(
-              yield* appName,
-              yield* secretName,
-              "encrypt",
-              {
-                plaintext: bytesToBase64(request.plaintext),
-                associated_data:
-                  request.associatedData === undefined
-                    ? undefined
-                    : bytesToBase64(request.associatedData),
-              },
-            );
-            return {
-              ciphertext: base64ToBytes(
-                typeof res.ciphertext === "string" ? res.ciphertext : undefined,
-              ),
-            };
-          }
           const res = yield* auth.authorize(
             machines.encryptSecretKey({
               app_name: yield* appName,

@@ -48,7 +48,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Api extends Railway.Service<Api>()(
   "Api",
-  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", port: 3000 },
+  { project: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
     const putObject = yield* Railway.PutObject(Data);
     const getObject = yield* Railway.GetObject(Data);

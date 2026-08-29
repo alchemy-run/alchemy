@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   TcpProxiesResultItem,
   TcpProxyCreateResponse,
@@ -10,6 +9,8 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -290,6 +291,38 @@ export const TcpProxyProvider = () =>
     stables: ["id", "domain", "proxyPort", "serviceId", "environmentId"],
     nuke: { dependsOn: ["Railway.Project"] },
 
+    list: Effect.fn(function* () {
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const live = yield* railway
+            .project({ id: project.projectId })
+            .pipe(
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const services = (
+            live?.services.edges.map((edge) => edge.node) ?? []
+          ).filter(
+            (service) =>
+              service.deletedAt == null &&
+              matchesAlchemyPhysicalName(service.name),
+          );
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(services, (service) =>
+            Effect.forEach(envIds, (environmentId) =>
+              listProxies(environmentId, service.id).pipe(
+                Effect.map((proxies) => proxies.map((proxy) => toAttrs(proxy))),
+              ),
+            ).pipe(Effect.map((rows) => rows.flat())),
+          );
+          return nested.flat();
+        }),
+      );
+      return rows.flat();
+    }),
+
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
@@ -361,12 +394,6 @@ export const TcpProxyProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),
@@ -395,11 +422,19 @@ export const TcpProxyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const id = output.id;
       if (id.length === 0) return;
-      yield* railway
-        .tcpProxyDelete({ id })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+      yield* railway.tcpProxyDelete({ id }).pipe(
+        // Railway serializes proxy mutations per environment: a delete
+        // racing an in-flight deploy fails with "Cannot delete TCP proxy:
+        // an operation is already in progress".
+        Effect.retry({
+          while: (e) =>
+            e._tag === "RailwayInternalError" &&
+            e.message.includes("operation is already in progress"),
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+      );
       if (output.environmentId.length > 0 && output.serviceId.length > 0) {
         yield* waitUntilGone(output.environmentId, output.serviceId, id);
       }

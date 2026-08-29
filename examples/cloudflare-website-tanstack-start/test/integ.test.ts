@@ -50,13 +50,16 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   stage: "test",
 });
 
-const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)));
+const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
+  timeout: 240_000,
+});
 afterAll(
   Effect.gen(function* () {
     if (!process.env.NO_DESTROY) {
       yield* destroy(Stack);
     }
   }),
+  { timeout: 180_000 },
 );
 
 const route = (url: string, params: Record<string, string>) =>

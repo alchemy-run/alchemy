@@ -989,6 +989,43 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "hetzner/tutorial" } }],
             },
             {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/hetzner/frontend/websites",
+                },
+                { label: "Astro", link: "/hetzner/frontend/astro" },
+                { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
+                { label: "Next.js", link: "/hetzner/frontend/nextjs" },
+                { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
+                { label: "Octane", link: "/hetzner/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/hetzner/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/hetzner/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/hetzner/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/hetzner/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/hetzner/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/hetzner/frontend/vite" },
+                { label: "Vocs", link: "/hetzner/frontend/vocs" },
+                { label: "Waku", link: "/hetzner/frontend/waku" },
+              ],
+            },
+            {
               label: "Compute",
               items: [
                 { label: "Servers", link: "/hetzner/compute/servers" },
@@ -1017,6 +1054,43 @@ export default defineConfig({
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "fly/tutorial" } }],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/fly/frontend/websites",
+                },
+                { label: "Astro", link: "/fly/frontend/astro" },
+                { label: "Foldkit", link: "/fly/frontend/foldkit" },
+                { label: "Next.js", link: "/fly/frontend/nextjs" },
+                { label: "Nuxt", link: "/fly/frontend/nuxt" },
+                { label: "Octane", link: "/fly/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/fly/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/fly/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/fly/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/fly/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/fly/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/fly/frontend/vite" },
+                { label: "Vocs", link: "/fly/frontend/vocs" },
+                { label: "Waku", link: "/fly/frontend/waku" },
+              ],
             },
             {
               label: "Compute",
@@ -1053,6 +1127,43 @@ export default defineConfig({
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "railway/tutorial" } }],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/railway/frontend/websites",
+                },
+                { label: "Astro", link: "/railway/frontend/astro" },
+                { label: "Foldkit", link: "/railway/frontend/foldkit" },
+                { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "Nuxt", link: "/railway/frontend/nuxt" },
+                { label: "Octane", link: "/railway/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/railway/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/railway/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/railway/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/railway/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/railway/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/railway/frontend/vite" },
+                { label: "Vocs", link: "/railway/frontend/vocs" },
+                { label: "Waku", link: "/railway/frontend/waku" },
+              ],
             },
             {
               label: "Compute",

@@ -1,8 +1,9 @@
 import { createRequire } from "node:module";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
 import {
@@ -17,7 +18,6 @@ import {
   getStableContextDir,
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
-import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import { safeHttpEffect } from "../Http.ts";
 import { Self } from "../Self.ts";
@@ -27,6 +27,16 @@ import {
 } from "../Server/Process.ts";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  copyExtraFiles,
+  contextRootOf,
+  extraFileDestination,
+  hashExtraFiles,
+  isContextRootDest,
+  posixRelUnder,
+  resolveExtraSource,
+  type ExtraFile,
+} from "../Util/extraFiles.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import type { MountSpec, ServiceBinding } from "./MountVolume.ts";
 
@@ -34,7 +44,9 @@ export type RailwayHostRuntimeContext = HostRuntimeContext;
 
 /**
  * Container host. RPC wrapping lives in `Service.ts` so canvas Functions
- * do not pay for `rpc-server.ts` in the 96KB start command.
+ * do not pay for `rpc-server.ts` in the 96KB start command. The generated
+ * Service entry is a shim that imports `alchemy/Runtime/Bootstrap/Railway`
+ * (Node HTTP) plus the user's `main` — see that module for why.
  */
 export const createRailwayHostRuntimeContext = createContainerRuntimeContext;
 
@@ -57,11 +69,9 @@ export const createRailwayFunctionRuntimeContext =
           );
           (
             globalThis as typeof globalThis & {
-              __ALCHEMY_FUNCTION_FETCH__?: (
-                request: Request,
-              ) => Promise<Response>;
+              __aFF?: (request: Request) => Promise<Response>;
             }
-          ).__ALCHEMY_FUNCTION_FETCH__ = async (request: Request) => {
+          ).__aFF = async (request: Request) => {
             try {
               const response = await Effect.runPromise(
                 run.pipe(
@@ -84,14 +94,13 @@ export const createRailwayFunctionRuntimeContext =
     } as HostRuntimeContext;
   };
 
-export const DEFAULT_BASE_IMAGE = "oven/bun:1";
+export const DEFAULT_BASE_IMAGE = "node:26-slim";
 export const DEFAULT_PORT = 3000;
-export const MACHINE_PLATFORM = "linux/amd64";
 
 export interface RailwayBuildOptions extends Bundle.BundleConfig {
   /**
    * Native or Node-only packages to install into the image with
-   * `bun install` instead of bundling them. `pg` is CommonJS: Rolldown's
+   * `npm install` instead of bundling them. `pg` is CommonJS: Rolldown's
    * interop turns `Client` into a namespace (`The superclass is not a
    * constructor`). Same `build.install` shape as Lambda / Fly.
    *
@@ -103,6 +112,8 @@ export interface RailwayBuildOptions extends Bundle.BundleConfig {
   readonly install?: PackageInstall;
 }
 
+export type { ExtraFile };
+
 export interface HostedProgramProps {
   main: string;
   handler?: string;
@@ -111,17 +122,17 @@ export interface HostedProgramProps {
    * Dockerfile `FROM` for the Effect-native image. Ignored for the
    * public-image path (`props.image` without `main`).
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim"
    */
   image?: string;
   env?: Record<string, any>;
   isExternal?: boolean;
   build?: RailwayBuildOptions;
   /**
-   * Registry prefix Railway can pull from after we push the bundled
-   * image (`ghcr.io/org`, `docker.io/user`). Required when `main` is set.
+   * Extra files/directories copied into `/app` after the bundled entry.
+   * Hashed into `code.hash` so asset-only changes rebuild the image.
    */
-  registry?: string;
+  extraFiles?: ReadonlyArray<ExtraFile>;
 }
 
 const matchesConfiguredExternal = (
@@ -140,91 +151,41 @@ const matchesConfiguredExternal = (
   );
 };
 
-export class RegistryRequired extends Data.TaggedError(
-  "Railway.RegistryRequired",
+export class ExtraFileMissing extends Data.TaggedError(
+  "Railway.ExtraFileMissing",
 )<{
-  message: string;
+  source: string;
+  dest: string;
 }> {}
 
-export class RegistryCredentialsMissing extends Data.TaggedError(
-  "Railway.RegistryCredentialsMissing",
-)<{
-  registry: string;
-}> {}
+const dockerfileCopyLines = (files: ReadonlyArray<ExtraFile> | undefined) =>
+  (files ?? []).flatMap((file) => {
+    const dest = extraFileDestination(file.dest);
+    if (isContextRootDest(dest)) return [];
+    return [`COPY ${dest} /app/${dest}`];
+  });
 
-const makeBunBootstrap =
+/**
+ * The generated entry for `Railway.Service` containers: a shim importing
+ * only `alchemy/Runtime/Bootstrap/Railway` plus the user's `main` — see
+ * that module for why the entry never imports alchemy's own dependencies.
+ */
+const makeNodeBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Railway";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 
-const tag = Context.Service(${JSON.stringify(Self.key)});
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.effect(
-  Stack,
-  Effect.all([
-    Config.string("ALCHEMY_STACK_NAME"),
-    Config.string("ALCHEMY_STAGE")
-  ]).pipe(
-    Effect.map(([name, stage]) => ({
-      name,
-      stage,
-      bindings: {},
-      resources: {}
-    }))
-  )
-);
-
-const program = tag.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Railway service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Railway service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `;
 
 /**
  * Inner Function module: builds the class layer so `serve` registers
- * `globalThis.__ALCHEMY_FUNCTION_FETCH__`. The canvas wrapper listens
- * first, then import()s this file.
+ * `globalThis.__aFF`. The canvas wrapper listens first, then import()s
+ * this file.
  */
 const makeFunctionBootstrap =
   (handler: string) =>
@@ -237,17 +198,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 const tag = Context.Service(${JSON.stringify(Self.key)});
 const layer = makeEntrypointLayer(tag, entrypoint);
-const platform = Layer.mergeAll(
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
+const platform = FetchHttpClient.layer;
 const stack = Layer.effect(
   Stack,
   Effect.all([
@@ -435,27 +392,60 @@ const wrapCanvasListener = (
     });
     const pins = [
       pinImport("effect", effectVersion),
-      pinImport("@effect/platform-bun", bunVersion),
+      ...(inner.includes("@effect/platform-bun")
+        ? [pinImport("@effect/platform-bun", bunVersion)]
+        : []),
       ...extraPins,
     ].join("\n");
     return `${pins}
-const g = globalThis;
-const port = Number(process.env.PORT ?? 3000);
-g.__ALCHEMY_FUNCTION_FETCH__ ??= async () => new Response("");
-Bun.serve({
-  hostname: "0.0.0.0",
-  port,
-  fetch: (r) => g.__ALCHEMY_FUNCTION_FETCH__(r),
-});
-try {
-  const innerUrl = new URL("./i.mjs", import.meta.url);
-  await Bun.write(innerUrl, ${JSON.stringify(inner)});
-  await import(innerUrl.href);
-} catch (error) {
-  g.__ALCHEMY_FUNCTION_FETCH__ = async () =>
-    new Response(String(error), { status: 500 });
+const g=globalThis,port=Number(process.env.PORT??3000);
+g.__aFF??=async()=>new Response("");
+Bun.serve({hostname:"0.0.0.0",port,fetch:r=>g.__aFF(r)});
+try{
+const u=new URL("./i.mjs",import.meta.url);
+await Bun.write(u,${JSON.stringify(inner)});
+await import(u.href);
+}catch(e){
+g.__aFF=async()=>new Response(String(e),{status:500});
 }
-await new Promise(()=>{});
+`;
+  });
+
+/**
+ * Canvas wrapper for async (non-Effect) Functions. No Effect pin, no
+ * `__aFF` bridge — the user's `export default { fetch }` is the handler,
+ * with `process.env` as the second argument (Cloudflare `env`).
+ */
+const wrapAsyncCanvasListener = (
+  inner: string,
+  handler: string,
+  install: Readonly<Record<string, string>> = {},
+) =>
+  Effect.sync(() => {
+    const extraPins = collectCanvasPackageRoots(inner, install).map((name) => {
+      const requested = install[name];
+      const version =
+        requested !== undefined && requested !== "*"
+          ? requested
+          : readPackageVersion(name);
+      return pinImport(name, version);
+    });
+    const pins = extraPins.join("\n");
+    const handlerLit = JSON.stringify(handler);
+    return `${pins}
+const port=Number(process.env.PORT??3000);
+const fail=e=>new Response(String(e),{status:500});
+try{
+const u=new URL("./i.mjs",import.meta.url);
+await Bun.write(u,${JSON.stringify(inner)});
+const m=await import(u.href);
+const e=m[${handlerLit}];
+const f=typeof e==="function"?e:e?.fetch;
+if(typeof f!=="function")throw new Error("async Function missing fetch");
+Bun.serve({hostname:"0.0.0.0",port,fetch:r=>f(r,process.env)});
+}catch(e){
+Bun.serve({hostname:"0.0.0.0",port,fetch:()=>fail(e)});
+}
 `;
   });
 
@@ -537,13 +527,18 @@ const createBundleProgram = (
      */
     canvasExternals?: boolean;
     bootstrap?: (handler: string) => (importPath: string) => string;
+    /**
+     * Bundle `main` as the entry with no virtual bootstrap. Used for
+     * async (non-Effect) canvas Functions (`isExternal`).
+     */
+    skipVirtualEntry?: boolean;
   },
 ) =>
   Effect.fn(function* (props: HostedProgramProps) {
     const handler = props.handler ?? "default";
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
-    const bootstrap = (options?.bootstrap ?? makeBunBootstrap)(handler);
+    const bootstrap = (options?.bootstrap ?? makeNodeBootstrap)(handler);
     const requested = yield* normalizeInstallTargets(props.build?.install);
     const installRoots = new Set(Object.keys(requested));
     const configuredExternal = props.build?.input?.external;
@@ -576,7 +571,9 @@ const createBundleProgram = (
             );
           },
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: canvasExternals
+              ? ["bun", "import", "module", "default"]
+              : [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [
@@ -594,15 +591,29 @@ const createBundleProgram = (
             output?.sourcemap ?? props.build?.output?.sourcemap ?? false,
           entryFileNames: "index.mjs",
           strictExecutionOrder: true,
-          keepNames: true,
+          keepNames: !canvasExternals,
         },
         props.build,
       );
     });
 
-    const bundleOutput = props.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
+    if (props.isExternal === true && options?.skipVirtualEntry !== true) {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const bytes = yield* fs.readFile(realMain);
+      const hash = yield* sha256(bytes);
+      return {
+        files: [{ path: path.basename(realMain), content: bytes }],
+        hash,
+      };
+    }
+
+    const bundleOutput = yield* buildBundle(
+      realMain,
+      options?.skipVirtualEntry === true
+        ? undefined
+        : virtualEntryPlugin(bootstrap),
+    );
 
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
@@ -634,6 +645,7 @@ export const createRailwayFunctionSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = createBundleProgram(virtualEntryPlugin, {
@@ -647,8 +659,17 @@ export const createRailwayFunctionSupport = ({
     },
   });
 
+  const asyncBundleProgram = createBundleProgram(virtualEntryPlugin, {
+    canvasExternals: true,
+    skipVirtualEntry: true,
+    output: { codeSplitting: false },
+  });
+
   const bundleToSource = Effect.fn(function* (props: HostedProgramProps) {
-    const bundled = yield* bundleProgram(props);
+    const bundled =
+      props.isExternal === true
+        ? yield* asyncBundleProgram(props)
+        : yield* bundleProgram(props);
     if (bundled.files.length !== 1) {
       return yield* new FunctionBundleNotSingleFile({
         files: bundled.files.map((file) => file.path),
@@ -656,7 +677,14 @@ export const createRailwayFunctionSupport = ({
     }
     const inner = decodeBundleText(bundled.files[0]!.content);
     const install = yield* normalizeInstallTargets(props.build?.install);
-    const source = yield* wrapCanvasListener(inner, install);
+    const source =
+      props.isExternal === true
+        ? yield* wrapAsyncCanvasListener(
+            inner,
+            props.handler ?? "default",
+            install,
+          )
+        : yield* wrapCanvasListener(inner, install);
     const hash = yield* sha256(source);
     return { source, hash };
   });
@@ -669,35 +697,44 @@ export const createRailwayFunctionSupport = ({
   return { alchemyEnv, bundleProgram, bundleToSource, hash };
 };
 
-const sanitizeImageRepo = (id: string): string => {
-  const lowered = id
-    .toLowerCase()
-    .replace(/[^a-z0-9_.-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return lowered.length === 0 ? "service" : lowered;
-};
-
 const generateDockerfile = (
   props: HostedProgramProps,
   hasChunks: boolean,
   install?: Record<string, string>,
+  entryRel?: string,
 ) => {
   const port = props.port ?? DEFAULT_PORT;
   const lines = [`FROM ${props.image ?? DEFAULT_BASE_IMAGE}`, `WORKDIR /app`];
   if (install !== undefined && Object.keys(install).length > 0) {
     lines.push(
       `COPY package.json /app/package.json`,
-      `RUN bun install --production`,
+      `RUN npm install --omit=dev --no-fund --no-audit`,
     );
+  }
+  if (props.isExternal === true) {
+    lines.push(`COPY . /app`);
+    const entry =
+      entryRel !== undefined && entryRel.length > 0
+        ? entryRel
+        : "serve-node.mjs";
+    lines.push(
+      `ENV PORT=${String(port)}`,
+      `ENV HOST=0.0.0.0`,
+      `EXPOSE ${String(port)}`,
+      `ENTRYPOINT ["node", ${JSON.stringify(`/app/${entry}`)}]`,
+    );
+    return `${lines.join("\n")}\n`;
   }
   lines.push(`COPY index.mjs /app/index.mjs`);
   if (hasChunks) {
     lines.push(`COPY *.js /app/`);
   }
+  lines.push(...dockerfileCopyLines(props.extraFiles));
   lines.push(
     `ENV PORT=${String(port)}`,
+    `ENV HOST=0.0.0.0`,
     `EXPOSE ${String(port)}`,
-    `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+    `ENTRYPOINT ["node", "/app/index.mjs"]`,
   );
   return `${lines.join("\n")}\n`;
 };
@@ -709,21 +746,10 @@ const installManifest = (dependencies: Record<string, string>) =>
     2,
   )}\n`;
 
-const registryHost = (registry: string): string => {
-  const trimmed = registry.replace(/\/+$/, "");
-  const host = trimmed.split("/")[0] ?? trimmed;
-  if (host === "docker.io" || host === "index.docker.io") {
-    return "https://index.docker.io/v1/";
-  }
-  if (host.includes(".")) return host;
-  return "https://index.docker.io/v1/";
-};
-
 export const createRailwayHostedSupport = ({
   stackName,
   stage,
   virtualEntryPlugin,
-  docker,
   dotAlchemy,
 }: {
   stackName: string;
@@ -731,13 +757,13 @@ export const createRailwayHostedSupport = ({
   virtualEntryPlugin: (
     content: (importPath: string) => string,
   ) => rolldown.Plugin;
-  docker: Docker["Service"];
   dotAlchemy: string;
 }) => {
   const alchemyEnv = {
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = createBundleProgram(virtualEntryPlugin);
@@ -757,130 +783,101 @@ export const createRailwayHostedSupport = ({
         : undefined;
     const packageJson =
       install === undefined ? undefined : installManifest(install);
+    const path = yield* Path.Path;
+    const extras = props.extraFiles ?? [];
+    const root = contextRootOf(realMain, extras, path, (source) =>
+      resolveExtraSource(source, path),
+    );
+    const entryRel =
+      props.isExternal === true
+        ? (posixRelUnder(root, realMain, path) ?? path.basename(realMain))
+        : undefined;
     const dockerfile = generateDockerfile(
       props,
       bundled.files.length > 1,
       install,
+      entryRel,
     );
+    const extraFiles = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
       packageJson,
+      extraFiles,
+      extraFilesIncludesNodeModules: true,
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash, packageJson };
   });
 
-  const imageExists = (imageRef: string) =>
-    docker.image.inspect(imageRef).pipe(
-      Effect.map(() => true),
-      Effect.catchReason("PlatformError", "NotFound", () =>
-        Effect.succeed(false),
-      ),
-    );
-
-  const pushBackoff = Schedule.exponential("2 seconds");
-
   /**
-   * Bundle `main`, content-hash the image, build it when missing, and
-   * push to `{registry}/{logicalId}:{hash}`. When `previousHash` matches,
-   * skip build and push.
+   * Write the generated Dockerfile + bundled entry + extraFiles into a
+   * stable context directory. Railway builds this; Alchemy does not.
    */
-  const resolveImage = Effect.fn(function* (input: {
+  const writeContext = Effect.fn(function* (input: {
     id: string;
     props: HostedProgramProps;
-    previousHash?: string;
-    session?: { note: (message: string) => Effect.Effect<void> };
-  }) {
-    const registry = input.props.registry?.replace(/\/+$/, "");
-    if (registry === undefined || registry.length === 0) {
-      return yield* new RegistryRequired({
-        message:
-          "Railway.Service with `main` requires `registry` (GHCR / Docker Hub prefix Railway can pull).",
-      });
-    }
-    const note = input.session?.note ?? ((_message: string) => Effect.void);
-    yield* note(`Bundling ${input.id} program...`);
-    const { bundled, dockerfile, codeHash, packageJson } =
-      yield* computeCodeHash(input.props);
-    const repo = sanitizeImageRepo(input.id);
-    const imageRef = `${registry}/${repo}:${codeHash}`;
-
-    if (input.previousHash === codeHash) {
-      return { imageRef, codeHash, registryCredentials: undefined };
-    }
-
-    if (!(yield* imageExists(imageRef))) {
-      const realMain = yield* resolveMainPath(input.props.main);
-      const contextDir = yield* getStableContextDir(
-        realMain,
-        dotAlchemy,
-        `${input.id}-image`,
-      );
-      const files = bundled.files.map((file, index) => ({
-        path: index === 0 ? "index.mjs" : file.path,
-        content: file.content,
-      }));
-      if (packageJson !== undefined) {
-        files.push({
-          path: "package.json",
-          content: new TextEncoder().encode(packageJson),
-        });
-      }
-      yield* docker.materialize({
-        context: contextDir,
-        dockerfile,
-        files,
-      });
-      yield* note(`Building container image ${imageRef}...`);
-      yield* docker.image.build({
-        context: contextDir,
-        tag: imageRef,
-        platform: MACHINE_PLATFORM,
-      });
-      yield* note(`Built ${imageRef}`);
-    }
-
-    const username = yield* Effect.sync(
-      () =>
-        process.env.RAILWAY_REGISTRY_USERNAME ??
-        process.env.GITHUB_ACTOR ??
-        process.env.DOCKERHUB_USERNAME,
-    );
-    const passwordPlain = yield* Effect.sync(
-      () =>
-        process.env.RAILWAY_REGISTRY_PASSWORD ??
-        process.env.GITHUB_TOKEN ??
-        process.env.DOCKERHUB_TOKEN ??
-        process.env.DOCKER_PASSWORD,
-    );
-    if (
-      username === undefined ||
-      username.length === 0 ||
-      passwordPlain === undefined ||
-      passwordPlain.length === 0
-    ) {
-      return yield* new RegistryCredentialsMissing({ registry });
-    }
-
-    yield* note(`Pushing ${imageRef}...`);
-    yield* docker.image
-      .push(imageRef, {
-        server: registryHost(registry),
-        username,
-        password: Redacted.make(passwordPlain),
-      })
-      .pipe(
-        Effect.retry({
-          times: 3,
-          schedule: pushBackoff,
-        }),
-      );
-    yield* note(`Pushed ${imageRef}`);
-    return {
-      imageRef,
-      codeHash,
-      registryCredentials: { username, password: passwordPlain },
+    hashed: {
+      bundled: {
+        files: ReadonlyArray<{ path: string; content: string | Uint8Array }>;
+      };
+      dockerfile: string;
+      packageJson: string | undefined;
     };
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const realMain = yield* resolveMainPath(input.props.main);
+    const contextDir = yield* getStableContextDir(
+      realMain,
+      dotAlchemy,
+      `${input.id}-image`,
+    );
+    if (yield* fs.exists(contextDir)) {
+      yield* fs.remove(contextDir, { recursive: true });
+    }
+    yield* fs.makeDirectory(contextDir, { recursive: true });
+    const files: Array<{ path: string; content: string | Uint8Array }> = [
+      { path: "Dockerfile", content: input.hashed.dockerfile },
+      ...(input.props.isExternal === true
+        ? []
+        : input.hashed.bundled.files.map((file, index) => ({
+            path: index === 0 ? "index.mjs" : file.path,
+            content: file.content,
+          }))),
+    ];
+    if (input.hashed.packageJson !== undefined) {
+      files.push({
+        path: "package.json",
+        content: input.hashed.packageJson,
+      });
+    }
+    for (const file of files) {
+      const fullPath = path.join(contextDir, file.path);
+      yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
+      if (typeof file.content === "string") {
+        yield* fs.writeFileString(fullPath, file.content);
+      } else {
+        yield* fs.writeFile(fullPath, file.content);
+      }
+    }
+    yield* copyExtraFiles(contextDir, input.props.extraFiles, {
+      onMissing: (file) => new ExtraFileMissing(file),
+    });
+    if (input.props.isExternal === true) {
+      const extras = input.props.extraFiles ?? [];
+      const root = contextRootOf(realMain, extras, path, (source) =>
+        resolveExtraSource(source, path),
+      );
+      const entryRel =
+        posixRelUnder(root, realMain, path) ?? path.basename(realMain);
+      const dest = path.join(contextDir, entryRel);
+      if (!(yield* fs.exists(dest))) {
+        yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+        const contents = yield* fs.readFile(realMain);
+        yield* fs.writeFile(dest, contents);
+      }
+    }
+    return contextDir;
   });
 
   const hash = Effect.fn(function* (props: HostedProgramProps) {
@@ -892,7 +889,7 @@ export const createRailwayHostedSupport = ({
     alchemyEnv,
     bundleProgram,
     computeCodeHash,
-    resolveImage,
+    writeContext,
     hash,
   };
 };

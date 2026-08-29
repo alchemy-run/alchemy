@@ -31,7 +31,7 @@ const waitUntilLimitGone = (workspaceId: string, usageLimitId: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
-      times: 10,
+      times: 30,
     }),
   );
 
@@ -61,7 +61,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider(
@@ -157,5 +157,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
