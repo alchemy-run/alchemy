@@ -526,17 +526,30 @@ const waitUntilReady = (name: string, addOnId: string) =>
   );
 
 const waitUntilGone = (addOnId: string, name: string) =>
-  findById(addOnId).pipe(
-    Effect.map((addOn) => addOn === undefined),
-    Effect.flatMap((goneById) =>
-      goneById
-        ? Effect.succeed(true)
-        : findByName(name).pipe(Effect.map((addOn) => addOn === undefined)),
-    ),
-    Effect.repeat({
+  Effect.gen(function* () {
+    // Best-effort: Tigris often answers "The specified bucket does not
+    // exist" (untyped UnknownFlyIoError) for a delete that already
+    // succeeded. Never fail the wait on that — only on the add-on still
+    // showing up in list.
+    yield* Effect.result(
+      addons.deleteAddOn({
+        input: addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS },
+      }),
+    );
+    const still =
+      (yield* findById(addOnId)) ??
+      (name.length > 0 ? yield* findByName(name) : undefined);
+    if (still !== undefined) {
+      return yield* new BucketPending({
+        name,
+        status: still.status ?? "deleting",
+      });
+    }
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Fly.BucketPending",
       schedule: Schedule.spaced("2 seconds"),
-      until: (gone) => gone,
-      times: 10,
+      times: 20,
     }),
   );
 
@@ -755,22 +768,11 @@ export const BucketProvider = () =>
       const addOnId = output.addOnId;
       const name = output.name;
       if (addOnId.length === 0 && name.length === 0) return;
-      const deleted = yield* Effect.result(
-        addons.deleteAddOn({
-          input: addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS },
-        }),
-      );
-      if (Result.isFailure(deleted)) {
-        const still = yield* findById(addOnId);
-        const stillNamed =
-          still === undefined && name.length > 0
-            ? yield* findByName(name)
-            : still;
-        if (stillNamed !== undefined) {
-          return yield* Effect.fail(deleted.failure);
-        }
-        return;
-      }
+      // Always wait for the add-on to leave the list. A failed
+      // deleteAddOn plus a single list miss is not gone — Tigris
+      // list lags, and a bucket still attached to an App is a
+      // transient error. waitUntilGone retries delete and only
+      // succeeds once list (id and name) is empty.
       yield* waitUntilGone(addOnId, name);
     }),
   });

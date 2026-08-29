@@ -1,3 +1,4 @@
+import { Action } from "@/Action";
 import { adopt, Unowned } from "@/AdoptPolicy";
 import type { DestroyError } from "@/Apply";
 import { Cli } from "@/Cli/Cli";
@@ -6,6 +7,7 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
+import { remote } from "@/ProviderMode.ts";
 import { Stack } from "@/Stack";
 import {
   type CreatingResourceState,
@@ -42,6 +44,7 @@ import {
   modalCalls,
   type ModalResourceProps,
   PhasedTarget,
+  ProbeBinding,
   StaticStablesResource,
   TestLayers,
   TestResource,
@@ -6321,6 +6324,57 @@ describe("provider modes (local ⇄ live)", () => {
 
         yield* stack.destroy();
         expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+describe("binding client data-plane routing (apply)", () => {
+  // Action bodies invoke Binding.Service clients at apply time. In a
+  // `dev` run the wrap must route local resources to the emulator plane
+  // and `Alchemy.remote()` resources to the live plane — the inverse of
+  // each other, and never ambient.
+
+  test.provider(
+    "dev Action on a local resource hits the emulator plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" });
+            const Probe = Action(
+              "ProbeLocal",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("local");
+      }),
+  );
+
+  test.provider(
+    "dev Action on a remote() resource hits the live plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" }).pipe(
+              remote(),
+            );
+            const Probe = Action(
+              "ProbeRemote",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("live");
       }),
   );
 });

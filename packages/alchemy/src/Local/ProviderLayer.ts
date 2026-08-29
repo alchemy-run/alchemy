@@ -75,6 +75,15 @@ export const dual = <
      * Pass a module-memoized layer reference.
      */
     dataPlane?: () => Layer.Layer<any, any, never>;
+    /**
+     * Data-plane override for **live** mode — the inverse of
+     * {@link dataPlane}. Stamped as {@link ProviderService.liveDataPlane} so
+     * `Alchemy.remote()` binding clients in a `dev` run provide the live
+     * chain closest (ambient is the emulator). Pass a module-memoized
+     * layer reference. AWS duals also get this from
+     * `pinCollectionEnvironment`.
+     */
+    liveDataPlane?: () => Layer.Layer<any, any, never>;
   },
 ): Layer.Layer<
   Layer.Success<LayerLive | LayerLocal>,
@@ -131,6 +140,7 @@ export const dual = <
         mode: defaultMode,
         modes,
         localDataPlane: input.dataPlane,
+        liveDataPlane: input.liveDataPlane,
       } satisfies ProviderService<R>);
     }),
   ) as any;

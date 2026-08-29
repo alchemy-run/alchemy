@@ -668,6 +668,11 @@ export const InstanceProvider = () =>
             handler: raw.handler,
             build: raw.build,
             port: raw.port,
+            // `isExternal` chooses the bundler entry (raw file vs virtual
+            // `export default` wrapper). Omitting it here re-bundles an
+            // external program as an Effect entrypoint and fails the plan
+            // with MISSING_EXPORT when the source has no default export.
+            isExternal: raw.isExternal,
           };
           if (
             isResolved(contentInputs) &&

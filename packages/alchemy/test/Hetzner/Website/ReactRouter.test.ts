@@ -98,6 +98,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(
       logLevel,
+      Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
       Effect.catchTag(["PreconditionFailed", "Forbidden"], (error) =>
         Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
       ),
