@@ -27,7 +27,12 @@ import {
   captureAwsEnvironment,
   pinCollectionEnvironment,
 } from "./Local/ProviderContext.ts";
-import { flociDual, flociServices } from "./Local/FlociServices.ts";
+import {
+  FlociProfileService,
+  flociDual,
+  flociServices,
+  type FlociProfile,
+} from "./Local/FlociServices.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import {
@@ -239,7 +244,13 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
   "AWS",
 ) {}
 
-export const providers = () =>
+/** Provider-wide configuration for local AWS emulation. */
+export interface ProvidersOptions {
+  /** Identity, endpoint, and lifecycle settings for the Floci local mode. */
+  readonly local?: FlociProfile;
+}
+
+export const providers = (options: ProvidersOptions = {}) =>
   Layer.effect(
     Providers,
     // Providers are PINNED to the environment they are registered with (the
@@ -1956,6 +1967,7 @@ export const providers = () =>
     Layer.provideMerge(Credentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),
     Layer.provideMerge(DefaultEnvironment),
+    Layer.provideMerge(Layer.succeed(FlociProfileService, options.local ?? {})),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every AWS SDK call. Like distilled's
