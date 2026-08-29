@@ -9,8 +9,11 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
+import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
+
+const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -277,20 +280,29 @@ export const ContainerProvider = () =>
         );
       });
 
+      const inspect = (name: string, context?: string) =>
+        docker.container
+          .inspect(name, context)
+          .pipe(
+            Effect.catchReason(
+              "PlatformError",
+              "NotFound",
+              () => Effect.undefined,
+            ),
+          );
+
+      const remove = (name: string, context?: string) =>
+        docker.container.stop(name, context).pipe(
+          Effect.andThen(docker.container.remove(name, true, context)),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+        );
+
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
-          const info = yield* docker.container
-            .inspect(name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+          const info = yield* inspect(name, context);
           if (!info) return undefined;
           // `olds.image` may be `undefined` when a `creating` row was
           // persisted before upstream Outputs resolved — fall back to the
@@ -342,52 +354,46 @@ export const ContainerProvider = () =>
         }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const oldContext = dockerContextName(olds?.context);
-          const oldArgs =
-            olds?.image === undefined
-              ? undefined
-              : yield* makeCreateArgs(id, olds, instanceId);
-          const inspect = (name: string, engineContext?: string) =>
-            docker.container
-              .inspect(name, engineContext)
-              .pipe(
-                Effect.catchReason(
-                  "PlatformError",
-                  "NotFound",
-                  () => Effect.undefined,
-                ),
-              );
-          const remove = (
-            container: Docker.Container,
-            engineContext?: string,
-          ) =>
-            docker.container.stop(container.Id, engineContext).pipe(
-              Effect.andThen(
-                docker.container.remove(container.Id, true, engineContext),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            );
-
-          const live = yield* inspect(args.name, context);
+          const configHash = yield* sha256Object({
+            ...args,
+            imageId: normalizeImageId(news.image),
+          });
+          // Adoption has output but no olds. In that case the observed
+          // container already lives in the desired context.
+          const oldContext = olds ? dockerContextName(olds.context) : context;
+          const desiredLive = yield* inspect(args.name, context);
           const previous =
             output && (output.name !== args.name || oldContext !== context)
               ? yield* inspect(output.name, oldContext)
               : undefined;
           if (previous) {
-            yield* remove(previous, oldContext);
+            yield* remove(previous.Id, oldContext);
           }
+          const live =
+            desiredLive?.Id === previous?.Id ? undefined : desiredLive;
 
+          const oldArgs =
+            live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined &&
+            olds !== undefined
+              ? yield* makeCreateArgs(
+                  id,
+                  {
+                    ...olds,
+                    image: olds.image ?? output?.imageRef ?? news.image,
+                  },
+                  instanceId,
+                )
+              : undefined;
           const recreate =
             live !== undefined &&
-            ((oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
-              normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
-              !matchesDesiredCreateConfiguration(live, args, news.image));
+            (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
+              ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
+                normalizeImageId(olds?.image) !==
+                  normalizeImageId(news.image) ||
+                !matchesLegacyConfig(live, args, news.image)
+              : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
           if (recreate) {
-            yield* remove(live, context);
+            yield* remove(live.Id, context);
           }
 
           const current = recreate ? undefined : live;
@@ -396,7 +402,11 @@ export const ContainerProvider = () =>
             const { stdout: containerId } = yield* docker.container.create({
               ...args,
               context,
-              label: { ...args.label, ...internalTags },
+              label: {
+                ...args.label,
+                ...internalTags,
+                [CREATE_CONFIG_HASH_LABEL]: configHash,
+              },
             });
             yield* Effect.forEach(
               news.networks ?? [],
@@ -429,22 +439,7 @@ export const ContainerProvider = () =>
             );
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.container
-            .stop(output.name, dockerContextName(olds.context))
-            .pipe(
-              Effect.andThen(
-                docker.container.remove(
-                  output.name,
-                  true,
-                  dockerContextName(olds.context),
-                ),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            ),
+          remove(output.name, dockerContextName(olds.context)),
         ),
       });
     }),
@@ -458,7 +453,10 @@ const normalizeImageId = (image: Container.Image | undefined) =>
 
 type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
 
-const matchesDesiredCreateConfiguration = (
+// Containers created before config hashes were introduced are compared using
+// the fields Docker reports without image-default normalization. A subsequent
+// create stamps the complete resolved configuration hash.
+const matchesLegacyConfig = (
   live: Docker.Container,
   desired: CreateArgs,
   image: Container.Image,
@@ -470,93 +468,52 @@ const matchesDesiredCreateConfiguration = (
     Equal.equals(live.Config.Cmd, desired.command)) &&
   Object.entries(desired.env ?? {}).every(([key, value]) =>
     live.Config.Env?.includes(`${key}=${value}`),
-  ) &&
-  Equal.equals(
-    [...(live.HostConfig.Binds ?? [])].sort(),
-    [...(desired.volume ?? [])].sort(),
-  ) &&
-  Equal.equals(
-    Object.entries(live.HostConfig.PortBindings ?? {})
-      .flatMap(([internal, bindings]) =>
-        (bindings ?? []).map((binding) => `${binding.HostPort}:${internal}`),
-      )
-      .sort(),
-    [...(desired.p ?? [])].sort(),
-  ) &&
-  live.HostConfig.RestartPolicy.Name === desired.restart &&
-  live.HostConfig.AutoRemove === desired.rm &&
-  Object.entries(desired.label ?? {}).every(
-    ([key, value]) => live.Config.Labels?.[key] === value,
-  ) &&
-  (desired["stop-timeout"] === undefined ||
-    live.Config.StopTimeout === Number(desired["stop-timeout"])) &&
-  matchesDesiredHealthcheck(live.Config.Healthcheck, desired);
-
-const matchesDesiredHealthcheck = (
-  live: Docker.Container["Config"]["Healthcheck"],
-  desired: CreateArgs,
-) => {
-  if (desired["health-cmd"] === undefined) return true;
-  return (
-    Equal.equals(live?.Test, ["CMD-SHELL", desired["health-cmd"]]) &&
-    (desired["health-interval"] === undefined ||
-      live?.Interval === parseDockerDuration(desired["health-interval"])) &&
-    (desired["health-timeout"] === undefined ||
-      live?.Timeout === parseDockerDuration(desired["health-timeout"])) &&
-    live?.Retries === desired["health-retries"] &&
-    (desired["health-start-period"] === undefined ||
-      live?.StartPeriod ===
-        parseDockerDuration(desired["health-start-period"])) &&
-    (desired["health-start-interval"] === undefined ||
-      live?.StartInterval ===
-        parseDockerDuration(desired["health-start-interval"]))
   );
-};
-
-const parseDockerDuration = (duration: string | undefined) =>
-  duration?.endsWith("ns") ? Number(duration.slice(0, -2)) : undefined;
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
-    Effect.map((name): CreateArgs => ({
-      name,
-      image: normalizeImageRef(news.image),
-      command: news.command,
-      env: normalizeEnvironment(news.environment),
-      volume: news.volumes?.map(
-        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-      ),
-      p: news.ports?.map(
-        (port) => `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
-      ),
-      restart: news.restart ?? "no",
-      label: news.labels,
-      "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
-      rm: news.removeOnExit ?? false,
-      ...(news.healthcheck
-        ? {
-            "health-cmd": Array.isArray(news.healthcheck.cmd)
-              ? news.healthcheck.cmd.join(" ")
-              : news.healthcheck.cmd,
-            "health-interval": normalizeDuration(news.healthcheck.interval),
-            "health-timeout": normalizeDuration(news.healthcheck.timeout),
-            "health-retries": news.healthcheck.retries ?? 0,
-            "health-start-period": normalizeDuration(
-              news.healthcheck.startPeriod,
-            ),
-            "health-start-interval": normalizeDuration(
-              news.healthcheck.startInterval,
-            ),
-          }
-        : {
-            "health-cmd": undefined,
-            "health-interval": undefined,
-            "health-timeout": undefined,
-            "health-retries": undefined,
-            "health-start-period": undefined,
-            "health-start-interval": undefined,
-          }),
-    })),
+    Effect.map(
+      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
+        name,
+        image: normalizeImageRef(news.image),
+        command: news.command,
+        env: normalizeEnvironment(news.environment),
+        volume: news.volumes?.map(
+          (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+        ),
+        p: news.ports?.map(
+          (port) =>
+            `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
+        ),
+        restart: news.restart ?? "no",
+        label: news.labels,
+        "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
+        rm: news.removeOnExit ?? false,
+        ...(news.healthcheck
+          ? {
+              "health-cmd": Array.isArray(news.healthcheck.cmd)
+                ? news.healthcheck.cmd.join(" ")
+                : news.healthcheck.cmd,
+              "health-interval": normalizeDuration(news.healthcheck.interval),
+              "health-timeout": normalizeDuration(news.healthcheck.timeout),
+              "health-retries": news.healthcheck.retries ?? 0,
+              "health-start-period": normalizeDuration(
+                news.healthcheck.startPeriod,
+              ),
+              "health-start-interval": normalizeDuration(
+                news.healthcheck.startInterval,
+              ),
+            }
+          : {
+              "health-cmd": undefined,
+              "health-interval": undefined,
+              "health-timeout": undefined,
+              "health-retries": undefined,
+              "health-start-period": undefined,
+              "health-start-interval": undefined,
+            }),
+      }),
+    ),
   );
 
 const toContainerAttributes = (
