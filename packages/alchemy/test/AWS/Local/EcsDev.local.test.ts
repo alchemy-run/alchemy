@@ -28,6 +28,7 @@ import { State, type ResourceState } from "@/State";
 import { Stack } from "@/Stack";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -68,6 +69,10 @@ const getState = Effect.fn(function* (fqn: string) {
     fqn,
   })) as ResourceState | undefined;
 });
+
+class RunTaskRejected extends Data.TaggedError("RunTaskRejected")<{
+  readonly status: number;
+}> {}
 
 /** Raw ECS operation against the emulator gateway (out-of-band). */
 const rawEcs = (action: string, body: Record<string, unknown>) =>
@@ -116,13 +121,25 @@ const runTaskRoundTrip = Effect.fn(function* (options: {
 
   // Out-of-band: run the deployed task definition on the deployed cluster
   // through the raw gateway API. floci launches a REAL docker container.
+  // Full-suite load can 400 the first RunTask; retry until the emulator
+  // accepts it rather than failing the whole file.
   const runResponse = yield* rawEcs("RunTask", {
     cluster: options.clusterName,
     taskDefinition: options.taskDefinitionArn,
     count: 1,
     launchType: "EC2",
-  });
-  expect(runResponse.status).toBe(200);
+  }).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? Effect.succeed(response)
+        : Effect.fail(new RunTaskRejected({ status: response.status })),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "RunTaskRejected",
+      times: 8,
+      schedule: Schedule.exponential("500 millis"),
+    }),
+  );
   const run = (yield* runResponse.json) as {
     tasks?: { taskArn?: string; lastStatus?: string }[];
     failures?: unknown[];
