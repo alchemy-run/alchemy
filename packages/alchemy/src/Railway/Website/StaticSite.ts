@@ -10,6 +10,7 @@ import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Command from "../../Command/index.ts";
 import * as Namespace from "../../Namespace.ts";
+import type * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { CustomDomain } from "../CustomDomain.ts";
@@ -21,9 +22,13 @@ import {
   type Website,
 } from "./FrameworkSite.ts";
 
+// `env` comes from FrameworkSiteProps (which additionally accepts `Output`
+// values, e.g. `VITE_API_URL: api.url`) — it must be omitted from the
+// BuildProps side because interfaces cannot extend two parents whose `env`
+// members differ.
 export interface StaticSiteProps
   extends
-    Command.BuildProps,
+    Omit<Command.BuildProps, "env">,
     Pick<
       FrameworkSiteProps,
       "project" | "environment" | "domain" | "tags" | "env"
@@ -68,8 +73,13 @@ export interface StaticSiteProps
 }
 
 const envRecord = (
-  env: Record<string, string | Redacted.Redacted<string>> | undefined,
-): Record<string, string> | undefined => {
+  env:
+    | Record<
+        string,
+        string | Redacted.Redacted<string> | Output.Output<string | undefined>
+      >
+    | undefined,
+): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(env).map(([key, value]) => [

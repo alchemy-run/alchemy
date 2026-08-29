@@ -55,6 +55,18 @@ export class FrameworkServerError extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
+/** Drops `undefined`-valued entries from {@link ServerProps.env}. */
+const definedEnv = (
+  env: Record<string, string | undefined> | undefined,
+): Record<string, string> | undefined =>
+  env === undefined
+    ? undefined
+    : Object.fromEntries(
+        Object.entries(env).filter(
+          (entry): entry is [string, string] => entry[1] !== undefined,
+        ),
+      );
+
 /**
  * Options for the local dev server that runs a framework site under
  * `alchemy dev`.
@@ -137,8 +149,12 @@ export interface ServerProps {
    * applied to the dev server's process environment (the dev sidecar and
    * any child it spawns) so server code reads the same values in both
    * modes. Changing a value restarts the dev server.
+   *
+   * Entries whose value is `undefined` are dropped — this lets website
+   * composites forward optional values (e.g. an `Output` service URL that
+   * resolves to `undefined`) without filtering first.
    */
-  env?: Record<string, string>;
+  env?: Record<string, string | undefined>;
   /**
    * Controls which files are hashed to decide whether the build should
    * re-run. By default every non-gitignored file in the root is hashed,
@@ -281,7 +297,7 @@ export const ServerProviderLive = () =>
         const root = path.resolve(initialCwd, props.root ?? ".");
         const service = yield* makeFramework(props, root);
         return yield* Effect.mapError(
-          service.build({ root, env: props.env }),
+          service.build({ root, env: definedEnv(props.env) }),
           (cause) =>
             new FrameworkServerError({
               framework: props.framework,
@@ -482,6 +498,7 @@ export const ServerProviderLocal = () =>
           if (props.env !== undefined) {
             yield* Effect.sync(() => {
               for (const [key, value] of Object.entries(props.env!)) {
+                if (value === undefined) continue;
                 process.env[key] = String(value);
               }
             });
