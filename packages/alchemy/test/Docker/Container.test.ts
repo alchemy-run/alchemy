@@ -401,4 +401,107 @@ describe("Docker.Container", { concurrent: false }, () => {
       expect(health?.StartPeriod).toBe(1_000_000_000);
     }),
   );
+  test.provider(
+    "reports the host port Docker assigned to a random publish (#1388)",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("random-port-container", {
+            image: "nginx:alpine",
+            // `external: 0` = "any free host port".
+            ports: [{ external: 0, internal: 80 }],
+            start: true,
+          }),
+        );
+
+        // Before the fix this was 0: the create arg asked for host port 0
+        // literally, and the requested binding was then reported over the
+        // assigned one.
+        const assigned = container.ports["80/tcp"];
+        expect(assigned).toBeGreaterThan(0);
+
+        // …and it is the port the container is actually published on.
+        const runtime = yield* docker.container.inspect(container.name);
+        expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ HostPort: `${assigned}` }),
+          ]),
+        );
+      }),
+  );
+
+  test.provider("forwards extra hosts to the container (#1387)", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = yield* stack.deploy(
+        Docker.Container("extra-hosts-container", {
+          image: "nginx:alpine",
+          extraHosts: [
+            "host.docker.internal:host-gateway",
+            "db.internal:10.1.2.3",
+          ],
+          start: true,
+        }),
+      );
+
+      const runtime = yield* docker.container.inspect(container.name);
+      expect(runtime?.HostConfig.ExtraHosts).toEqual(
+        expect.arrayContaining([
+          "host.docker.internal:host-gateway",
+          "db.internal:10.1.2.3",
+        ]),
+      );
+    }),
+  );
+
+  test.provider(
+    "disconnects only the networks alchemy connected (#1386)",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const foreign = "alchemy-test-foreign-network";
+
+        const deploy = (attach: boolean) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const network = yield* Docker.Network("managed-network");
+              const container = yield* Docker.Container("managed-container", {
+                image: "nginx:alpine",
+                networks: attach ? [{ name: network.name }] : [],
+              });
+              return { container, network };
+            }),
+          );
+
+        const first = yield* deploy(true);
+
+        // A network alchemy never connected the container to — the case a
+        // user, compose file, or another tool creates.
+        yield* docker.network
+          .create({ name: foreign, driver: "bridge" })
+          .pipe(Effect.ignore);
+        yield* Effect.addFinalizer(() =>
+          docker.network.remove(foreign).pipe(Effect.ignore),
+        );
+        yield* docker.network.connect({
+          network: foreign,
+          container: first.container.name,
+        });
+
+        // Drop the managed network from the desired state.
+        const second = yield* deploy(false);
+        expect(second.container.id).toBe(first.container.id);
+
+        const info = yield* docker.container.inspect(second.container.name);
+        const attached = Object.keys(info?.NetworkSettings.Networks ?? {});
+        // Ours goes…
+        expect(attached).not.toContain(first.network.name);
+        // …the foreign one and Docker's own default stay. Before the fix the
+        // reconciler swept every live network and tore off both.
+        expect(attached).toContain(foreign);
+        expect(attached).toContain("bridge");
+      }),
+    { timeout: 240_000 },
+  );
 });
