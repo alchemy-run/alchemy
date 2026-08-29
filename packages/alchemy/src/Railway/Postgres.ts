@@ -709,8 +709,10 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.PostgresPending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      // serviceCreate fans the instance out to each environment
+      // asynchronously; under full-suite load the fan-out can take minutes.
+      times: 60,
+      schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.catchTag("Railway.PostgresPending", () =>
       getInstance(environmentId, serviceId),

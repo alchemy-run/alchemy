@@ -34,12 +34,18 @@ const examples = [
   // "./examples/aws-website-vite",
   // "./examples/aws-website-waku",
   "./examples/fly-app",
-  "./examples/railway-project",
   "./examples/fly-service",
   "./examples/fly-website-vite",
   "./examples/hetzner-website-vite",
-  "./examples/railway-service",
-  "./examples/railway-website-vite",
+  // Railway examples are gated out of test:examples for now: repeated
+  // Railway platform outages (deployment queue backlogs, e.g. the
+  // 2026-08-28 "Deployments slow to start" incident) and general
+  // flakiness working with Railway's API make these suites too
+  // unreliable for CI. Run them from the example directory with
+  // `bun test` when Railway is healthy.
+  // "./examples/railway-project",
+  // "./examples/railway-service",
+  // "./examples/railway-website-vite",
   // Card-app Website composites (same apps as the AWS/Cloudflare
   // *-website-* examples). Commented so CI does not provision extra
   // sites; run them from the example directory with `bun test`.
