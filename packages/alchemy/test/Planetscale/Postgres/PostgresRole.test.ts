@@ -18,6 +18,15 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
+
+const expectPrivateConnectionDetails = (role: {
+  privateHost: string;
+  privateConnectionServiceName: string;
+}) => {
+  expect(role.privateHost).toEqual(expect.any(String));
+  expect(role.privateConnectionServiceName).toEqual(expect.any(String));
+};
+
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("PostgresRole", () => {
@@ -39,6 +48,7 @@ describe
             database: expect.any(String),
             branch: expect.any(String),
           });
+          expectPrivateConnectionDetails(r);
         }
       }).pipe(logLevel),
     );
@@ -105,6 +115,7 @@ describe
             database: expect.any(String),
             branch: expect.any(String),
           });
+          expectPrivateConnectionDetails(r);
         }
       }).pipe(logLevel),
     );
@@ -185,6 +196,19 @@ describe
             branch: "main",
             organization: database.organization,
           });
+          expectPrivateConnectionDetails(role1);
+
+          const defaultRoleFromApi = yield* ps.getDefaultRole({
+            organization: database.organization,
+            database: database.name,
+            branch: "main",
+          });
+          expect(role1.privateConnectionServiceName).toEqual(
+            defaultRoleFromApi.private_connection_service_name,
+          );
+          expect(role1.privateHost).toEqual(
+            defaultRoleFromApi.private_access_host_url,
+          );
 
           // Second: create again without forceReset — should fail (default already exists)
           const exit = yield* stack
@@ -285,6 +309,18 @@ describe
             username: expect.any(String),
             password: expect.any(Object),
           });
+          expectPrivateConnectionDetails(role);
+
+          const roleFromApi = yield* ps.getRole({
+            id: role.id,
+            database: database.name,
+            organization: database.organization,
+            branch: "main",
+          });
+          expect(role.privateConnectionServiceName).toEqual(
+            roleFromApi.private_connection_service_name,
+          );
+          expect(role.privateHost).toEqual(roleFromApi.private_access_host_url);
 
           // Update role with different ttl (should trigger replacement)
           const { updatedRole } = yield* stack.deploy(

@@ -115,11 +115,15 @@ export interface PostgresRoleAttributes {
   databaseName: string;
   /** Parsed direct (port 5432) connection components ready to feed into Cloudflare Hyperdrive. */
   origin: PostgresOrigin;
-  /** Parsed pooled (PSBouncer, port 6432) connection components, e.g. for a Hyperdrive `dev` origin. */
+  /** Parsed pooled (PgBouncer, port 6432) connection components, e.g. for a Hyperdrive `dev` origin. */
   pooledOrigin: PostgresOrigin;
+  /** Private connection host or DNS zone supplied by PlanetScale. */
+  privateHost: string;
+  /** Service name supplied by PlanetScale to establish a private connection. */
+  privateConnectionServiceName: string;
   /** Direct connection URL for the database (Redacted). */
   connectionUrl: Redacted.Redacted<string>;
-  /** Pooled connection URL via PSBouncer (port 6432, Redacted). */
+  /** Pooled connection URL via PgBouncer (port 6432, Redacted). */
   connectionUrlPooled: Redacted.Redacted<string>;
   /** Inherited roles. */
   inheritedRoles: InheritedRole[];
@@ -495,6 +499,8 @@ const buildAttributes = (
     name: string;
     expires_at: string | null;
     access_host_url: string;
+    private_access_host_url: string;
+    private_connection_service_name: string;
     username: string;
     database_name: string;
     ttl: number | null;
@@ -521,6 +527,8 @@ const buildAttributes = (
     password,
     connectionUrl: Redacted.make(connectionUrl),
     connectionUrlPooled: Redacted.make(connectionUrlPooled),
+    privateHost: role.private_access_host_url,
+    privateConnectionServiceName: role.private_connection_service_name,
     inheritedRoles: context.inheritedRoles,
     successor: context.successor,
     organization: context.organization,
