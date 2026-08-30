@@ -33,6 +33,8 @@ interface WorkflowStatus {
   status: string;
   output?: {
     greeting: string;
+    retriedOk: boolean;
+    boundedOk: boolean;
     workflowName: string;
     instanceId: string;
   };
@@ -170,6 +172,15 @@ test.provider(
       expect(status.output?.greeting).toBe("Hello, world!");
       expect(status.output?.instanceId).toBe(instanceId);
 
+      // The fixture's partially-configured steps ran. Before
+      // `toWorkflowStepConfig` stopped emitting keys it had no value for, the
+      // `retry-only` step clobbered the engine's default `timeout` with
+      // `undefined` and this instance ended `errored` with
+      // `Cannot read properties of undefined (reading 'match')`.
+      expect(status.error).toBeFalsy();
+      expect(status.output?.retriedOk).toBe(true);
+      expect(status.output?.boundedOk).toBe(true);
+
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -237,6 +248,8 @@ test.provider(
         Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
       );
       expect(status.output?.greeting).toBe("Hello, world!");
+      expect(status.output?.retriedOk).toBe(true);
+      expect(status.output?.boundedOk).toBe(true);
 
       yield* stack.destroy();
 
