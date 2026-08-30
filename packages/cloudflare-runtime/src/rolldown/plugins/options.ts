@@ -248,6 +248,28 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>(
             },
           };
         },
+        // Vite merges every plugin's `config` result into the config the next
+        // plugin sees, so the entry input returned above is UNIONED with an
+        // input the app's own plugins declared for the same environment — a
+        // framework that names its own server entry (Foldkit's `ssr.build`,
+        // for one) leaves two entry chunks in the bundle, and the deployed
+        // Worker becomes whichever one the bundle happens to list first.
+        // `main` names the Worker entry, so when it is set it replaces rather
+        // than joins. This hook runs per environment after config resolution,
+        // where nothing merges over it.
+        options(options) {
+          if (pluginOptions.main === undefined) return;
+          // Only the entry environment carries the Worker's input; children
+          // (e.g. an RSC build's `ssr`) keep the entries their framework gave
+          // them. Without a resolvable environment there is nothing to check
+          // against, so leave the options alone.
+          const environmentName = this.environment?.name;
+          if (environmentName === undefined) return;
+          if (environmentName !== parseViteEnvironments(pluginOptions)[0])
+            return;
+          options.input = wrapInput(input);
+          return options;
+        },
       },
     };
   },
