@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import HttpStack from "./fixtures/stack-http.ts";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -227,66 +228,86 @@ const exercise = (
   });
 
 /**
- * Deploys six Workers that all bind one shared R2 bucket — read /
- * write / read-write, each over the native Worker binding
- * (`*BucketBinding`) and over a scoped HTTP API token (`*BucketHttp`)
- * — via {@link Stack}, then drives each binding flavor over `fetch` in
- * its own test:
+ * Deploys three Workers that all bind one shared R2 bucket — read /
+ * write / read-write — over the native Worker binding
+ * (`*BucketBinding`), via {@link Stack}, then drives each flavor over
+ * `fetch`:
  *
  * - write through the Write worker, read it back through the Read
  *   worker (cross-worker, proving both halves agree on the bucket);
  * - round-trip a key through the ReadWrite worker by itself.
- *
- * The stack lives in `fixtures/stack.ts` so it can also be inspected
- * directly, e.g. `alchemy tail --stage test ./test/Cloudflare/R2/fixtures/stack.ts`.
  */
-const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: HOOK_TIMEOUT,
+describe("native binding", () => {
+  const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+    timeout: HOOK_TIMEOUT,
+  });
+
+  test(
+    "write + read across separate workers",
+    Effect.gen(function* () {
+      const out = yield* stack;
+      yield* exercise("bind", out.writeBinding, out.readBinding, true);
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
+
+  test(
+    "read-write round-trip in one worker",
+    Effect.gen(function* () {
+      const out = yield* stack;
+      yield* exercise(
+        "rw-bind",
+        out.readWriteBinding,
+        out.readWriteBinding,
+        true,
+      );
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
 });
 
-// ── Native Worker binding ── write through the Write worker, read back through
-// the Read worker (cross-worker, proving both halves agree on the bucket).
-test(
-  "native binding: write + read across separate workers",
-  Effect.gen(function* () {
-    const out = yield* stack;
-    yield* exercise("bind", out.writeBinding, out.readBinding, true);
-  }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
-);
+/**
+ * The same matrix over the `*BucketHttp` clients (multipart is
+ * unsupported over the HTTP API, so it is skipped here).
+ *
+ * Gated: the `*BucketHttp` layers mint a scoped `AccountApiToken`, and
+ * Cloudflare OAuth credentials have no token-creation scope at all — the
+ * deploy fails at token creation with:
+ *
+ *     Unauthorized: Unauthorized to access requested resource
+ *       at AccountApiToken.ts (provider.create)
+ *
+ * The gate is on the `describe` rather than the individual tests so the
+ * suite's `beforeAll` never runs: the runner skips a suite's hooks when
+ * every test below it is skipped, which is what keeps the token mint out
+ * of the native-binding path above.
+ *
+ * Set `CLOUDFLARE_TEST_API_TOKENS=1` with an API-token credential that is
+ * permitted to create account tokens. Matches the gate on the
+ * `UserApiToken` lifecycle tests (`CLOUDFLARE_TEST_USER_TOKENS`).
+ */
+describe.skipIf(!process.env.CLOUDFLARE_TEST_API_TOKENS)("http token", () => {
+  const stack = beforeAll(deploy(HttpStack), { timeout: HOOK_TIMEOUT });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(HttpStack), {
+    timeout: HOOK_TIMEOUT,
+  });
 
-// The ReadWrite worker round-trips a key by itself over the native binding.
-test(
-  "native binding: read-write round-trip in one worker",
-  Effect.gen(function* () {
-    const out = yield* stack;
-    yield* exercise(
-      "rw-bind",
-      out.readWriteBinding,
-      out.readWriteBinding,
-      true,
-    );
-  }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
-);
+  test(
+    "write + read across separate workers",
+    Effect.gen(function* () {
+      const out = yield* stack;
+      yield* exercise("http", out.writeHttp, out.readHttp, false);
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
 
-// ── Scoped HTTP API token ── same matrix over the `*BucketHttp` clients
-// (multipart is unsupported over the HTTP API, so it is skipped here).
-test(
-  "http token: write + read across separate workers",
-  Effect.gen(function* () {
-    const out = yield* stack;
-    yield* exercise("http", out.writeHttp, out.readHttp, false);
-  }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
-);
-
-test(
-  "http token: read-write round-trip in one worker",
-  Effect.gen(function* () {
-    const out = yield* stack;
-    yield* exercise("rw-http", out.readWriteHttp, out.readWriteHttp, false);
-  }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
-);
+  test(
+    "read-write round-trip in one worker",
+    Effect.gen(function* () {
+      const out = yield* stack;
+      yield* exercise("rw-http", out.readWriteHttp, out.readWriteHttp, false);
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
+});

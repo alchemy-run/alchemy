@@ -52,17 +52,34 @@ const post = (base: string, path: string, body?: string) => {
 };
 
 /**
- * Cloudflare Queue is producer-only at the binding layer, so there is
- * no Read/ReadWrite split — only a Write producer. This deploys two
- * Workers that both bind one shared queue (native Worker binding and
- * scoped HTTP API token), then drives every {@link WriteQueueClient}
- * method over `fetch` — `send` and `sendBatch`, each in its JSON and
- * `text` content-type form — and asserts the producer accepts the
- * messages (202), proving the binding/token are wired and reach the
- * real queue.
+ * Drive every {@link WriteQueueClient} method over `fetch` — `send` and
+ * `sendBatch`, each in its JSON and `text` content-type form — and assert
+ * the producer accepts the messages (202), proving the binding/token are
+ * wired and reach the real queue.
+ *
+ * Cloudflare Queue is producer-only at the binding layer, so there is no
+ * Read/ReadWrite split — only a Write producer.
+ *
+ * The two implementations deploy separately on purpose. The HTTP producer
+ * mints a scoped `AccountApiToken`, which the native binding does not need;
+ * sharing one deploy meant a credential that cannot mint tokens lost the
+ * native-binding coverage too, rather than just the half it actually gates.
  */
+const exercise = (base: string, label: string) =>
+  Effect.gen(function* () {
+    expect((yield* post(base, "/send", `${label}-json`)).status).toBe(202);
+    expect((yield* post(base, "/send-text", `${label}-text`)).status).toBe(202);
+    expect((yield* post(base, "/sendBatch")).status).toBe(202);
+    expect((yield* post(base, "/sendBatch-text")).status).toBe(202);
+  });
+
+const url = (u: unknown) => {
+  expect(u).toBeTypeOf("string");
+  return u as string;
+};
+
 test.provider(
-  "Queue write producer over binding + http",
+  "Queue write producer over the native binding",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -70,36 +87,42 @@ test.provider(
       const out = yield* stack.deploy(
         Effect.gen(function* () {
           const writeBinding = yield* WriteBindingWorker;
-          const writeHttp = yield* WriteHttpWorker;
-          return {
-            writeBinding: writeBinding.url,
-            writeHttp: writeHttp.url,
-          };
+          return { writeBinding: writeBinding.url };
         }),
       );
 
-      const url = (u: unknown) => {
-        expect(u).toBeTypeOf("string");
-        return u as string;
-      };
-
-      // Drive the full producer surface (send + sendBatch, json + text)
-      // against one base url.
-      const exercise = (base: string, label: string) =>
-        Effect.gen(function* () {
-          expect((yield* post(base, "/send", `${label}-json`)).status).toBe(
-            202,
-          );
-          expect(
-            (yield* post(base, "/send-text", `${label}-text`)).status,
-          ).toBe(202);
-          expect((yield* post(base, "/sendBatch")).status).toBe(202);
-          expect((yield* post(base, "/sendBatch-text")).status).toBe(202);
-        });
-
-      // ── Native binding producer ──
       yield* exercise(url(out.writeBinding), "binding");
-      // ── HTTP token producer ──
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+/**
+ * Gated: the `WriteQueueHttp` layer mints a scoped `AccountApiToken`, and
+ * Cloudflare OAuth credentials have no token-creation scope at all — the
+ * deploy fails at token creation with:
+ *
+ *     Unauthorized: Unauthorized to access requested resource
+ *       at AccountApiToken.ts (provider.create)
+ *
+ * Set `CLOUDFLARE_TEST_API_TOKENS=1` with an API-token credential that is
+ * permitted to create account tokens. Matches the gate on the
+ * `UserApiToken` lifecycle tests (`CLOUDFLARE_TEST_USER_TOKENS`).
+ */
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_API_TOKENS)(
+  "Queue write producer over a scoped HTTP token",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const writeHttp = yield* WriteHttpWorker;
+          return { writeHttp: writeHttp.url };
+        }),
+      );
+
       yield* exercise(url(out.writeHttp), "http");
 
       yield* stack.destroy();

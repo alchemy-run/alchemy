@@ -241,20 +241,36 @@ const exercise = (label: string, base: string) =>
     yield* expectMissing(base, k("v"));
   });
 
+/** Write through `writeBase`, read it back (and observe the delete) through `readBase`. */
+const crossWorker = (label: string, writeBase: string, readBase: string) =>
+  Effect.gen(function* () {
+    const key = `${label}-key`;
+    expect((yield* put(writeBase, key, `${label}-value`)).status).toBe(200);
+    expect(yield* expectValue(readBase, key, `${label}-value`)).toBe(
+      `${label}-value`,
+    );
+    yield* del(writeBase, key);
+    yield* expectMissing(readBase, key);
+  });
+
+const url = (u: unknown) => {
+  expect(u).toBeTypeOf("string");
+  return u as string;
+};
+
 /**
- * Deploys six Workers that all bind one shared KV namespace — read /
- * write / read-write, each over the native Worker binding
- * (`*NamespaceBinding`) and over a scoped HTTP API token
- * (`*NamespaceHttp`) — then drives them over `fetch`:
+ * Deploys three Workers that all bind one shared KV namespace — read /
+ * write / read-write — over the native Worker binding
+ * (`*NamespaceBinding`), then drives them over `fetch`:
  *
  * - the read-write worker exercises the entire client surface by itself
- *   (every read + write method), once per transport;
+ *   (every read + write method);
  * - the split Read/Write workers prove the separate bindings agree on
  *   the namespace: write through Write, read back through Read, delete
  *   through Write, observe gone through Read.
  */
 test.provider.skipIf(!!process.env.FAST)(
-  "KV read/write/read-write bindings over binding + http",
+  "KV read/write/read-write bindings over the native binding",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -264,13 +280,53 @@ test.provider.skipIf(!!process.env.FAST)(
           const readBinding = yield* ReadBindingWorker;
           const writeBinding = yield* WriteBindingWorker;
           const readWriteBinding = yield* ReadWriteBindingWorker;
-          const readHttp = yield* ReadHttpWorker;
-          const writeHttp = yield* WriteHttpWorker;
-          const readWriteHttp = yield* ReadWriteHttpWorker;
           return {
             readBinding: readBinding.url,
             writeBinding: writeBinding.url,
             readWriteBinding: readWriteBinding.url,
+          };
+        }),
+      );
+
+      yield* exercise("rw-bind", url(out.readWriteBinding));
+      yield* crossWorker("bind", url(out.writeBinding), url(out.readBinding));
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+/**
+ * The same matrix over the `*NamespaceHttp` clients.
+ *
+ * Gated: the `*NamespaceHttp` layers mint a scoped `AccountApiToken`, and
+ * Cloudflare OAuth credentials have no token-creation scope at all — the
+ * deploy fails at token creation with:
+ *
+ *     Unauthorized: Unauthorized to access requested resource
+ *       at AccountApiToken.ts (provider.create)
+ *
+ * Deployed separately from the native-binding test above so that minting
+ * the token cannot take down binding coverage that needs no token.
+ *
+ * Set `CLOUDFLARE_TEST_API_TOKENS=1` with an API-token credential that is
+ * permitted to create account tokens. Matches the gate on the
+ * `UserApiToken` lifecycle tests (`CLOUDFLARE_TEST_USER_TOKENS`).
+ */
+test.provider.skipIf(
+  !!process.env.FAST || !process.env.CLOUDFLARE_TEST_API_TOKENS,
+)(
+  "KV read/write/read-write bindings over a scoped HTTP token",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const readHttp = yield* ReadHttpWorker;
+          const writeHttp = yield* WriteHttpWorker;
+          const readWriteHttp = yield* ReadWriteHttpWorker;
+          return {
             readHttp: readHttp.url,
             writeHttp: writeHttp.url,
             readWriteHttp: readWriteHttp.url,
@@ -278,34 +334,7 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      const url = (u: unknown) => {
-        expect(u).toBeTypeOf("string");
-        return u as string;
-      };
-
-      // ── Full client surface through a single read-write worker ──
-      yield* exercise("rw-bind", url(out.readWriteBinding));
       yield* exercise("rw-http", url(out.readWriteHttp));
-
-      // ── Split Read/Write bindings agree on the shared namespace ──
-      const crossWorker = (
-        label: string,
-        writeBase: string,
-        readBase: string,
-      ) =>
-        Effect.gen(function* () {
-          const key = `${label}-key`;
-          expect((yield* put(writeBase, key, `${label}-value`)).status).toBe(
-            200,
-          );
-          expect(yield* expectValue(readBase, key, `${label}-value`)).toBe(
-            `${label}-value`,
-          );
-          yield* del(writeBase, key);
-          yield* expectMissing(readBase, key);
-        });
-
-      yield* crossWorker("bind", url(out.writeBinding), url(out.readBinding));
       yield* crossWorker("http", url(out.writeHttp), url(out.readHttp));
 
       yield* stack.destroy();
