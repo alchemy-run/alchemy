@@ -122,7 +122,7 @@ into consumers like [Cloudflare Hyperdrive](/cloudflare/data/hyperdrive):
 
 - `role.origin` — the **direct** connection (port 5432). Use it where
   the consumer does its own pooling, e.g. as a Hyperdrive origin.
-- `role.pooledOrigin` — the **pooled** connection via PSBouncer
+- `role.pooledOrigin` — the **pooled** connection via PgBouncer
   (port 6432). Use it where each request would otherwise open a fresh
   direct connection, e.g. Hyperdrive's local-dev origin.
 
@@ -138,6 +138,63 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 If you need a URL instead of components, `connectionUrl` and
 `connectionUrlPooled` carry the same direct/pooled endpoints as
 `Redacted` connection strings (`sslmode=verify-full`).
+
+## Connect privately with AWS PrivateLink
+
+Postgres roles expose the branch's provider-neutral private connection
+details. For AWS PrivateLink, pass `privateConnectionServiceName` to
+an Interface VPC endpoint. With private DNS enabled, use
+`privateHost` for workloads in that VPC:
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Cloudflare from "alchemy/Cloudflare";
+
+const endpoint = yield* AWS.EC2.VpcEndpoint("postgres-private-link", {
+  vpcId: vpc.vpcId,
+  serviceName: role.privateConnectionServiceName,
+  vpcEndpointType: "Interface",
+  subnetIds: [privateSubnet.subnetId],
+  securityGroupIds: [databaseSecurityGroup.groupId],
+  privateDnsEnabled: true,
+});
+
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("private-db", {
+  origin: { ...role.origin, host: role.privateHost }, // direct, port 5432
+  dev: { ...role.pooledOrigin, host: role.privateHost }, // PgBouncer, port 6432
+});
+```
+
+For GCP Private Service Connect, `privateHost` is the private DNS zone;
+prepend the endpoint name configured in GCP before connecting.
+`PostgresDefaultRole` exposes the same details, though `PostgresRole`
+remains the safer choice for applications.
+
+### Why these outputs exist
+
+PlanetScale returns the private host and service name through role
+responses, but both are shared by every role on a branch. Exposing
+them lets one Stack declare the endpoint and the workload together,
+instead of copying connection details from the dashboard into a second
+system. Alchemy deliberately does not synthesize private URLs: GCP
+needs the endpoint name you choose in addition to `privateHost`.
+
+### Verifying an AWS PrivateLink deployment
+
+The provider tests verify PlanetScale's field mapping. A full private
+network test needs an entitled PlanetScale Postgres database and AWS
+resources in the same region. A future opt-in integration test should:
+
+1. Deploy a `PostgresRole`, VPC, Interface `VpcEndpoint`, subnets, and
+   security group permitting TCP ports 5432 and 6432.
+2. Assert the endpoint's `serviceName` equals
+   `role.privateConnectionServiceName`, then resolve `role.privateHost`
+   from a Lambda or EC2 instance in the VPC.
+3. Run a database query through the private host on both ports and
+   confirm that the resolved address is private.
+
+Keep this behind `PLANETSCALE_AWS_PRIVATELINK_TEST=1`: it provisions
+real, billable AWS and PlanetScale infrastructure.
 
 ## Where next
 
