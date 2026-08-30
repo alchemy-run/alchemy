@@ -1,4 +1,4 @@
-// Prisma ORM v8 (prisma-next) integration: contract emission + migration
+// Prisma ORM v8 integration: contract emission + migration
 // planning (`Contract`), deploy-time application (`Migrate`), and the
 // per-execution Postgres runtime client (subpath-only, see below).
 //

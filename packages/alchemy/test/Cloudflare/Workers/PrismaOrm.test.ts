@@ -52,7 +52,7 @@ const getOk = (url: string) =>
   });
 
 test(
-  "prisma-next client round-trips orm queries through Hyperdrive on workerd",
+  "Prisma client round-trips orm queries through Hyperdrive on workerd",
   Effect.gen(function* () {
     const { url } = yield* stack;
 

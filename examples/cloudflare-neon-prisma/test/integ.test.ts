@@ -47,7 +47,7 @@ test(
 );
 
 test(
-  "worker exposes user CRUD through prisma-next / Hyperdrive / Neon",
+  "worker exposes user CRUD through Prisma ORM / Hyperdrive / Neon",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");

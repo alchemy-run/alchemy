@@ -8,8 +8,8 @@ import contractJson from "./generated/contract.json";
 import { Hyperdrive } from "./db.ts";
 
 /**
- * Worker exercising the prisma-next Effect client on workerd. The client is
- * created once at init (no I/O — prisma-next connects lazily), and each fetch
+ * Worker exercising the Prisma ORM v8 Effect client on workerd. The client is
+ * created once at init (no I/O — Prisma connects lazily), and each fetch
  * event builds (and closes) its own `pg` pool against its per-event scope via
  * the execution memo. The test hammers the query routes sequentially and
  * concurrently to pin cross-request pool isolation: no "Cannot perform I/O on

@@ -27,7 +27,7 @@ import { type EffectOrm, makeOrmProxy } from "./OrmClient.ts";
 export * from "./Errors.ts";
 export type { EffectCollection, EffectOrm, WhereFilter } from "./OrmClient.ts";
 
-/** Any emitted prisma-next contract (the `Contract` type from `contract.d.ts`). */
+/** Any emitted Prisma contract (the `Contract` type from `contract.d.ts`). */
 export type AnyPostgresContract = Contract<SqlStorage>;
 
 /** A plan produced by the `sql` builder lane (`db.sql...build()`) or `raw`. */
@@ -36,7 +36,7 @@ export type Plan<Row> = SqlQueryPlan<Row> | SqlExecutionPlan<Row>;
 export interface PostgresConfig extends PostgresOptionsBase {
   /**
    * The emitted contract IR — import it from the `contract.json` written by
-   * {@link Contract} (or `prisma-next contract emit`):
+   * {@link Contract} (or `prisma contract emit`):
    *
    * ```typescript
    * import contractJson from "./prisma/contract.json" with { type: "json" };
@@ -68,7 +68,7 @@ export interface PostgresDatabase<
   R = never,
 > {
   /**
-   * The prisma-next client for the current execution. An escape hatch for
+   * The Prisma client for the current execution. An escape hatch for
    * surfaces the Effect facade does not cover yet (`groupBy`, `combine`,
    * `variant`, `prepare`); prefer {@link orm} / {@link execute}.
    */
@@ -84,8 +84,7 @@ export interface PostgresDatabase<
     f: (client: PostgresClient<C>) => PromiseLike<A>,
   ) => Effect.Effect<A, ClientError | E, R>;
   /**
-   * The Effect-native orm lane — chain like prisma-next, yield the
-   * terminal:
+   * The Effect-native orm lane — chain like Prisma, yield the terminal:
    *
    * ```typescript
    * const user = yield* db.orm.public.User.where({ email }).include("posts").first();
@@ -97,7 +96,7 @@ export interface PostgresDatabase<
    * `db.sql.public.user.select("id", "email").build()`.
    */
   readonly sql: PostgresStaticContext<C>["sql"];
-  /** The raw SQL tagged-template lane (pure — produces expressions/plans). */
+  /** The raw SQL lane (pure): ``db.raw.sql`SELECT ...` `` builds plans. */
   readonly raw: PostgresStaticContext<C>["raw"];
   /** Execute a plan, buffering all rows. */
   execute<Row>(plan: Plan<Row>): Effect.Effect<Row[], ClientError | E, R>;
@@ -114,9 +113,8 @@ export interface PostgresDatabase<
 }
 
 /**
- * Open a Prisma ORM v8 (prisma-next) Postgres client from a connection URL,
- * with Effect-native query surfaces over prisma-next's own builders and
- * engine.
+ * Open a Prisma ORM v8 Postgres client from a connection URL, with
+ * Effect-native query surfaces over Prisma's own builders and engine.
  *
  * The client is built at most once per execution — a Worker
  * `fetch`/`queue`/`scheduled` event, a Durable Object call, a Workflow run,
@@ -125,7 +123,7 @@ export interface PostgresDatabase<
  * so the underlying `pg` pool never outlives its event. That per-execution
  * lifecycle is what makes the client safe on workerd, where sockets are
  * pinned to the creating request's IoContext. Construction does no I/O
- * (prisma-next connects lazily on the first query), so deploy/plan-time
+ * (Prisma connects lazily on the first query), so deploy/plan-time
  * evaluations never touch the database.
  *
  * The factory is curried (`Postgres<Contract>()(source, config)`, like
@@ -169,7 +167,7 @@ export interface PostgresDatabase<
  * `Prisma.CheckViolationError`), other statement failures are
  * `Prisma.QueryError` (with the normalized `sqlState`), connection
  * failures are `Prisma.ConnectionError` (with the driver's
- * `transient` verdict), and prisma-next's structured codes split by
+ * `transient` verdict), and Prisma's structured codes split by
  * category into `Prisma.OrmError` / `Prisma.RuntimeError`
  * with an autocompleting `code` field.
  *
@@ -221,7 +219,7 @@ export const Postgres =
       ): Effect.Effect<Row[], ClientError | E, R> =>
         Effect.flatMap(client, (c) =>
           Effect.tryPromise({
-            try: (signal) => c.runtime().execute(plan, { signal }).toArray(),
+            try: (signal) => c.runtime().query(plan, { signal }).toArray(),
             catch: wrapPrismaError,
           }),
         );
@@ -234,7 +232,7 @@ export const Postgres =
         Stream.unwrap(
           Effect.map(client, (c) =>
             Stream.fromAsyncIterable(
-              c.runtime().execute(plan) as AsyncIterable<Row>,
+              c.runtime().query(plan) as AsyncIterable<Row>,
               wrapPrismaError,
             ),
           ),
@@ -242,15 +240,14 @@ export const Postgres =
 
       const makeTransactionScope = (txn: RuntimeTransaction) => {
         const txOrm = ormModule.orm<C>({
-          runtime: { execute: (plan) => txn.execute(plan) },
+          runtime: txn,
           context: statics.context,
         });
         const tx: PostgresTransaction<C> = {
           orm: makeOrmProxy<C, never, never>(Effect.sync(() => txOrm)),
           execute: <Row>(plan: Plan<Row>) =>
             Effect.tryPromise({
-              try: () =>
-                Promise.resolve(txn.execute(plan) as PromiseLike<Row[]>),
+              try: (signal) => txn.query(plan, { signal }).toArray(),
               catch: wrapPrismaError,
             }),
           rollback: () => Effect.fail(new RollbackError()),

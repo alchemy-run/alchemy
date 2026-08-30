@@ -5,7 +5,7 @@ import * as Prisma from "alchemy/Prisma";
 import * as Effect from "effect/Effect";
 
 /**
- * A prisma-next contract + Neon project + branch. Passing the contract's
+ * A Prisma contract + Neon project + branch. Passing the contract's
  * output to `Prisma.Migrate` orders the deploy:
  *
  *   1. `Prisma.Contract` re-emits the contract and plans a migration

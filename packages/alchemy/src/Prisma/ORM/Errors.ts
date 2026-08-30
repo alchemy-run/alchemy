@@ -1,18 +1,18 @@
-// Runtime error taxonomy for the prisma-next Effect client. Worker-safe:
-// imports nothing beyond effect, and detects prisma-next's error shapes
+// Runtime error taxonomy for the Prisma ORM v8 Effect client. Worker-safe:
+// imports nothing beyond effect, and detects Prisma's error shapes
 // structurally (via their stable `kind` / `code` / `sqlState` discriminants)
 // so this module never has to value-import the optional peer.
 //
 // Granularity policy: a dedicated tag wherever the discriminant is STABLE
 // and handling genuinely branches — the SQL-standard integrity-violation
-// SQLSTATEs (23xxx) and prisma-next's error categories (`ORM.*`,
+// SQLSTATEs (23xxx) and Prisma's error categories (`ORM.*`,
 // `RUNTIME.*`, ...). Individual codes stay a typed `code` field rather than
 // one class per code: the code set churns per RC, while categories and
 // SQLSTATEs do not.
 import * as Data from "effect/Data";
 
 /**
- * prisma-next structured error codes observed in 8.0.0-rc.1 — an OPEN union
+ * Prisma structured error codes observed in 8.0.0-rc.8 — an OPEN union
  * (`string` stays assignable) so new RC codes never break, while known ones
  * autocomplete.
  */
@@ -124,7 +124,7 @@ export class ConnectionError extends Data.TaggedError(
   cause: unknown;
 }> {}
 
-// ── prisma-next pipeline categories ───────────────────────────────────
+// ── Prisma pipeline categories ────────────────────────────────────────
 
 /**
  * ORM-lane misuse or validation failure (`ORM.*` codes: unknown
@@ -149,7 +149,7 @@ export class RuntimeError extends Data.TaggedError("Prisma.RuntimeError")<{
   cause: unknown;
 }> {}
 
-/** A failure prisma-next did not classify at all (no kind, no code). */
+/** A failure Prisma did not classify at all (no kind, no code). */
 export class UnknownError extends Data.TaggedError("Prisma.UnknownError")<{
   code?: ErrorCode | undefined;
   message: string;
@@ -166,7 +166,7 @@ export class RollbackError extends Data.TaggedError(
   "Prisma.RollbackError",
 )<{}> {}
 
-/** Everything a prisma-next query can fail with. */
+/** Everything a Prisma query can fail with. */
 export type ClientError =
   | ConstraintViolationError
   | QueryError
@@ -185,7 +185,7 @@ const message = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
 /**
- * The single funnel converting prisma-next's thrown errors into the typed
+ * The single funnel converting Prisma's thrown errors into the typed
  * taxonomy. Detection uses stable discriminants: `kind: 'sql_query' |
  * 'sql_connection'` on driver errors (with SQLSTATE refining the class-23
  * integrity violations onto their own tags), and the `CATEGORY.NAME`

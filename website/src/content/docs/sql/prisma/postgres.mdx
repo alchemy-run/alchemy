@@ -1,18 +1,17 @@
 ---
 title: Postgres
-description: Prisma ORM v8 (prisma-next) on Postgres — declare the contract, plan and apply migrations on deploy, and query from a Worker over Hyperdrive.
+description: Prisma ORM v8 on Postgres — declare the contract, plan and apply migrations on deploy, and query from a Worker over Hyperdrive.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const deps = `@prisma/orm-postgres`;
-export const devDeps = `prisma-next`;
+export const devDeps = `prisma`;
 
-Prisma ORM v8 (the `8.0.0-rc` line, a.k.a. **prisma-next**) on
-Postgres, end to end: a contract, a `Prisma.Contract` resource that
-emits it and plans migrations on deploy, a `Prisma.Migrate` resource
-that applies them, and a Worker that queries through the prisma-next
-client over Hyperdrive.
+Prisma ORM v8 (the `8.0.0-rc` line) on Postgres, end to end: a
+contract, a `Prisma.Contract` resource that emits it and plans
+migrations on deploy, a `Prisma.Migrate` resource that applies them,
+and a Worker that queries through the Prisma client over Hyperdrive.
 
 :::caution
 Prisma v8 is a release candidate. It is a ground-up rewrite of Prisma
@@ -56,7 +55,7 @@ export const contract = defineContract({}, ({ field, model, rel }) => ({
         id: field.id.uuidv7String(),
         email: field.text().unique(),
         name: field.text(),
-        createdAt: field.temporal.createdAt(),
+        createdAt: field.temporal.createdAtString(),
       },
       relations: {
         posts: rel.hasMany("Post", { by: "authorId" }),
@@ -83,22 +82,25 @@ is identical.
 
 ## Point the config at it
 
-`prisma-next.config.ts` is the single source of truth for the
+`prisma.config.ts` is the single source of truth for the
 toolchain — the CLI and alchemy's resources both read it:
 
 ```typescript
-// prisma-next.config.ts
-import { defineConfig } from "@prisma/orm-postgres/config";
+// prisma.config.ts
+import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
+import { definePrismaConfig } from "prisma/config";
 
-export default defineConfig({
-  contract: "./src/prisma/contract.ts",
-  output: "./src/prisma", // contract.json + contract.d.ts land here
+export default definePrismaConfig({
+  orm: ormConfig({
+    contract: "./src/prisma/contract.ts",
+    output: "./src/prisma", // contract.json + contract.d.ts land here
+  }),
 });
 ```
 
 ## Declare the contract resource and database
 
-`Prisma.Contract` runs `prisma-next contract emit` on every deploy
+`Prisma.Contract` runs `prisma contract emit` on every deploy
 and — when the contract drifted from the migration graph — plans a new
 migration package. `Prisma.Migrate` applies pending packages to a
 database. Passing the contract's output creates the dependency edge:
@@ -183,7 +185,7 @@ deploy never open a connection.
 
 ## Queries are Effects
 
-The `orm` lane chains exactly like prisma-next's own client
+The `orm` lane chains exactly like Prisma's own client
 (namespaced per Postgres schema — `db.orm.public.*`), but every
 terminal yields an Effect with typed errors. Queries are lazy and
 re-runnable: `Effect.retry` re-issues the query.
@@ -203,13 +205,13 @@ const slim = yield* db.orm.public.User.select("id", "email").all();
 ```
 
 `update` and `delete` require a prior `.where(...)` — at compile
-time, same as prisma-next. Failures surface as granular tagged
+time, same as Prisma. Failures surface as granular tagged
 errors: each SQL integrity violation has its own tag
 (`UniqueViolationError`, `ForeignKeyViolationError`,
 `NotNullViolationError`, `CheckViolationError`), other
 statement failures are `QueryError` (with the normalized
 `sqlState`), connection failures are `ConnectionError` (with
-the driver's `transient` retry hint), and prisma-next's structured
+the driver's `transient` retry hint), and Prisma's structured
 codes split by category into `OrmError` / `RuntimeError`
 with an autocompleting `code` field:
 
@@ -223,7 +225,7 @@ const outcome = yield* db.orm.public.User.create({ email }).pipe(
 
 ## The sql lane and raw SQL
 
-`db.sql` is prisma-next's pure query builder — plans are data, no
+`db.sql` is Prisma's pure query builder — plans are data, no
 connection behind them — and `db.execute` / `db.stream` run them:
 
 ```typescript

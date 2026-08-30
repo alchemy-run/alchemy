@@ -26,7 +26,7 @@ const fixtureConfig = Effect.gen(function* () {
     path.dirname(self),
     "fixtures",
     "client",
-    "prisma-next.config.ts",
+    "prisma.config.ts",
   );
 });
 

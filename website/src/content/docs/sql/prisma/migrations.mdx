@@ -1,11 +1,11 @@
 ---
 title: Migrations
-description: How Prisma.Contract and Prisma.Migrate run prisma-next's contract emission, migration planning, and graph-ordered apply inside alchemy deploy.
+description: How Prisma.Contract and Prisma.Migrate run Prisma's contract emission, migration planning, and graph-ordered apply inside alchemy deploy.
 ---
 
 Prisma ORM v8 replaces `prisma migrate dev`/`deploy` with a
-contract-first migration system: `prisma-next migration plan` writes
-**migration packages** and `prisma-next migrate` applies them in graph
+contract-first migration system: `prisma migration plan` writes
+**migration packages** and `prisma db migrate` applies them in graph
 order. Alchemy runs both as resources in the deploy graph —
 `Prisma.Contract` plans, `Prisma.Migrate` applies:
 
@@ -22,16 +22,16 @@ yield* Prisma.Migrate("migrate", {
 
 On every `alchemy deploy`, `Prisma.Contract`:
 
-1. Runs `prisma-next contract emit` — regenerating `contract.json`
+1. Runs `prisma contract emit` — regenerating `contract.json`
    (runtime IR) and `contract.d.ts` (types) from your contract source.
 2. Compares the emitted contract's hash against the head of the
    on-disk migration graph.
 3. If the graph doesn't cover the contract, runs
-   `prisma-next migration plan` with an explicit `--from` at the
+   `prisma migration plan` with an explicit `--from` at the
    current head, writing a new package under `migrations/app/`.
 
 `Prisma.Migrate` then observes the database's **contract marker** (a
-`prisma_contract.marker` row prisma-next maintains) and applies only
+`prisma_contract.marker` row Prisma maintains) and applies only
 the pending part of the graph — a fresh database is bootstrapped from
 empty, an up-to-date one is a no-op, and re-running after a crash
 converges. During plan (`alchemy plan`), drift detection emits into a
@@ -60,7 +60,7 @@ only plans a new package when the contract actually changed.
 ## Placeholders need your decision
 
 Some changes cannot be planned mechanically — making a column required
-needs a backfill for existing rows. prisma-next renders those as
+needs a backfill for existing rows. Prisma renders those as
 `placeholder(...)` closures in the package's `migration.ts`, and
 alchemy **fails the deploy** rather than guessing (the SQL runs
 against your real database later in the same deploy):
@@ -74,25 +74,25 @@ against your real database later in the same deploy):
 Or abandon the change: delete the package directory and revert the
 contract source.
 
-## Or: run prisma-next yourself
+## Or: run the CLI yourself
 
-The resources shell the same CLI you would run by hand, against the
-same `prisma-next.config.ts`. Planning locally and letting the deploy
-only apply is fully supported:
+The resources shell the same `prisma` CLI you would run by hand,
+against the same `prisma.config.ts`. Planning locally and letting the
+deploy only apply is fully supported:
 
 ```sh
-prisma-next contract emit
-prisma-next migration plan --name add-posts
+prisma contract emit
+prisma migration plan --name add-posts
 git add migrations src/prisma && git commit
 ```
 
 The next deploy detects no drift (the committed package already covers
-the contract) and `Prisma.Migrate` applies it. `prisma-next migrate
+the contract) and `Prisma.Migrate` applies it. `prisma db migrate
 --show --db $DATABASE_URL` previews what a deploy would run.
 
 ## The contract marker
 
-prisma-next records the applied contract hash in the database itself
+Prisma records the applied contract hash in the database itself
 (`prisma_contract.marker`). `Prisma.Migrate`'s diff compares the
 marker against the contract's hash, so databases changed out-of-band —
 a marker reset, a branch recreated from another parent — are detected
@@ -107,7 +107,7 @@ packages or emitted artifacts (they are checked in), and destroying
 `Prisma.Migrate` never drops tables or reverts migrations — the
 database's contents outlive the stack by design. Rolling back a schema
 is itself a migration: plan to an earlier contract with
-`prisma-next migration plan --to <ref>`.
+`prisma migration plan --to <ref>`.
 
 ## Scope: Postgres 17+, RC caveats
 

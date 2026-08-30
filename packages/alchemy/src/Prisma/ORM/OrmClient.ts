@@ -1,17 +1,17 @@
-// Effect-native facade over prisma-next's `orm` lane.
+// Effect-native facade over Prisma's `orm` lane.
 //
 // Runtime: a path-replaying Proxy. Chainable calls and property accesses are
 // recorded, and only a *terminal* call (first/all/create/...) produces an
 // Effect — which replays the whole chain against the per-execution client's
 // live Collection inside `Effect.tryPromise`. Replay-per-evaluation makes
 // every query lazy and re-runnable (`Effect.retry` re-issues it), exactly
-// like an effect-native builder, without forking prisma-next's Collection.
+// like an effect-native builder, without forking Prisma's Collection.
 //
 // Types: hand-authored rather than mapped from `Collection`. Mapped types
 // erase method-level generics (`include`'s relation-name literal, `select`'s
 // field tuple) and collapse overloads, silently widening row inference — so
 // the surface below re-declares the supported subset faithfully from
-// prisma-next's *exported* type utilities. Methods not yet re-typed
+// Prisma's *exported* type utilities. Methods not yet re-typed
 // (groupBy, combine, variant, cursor, distinctOn) still work through
 // `db.use(...)`.
 //
@@ -55,7 +55,7 @@ type ModelsOf<C, Ns> =
 /**
  * A `where` filter: either the shorthand object form or a callback over the
  * typed model accessor (`(u) => u.email.eq(email)`). The callback's return
- * is prisma-next's opaque predicate expression.
+ * is Prisma's opaque predicate expression.
  */
 export type WhereFilter<
   C extends AnyContract,
@@ -123,10 +123,10 @@ type IncludedValue<
     : never;
 
 /**
- * The Effect-native view of one prisma-next model collection. Chainables
+ * The Effect-native view of one Prisma model collection. Chainables
  * mirror `Collection`'s row/filter typing; terminals return Effects with
  * {@link ClientError} in the error channel. `HasWhere` reproduces
- * prisma-next's compile-time gate: `update`/`delete` require a prior
+ * Prisma's compile-time gate: `update`/`delete` require a prior
  * `.where(...)`.
  */
 export interface EffectCollection<
@@ -181,8 +181,8 @@ export interface EffectCollection<
   ): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
 
   distinct(): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
-  take(n: number): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
-  skip(n: number): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
+  limit(n: number): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
+  offset(n: number): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
 
   // ── read terminals ────────────────────────────────────────────────
 

@@ -18,17 +18,18 @@ const { test } = Test.make({
 const HOOK_TIMEOUT = 300_000;
 
 const CONFIG_SOURCE = `
-import { defineConfig } from "@prisma/orm-postgres/config";
+import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
+import { definePrismaConfig } from "prisma/config";
 
-export default defineConfig({
-  contract: "./contract.prisma",
-  output: "./generated",
+export default definePrismaConfig({
+  orm: ormConfig({
+    contract: "./contract.prisma",
+    output: "./generated",
+  }),
 });
 `;
 
-const CONTRACT_SOURCE = `// use prisma-next
-
-model User {
+const CONTRACT_SOURCE = `model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
   name  String?
@@ -47,7 +48,7 @@ model Post {
 const stageWorkspace = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  // Stage inside the repo (not the OS temp dir): prisma-next.config.ts
+  // Stage inside the repo (not the OS temp dir): prisma.config.ts
   // imports `@prisma/orm-postgres/config`, resolved by walking up from the
   // config file to the workspace node_modules.
   const cwd = yield* Effect.sync(() => process.cwd());
@@ -57,16 +58,13 @@ const stageWorkspace = Effect.gen(function* () {
     directory: tempParent,
     prefix: "alchemy-prisma-migrate-test-",
   });
-  yield* fs.writeFileString(
-    path.join(root, "prisma-next.config.ts"),
-    CONFIG_SOURCE,
-  );
+  yield* fs.writeFileString(path.join(root, "prisma.config.ts"), CONFIG_SOURCE);
   const contractPath = path.join(root, "contract.prisma");
   yield* fs.writeFileString(contractPath, CONTRACT_SOURCE);
   return {
     root,
     contractPath,
-    configPath: path.join(root, "prisma-next.config.ts"),
+    configPath: path.join(root, "prisma.config.ts"),
   };
 });
 

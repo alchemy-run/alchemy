@@ -12,17 +12,18 @@ import * as Result from "effect/Result";
 const { test } = Test.make({ providers: Prisma.providers() });
 
 const CONFIG_SOURCE = `
-import { defineConfig } from "@prisma/orm-postgres/config";
+import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
+import { definePrismaConfig } from "prisma/config";
 
-export default defineConfig({
-  contract: "./contract.prisma",
-  output: "./generated",
+export default definePrismaConfig({
+  orm: ormConfig({
+    contract: "./contract.prisma",
+    output: "./generated",
+  }),
 });
 `;
 
-const CONTRACT_SOURCE = `// use prisma-next
-
-model User {
+const CONTRACT_SOURCE = `model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
   name  String?
@@ -39,18 +40,21 @@ model Post {
 `;
 
 // Making \`name\` required forces a data transform on existing rows, which
-// prisma-next renders as unfilled placeholder(...) closures.
+// Prisma renders as unfilled placeholder(...) closures.
 const PLACEHOLDER_CONTRACT_SOURCE = CONTRACT_SOURCE.replace(
   "name  String?",
   "name  String",
 );
 
 const TS_CONFIG_SOURCE = `
-import { defineConfig } from "@prisma/orm-postgres/config";
+import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
+import { definePrismaConfig } from "prisma/config";
 
-export default defineConfig({
-  contract: "./contract.ts",
-  output: "./generated",
+export default definePrismaConfig({
+  orm: ormConfig({
+    contract: "./contract.ts",
+    output: "./generated",
+  }),
 });
 `;
 
@@ -76,7 +80,7 @@ const stageWorkspace = (contractSource: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    // Stage inside the repo (not the OS temp dir): prisma-next.config.ts
+    // Stage inside the repo (not the OS temp dir): prisma.config.ts
     // imports `@prisma/orm-postgres/config`, and bun resolves that bare
     // import by walking up from the config file — which only finds
     // `node_modules` when the staging dir lives in the workspace.
@@ -88,7 +92,7 @@ const stageWorkspace = (contractSource: string) =>
       prefix: "alchemy-prisma-contract-test-",
     });
     yield* fs.writeFileString(
-      path.join(root, "prisma-next.config.ts"),
+      path.join(root, "prisma.config.ts"),
       CONFIG_SOURCE,
     );
     const contractPath = path.join(root, "contract.prisma");
@@ -96,7 +100,7 @@ const stageWorkspace = (contractSource: string) =>
     return {
       root,
       contractPath,
-      configPath: path.join(root, "prisma-next.config.ts"),
+      configPath: path.join(root, "prisma.config.ts"),
       migrationsDir: path.join(root, "migrations"),
     };
   });
@@ -227,7 +231,7 @@ test.provider(
       // Swap in the TS-authored form of the same workspace.
       yield* fs.remove(ws.contractPath);
       yield* fs.writeFileString(
-        path.join(ws.root, "prisma-next.config.ts"),
+        path.join(ws.root, "prisma.config.ts"),
         TS_CONFIG_SOURCE,
       );
       yield* fs.writeFileString(
@@ -245,7 +249,7 @@ test.provider(
         contract.contractHash,
       );
 
-      // rc.1 emits unpublished @internal/* specifiers for TS-authored
+      // The CLI emits unpublished @internal/* specifiers for TS-authored
       // contracts; the resource must rewrite them to the public subpaths or
       // the emitted types cannot resolve in a user project.
       const dts = yield* fs.readFileString(

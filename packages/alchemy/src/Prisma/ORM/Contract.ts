@@ -14,24 +14,24 @@ import {
   readMigrationPackages,
   rewriteEmittedTypes,
   resolveGraphHead,
-  runPrismaNext,
+  runPrismaCli,
 } from "./internal.ts";
 
 export type ContractProps = {
   /**
-   * Path to the project's `prisma-next.config.ts`, relative to the current
+   * Path to the project's `prisma.config.ts`, relative to the current
    * working directory. The config is the single source of truth for the
    * contract source, emit output directory, and database defaults — exactly
-   * as when running the `prisma-next` CLI by hand.
+   * as when running the `prisma` CLI by hand.
    *
-   * @default "./prisma-next.config.ts"
+   * @default "./prisma.config.ts"
    */
   config?: string;
   /**
    * Directory holding the migration graph (`app/` packages +
    * content-addressed `snapshots/`), relative to the **config file's
    * directory** — the same base the CLI resolves against. If you override
-   * `migrations.dir` in `prisma-next.config.ts`, set this to the same value.
+   * `orm.migrations.dir` in `prisma.config.ts`, set this to the same value.
    *
    * @default "./migrations"
    */
@@ -59,7 +59,7 @@ export type Contract = Resource<
      */
     contractHash: string;
     /**
-     * Path to `prisma-next.config.ts`, relative to the current working
+     * Path to `prisma.config.ts`, relative to the current working
      * directory. Downstream resources ({@link Migrate}) inherit it so the
      * whole toolchain reads one config.
      */
@@ -78,10 +78,10 @@ export type Contract = Resource<
 >;
 
 /**
- * A Prisma ORM v8 (prisma-next) contract managed as an Alchemy resource.
+ * A Prisma ORM v8 contract managed as an Alchemy resource.
  *
- * Runs `prisma-next contract emit` and — when the contract's storage shape
- * has drifted from the migration graph — `prisma-next migration plan` as
+ * Runs `prisma contract emit` and — when the contract's storage shape
+ * has drifted from the migration graph — `prisma migration plan` as
  * part of `alchemy deploy`, so the emitted contract artifacts
  * (`contract.json` / `contract.d.ts`) and the migration packages under
  * `migrations/` are always regenerated from the source contract before
@@ -110,14 +110,14 @@ export type Contract = Resource<
  * @section Declaring the contract
  * @example Contract at the project root
  * ```typescript
- * // expects ./prisma-next.config.ts and writes ./migrations
+ * // expects ./prisma.config.ts and writes ./migrations
  * const contract = yield* Prisma.Contract("contract");
  * ```
  *
  * @example Custom config location
  * ```typescript
  * const contract = yield* Prisma.Contract("contract", {
- *   config: "./db/prisma-next.config.ts",
+ *   config: "./db/prisma.config.ts",
  *   // resolved relative to ./db (the config's directory)
  *   migrationsDir: "./migrations",
  * });
@@ -144,7 +144,7 @@ export const Contract = Resource<Contract>("Prisma.Contract");
 const placeholderGuidance = (dir: string) =>
   [
     `The planned migration package ${dir} contains unfilled placeholder(s) — a data`,
-    "backfill or destructive change that prisma-next cannot decide automatically",
+    "backfill or destructive change that Prisma cannot decide automatically",
     "(the SQL is applied to a real database later in the same deploy).",
     "",
     "To resolve:",
@@ -166,7 +166,7 @@ export const ContractProvider = () =>
       // object at all) is legal — the engine then hands lifecycle ops
       // `undefined` rather than `{}`.
       const resolveConfig = (p: ContractProps | undefined) =>
-        path.resolve(process.cwd(), p?.config ?? "./prisma-next.config.ts");
+        path.resolve(process.cwd(), p?.config ?? "./prisma.config.ts");
 
       const configDir = (p: ContractProps | undefined) =>
         path.dirname(resolveConfig(p));
@@ -180,7 +180,7 @@ export const ContractProvider = () =>
       const relative = (abs: string) => path.relative(process.cwd(), abs);
 
       const emit = (p: ContractProps | undefined, outputPath?: string) =>
-        runPrismaNext<EmitResult>(
+        runPrismaCli<EmitResult>(
           [
             "contract",
             "emit",
@@ -283,11 +283,11 @@ export const ContractProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           yield* session.note(
-            `${output ? "Re-emitting" : "Emitting"} prisma-next contract`,
+            `${output ? "Re-emitting" : "Emitting"} Prisma contract`,
           );
           const emitted = yield* emit(news);
-          // TS-authored emits leak unpublished @internal/* specifiers in
-          // rc.1; rewrite them to the public subpaths (no-op for PSL).
+          // Emits leak unpublished @internal/* specifiers (through rc.8);
+          // rewrite them to the public @prisma/orm-postgres/* subpaths.
           yield* rewriteEmittedTypes(emitted.files.dts);
           const migrationsDir = resolveMigrationsDir(news);
           let packages = yield* readMigrationPackages(migrationsDir);
@@ -295,9 +295,9 @@ export const ContractProvider = () =>
 
           if (head === undefined || head.to !== emitted.storageHash) {
             yield* session.note(
-              `Planning prisma-next migration (${head ? `${head.to.slice(0, 8)} →` : "empty →"} ${emitted.storageHash.slice(0, 8)})`,
+              `Planning Prisma migration (${head ? `${head.to.slice(0, 8)} →` : "empty →"} ${emitted.storageHash.slice(0, 8)})`,
             );
-            const plan = yield* runPrismaNext<PlanResult>(
+            const plan = yield* runPrismaCli<PlanResult>(
               [
                 "migration",
                 "plan",
@@ -330,9 +330,9 @@ export const ContractProvider = () =>
                 return yield* Effect.fail(
                   new CliError({
                     message: [
-                      `prisma-next wrote the migration package to ${relative(planDir)},`,
+                      `prisma wrote the migration package to ${relative(planDir)},`,
                       `outside this resource's migrationsDir (${relative(migrationsDir)}).`,
-                      "Set the `migrationsDir` prop to match `migrations.dir` in prisma-next.config.ts.",
+                      "Set the `migrationsDir` prop to match `orm.migrations.dir` in prisma.config.ts.",
                     ].join("\n"),
                   }),
                 );

@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Neon + prisma-next wiring for the Prisma ORM Worker E2E test: the contract
+ * Neon + Prisma wiring for the Prisma ORM Worker E2E test: the contract
  * in this fixture directory is emitted and planned by {@link Prisma.Contract}
  * (no drift on a clean checkout — `generated/` and `migrations/` are checked
  * in), applied to a fresh Neon branch by {@link Prisma.Migrate}, and fronted
@@ -19,7 +19,7 @@ export const Db = Effect.gen(function* () {
     path.join(
       import.meta.url ? fileURLToPath(import.meta.url) : ".",
       "..",
-      "prisma-next.config.ts",
+      "prisma.config.ts",
     ),
   );
 

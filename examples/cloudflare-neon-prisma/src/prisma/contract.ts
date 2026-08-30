@@ -7,7 +7,7 @@ export const contract = defineContract({}, ({ field, model, rel }) => ({
         id: field.id.uuidv7String(),
         email: field.text().unique(),
         name: field.text(),
-        createdAt: field.temporal.createdAt(),
+        createdAt: field.temporal.createdAtString(),
       },
       relations: {
         posts: rel.hasMany("Post", { by: "authorId" }),

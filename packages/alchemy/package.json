@@ -504,6 +504,7 @@
     "nuxt": "catalog:frontend",
     "octane": "catalog:frontend",
     "pg": "catalog:database",
+    "prisma": "catalog:database",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:frontend",
     "react-router": "catalog:frontend",
@@ -537,6 +538,7 @@
     "mongodb": "catalog:database",
     "mysql2": "catalog:database",
     "pg": "catalog:database",
+    "prisma": "catalog:database",
     "vite": "catalog:build",
     "ws": "catalog:shared"
   },
@@ -578,6 +580,9 @@
       "optional": true
     },
     "@prisma/orm-postgres": {
+      "optional": true
+    },
+    "prisma": {
       "optional": true
     },
     "vite": {

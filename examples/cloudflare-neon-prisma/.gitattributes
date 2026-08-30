@@ -1,5 +1,5 @@
-# Fold prisma-next's generated artifacts in diffs (same marks as
-# `prisma-next init` scaffolds). migrations/app/**/migration.ts stays
+# Fold Prisma's generated artifacts in diffs (same marks as
+# `prisma orm init` scaffolds). migrations/app/**/migration.ts stays
 # unmarked — it is the human editing surface for placeholder backfills.
 src/prisma/contract.json linguist-generated
 src/prisma/contract.d.ts linguist-generated

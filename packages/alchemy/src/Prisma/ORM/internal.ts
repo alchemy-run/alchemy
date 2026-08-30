@@ -1,4 +1,4 @@
-// Shared scaffolding for the Prisma ORM (prisma-next) deploy-time resources.
+// Shared scaffolding for the Prisma ORM v8 deploy-time resources.
 // NOT exported from the ORM index — service-internal only.
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,13 +9,14 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { exec } from "../../Util/exec.ts";
 
 /**
- * A structured failure from the `prisma-next` CLI.
+ * A structured failure from the `prisma` CLI.
  *
- * The CLI emits machine-readable JSON on stderr-free stdout (`--json`), and
- * failures carry a stable `code` (e.g. `CONFIG.FILE_NOT_FOUND`,
- * `CONTRACT.VERIFY_FAILED`) plus human guidance in `summary`/`fix`. Those
- * fields are surfaced verbatim so callers can match on `code` and users get
- * the CLI's own remediation text.
+ * In `--json` mode the CLI streams newline-delimited events and closes with
+ * a `{ kind: "result", envelope }` document. A failed envelope carries a
+ * stable `code` (e.g. `CONFIG.FILE_NOT_FOUND`, `CONTRACT.VERIFY_FAILED`)
+ * plus human guidance in `summary`/`why`/`nextActions`. Those fields are
+ * surfaced verbatim so callers can match on `code` and users get the CLI's
+ * own remediation text.
  */
 export class CliError extends Data.TaggedError("Prisma.CliError")<{
   /** Stable machine code reported by the CLI (e.g. `CONTRACT.VERIFY_FAILED`). */
@@ -33,8 +34,13 @@ export class CliError extends Data.TaggedError("Prisma.CliError")<{
  * yet (eventual consistency), so `Prisma.Migrate` retries these briefly.
  */
 export const isTransientDbError = (error: CliError): boolean => {
+  if (error.code === "DRIVER.CONNECTION_FAILED") return true;
   const meta = error.meta ?? {};
-  const metaCode = typeof meta.code === "string" ? meta.code : "";
+  // The CLI reports the driver's errno under `sqlState` for connection
+  // failures (`ECONNREFUSED`, ...) and a real SQLSTATE for statement ones.
+  const errno = [meta.sqlState, meta.code].find(
+    (value) => typeof value === "string",
+  );
   return (
     [
       "ECONNREFUSED",
@@ -42,63 +48,139 @@ export const isTransientDbError = (error: CliError): boolean => {
       "ENOTFOUND",
       "ETIMEDOUT",
       "EAI_AGAIN",
-    ].includes(metaCode) || /connection|timeout|reachable/i.test(error.message)
+    ].includes(errno as string) ||
+    /connection|timeout|reachable/i.test(error.message)
   );
 };
 
 /**
- * Resolve the `prisma-next` CLI entrypoint shipped inside
- * `@prisma/orm-postgres` (the façade bundles the full CLI as
- * `./bin/prisma-next`), so the resources only need the one optional peer the
- * runtime already requires.
+ * Resolve the unified `prisma` CLI entrypoint (`prisma` v8 mounts the ORM
+ * commands — `contract emit`, `migration plan`, `db migrate` — that the
+ * retired `prisma-next` bin used to serve). The package is an optional peer,
+ * so it resolves out of the *user's* project and their pinned CLI version is
+ * the one that runs.
  */
-export const resolvePrismaNextBin = Effect.gen(function* () {
+export const resolvePrismaCliBin = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const url = yield* Effect.try({
-    try: () => import.meta.resolve("@prisma/orm-postgres/bin/prisma-next"),
+    try: () => import.meta.resolve("prisma/package.json"),
     catch: (cause) =>
       new CliError({
-        message: `Failed to resolve @prisma/orm-postgres (is it installed?): ${cause}`,
+        message: `Failed to resolve the "prisma" CLI (is it installed? \`npm i -D prisma\`): ${cause}`,
       }),
   });
-  const fileUrl = yield* Effect.try({
+  const manifestPath = yield* Effect.try({
     try: () => new URL(url),
     catch: (cause) =>
       new CliError({
-        message: `Failed to parse @prisma/orm-postgres bin URL: ${cause}`,
+        message: `Failed to parse the "prisma" package URL: ${cause}`,
       }),
-  });
-  return yield* path.fromFileUrl(fileUrl).pipe(
-    Effect.mapError(
-      (cause) =>
-        new CliError({
-          message: `Failed to convert @prisma/orm-postgres bin URL to a path: ${cause}`,
-        }),
+  }).pipe(
+    Effect.flatMap((fileUrl) =>
+      path.fromFileUrl(fileUrl).pipe(
+        Effect.mapError(
+          (cause) =>
+            new CliError({
+              message: `Failed to convert the "prisma" package URL to a path: ${cause}`,
+            }),
+        ),
+      ),
     ),
   );
+  const manifest = yield* fs.readFileString(manifestPath).pipe(
+    Effect.flatMap((text) =>
+      Effect.try({
+        try: () =>
+          JSON.parse(text) as { bin?: Record<string, string> | string },
+        catch: (cause) =>
+          new CliError({
+            message: `Failed to parse ${manifestPath}: ${cause}`,
+          }),
+      }),
+    ),
+    Effect.mapError((cause) =>
+      cause instanceof CliError
+        ? cause
+        : new CliError({ message: `Failed to read ${manifestPath}: ${cause}` }),
+    ),
+  );
+  const bin =
+    typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
+  if (bin === undefined) {
+    return yield* Effect.fail(
+      new CliError({
+        message: `The installed "prisma" package declares no \`prisma\` bin (${manifestPath}).`,
+      }),
+    );
+  }
+  return path.resolve(path.dirname(manifestPath), bin);
 });
 
+/** The CLI's failure payload (`envelope.error` in `--json` mode). */
 interface CliFailure {
-  ok: false;
   code?: string;
+  severity?: string;
   summary?: string;
   why?: string;
-  fix?: string;
+  nextActions?: Array<{ kind?: string; label?: string }>;
   meta?: Record<string, unknown>;
+  docsUrl?: string;
 }
 
 /**
- * Run a `prisma-next` subcommand with `--json --no-interactive` from `cwd`
- * (the directory containing `prisma-next.config.ts` — all config-relative
- * paths resolve against it, matching a user running the CLI in their
- * project) and parse the structured result.
+ * The terminal `{ kind: "result" }` event the CLI closes a `--json` run
+ * with. `ok` discriminates the payload: `result` for success, `error` for
+ * failure.
  */
-export const runPrismaNext = <T extends { ok: true }>(
+interface CliEnvelope {
+  ok: boolean;
+  commandId?: string;
+  result?: unknown;
+  error?: CliFailure;
+  exitCode?: number;
+  nextActions?: Array<{ kind?: string; label?: string }>;
+}
+
+/**
+ * Scan the CLI's newline-delimited JSON stream for the terminal result
+ * envelope. Progress events (`step-started`, `step-finished`, ...) and any
+ * non-JSON banner lines are skipped.
+ */
+const parseEnvelope = (stdout: string): CliEnvelope | undefined => {
+  let envelope: CliEnvelope | undefined;
+  for (const line of stdout.split("\n")) {
+    const text = line.trim();
+    if (!text.startsWith("{")) continue;
+    let event: { kind?: string; envelope?: CliEnvelope };
+    try {
+      event = JSON.parse(text);
+    } catch {
+      continue;
+    }
+    if (event.kind === "result" && event.envelope !== undefined) {
+      envelope = event.envelope;
+    }
+  }
+  return envelope;
+};
+
+/**
+ * Run a `prisma` subcommand with `--json --no-interactive` from `cwd` (the
+ * directory containing `prisma.config.ts` — all config-relative paths
+ * resolve against it, matching a user running the CLI in their project) and
+ * parse the structured result envelope.
+ */
+export const runPrismaCli = <T>(
   args: readonly string[],
   options: { readonly cwd: string },
-): Effect.Effect<T, CliError, Path.Path | ChildProcessSpawner> =>
+): Effect.Effect<
+  T,
+  CliError,
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+> =>
   Effect.gen(function* () {
-    const bin = yield* resolvePrismaNextBin;
+    const bin = yield* resolvePrismaCliBin;
     const nodeExecPath = yield* Effect.sync(() => process.execPath);
     const result = yield* exec(
       ChildProcess.make(
@@ -106,7 +188,7 @@ export const runPrismaNext = <T extends { ok: true }>(
         [bin, ...args, "--json", "--no-interactive"],
         {
           cwd: options.cwd,
-          env: { PRISMA_NEXT_DISABLE_TELEMETRY: "1" },
+          env: { PRISMA_DISABLE_TELEMETRY: "1", DO_NOT_TRACK: "1" },
           extendEnv: true,
         },
       ),
@@ -117,55 +199,50 @@ export const runPrismaNext = <T extends { ok: true }>(
       Effect.mapError(
         (cause) =>
           new CliError({
-            message: `prisma-next ${args.join(" ")} failed to spawn: ${String(cause)}`,
+            message: `prisma ${args.join(" ")} failed to spawn: ${String(cause)}`,
           }),
       ),
     );
 
-    // The CLI prints exactly one JSON document to stdout in --json mode;
-    // scan to the first `{` in case a stray banner precedes it.
-    const parsed = yield* Effect.sync((): T | CliFailure | undefined => {
-      const jsonStart = result.stdout.indexOf("{");
-      if (jsonStart < 0) return undefined;
-      try {
-        return JSON.parse(result.stdout.slice(jsonStart)) as T | CliFailure;
-      } catch {
-        return undefined;
-      }
-    });
+    const envelope = yield* Effect.sync(() => parseEnvelope(result.stdout));
 
-    if (parsed && parsed.ok === true) {
-      return parsed;
+    if (envelope?.ok === true) {
+      return envelope.result as T;
     }
-    if (parsed && parsed.ok === false) {
+    if (envelope?.ok === false) {
+      const error = envelope.error ?? {};
+      const fix = (error.nextActions ?? envelope.nextActions ?? []).find(
+        (action) => typeof action.label === "string",
+      )?.label;
       return yield* Effect.fail(
         new CliError({
-          code: parsed.code,
-          message: `prisma-next ${args.join(" ")} failed: ${parsed.summary ?? parsed.why ?? "unknown error"}`,
-          fix: parsed.fix,
-          meta: parsed.meta,
+          code: error.code,
+          message: `prisma ${args.join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
+          fix,
+          meta: error.meta,
         }),
       );
     }
     return yield* Effect.fail(
       new CliError({
-        message: `prisma-next ${args.join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
+        message: `prisma ${args.join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
       }),
     );
   });
 
-/** `prisma-next contract emit --json` result. */
+/** `prisma contract emit --json` result. */
 export interface EmitResult {
   ok: true;
   /** Canonical hash of the emitted contract's storage shape — the contract identity the migration graph and DB marker track. */
   storageHash: string;
-  executionHash: string;
+  /** Only emitted for TypeScript-authored contracts. */
+  executionHash?: string;
   profileHash: string;
   outDir: string;
   files: { json: string; dts: string };
 }
 
-/** `prisma-next migration plan --json` result. */
+/** `prisma migration plan --json` result. */
 export interface PlanResult {
   ok: true;
   noOp: boolean;
@@ -178,7 +255,7 @@ export interface PlanResult {
   operations: Array<{ id: string; label: string; operationClass: string }>;
 }
 
-/** `prisma-next migrate --json` result. */
+/** `prisma db migrate --json` result. */
 export interface MigrateResult {
   ok: true;
   migrationsApplied: number;
@@ -194,7 +271,7 @@ export interface MigrateResult {
   }>;
 }
 
-/** `prisma-next migrate --show --json` result (read-only preview). */
+/** `prisma db migrate --show --json` result (read-only preview). */
 export interface MigrateShowResult {
   ok: true;
   migrations: Array<{
@@ -207,10 +284,9 @@ export interface MigrateShowResult {
 }
 
 /**
- * prisma-next 8.0.0-rc.1 bug workaround: `contract emit` for a
- * **TypeScript-authored** contract writes the Prisma monorepo's `@internal/*`
- * aliases into `contract.d.ts` instead of the public `@prisma/orm-postgres/*`
- * subpaths (PSL-authored emits map them correctly). Those packages are not
+ * Prisma ORM v8 bug workaround (through 8.0.0-rc.8): `contract emit` writes
+ * the Prisma monorepo's `@internal/*` aliases into `contract.d.ts` instead of
+ * the public `@prisma/orm-postgres/*` subpaths. Those packages are not
  * published, so the emitted types would not resolve in a user project.
  * Longest-prefix-first so `sql-contract` is not eaten by `contract`.
  */

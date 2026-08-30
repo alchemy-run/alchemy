@@ -12,7 +12,7 @@ import {
   type MigrateShowResult,
   readMigrationPackages,
   resolveGraphHead,
-  runPrismaNext,
+  runPrismaCli,
 } from "./internal.ts";
 
 export type MigrateProps = {
@@ -31,13 +31,13 @@ export type MigrateProps = {
   contract: {
     /** The emitted contract's storage hash (see {@link Contract}). */
     contractHash: string;
-    /** Path to `prisma-next.config.ts`, relative to the current working directory. */
+    /** Path to `prisma.config.ts`, relative to the current working directory. */
     config: string;
     /** Migration graph directory, relative to the current working directory. */
     migrationsDir: string;
   };
   /**
-   * Path to the project's `prisma-next.config.ts`, relative to the current
+   * Path to the project's `prisma.config.ts`, relative to the current
    * working directory. Defaults to the config the {@link Contract} was
    * emitted from.
    *
@@ -68,11 +68,11 @@ export type Migrate = Resource<
 >;
 
 /**
- * Applies pending prisma-next migration packages to a Postgres database
+ * Applies pending Prisma migration packages to a Postgres database
  * during `alchemy deploy` — the deploy-graph equivalent of running
- * `prisma-next migrate --db $DATABASE_URL` by hand.
+ * `prisma db migrate --db $DATABASE_URL` by hand.
  *
- * The apply is idempotent: prisma-next records the applied contract in the
+ * The apply is idempotent: Prisma records the applied contract in the
  * database's `prisma_contract.marker` table and only walks the pending part
  * of the migration graph, so re-deploys are no-ops and a database
  * provisioned in the same deploy is bootstrapped from empty. Fresh databases
@@ -131,7 +131,7 @@ export const MigrateProvider = () =>
       const resolveConfig = (p: MigrateProps) =>
         path.resolve(
           process.cwd(),
-          p.config ?? p.contract.config ?? "./prisma-next.config.ts",
+          p.config ?? p.contract.config ?? "./prisma.config.ts",
         );
 
       const configDir = (p: MigrateProps) => path.dirname(resolveConfig(p));
@@ -154,12 +154,13 @@ export const MigrateProvider = () =>
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (!output || !olds) return output;
-          // `migrate --show` is a read-only preview of the pending path from
-          // the database's current marker. An empty path means the marker is
+          // `db migrate --show` is a read-only preview of the pending path
+          // from the database's current marker. An empty path means the marker is
           // at the on-disk graph head; otherwise the first pending package's
           // `from` IS the marker ("empty" = database was never initialized).
-          const show = yield* runPrismaNext<MigrateShowResult>(
+          const show = yield* runPrismaCli<MigrateShowResult>(
             [
+              "db",
               "migrate",
               "--show",
               "--db",
@@ -188,10 +189,11 @@ export const MigrateProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           yield* session.note(
-            `Applying prisma-next migrations (target ${news.contract.contractHash.slice(0, 8)})`,
+            `Applying Prisma migrations (target ${news.contract.contractHash.slice(0, 8)})`,
           );
-          const result = yield* runPrismaNext<MigrateResult>(
+          const result = yield* runPrismaCli<MigrateResult>(
             [
+              "db",
               "migrate",
               "--db",
               urlValue(news.url),

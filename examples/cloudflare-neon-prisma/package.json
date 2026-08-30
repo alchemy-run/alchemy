@@ -24,6 +24,6 @@
     "effect": "catalog:effect"
   },
   "devDependencies": {
-    "prisma-next": "catalog:database"
+    "prisma": "catalog:database"
   }
 }

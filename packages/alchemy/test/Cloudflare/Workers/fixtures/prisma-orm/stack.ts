@@ -8,9 +8,9 @@ import { Db, Hyperdrive } from "./db.ts";
 import PrismaOrmWorker from "./worker.ts";
 
 /**
- * Deploys the prisma-next contract + migrations, a Neon project + branch, a
+ * Deploys the Prisma contract + migrations, a Neon project + branch, a
  * Hyperdrive pointed at it, and the {@link PrismaOrmWorker} that runs the
- * prisma-next runtime client on workerd. Standalone so it can also be driven
+ * Prisma runtime client on workerd. Standalone so it can also be driven
  * by `alchemy deploy`/`alchemy tail` while iterating.
  */
 export default Alchemy.Stack(
