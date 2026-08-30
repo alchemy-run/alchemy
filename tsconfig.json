@@ -140,6 +140,9 @@
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-neon-prisma/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {

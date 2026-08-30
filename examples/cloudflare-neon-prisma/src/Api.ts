@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
-import type { Contract } from "./prisma/contract.d.ts";
-import contractJson from "./prisma/contract.json" with { type: "json" };
+import type { Contract } from "./prisma/generated/contract.d.ts";
+import contractJson from "./prisma/generated/contract.json" with { type: "json" };
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",

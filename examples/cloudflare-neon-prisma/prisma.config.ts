@@ -4,6 +4,6 @@ import { definePrismaConfig } from "prisma/config";
 export default definePrismaConfig({
   orm: ormConfig({
     contract: "./src/prisma/contract.ts",
-    output: "./src/prisma",
+    output: "./src/prisma/generated",
   }),
 });

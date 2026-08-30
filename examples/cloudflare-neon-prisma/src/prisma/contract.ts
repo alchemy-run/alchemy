@@ -4,7 +4,7 @@ export const contract = defineContract({}, ({ field, model, rel }) => ({
   models: {
     User: model("User", {
       fields: {
-        id: field.id.uuidv7String(),
+        id: field.id.uuidv7Native(),
         email: field.text().unique(),
         name: field.text(),
         createdAt: field.temporal.createdAtString(),
@@ -16,9 +16,9 @@ export const contract = defineContract({}, ({ field, model, rel }) => ({
 
     Post: model("Post", {
       fields: {
-        id: field.id.uuidv7String(),
+        id: field.id.uuidv7Native(),
         title: field.text(),
-        authorId: field.uuidString(),
+        authorId: field.uuidNative(),
       },
       relations: {
         author: rel.belongsTo("User", { from: "authorId", to: "id" }),

@@ -33,7 +33,7 @@ import type {
 } from "@prisma/orm-postgres/contract/types";
 
 export type StorageHash =
-  StorageHashBase<"ff53f0b9c647de137bddcfaa13b53e83073e7715dfb4fec95f6c174732d42bcb">;
+  StorageHashBase<"7de60ab4aee8baa42480f8a2d3559ff4027deae801de73c6a93c9eeb4170f558">;
 export type ExecutionHash =
   ExecutionHashBase<"3d1e5ef7d0bf68e99ed01f74317c9cb4403c9f0235bcb38e447cfe4595460215">;
 export type ProfileHash =
@@ -530,12 +530,12 @@ type DefaultLiteralValue<
 export type FieldOutputTypes = {
   readonly public: {
     readonly Post: {
-      readonly id: Char<36>;
+      readonly id: CodecTypes["pg/uuid@1"]["output"];
       readonly title: CodecTypes["pg/text@1"]["output"];
-      readonly authorId: Char<36>;
+      readonly authorId: CodecTypes["pg/uuid@1"]["output"];
     };
     readonly User: {
-      readonly id: Char<36>;
+      readonly id: CodecTypes["pg/uuid@1"]["output"];
       readonly email: CodecTypes["pg/text@1"]["output"];
       readonly name: CodecTypes["pg/text@1"]["output"];
       readonly createdAt: CodecTypes["pg/timestamptz-string@1"]["output"];
@@ -545,12 +545,12 @@ export type FieldOutputTypes = {
 export type FieldInputTypes = {
   readonly public: {
     readonly Post: {
-      readonly id: CodecTypes["sql/char@1"]["input"];
+      readonly id: CodecTypes["pg/uuid@1"]["input"];
       readonly title: CodecTypes["pg/text@1"]["input"];
-      readonly authorId: CodecTypes["sql/char@1"]["input"];
+      readonly authorId: CodecTypes["pg/uuid@1"]["input"];
     };
     readonly User: {
-      readonly id: CodecTypes["sql/char@1"]["input"];
+      readonly id: CodecTypes["pg/uuid@1"]["input"];
       readonly email: CodecTypes["pg/text@1"]["input"];
       readonly name: CodecTypes["pg/text@1"]["input"];
       readonly createdAt: CodecTypes["pg/timestamptz-string@1"]["input"];
@@ -560,14 +560,14 @@ export type FieldInputTypes = {
 export type StorageColumnTypes = {
   readonly public: {
     readonly Post: {
-      readonly authorId: Char<36>;
-      readonly id: Char<36>;
+      readonly authorId: CodecTypes["pg/uuid@1"]["output"];
+      readonly id: CodecTypes["pg/uuid@1"]["output"];
       readonly title: CodecTypes["pg/text@1"]["output"];
     };
     readonly User: {
       readonly createdAt: CodecTypes["pg/timestamptz-string@1"]["output"];
       readonly email: CodecTypes["pg/text@1"]["output"];
-      readonly id: Char<36>;
+      readonly id: CodecTypes["pg/uuid@1"]["output"];
       readonly name: CodecTypes["pg/text@1"]["output"];
     };
   };
@@ -575,14 +575,14 @@ export type StorageColumnTypes = {
 export type StorageColumnInputTypes = {
   readonly public: {
     readonly Post: {
-      readonly authorId: CodecTypes["sql/char@1"]["input"];
-      readonly id: CodecTypes["sql/char@1"]["input"];
+      readonly authorId: CodecTypes["pg/uuid@1"]["input"];
+      readonly id: CodecTypes["pg/uuid@1"]["input"];
       readonly title: CodecTypes["pg/text@1"]["input"];
     };
     readonly User: {
       readonly createdAt: CodecTypes["pg/timestamptz-string@1"]["input"];
       readonly email: CodecTypes["pg/text@1"]["input"];
-      readonly id: CodecTypes["sql/char@1"]["input"];
+      readonly id: CodecTypes["pg/uuid@1"]["input"];
       readonly name: CodecTypes["pg/text@1"]["input"];
     };
   };
@@ -608,10 +608,9 @@ type ContractBase = Omit<
             readonly Post: {
               columns: {
                 readonly id: {
-                  readonly nativeType: "character";
-                  readonly codecId: "sql/char@1";
+                  readonly nativeType: "uuid";
+                  readonly codecId: "pg/uuid@1";
                   readonly nullable: false;
-                  readonly typeParams: { readonly length: 36 };
                 };
                 readonly title: {
                   readonly nativeType: "text";
@@ -619,10 +618,9 @@ type ContractBase = Omit<
                   readonly nullable: false;
                 };
                 readonly authorId: {
-                  readonly nativeType: "character";
-                  readonly codecId: "sql/char@1";
+                  readonly nativeType: "uuid";
+                  readonly codecId: "pg/uuid@1";
                   readonly nullable: false;
-                  readonly typeParams: { readonly length: 36 };
                 };
               };
               primaryKey: { readonly columns: readonly ["id"] };
@@ -633,10 +631,9 @@ type ContractBase = Omit<
             readonly User: {
               columns: {
                 readonly id: {
-                  readonly nativeType: "character";
-                  readonly codecId: "sql/char@1";
+                  readonly nativeType: "uuid";
+                  readonly codecId: "pg/uuid@1";
                   readonly nullable: false;
-                  readonly typeParams: { readonly length: 36 };
                 };
                 readonly email: {
                   readonly nativeType: "text";
@@ -693,8 +690,7 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: {
                   readonly kind: "scalar";
-                  readonly codecId: "sql/char@1";
-                  readonly typeParams: { readonly length: 36 };
+                  readonly codecId: "pg/uuid@1";
                 };
               };
               readonly title: {
@@ -708,8 +704,7 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: {
                   readonly kind: "scalar";
-                  readonly codecId: "sql/char@1";
-                  readonly typeParams: { readonly length: 36 };
+                  readonly codecId: "pg/uuid@1";
                 };
               };
             };
@@ -742,8 +737,7 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: {
                   readonly kind: "scalar";
-                  readonly codecId: "sql/char@1";
-                  readonly typeParams: { readonly length: 36 };
+                  readonly codecId: "pg/uuid@1";
                 };
               };
               readonly email: {

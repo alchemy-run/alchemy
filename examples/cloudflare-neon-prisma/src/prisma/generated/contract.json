@@ -22,21 +22,15 @@
               "authorId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sql/char@1",
-                  "kind": "scalar",
-                  "typeParams": {
-                    "length": 36
-                  }
+                  "codecId": "pg/uuid@1",
+                  "kind": "scalar"
                 }
               },
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sql/char@1",
-                  "kind": "scalar",
-                  "typeParams": {
-                    "length": 36
-                  }
+                  "codecId": "pg/uuid@1",
+                  "kind": "scalar"
                 }
               },
               "title": {
@@ -95,11 +89,8 @@
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sql/char@1",
-                  "kind": "scalar",
-                  "typeParams": {
-                    "length": 36
-                  }
+                  "codecId": "pg/uuid@1",
+                  "kind": "scalar"
                 }
               },
               "name": {
@@ -154,20 +145,14 @@
             "Post": {
               "columns": {
                 "authorId": {
-                  "codecId": "sql/char@1",
-                  "nativeType": "character",
-                  "nullable": false,
-                  "typeParams": {
-                    "length": 36
-                  }
+                  "codecId": "pg/uuid@1",
+                  "nativeType": "uuid",
+                  "nullable": false
                 },
                 "id": {
-                  "codecId": "sql/char@1",
-                  "nativeType": "character",
-                  "nullable": false,
-                  "typeParams": {
-                    "length": 36
-                  }
+                  "codecId": "pg/uuid@1",
+                  "nativeType": "uuid",
+                  "nullable": false
                 },
                 "title": {
                   "codecId": "pg/text@1",
@@ -199,12 +184,9 @@
                   "nullable": false
                 },
                 "id": {
-                  "codecId": "sql/char@1",
-                  "nativeType": "character",
-                  "nullable": false,
-                  "typeParams": {
-                    "length": 36
-                  }
+                  "codecId": "pg/uuid@1",
+                  "nativeType": "uuid",
+                  "nullable": false
                 },
                 "name": {
                   "codecId": "pg/text@1",
@@ -229,7 +211,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ff53f0b9c647de137bddcfaa13b53e83073e7715dfb4fec95f6c174732d42bcb"
+    "storageHash": "7de60ab4aee8baa42480f8a2d3559ff4027deae801de73c6a93c9eeb4170f558"
   },
   "execution": {
     "executionHash": "3d1e5ef7d0bf68e99ed01f74317c9cb4403c9f0235bcb38e447cfe4595460215",
