@@ -46,7 +46,7 @@ export const devCommand = Command.make(
       // they launch) inherit it — they are forked from here, not from the exec
       // child below.
       if (yield* fs.exists(Floci.FLOCI_CA_PATH)) {
-        process.env.NODE_EXTRA_CA_CERTS = Floci.FLOCI_CA_PATH;
+        process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
       }
       const spawner = yield* RpcSpawner.RpcSpawner;
       // We no longer force Bun in development because this prevents us from testing in Node.
