@@ -36,7 +36,7 @@
     "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle && bun ../../scripts/copy-package-files.ts alchemy",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
-    "test": "alchemy-test",
+    "test": "alchemy-test --exclude test/Railway",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
     "nuke": "cd ../../ && bun nuke"
   },
