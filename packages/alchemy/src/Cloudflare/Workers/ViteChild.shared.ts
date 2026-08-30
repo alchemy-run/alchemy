@@ -71,6 +71,8 @@ export interface ViteBuildChildConfig {
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   viteEnvironments: { entry?: string; children?: string[] } | undefined;
+  /** Deploy the client output alone, ignoring any server bundle. */
+  assetsOnly: boolean | undefined;
   /** Absolute path the child writes the V8-serialized result to. */
   outputPath: string;
 }

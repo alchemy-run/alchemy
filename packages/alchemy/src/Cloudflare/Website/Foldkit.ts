@@ -258,6 +258,14 @@ export const Foldkit: {
               main: props?.main,
               rootDir: props?.rootDir,
               memo: props?.memo,
+              // A Foldkit app that renders outside the browser builds a
+              // server bundle from its own Vite config (`ssr.build`), and
+              // that bundle is not a Worker entry: it exports `renderPage`,
+              // not a handler. Deploying it produces a Worker that answers
+              // nothing, so without a `main` naming a real entry the
+              // deployment carries the client output alone — which is what
+              // a generated site wants, prerendered pages included.
+              assetsOnly: props?.main === undefined,
             },
           }),
         ),
