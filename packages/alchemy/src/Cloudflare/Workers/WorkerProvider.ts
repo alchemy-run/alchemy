@@ -18,12 +18,19 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
-import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
+import {
+  havePropsChanged,
+  isResolved,
+  stripEffects,
+  stripUnresolved,
+} from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
+import { isPlainData } from "../../Util/data.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -212,6 +219,77 @@ export const resolveVersionParentName = (
   if (typeof parent === "string") return parent;
   const workerName = (parent as { workerName?: unknown }).workerName;
   return typeof workerName === "string" ? workerName : undefined;
+};
+
+type WorkerReadInput = {
+  [K in keyof WorkerProps]?: Input<WorkerProps[K]>;
+};
+
+/**
+ * Project desired Worker props for a cold adoption read. Script name,
+ * dispatch namespace, and version parent determine which cloud resource is
+ * read, so each must already have a concrete identity. Other unresolved
+ * leaves, such as bindings in `env`, are safe to omit from the read.
+ *
+ * Domain, route, and cron props control optional observation calls. Keep each
+ * surface only when its complete declaration is resolved; reconcile performs
+ * the forced adoption update from the original desired props afterward.
+ *
+ * @internal exported for unit testing.
+ */
+export const resolveWorkerReadProps = (
+  news: Input<WorkerProps>,
+): Option.Option<WorkerProps> => {
+  if (!isPlainData(news) || Array.isArray(news)) return Option.none();
+  const desired = news as WorkerReadInput;
+
+  const name = desired.name;
+  if (name !== undefined && typeof name !== "string") return Option.none();
+
+  const namespace = desired.namespace;
+  let namespaceName: string | undefined;
+  if (namespace != null) {
+    if (
+      typeof namespace !== "string" &&
+      (!isPlainData(namespace) || Array.isArray(namespace))
+    ) {
+      return Option.none();
+    }
+    namespaceName = resolveNamespaceName(namespace);
+    if (typeof namespaceName !== "string") return Option.none();
+  }
+
+  const version = desired.version;
+  let parentName: string | undefined;
+  if (version != null) {
+    if (!isPlainData(version) || Array.isArray(version)) return Option.none();
+    const parent = version.parent;
+    if (parent != null) {
+      parentName =
+        typeof parent === "string"
+          ? parent
+          : isPlainData(parent) && !Array.isArray(parent)
+            ? typeof parent.workerName === "string"
+              ? parent.workerName
+              : undefined
+            : undefined;
+      if (parentName === undefined) return Option.none();
+    }
+  }
+
+  const projected = stripUnresolved(desired) as WorkerProps;
+  projected.name = name;
+  projected.namespace = namespaceName;
+  if (parentName === undefined) {
+    delete projected.version;
+  } else {
+    projected.version = { parent: parentName };
+  }
+  if (!isResolved(desired.domain)) delete projected.domain;
+  if (!isResolved(desired.routes)) delete projected.routes;
+  if (!isResolved(desired.crons)) delete projected.crons;
+
+  return Option.some(projected);
 };
 
 /**
@@ -4229,6 +4307,7 @@ export const LiveWorkerProvider = () =>
 
       return Worker.Provider.of({
         stables: ["workerId", "workerName"],
+        resolveReadProps: resolveWorkerReadProps,
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* yield* CloudflareEnvironment;

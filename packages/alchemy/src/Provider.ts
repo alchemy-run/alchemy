@@ -267,6 +267,13 @@ export interface ProviderService<
     output: Res["Attributes"] | undefined; // current state -> synced state
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
   /**
+   * Projects unresolved desired props into a safe, resolved shape for a cold
+   * adoption read. Return `None` when any physical-identity input needed by
+   * {@link read} is still unresolved. Providers without this hook retain the
+   * default behavior of skipping cold reads until all desired props resolve.
+   */
+  resolveReadProps?(news: Input<Props<Res>>): Option.Option<Props<Res>>;
+  /**
    * Properties that are always stable across any update.
    */
   stables?: Extract<keyof Res["Attributes"], string>[];
