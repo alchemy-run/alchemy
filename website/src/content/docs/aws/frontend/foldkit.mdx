@@ -10,8 +10,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
 [Foldkit](https://foldkit.dev) is an Elm-architecture frontend framework
-built on Effect. Its apps are client-only Vite projects — the Foldkit
-Vite plugin only adds HMR and devtools wiring — so
+built on Effect. A client-only Foldkit app is a plain `vite build`, so
 `AWS.Website.Foldkit` deploys one with a single declaration: the client
 build lands in a private S3 bucket and serves through CloudFront, routed
 at the edge. There is no server function, no build command, and no
@@ -245,9 +244,10 @@ Effect.gen(function* () {
 ```
 
 :::note[No edge code]
-Cloudflare's `Foldkit` accepts a `main` entry that runs a Worker in
-front of the assets. AWS has no equivalent: this composite is
-assets-only and never creates a server function. Put request-time logic
-behind its own [Lambda API](/aws/apis/effect-http-api) and fetch it from
-the client.
+This composite is assets-only and never creates a server function.
+`ssr.build` is how Foldkit emits a server bundle; this resource does
+not run it. Server-rendered and hybrid Foldkit deployments are the
+[Cloudflare Foldkit](/cloudflare/frontend/foldkit) page. Put
+request-time logic behind its own
+[Lambda API](/aws/apis/effect-http-api) and fetch it from the client.
 :::

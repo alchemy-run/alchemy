@@ -74,11 +74,13 @@ export interface FoldkitProps<
    * - **Client-only.** `index.html` is an unrendered template and no route
    *   has a file of its own. Set `notFoundHandling: "single-page-application"`
    *   so a deep link serves that template and the app's router resolves it.
-   * - **Prerendered.** The build writes every route as `<path>/index.html`
-   *   and overwrites `index.html` with the rendered `/`. The default
-   *   `htmlHandling` already resolves those, and `"single-page-application"`
-   *   is wrong here: it answers an unknown path with the rendered `/` at 200
-   *   instead of a 404.
+   * - **Prerendered.** The app's own `vite.config.ts` sets
+   *   `ssr: { serverEntry, build: { prerender: true } }`, so the one
+   *   `vite build` this resource runs writes every route as
+   *   `<path>/index.html` and overwrites `index.html` with the rendered `/`.
+   *   The default `htmlHandling` already resolves those, and
+   *   `"single-page-application"` is wrong here: it answers an unknown path
+   *   with the rendered `/` at 200 instead of a 404.
    * - **Server-rendered.** Nothing is prerendered, so `index.html` is a bare
    *   template no browser should receive. Set `htmlHandling: "none"` and
    *   `notFoundHandling: "none"` so `/` and every other page fall through to
@@ -245,12 +247,12 @@ export const Foldkit: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
-            // No `assets` default. A Foldkit app can be delivered
-            // client-only, prerendered, server-rendered, or as a mix, and
-            // those want different routing — defaulting to
-            // `single-page-application` served the unrendered template for
-            // every deep link of a server-rendered deployment, at 200, with
-            // nothing to indicate it. See `FoldkitProps.assets`.
+            // No `assets` default. A deployment is delivered client-only
+            // or server-rendered, and those want different routing —
+            // defaulting to `single-page-application` served the unrendered
+            // template for every deep link of a server-rendered deployment,
+            // at 200, with nothing to indicate it. See
+            // `FoldkitProps.assets`.
             main: undefined!,
             vite: {
               main: props?.main,

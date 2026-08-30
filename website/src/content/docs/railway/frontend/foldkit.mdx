@@ -10,9 +10,8 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
 [Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. Its apps are client-only Vite projects —
-the Foldkit Vite plugin only adds HMR and devtools wiring — so
-`Railway.Website.Foldkit` is
+framework built on Effect. A client-only Foldkit app is a plain
+`vite build`, so `Railway.Website.Foldkit` is
 [`Railway.Website.Vite`](/railway/frontend/vite) with SPA fallback
 to `index.html`. Deep links boot the app and the Foldkit router
 takes over.
@@ -21,6 +20,14 @@ Deploy creates a [`Railway.Project`](/railway/compute/projects)
 (unless you pass `project`) and a
 [`Railway.Service`](/railway/compute/services) from a container
 image. The URL is `https://{name}.up.railway.app`.
+
+:::note[Server rendering]
+`ssr.build` is how Foldkit emits a server bundle and prerendered
+pages from that same `vite build`. This resource does not run that
+bundle: it is assets-only. Server-rendered and hybrid Foldkit
+deployments are the
+[Cloudflare Foldkit](/cloudflare/frontend/foldkit) page.
+:::
 
 ## Install
 

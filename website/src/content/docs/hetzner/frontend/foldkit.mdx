@@ -10,9 +10,8 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
 [Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. Its apps are client-only Vite projects —
-the Foldkit Vite plugin only adds HMR and devtools wiring — so
-`Hetzner.Website.Foldkit` is
+framework built on Effect. A client-only Foldkit app is a plain
+`vite build`, so `Hetzner.Website.Foldkit` is
 [`Hetzner.Website.Vite`](/hetzner/frontend/vite) with SPA fallback
 to `index.html`. Deep links boot the app and the Foldkit router
 takes over.
@@ -22,6 +21,14 @@ Deploy creates a [`Hetzner.Server`](/hetzner/compute/servers)
 [`Hetzner.Service`](/hetzner/compute/services) systemd unit on port
 3000. The live URL is `http://{ipv4}:3000` — there is no TLS on the
 Service. Pass `server` to share the VM with other sites and APIs.
+
+:::note[Server rendering]
+`ssr.build` is how Foldkit emits a server bundle and prerendered
+pages from that same `vite build`. This resource does not run that
+bundle: it is assets-only. Server-rendered and hybrid Foldkit
+deployments are the
+[Cloudflare Foldkit](/cloudflare/frontend/foldkit) page.
+:::
 
 ## Install
 

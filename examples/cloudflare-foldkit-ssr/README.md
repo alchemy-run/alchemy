@@ -32,11 +32,11 @@ Files are still served straight from the asset layer — only page requests reac
 
 ## The build id
 
-`renderToString` and `Runtime.hydrate` both require a build id, and hydration refuses a page whose id is not the running build's. `vite.config.ts` takes it from `FOLDKIT_BUILD_ID` and falls back to a fresh value, so a local build always has one. A real deployment should pass a value it already has, such as a commit or release tag, and give the client and server builds the same one. It is published in the page, so it must not be a secret.
+`renderToString` and `Runtime.hydrate` both require a build id, and hydration refuses a page whose id is not the running build's. `vite.config.ts` takes it from `FOLDKIT_BUILD_ID` and stores a generated fallback back into the environment, so a local build always has one and every config read within a build resolves the same id. A real deployment should pass a value it already has, such as a commit or release tag, and give the client and server builds the same one. It is published in the page, so it must not be a secret.
 
 ## A note on `alchemy dev`
 
-The Foldkit Vite plugin has an `ssr: { serverEntry }` option that serves rendered pages from the Vite dev server. This example deliberately does not set it: it loads the entry through `ssrLoadModule`, which needs a runnable `ssr` environment, and under `alchemy dev` that environment belongs to workerd. It is redundant here in any case — requests reach `src/worker.ts`, which renders through the same entry.
+The Foldkit Vite plugin has an `ssr: { serverEntry }` option that serves rendered pages from Foldkit's own Vite dev server. This example does not set it: its dev-time rendering stands down under `alchemy dev` anyway (the `ssr` environment is workerd, so the plugin defers and says so once at startup), and it is redundant here — requests reach `src/worker.ts`, which renders through the same entry.
 
 ## Commands
 
