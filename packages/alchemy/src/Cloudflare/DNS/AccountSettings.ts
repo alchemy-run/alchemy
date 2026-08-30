@@ -202,31 +202,32 @@ export type AccountDnsSettings = Resource<
  * values require the custom nameserver TTL / custom SOA entitlements,
  * `foundationDns` is a paid add-on, and `internalDns` is Enterprise
  * Internal DNS only.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Account-wide overrides
- * @example Force every proxied record to DNS-only
+ * ### Account-wide overrides
+ * **Example:** Force every proxied record to DNS-only
  * ```typescript
  * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   enforceDnsOnly: true,
  * });
  * ```
  *
- * @section Zone defaults
- * @example Flatten CNAMEs in every new zone
+ * ### Zone defaults
+ * **Example:** Flatten CNAMEs in every new zone
  * ```typescript
  * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { flattenAllCnames: true },
  * });
  * ```
  *
- * @example Default new zones to multi-provider DNS
+ * **Example:** Default new zones to multi-provider DNS
  * ```typescript
  * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { multiProvider: true },
  * });
  * ```
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const AccountDnsSettings = Resource<AccountDnsSettings>(TypeId, {
   aliases: ["Cloudflare.Dns.AccountSettings"],

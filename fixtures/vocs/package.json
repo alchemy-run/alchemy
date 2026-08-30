@@ -10,27 +10,27 @@
     "pretest": "playwright install chromium && bun run build"
   },
   "dependencies": {
-    "hono": "catalog:frameworks",
+    "hono": "catalog:frontend",
     "react": "~19.2.6",
     "react-dom": "~19.2.6",
-    "react-server-dom-webpack": "~19.2.6",
-    "vocs": "catalog:frameworks",
-    "waku": "catalog:frameworks"
+    "react-server-dom-webpack": "catalog:frontend",
+    "vocs": "catalog:frontend",
+    "waku": "catalog:frontend"
   },
   "devDependencies": {
-    "@cloudflare/unenv-preset": "catalog:workers",
-    "@cloudflare/workers-types": "catalog:workers",
+    "@cloudflare/unenv-preset": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@playwright/test": "catalog:",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@playwright/test": "catalog:testing",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
-    "@vitejs/plugin-rsc": "catalog:fixtures",
+    "@vitejs/plugin-react": "catalog:frontend",
+    "@vitejs/plugin-rsc": "catalog:frontend",
     "effect": "catalog:effect",
-    "unenv": "catalog:workers",
-    "vite": "catalog:"
+    "unenv": "catalog:cloudflare-runtime",
+    "vite": "catalog:build"
   }
 }

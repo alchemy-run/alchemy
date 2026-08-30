@@ -15,69 +15,24 @@ import {
 
 /**
  * The module specifier of the Next.js source provider. Loaded with a
- * dynamic `import()`, so `@alchemy.run/cloudflare-frameworks` must be installed
+ * dynamic `import()`, so `@alchemy.run/frontend-frameworks` must be installed
  * in the deploying project. The provider is exposed through its `/nextjs`
  * subpath.
  */
-const NEXTJS_SOURCE_PROVIDER =
-  "@alchemy.run/cloudflare-frameworks/nextjs/source";
+const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 
 /**
  * The default compatibility date when none is provided. Matches the
- * `@alchemy.run/cloudflare-frameworks/nextjs` integration's own default so deploy and local
+ * `@alchemy.run/frontend-frameworks/nextjs` integration's own default so deploy and local
  * dev agree.
  */
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
-
-/** Next.js/OpenNext-specific build knobs, forwarded to the source provider. */
-export interface NextjsBuildOptions {
-  /**
-   * Path of the OpenNext config, relative to the project root.
-   * @default "open-next.config.ts"
-   */
-  configPath?: string;
-  /**
-   * The command the OpenNext pipeline runs to build the Next.js app.
-   * A `buildCommand` set in the project's `open-next.config.ts` takes
-   * precedence over this option.
-   * @default "npx next build"
-   */
-  buildCommand?: string;
-  /**
-   * Skip the internal `next build` and reuse an existing `.next` directory.
-   * @default false
-   */
-  skipNextBuild?: boolean;
-  /**
-   * Minify the OpenNext bundling steps and the final worker bundle pass.
-   * @default false
-   */
-  minify?: boolean;
-  /**
-   * Enable OpenNext debug logging (and verbose workerd output in dev).
-   * @default false
-   */
-  debug?: boolean;
-  /**
-   * Local dev (`alchemy dev`) behavior.
-   *
-   * - `"preview"` (default): build the OpenNext worker and serve it under
-   *   workerd — production parity (workerd APIs, ISR/cache semantics),
-   *   no HMR.
-   * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
-   *   Worker's bindings proxied onto OpenNext's `getCloudflareContext()`
-   *   contract. App code runs in Node, not workerd — CF-specific runtime
-   *   behavior still needs `"preview"`.
-   * @default "preview"
-   */
-  devMode?: "preview" | "hmr";
-}
 
 export interface NextjsProps<
   Bindings extends WorkerBindingProps = {},
 > extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
+  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules" | "dev"
 > {
   /**
    * The Next.js project root (the directory containing `next.config.*` and
@@ -92,8 +47,29 @@ export interface NextjsProps<
    * `include`/`exclude` globs when the default is too broad.
    */
   memo?: MemoOptions;
-  /** Next.js/OpenNext-specific build and dev configuration. */
-  nextjs?: NextjsBuildOptions;
+  // The OpenNext build pipeline (buildCommand, minify, debug, ...) is
+  // configured in YOUR `open-next.config.ts`, which OpenNext loads
+  // natively — this resource only deploys the result.
+  /**
+   * Local dev (`alchemy dev`) behavior.
+   */
+  dev?: {
+    /**
+     * - `"preview"` (default): build the OpenNext worker and serve it
+     *   under workerd — production parity (workerd APIs, ISR/cache
+     *   semantics), no HMR.
+     * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
+     *   Worker's bindings proxied onto OpenNext's `getCloudflareContext()`
+     *   contract. App code runs in Node, not workerd — CF-specific
+     *   runtime behavior still needs `"preview"`.
+     * @default "preview"
+     */
+    mode?: "preview" | "hmr";
+    /**
+     * Port for the local dev server. `0` picks an ephemeral port.
+     */
+    port?: number;
+  };
   /**
    * Optional configuration for static asset routing behavior.
    * Defaults to `runWorkerFirst: true` with `htmlHandling`/`notFoundHandling`
@@ -107,21 +83,21 @@ export interface NextjsProps<
  * A Cloudflare Worker deployed from a Next.js project.
  *
  * `Nextjs` builds the app with the wrangler-free OpenNext pipeline from
- * [`@alchemy.run/cloudflare-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/cloudflare-frameworks/src/nextjs):
+ * [`@alchemy.run/frontend-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/frontend-frameworks/src/nextjs):
  * `next build` runs through `@opennextjs/cloudflare`, the resulting worker
  * is bundled into a self-contained ES module set, and the static assets
  * (including prerendered pages and the read-only incremental cache) deploy
  * as Workers static assets. Input files are content-hashed so unchanged
  * projects skip the build and deploy entirely.
  *
- * Both `@alchemy.run/cloudflare-frameworks` and its peer
+ * Both `@alchemy.run/frontend-frameworks` and its peer
  * `@opennextjs/cloudflare` must be installed in the deploying project. The
  * source provider is loaded from the package's `/nextjs` export with a dynamic
  * `import()`.
  *
  * Local dev (`alchemy dev`) defaults to preview parity — the built worker
- * served under workerd. Set `nextjs: { devMode: "hmr" }` for the real
- * `next dev` (Turbopack HMR) with the Worker's bindings proxied onto
+ * served under workerd. Set `devMode: "hmr"` for the real `next dev`
+ * (Turbopack HMR) with the Worker's bindings proxied onto
  * `getCloudflareContext()`.
  *
  * ISR comes in two flavors, chosen by the project's `open-next.config.ts`:
@@ -141,11 +117,8 @@ export interface NextjsProps<
  *   Pages-Router `i18n` config are untested/out of scope for now. App
  *   Router i18n via middleware works (middleware is fully supported).
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Next.js App
+ * ### Deploying a Next.js App
  * A single call builds the app with OpenNext and deploys the worker plus
  * its static assets. The project needs an `open-next.config.ts` — the
  * read-only static-assets incremental cache is a good default:
@@ -160,24 +133,24 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @example Basic Next.js site
+ * **Example:** Basic Next.js site
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site");
  * ```
  *
- * @example Explicit project root
+ * **Example:** Explicit project root
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   rootDir: "./apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Resources passed via `env` become Worker bindings, readable in route
  * handlers and server components through OpenNext's
  * `getCloudflareContext()`.
  *
- * @example Binding an R2 bucket
+ * **Example:** Binding an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
@@ -198,7 +171,7 @@ export interface NextjsProps<
  * }
  * ```
  *
- * @section Writable ISR
+ * ### Writable ISR
  * With the KV incremental cache, ISR revalidation actually writes:
  * `revalidatePath` / `revalidateTag` purge entries, and time-based
  * `revalidate` windows regenerate pages in the background through the
@@ -219,7 +192,7 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @example Binding the writable-ISR resources
+ * **Example:** Binding the writable-ISR resources
  * ```typescript
  * const incCache = yield* Cloudflare.KV.Namespace("NextIncCache");
  * const tagCache = yield* Cloudflare.KV.Namespace("NextTagCache");
@@ -237,12 +210,12 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every project file outside build outputs is hashed to decide
  * whether a rebuild is needed. Use `memo` to narrow the scope when the
  * project has large directories that don't affect the build output.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   memo: {
@@ -251,27 +224,18 @@ export interface NextjsProps<
  * });
  * ```
  *
- * @section Build Configuration
- * The `nextjs` prop tunes the OpenNext pipeline: a custom build command,
- * minification, or reusing an existing `.next` build.
+ * ### Build Configuration
+ * The OpenNext build pipeline (build command, minification, ...) is
+ * configured in your project's `open-next.config.ts`, which loads
+ * natively — the resource only deploys the result.
  *
- * @example Minified build with a custom command
- * ```typescript
- * const site = yield* Cloudflare.Website.Nextjs("Site", {
- *   nextjs: {
- *     buildCommand: "npx next build --no-lint",
- *     minify: true,
- *   },
- * });
- * ```
- *
- * @section Class Form
+ * ### Class Form
  * Calling `Nextjs` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Site extends Cloudflare.Website.Nextjs<Site>()("Site", {
  *   rootDir: "./apps/web",
@@ -279,6 +243,10 @@ export interface NextjsProps<
  *
  * const site = yield* Site;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Nextjs: {
   <Self>(): {
@@ -289,10 +257,9 @@ export const Nextjs: {
         | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -303,10 +270,9 @@ export const Nextjs: {
       | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers
@@ -320,6 +286,13 @@ export const Nextjs: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
+            // `dev.mode` is the integration's dev behavior (routed through
+            // the source options below); only `port` maps onto the Worker's
+            // own local-dev config.
+            dev:
+              props?.dev?.port !== undefined
+                ? { port: props.dev.port }
+                : undefined,
             // OpenNext's revalidation queues (memory-queue, do-queue) fetch
             // the worker back through `WORKER_SELF_REFERENCE`. Always wire
             // the self service binding — it's inert when unused, and its
@@ -351,16 +324,15 @@ export const Nextjs: {
             source: {
               provider: NEXTJS_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
+              // `next dev` (Turbopack) cold-starts broken under bun (every
+              // route 404s until `.next` is warm) — pin the dev child to node.
+              runtime: "node",
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,
-                ...(props?.nextjs !== undefined
-                  ? (({ devMode, ...build }) => ({
-                      ...build,
-                      ...(devMode !== undefined
-                        ? { dev: { mode: devMode } }
-                        : {}),
-                    }))(props.nextjs)
+                ...(props?.dev?.mode !== undefined
+                  ? { dev: { mode: props.dev.mode } }
                   : {}),
               },
             },

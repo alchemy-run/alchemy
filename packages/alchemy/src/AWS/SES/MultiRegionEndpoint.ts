@@ -80,9 +80,8 @@ export interface MultiRegionEndpoint extends Resource<
  *
  * There is no update API, so any change to the name or routes replaces the
  * endpoint.
- * @resource
- * @section Creating Endpoints
- * @example Two-Region Endpoint
+ * ### Creating Endpoints
+ * **Example:** Two-Region Endpoint
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -93,7 +92,7 @@ export interface MultiRegionEndpoint extends Resource<
  * });
  * ```
  *
- * @example Three-Region Endpoint
+ * **Example:** Three-Region Endpoint
  * ```typescript
  * // Traffic is split across the primary region plus every listed route.
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
@@ -101,7 +100,7 @@ export interface MultiRegionEndpoint extends Resource<
  * });
  * ```
  *
- * @example Explicit Endpoint Name
+ * **Example:** Explicit Endpoint Name
  * ```typescript
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
  *   endpointName: "acme-global",
@@ -109,8 +108,8 @@ export interface MultiRegionEndpoint extends Resource<
  * });
  * ```
  *
- * @section Waiting for READY
- * @example Poll Until the Endpoint Is Usable
+ * ### Waiting for READY
+ * **Example:** Poll Until the Endpoint Is Usable
  * ```typescript
  * import * as sesv2 from "@distilled.cloud/aws/sesv2";
  * import * as Effect from "effect/Effect";
@@ -132,6 +131,8 @@ export interface MultiRegionEndpoint extends Resource<
  *     }),
  *   );
  * ```
+ *
+ * @resource
  */
 export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>(
   "AWS.SES.MultiRegionEndpoint",

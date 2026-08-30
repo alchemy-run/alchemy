@@ -107,11 +107,8 @@ export type DeviceDexTest = Resource<
  *
  * Requires the DEX entitlement on the account (the API rejects writes
  * with `Forbidden` / `dex.api.entitlements.missing` otherwise).
- * @resource
- * @product Devices
- * @category Cloudflare One (Zero Trust)
- * @section Creating a DEX test
- * @example HTTP probe every 30 minutes
+ * ### Creating a DEX test
+ * **Example:** HTTP probe every 30 minutes
  * ```typescript
  * const test = yield* Cloudflare.Devices.DeviceDexTest("AppHealth", {
  *   data: { host: "https://app.example.com/health", kind: "http", method: "GET" },
@@ -120,7 +117,7 @@ export type DeviceDexTest = Resource<
  * });
  * ```
  *
- * @example Traceroute probe targeting specific device profiles
+ * **Example:** Traceroute probe targeting specific device profiles
  * ```typescript
  * const trace = yield* Cloudflare.Devices.DeviceDexTest("OriginTrace", {
  *   data: { host: "203.0.113.10", kind: "traceroute" },
@@ -131,6 +128,10 @@ export type DeviceDexTest = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/dex/tests/
+ *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  */
 export const DeviceDexTest = Resource<DeviceDexTest>(TypeId);
 

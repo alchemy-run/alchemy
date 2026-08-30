@@ -32,9 +32,8 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * Note: actually sending a custom verification email requires the account to
  * be out of the SES sandbox — in the sandbox the call fails with the typed
  * `BadRequestException`.
- * @binding
- * @section Verifying Addresses
- * @example Send a Custom Verification Email
+ * ### Verifying Addresses
+ * **Example:** Send a Custom Verification Email
  * ```typescript
  * // init — the function may verify addresses at this identity's domain
  * const sendVerification = yield* SES.SendCustomVerificationEmail(identity);
@@ -46,7 +45,7 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * });
  * ```
  *
- * @example Scope to a Domain the Stack Does Not Manage
+ * **Example:** Scope to a Domain the Stack Does Not Manage
  * ```typescript
  * // Any address at signups.example.com may be verified. No resource edge and
  * // no ownership — nothing is created, adopted, or destroyed.
@@ -55,7 +54,7 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * });
  * ```
  *
- * @example Attribute the Send to a Configuration Set
+ * **Example:** Attribute the Send to a Configuration Set
  * ```typescript
  * // ConfigurationSetName is injected into every request
  * const sendVerification = yield* SES.SendCustomVerificationEmail(
@@ -63,6 +62,8 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  *   configSet,
  * );
  * ```
+ *
+ * @binding
  */
 export interface SendCustomVerificationEmail extends Binding.Service<
   SendCustomVerificationEmail,

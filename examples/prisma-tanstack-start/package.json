@@ -25,12 +25,12 @@
   },
   "dependencies": {
     "@prisma-next/postgres": "^0.8.0",
-    "@tanstack/react-router": "^1.167.4",
-    "@tanstack/react-start": "^1.166.15",
+    "@tanstack/react-router": "catalog:frontend",
+    "@tanstack/react-start": "catalog:frontend",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
+    "effect": "catalog:effect",
     "nitro": "^3.0.260415-beta",
-    "pg": "catalog:",
+    "pg": "catalog:database",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
@@ -38,14 +38,14 @@
     "@prisma-next/cli": "^0.8.0",
     "@prisma-next/target-postgres": "^0.8.0",
     "@prisma-next/vite-plugin-contract-emit": "^0.8.0",
-    "@types/node": "catalog:",
-    "@types/pg": "catalog:",
+    "@types/node": "catalog:tooling",
+    "@types/pg": "catalog:database",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "dotenv": "^17.4.2",
-    "tsx": "^4.20.6",
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "tsx": "catalog:tooling",
+    "typescript": "catalog:build",
+    "vite": "catalog:build"
   }
 }

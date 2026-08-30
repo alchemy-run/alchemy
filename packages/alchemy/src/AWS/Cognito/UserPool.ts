@@ -104,9 +104,10 @@ export interface UserPoolSchemaAttribute {
 
 /**
  * The user pool Lambda trigger slots that take a plain function ARN — the
- * string-valued keys of the pool's `LambdaConfig`. (`CustomSMSSender` /
- * `CustomEmailSender` take versioned config objects + a KMS key and are
- * out of scope for the trigger event source.)
+ * string-valued keys of the pool's `LambdaConfig`. The versioned custom
+ * sender slots are configured separately: `CustomEmailSender` through
+ * {@link UserPoolProps.customEmailSender} (+ `kmsKeyId`); `CustomSMSSender`
+ * is not modelled yet (an observed one is preserved, never cleared).
  */
 export type UserPoolTriggerName =
   | "PreSignUp"
@@ -165,6 +166,59 @@ export class ConflictingUserPoolTrigger extends Data.TaggedError(
 }> {}
 
 /**
+ * The user pool's configuration is internally inconsistent (e.g. a custom
+ * email sender without the KMS key Cognito needs to encrypt the codes it
+ * hands to the function). Raised before any API call is made.
+ */
+export class InvalidUserPoolConfiguration extends Data.TaggedError(
+  "InvalidUserPoolConfiguration",
+)<{
+  readonly reason: string;
+}> {}
+
+/**
+ * A first-factor sign-in method for choice-based authentication.
+ */
+export type UserPoolAuthFactor =
+  | "PASSWORD"
+  | "EMAIL_OTP"
+  | "SMS_OTP"
+  | "WEB_AUTHN";
+
+/**
+ * The sign-in policy of the pool — which first-factor authentication
+ * methods users may start with (choice-based authentication). Requires the
+ * `ESSENTIALS` or `PLUS` feature tier.
+ */
+export interface UserPoolSignInPolicy {
+  /**
+   * First-factor sign-in methods the pool allows. `PASSWORD` is the
+   * classic username + password flow; `EMAIL_OTP` / `SMS_OTP` send a
+   * one-time code (email OTP is delivered through `customEmailSender` when
+   * one is configured); `WEB_AUTHN` is passkey sign-in.
+   * Passwordless factors require the `ESSENTIALS` or `PLUS` tier.
+   */
+  allowedFirstAuthFactors?: UserPoolAuthFactor[];
+}
+
+/**
+ * The `CustomEmailSender` Lambda trigger: Cognito invokes this function
+ * instead of sending email itself, passing the verification / OTP code
+ * encrypted with `kmsKeyId` (decrypt it with the AWS Encryption SDK).
+ * Requires {@link UserPoolProps.kmsKeyId}. The function must also grant
+ * `cognito-idp.amazonaws.com` invoke access (`AWS.Lambda.Permission`).
+ */
+export interface UserPoolCustomEmailSender {
+  /** ARN of the Lambda function that delivers the pool's email messages. */
+  lambdaArn: string;
+  /**
+   * The custom sender event version the function understands.
+   * @default "V1_0"
+   */
+  lambdaVersion?: "V1_0";
+}
+
+/**
  * An account recovery mechanism with its priority (1 is highest).
  */
 export interface UserPoolRecoveryMechanism {
@@ -211,6 +265,13 @@ export interface UserPoolProps {
    */
   schema?: UserPoolSchemaAttribute[];
   /**
+   * Choice-based authentication: the first-factor sign-in methods users may
+   * start with (`PASSWORD`, `EMAIL_OTP`, `SMS_OTP`, `WEB_AUTHN`). Requires
+   * the `ESSENTIALS` or `PLUS` tier when any passwordless factor is listed.
+   * When omitted the observed policy is left untouched.
+   */
+  signInPolicy?: UserPoolSignInPolicy;
+  /**
    * Multi-factor authentication mode. `ON` requires SMS or TOTP setup for
    * every user; avoid SMS-based MFA unless the account has SNS spend
    * entitlements.
@@ -253,6 +314,23 @@ export interface UserPoolProps {
    */
   lambdaConfig?: UserPoolLambdaConfig;
   /**
+   * Route the pool's email messages (sign-up / OTP / recovery codes,
+   * temporary passwords) through your own Lambda function instead of
+   * Cognito's built-in delivery. Requires `kmsKeyId`. Omitting this on an
+   * existing pool clears the custom sender (Cognito falls back to its own
+   * email delivery); ordinary triggers and the other pool settings are
+   * never affected by adding or removing it.
+   */
+  customEmailSender?: UserPoolCustomEmailSender;
+  /**
+   * ARN of the symmetric KMS key Cognito uses to encrypt the codes it
+   * passes to the custom sender function(s) (`LambdaConfig.KMSKeyID`).
+   * The principal running the deploy must hold `kms:CreateGrant` on the
+   * key — Cognito creates a grant against it when the pool is configured —
+   * and the sender function's role needs `kms:Decrypt`.
+   */
+  kmsKeyId?: string;
+  /**
    * Tags to apply to the user pool. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -277,16 +355,15 @@ export interface UserPool extends Resource<
  * An Amazon Cognito user pool — a managed user directory that handles
  * sign-up, sign-in, and token issuance (OIDC-compliant JWTs) for your
  * application.
- * @resource
- * @section Creating a User Pool
- * @example Basic User Pool
+ * ### Creating a User Pool
+ * **Example:** Basic User Pool
  * ```typescript
  * import * as Cognito from "alchemy/AWS/Cognito";
  *
  * const pool = yield* Cognito.UserPool("Users", {});
  * ```
  *
- * @example Email Sign-In with Password Policy
+ * **Example:** Email Sign-In with Password Policy
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {
  *   usernameAttributes: ["email"],
@@ -298,7 +375,7 @@ export interface UserPool extends Resource<
  * });
  * ```
  *
- * @example Admin-Only User Creation
+ * **Example:** Admin-Only User Creation
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {
  *   adminCreateUserOnly: true,
@@ -306,8 +383,8 @@ export interface UserPool extends Resource<
  * });
  * ```
  *
- * @section Custom Attributes
- * @example Pool with Custom Schema Attributes
+ * ### Custom Attributes
+ * **Example:** Pool with Custom Schema Attributes
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {
  *   schema: [
@@ -317,8 +394,29 @@ export interface UserPool extends Resource<
  * });
  * ```
  *
- * @section App Clients and Auth
- * @example Pool with an App Client
+ * ### Email OTP with a Custom Email Sender
+ * **Example:** Passwordless Email OTP Delivered by Your Own Lambda
+ * ```typescript
+ * const key = yield* KMS.Key("CodeKey", {});
+ * const sender = yield* Lambda.Function("EmailSender", {
+ *   main: import.meta.url,
+ * });
+ * yield* Lambda.Permission("CognitoInvoke", {
+ *   functionName: sender.functionName,
+ *   action: "lambda:InvokeFunction",
+ *   principal: "cognito-idp.amazonaws.com",
+ * });
+ * const pool = yield* Cognito.UserPool("Auth", {
+ *   tier: "ESSENTIALS",
+ *   usernameAttributes: ["email"],
+ *   signInPolicy: { allowedFirstAuthFactors: ["PASSWORD", "EMAIL_OTP"] },
+ *   customEmailSender: { lambdaArn: sender.functionArn },
+ *   kmsKeyId: key.keyArn,
+ * });
+ * ```
+ *
+ * ### App Clients and Auth
+ * **Example:** Pool with an App Client
  * ```typescript
  * const pool = yield* Cognito.UserPool("Users", {});
  * const client = yield* Cognito.UserPoolClient("Web", {
@@ -326,6 +424,8 @@ export interface UserPool extends Resource<
  *   explicitAuthFlows: ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
  * });
  * ```
+ *
+ * @resource
  */
 export const UserPool = Resource<UserPool>("AWS.Cognito.UserPool");
 
@@ -379,6 +479,51 @@ const toWireAccountRecovery = (
           Priority: m.priority,
         })),
       };
+
+const toWireSignInPolicy = (policy: UserPoolSignInPolicy | undefined) =>
+  policy === undefined
+    ? undefined
+    : { AllowedFirstAuthFactors: policy.allowedFirstAuthFactors };
+
+const toWireCustomEmailSender = (
+  sender: UserPoolCustomEmailSender | undefined,
+): cip.CustomEmailLambdaVersionConfigType | undefined =>
+  sender === undefined
+    ? undefined
+    : {
+        LambdaArn: sender.lambdaArn,
+        LambdaVersion: sender.lambdaVersion ?? "V1_0",
+      };
+
+const PASSWORDLESS_AUTH_FACTORS: readonly UserPoolAuthFactor[] = [
+  "EMAIL_OTP",
+  "SMS_OTP",
+  "WEB_AUTHN",
+];
+
+/**
+ * Reject configurations Cognito would refuse (or silently mangle) before
+ * any API call is made.
+ */
+const validateProps = (props: UserPoolProps) =>
+  props.customEmailSender !== undefined && props.kmsKeyId === undefined
+    ? Effect.fail(
+        new InvalidUserPoolConfiguration({
+          reason:
+            "customEmailSender requires kmsKeyId — Cognito encrypts the codes it passes to the custom sender with that KMS key",
+        }),
+      )
+    : props.tier === "LITE" &&
+        (props.signInPolicy?.allowedFirstAuthFactors ?? []).some((factor) =>
+          PASSWORDLESS_AUTH_FACTORS.includes(factor),
+        )
+      ? Effect.fail(
+          new InvalidUserPoolConfiguration({
+            reason:
+              "passwordless first-auth factors (EMAIL_OTP / SMS_OTP / WEB_AUTHN) require the ESSENTIALS or PLUS tier, not LITE",
+          }),
+        )
+      : Effect.void;
 
 const tagRecordOf = (
   tags: { [key: string]: string | undefined } | undefined,
@@ -455,14 +600,12 @@ export const UserPoolProvider = () =>
       });
 
       /**
-       * The pool's desired `LambdaConfig`: `props.lambdaConfig` merged with
+       * The pool's desired trigger slots: `props.lambdaConfig` merged with
        * the trigger entries contributed through the binding contract
        * (`Cognito.onUserPoolTrigger` and friends). Fails when two different
-       * function ARNs target the same trigger slot. Returns `undefined`
-       * when no triggers are desired (omitting `LambdaConfig` clears it on
-       * both create and update).
+       * function ARNs target the same trigger slot.
        */
-      const resolveLambdaConfig = Effect.fn(function* (
+      const resolveTriggers = Effect.fn(function* (
         news: UserPoolProps,
         bindings: ReadonlyArray<UserPoolBinding | { data?: UserPoolBinding }>,
       ) {
@@ -492,32 +635,108 @@ export const UserPoolProvider = () =>
             merged[trigger] = arn;
           }
         }
-        return Object.keys(merged).length > 0
-          ? (merged as UserPoolLambdaConfig)
-          : undefined;
+        return merged as UserPoolLambdaConfig;
       });
 
+      /**
+       * The full desired `LambdaConfig` wire shape: the string trigger slots
+       * plus the versioned `CustomEmailSender` + `KMSKeyID` from props. The
+       * provider owns `LambdaConfig` outright, so a trigger or custom sender
+       * removed from the program is cleared on the pool. The one exception
+       * is `CustomSMSSender`, which the props cannot express yet: an
+       * observed one (and the KMS key it needs) is carried over rather than
+       * wiped by an unrelated update. Returns `undefined` when nothing is
+       * desired (omitting `LambdaConfig` clears it on both create and
+       * update).
+       */
+      const desiredLambdaConfig = (
+        news: UserPoolProps,
+        triggers: UserPoolLambdaConfig,
+        observed: cip.LambdaConfigType | undefined,
+      ): cip.LambdaConfigType | undefined => {
+        const customSMSSender = observed?.CustomSMSSender;
+        const config: cip.LambdaConfigType = {
+          ...triggers,
+          CustomEmailSender: toWireCustomEmailSender(news.customEmailSender),
+          CustomSMSSender: customSMSSender,
+          KMSKeyID:
+            news.kmsKeyId ??
+            (customSMSSender !== undefined ? observed?.KMSKeyID : undefined),
+        };
+        const present = Object.fromEntries(
+          Object.entries(config).filter(([, value]) => value !== undefined),
+        ) as cip.LambdaConfigType;
+        return Object.keys(present).length > 0 ? present : undefined;
+      };
+
+      /** True when the managed parts of the observed `LambdaConfig` differ
+       * from the desired one. */
+      const lambdaConfigDrifted = (
+        desired: cip.LambdaConfigType | undefined,
+        observed: cip.LambdaConfigType | undefined,
+      ) => {
+        for (const trigger of USER_POOL_TRIGGER_NAMES) {
+          if (desired?.[trigger] !== observed?.[trigger]) return true;
+        }
+        if (
+          desired?.CustomEmailSender?.LambdaArn !==
+            observed?.CustomEmailSender?.LambdaArn ||
+          desired?.CustomEmailSender?.LambdaVersion !==
+            observed?.CustomEmailSender?.LambdaVersion
+        ) {
+          return true;
+        }
+        return desired?.KMSKeyID !== observed?.KMSKeyID;
+      };
+
       /** The update body sent to `updateUserPool` — always the full desired
-       * state, because Cognito resets any omitted field to its default. */
+       * state, because Cognito resets any omitted field to its default.
+       * Props the user left undefined are "don't care" (see `hasDrift`), so
+       * their OBSERVED value is echoed back rather than dropped — an update
+       * to one setting must not reset another to its default. */
       const desiredUpdate = (
         news: UserPoolProps,
-        lambdaConfig: UserPoolLambdaConfig | undefined,
-      ) => ({
-        LambdaConfig: lambdaConfig,
-        Policies:
+        observed: cip.UserPoolType,
+        lambdaConfig: cip.LambdaConfigType | undefined,
+      ): Omit<cip.UpdateUserPoolRequest, "UserPoolId"> => {
+        const PasswordPolicy =
           news.passwordPolicy === undefined
-            ? undefined
-            : { PasswordPolicy: toWirePasswordPolicy(news.passwordPolicy) },
-        DeletionProtection: news.deletionProtection ? "ACTIVE" : "INACTIVE",
-        AutoVerifiedAttributes: news.autoVerifiedAttributes,
-        MfaConfiguration: news.mfaConfiguration ?? "OFF",
-        AdminCreateUserConfig:
-          news.adminCreateUserOnly === undefined
-            ? undefined
-            : { AllowAdminCreateUserOnly: news.adminCreateUserOnly },
-        AccountRecoverySetting: toWireAccountRecovery(news.accountRecovery),
-        UserPoolTier: news.tier,
-      });
+            ? observed.Policies?.PasswordPolicy
+            : toWirePasswordPolicy(news.passwordPolicy);
+        const SignInPolicy =
+          news.signInPolicy === undefined
+            ? observed.Policies?.SignInPolicy
+            : toWireSignInPolicy(news.signInPolicy);
+        return {
+          LambdaConfig: lambdaConfig,
+          Policies:
+            PasswordPolicy === undefined && SignInPolicy === undefined
+              ? undefined
+              : { PasswordPolicy, SignInPolicy },
+          DeletionProtection: news.deletionProtection ? "ACTIVE" : "INACTIVE",
+          AutoVerifiedAttributes:
+            news.autoVerifiedAttributes ?? observed.AutoVerifiedAttributes,
+          MfaConfiguration: news.mfaConfiguration ?? "OFF",
+          AdminCreateUserConfig:
+            news.adminCreateUserOnly === undefined
+              ? observed.AdminCreateUserConfig === undefined
+                ? undefined
+                : {
+                    // never echo the deprecated UnusedAccountValidityDays —
+                    // Cognito rejects it next to TemporaryPasswordValidityDays
+                    AllowAdminCreateUserOnly:
+                      observed.AdminCreateUserConfig.AllowAdminCreateUserOnly,
+                    InviteMessageTemplate:
+                      observed.AdminCreateUserConfig.InviteMessageTemplate,
+                  }
+              : { AllowAdminCreateUserOnly: news.adminCreateUserOnly },
+          AccountRecoverySetting:
+            news.accountRecovery === undefined
+              ? observed.AccountRecoverySetting
+              : toWireAccountRecovery(news.accountRecovery),
+          UserPoolTier: news.tier ?? observed.UserPoolTier,
+        };
+      };
 
       /** Canonicalize a recovery-mechanism list for order-insensitive
        * comparison. */
@@ -562,17 +781,27 @@ export const UserPoolProvider = () =>
       /** True when the observed pool differs from the desired mutable state.
        * Props the user left undefined are "don't care" and never drift —
        * except `LambdaConfig`, which the provider owns outright (bindings
-       * contribute to it), so a trigger removed from the program is drift
-       * that clears the observed entry. */
+       * contribute to it), so a trigger or custom sender removed from the
+       * program is drift that clears the observed entry. */
       const hasDrift = (
         news: UserPoolProps,
         observed: cip.UserPoolType,
-        lambdaConfig: UserPoolLambdaConfig | undefined,
+        lambdaConfig: cip.LambdaConfigType | undefined,
       ) => {
-        for (const trigger of USER_POOL_TRIGGER_NAMES) {
-          if (lambdaConfig?.[trigger] !== observed.LambdaConfig?.[trigger]) {
-            return true;
-          }
+        if (lambdaConfigDrifted(lambdaConfig, observed.LambdaConfig)) {
+          return true;
+        }
+        if (
+          news.signInPolicy?.allowedFirstAuthFactors !== undefined &&
+          [...news.signInPolicy.allowedFirstAuthFactors].sort().join(",") !==
+            [
+              ...(observed.Policies?.SignInPolicy?.AllowedFirstAuthFactors ??
+                []),
+            ]
+              .sort()
+              .join(",")
+        ) {
+          return true;
         }
         if (news.passwordPolicy !== undefined) {
           const desired = normalizedPasswordPolicy({
@@ -713,10 +942,11 @@ export const UserPoolProvider = () =>
           session,
           bindings,
         }) {
+          yield* validateProps(news);
           const name = output?.userPoolName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const lambdaConfig = yield* resolveLambdaConfig(news, bindings);
+          const triggers = yield* resolveTriggers(news, bindings);
 
           // 1. OBSERVE — output.userPoolId is only a cache; fall back to a
           //    name search so out-of-band deletes and adoption converge.
@@ -744,14 +974,16 @@ export const UserPoolProvider = () =>
             observed = yield* cip
               .createUserPool({
                 PoolName: name,
-                LambdaConfig: lambdaConfig,
+                LambdaConfig: desiredLambdaConfig(news, triggers, undefined),
                 Policies:
-                  news.passwordPolicy === undefined
+                  news.passwordPolicy === undefined &&
+                  news.signInPolicy === undefined
                     ? undefined
                     : {
                         PasswordPolicy: toWirePasswordPolicy(
                           news.passwordPolicy,
                         ),
+                        SignInPolicy: toWireSignInPolicy(news.signInPolicy),
                       },
                 DeletionProtection: news.deletionProtection
                   ? "ACTIVE"
@@ -780,10 +1012,15 @@ export const UserPoolProvider = () =>
             // 3. SYNC — updateUserPool resets omitted fields to defaults, so
             //    the body is always the full desired mutable state; skip the
             //    call entirely when nothing drifted.
+            const lambdaConfig = desiredLambdaConfig(
+              news,
+              triggers,
+              observed.LambdaConfig,
+            );
             if (hasDrift(news, observed, lambdaConfig)) {
               yield* cip.updateUserPool({
                 UserPoolId: observed.Id!,
-                ...desiredUpdate(news, lambdaConfig),
+                ...desiredUpdate(news, observed, lambdaConfig),
               });
             }
 

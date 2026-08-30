@@ -1,3 +1,4 @@
+import { Action } from "@/Action";
 import { adopt, Unowned } from "@/AdoptPolicy";
 import type { DestroyError } from "@/Apply";
 import { Cli } from "@/Cli/Cli";
@@ -6,6 +7,7 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
+import { remote } from "@/ProviderMode.ts";
 import { Stack } from "@/Stack";
 import {
   type CreatingResourceState,
@@ -42,6 +44,7 @@ import {
   modalCalls,
   type ModalResourceProps,
   PhasedTarget,
+  ProbeBinding,
   StaticStablesResource,
   TestLayers,
   TestResource,
@@ -60,6 +63,12 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
     fqn: resourceId,
   })) as S;
 });
+/** The planned action for a logical id, or `undefined` if it isn't planned. */
+const actionOfPlan = (plan: any, logicalId: string) =>
+  (Object.values(plan.resources) as any[]).find(
+    (node: any) => node.resource.LogicalId === logicalId,
+  )?.action;
+
 const listState = Effect.fn(function* () {
   const state = yield* yield* State;
   const stk = yield* Stack;
@@ -2580,6 +2589,78 @@ describe("retain removal policy on replace", () => {
         );
 
         expect(deleted).not.toContain("A");
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "retain added to an already-created resource is persisted by the noop deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        // 1. Create with the default (destroy) policy.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+
+        // 2. Add `retain` — props are otherwise identical, so the resource
+        //    plans as a noop. The policy is a declaration decoration, not a
+        //    prop, so nothing about it can produce a diff; the noop path is
+        //    the only pass that ever sees the change.
+        const declaration = Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        });
+        const plan = yield* declaration.pipe(stack.plan);
+        expect(actionOfPlan(plan, "A")).toEqual("noop");
+        yield* declaration.pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("retain");
+
+        // 3. Remove the declaration — the orphan sweep reads the policy from
+        //    state, so the provider's delete must never fire.
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+        expect(deleted).not.toContain("A");
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "retain removed from an already-created resource is persisted by the noop deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        // The inverse direction: a resource that was retained and is now
+        // declared `destroy` must actually be deleted by the orphan sweep.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("retain");
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+        expect(deleted).toContain("A");
         expect(yield* getState("A")).toBeUndefined();
       }),
   );
@@ -6243,6 +6324,57 @@ describe("provider modes (local ⇄ live)", () => {
 
         yield* stack.destroy();
         expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+describe("binding client data-plane routing (apply)", () => {
+  // Action bodies invoke Binding.Service clients at apply time. In a
+  // `dev` run the wrap must route local resources to the emulator plane
+  // and `Alchemy.remote()` resources to the live plane — the inverse of
+  // each other, and never ambient.
+
+  test.provider(
+    "dev Action on a local resource hits the emulator plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" });
+            const Probe = Action(
+              "ProbeLocal",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("local");
+      }),
+  );
+
+  test.provider(
+    "dev Action on a remote() resource hits the live plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" }).pipe(
+              remote(),
+            );
+            const Probe = Action(
+              "ProbeRemote",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("live");
       }),
   );
 });

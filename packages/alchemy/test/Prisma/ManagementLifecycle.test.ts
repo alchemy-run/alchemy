@@ -41,8 +41,15 @@ import type {
   Project as ApiProject,
   SourceRepository as ApiSourceRepository,
 } from "@/Prisma/Types";
+import { AlchemyContext } from "@/AlchemyContext";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
+
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
 
 class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()(
   "Prisma",
@@ -52,18 +59,21 @@ const projectLayer = (client: PrismaManagementClient) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaProject])).pipe(
     Layer.provideMerge(ProjectProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
   );
 
 const branchLayer = (client: PrismaManagementClient) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaBranch])).pipe(
     Layer.provideMerge(BranchProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
   );
 
 const databaseLayer = (client: PrismaManagementClient) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaDatabase])).pipe(
     Layer.provideMerge(DatabaseProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
   );
 
 const environmentVariableLayer = (client: PrismaManagementClient) =>
@@ -73,6 +83,7 @@ const environmentVariableLayer = (client: PrismaManagementClient) =>
   ).pipe(
     Layer.provideMerge(EnvironmentVariableProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
   );
 
 const customDomainLayer = (client: PrismaManagementClient) =>
@@ -82,6 +93,7 @@ const customDomainLayer = (client: PrismaManagementClient) =>
   ).pipe(
     Layer.provideMerge(CustomDomainProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
   );
 
 const sourceRepositoryLayer = (client: PrismaManagementClient) =>
@@ -91,6 +103,7 @@ const sourceRepositoryLayer = (client: PrismaManagementClient) =>
   ).pipe(
     Layer.provideMerge(SourceRepositoryProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
   );
 
 const apiProject = (
@@ -1182,6 +1195,7 @@ it.effect("refuses an undeletable standalone default database", () => {
   }).pipe(
     Effect.provide(DatabaseProvider()),
     Effect.provide(Layer.succeed(PrismaClient, client)),
+    Effect.provide(liveProviderContext),
   );
 });
 

@@ -118,9 +118,7 @@ export default Api.make(
         if (request.method === "POST" && url.pathname === "/entries") {
           const author = url.searchParams.get("author") ?? "anonymous";
           const message = url.searchParams.get("message") ?? "";
-          const id = yield* Effect.sync(() =>
-            crypto.randomUUID().slice(0, 8),
-          );
+          const id = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
           yield* putItem({
             Item: {
               pk: { S: `entry#${id}` },

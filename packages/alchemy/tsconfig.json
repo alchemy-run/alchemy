@@ -56,6 +56,15 @@
       "path": "../../distilled/packages/neon/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/fly-io/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/railway/tsconfig.json"
+    },
+    {
       "path": "../cloudflare-runtime/tsconfig.json"
     }
   ]

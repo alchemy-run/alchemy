@@ -11,19 +11,19 @@
     "test:e2e": "bun run build && playwright test"
   },
   "dependencies": {
-    "next": "catalog:frameworks",
+    "next": "catalog:frontend",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:effect",
-    "@opennextjs/cloudflare": "catalog:frameworks",
-    "@playwright/test": "catalog:",
+    "@opennextjs/cloudflare": "catalog:frontend",
+    "@playwright/test": "catalog:testing",
     "effect": "catalog:effect",
-    "miniflare": "catalog:workers",
-    "wrangler": "file:../../packages/cloudflare-frameworks/src/nextjs/wrangler-stub"
+    "miniflare": "catalog:cloudflare-runtime",
+    "wrangler": "file:../../packages/frontend-frameworks/src/nextjs/wrangler-stub"
   }
 }

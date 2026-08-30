@@ -28,11 +28,11 @@
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:workers",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@effect/platform-node": "catalog:effect",
-    "@playwright/test": "catalog:",
+    "@playwright/test": "catalog:testing",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",
     "@types/node": "^22.10.2",
@@ -40,7 +40,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
     "effect": "catalog:effect",
-    "vite": "catalog:"
+    "vite": "catalog:build"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

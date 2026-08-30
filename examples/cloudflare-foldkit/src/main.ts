@@ -71,7 +71,10 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             [h.OnClick(ClickedDecrement()), h.Class(buttonClass)],
             ["-"],
           ),
-          h.button([h.OnClick(ClickedReset()), h.Class(buttonClass)], ["Reset"]),
+          h.button(
+            [h.OnClick(ClickedReset()), h.Class(buttonClass)],
+            ["Reset"],
+          ),
           h.button(
             [h.OnClick(ClickedIncrement()), h.Class(buttonClass)],
             ["+"],

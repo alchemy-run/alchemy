@@ -15,6 +15,8 @@
         "**/dist/**",
         "lib/**",
         "**/lib/**",
+        "bin/**",
+        "**/bin/**",
         ".cache/**/*.tsbuildinfo",
         "**/.cache/**/*.tsbuildinfo"
       ]
@@ -37,7 +39,7 @@
       "dependsOn": ["build", "^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
     },
-    "@alchemy.run/cloudflare-frameworks#typecheck": {
+    "@alchemy.run/frontend-frameworks#typecheck": {
       "dependsOn": ["build", "^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
     },

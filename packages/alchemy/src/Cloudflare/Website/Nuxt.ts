@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const NUXT_SOURCE_PROVIDER = "@alchemy.run/cloudflare-frameworks/nuxt/source";
+const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
 export interface NuxtProps<
   Bindings extends WorkerBindingProps = {},
@@ -58,20 +58,23 @@ export interface NuxtProps<
    */
   memo?: MemoOptions;
   /**
-   * Nuxt configuration overrides merged over the project's own
-   * `nuxt.config.ts` (the override wins). The project's config file is
-   * loaded natively — modules, layers, and all — so this is for
-   * deploy-specific tweaks (`routeRules`, `runtimeConfig`, ...). Must be
-   * JSON-serializable (it persists in state). Do not set `nitro.preset`
-   * here — the Cloudflare deploy target owns the preset and a foreign
-   * preset is a hard error.
-   */
-  nuxt?: Record<string, unknown>;
-  /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
   assets?: AssetsConfig;
+  /**
+   * Nuxt config overrides merged over the project's own `nuxt.config.ts`
+   * (the highest-priority c12 layer — a value here wins over the file).
+   * Use it for deploy-time values the config file can't express, e.g.
+   * per-stage `runtimeConfig`; `nuxt.config.ts` remains the primary home
+   * for everything else.
+   *
+   * Must be JSON-serializable — no functions, plugins, or modules (the
+   * value persists in state and participates in the rebuild hash).
+   * `nitro.preset` is always owned by the deploy target and cannot be
+   * overridden here.
+   */
+  nuxt?: Record<string, unknown>;
 }
 
 /**
@@ -84,7 +87,7 @@ export interface NuxtProps<
  * deploys as the Worker script; client assets and prerendered pages
  * (`.output/public`) deploy as Worker static assets.
  *
- * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
  * your project; the integration is loaded from its `/nuxt` export. Input files
  * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the
@@ -104,33 +107,30 @@ export interface NuxtProps<
  * declared via a custom `main` entry only exist in the production build
  * and are not servable in dev yet.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a Nuxt App
+ * ### Deploying a Nuxt App
  * A single call builds and deploys the app — server-rendered pages, API
  * routes, prerendered pages, and client assets included.
  *
- * @example Basic Nuxt site
+ * **Example:** Basic Nuxt site
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website");
  * ```
  *
- * @example Nuxt project in a subdirectory
+ * **Example:** Nuxt project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   rootDir: "apps/web",
  * });
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Values passed via `env` are exposed to server routes and SSR through
  * nitro's `cloudflare_module` runtime contract:
  * `event.context.cloudflare.env` (plus `event.context.cf` and
  * `event.context.cloudflare.context.waitUntil`).
  *
- * @example Reading env from an API route
+ * **Example:** Reading env from an API route
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   env: {
@@ -144,7 +144,7 @@ export interface NuxtProps<
  * // }));
  * ```
  *
- * @example Binding an R2 bucket
+ * **Example:** Binding an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
@@ -155,23 +155,43 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Prerendering
+ * ### Prerendering
  * Routes marked for prerendering in `routeRules` (or via
  * `nitro.prerender`) render at build time into `.output/public` and are
- * served as static assets — no Worker invocation.
+ * served as static assets — no Worker invocation. Configure them in
+ * your `nuxt.config.ts`, which loads natively:
  *
- * @example Prerendering a route
+ * **Example:** Prerendering a route (nuxt.config.ts)
+ * ```typescript
+ * // nuxt.config.ts
+ * export default defineNuxtConfig({
+ *   routeRules: {
+ *     "/about": { prerender: true },
+ *   },
+ * });
+ * ```
+ *
+ * ### Config Overrides
+ * `nuxt.config.ts` is the primary home for Nuxt configuration — it loads
+ * natively. The `nuxt` prop layers deploy-time overrides on top (the
+ * highest-priority c12 layer) for values the file can't express, like
+ * per-stage settings. The bag must be JSON-serializable — no functions,
+ * plugins, or modules — and `nitro.preset` stays owned by the deploy
+ * target.
+ *
+ * **Example:** Deploy-time config overrides
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   nuxt: {
- *     routeRules: {
- *       "/about": { prerender: true },
+ *     app: { baseURL: "/docs/" },
+ *     runtimeConfig: {
+ *       public: { apiBase: "https://api.example.com" },
  *     },
  *   },
  * });
  * ```
  *
- * @section Custom Worker Exports (Durable Objects)
+ * ### Custom Worker Exports (Durable Objects)
  * Nitro's entry module is the Worker's exports seam. Point `main` at your
  * own module that re-exports nitro's runtime handler (imported from
  * `nitropack/presets/cloudflare/runtime/cloudflare-module`) and adds
@@ -179,7 +199,7 @@ export interface NuxtProps<
  * Worker for their namespace bindings to resolve. Every framework route
  * keeps working through the re-exported handler.
  *
- * @example Custom entry hosting a Durable Object
+ * **Example:** Custom entry hosting a Durable Object
  * ```typescript
  * // worker-entry.ts
  * // import nitroHandler from "nitropack/presets/cloudflare/runtime/cloudflare-module";
@@ -196,13 +216,13 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Dev
+ * ### Dev
  * `alchemy dev` runs Nuxt's own dev server (nitro dev, full HMR) with
  * `event.context.cloudflare` served wrangler-free through
  * cloudflare-runtime's platform proxy: resource bindings resolve against
  * a local workerd instance, and literal `env` values overlay them.
  *
- * @example Reading bindings in dev and production alike
+ * **Example:** Reading bindings in dev and production alike
  * ```typescript
  * // server/api/greeting.ts — identical code in dev and deployed
  * // export default defineEventHandler((event) => ({
@@ -213,12 +233,12 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when the project
  * lives in a large repository.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   memo: {
@@ -227,20 +247,20 @@ export interface NuxtProps<
  * });
  * ```
  *
- * @section Limitations
+ * ### Limitations
  * Nitro's `isr` route rule (incremental static regeneration) is
  * implemented only by the Vercel and Netlify presets — on Cloudflare it
  * is silently ignored at build time, and the route renders on demand in
  * the Worker like any other SSR route. Use `prerender` for build-time
  * static routes, or `cache` route rules for runtime caching.
  *
- * @section Class Form
+ * ### Class Form
  * Calling `Nuxt` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.Nuxt<Website>()(
  *   "Website",
@@ -248,6 +268,10 @@ export interface NuxtProps<
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const Nuxt: {
   <Self>(): {
@@ -258,10 +282,9 @@ export const Nuxt: {
         | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -272,10 +295,9 @@ export const Nuxt: {
       | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers
@@ -299,6 +321,7 @@ export const Nuxt: {
             source: {
               provider: NUXT_SOURCE_PROVIDER,
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 main: props?.main,

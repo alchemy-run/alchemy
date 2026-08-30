@@ -5,6 +5,15 @@ import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { Scope } from "effect/Scope";
+import type * as Path from "effect/Path";
+import {
+  closePrismaDevDatabase,
+  ensurePrismaDevDatabase,
+} from "./PrismaDevDatabase.ts";
+import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -237,9 +246,8 @@ export interface Database extends Resource<
  * name and branch attachment can converge in place. Destroying this resource
  * deletes its database and data.
  *
- * @resource
- * @section Creating a Database
- * @example Database in a project
+ * ### Creating a Database
+ * **Example:** Database in a project
  * ```typescript
  * const project = yield* Prisma.Project("app", { createDatabase: false });
  * const database = yield* Prisma.Database("db", {
@@ -248,13 +256,15 @@ export interface Database extends Resource<
  * });
  * ```
  *
- * @example Database attached to a preview branch
+ * **Example:** Database attached to a preview branch
  * ```typescript
  * const database = yield* Prisma.Database("preview-db", {
  *   project,
  *   branchId: preview.branchId,
  * });
  * ```
+ *
+ * @resource
  */
 export const Database = Resource<Database>("Prisma.Database");
 
@@ -478,7 +488,7 @@ const validateDatabaseProps = (props: DatabaseProps) =>
     }
   });
 
-export const DatabaseProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Database,
     Effect.gen(function* () {
@@ -848,3 +858,54 @@ export const DatabaseProvider = () =>
       };
     }),
   );
+
+type PrismaDevDatabaseRequirements = ChildProcessSpawner | Path.Path | Scope;
+
+const ProviderLocal = () =>
+  Provider.succeed<
+    Database,
+    never,
+    never,
+    never,
+    PrismaDevDatabaseRequirements
+  >(Database, {
+    stables: ["databaseId"],
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* () {
+      return { action: "update" } as const;
+    }),
+    read: Effect.fn(function* ({ output }) {
+      return output;
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const databaseId = output?.databaseId ?? devId("database", id);
+      const local = yield* ensurePrismaDevDatabase(databaseId, news.dev);
+      return {
+        databaseId,
+        databaseName: news.name ?? id,
+        projectId:
+          attrOrString(news.project, "projectId") ?? devId("project", id),
+        status: "ready",
+        region: news.region ?? "us-east-1",
+        isDefault: news.isDefault ?? false,
+        branchId: news.branchId ?? null,
+        defaultConnectionId: devId("connection", id),
+        createdAt: output?.createdAt ?? DEV_TIMESTAMP,
+        directConnectionString: local?.directConnectionString,
+        pooledConnectionString: local?.pooledConnectionString,
+        accelerateConnectionString: local?.accelerateConnectionString,
+        host: local?.host,
+        user: local?.user,
+        password: local?.password,
+      } satisfies Database["Attributes"];
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* closePrismaDevDatabase(output.databaseId);
+    }),
+  });
+
+export const DatabaseProvider = () =>
+  ProviderLayer.dual(Database, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

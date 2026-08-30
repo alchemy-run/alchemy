@@ -56,6 +56,8 @@ const forbiddenPatterns = [
 
 const documentedResources = [
   "Branch",
+  "Bucket",
+  "BucketAccessKey",
   "Compute",
   "App",
   "Deployment",
@@ -150,8 +152,11 @@ describe("Prisma source conventions", () => {
         if (resourceDoc === undefined) {
           throw new Error(`${resource} is missing resource JSDoc`);
         }
-        expect(resourceDoc).toContain("@section");
-        expect(resourceDoc).toContain("@example");
+        // `docs:fix-jsdoc` rewrites `@section` / `@example` into markdown
+        // headings (`###` / `**Example:**`). Source of truth is the
+        // rewritten form — see scripts/fix-api-jsdocs.ts.
+        expect(resourceDoc).toContain("### ");
+        expect(resourceDoc).toContain("**Example:**");
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   );

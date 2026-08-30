@@ -65,7 +65,7 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 `Drizzle.Schema` diffs the schema module on each deploy and writes
 pending migration SQL to `out` — `dialect: "mysql"` selects
 drizzle-kit's MySQL differ. Passing `schema.out` as the branch's
-`migrationsDir` creates the dependency edge: generate first, apply
+`migrations` prop creates the dependency edge: generate first, apply
 second, in one `alchemy deploy`. On PlanetScale:
 
 ```typescript
@@ -90,7 +90,7 @@ export const Db = Effect.gen(function* () {
   const branch = yield* Planetscale.MySQLBranch("app-branch", {
     database,
     isProduction: false,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   const password = yield* Planetscale.MySQLPassword("app-password", {

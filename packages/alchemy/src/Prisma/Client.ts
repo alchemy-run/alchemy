@@ -20,6 +20,11 @@ import type {
   Branch,
   BranchCreateInput,
   BranchUpdateInput,
+  Bucket,
+  BucketCreateInput,
+  BucketKey,
+  BucketKeyCreateInput,
+  BucketKeyWithSecret,
   BuildLogsQuery,
   BuildLogsRequest,
   ConnectionCreateInput,
@@ -232,6 +237,30 @@ export interface PrismaManagementClient {
   deleteBranch(
     id: string,
   ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  listBuckets(
+    query?: BucketListQuery,
+  ): Effect.Effect<Bucket[], PrismaApiError | PrismaApiDecodeError>;
+  getBucket(
+    id: string,
+  ): Effect.Effect<Bucket, PrismaApiError | PrismaApiDecodeError>;
+  createBucket(
+    input: BucketCreateInput,
+  ): Effect.Effect<Bucket, PrismaApiError | PrismaApiDecodeError>;
+  deleteBucket(
+    id: string,
+  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  listBucketKeys(
+    bucketId: string,
+    query?: PaginationQuery,
+  ): Effect.Effect<BucketKey[], PrismaApiError | PrismaApiDecodeError>;
+  createBucketKey(
+    bucketId: string,
+    input: BucketKeyCreateInput,
+  ): Effect.Effect<BucketKeyWithSecret, PrismaApiError | PrismaApiDecodeError>;
+  deleteBucketKey(
+    bucketId: string,
+    keyId: string,
+  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   getCustomDomain(
     id: string,
   ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
@@ -405,6 +434,12 @@ export interface ConnectionListQuery extends PaginationQuery {
 export interface BranchListQuery extends PaginationQuery {
   gitName?: string;
   gitNameContains?: string;
+}
+
+export interface BucketListQuery extends PaginationQuery {
+  projectId?: string;
+  branchId?: PrismaBranchIdFilter;
+  branchGitName?: string;
 }
 
 export interface AppListQuery extends PaginationQuery {
@@ -1127,6 +1162,26 @@ function makePrismaClient(): Effect.Effect<
       deleteBranch: (id) =>
         request<void>("DELETE", `/v1/branches/${pathSegment(id)}`),
 
+      listBuckets: (query) => paginate<Bucket>("/v1/buckets", query),
+      getBucket: (id) => data<Bucket>("GET", `/v1/buckets/${pathSegment(id)}`),
+      createBucket: (input) =>
+        data<Bucket>("POST", "/v1/buckets", { body: input }),
+      deleteBucket: (id) =>
+        request<void>("DELETE", `/v1/buckets/${pathSegment(id)}`),
+      listBucketKeys: (bucketId, query) =>
+        paginate<BucketKey>(`/v1/buckets/${pathSegment(bucketId)}/keys`, query),
+      createBucketKey: (bucketId, input) =>
+        data<BucketKeyWithSecret>(
+          "POST",
+          `/v1/buckets/${pathSegment(bucketId)}/keys`,
+          { body: input },
+        ),
+      deleteBucketKey: (bucketId, keyId) =>
+        request<void>(
+          "DELETE",
+          `/v1/buckets/${pathSegment(bucketId)}/keys/${pathSegment(keyId)}`,
+        ),
+
       getCustomDomain: (id) =>
         data<CustomDomain>("GET", `/v1/domains/${pathSegment(id)}`),
       deleteCustomDomain: (id) =>
@@ -1208,30 +1263,26 @@ function makePrismaClient(): Effect.Effect<
           `/v1/deployments/${pathSegment(id)}/logs`,
           logsQuery(query),
         ).pipe(
-          Effect.map(
-            (url): DeploymentLogsRequest => ({
-              url,
-              headers: {
-                Authorization: Redacted.make(
-                  `Bearer ${Redacted.value(env.serviceToken)}`,
-                ),
-              },
-            }),
-          ),
+          Effect.map((url): DeploymentLogsRequest => ({
+            url,
+            headers: {
+              Authorization: Redacted.make(
+                `Bearer ${Redacted.value(env.serviceToken)}`,
+              ),
+            },
+          })),
         ),
       getBuildLogsRequest: (buildId, query) =>
         buildUrl(`/v1/builds/${pathSegment(buildId)}/logs`, query).pipe(
-          Effect.map(
-            (url): BuildLogsRequest => ({
-              url,
-              headers: {
-                Authorization: Redacted.make(
-                  `Bearer ${Redacted.value(env.serviceToken)}`,
-                ),
-                Accept: "application/x-ndjson",
-              },
-            }),
-          ),
+          Effect.map((url): BuildLogsRequest => ({
+            url,
+            headers: {
+              Authorization: Redacted.make(
+                `Bearer ${Redacted.value(env.serviceToken)}`,
+              ),
+              Accept: "application/x-ndjson",
+            },
+          })),
         ),
 
       listEnvironmentVariables: (query) =>

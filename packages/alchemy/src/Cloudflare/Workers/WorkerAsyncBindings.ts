@@ -4,7 +4,14 @@ import type { Json } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
+import * as Namespace from "../../Namespace.ts";
+import { defaultProviderMode } from "../../ProviderMode.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
+import {
+  Application,
+  isApplication,
+  type Application as AccessApplication,
+} from "../Access/Application.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -19,6 +26,8 @@ import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
+import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
@@ -49,6 +58,7 @@ import {
   type Worker,
   type WorkerProps,
 } from "./Worker.ts";
+import type { WorkerAccessApplication } from "./WorkerAccess.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -57,6 +67,59 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
+  // Access enrollment (`access` prop): push this Worker's
+  // `worker`/`preview_worker` destinations onto the application's binding
+  // contract. The application deploys with — and converges on — every
+  // enrolled Worker's destinations, including at create time, where
+  // Cloudflare requires a self-hosted app to be born with a domain or
+  // destinations.
+  //
+  // Skipped when this Worker runs locally (`alchemy dev`): a local worker
+  // has no cloud script (no immutable ID to enroll), and Access cannot
+  // front a localhost URL — the `dev.access` stub covers the runtime
+  // instead. A Worker opted out via `Alchemy.remote()` enrolls normally.
+  const accessHostMode = resource.Mode ?? (yield* defaultProviderMode);
+  if (props.access && accessHostMode !== "local") {
+    const accessInput = props.access;
+    // The shared form is the application itself — as the module-scope
+    // declaration Effect (`const App = Cloudflare.Access.Application(...)`)
+    // or an already-yielded resource. Resolve the yieldable spelling first,
+    // then discriminate.
+    const access = (
+      isYieldableEffectLike(accessInput) && !Output.isOutput(accessInput)
+        ? yield* accessInput as Effect.Effect<unknown>
+        : accessInput
+    ) as AccessApplication | InputProps<WorkerAccessApplication>;
+    const application = isApplication(access)
+      ? access
+      : // Dedicated form: declare an application owned by this Worker —
+        // per-Worker Access configuration means a per-Worker application
+        // (Cloudflare attaches policies to applications, not Workers). It
+        // lives in the Worker's namespace: `<Worker>/Access`.
+        yield* Application("Access", {
+          type: "self_hosted",
+          name: access.name,
+          policies: access.policies,
+          sessionDuration: access.sessionDuration,
+          allowedIdps: access.allowedIdps,
+          autoRedirectToIdentity: access.autoRedirectToIdentity,
+          appLauncherVisible: access.appLauncherVisible,
+        }).pipe(Namespace.push(resource.LogicalId));
+    const previews = isApplication(access) || access.previews !== false;
+    yield* application.bind(`enroll:${resource.FQN}`, {
+      destinations: [
+        { type: "worker", workerId: resource.workerId },
+        ...(previews
+          ? [
+              {
+                type: "preview_worker" as const,
+                workerId: resource.workerId,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
   if (props.env) {
     for (const bindingName in props.env) {
       // @ts-expect-error
@@ -150,6 +213,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               workflowName,
               className,
               scriptName: resource.workerName,
+              limits: binding.limits,
             });
           }
         }
@@ -227,7 +291,14 @@ const bindContainerClass = Effect.fn(function* (
   bindingName: string,
   decl: Container.Decl.Any,
 ) {
-  const className = decl["~alchemy/Container/ClassName"] ?? bindingName;
+  // Effect-valued container props (the shape that threads a sibling
+  // resource's outputs into `env`) can only surface `className` here, once
+  // the props Effect runs.
+  const declaredClassName = decl["~alchemy/Container/ClassName"];
+  const className =
+    (Effect.isEffect(declaredClassName)
+      ? yield* declaredClassName
+      : declaredClassName) ?? bindingName;
   // Resolve the ContainerApplication resource declaration carried on the
   // class. An effectful (`main`) container has no application declaration of
   // its own here (it is created by its `.make()` Layer inside a Durable
@@ -242,12 +313,26 @@ const bindContainerClass = Effect.fn(function* (
       `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
     );
   }
+  // Both halves of the Worker's side describe the same env entry, so they
+  // share one `sid`. Binding rows are collapsed by sid (last write wins), so
+  // splitting them across two `bind` calls silently drops the namespace
+  // binding whenever the two sids coincide — e.g. the env key and the
+  // Container's logical id match (`Sandbox: Container("Sandbox", …)`). The
+  // Worker then uploads the Container declaration itself as a `json` binding
+  // and `env.NAME` is not a DO namespace at runtime.
   yield* resource.bind`${bindingName}`({
     bindings: [
       {
         type: "durable_object_namespace",
         name: bindingName,
         className,
+      },
+    ],
+    containers: [
+      {
+        className,
+        dev: application.dev,
+        hash: application.hash.pipe(Output.map((h) => h?.image)),
       },
     ],
   });
@@ -257,9 +342,6 @@ const bindContainerClass = Effect.fn(function* (
         Output.map((namespaces) => namespaces?.[className]),
       ),
     },
-  });
-  yield* resource.bind`${application.LogicalId}`({
-    containers: [{ className, dev: application.dev }],
   });
 });
 
@@ -526,6 +608,18 @@ const toBinding = (
     return {
       type: "worker_loader",
       name: bindingName,
+    };
+  } else if (isPipelinesStream(binding)) {
+    return {
+      type: "pipelines",
+      name: bindingName,
+      pipeline: binding.streamId,
+    };
+  } else if (isLegacyPipeline(binding)) {
+    return {
+      type: "pipelines",
+      name: bindingName,
+      pipeline: binding.name,
     };
   } else if (Output.isOutput(binding)) {
     return Output.map(

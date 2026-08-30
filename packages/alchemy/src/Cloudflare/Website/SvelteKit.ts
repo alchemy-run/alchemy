@@ -33,41 +33,14 @@ export interface SvelteKitProps<
    */
   memo?: MemoOptions;
   /**
-   * SvelteKit configuration overrides. A project-owned `vite.config.*`
-   * loads natively — its `sveltekit(...)` call is the primary config
-   * source — and these options are merged OVER it (the override wins).
-   * Without a config file, this is the whole kit config. Construction-time
-   * options (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`)
-   * only apply in the no-config-file case — put them in your own
-   * `sveltekit(...)` call otherwise. The `adapter` field is injected by
-   * Alchemy's wrangler-free Cloudflare adapter — do not set it here. Must
-   * be JSON-serializable (it persists in state).
+   * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
+   * over the options of the user's own call (these win). JSON-serializable
+   * only — no `preprocess`/`vitePlugin`/functions; construction-time options
+   * (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`) can only
+   * apply when no user `vite.config.*` exists. The `adapter` field is
+   * always owned by alchemy.
    */
   kit?: Record<string, unknown>;
-  /**
-   * Options for the wrangler-free Cloudflare adapter.
-   */
-  adapter?: {
-    /**
-     * Name of the static-assets binding the generated worker serves files
-     * through.
-     * @default "ASSETS"
-     */
-    assetsBinding?: string;
-    /**
-     * Fallback-page generation, mirroring Workers static assets
-     * `not_found_handling`: `"404-page"` writes a `404.html`,
-     * `"single-page-application"` writes an app-shell `index.html`.
-     * @default "none"
-     */
-    notFoundHandling?: "none" | "404-page" | "single-page-application";
-    /**
-     * With `notFoundHandling: "404-page"`: `"spa"` renders the app shell
-     * as the fallback, `"plaintext"` writes a plain `Not Found` page.
-     * @default "plaintext"
-     */
-    fallback?: "spa" | "plaintext";
-  };
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -87,7 +60,7 @@ export interface SvelteKitProps<
  * Client assets and prerendered pages are deployed as Worker static
  * assets; dynamic routes are served by the generated Worker.
  *
- * The `@alchemy.run/cloudflare-frameworks` package must be installed in your
+ * The `@alchemy.run/frontend-frameworks` package must be installed in your
  * project — its `/sveltekit` export is loaded dynamically at deploy time.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
@@ -103,24 +76,21 @@ export interface SvelteKitProps<
  * platform proxy, with literal `env` values (strings and secrets)
  * overlaid.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Deploying a SvelteKit App
+ * ### Deploying a SvelteKit App
  * A single call builds and deploys the app — server-rendered routes,
  * prerendered pages, and client assets included.
  *
- * @example Basic SvelteKit site
+ * **Example:** Basic SvelteKit site
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website");
  * ```
  *
- * @section Bindings
+ * ### Bindings
  * Values passed via `env` are exposed to server routes through
  * SvelteKit's `platform.env`.
  *
- * @example Reading env from a server route
+ * **Example:** Reading env from a server route
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
  *   env: {
@@ -134,28 +104,41 @@ export interface SvelteKitProps<
  * // });
  * ```
  *
- * @section Kit and Adapter Options
- * Kit options normally live in the `sveltekit(...)` call in your
- * `vite.config.ts`, which loads natively; `kit` is a deploy-time
- * override layer merged over them (the override wins). The generated
- * Cloudflare adapter is configured via `adapter`.
+ * ### Kit Options and 404 Handling
+ * Kit options live in the `sveltekit(...)` call in your
+ * `vite.config.ts`, which loads natively. Fallback-page behavior is
+ * driven by the platform-native `assets.notFoundHandling` knob — the
+ * build generates the matching fallback page (rendering the app shell,
+ * so kit's own error page shows).
  *
- * @example SPA-style 404 fallback
+ * **Example:** App-shell 404 fallback
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
- *   adapter: {
+ *   assets: {
  *     notFoundHandling: "404-page",
- *     fallback: "spa",
  *   },
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * The `kit` prop is a deploy-time override bag merged over your own
+ * `sveltekit(...)` options (the prop wins) — useful for per-stage values
+ * the config file can't compute. JSON-serializable values only.
+ *
+ * **Example:** Deploy-time kit overrides
+ * ```typescript
+ * const site = yield* Cloudflare.Website.SvelteKit("Website", {
+ *   kit: {
+ *     paths: { base: "/docs" },
+ *   },
+ * });
+ * ```
+ *
+ * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when the project
  * lives in a large repository.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
  *   memo: {
@@ -164,13 +147,13 @@ export interface SvelteKitProps<
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `SvelteKit` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Website extends Cloudflare.Website.SvelteKit<Website>()(
  *   "Website",
@@ -178,6 +161,10 @@ export interface SvelteKitProps<
  *
  * const site = yield* Website;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const SvelteKit: {
   <Self>(): {
@@ -188,10 +175,9 @@ export const SvelteKit: {
         | Effect.Effect<InputProps<SvelteKitProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -202,10 +188,9 @@ export const SvelteKit: {
       | Effect.Effect<InputProps<SvelteKitProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers
@@ -222,30 +207,30 @@ export const SvelteKit: {
             // SvelteKit's server graph is built for Node and needs
             // `nodejs_compat` — `getCompatibility` already adds it to every
             // non-python Worker.
-            // The adapter's `notFoundHandling` generates the fallback pages
-            // and the worker shim's 404 deferral, but the Workers assets
-            // layer has its own `not_found_handling` knob — if they
-            // disagree, unknown routes come back as empty-body 404s (the
-            // shim defers to an assets layer still on "none"). Default the
-            // assets-layer knob from the adapter so one prop configures the
-            // whole story; an explicit `assets.notFoundHandling` wins.
-            assets:
-              props?.adapter?.notFoundHandling !== undefined &&
-              props.adapter.notFoundHandling !== "none" &&
-              props.assets?.notFoundHandling === undefined
-                ? {
-                    ...props.assets,
-                    notFoundHandling: props.adapter.notFoundHandling,
-                  }
-                : props?.assets,
+            assets: props?.assets,
             source: {
-              provider: "@alchemy.run/cloudflare-frameworks/sveltekit/source",
+              provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
               devMode: "server",
+              rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,
                 kit: props?.kit,
-                adapter: props?.adapter,
+                // The adapter's build-time page GENERATION (404.html /
+                // app-shell index.html) is derived from the one
+                // platform-native knob, `assets.notFoundHandling`, so a
+                // single prop configures generation AND serving — the two
+                // halves can never disagree. The generated 404-page
+                // renders the app shell so kit's own error page shows.
+                ...(props?.assets?.notFoundHandling !== undefined &&
+                props.assets.notFoundHandling !== "none"
+                  ? {
+                      adapter: {
+                        notFoundHandling: props.assets.notFoundHandling,
+                        fallback: "spa",
+                      },
+                    }
+                  : {}),
               },
             },
           }),

@@ -5,8 +5,9 @@ const root = path.resolve(import.meta.dir, "..");
 const packagesDirectory = path.join(root, "packages");
 const thirdPartyPackages: Array<string> = [
   "alchemy",
-  "cloudflare-frameworks",
+  "frontend-frameworks",
   "cloudflare-runtime",
+  "node-utils",
 ];
 const readmePackages: Array<string> = ["alchemy"];
 

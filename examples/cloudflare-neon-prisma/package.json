@@ -16,14 +16,14 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@effect/platform-bun": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@prisma/orm-postgres": "catalog:",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@effect/platform-bun": "catalog:effect",
+    "@effect/platform-node": "catalog:effect",
+    "@prisma/orm-postgres": "catalog:database",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:effect"
   },
   "devDependencies": {
-    "prisma-next": "catalog:"
+    "prisma-next": "catalog:database"
   }
 }

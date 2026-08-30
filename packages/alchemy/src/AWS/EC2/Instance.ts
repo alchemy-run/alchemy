@@ -27,6 +27,7 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
+  type Ec2HostedProps,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
@@ -274,9 +275,8 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
  * a bundled long-lived Effect program directly on the machine.
- * @resource
- * @section Launching Instances
- * @example Basic Instance
+ * ### Launching Instances
+ * **Example:** Basic Instance
  * ```typescript
  * const instance = yield* AWS.EC2.Instance("AppInstance", {
  *   imageId: AWS.EC2.amazonLinux2023(),
@@ -285,8 +285,8 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * });
  * ```
  *
- * @section Hosting Processes
- * @example HTTP Server on an Instance
+ * ### Hosting Processes
+ * **Example:** HTTP Server on an Instance
  * ```typescript
  * const api = yield* Effect.gen(function* () {
  *   yield* Http.serve(
@@ -308,7 +308,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
+ * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Top-level calls in the
  * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
  * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
@@ -316,7 +316,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * tree-shaken out of the bundle. Any other package — including your own
  * app — is left untouched unless you list it explicitly.
  *
- * @example Treat additional packages as pure
+ * **Example:** Treat additional packages as pure
  * Pass package names (or picomatch globs) via `build.pure.packages` to
  * annotate them in addition to the defaults.
  * ```typescript
@@ -339,13 +339,15 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * `@distilled.cloud` defaults declare exactly that, on purpose — their
  * modules are designed to be fully tree-shakeable.
  *
- * @example Disable pure annotations
+ * **Example:** Disable pure annotations
  * ```typescript
  * {
  *   main: import.meta.url,
  *   build: { pure: false },
  * }
  * ```
+ *
+ * @resource
  */
 export const Instance: Platform<
   Instance,
@@ -653,6 +655,41 @@ export const InstanceProvider = () =>
             );
           }),
         diff: Effect.fn(function* ({ id, news, olds, output }) {
+          // The hosted bundle hash must participate in planning even while
+          // OTHER props are unresolved Outputs (an `imageId` AMI lookup, a
+          // subnet reference): a content-only edit changes no prop at all,
+          // so bailing on full resolution silently no-ops the update. The
+          // content inputs are plain — gate on THEM, not on the whole bag
+          // (the same isResolved-defeats-content-diff bug the MicroVM image
+          // diff had).
+          const raw = news as unknown as Record<string, unknown>;
+          const contentInputs = {
+            main: raw.main,
+            handler: raw.handler,
+            build: raw.build,
+            port: raw.port,
+            // `isExternal` chooses the bundler entry (raw file vs virtual
+            // `export default` wrapper). Omitting it here re-bundles an
+            // external program as an Effect entrypoint and fails the plan
+            // with MISSING_EXPORT when the source has no default export.
+            isExternal: raw.isExternal,
+          };
+          if (
+            isResolved(contentInputs) &&
+            contentInputs.main !== undefined &&
+            output?.code?.hash
+          ) {
+            const { hash } = yield* hosted.bundleProgram(
+              id,
+              contentInputs as unknown as Ec2HostedProps,
+            );
+            if (hash !== output.code.hash) {
+              return {
+                action: "update",
+                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+              } as const;
+            }
+          }
           if (!isResolved(news)) return;
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
@@ -693,20 +730,8 @@ export const InstanceProvider = () =>
             } as const;
           }
 
-          // The hosted bundle hash participates in planning: a change confined
-          // to the runtime program (or its imports) leaves every prop equal, so
-          // re-bundle and compare against the deployed hash. A mismatch plans
-          // an in-place update, whose reconcile re-uploads the bundle and
-          // reboots the instance.
-          if (news.main && output?.code?.hash) {
-            const { hash } = yield* hosted.bundleProgram(id, news);
-            if (hash !== output.code.hash) {
-              return {
-                action: "update",
-                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
-              } as const;
-            }
-          }
+          // Content-only changes were already handled by the resolved-subset
+          // bundle-hash check above.
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId

@@ -3,6 +3,7 @@ import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { AlchemyContext } from "@/AlchemyContext";
 
 const app = (id: string, branchId: string | null = "branch-main") => ({
   id,
@@ -33,12 +34,19 @@ const branch = (id: string, isDefault = true) => ({
   },
 });
 
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
 const provide =
   (client: PrismaManagementClient) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.provide(AppProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(liveProviderContext),
     );
 
 describe("Prisma App", () => {

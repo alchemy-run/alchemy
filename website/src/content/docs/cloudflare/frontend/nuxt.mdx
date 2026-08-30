@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@alchemy.run/cloudflare-frameworks";
+export const devDeps = "@alchemy.run/frontend-frameworks";
 
 `Cloudflare.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app as
 a Cloudflare Worker. It builds the app through your project's own
@@ -20,7 +20,7 @@ run.
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/cloudflare-frameworks`; the resource loads its `/nuxt`
+`@alchemy.run/frontend-frameworks`; the resource loads its `/nuxt`
 export from your project at deploy time. It is only used at build time,
 so a dev dependency is enough:
 
@@ -54,12 +54,30 @@ export default defineNuxtConfig({
 });
 ```
 
-Deploy-specific overrides are merged over it via the `nuxt` prop
-(the override wins) — see [Prerendering](#prerendering) below for an
-example.
-
 Don't set `nitro.preset` — the Cloudflare deploy target owns the
 preset, and a foreign preset is a hard error.
+
+## Deploy-time overrides
+
+Config that only exists at deploy time — a stage-dependent base URL, a
+per-environment `runtimeConfig` — goes in the `nuxt` prop. It merges
+over `nuxt.config.ts` as the highest-priority layer, so a value here
+wins:
+
+```typescript
+export const Website = Cloudflare.Website.Nuxt("Website", {
+  nuxt: {
+    app: { baseURL: "/docs/" },
+    runtimeConfig: {
+      public: { apiBase: "https://api.example.com" },
+    },
+  },
+});
+```
+
+The bag must be JSON-serializable — no functions, plugins, or modules;
+those belong in `nuxt.config.ts`. `nitro.preset` stays owned by the
+deploy target.
 
 ## Declare the Website
 
@@ -174,14 +192,14 @@ way.
 
 Routes marked for prerendering in `routeRules` (or via
 `nitro.prerender`) render at build time into `.output/public` and are
-served as static assets, with no Worker invocation:
+served as static assets, with no Worker invocation. Configure them in
+your `nuxt.config.ts`, which loads natively:
 
 ```typescript
-export const Website = Cloudflare.Website.Nuxt("Website", {
-  nuxt: {
-    routeRules: {
-      "/about": { prerender: true },
-    },
+// nuxt.config.ts
+export default defineNuxtConfig({
+  routeRules: {
+    "/about": { prerender: true },
   },
 });
 ```
