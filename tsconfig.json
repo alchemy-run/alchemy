@@ -119,6 +119,9 @@
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-stream-webrtc/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-tanstack-start/tsconfig.json"
     },
     {
