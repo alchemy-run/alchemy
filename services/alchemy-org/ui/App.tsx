@@ -1231,7 +1231,9 @@ export const App = () => {
                     </span>
                   </div>
                     </ContextMenuTrigger>
-                    <ContextMenuContent>
+                    <ContextMenuContent
+                      onCloseAutoFocus={(event) => event.preventDefault()}
+                    >
                       <ContextMenuItem
                         onSelect={() => newThread(group.session)}
                       >
@@ -1459,7 +1461,9 @@ export const App = () => {
                           </button>
                         )}
                       </ContextMenuTrigger>
-                      <ContextMenuContent>
+                      <ContextMenuContent
+                        onCloseAutoFocus={(event) => event.preventDefault()}
+                      >
                         <ContextMenuItem onSelect={() => newThread(session)}>
                           <MessageSquare /> New thread
                         </ContextMenuItem>
@@ -1528,7 +1532,12 @@ export const App = () => {
                     +
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent
+                  align="start"
+                  // let the freshly opened thread/terminal keep focus
+                  // instead of returning it to the + trigger
+                  onCloseAutoFocus={(event) => event.preventDefault()}
+                >
                   <DropdownMenuItem
                     onSelect={() => newThread(currentGroup.session)}
                   >

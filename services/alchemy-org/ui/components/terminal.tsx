@@ -70,6 +70,10 @@ export const GhosttyTerminal = ({
   // latest registration callback without re-running the socket effect
   const registerKillRef = useRef(registerKill);
   registerKillRef.current = registerKill;
+  // read at async-init time: a freshly created tab is active before the
+  // terminal object exists, so the [active] effect alone can't focus it
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const [phase, setPhase] = useState<Phase>("connecting");
   const [statusMessage, setStatusMessage] = useState(
     "starting the session's machine",
@@ -192,6 +196,10 @@ export const GhosttyTerminal = ({
       term.open(container);
       fit.fit();
       fit.observeResize();
+      // a new tab mounts active — take focus as soon as the terminal
+      // exists (menus that spawned the tab must not keep it; see the
+      // onCloseAutoFocus preventDefault on their Content)
+      if (activeRef.current) term.focus();
 
       term.onData((data) => {
         if (socket?.readyState === WebSocket.OPEN) {
