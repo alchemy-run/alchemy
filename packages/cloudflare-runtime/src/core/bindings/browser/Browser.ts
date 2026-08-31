@@ -174,6 +174,7 @@ export const BrowserLive = Layer.effect(
             const browserService: WorkerdConfig.Service = {
               name: SERVICE_BROWSER,
               worker: {
+                // Stay pre-2026-04-07: CDP proxy hangs with auto-reply-to-close.
                 compatibilityDate: "2025-01-01",
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(BrowserWorker.worker),

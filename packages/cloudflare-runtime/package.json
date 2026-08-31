@@ -576,6 +576,12 @@
       "worker": "./src/core/globals/Storage.ts",
       "import": "./dist/core/node/globals/Storage.mjs"
     },
+    "./core/internal/constants": {
+      "types": "./dist/core/node/internal/constants.d.mts",
+      "bun": "./src/core/internal/constants.ts",
+      "worker": "./src/core/internal/constants.ts",
+      "import": "./dist/core/node/internal/constants.mjs"
+    },
     "./core/internal/internal-worker": {
       "types": "./dist/core/node/internal/internal-worker.d.mts",
       "bun": "./src/core/internal/internal-worker.ts",
