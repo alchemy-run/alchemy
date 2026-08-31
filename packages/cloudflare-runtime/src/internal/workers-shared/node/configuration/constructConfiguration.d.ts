@@ -13,7 +13,7 @@ export declare function constructRedirects({
 }: {
   redirects?: ParsedRedirects;
   redirectsFile?: string;
-  logger: Logger;
+  logger?: Logger;
 }): Pick<AssetConfig, "redirects">;
 export declare function constructHeaders({
   headers,
@@ -22,6 +22,6 @@ export declare function constructHeaders({
 }: {
   headers?: ParsedHeaders;
   headersFile?: string;
-  logger: Logger;
+  logger?: Logger;
 }): Pick<AssetConfig, "headers">;
 //# sourceMappingURL=constructConfiguration.d.ts.map

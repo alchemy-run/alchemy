@@ -22,7 +22,6 @@ import {
   PATH_HASH_OFFSET,
   PATH_HASH_SIZE,
 } from "../../../internal/workers-shared/shared/constants.ts";
-import type { Logger as AssetParserLogger } from "../../../internal/workers-shared/shared/configuration/types.ts";
 import type {
   AssetConfig,
   RouterConfig,
@@ -370,36 +369,6 @@ export const AssetsLive = Layer.effect(
   }),
 );
 
-/**
- * Collects workers-shared parser logs and re-emits them through Effect so
- * they hit the CLI logger (log level, run file, TUI) instead of raw stdout.
- */
-const withAssetParserLogger = <A>(
-  run: (logger: AssetParserLogger) => A,
-): Effect.Effect<A> =>
-  Effect.gen(function* () {
-    const pending: Array<Effect.Effect<void>> = [];
-    const result = run({
-      debug: (message) => {
-        pending.push(Effect.logDebug(message));
-      },
-      log: (message) => {
-        pending.push(Effect.log(message));
-      },
-      info: (message) => {
-        pending.push(Effect.logInfo(message));
-      },
-      warn: (message) => {
-        pending.push(Effect.logWarning(message));
-      },
-      error: (error) => {
-        pending.push(Effect.logError(error));
-      },
-    });
-    yield* Effect.all(pending, { discard: true });
-    return result;
-  });
-
 export const buildAssetConfigs = Effect.fn("buildAssetConfigs")(function* (
   worker: Pick<
     RuntimeWorker,
@@ -409,24 +378,36 @@ export const buildAssetConfigs = Effect.fn("buildAssetConfigs")(function* (
   let headers: AssetConfig["headers"] | undefined;
   if (worker.assets?.headers) {
     const parsedHeaders = parseHeaders(worker.assets.headers);
-    headers = (yield* withAssetParserLogger((logger) =>
-      constructHeaders({
-        headers: parsedHeaders,
-        headersFile: worker.assets.headers,
-        logger,
-      }),
-    )).headers;
+    yield* Effect.log(
+      `Parsed ${parsedHeaders.rules.length} valid header rule${parsedHeaders.rules.length === 1 ? "" : "s"}.`,
+    );
+    if (parsedHeaders.invalid.length > 0) {
+      yield* Effect.logWarning(
+        `Found ${parsedHeaders.invalid.length} invalid header rule${parsedHeaders.invalid.length === 1 ? "" : "s"}:\n` +
+          parsedHeaders.invalid.map((rule) => rule.message).join("\n"),
+      );
+    }
+    headers = constructHeaders({
+      headers: parsedHeaders,
+      headersFile: worker.assets.headers,
+    }).headers;
   }
   let redirects: AssetConfig["redirects"] | undefined;
   if (worker.assets?.redirects) {
     const parsedRedirects = parseRedirects(worker.assets.redirects);
-    redirects = (yield* withAssetParserLogger((logger) =>
-      constructRedirects({
-        redirects: parsedRedirects,
-        redirectsFile: worker.assets.redirects,
-        logger,
-      }),
-    )).redirects;
+    yield* Effect.log(
+      `Parsed ${parsedRedirects.rules.length} valid redirect rule${parsedRedirects.rules.length === 1 ? "" : "s"}.`,
+    );
+    if (parsedRedirects.invalid.length > 0) {
+      yield* Effect.logWarning(
+        `Found ${parsedRedirects.invalid.length} invalid redirect rule${parsedRedirects.invalid.length === 1 ? "" : "s"}:\n` +
+          parsedRedirects.invalid.map((rule) => rule.message).join("\n"),
+      );
+    }
+    redirects = constructRedirects({
+      redirects: parsedRedirects,
+      redirectsFile: worker.assets.redirects,
+    }).redirects;
   }
   let staticRouting: StaticRouting | undefined;
   if (Array.isArray(worker.assets?.runWorkerFirst)) {

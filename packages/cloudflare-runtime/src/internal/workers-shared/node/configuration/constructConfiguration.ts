@@ -26,7 +26,7 @@ export function constructRedirects({
 }: {
   redirects?: ParsedRedirects;
   redirectsFile?: string;
-  logger: Logger;
+  logger?: Logger;
 }): Pick<AssetConfig, "redirects"> {
   if (!redirects) {
     return {};
@@ -41,7 +41,7 @@ export function constructRedirects({
     ? relative(process.cwd(), redirectsFile)
     : "";
 
-  logger.log(
+  logger?.log(
     `✨ Parsed ${num_valid} valid redirect rule${num_valid === 1 ? "" : "s"}.`,
   );
 
@@ -56,7 +56,7 @@ export function constructRedirects({
       }
     }
 
-    logger.warn(
+    logger?.warn(
       `Found ${num_invalid} invalid redirect rule${num_invalid === 1 ? "" : "s"}:\n` +
         `${invalidRedirectRulesList}`,
     );
@@ -80,7 +80,7 @@ export function constructRedirects({
         };
         continue;
       } else {
-        logger.info(
+        logger?.info(
           `The redirect rule ${rule.from} → ${rule.status} ${rule.to} could be made more performant by bringing it above any lines with splats or placeholders.`,
         );
       }
@@ -106,7 +106,7 @@ export function constructHeaders({
 }: {
   headers?: ParsedHeaders;
   headersFile?: string;
-  logger: Logger;
+  logger?: Logger;
 }): Pick<AssetConfig, "headers"> {
   if (!headers) {
     return {};
@@ -121,7 +121,7 @@ export function constructHeaders({
     ? relative(process.cwd(), headersFile)
     : "";
 
-  logger.log(
+  logger?.log(
     `✨ Parsed ${num_valid} valid header rule${num_valid === 1 ? "" : "s"}.`,
   );
 
@@ -136,7 +136,7 @@ export function constructHeaders({
       }
     }
 
-    logger.warn(
+    logger?.warn(
       `Found ${num_invalid} invalid header rule${num_invalid === 1 ? "" : "s"}:\n` +
         `${invalidHeaderRulesList}`,
     );
