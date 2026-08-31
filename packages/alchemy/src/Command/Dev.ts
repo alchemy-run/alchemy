@@ -218,7 +218,15 @@ const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
  */
 export const extractUrl = (text: string) => {
   const clean = text.replaceAll(ANSI_REGEX, "");
-  return clean.match(LOCAL_URL_REGEX)?.[0] ?? clean.match(URL_REGEX)?.[0];
+  const url = clean.match(LOCAL_URL_REGEX)?.[0] ?? clean.match(URL_REGEX)?.[0];
+  // Some dev servers print their *bind* address (Nuxt: `http://0.0.0.0:3000`),
+  // which is not a connectable host. Normalize the unspecified address to
+  // `localhost` so consumers of `url` — browser links, Router dev routing,
+  // the emulated CloudFront edge dialing the origin — can actually reach it.
+  return url?.replace(
+    /^(https?:\/\/)(?:0\.0\.0\.0|\[::\]|\[0+:0+:0+:0+:0+:0+:0+:0+\])(?=[:/]|$)/,
+    "$1localhost",
+  );
 };
 
 const isLocalUrl = (url: string) => LOCAL_URL_REGEX.test(url);

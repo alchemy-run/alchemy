@@ -93,7 +93,26 @@ for (const root of requestedRoots) {
 }
 
 process.env.ALCHEMY_TEST_DEV = "1";
-process.env.ALCHEMY_FLOCI_IMAGE ??= "floci:dev";
+
+// Prefer a locally built `floci:dev` (pnpm floci:build) when it exists —
+// that's how unreleased emulator patches get exercised by this suite. When
+// it doesn't, leave the env unset so the floci package resolves the pinned
+// release image; hard-defaulting to a missing image fails every suite's
+// `docker run` before a single test can run.
+if (!process.env.ALCHEMY_FLOCI_IMAGE) {
+  const devImage = Bun.spawnSync(
+    ["docker", "image", "inspect", "floci:dev"],
+    { stdout: "ignore", stderr: "ignore" },
+  );
+  if (devImage.exitCode === 0) {
+    process.env.ALCHEMY_FLOCI_IMAGE = "floci:dev";
+    console.log("test:aws:floci: using locally built floci:dev image");
+  } else {
+    console.log(
+      "test:aws:floci: no local floci:dev image (pnpm floci:build) — using the pinned release image",
+    );
+  }
+}
 
 if (!flags.includes("--profile")) {
   flags.unshift("--profile", "testing");

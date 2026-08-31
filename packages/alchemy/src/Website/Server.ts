@@ -457,6 +457,21 @@ const resolveDevPort = Effect.fn(function* (options: {
 });
 
 /**
+ * A framework dev server may advertise its *bind* address — nuxt echoes the
+ * host it was told to listen on, so a Router-attached site (which binds
+ * `0.0.0.0` to be reachable from the emulator container) reports
+ * `http://0.0.0.0:{port}/`. The unspecified address is not a connectable
+ * host: normalize it to `localhost` for the `url` attribute (browser links,
+ * Router dev routing, the emulated CloudFront edge dialing the origin). The
+ * server itself still listens on every interface.
+ */
+const normalizeAdvertisedUrl = (url: string) =>
+  url.replace(
+    /^(https?:\/\/)(?:0\.0\.0\.0|\[::\]|\[0+(?::0+){7}\])(?=[:/]|$)/,
+    "$1localhost",
+  );
+
+/**
  * The `alchemy dev` variant: runs the framework's own dev server (native
  * HMR through the framework's kit — nuxt, astro, ...) inside the dev
  * sidecar, so it survives user-code hot reloads. Restarts when the
@@ -536,7 +551,7 @@ export const ServerProviderLocal = () =>
             distDir: undefined,
             clientDir: undefined,
             serverEntry: undefined,
-            url,
+            url: normalizeAdvertisedUrl(url),
             hash: { input: undefined, output: undefined },
           };
         }),
