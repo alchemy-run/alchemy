@@ -760,15 +760,19 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     // Precedence: the canonical domain, then aliases in declaration
     // order, then the CloudFront default domain (only while
     // `cloudfrontUrl` is enabled). Redirect hostnames never appear.
+    //
+    // `dist.url` rather than an interpolated
+    // `https://${dist.domainName}` (same as Router): the distribution
+    // knows its own address, which is `https://{id}.cloudfront.net` on
+    // AWS and `http://localhost:{port}` under `alchemy dev`, where that
+    // AWS hostname resolves to nothing.
     urls = domain
       ? [
           Output.interpolate`https://${domain.name}`,
           ...(domain.aliases ?? []).map((alias) => `https://${alias}`),
-          ...(props.cloudfrontUrl !== false
-            ? [Output.interpolate`https://${dist.domainName}`]
-            : []),
+          ...(props.cloudfrontUrl !== false ? [dist.url] : []),
         ]
-      : [Output.interpolate`https://${dist.domainName}`];
+      : [dist.url];
   }
 
   // The edge router signs S3 origin requests with OAC (sigv4, see

@@ -36,7 +36,13 @@ const fixtureEntries = [
   "public",
 ];
 
-describe.skipIf(!runLive)("AWS.Website.Foldkit", () => {
+// Skipped under the floci runner: in dev the composite deploys only the
+// framework dev server (no Lambda/S3/CloudFront), so this test's live
+// topology assertions are meaningless there. Dev behavior is covered by
+// the co-located Foldkit.local.test.ts suite.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
+describe.skipIf(!runLive || runEmulated)("AWS.Website.Foldkit", () => {
   // The resource's reason to exist: a Foldkit app routes on the client, so
   // the deployment is assets-only and deep links fall back to the shell
   // without the caller configuring anything.
