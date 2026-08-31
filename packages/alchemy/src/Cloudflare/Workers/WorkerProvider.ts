@@ -3234,6 +3234,7 @@ export const LiveWorkerProvider = () =>
               name,
               assets,
               session,
+              dispatchNamespace,
             );
             metadataAssets = {
               jwt,
