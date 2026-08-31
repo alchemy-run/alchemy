@@ -86,8 +86,9 @@ export interface BundleExtraOptions {
  * rolldown input/output overrides plus the {@link BundleExtraOptions}
  * (pure-annotation packages via `pure`, bundle analyzer).
  *
- * Unused `effect`, alchemy, and `@distilled.cloud` code is tree-shaken.
- * List extra packages with `pure.packages`, or disable with `pure: false`.
+ * Unused code is tree-shaken. `effect`, alchemy, and `@distilled.cloud`
+ * are marked pure so unused parts prune more aggressively. List extra
+ * packages with `pure.packages`, or disable with `pure: false`.
  */
 export interface BundleConfig extends BundleExtraOptions {
   /**

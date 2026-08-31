@@ -90,8 +90,9 @@ export interface BundledImageSource {
    */
   handler?: string;
   /**
-   * Bundler configuration for the entrypoint. Unused `effect`, alchemy,
-   * and `@distilled.cloud` code is tree-shaken. List extra packages with
+   * Bundler configuration for the entrypoint. Unused code is tree-shaken.
+   * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
+   * parts prune more aggressively. List extra packages with
    * `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;

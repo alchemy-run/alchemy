@@ -1774,11 +1774,12 @@ export const isSelf = (value: unknown): value is Self =>
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Unused `effect`,
- * alchemy, and `@distilled.cloud` code is tree-shaken. Your app is left
- * untouched.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Tree-shake additional packages
+ * **Example:** Mark additional packages as pure
  * Only list packages with no top-level side effects.
  * ```typescript
  * {

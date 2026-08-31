@@ -262,8 +262,9 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    */
   autoInstallExternals?: boolean;
   /**
-   * Bundler configuration for {@link main}. Unused `effect`, alchemy, and
-   * `@distilled.cloud` code is tree-shaken. List extra packages with
+   * Bundler configuration for {@link main}. Unused code is tree-shaken.
+   * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
+   * parts prune more aggressively. List extra packages with
    * `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
@@ -479,11 +480,12 @@ export type ContainerShape = Main<ContainerServices>;
  * bundled program is still layered on top.
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Unused `effect`,
- * alchemy, and `@distilled.cloud` code is tree-shaken. Your app is left
- * untouched.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Tree-shake additional packages
+ * **Example:** Mark additional packages as pure
  * Only list packages with no top-level side effects.
  * ```typescript
  * {

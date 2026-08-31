@@ -164,8 +164,9 @@ export interface WorkloadImageSource {
   main?: string;
   handler?: string;
   /**
-   * Bundler configuration for `main`. Unused `effect`, alchemy, and
-   * `@distilled.cloud` code is tree-shaken. List extra packages with
+   * Bundler configuration for `main`. Unused code is tree-shaken.
+   * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
+   * parts prune more aggressively. List extra packages with
    * `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
