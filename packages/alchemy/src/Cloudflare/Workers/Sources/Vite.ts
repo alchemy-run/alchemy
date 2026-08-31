@@ -163,6 +163,7 @@ export const viteBuild = (
   rootDir: string = initialCwd,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  options: { assetsOnly?: boolean } = {},
 ) =>
   ConsoleService.consoleWith((console) =>
     Effect.gen(function* () {
@@ -180,6 +181,7 @@ export const viteBuild = (
           compatibilityDate: pluginOptions.compatibilityDate,
           compatibilityFlags: pluginOptions.compatibilityFlags,
           viteEnvironments: pluginOptions.viteEnvironments,
+          assetsOnly: options.assetsOnly,
         },
         (channel, line) =>
           channel === "stderr" ? console.error(line) : console.log(line),
@@ -203,10 +205,14 @@ export const viteBuildInProcess = (
   rootDir: string,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  options: { assetsOnly?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
+      ...(options.assetsOnly === undefined
+        ? {}
+        : { assetsOnly: options.assetsOnly }),
     });
     const console = yield* ConsoleService.Console;
     yield* Effect.promise(async () => {
@@ -381,12 +387,17 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
     const path = yield* Path.Path;
     const env = yield* resolveViteEnv(ctx.env ?? {});
     const { clientDirectory, serverBundle, externalWorkspaces } =
-      yield* viteBuild(vite.rootDir, env, {
-        main: vite.main,
-        compatibilityDate: ctx.compatibility.date,
-        compatibilityFlags: ctx.compatibility.flags,
-        viteEnvironments: vite.viteEnvironments,
-      });
+      yield* viteBuild(
+        vite.rootDir,
+        env,
+        {
+          main: vite.main,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+          viteEnvironments: vite.viteEnvironments,
+        },
+        { assetsOnly: vite.assetsOnly },
+      );
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory

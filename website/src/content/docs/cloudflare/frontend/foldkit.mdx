@@ -1,25 +1,35 @@
 ---
 title: Foldkit
-description: Deploy a Foldkit app to Cloudflare with the Foldkit resource — one declaration, no Wrangler config.
+description: Deploy a Foldkit app to Cloudflare Workers with Cloudflare.Website.Foldkit — client-only or server-rendered from a single vite build, no adapter or Wrangler config.
 sidebar:
   order: 8
 ---
 
 [Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. Its apps are client-only Vite projects —
-the Foldkit Vite plugin only adds HMR and devtools wiring — so
-`Cloudflare.Website.Foldkit` deploys them with a single declaration:
-no `main` entrypoint, no build command, no output directory, no
-Wrangler configuration.
+framework built on Effect. A Foldkit app builds through Vite, so
+`Cloudflare.Website.Foldkit` deploys one as a Cloudflare Worker with
+a single declaration: no adapter, no build command, no output
+directory, no Wrangler configuration.
 
 `Foldkit` is [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite)
-with Foldkit's defaults applied: client-side routing is assumed, so
-deep links fall back to `index.html` without you configuring
-anything.
+with Foldkit's defaults: one `vite build` over the project. The
+client output deploys as the Worker's static assets; a server bundle
+is built only when the declaration names a `main`, so a deployment
+is assets-only until you ask for code at the edge. Every prop this
+page doesn't cover behaves as it does on `Vite`.
+
+How a Foldkit app is delivered is a property of the deployment, not
+of the app. The same project can ship client-only, prerendered,
+server-rendered, or as a mix of the last two; they want different
+asset routing, and none is a safe default, so `Foldkit` applies
+none. See [Asset routing](#asset-routing) for which your
+deployment needs.
 
 ## Configure Vite
 
-Your Vite config stays what Foldkit's setup gives you:
+Your Vite config stays exactly what `create-foldkit-app` gives you —
+the `foldkit()` plugin, and the `optimizeDeps.entries` hint pointing
+Vite's dependency scan at your app's entry module:
 
 ```typescript
 // vite.config.ts
@@ -36,7 +46,10 @@ export default defineConfig({
 
 Alchemy runs Vite programmatically on the project root and layers
 its Cloudflare integration on top of this config — the Foldkit
-plugin and the rest of your setup are preserved as-is.
+plugin and the rest of your setup are preserved as-is. A client-only
+app is a plain `vite build`. With `ssr.build` set, the Foldkit
+plugin emits the server bundle and prerendered pages from that same
+build.
 
 :::note[Pinned Effect versions]
 Foldkit pins its `effect` peer dependency to an exact version.
@@ -45,17 +58,70 @@ Alchemy runs your app's own Vite build with your app's own
 manager — Alchemy imposes no Effect version on your frontend.
 :::
 
+### Server-rendered and prerendered
+
+A deployment that renders outside the browser declares its server
+entry in this file, exactly as `create-foldkit-app`'s SSG and SSR
+scaffolds generate it:
+
+```diff lang="typescript"
+// vite.config.ts
++import { randomUUID } from "node:crypto";
+
++process.env.FOLDKIT_BUILD_ID ||= randomUUID();
++const buildId = process.env.FOLDKIT_BUILD_ID;
+
+export default defineConfig({
+-  plugins: [foldkit()],
++  plugins: [
++    foldkit({
++      buildId,
++      ssr: {
++        serverEntry: "/src/entry.server.ts",
++        build: { prerender: true },
++      },
++    }),
++  ],
+  optimizeDeps: {
+    entries: ["src/entry.ts"],
+  },
+});
+```
+
+`ssr.build` is what makes the server bundle and — with `prerender` —
+the generated pages part of the one `vite build`. Drop `prerender`
+for a purely server-rendered deployment; rendering then happens in
+the Worker named by `main`.
+
+`buildId` is compiled into both entries as
+`import.meta.env.FOLDKIT_BUILD_ID`. Give CI a real per-deployment
+value — a commit SHA or a release tag — and store the fallback on
+`process.env` rather than computing it inline, so the client bundle
+and the server bundle see the same id. See Foldkit's
+[server rendering](https://foldkit.dev/core/server-rendering) docs
+for the hydration contract.
+
+Under `alchemy dev`, the plugin stands down and the module named by
+`main` renders instead. It says so once, at startup.
+
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the
-Stack):
+Stack) and derive the typed shape of its bindings from it:
 
 ```typescript
 // alchemy.run.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
 export const Website = Cloudflare.Website.Foldkit("Foldkit");
+
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
+
+`WebsiteEnv` is the typed shape of the Worker's bindings, derived
+from the declaration. A pure-assets deployment has nothing to read
+it with; a deployment with a `main` entry imports it in
+[Custom Worker entry](#custom-worker-entry).
 
 For an app in a subdirectory of a monorepo, point `rootDir` at it:
 
@@ -95,34 +161,91 @@ export default Alchemy.Stack(
 Alchemy builds the client assets and serves them from a Worker at
 the returned `url`.
 
-## Deep links
+## Asset routing
 
-A Foldkit app that uses URL routing (`Runtime.makeApplication` with
-`route`, `onUrlRequest`, and `onUrlChange`) resolves routes on the
-client, so a deep link like `/counter/42` arrives at the server as a
-request for a file that doesn't exist.
+`Foldkit` applies no `notFoundHandling` or `htmlHandling` default.
+What the asset layer should do with a request that matches no file
+depends on how the deployment is delivered, and the four shapes
+want different things. Getting the routing wrong fails quietly —
+the site serves 200s that carry an empty document.
 
-`Foldkit` defaults `assets.notFoundHandling` to
-`"single-page-application"`, which returns `index.html` for unmatched
-paths instead of a 404 — the Foldkit runtime resolves the route once
-the app boots.
+### Client-only
 
-A Foldkit app that ships a real 404 page overrides the default with
-`"404-page"` — Workers Assets serves the nearest `404.html`:
+A Foldkit app that uses client URL routing resolves routes in the
+browser, so a deep link like `/counter/42` arrives as a request for
+a file that doesn't exist. Serve the template for those and let the
+app's own router resolve the path once it boots:
 
 ```typescript
 export const Website = Cloudflare.Website.Foldkit("Foldkit", {
   assets: {
-    notFoundHandling: "404-page",
+    notFoundHandling: "single-page-application",
+  },
+});
+```
+
+Without it the deep link is a 404. An app that ships a real 404 page
+wants `notFoundHandling: "404-page"` instead.
+
+### Server-rendered
+
+Nothing is prerendered, so `index.html` is a bare template no browser
+should receive. Both settings are load-bearing:
+
+```typescript
+export const Website = Cloudflare.Website.Foldkit("Foldkit", {
+  main: "src/worker.ts",
+  assets: {
+    htmlHandling: "none",
+    notFoundHandling: "none",
+  },
+});
+```
+
+`notFoundHandling: "none"` lets a request that matches no file reach
+the Worker instead of being answered with the template.
+`htmlHandling: "none"` stops the asset layer resolving `/` to
+`/index.html` on its own, which would serve the unrendered template
+for the front page alone. Files still come straight from the asset
+layer; only page requests reach the Worker. See
+[examples/cloudflare-foldkit-ssr](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-foldkit-ssr)
+for the whole shape, including the Worker that reads the built shell
+back from the `ASSETS` binding.
+
+### Prerendered
+
+With `ssr: { serverEntry, build: { prerender: true } }` in the app's
+`vite.config.ts`, the build writes every route as `<path>/index.html`
+and overwrites `index.html` with the rendered `/`. The default
+`htmlHandling` already resolves those, so no `assets` config is
+needed — and `"single-page-application"` is wrong here: it answers an
+unknown path with the rendered `/` at 200 instead of a 404.
+
+```typescript
+export const Website = Cloudflare.Website.Foldkit("Foldkit");
+```
+
+### Hybrid
+
+Prerendered routes are files and the rest render in the Worker: the
+default `htmlHandling` plus `notFoundHandling: "none"`, with a `main`
+for the fall-through. Prerender `/` as well, or `htmlHandling`
+resolves it to the bare template.
+
+```typescript
+export const Website = Cloudflare.Website.Foldkit("Foldkit", {
+  main: "src/worker.ts",
+  assets: {
+    notFoundHandling: "none",
   },
 });
 ```
 
 ## Add environment variables
 
-A Foldkit SPA has no server, so anything it needs from the rest of
-your Stack is baked into the bundle at build time — pass a
-`VITE_`-prefixed key in `env`:
+Browser code has no server to ask, so anything a client-only app
+needs from the rest of your Stack is baked into the bundle at build
+time — pass a `VITE_`-prefixed key in `env`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -145,32 +268,33 @@ interface ImportMetaEnv {
 }
 ```
 
-Client code reads it as `import.meta.env.VITE_API_URL` (e.g. from a
-`Command` that fetches it). See
+Client code reads it as `import.meta.env.VITE_API_URL`. See
 [Environment](/cloudflare/frontend/vite#environment) for the full
 inlining semantics.
 
-## Add a Worker in front of the app
+The same `env` prop also carries runtime bindings — KV namespaces,
+secrets, other Workers — to a `main` entry, where they are read from
+the Worker's env rather than inlined into the bundle.
 
-A Foldkit deployment is pure assets by default — no Worker code runs
-on a request. Point `main` at your own module when the deployment
-must do something at the edge: serve an API route, wrap the app in
-error reporting, or export Durable Object classes.
+## Custom Worker entry
+
+Point `main` at your own module when a client-only deployment must
+also do something at the edge: serve an API route, wrap the app in
+error reporting, or export Durable Object classes. Server rendering
+uses the same `main` prop; its routing lives under
+[Server-rendered](#server-rendered).
 
 The module builds through Vite's `ssr` environment and becomes the
-deployed Worker entry. The client build is still served through the
-Worker's `ASSETS` binding, so the SPA fallback keeps working behind
-it:
+deployed Worker entry. The client build is still reachable through
+the Worker's `ASSETS` binding, so the Worker answers its own routes
+and hands everything else back to the asset layer:
 
 ```typescript
 // src/worker.ts
-type Env = {
-  ASSETS: { fetch(request: Request): Promise<Response> };
-  TICKER: KVNamespace;
-};
+import type { WebsiteEnv } from "../alchemy.run.ts";
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: WebsiteEnv): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/ticker") {
@@ -198,23 +322,33 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit", {
   env: { TICKER: ticker },
   assets: {
     runWorkerFirst: ["/api/*"],
+    notFoundHandling: "single-page-application",
   },
 });
 ```
 
-Bindings passed in `env` are reachable from this Worker entry (and
-from cron handlers), not from browser code — a Foldkit app runs on
-the client, so anything it needs must come from a route the Worker
-serves. Type the Worker's `env` with
-[`Cloudflare.InferEnv`](/cloudflare/compute/workers) when you want
-the bindings inferred rather than hand-written.
+`runWorkerFirst` sends `/api/*` to the Worker ahead of the asset
+layer. The client-only routing above still has to be declared —
+adding a Worker does not bring a fallback with it, so without
+`notFoundHandling` a deep link is a 404 whether or not `main` is set.
 
-## Dev
+Bindings passed in `env` are reachable from this Worker entry (and
+from cron handlers), not from browser code. `env.TICKER` is typed as
+a KV namespace and `ASSETS` comes with the resource, so nothing here
+is hand-written — renaming a binding in `alchemy.run.ts` is a type
+error in your Worker.
+
+## Local dev
+
+```sh
+bun alchemy dev
+```
 
 `alchemy dev` runs the app's own Vite dev server, so Foldkit's HMR
 with state preservation and its devtools wiring work unchanged.
 Bindings are live, so a custom `main` entry sees real KV namespaces
-and secrets.
+and secrets. A server-rendered app renders through `main` in dev
+exactly as it does in a deployment.
 
 Pin the dev server's address when several apps run in one Stack:
 
@@ -223,3 +357,16 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit", {
   dev: { host: "127.0.0.1", port: 5180, strictPort: true },
 });
 ```
+
+## Where next
+
+- [The Vite resource](/cloudflare/frontend/vite) — build model, env
+  inlining, runtime bindings, memo, dev mode.
+- [examples/cloudflare-foldkit](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-foldkit)
+  and
+  [examples/cloudflare-foldkit-ssr](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-foldkit-ssr)
+  — the checked-in client-only and server-rendered shapes.
+- [Foldkit server rendering](https://foldkit.dev/core/server-rendering)
+  — the hydration contract, `buildId`, and `ssr.build`.
+- [Frontend overview](/cloudflare/frontend/frontends) — the rest of
+  the Cloudflare frontend family.

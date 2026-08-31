@@ -54,11 +54,18 @@ interface EnvironmentLike {
 /**
  * A Vite plugin that collects the output of the build and makes it available as an Effect.
  * @param entryEnvironment - The environment to use as the entry point for the server bundle. Defaults to "ssr".
+ * @param assetsOnly - Deploy the client output alone, ignoring whatever the
+ * build's server environments emit. Set for a project whose server build is
+ * not a Worker entry — a static-site generator that renders pages at build
+ * time, for one. Without it the server environment's entry chunk becomes the
+ * deployed Worker, which for such a project exports no handler.
  */
 export const viteBuildOutputPlugin = Effect.fn(function* ({
   entryEnvironment = "ssr",
+  assetsOnly = false,
 }: {
   entryEnvironment?: string;
+  assetsOnly?: boolean;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -136,6 +143,10 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
         base = this.environment.config.base;
         return;
       }
+      // The build may still produce server output the deployment has no use
+      // for (a generator's render entry, say); collecting none of it is what
+      // keeps it from being deployed as the Worker.
+      if (assetsOnly) return;
       const files = Object.values(bundle);
       if (this.environment.name === entryEnvironment) {
         const entryChunk = files.find(

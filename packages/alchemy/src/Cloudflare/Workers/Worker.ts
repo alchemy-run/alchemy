@@ -1136,6 +1136,23 @@ export interface ViteOptions {
         >;
   };
   /**
+   * Deploy the client output alone, ignoring any server bundle the build
+   * produces.
+   *
+   * The default is to deploy the entry environment's server bundle as the
+   * Worker, which is what an SSR framework wants. Set this for a project
+   * whose server build is not a Worker entry — a static-site generator that
+   * renders pages during the build, for one: its server bundle exports a
+   * render function, not a handler, and deploying it produces a Worker that
+   * answers nothing.
+   *
+   * The server environment still builds; only its output is left out of the
+   * deployment.
+   *
+   * @default false
+   */
+  assetsOnly?: boolean;
+  /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
    *

@@ -123,10 +123,10 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * **Example:** Foldkit
- * [Foldkit](https://foldkit.dev) apps are client-only Vite projects, so a
- * single call deploys them — the Foldkit Vite plugin in the app's own
- * `vite.config.ts` composes with the injected Cloudflare plugin. Enable
- * `single-page-application` not-found handling so deep links boot the app:
+ * [Foldkit](https://foldkit.dev) apps are Vite projects, so a single call
+ * deploys them — the Foldkit Vite plugin in the app's own `vite.config.ts`
+ * composes with the injected Cloudflare plugin. A client-only Foldkit app
+ * wants `single-page-application` not-found handling so deep links boot it:
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Foldkit", {
  *   assets: {
@@ -134,8 +134,11 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
- * {@link Foldkit | Cloudflare.Website.Foldkit} is the same thing with that
- * default already applied.
+ * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
+ * takes the same `assets` config, and additionally wires the rebuild scope
+ * for you. A server-rendered Foldkit app wants different asset routing —
+ * see the `assets` documentation on
+ * {@link Foldkit | Cloudflare.Website.Foldkit}.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`

@@ -1,6 +1,6 @@
 ---
 title: Frontend frameworks
-description: Deploy Vite, Astro, Next.js, Nuxt, SvelteKit, Waku, or any static build to Cloudflare Workers with first-class Website resources.
+description: Deploy Vite, Foldkit, Astro, Next.js, Nuxt, SvelteKit, Waku, or any static build to Cloudflare Workers with first-class Website resources.
 sidebar:
   label: Overview
   order: 1
@@ -17,6 +17,9 @@ natively; Alchemy layers its Cloudflare integration on top.
 - [`Vite`](/cloudflare/frontend/vite) — any pure-Vite app: SPAs and
   Vite-plugin frameworks like TanStack Start, React Router, Vue, and
   SolidStart; your `vite.config.ts` loads natively.
+- [`Foldkit`](/cloudflare/frontend/foldkit) — Foldkit apps; one
+  `vite build`, client-only or server-rendered, with no asset-routing
+  default.
 - [`Astro`](/cloudflare/frontend/astro) — Astro sites, server-rendered
   or fully static, with an auto-provisioned session KV namespace;
   your `astro.config.*` loads natively.
@@ -79,6 +82,11 @@ and a single `vite build` produces the whole app — TanStack Start,
 React Router, Vue, SolidStart, or a plain SPA. See
 [what "pure Vite" means](/cloudflare/frontend/vite#what-pure-vite-means).
 
+Use `Foldkit` for a Foldkit app. It is `Vite` with Foldkit's
+defaults: one `vite build`, and no asset-routing default, because
+the same project can ship client-only, prerendered, server-rendered,
+or hybrid.
+
 Use `StaticSite` when the build is an arbitrary shell command that
 emits a directory of files — Zola, Hugo, or any other generator
 without a dedicated resource.
@@ -95,6 +103,7 @@ without a dedicated resource.
   [TanStack Start](/cloudflare/frontend/tanstack-start),
   [React Router](/cloudflare/frontend/react-router),
   [Vue](/cloudflare/frontend/vue),
+  [Foldkit](/cloudflare/frontend/foldkit),
   [SolidStart](/cloudflare/frontend/solidstart),
   [Astro](/cloudflare/frontend/astro),
   [Next.js](/cloudflare/frontend/nextjs),
