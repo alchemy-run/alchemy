@@ -19,7 +19,29 @@ export interface ConnectCacheClusterOptions {
 export const cacheClusterConnectEnvPrefix = (logicalId: string) =>
   makeConnectEnvPrefix("ELASTICACHE", logicalId);
 
-/** Publishes all provisioned Memcached nodes to a VPC-attached function. */
+/**
+ * Runtime binding for a provisioned Memcached cluster.
+ *
+ * At deploy time it publishes all node endpoints as
+ * `ELASTICACHE_{LOGICAL_ID}_ENDPOINTS` on the host Function. Passing VPC
+ * options attaches the host Lambda to the cache network. ElastiCache data
+ * plane access is controlled by security groups, not IAM.
+ *
+ * ### Connecting from a Lambda
+ * **Example:** Resolve Memcached node endpoints
+ * ```typescript
+ * const connect = yield* AWS.ElastiCache.ConnectCacheCluster(cache, {
+ *   subnetIds: privateSubnetIds,
+ *   securityGroupIds: [functionSecurityGroup.groupId],
+ * });
+ *
+ * // inside the handler:
+ * const { endpoints } = yield* connect;
+ * const endpoint = endpoints[0];
+ * ```
+ *
+ * @binding
+ */
 export interface ConnectCacheCluster extends Binding.Service<
   ConnectCacheCluster,
   "AWS.ElastiCache.ConnectCacheCluster",
