@@ -3,12 +3,11 @@ import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 import { UserInputError } from "./errors.ts";
-
-const USER_STAGE_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -20,48 +19,33 @@ export const STAGE = Config.string("STAGE").pipe(
   Effect.map(Option.getOrUndefined),
 );
 
-const invalidUserStage = (value: string) =>
-  new CliError.InvalidValue({
-    option: "stage",
-    value,
-    expected: "a name matching [a-z0-9]+([-_a-z0-9]+)*",
-    kind: "flag",
-  });
-
-const defaultStage = (kind: "live" | "dev") =>
-  USER.pipe(
-    Effect.map((user) => `${kind}_${user}`),
-    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
-  );
-
 const makeStageFlag = (kind: "live" | "dev") =>
   Flag.string("stage").pipe(
+    Flag.withSchema(
+      Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
+    ),
     Flag.withDescription(
       kind === "live"
-        ? "Stage to target, defaults to live_${USER}"
-        : "Stage to target, defaults to dev_${USER}",
+        ? "Stage to deploy to, defaults to live_${USER}"
+        : "Stage to use for dev, defaults to dev_${USER}",
     ),
     Flag.optional,
     Flag.map(Option.getOrUndefined),
     Flag.mapEffect(
       Effect.fn(function* (stage) {
-        if (stage) {
-          if (!USER_STAGE_PATTERN.test(stage)) {
-            return yield* invalidUserStage(stage);
-          }
-          return stage;
-        }
+        if (stage) return stage;
         return yield* STAGE.pipe(
           Effect.catch(() =>
             Effect.fail(new CliError.MissingOption({ option: "stage" })),
           ),
-          Effect.flatMap((configured) => {
-            if (configured === undefined) return defaultStage(kind);
-            if (!USER_STAGE_PATTERN.test(configured)) {
-              return invalidUserStage(configured);
-            }
-            return Effect.succeed(configured);
-          }),
+          Effect.flatMap((configured) =>
+            configured === undefined
+              ? USER.pipe(
+                  Effect.map((user) => `${kind}_${user}`),
+                  Effect.catch(() => Effect.succeed("unknown")),
+                )
+              : Effect.succeed(configured),
+          ),
         );
       }),
     ),

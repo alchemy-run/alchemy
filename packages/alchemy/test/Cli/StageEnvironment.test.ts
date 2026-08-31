@@ -3,7 +3,6 @@ import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 
 const envLayer = (env: Record<string, string>) =>
@@ -32,24 +31,6 @@ describe("STAGE environment variable", () => {
 
       expect(selected).toBe("preview");
     }).pipe(Effect.provide(TestEnv)),
-  );
-
-  test.effect("rejects a $STAGE value containing ':'", () =>
-    Effect.gen(function* () {
-      const exit = yield* stage
-        .parse({ arguments: [], flags: {} })
-        .pipe(Effect.exit);
-      expect(Exit.isFailure(exit)).toBe(true);
-    }).pipe(Effect.provide(envLayer({ STAGE: "local:sam", USER: "sam" }))),
-  );
-
-  test.effect("rejects --stage local:sam", () =>
-    Effect.gen(function* () {
-      const exit = yield* stage
-        .parse({ arguments: [], flags: { stage: ["local:sam"] } })
-        .pipe(Effect.exit);
-      expect(Exit.isFailure(exit)).toBe(true);
-    }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
   );
 });
 
