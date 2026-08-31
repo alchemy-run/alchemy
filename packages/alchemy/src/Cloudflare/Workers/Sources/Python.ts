@@ -88,6 +88,8 @@ const MANAGED_SDK_PACKAGE = "workers-runtime-sdk";
 
 export interface PythonWorkerBundleOptions {
   id: string;
+  /** Namespace-qualified id — the display prefix for log lines. */
+  fqn: string;
   /** Path (or `file://` URL) to the Worker's `.py` entry module. */
   main: string;
   compatibility: {
@@ -182,7 +184,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
   }
 
   yield* Effect.logDebug(
-    `[${options.id}] Vendoring Python dependencies for ${pythonVersion} (emscripten-wasm32) with uv`,
+    `[${options.fqn}] Vendoring Python dependencies for ${pythonVersion} (emscripten-wasm32) with uv`,
   );
   yield* fs
     .makeDirectory(staging, { recursive: true })
@@ -410,6 +412,7 @@ export const watchPythonWorkerBundle = (options: PythonWorkerBundleOptions) =>
 export const makePythonSource = (main: string): SourceProvider => {
   const pythonOptions = (ctx: SourceContext) => ({
     id: ctx.id,
+    fqn: ctx.fqn,
     main,
     compatibility: ctx.compatibility,
   });

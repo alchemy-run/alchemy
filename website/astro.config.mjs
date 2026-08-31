@@ -343,6 +343,7 @@ function buildOutputChecks() {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
   },
@@ -571,6 +572,7 @@ export default defineConfig({
                 { label: "deploy", link: "/cli/deploy" },
                 { label: "plan", link: "/cli/plan" },
                 { label: "destroy", link: "/cli/destroy" },
+                { label: "drift", link: "/cli/drift" },
                 { label: "nuke", link: "/cli/nuke" },
                 {
                   label: "Adopting Resources",
@@ -582,16 +584,12 @@ export default defineConfig({
               label: "Develop",
               items: [
                 { label: "dev", link: "/cli/dev" },
-                { label: "tail", link: "/cli/tail" },
                 { label: "logs", link: "/cli/logs" },
               ],
             },
             {
               label: "Auth",
-              items: [
-                { label: "login", link: "/cli/login" },
-                { label: "profile", link: "/cli/profile" },
-              ],
+              items: [{ label: "profile", link: "/cli/profile" }],
             },
             {
               label: "State",

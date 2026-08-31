@@ -10,7 +10,7 @@ import * as Stream from "effect/Stream";
 
 import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import { hostStatementsFor, type Host } from "../../Docker/Host.ts";
 import type { Input, InputProps } from "../../Input.ts";

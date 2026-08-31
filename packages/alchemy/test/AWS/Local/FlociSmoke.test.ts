@@ -8,12 +8,9 @@
  * ## How local mode is activated
  *
  * The AWS auth method is normally chosen by the profile entry in
- * `~/.alchemy/profiles.json` (written by `alchemy login --configure`). Tests
- * must not depend on the developer's on-disk profiles, so this file overrides
- * the `AlchemyProfile` service with a stub whose `loadOrConfigure` always
- * returns `{ method: "local" }` for the AWS auth provider. The stub is
- * `Layer.provide`d directly onto `AWS.providers()`, so it only affects this
- * file — `AWSEnvironment.Default` then resolves dummy credentials
+ * `~/.alchemy/profiles.json` (written by `alchemy profile edit`). Tests
+ * must not depend on the developer's on-disk profiles. Local AWS providers
+ * carry their own floci-scoped environment, which resolves dummy credentials
  * (`test`/`test`), accountId `000000000000`, and endpoint
  * `http://localhost:4566`, and `ensureFloci()` guarantees the emulator is
  * serving (starting the `alchemy-floci` container if needed).
@@ -29,14 +26,12 @@
  * daemon is unavailable.
  */
 import * as AWS from "@/AWS";
-import { AlchemyProfile, type ProfileService } from "@/Auth/Profile.ts";
 import { Table } from "@/AWS/DynamoDB";
 import { Bucket } from "@/AWS/S3";
 import { Queue } from "@/AWS/SQS";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -58,25 +53,7 @@ const dockerAvailable = (() => {
   }
 })();
 
-/**
- * Stub profile service forcing the AWS auth provider into
- * `{ method: "local" }` regardless of what is configured on disk.
- * `loadOrConfigure` mirrors the real implementation's `stored as Config`
- * narrowing (the generic `Config` is the auth provider's own config type).
- */
-const localProfileStub: ProfileService = {
-  readConfig: Effect.succeed({ version: 0, profiles: {} }),
-  writeConfig: () => Effect.void,
-  getProfile: () => Effect.succeed({ AWS: { method: "local" } }),
-  setProfile: () => Effect.void,
-  deleteProfile: () => Effect.succeed(false),
-  loadOrConfigure: <Config extends { method: string }>() =>
-    Effect.succeed({ method: "local" } as Config),
-};
-
-const providers = AWS.providers().pipe(
-  Layer.provide(Layer.succeed(AlchemyProfile, localProfileStub)),
-);
+const providers = AWS.providers();
 
 const { test } = Test.make({ providers });
 

@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { PlatformProps } from "../../Platform.ts";

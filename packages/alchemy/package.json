@@ -48,6 +48,12 @@
       "worker": "./src/index.ts",
       "import": "./lib/index.js"
     },
+    "./Alchemist": {
+      "types": "./lib/Alchemist/index.d.ts",
+      "bun": "./src/Alchemist/index.ts",
+      "worker": "./src/Alchemist/index.ts",
+      "import": "./lib/Alchemist/index.js"
+    },
     "./*": {
       "types": "./lib/*.d.ts",
       "bun": "./src/*.ts",
@@ -158,11 +164,11 @@
       "worker": "./src/Cli/index.ts",
       "import": "./lib/Cli/index.js"
     },
-    "./Cli/InkCLI": {
-      "types": "./lib/Cli/InkCLI.d.ts",
-      "bun": "./src/Cli/InkCLI.tsx",
-      "worker": "./src/Cli/InkCLI.tsx",
-      "import": "./lib/Cli/InkCLI.js"
+    "./Cli/CliKit": {
+      "types": "./lib/Cli/CliKit/index.d.ts",
+      "bun": "./src/Cli/CliKit/index.ts",
+      "worker": "./src/Cli/CliKit/index.ts",
+      "import": "./lib/Cli/CliKit/index.js"
     },
     "./Cloudflare": {
       "types": "./lib/Cloudflare/index.d.ts",
@@ -455,8 +461,8 @@
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
+    "@alchemy.run/sigil": "0.0.0-alpha.5",
     "@aws-sdk/credential-providers": "catalog:aws",
-    "@clack/prompts": "^1.7.0",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
@@ -483,13 +489,13 @@
     "capnweb": "^0.6.1",
     "fast-glob": "catalog:cloudflare-runtime",
     "fast-xml-parser": "catalog:shared",
-    "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "pathe": "catalog:tooling",
     "picomatch": "^4.0.4",
     "react": "^19.2.0",
     "rolldown": "catalog:build",
+    "string-width": "^8.2.2",
     "undici": "^7.16.0",
     "yaml": "catalog:shared"
   },

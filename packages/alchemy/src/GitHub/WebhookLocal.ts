@@ -7,7 +7,8 @@
  */
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
 import * as RpcServer from "../Dev/RpcServer.ts";
 import { makeGitHubAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
@@ -16,7 +17,9 @@ import { LocalWebhookProvider } from "./LocalWebhookProvider.ts";
 LocalWebhookProvider().pipe(
   Layer.provide(Credentials.fromAuthProvider()),
   Layer.provide(makeGitHubAuth()),
-  Layer.provide(ProfileLive),
+  Layer.provide(ProfileStoreLive),
   Layer.provide(CredentialsStoreLive),
+  // the sidecar has no TTY; auth flows must not prompt
+  Layer.provide(CliKit.layer({ input: false })),
   RpcServer.launch,
 );

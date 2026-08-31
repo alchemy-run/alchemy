@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
@@ -29,8 +29,8 @@ export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
  * GitHub providers (Comment, Environment, PersonalAccessToken, Repository,
- * Secret, Variable, Webhook) plus the GitHub AuthProvider that `alchemy login`
- * discovers.
+ * Secret, Variable, Webhook) plus the GitHub AuthProvider that the alchemy
+ * CLI discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -39,7 +39,7 @@ export interface ProvidersOptions extends GitHubAuthOptions {}
  * providers: GitHub.providers({ baseUrl: "github.example.com" })
  * ```
  *
- * The auth provider receives the same value, so `alchemy login` skips the
+ * The auth provider receives the same value, so the configure flow skips the
  * host prompt and authenticates against the pinned host (`gh auth token
  * --hostname`, enterprise token env vars). Individual resources can still
  * override the host per-resource via their own `baseUrl` prop.
@@ -75,7 +75,7 @@ export const providers = (options?: ProvidersOptions) =>
     ),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
     Layer.provideMerge(makeGitHubAuth(options)),
-    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );

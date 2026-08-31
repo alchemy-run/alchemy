@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import { CliKit } from "@/Cli/CliKit/index.ts";
 import { RpcProviderProxy } from "@/Dev/RpcProviderProxy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -54,5 +55,13 @@ live.test(
   Effect.gen(function* () {
     const proxy = yield* Effect.serviceOption(RpcProviderProxy);
     expect(proxy._tag).toBe("None");
+  }),
+);
+
+live.test(
+  "test runtimes provide a non-interactive CliKit",
+  Effect.gen(function* () {
+    const cli = yield* CliKit;
+    expect(cli.terminal.input).toBe(false);
   }),
 );

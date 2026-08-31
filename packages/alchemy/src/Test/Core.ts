@@ -21,7 +21,9 @@ import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { withProfileOverride } from "../Auth/Resolve.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -51,7 +53,7 @@ export interface MakeOptions<ROut = any> {
   providers: Layer.Layer<ROut, never, StackServices>;
   /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
   state?: Layer.Layer<State.State, never, StackServices>;
-  /** Override `ALCHEMY_PROFILE`; otherwise resolved from env / .env. */
+  /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
   /** Default stage for deploy/destroy (default `"test"`). */
   stage?: string;
@@ -315,11 +317,15 @@ const platformLayer = () =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
       ? flociWebsiteHttp
       : FetchHttpClient.layer,
-    Layer.provide(ProfileLive, PlatformServices),
+    Layer.provide(ProfileStoreLive, PlatformServices),
     Layer.provide(CredentialsStoreLive, PlatformServices),
   );
 
-const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
+const alchemyLayer = Layer.mergeAll(
+  LoggingCli,
+  CliKit.layer({ input: false }),
+  AlchemyContextLive,
+);
 
 /**
  * Build the per-test runtime and return a self-contained Effect.

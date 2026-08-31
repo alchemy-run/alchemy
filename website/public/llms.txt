@@ -18,14 +18,13 @@ Every command runs through your package manager: bun alchemy <command>. Command 
 - [deploy](https://alchemy.run/cli/deploy) — Compute a plan, ask for approval, and create/update/delete resources to match the desired state.
 - [plan](https://alchemy.run/cli/plan) — Preview what would change without applying anything. Equivalent to alchemy deploy --dry-run.
 - [destroy](https://alchemy.run/cli/destroy) — Delete every resource in a stack — plan all existing resources for deletion, ask for approval, and remove them in dependency order.
+- [drift](https://alchemy.run/cli/drift) — Detect infrastructure drift by re-observing the cloud, and optionally repair it back to the last deployed state.
 - [nuke](https://alchemy.run/cli/nuke) — Enumerate and delete every live resource across the stack's providers.
 - [Adopting Resources](https://alchemy.run/cli/adopting-resources) — How alchemy takes ownership of pre-existing cloud resources — recovery by default, --adopt for foreign resources, and the programmatic AdoptPolicy.
 - [dev](https://alchemy.run/cli/dev) — Run your stack in development mode with hot reloading — resources deploy to the cloud while Workers run in the local dev runtime.
-- [tail](https://alchemy.run/cli/tail) — Stream live logs from deployed resources in real time, interleaved and color-coded by resource.
-- [logs](https://alchemy.run/cli/logs) — Fetch historical logs from deployed resources — a batch of past entries, merged and sorted by timestamp.
-- [login](https://alchemy.run/cli/login) — Configure and log in to each cloud provider used by your stack.
-- [profile](https://alchemy.run/cli/profile) — Inspect or clear credentials stored in ~/.alchemy/profiles.json.
-- [state](https://alchemy.run/cli/state) — Inspect and manage the state store — list stacks, stages, and resources, print persisted state, and clear entries.
+- [logs](https://alchemy.run/cli/logs) — Fetch or tail logs from deployed resources, merged and color-coded by resource.
+- [profile](https://alchemy.run/cli/profile) — Create, refresh, rename, edit, inspect, or delete Alchemy authentication profiles.
+- [state](https://alchemy.run/cli/state) — Browse, read, and delete entries in the state store.
 - [Inspecting State](https://alchemy.run/cli/inspecting-state) — See what alchemy thinks is deployed, debug a bad diff, and recover from bad state.
 - [aws](https://alchemy.run/cli/aws) — AWS provider commands — bootstrap the per-account assets bucket that Lambda deployments rely on.
 - [cloudflare](https://alchemy.run/cli/cloudflare) — Cloudflare provider commands — bootstrap the state-store worker, mint API tokens, and inspect state-store logs.
@@ -71,9 +70,9 @@ Typed calls between Functions and Servers: schemaless RPC for internal communica
 Stages, credential profiles, auth providers, secrets and config, local development, and CI.
 
 - [Stages](https://alchemy.run/environments/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
-- [Profiles](https://alchemy.run/environments/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
+- [Profiles](https://alchemy.run/environments/profiles) — Use profiles to select cloud accounts and credentials for each environment.
 - [Auth Providers](https://alchemy.run/environments/auth-providers) — An Auth Provider produces the credentials for a cloud's API calls — resolved lazily as Effects, so tokens and role sessions can refresh instead of pinning one static key.
-- [Custom Auth Provider](https://alchemy.run/environments/custom-auth-provider) — Plug a third-party API into alchemy login — a lazy credentials service backed by an AuthProvider that resolves keys from a Profile, env vars, or a refreshable session.
+- [Custom Auth Provider](https://alchemy.run/environments/custom-auth-provider) — Add profile and CI credentials for a third-party API with a generated AuthProvider.
 - [Secrets & Config](https://alchemy.run/environments/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
 - [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local execution, and local emulation with per-resource opt-in to real cloud services.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
@@ -181,6 +180,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 ## Cloudflare — Email
 
 - [Send & receive email](https://alchemy.run/cloudflare/email/send-and-receive) — Enable Email Routing on a zone, verify destination addresses, forward inbound mail with rules and a catch-all, and send email from a Worker with the send_email binding.
+- [Receive email in a Worker](https://alchemy.run/cloudflare/email/email-worker) — Receive inbound mail in a Cloudflare Worker with Cloudflare.email({ zone }).subscribe(...) — auto-creates routing and forwarding rules.
 - [Email](https://alchemy.run/cloudflare/email) — Cloudflare Email Routing turns a zone into a mail endpoint — enable routing, verify destinations, forward with rules and a catch-all, hand mail to a Worker, and send from Workers with the send_email binding.
 
 ## Cloudflare — AI
@@ -215,7 +215,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.
 
 - [AWS](https://alchemy.run/aws) — Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed resources, wired together by bindings that mint least-privilege IAM policies.
-- [Setup](https://alchemy.run/aws/setup) — Install Alchemy and connect it to your AWS account — SSO, environment variables, or stored access keys.
+- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with SSO, stored access keys, or CI environment credentials.
 - [Choosing a runtime](https://alchemy.run/aws/compute/choosing-a-runtime) — Lambda vs ECS vs EKS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
 
 ## AWS — tutorial
@@ -378,4 +378,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~879 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~886 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -41,7 +41,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { Docker, DockerLive } from "../../Docker/Docker.ts";
