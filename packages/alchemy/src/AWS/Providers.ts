@@ -423,6 +423,7 @@ export const providers = () =>
         Cognito.IdentityPool,
         Cognito.IdentityPoolRoleAttachment,
         Cognito.IdentityProvider,
+        Cognito.ManagedLoginBranding,
         Cognito.ResourceServer,
         Cognito.User,
         Cognito.UserPool,
@@ -1202,6 +1203,9 @@ export const providers = () =>
           ),
           flociDual(Cognito.IdentityProvider, () =>
             Cognito.IdentityProviderProvider(),
+          ),
+          flociDual(Cognito.ManagedLoginBranding, () =>
+            Cognito.ManagedLoginBrandingProvider(),
           ),
           flociDual(Cognito.ResourceServer, () =>
             Cognito.ResourceServerProvider(),
