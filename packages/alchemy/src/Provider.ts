@@ -221,7 +221,7 @@ export interface ProviderService<
   list(): Effect.Effect<Res["Attributes"][], any, ListReq>;
   /**
    * Returns a stream of log lines for a deployed resource.
-   * Used by `alchemy logs --follow` to stream real-time logs.
+   * Used by `alchemy logs --tail` to stream real-time logs.
    */
   tail?(input: {
     id: string;

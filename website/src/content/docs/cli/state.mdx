@@ -41,14 +41,14 @@ alchemy state list [path] [options]      # alias: ls
 ```
 
 State is addressed like a filesystem: `<stack>/<stage>/<namespace…>/
-<resource>.json`, plus one `output.json` per stage holding the stack's
+<resource>`, plus one `output` entry per stage holding the stack's
 evaluated outputs. `list` prints one directory level; `--recursive`/`-r`
 walks the whole subtree.
 
 ```sh
 alchemy state list                       # every stack
 alchemy state list my-app                # stages under my-app
-alchemy state list my-app/prod           # resource files under my-app/prod
+alchemy state list my-app/prod           # resource entries under my-app/prod
 alchemy state list my-app -r             # every path under my-app
 ```
 
@@ -58,7 +58,7 @@ alchemy state list my-app -r             # every path under my-app
 alchemy state read [path] [options]      # alias: cat
 ```
 
-Print persisted state as JSON. A file path prints that record; a
+Print persisted state as JSON. A resource path prints that record; a
 directory path with `--recursive` prints every record beneath it, keyed
 by path. Output uses the same encoding the store persists: redacted
 secrets are unwrapped into `{ __redacted__: ... }` and Resources are
@@ -66,7 +66,7 @@ flattened.
 
 ```sh
 # one resource record
-alchemy state read my-app/prod/Bucket.json
+alchemy state read my-app/prod/Bucket
 
 # a whole stage as one JSON document for jq
 alchemy state read my-app/prod -r | jq 'to_entries[] | select(.value.resourceType == "AWS.EC2.Instance")'
@@ -84,7 +84,7 @@ alchemy state delete <path> [options]    # alias: rm
 
 Delete state records. Deleting a stack or stage path removes everything
 beneath it; a directory path below stage level needs `--recursive`.
-`output.json` cannot be deleted independently. Alchemy removes it with its
+`output` cannot be deleted independently. Alchemy removes it with its
 stage.
 
 | Option              | Description                        |

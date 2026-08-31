@@ -161,8 +161,8 @@ default scope set; existing profiles need to re-run
 
 | Option                 | Description                                                                                                  |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `--follow`, `-f`       | Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries                  |
-| `--limit <n>`          | Number of log entries to fetch (default: 100). Ignored with `--follow`.                                        |
+| `--tail`, `-t`       | Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries                  |
+| `--limit <n>`          | Number of log entries to fetch (default: 100). Ignored with `--tail`.                                        |
 | `--since <time>`       | Fetch logs since this time — a duration (`1h`, `30m`, `2d`) or ISO date                                       |
 | `--worker-name <name>` | Override the default state-store worker name. Only needed if you run multiple state stores per account.       |
 | `--profile <name>`     | Alchemy auth profile (defaults to `$ALCHEMY_PROFILE` or `default`)                                    |
@@ -173,7 +173,7 @@ default scope set; existing profiles need to re-run
 alchemy provider cloudflare state logs
 
 # Stream live in a separate terminal while you reproduce a bug
-alchemy provider cloudflare state logs --follow
+alchemy provider cloudflare state logs --tail
 
 # Just the last 30 minutes
 alchemy provider cloudflare state logs --since 30m --limit 200

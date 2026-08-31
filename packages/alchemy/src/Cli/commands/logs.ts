@@ -15,8 +15,8 @@ const logsLimit = Flag.integer("limit").pipe(
   Flag.withDefault(100),
 );
 
-const follow = Flag.boolean("follow").pipe(
-  Flag.withAlias("f"),
+const tail = Flag.boolean("tail").pipe(
+  Flag.withAlias("t"),
   Flag.withDescription("Continue streaming new log entries"),
   Flag.withDefault(false),
 );
@@ -48,7 +48,7 @@ export const logsCommand = Command.make(
     resources,
     limit: logsLimit,
     since: logsSince,
-    follow,
+    tail,
   },
   instrumentCommand(
     "logs",
@@ -57,13 +57,13 @@ export const logsCommand = Command.make(
       stage: string;
       profile: string | undefined;
       limit: number;
-      follow: boolean;
+      tail: boolean;
     }) => ({
       "alchemy.stage": a.stage,
       "alchemy.profile": a.profile ?? "",
       "alchemy.main": a.main,
       "alchemy.limit": a.limit,
-      "alchemy.follow": a.follow,
+      "alchemy.tail": a.tail,
     }),
   )(
     Effect.fn(function* ({
@@ -74,7 +74,7 @@ export const logsCommand = Command.make(
       resources,
       limit,
       since,
-      follow,
+      tail,
     }) {
       const sinceDate = since ? yield* parseSince(since) : undefined;
       const selected = (resources ?? "")
@@ -108,14 +108,14 @@ export const logsCommand = Command.make(
       }) =>
         `${paint(colors.get(entry.resource.fqn) ?? "gray", `${formatLocalTimestamp(entry.timestamp)} [${entry.resource.fqn}]`)} ${entry.message}`;
 
-      if (follow) {
+      if (tail) {
         const tailing = matching.filter((resource) => resource.supportsTail);
         if (tailing.length === 0) {
           yield* Console.log("No matching resources support live logs.");
           return;
         }
         yield* Console.log(
-          `Following: ${tailing.map(({ logicalId }) => logicalId).join(", ")}`,
+          `Tailing: ${tailing.map(({ logicalId }) => logicalId).join(", ")}`,
         );
         yield* Logs.tail({ target, resources: selected }).pipe(
           Stream.runForEach((entry) => Console.log(format(entry))),
@@ -140,4 +140,4 @@ export const logsCommand = Command.make(
       for (const entry of entries) yield* Console.log(format(entry));
     }),
   ),
-).pipe(Command.withDescription("Fetch or follow logs from stack resources"));
+).pipe(Command.withDescription("Fetch or tail logs from stack resources"));

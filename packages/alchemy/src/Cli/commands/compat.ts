@@ -5,7 +5,7 @@ import { setExitCode } from "./errors.ts";
 
 export const compatibilityCommands = {
   login: "alchemy profile",
-  tail: "alchemy logs --follow",
+  tail: "alchemy logs --tail",
   sync: "alchemy drift --repair",
   aws: "alchemy provider aws",
   cloudflare: "alchemy provider cloudflare",

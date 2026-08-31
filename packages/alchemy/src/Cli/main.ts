@@ -35,7 +35,7 @@ const commandMetadata = [
   ["dev", "Develop a stack with live reload"],
   ["destroy", "Destroy a deployed stack"],
   ["plan", "Preview changes to a stack"],
-  ["logs", "Fetch or follow logs from stack resources"],
+  ["logs", "Fetch or tail logs from stack resources"],
   ["profile", "Manage authentication profiles and accounts"],
   ["state", "Inspect and manage deployment state"],
   ["drift", "Detect infrastructure drift"],
@@ -128,7 +128,7 @@ const root = Command.make("alchemy", {}, () =>
     { command: "alchemy deploy" },
     { command: "alchemy plan --stage prod" },
     { command: "alchemy dev" },
-    { command: "alchemy logs --follow" },
+    { command: "alchemy logs --tail" },
   ]),
   Command.withSubcommands([
     ...commands,

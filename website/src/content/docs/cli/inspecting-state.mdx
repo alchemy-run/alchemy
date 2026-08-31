@@ -43,7 +43,7 @@ Lists every stage recorded under `myapp`.
 bun alchemy state list myapp/dev_sam
 ```
 
-Prints the state files tracked under that stack and stage. Pass these paths to
+Prints the state entries tracked under that stack and stage. Pass these paths to
 `state read`.
 
 Or skip the drilling entirely and read the whole estate at once:
@@ -59,7 +59,7 @@ single JSON document to filter locally — see
 ## Debugging a bad diff
 
 ```sh
-bun alchemy state read myapp/dev_sam/Bucket.json
+bun alchemy state read myapp/dev_sam/Bucket
 ```
 
 This is the persisted props/attrs the planner diffs against — see

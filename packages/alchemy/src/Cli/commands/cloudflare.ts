@@ -307,8 +307,8 @@ const createTokenCommand = Command.make(
   ),
 ).pipe(Command.withDescription("Create a scoped Cloudflare API token"));
 
-const followFlag = Flag.boolean("follow").pipe(
-  Flag.withAlias("f"),
+const tailFlag = Flag.boolean("tail").pipe(
+  Flag.withAlias("t"),
   Flag.withDescription(
     "Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries.",
   ),
@@ -316,9 +316,7 @@ const followFlag = Flag.boolean("follow").pipe(
 );
 
 const limitFlag = Flag.integer("limit").pipe(
-  Flag.withDescription(
-    "Number of log entries to fetch (ignored with --follow)",
-  ),
+  Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
   Flag.withDefault(100),
 );
 
@@ -331,7 +329,7 @@ const sinceFlag = Flag.string("since").pipe(
 );
 
 /**
- * `alchemy provider cloudflare state logs` — get or follow logs from the
+ * `alchemy provider cloudflare state logs` — get or tail logs from the
  * `alchemy-state-store` Worker on the user's account. Lets us debug
  * the state-store worker without standing up a stack file.
  */
@@ -341,7 +339,7 @@ const stateLogsCommand = Command.make(
     envFile,
     profile,
     workerName: cloudflareWorkerName,
-    follow: followFlag,
+    tail: tailFlag,
     limit: limitFlag,
     since: sinceFlag,
   },
@@ -350,23 +348,16 @@ const stateLogsCommand = Command.make(
     (a: {
       profile: string | undefined;
       workerName: string | undefined;
-      follow: boolean;
+      tail: boolean;
       limit: number;
     }) => ({
       "alchemy.profile": a.profile ?? "",
       "alchemy.worker_name": a.workerName ?? STATE_STORE_SCRIPT_NAME,
-      "alchemy.follow": a.follow,
+      "alchemy.tail": a.tail,
       "alchemy.limit": a.limit,
     }),
   )(
-    Effect.fn(function* ({
-      envFile,
-      profile,
-      workerName,
-      follow,
-      limit,
-      since,
-    }) {
+    Effect.fn(function* ({ envFile, profile, workerName, tail, limit, since }) {
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
       const target = {
         profile,
@@ -375,7 +366,7 @@ const stateLogsCommand = Command.make(
       };
       const formatLine = (line: { timestamp: Date; message: string }) =>
         `${formatLocalTimestamp(line.timestamp)} [${scriptName}] ${line.message}`;
-      if (follow) {
+      if (tail) {
         yield* CliKit.accessors.output.info(`Tailing ${scriptName}...`);
         yield* Cloudflare.tailStateLogs(target).pipe(
           Stream.runForEach((line) => Console.log(formatLine(line))),

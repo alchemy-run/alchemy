@@ -22,7 +22,7 @@ Every command runs through your package manager: bun alchemy <command>. Command 
 - [nuke](https://alchemy.run/cli/nuke) — Enumerate and delete every live resource across the stack's providers.
 - [Adopting Resources](https://alchemy.run/cli/adopting-resources) — How alchemy takes ownership of pre-existing cloud resources — recovery by default, --adopt for foreign resources, and the programmatic AdoptPolicy.
 - [dev](https://alchemy.run/cli/dev) — Run your stack in development mode with hot reloading — resources deploy to the cloud while Workers run in the local dev runtime.
-- [logs](https://alchemy.run/cli/logs) — Fetch or follow logs from deployed resources, merged and color-coded by resource.
+- [logs](https://alchemy.run/cli/logs) — Fetch or tail logs from deployed resources, merged and color-coded by resource.
 - [profile](https://alchemy.run/cli/profile) — Create, refresh, rename, edit, inspect, or delete Alchemy authentication profiles.
 - [state](https://alchemy.run/cli/state) — Browse, read, and delete entries in the state store.
 - [Inspecting State](https://alchemy.run/cli/inspecting-state) — See what alchemy thinks is deployed, debug a bad diff, and recover from bad state.
