@@ -233,12 +233,9 @@ export interface ServiceProps extends PlatformProps {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for the Effect-native entrypoint: rolldown
-   * `input`/`output` overrides plus pure-annotation options (`pure`).
-   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
-   * `@distilled.cloud/*` are annotated as pure by default so unused code
-   * from those packages is tree-shaken; list additional packages via
-   * `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for the Effect-native entrypoint. Unused
+   * `effect`, alchemy, and `@distilled.cloud` code is tree-shaken. List
+   * extra packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
   /**
@@ -463,16 +460,12 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused `effect`,
+ * alchemy, and `@distilled.cloud` code is tree-shaken. Your app is left
+ * untouched.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Tree-shake additional packages
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -482,18 +475,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
