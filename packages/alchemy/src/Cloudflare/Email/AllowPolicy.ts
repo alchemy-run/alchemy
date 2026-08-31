@@ -172,9 +172,15 @@ export const AllowPolicyProvider = () =>
               ),
             ),
           ),
-          // Email Security is a paid add-on; accounts without the
-          // entitlement can't enumerate policies — treat as empty.
-          Effect.catchTag("EmailSecurityNotEntitled", () =>
+          // Email Security is a paid add-on gated by both account
+          // entitlement and token scope: an unentitled account answers
+          // `EmailSecurityNotEntitled`, while a credential lacking the
+          // Email Security scope (e.g. Cloudflare OAuth) answers a bare
+          // `Forbidden`. Neither can enumerate, so both mean "none
+          // visible" — matching `Domain.list()`. Returning `[]` is the
+          // safe direction for the callers of `list` (orphan detection
+          // never deletes what it cannot see).
+          Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
             Effect.succeed([] as AllowPolicyAttributes[]),
           ),
         );
