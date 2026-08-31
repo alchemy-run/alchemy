@@ -26,9 +26,10 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-config");
  * Regression for https://github.com/alchemy-run/alchemy/pull/1418:
  * local asset serving used to crash with `TypeError: undefined is not an
  * object` the moment the assets directory contained a `_headers` or
- * `_redirects` file, because `buildAssetConfigs` passed `logger: undefined!`
- * into constructors that call `logger.log` unconditionally. After the
- * crash every subsequent request hung.
+ * `_redirects` file, because `buildAssetConfigs` passed no logger into
+ * constructors that call `logger.log` unconditionally. After the crash
+ * every subsequent request hung. Parser diagnostics go through Effect.log
+ * so the CLI logger captures them.
  *
  * This is the local counterpart of `AssetsConfigFiles.test.ts`: the
  * fixture's rules must reach the local assets worker and actually apply.

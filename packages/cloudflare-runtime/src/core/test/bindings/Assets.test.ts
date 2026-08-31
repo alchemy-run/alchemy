@@ -1,5 +1,6 @@
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Logger from "effect/Logger";
 import * as Assets from "../../bindings/assets/Assets.ts";
 import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
@@ -91,9 +92,12 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
   );
 });
 
+const assetConfigs = (worker: Parameters<typeof Assets.buildAssetConfigs>[0]) =>
+  Effect.runSync(Assets.buildAssetConfigs(worker));
+
 describe("Assets / buildAssetConfigs", () => {
   it("returns expected router and assets config", () => {
-    const { routerConfig, assetsConfig } = Assets.buildAssetConfigs({
+    const { routerConfig, assetsConfig } = assetConfigs({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: [],
       assets: {
@@ -119,7 +123,7 @@ describe("Assets / buildAssetConfigs", () => {
   });
 
   it("disables invoke_user_worker_ahead_of_assets when runWorkerFirst is false", () => {
-    const { routerConfig } = Assets.buildAssetConfigs({
+    const { routerConfig } = assetConfigs({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: [],
       assets: { directory: "/tmp/x", runWorkerFirst: false },
@@ -128,7 +132,7 @@ describe("Assets / buildAssetConfigs", () => {
   });
 
   it("serves assets first when runWorkerFirst is omitted (wrangler default)", () => {
-    const { routerConfig } = Assets.buildAssetConfigs({
+    const { routerConfig } = assetConfigs({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: [],
       assets: { directory: "/tmp/x" },
@@ -137,7 +141,7 @@ describe("Assets / buildAssetConfigs", () => {
   });
 
   it("enables invoke_user_worker_ahead_of_assets when runWorkerFirst is true", () => {
-    const { routerConfig } = Assets.buildAssetConfigs({
+    const { routerConfig } = assetConfigs({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: [],
       assets: { directory: "/tmp/x", runWorkerFirst: true },
@@ -148,9 +152,11 @@ describe("Assets / buildAssetConfigs", () => {
   // Regression for https://github.com/alchemy-run/alchemy/pull/1418:
   // constructHeaders / constructRedirects call `logger.log` unconditionally,
   // so a missing logger crashes local asset serving the moment the assets
-  // directory contains a `_headers` or `_redirects` file.
+  // directory contains a `_headers` or `_redirects` file. Parse messages
+  // go through Effect.log so the CLI logger (log level, run file, TUI)
+  // sees them.
   it("constructs header and redirect configs from _headers/_redirects contents", () => {
-    const { assetsConfig } = Assets.buildAssetConfigs({
+    const { assetsConfig } = assetConfigs({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: [],
       assets: {
@@ -180,5 +186,35 @@ describe("Assets / buildAssetConfigs", () => {
       },
       rules: {},
     });
+  });
+
+  it("emits _headers/_redirects parse messages through Effect.log", () => {
+    const messages: Array<string> = [];
+    Effect.runSync(
+      Assets.buildAssetConfigs({
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        assets: {
+          directory: "/tmp/x",
+          headers: `/*
+  X-Alchemy-Test: assets-config-header
+`,
+          redirects: "/old-path /index.html 301\n",
+        },
+      }).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((options) => {
+              const parts = Array.isArray(options.message)
+                ? options.message
+                : [options.message];
+              messages.push(parts.map(String).join(" "));
+            }),
+          ]),
+        ),
+      ),
+    );
+    expect(messages.some((m) => m.includes("valid header rule"))).toBe(true);
+    expect(messages.some((m) => m.includes("valid redirect rule"))).toBe(true);
   });
 });

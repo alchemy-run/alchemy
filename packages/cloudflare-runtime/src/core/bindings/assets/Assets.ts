@@ -22,6 +22,7 @@ import {
   PATH_HASH_OFFSET,
   PATH_HASH_SIZE,
 } from "../../../internal/workers-shared/shared/constants.ts";
+import type { Logger as AssetParserLogger } from "../../../internal/workers-shared/shared/configuration/types.ts";
 import type {
   AssetConfig,
   RouterConfig,
@@ -272,7 +273,7 @@ export const AssetsLive = Layer.effect(
         }
         const { encodedAssetManifest, assetsReverseMap } =
           yield* buildAssetManifest(path.resolve(worker.assets.directory));
-        const { assetsConfig, routerConfig } = buildAssetConfigs(worker);
+        const { assetsConfig, routerConfig } = yield* buildAssetConfigs(worker);
         const [assetsKvWorker, assetsWorker, routerWorker] =
           yield* Effect.forEach(
             [AssetsKvWorker, AssetsWorker, RouterWorker],
@@ -369,36 +370,70 @@ export const AssetsLive = Layer.effect(
   }),
 );
 
-export const buildAssetConfigs = (
+/**
+ * Collects workers-shared parser logs and re-emits them through Effect so
+ * they hit the CLI logger (log level, run file, TUI) instead of raw stdout.
+ */
+const withAssetParserLogger = <A>(
+  run: (logger: AssetParserLogger) => A,
+): Effect.Effect<A> =>
+  Effect.gen(function* () {
+    const pending: Array<Effect.Effect<void>> = [];
+    const result = run({
+      debug: (message) => {
+        pending.push(Effect.logDebug(message));
+      },
+      log: (message) => {
+        pending.push(Effect.log(message));
+      },
+      info: (message) => {
+        pending.push(Effect.logInfo(message));
+      },
+      warn: (message) => {
+        pending.push(Effect.logWarning(message));
+      },
+      error: (error) => {
+        pending.push(Effect.logError(error));
+      },
+    });
+    yield* Effect.all(pending, { discard: true });
+    return result;
+  });
+
+export const buildAssetConfigs = Effect.fn("buildAssetConfigs")(function* (
   worker: Pick<
     RuntimeWorker,
     "assets" | "compatibilityDate" | "compatibilityFlags"
   >,
-) => {
+) {
   let headers: AssetConfig["headers"] | undefined;
   if (worker.assets?.headers) {
     const parsedHeaders = parseHeaders(worker.assets.headers);
-    headers = constructHeaders({
-      headers: parsedHeaders,
-      headersFile: worker.assets.headers,
-      logger: console,
-    }).headers;
+    headers = (yield* withAssetParserLogger((logger) =>
+      constructHeaders({
+        headers: parsedHeaders,
+        headersFile: worker.assets.headers,
+        logger,
+      }),
+    )).headers;
   }
   let redirects: AssetConfig["redirects"] | undefined;
   if (worker.assets?.redirects) {
     const parsedRedirects = parseRedirects(worker.assets.redirects);
-    redirects = constructRedirects({
-      redirects: parsedRedirects,
-      redirectsFile: worker.assets.redirects,
-      logger: console,
-    }).redirects;
+    redirects = (yield* withAssetParserLogger((logger) =>
+      constructRedirects({
+        redirects: parsedRedirects,
+        redirectsFile: worker.assets.redirects,
+        logger,
+      }),
+    )).redirects;
   }
   let staticRouting: StaticRouting | undefined;
   if (Array.isArray(worker.assets?.runWorkerFirst)) {
     staticRouting = parseStaticRouting(worker.assets.runWorkerFirst);
   }
   const routerConfig: RouterConfig = {
-    // Matches wrangler: assets are served first unless `runWorkerFirst: true`.
+    // Assets are served first unless `runWorkerFirst: true`.
     // An array selects routes via `static_routing` instead of the blanket flag.
     invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst === true,
     static_routing: staticRouting,
@@ -414,7 +449,7 @@ export const buildAssetConfigs = (
     has_static_routing: !!staticRouting,
   };
   return { assetsConfig, routerConfig };
-};
+});
 
 export const local = (binding: string): BindingHook<Assets> =>
   Plugin.use(Assets, (assets) =>
