@@ -1582,7 +1582,7 @@ export const App = () => {
                             )}
                             <span
                               role="button"
-                              title="Kill terminal (the shell dies)"
+                              title="Close terminal (the shell dies)"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 killTerminal(session, tab.ptyId);
@@ -1672,7 +1672,7 @@ export const App = () => {
                             variant="destructive"
                             onSelect={() => killTerminal(session, tab.ptyId)}
                           >
-                            <X /> Kill terminal
+                            <X /> Close terminal
                           </ContextMenuItem>
                         )}
                       </ContextMenuContent>
