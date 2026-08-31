@@ -6,11 +6,12 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
+import * as CliKit from "./CliKit/index.ts";
 import { LoggingCli } from "./LoggingCli.ts";
 import { selectCli } from "./selectCli.ts";
 
@@ -22,9 +23,16 @@ import { selectCli } from "./selectCli.ts";
 // model for a dev server (plan → status → logs, strictly in order), so dev
 // always takes the line renderer; deploy/destroy keep the interactive TUI.
 const makeServices = (dev: boolean | undefined) =>
-  Layer.merge(dev ? LoggingCli : selectCli(), RpcProviderProxy.fromEnv()).pipe(
+  Layer.merge(
+    Layer.provideMerge(dev ? LoggingCli : selectCli(), CliKit.layer()),
+    RpcProviderProxy.fromEnv(),
+  ).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(AlchemyContextLive, ProfileLive, CredentialsStoreLive),
+      Layer.mergeAll(
+        AlchemyContextLive,
+        ProfileStoreLive,
+        CredentialsStoreLive,
+      ),
     ),
     Layer.provideMerge(
       Layer.mergeAll(

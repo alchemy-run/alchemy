@@ -55,7 +55,13 @@ Rather than hand those elevated rights to your day-to-day profile,
 create a dedicated `admin` profile:
 
 ```sh
-alchemy login --profile admin
+alchemy profile create admin
+```
+
+Connect AWS to the new profile:
+
+```sh
+alchemy profile edit admin --add AWS
 ```
 
 Choose an AWS credential (SSO, access keys, etc.) that's authorized

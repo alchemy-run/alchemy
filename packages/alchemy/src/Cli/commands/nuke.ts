@@ -392,10 +392,13 @@ const nukeCommand = Command.make(
     filter: filterFlag,
     local: localFlag,
   },
-  instrumentCommand("unsafe.nuke", (a: { profile: string; main: string }) => ({
-    "alchemy.profile": a.profile,
-    "alchemy.main": a.main,
-  }))(
+  instrumentCommand(
+    "unsafe.nuke",
+    (a: { profile: string | undefined; main: string }) => ({
+      "alchemy.profile": a.profile,
+      "alchemy.main": a.main,
+    }),
+  )(
     Effect.fn(function* ({
       main,
       envFile,
