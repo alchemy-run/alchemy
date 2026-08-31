@@ -40,6 +40,39 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
       }),
   );
 
+  it.effect("applies _headers and _redirects rules when serving assets", () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "assets-headers-redirects",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [
+          { name: "main.js", type: "ESModule", content: ASSETS_SCRIPT },
+        ],
+        assets: {
+          directory: ASSETS_DIRECTORY,
+          headers: `/*
+  X-Alchemy-Test: assets-config-header
+`,
+          redirects: "/old-path /index.html 301\n",
+        },
+        bindings: [Assets.local("ASSETS")],
+      });
+      const home = yield* worker.fetch("/");
+      expect(home.status).toBe(200);
+      expect(home.headers.get("x-alchemy-test")).toBe("assets-config-header");
+      expect(yield* Effect.promise(() => home.text())).toBe("<h1>home</h1>\n");
+
+      const redirected = yield* worker.fetch("/old-path", {
+        redirect: "manual",
+      });
+      expect(redirected.status).toBe(301);
+      const location = redirected.headers.get("location");
+      expect(location).toBeTruthy();
+      expect(new URL(location!, worker.baseUrl).pathname).toBe("/index.html");
+    }),
+  );
+
   it.effect(
     "Assets.binding fails with ConfigError when no assets are configured",
     () =>
@@ -110,5 +143,42 @@ describe("Assets / buildAssetConfigs", () => {
       assets: { directory: "/tmp/x", runWorkerFirst: true },
     });
     expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(true);
+  });
+
+  // Regression for https://github.com/alchemy-run/alchemy/pull/1418:
+  // constructHeaders / constructRedirects call `logger.log` unconditionally,
+  // so a missing logger crashes local asset serving the moment the assets
+  // directory contains a `_headers` or `_redirects` file.
+  it("constructs header and redirect configs from _headers/_redirects contents", () => {
+    const { assetsConfig } = Assets.buildAssetConfigs({
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: [],
+      assets: {
+        directory: "/tmp/x",
+        headers: `/*
+  X-Alchemy-Test: assets-config-header
+`,
+        redirects: "/old-path /index.html 301\n",
+      },
+    });
+    expect(assetsConfig.headers).toEqual({
+      version: 2,
+      rules: {
+        "/*": {
+          set: { "x-alchemy-test": "assets-config-header" },
+        },
+      },
+    });
+    expect(assetsConfig.redirects).toEqual({
+      version: 1,
+      staticRules: {
+        "/old-path": {
+          status: 301,
+          to: "/index.html",
+          lineNumber: 1,
+        },
+      },
+      rules: {},
+    });
   });
 });
