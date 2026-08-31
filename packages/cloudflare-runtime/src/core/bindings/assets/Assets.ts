@@ -381,7 +381,7 @@ export const buildAssetConfigs = (
     headers = constructHeaders({
       headers: parsedHeaders,
       headersFile: worker.assets.headers,
-      logger: undefined!,
+      logger: console,
     }).headers;
   }
   let redirects: AssetConfig["redirects"] | undefined;
@@ -390,7 +390,7 @@ export const buildAssetConfigs = (
     redirects = constructRedirects({
       redirects: parsedRedirects,
       redirectsFile: worker.assets.redirects,
-      logger: undefined!,
+      logger: console,
     }).redirects;
   }
   let staticRouting: StaticRouting | undefined;
