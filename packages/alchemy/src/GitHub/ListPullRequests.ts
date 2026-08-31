@@ -14,12 +14,13 @@ export type ListPullRequestsResponse =
 
 /**
  * List a repository's pull requests (`pulls.list`).
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const listPullRequests = yield* GitHub.ListPullRequests(repo);
  * const open = yield* listPullRequests({ state: "open", per_page: 100 });
  * ```
+ *
+ * @binding
  */
 export interface ListPullRequests extends Binding.Service<
   ListPullRequests,

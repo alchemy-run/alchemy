@@ -36,19 +36,20 @@ export interface BotTokenProps {
  *
  * Deleting the resource only forgets the token from state — resetting
  * a bot token happens in the Developer Portal and stays a human act.
- * @resource
- * @section Capturing a Token
- * @example The provider's credential (the common shape)
+ * ### Capturing a Token
+ * **Example:** The provider's credential (the common shape)
  * ```typescript
  * const token = yield* Discord.BotToken("factory-bot");
  * ```
  *
- * @example An explicit token
+ * **Example:** An explicit token
  * ```typescript
  * const token = yield* Discord.BotToken("bot", {
  *   token: Redacted.make(config.discordBotToken),
  * });
  * ```
+ *
+ * @resource
  */
 export interface BotToken extends Resource<
   "Discord.BotToken",

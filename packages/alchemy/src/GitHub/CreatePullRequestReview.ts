@@ -17,8 +17,7 @@ export type CreatePullRequestReviewResponse =
  * `body` + `event` verdict (`APPROVE` / `REQUEST_CHANGES` / `COMMENT`)
  * with inline `comments` anchored to diff lines — one atomic
  * submission, unlike {@link CreateIssueComment}'s flat thread comment.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const review = yield* GitHub.CreatePullRequestReview(repo);
  * yield* review({
@@ -28,6 +27,8 @@ export type CreatePullRequestReviewResponse =
  *   comments: [{ path: "src/x.ts", line: 42, body: "off-by-one" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreatePullRequestReview extends Binding.Service<
   CreatePullRequestReview,

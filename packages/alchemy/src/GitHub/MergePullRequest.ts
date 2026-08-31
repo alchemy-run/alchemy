@@ -16,12 +16,13 @@ export type MergePullRequestResponse =
  * Merge a pull request (`pulls.merge`). The RAW operation — approval
  * gates and merge policies are the caller's business rules, layered on
  * top (e.g. with {@link ListPullRequestReviews}).
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const merge = yield* GitHub.MergePullRequest(repo);
  * const merged = yield* merge({ pull_number: 9 });
  * ```
+ *
+ * @binding
  */
 export interface MergePullRequest extends Binding.Service<
   MergePullRequest,

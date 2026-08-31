@@ -22,12 +22,13 @@ export type SearchIssuesResponse =
 /**
  * Search issues and pull requests scoped to the repository
  * (`search.issuesAndPullRequests` with `repo:` injected).
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const search = yield* GitHub.SearchIssues(repo);
  * const dupes = yield* search({ q: "polling dedupe in:title", per_page: 20 });
  * ```
+ *
+ * @binding
  */
 export interface SearchIssues extends Binding.Service<
   SearchIssues,

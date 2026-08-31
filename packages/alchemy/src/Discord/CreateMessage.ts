@@ -16,8 +16,7 @@ export type CreateMessageResponse = GatewayMessage;
  * Post a message to a channel or thread
  * (`POST /channels/{id}/messages`) — the physics behind a Reply tool:
  * answer in the thread the mention arrived in, optionally quoting it.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const createMessage = yield* Discord.CreateMessage();
  * yield* createMessage({
@@ -26,6 +25,8 @@ export type CreateMessageResponse = GatewayMessage;
  *   message_reference: { message_id: mention.messageId },
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreateMessage extends Binding.Service<
   CreateMessage,

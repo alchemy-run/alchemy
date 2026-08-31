@@ -15,8 +15,7 @@ export type CreatePullRequestResponse =
 /**
  * Open a pull request (`pulls.create`). The RAW operation — branch
  * plumbing (commit, push) is the caller's business, layered on top.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const createPullRequest = yield* GitHub.CreatePullRequest(repo);
  * const pr = yield* createPullRequest({
@@ -26,6 +25,8 @@ export type CreatePullRequestResponse =
  *   body: "Closes #7.",
  * });
  * ```
+ *
+ * @binding
  */
 export interface CreatePullRequest extends Binding.Service<
   CreatePullRequest,

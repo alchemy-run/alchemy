@@ -25,8 +25,7 @@ export type ListMessagesResponse = ReadonlyArray<GatewayMessage>;
  * Read a channel or thread's messages (`GET /channels/{id}/messages`)
  * — how an agent walks the conversation a mention arrived in:
  * `around` the mention for context, `before` it for history.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const listMessages = yield* Discord.ListMessages();
  * const thread = yield* listMessages({
@@ -35,6 +34,8 @@ export type ListMessagesResponse = ReadonlyArray<GatewayMessage>;
  *   limit: 50,
  * });
  * ```
+ *
+ * @binding
  */
 export interface ListMessages extends Binding.Service<
   ListMessages,

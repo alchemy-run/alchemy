@@ -23,12 +23,13 @@ export class IssueNotFound extends Data.TaggedError("GitHub.IssueNotFound")<{
 /**
  * Get one issue by number (`issues.get`). A missing issue is the typed
  * {@link IssueNotFound}, never a status check.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const getIssue = yield* GitHub.GetIssue(repo);
  * const issue = yield* getIssue({ issue_number: 7 });
  * ```
+ *
+ * @binding
  */
 export interface GetIssue extends Binding.Service<
   GetIssue,

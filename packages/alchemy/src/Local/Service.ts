@@ -150,10 +150,9 @@ type ServiceShape = Main<ServiceServices>;
  * here — the same program moves to a Worker/Container later by
  * swapping the resource.
  *
- * @resource
  *
- * @section Running an Effectful Server
- * @example The Effectful Constructor, locally
+ * ### Running an Effectful Server
+ * **Example:** The Effectful Constructor, locally
  * ```typescript
  * export default class Api extends Local.Service<Api>()(
  *   "Api",
@@ -168,8 +167,8 @@ type ServiceShape = Main<ServiceServices>;
  * ) {}
  * ```
  *
- * @section Background Work
- * @example A perpetual loop via Host
+ * ### Background Work
+ * **Example:** A perpetual loop via Host
  * ```typescript
  * Effect.gen(function* () {
  *   const host = yield* Host;
@@ -185,8 +184,8 @@ type ServiceShape = Main<ServiceServices>;
  * when init returns.
 
  *
- * @section External Scripts
- * @example Run a self-contained script
+ * ### External Scripts
+ * **Example:** Run a self-contained script
  * ```typescript
  * const org = yield* Local.Service("AlchemyOrg", {
  *   main: "./src/local.ts",
@@ -195,14 +194,16 @@ type ServiceShape = Main<ServiceServices>;
  * return { url: org.url, pid: org.pid };
  * ```
  *
- * @section Restart on Source Change
- * @example Narrow the watched inputs
+ * ### Restart on Source Change
+ * **Example:** Narrow the watched inputs
  * ```typescript
  * yield* Local.Service("Api", {
  *   main: "./src/server.ts",
  *   memo: { include: ["src/**"] },
  * });
  * ```
+ *
+ * @resource
  */
 export const Service: Platform<
   Service,

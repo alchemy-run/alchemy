@@ -19,12 +19,13 @@ export type ListIssuesResponse =
 
 /**
  * List a repository's issues (`issues.listForRepo`).
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const listIssues = yield* GitHub.ListIssues(repo);
  * const open = yield* listIssues({ state: "open", per_page: 100 });
  * ```
+ *
+ * @binding
  */
 export interface ListIssues extends Binding.Service<
   ListIssues,

@@ -22,13 +22,14 @@ export type GetPullRequestResponse =
  * Fetch a pull request (`pulls.get`). The one general read — pass
  * `format: "diff"` (or `"patch"`) to receive the raw unified diff text
  * instead of the JSON object; the return type follows the request.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const getPullRequest = yield* GitHub.GetPullRequest(repo);
  * const pull = yield* getPullRequest({ pull_number: 9 });
  * const diff = yield* getPullRequest({ pull_number: 9, format: "diff" });
  * ```
+ *
+ * @binding
  */
 export interface GetPullRequest extends Binding.Service<
   GetPullRequest,

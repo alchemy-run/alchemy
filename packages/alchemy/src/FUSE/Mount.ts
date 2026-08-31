@@ -80,6 +80,7 @@ export interface Mount extends Binding.Service<
  * const persist = yield* FUSE.Mount(Bucket, { path: "/persist" });
  * // ...processes now read/write /persist as ordinary files
  * ```
+ *
  * @binding
  * @product FUSE
  * @category Storage & Databases

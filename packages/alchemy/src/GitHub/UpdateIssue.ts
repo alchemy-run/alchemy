@@ -17,8 +17,7 @@ export type UpdateIssueResponse =
  * Update one issue by number (`issues.update`) — state (open/closed
  * with a state_reason), title, body, labels. A missing issue is the
  * typed {@link IssueNotFound}, never a status check.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const updateIssue = yield* GitHub.UpdateIssue(repo);
  * yield* updateIssue({
@@ -27,6 +26,8 @@ export type UpdateIssueResponse =
  *   state_reason: "completed",
  * });
  * ```
+ *
+ * @binding
  */
 export interface UpdateIssue extends Binding.Service<
   UpdateIssue,

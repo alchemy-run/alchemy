@@ -15,13 +15,14 @@ export type ListPullRequestReviewsResponse =
 /**
  * List a pull request's reviews (`pulls.listReviews`) — e.g. to gate a
  * merge on an APPROVED review.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const listReviews = yield* GitHub.ListPullRequestReviews(repo);
  * const reviews = yield* listReviews({ pull_number: 9 });
  * const approved = reviews.some((review) => review.state === "APPROVED");
  * ```
+ *
+ * @binding
  */
 export interface ListPullRequestReviews extends Binding.Service<
   ListPullRequestReviews,

@@ -160,8 +160,7 @@ export interface ConsumeRepositoryEventsOptions<
  * `Cloudflare.Workers.GitHubRepositoryEventSourceLive` provisions a
  * verified webhook; `GitHub.RepositoryEventSourcePolling` polls the same
  * events locally.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * yield* GitHub.consumeRepositoryEvents(
  *   repo, // GitHub.Repository — yielded, or the exported un-yielded const
@@ -175,6 +174,7 @@ export interface ConsumeRepositoryEventsOptions<
  * );
  * ```
  *
+ * @binding
  * @binding
  */
 export function consumeRepositoryEvents<

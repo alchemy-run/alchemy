@@ -35,19 +35,20 @@ export interface PersonalAccessTokenProps {
  *
  * Deleting the resource only forgets the token from state — revoking a
  * PAT is not exposed by GitHub's API and stays a human act.
- * @resource
- * @section Capturing a Token
- * @example The provider's credential (the common shape)
+ * ### Capturing a Token
+ * **Example:** The provider's credential (the common shape)
  * ```typescript
  * const token = yield* GitHub.PersonalAccessToken("factory-token");
  * ```
  *
- * @example An explicit token
+ * **Example:** An explicit token
  * ```typescript
  * const token = yield* GitHub.PersonalAccessToken("bot-token", {
  *   token: Redacted.make(process.env.BOT_GITHUB_TOKEN!),
  * });
  * ```
+ *
+ * @resource
  */
 /**
  * The classic-PAT OAuth scopes GitHub grants, as reported by the

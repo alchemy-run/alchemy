@@ -17,12 +17,13 @@ export type CreateIssueCommentResponse =
  * door for both, GitHub's issues API). Named after the operation; the
  * `GitHub.Comment` RESOURCE (a comment whose lifecycle a Stack owns) is
  * a different thing.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const comment = yield* GitHub.CreateIssueComment(repo);
  * yield* comment({ issue_number: 7, body: "on it" });
  * ```
+ *
+ * @binding
  */
 export interface CreateIssueComment extends Binding.Service<
   CreateIssueComment,

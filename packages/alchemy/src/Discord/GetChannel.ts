@@ -25,12 +25,13 @@ export interface GetChannelRequest {
  * Read one channel or thread (`GET /channels/{id}`) — orientation for
  * a conversation: is this a thread, what is it called, which channel
  * is its parent.
- * @binding
- * @example
+ * **Example:** Example
  * ```typescript
  * const getChannel = yield* Discord.GetChannel();
  * const channel = yield* getChannel({ channel_id: mention.channelId });
  * ```
+ *
+ * @binding
  */
 export interface GetChannel extends Binding.Service<
   GetChannel,
