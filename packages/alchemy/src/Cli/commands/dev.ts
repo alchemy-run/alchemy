@@ -14,12 +14,13 @@ import {
   configPath,
   envFile,
   force,
+  localDevStageFromUser,
   optionalConfig,
   profile,
+  rejectedDevStage,
   resolveConfig,
-  stage,
 } from "./flags.ts";
-import { suppressInterruptMessages } from "./errors.ts";
+import { suppressInterruptMessages, UserInputError } from "./errors.ts";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -40,17 +41,29 @@ export const devCommand = Command.make(
     config: optionalConfig,
     configPath,
     envFile,
-    stage,
+    stage: rejectedDevStage,
     profile,
   },
   Effect.fn(
     function* (rawArgs) {
       const args = yield* resolveConfig(rawArgs);
+      const localStage = yield* localDevStageFromUser;
+      if (args.stage !== undefined) {
+        return yield* new UserInputError({
+          message:
+            `alchemy dev always uses the engine-owned local stage '${localStage}' ` +
+            `so it cannot replace a deployed stage. Omit --stage. ` +
+            `Tear this stage down with: alchemy destroy --dev`,
+        });
+      }
       // This process is only the exec child's supervisor; the child owns the
       // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
       // hits both processes and the interrupt message prints twice.
       yield* suppressInterruptMessages;
-      const options = yield* Schema.encodeEffect(DevOptions)(args);
+      const options = yield* Schema.encodeEffect(DevOptions)({
+        ...args,
+        stage: localStage,
+      });
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec

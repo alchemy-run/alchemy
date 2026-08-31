@@ -21,20 +21,24 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 
 | Option              | Description                                                        |
 | ------------------- | ------------------------------------------------------------------ |
-| `--stage <name>`    | Stage to use for dev (defaults to `dev_$USER`)                     |
 | `--force`           | Force updates for resources that would otherwise no-op             |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
 | `--env-file <path>` | Load environment variables from a file                             |
 | `--config, -c <file>`            | Stack file to run (defaults to `alchemy.run.ts`)                   |
 
+`alchemy dev` always uses the engine-owned stage `local:<user>` (for
+example `local:sam`). It does not honor `--stage` or `$STAGE` — those
+select the **deploy** stage, and sharing it with `alchemy dev` would
+replace live resources with local ones. Pass `--stage` and the command
+exits with an error.
+
+Tear the local-dev stage down with [`alchemy destroy --dev`](/cli/destroy).
+
 ## Examples
 
 ```sh
-# Start dev mode
+# Start dev mode (stage local:<user>)
 alchemy dev
-
-# Use a custom stage
-alchemy dev --stage dev
 ```
 
 ## Where next

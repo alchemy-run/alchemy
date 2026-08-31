@@ -8,7 +8,14 @@ import { Cli } from "../../Report.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 
-import { config, envFile, profile, stage } from "./flags.ts";
+import {
+  applyLocalDevStage,
+  config,
+  envFile,
+  localDev,
+  profile,
+  stage,
+} from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 import { renderApply, renderPlanning } from "./render.ts";
 
@@ -92,11 +99,17 @@ export const driftCommand = Command.make(
     envFile,
     stage,
     profile,
+    dev: localDev,
   },
-  instrumentCommand("drift", (args: SyncArgs & { repair: boolean }) => ({
-    "alchemy.stage": args.stage,
-    "alchemy.profile": args.profile,
-    "alchemy.main": args.main,
-    "alchemy.repair": args.repair,
-  }))((args) => routeDrift(args)),
+  (rawArgs) =>
+    applyLocalDevStage(rawArgs).pipe(
+      Effect.flatMap(
+        instrumentCommand("drift", (args: SyncArgs & { repair: boolean }) => ({
+          "alchemy.stage": args.stage,
+          "alchemy.profile": args.profile,
+          "alchemy.main": args.main,
+          "alchemy.repair": args.repair,
+        }))((args) => routeDrift(args)),
+      ),
+    ),
 ).pipe(Command.withDescription("Detect infrastructure drift"));

@@ -3,10 +3,10 @@ import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
+import { isUserStage, localDevStage } from "../../Stage.ts";
 import { UserInputError } from "./errors.ts";
 
 export const USER = Config.string("USER").pipe(
@@ -19,32 +19,86 @@ export const STAGE = Config.string("STAGE").pipe(
   Effect.map(Option.getOrUndefined),
 );
 
-export const stage = Flag.string("stage").pipe(
-  Flag.withSchema(
-    Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
+const invalidUserStage = (value: string) =>
+  new CliError.InvalidValue({
+    option: "stage",
+    value,
+    expected:
+      "a name matching [a-z0-9]+([-_a-z0-9]+)* (no ':'). alchemy dev uses local:<user>; tear it down with alchemy destroy --dev",
+    kind: "flag",
+  });
+
+export const defaultDeployStage: Effect.Effect<string> = USER.pipe(
+  Effect.map((user) => `dev_${user}`),
+  Effect.catch(() => Effect.succeed("dev_unknown")),
+);
+
+export const localDevStageFromUser: Effect.Effect<string> = USER.pipe(
+  Effect.map(localDevStage),
+  Effect.catch(() => Effect.succeed(localDevStage("unknown"))),
+);
+
+/**
+ * `--stage` on `alchemy dev`. Unlike {@link stage} this does not default:
+ * `alchemy dev` always writes to `local:<user>`, and an explicit value is
+ * rejected so a leftover `--stage prod` cannot hit the live row.
+ */
+export const rejectedDevStage = Flag.string("stage").pipe(
+  Flag.withDescription(
+    "Not used: alchemy dev always uses the engine-owned local:<user> stage. Tear it down with alchemy destroy --dev.",
   ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
+export const stage = Flag.string("stage").pipe(
   Flag.withDescription("Stage to deploy to, defaults to dev_${USER}"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
   Flag.mapEffect(
     Effect.fn(function* (stage) {
-      if (stage) return stage;
+      if (stage) {
+        if (!isUserStage(stage)) {
+          return yield* invalidUserStage(stage);
+        }
+        return stage;
+      }
       return yield* STAGE.pipe(
         Effect.catch(() =>
           Effect.fail(new CliError.MissingOption({ option: "stage" })),
         ),
-        Effect.flatMap((configured) =>
-          configured === undefined
-            ? USER.pipe(
-                Effect.map((user) => `dev_${user}`),
-                Effect.catch(() => Effect.succeed("unknown")),
-              )
-            : Effect.succeed(configured),
-        ),
+        Effect.flatMap((configured) => {
+          if (configured === undefined) return defaultDeployStage;
+          if (!isUserStage(configured)) {
+            return invalidUserStage(configured);
+          }
+          return Effect.succeed(configured);
+        }),
       );
     }),
   ),
 );
+
+/**
+ * Target the engine-owned `local:<user>` stage instead of `--stage` / `$STAGE`
+ * / `dev_$USER`. `alchemy dev` uses that stage unconditionally; pass `--dev`
+ * on destroy/plan/logs/drift to address the same row.
+ */
+export const localDev = Flag.boolean("dev").pipe(
+  Flag.withDescription(
+    "Target the engine-owned local stage (local:<user>) used by alchemy dev",
+  ),
+  Flag.withDefault(false),
+);
+
+export const applyLocalDevStage = <
+  A extends { readonly stage: string; readonly dev?: boolean },
+>(
+  args: A,
+): Effect.Effect<A> =>
+  args.dev
+    ? localDevStageFromUser.pipe(Effect.map((stage) => ({ ...args, stage })))
+    : Effect.succeed(args);
 
 export const envFile = Flag.file("env-file").pipe(
   Flag.optional,

@@ -1,6 +1,7 @@
 import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
+import { encodeStagePathSegment } from "@/Stage.ts";
 import { initialCwd } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "alchemy-test";
@@ -396,6 +397,31 @@ describe("makeLocalState", () => {
   );
 
   describe("weird names", () => {
+    it.effect("encodes a local: stage as a Windows-safe directory name", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-colon-stage";
+        const stage = "local:sam";
+        const value = resource("kv", { id: "dev:abc" });
+
+        yield* state.set({ stack, stage, fqn: value.fqn, value });
+        expect(yield* state.get({ stack, stage, fqn: value.fqn })).toEqual(
+          value,
+        );
+        expect(yield* state.listStages(stack)).toEqual([stage]);
+
+        const encodedDir = yield* statePath(
+          stack,
+          encodeStagePathSegment(stage),
+        );
+        expect(yield* fs.exists(encodedDir)).toBe(true);
+        expect(encodeStagePathSegment(stage)).toBe("local%3Asam");
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
     it.effect("unicode, spaces and punctuation in every name position", () =>
       Effect.gen(function* () {
         const state = yield* makeLocalState();

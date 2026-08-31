@@ -13,9 +13,9 @@ dedicated environment — all from one program.
 
 ## The default stage
 
-If you don't pass `--stage`, alchemy uses **`dev_$USER`** (e.g.
-`dev_sam`). Each developer on your team automatically gets a
-personal stage without any config.
+If you don't pass `--stage`, **`alchemy deploy`** uses **`dev_$USER`**
+(e.g. `dev_sam`). Each developer on your team automatically gets a
+personal cloud sandbox without any config.
 
 ```sh
 $ whoami
@@ -25,24 +25,41 @@ $ alchemy deploy
 # deploys to stage `dev_sam`
 ```
 
-The resolution order is:
+**`alchemy dev` does not use that stage.** It always writes to an
+engine-owned stage named **`local:<user>`** (e.g. `local:sam`). Colon is
+illegal in user stage names, so a deploy and a local-dev session can
+never share a state row — and `alchemy dev` cannot replace (or delete)
+resources you deployed.
 
-1. `--stage <name>` flag
-2. `$STAGE` environment variable
-3. `dev_${USER}` (or `dev_${USERNAME}` on Windows)
-4. `dev_unknown` if no user is set
+```sh
+$ alchemy dev
+# always uses stage `local:sam`
+
+$ alchemy destroy --dev
+# tears down `local:sam`
+```
+
+The resolution order for **deploy / destroy / plan / logs / drift** is:
+
+1. `--dev` — the engine-owned `local:<user>` stage (same row `alchemy dev` uses)
+2. `--stage <name>` flag
+3. `$STAGE` environment variable
+4. `dev_${USER}` (or `dev_${USERNAME}` on Windows)
+5. `dev_unknown` if no user is set
 
 ## Common stage patterns
 
-| Stage             | Purpose                                  |
-| ----------------- | ---------------------------------------- |
-| `dev_<user>`      | Per-developer sandbox (default)          |
-| `pr-<n>`          | Per-pull-request preview environment     |
-| `staging`         | Shared pre-production                    |
-| `prod`            | Production                               |
-| `dev`             | Shared development                       |
+| Stage             | Purpose                                           |
+| ----------------- | ------------------------------------------------- |
+| `dev_<user>`      | Per-developer cloud sandbox (`alchemy deploy` default) |
+| `local:<user>`    | Engine-owned local-dev stage (`alchemy dev`)      |
+| `pr-<n>`          | Per-pull-request preview environment              |
+| `staging`         | Shared pre-production                             |
+| `prod`            | Production                                        |
+| `dev`             | Shared development                                |
 
-Stage names must match `[a-z0-9][-_a-z0-9]*`.
+User stage names must match `[a-z0-9][-_a-z0-9]*`. `:` is reserved for
+`local:<user>`.
 
 ```sh
 alchemy deploy --stage prod

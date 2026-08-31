@@ -12,10 +12,12 @@ import { stackOutputsView } from "../components/view/StackOutputs.tsx";
 
 import { exitDeclined } from "./errors.ts";
 import {
+  applyLocalDevStage,
   configPath,
   dryRun as dryRunFlag,
   envFile,
   force,
+  localDev,
   optionalConfig,
   profile,
   resolveConfig,
@@ -244,9 +246,11 @@ export const destroyCommand = Command.make(
     stage,
     yes,
     profile,
+    dev: localDev,
   },
   (args) =>
     resolveConfig(args).pipe(
+      Effect.flatMap(applyLocalDevStage),
       Effect.flatMap(
         instrumentCommand(
           "destroy",
@@ -270,9 +274,11 @@ export const planCommand = Command.make(
     stage,
     profile,
     detailed,
+    dev: localDev,
   },
   (args) =>
     resolveConfig(args).pipe(
+      Effect.flatMap(applyLocalDevStage),
       Effect.flatMap(
         instrumentCommand(
           "plan",
