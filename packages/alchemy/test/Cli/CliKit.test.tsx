@@ -234,7 +234,7 @@ it("ignores state explorer responses from before a refresh", async () => {
   }
 });
 
-it("formats stack outputs as labeled values instead of a raw object dump", () => {
+it("prints stack outputs using inspect", () => {
   const { service } = makeStatic();
   const apiUrl =
     "https://cloudflareworkerexample-api-clxp5k3fbtqacxdev7mx7uuxmw.testing-2b2.workers.dev";
@@ -246,11 +246,9 @@ it("formats stack outputs as labeled values instead of a raw object dump", () =>
     { columns: 10_000 },
   );
 
-  expect(output).toContain("Outputs");
-  expect(output).toContain("apiUrl");
-  expect(output).toContain(apiUrl);
-  expect(output).toContain("metadata");
-  expect(output).toContain("region");
+  expect(output).toBe(
+    `{\n  apiUrl: '${apiUrl}',\n  metadata: { region: 'us-east-1', replicas: 2 }\n}`,
+  );
 });
 
 it("renders detailed plans as nested YAML", () => {
