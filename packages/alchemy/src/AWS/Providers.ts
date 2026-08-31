@@ -513,7 +513,10 @@ export const providers = () =>
       EKS.FargateProfile,
       EKS.Nodegroup,
       EKS.PodIdentityAssociation,
+      ElastiCache.CacheCluster,
+      ElastiCache.ReplicationGroup,
       ElastiCache.ServerlessCache,
+      ElastiCache.SubnetGroup,
       ELBv2.Listener,
       ELBv2.ListenerCertificate,
       ELBv2.ListenerRule,
@@ -1198,7 +1201,16 @@ export const providers = () =>
           EKS.FargateProfileProvider(),
           EKS.NodegroupProvider(),
           EKS.PodIdentityAssociationProvider(),
+          flociDual(ElastiCache.CacheCluster, () =>
+            ElastiCache.CacheClusterProvider(),
+          ),
+          flociDual(ElastiCache.ReplicationGroup, () =>
+            ElastiCache.ReplicationGroupProvider(),
+          ),
           ElastiCache.ServerlessCacheProvider(),
+          flociDual(ElastiCache.SubnetGroup, () =>
+            ElastiCache.SubnetGroupProvider(),
+          ),
           // Dual ELBv2: floci emulates ALBs with locally-resolvable DNS
           // (`*.elb.localhost.floci.io` → 127.0.0.1, host-routed on the
           // gateway port) so local ECS services are reachable behind a
