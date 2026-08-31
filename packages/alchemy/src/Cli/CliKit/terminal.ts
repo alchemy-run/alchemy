@@ -1,28 +1,15 @@
 /** Terminal-emulator features shared by CliKit components. */
-import { stripVTControlCharacters } from "node:util";
 import {
   detectColorLevel,
   detectUnicodeSupport,
 } from "@alchemy.run/sigil/capabilities";
+import {
+  setClipboard,
+  setTerminalProgress,
+  tmuxPassthrough,
+  type TerminalProgressState,
+} from "@alchemy.run/sigil/ansi";
 import stringWidth from "string-width";
-import { glyphsFor, theme } from "./theme.ts";
-
-const ATTRIBUTION_COLORS = [
-  theme.color.accent,
-  theme.color.info,
-  theme.color.warning,
-  theme.color.accentBright,
-  theme.color.muted,
-  theme.color.success,
-] as const;
-
-const sourceColor = (id: string): string => {
-  let hash = 0;
-  for (let index = 0; index < id.length; index++) {
-    hash = (hash * 31 + id.charCodeAt(index)) | 0;
-  }
-  return ATTRIBUTION_COLORS[Math.abs(hash) % ATTRIBUTION_COLORS.length];
-};
 
 export const ANSI_RESET = "\u001B[0m";
 export const ANSI_BOLD = "\u001B[1m";
@@ -54,33 +41,25 @@ export const pipedColorEnv = (): Record<string, string> =>
 export const paint = (code: string, value: string): string =>
   colorsEnabled() ? `${code}${value}${ANSI_RESET}` : value;
 
-export const stripAnsi = (value: string): string =>
-  stripVTControlCharacters(value);
-
-/** Stable source prefix for interleaved dev-server and worker output. */
-export const linePrefix = (
-  id: string,
-  options: { readonly colors?: boolean; readonly unicode?: boolean } = {},
-) => {
-  const colors = options.colors ?? colorsEnabled();
-  const divider = glyphsFor(options.unicode ?? unicodeEnabled()).bar;
-  return colors
-    ? `${ansiFg(sourceColor(id))}${id}${ANSI_RESET} ${divider}`
-    : `${id} ${divider}`;
-};
-
-export const hyperlink = (text: string, url: string): string =>
-  `\u001B]8;;${url}\u0007${text}\u001B]8;;\u0007`;
-
 export const copyToClipboard = (
   text: string,
   stdout: Pick<NodeJS.WriteStream, "write"> = process.stdout,
 ): void => {
-  const payload = Buffer.from(text).toString("base64");
-  let sequence = `\u001B]52;c;${payload}\u0007`;
+  let sequence = setClipboard(text);
   if (process.env.TMUX !== undefined) {
-    sequence = `\u001BPtmux;${sequence.replaceAll("\u001B", "\u001B\u001B")}\u001B\\`;
+    sequence = tmuxPassthrough(sequence);
   }
+  stdout.write(sequence);
+};
+
+export const setNativeProgress = (
+  state: TerminalProgressState,
+  value?: number,
+  stdout: Pick<NodeJS.WriteStream, "write" | "isTTY"> = process.stdout,
+): void => {
+  if (stdout.isTTY !== true) return;
+  let sequence = setTerminalProgress(state, value);
+  if (process.env.TMUX !== undefined) sequence = tmuxPassthrough(sequence);
   stdout.write(sequence);
 };
 

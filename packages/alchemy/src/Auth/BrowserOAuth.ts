@@ -11,6 +11,7 @@
 import * as Effect from "effect/Effect";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import * as CliKit from "../Cli/CliKit/index.ts";
+import { CallbackServerStartError } from "./OAuthFlow.ts";
 
 export interface BrowserOAuthOptions<A, E1, R1, E2, R2> {
   /** Display name, e.g. "Cloudflare" — used in the prompt title. */
@@ -37,7 +38,18 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
     Effect.catch(() => Effect.succeed(true)),
   );
   return yield* Effect.raceFirst(
-    options.callback,
+    // A callback server that cannot start (e.g. the port is taken) must not
+    // fail the race — warn and hang so manual code entry stays available.
+    // Genuine OAuth failures delivered via the callback still fail fast.
+    options.callback.pipe(
+      Effect.catch((e) =>
+        e instanceof CallbackServerStartError
+          ? CliKit.accessors.output
+              .warning(`${e.message} — paste the authorization code instead.`)
+              .pipe(Effect.andThen(Effect.never))
+          : Effect.fail(e),
+      ),
+    ),
     (yield* CliKit.CliKit).prompt
       .awaitExternal({
         message: `${options.provider} authorization`,

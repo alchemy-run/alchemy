@@ -81,9 +81,9 @@ export const CloudflareLogs = Effect.gen(function* () {
 
   /**
    * The telemetry query needs the `workers_observability:read` OAuth scope.
-   * A token minted by an older login (before the scope joined the defaults)
-   * keeps its original grants forever, so the query fails with a bare
-   * `Unauthorized`/`Forbidden` even though a fresh login would work —
+   * A token minted by an older login (before the scope joined the
+   * defaults) keeps its original grants forever, so the query fails with a
+   * bare `Unauthorized`/`Forbidden` even though a fresh login would work —
    * explain the fix instead of surfacing the raw tag.
    */
   const explainMissingObservabilityScope = <A, R>(

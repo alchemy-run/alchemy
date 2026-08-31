@@ -1,8 +1,6 @@
 import { AuthError } from "@/Auth/AuthProvider.ts";
-import {
-  handleCliErrors,
-  StackEntrypointError,
-} from "@/Cli/commands/_shared.ts";
+import { StackEntrypointError } from "@/Alchemist/Session.ts";
+import { handleCliErrors } from "@/Cli/commands/errors.ts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

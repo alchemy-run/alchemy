@@ -44,6 +44,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
         // sources are interpreted directly by Pyodide.
         const expected = yield* readPythonWorkerBundle({
           id: "PythonWorker",
+          fqn: "PythonWorker",
           main,
           compatibility: { date: "2026-03-17", flags: ["python_workers"] },
         });
@@ -94,6 +95,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
 
         const bundle = yield* readPythonWorkerBundle({
           id: "PythonDepsWorker",
+          fqn: "PythonDepsWorker",
           main: depsMain,
           compatibility: { date: "2026-03-17", flags: ["python_workers"] },
         });

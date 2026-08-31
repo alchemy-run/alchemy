@@ -3,7 +3,7 @@ import { Credentials, toConfig } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { resolveProviderConfig } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   RAILWAY_AUTH_PROVIDER_NAME,
   type RailwayAuthConfig,

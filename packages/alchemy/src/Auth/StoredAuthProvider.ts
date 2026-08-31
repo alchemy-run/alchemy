@@ -230,14 +230,6 @@ export const makeStoredAuthProvider = <Resolved>(
       const configure = (profileName: string) =>
         collectFieldValues(fields).pipe(
           Effect.flatMap((values) => persist(profileName, values)),
-          Effect.mapError((e) =>
-            e instanceof AuthError
-              ? e
-              : new AuthError({
-                  message: `${provider}: failed to configure credentials`,
-                  cause: e,
-                }),
-          ),
         );
 
       const configureWith = (
@@ -263,7 +255,7 @@ export const makeStoredAuthProvider = <Resolved>(
                 new NeedsReauth({
                   provider,
                   profile: profileName,
-                  message: `${provider} stored credentials not found. ${yield* refreshHint(provider, profileName)}`,
+                  message: `${provider} stored credentials not found. ${refreshHint(provider, profileName)}`,
                 }),
               );
             }),

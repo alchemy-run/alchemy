@@ -10,10 +10,9 @@ import {
   ProfileError,
   ProfileStore,
   ProfileStoreLive,
-  resolveProviderConfig,
   validateProfileName,
 } from "@/Auth/Profile.ts";
-import { resolveProfileName } from "@/Cli/ProfileSelection.ts";
+import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";

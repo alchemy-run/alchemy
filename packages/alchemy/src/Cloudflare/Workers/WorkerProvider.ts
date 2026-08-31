@@ -16,8 +16,7 @@ import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -48,7 +47,6 @@ import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
-  type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
@@ -2216,10 +2214,11 @@ export const LiveWorkerProvider = () =>
         );
       });
 
-      const prepareBundle = (id: string, props: WorkerProps) =>
+      const prepareBundle = (id: string, fqn: string, props: WorkerProps) =>
         (isPythonMain(props.main)
           ? readPythonWorkerBundle({
               id,
+              fqn,
               main: props.main,
               compatibility: getCompatibility(props),
             })
@@ -2251,6 +2250,8 @@ export const LiveWorkerProvider = () =>
         );
 
       const viteBuild = Effect.fn(function* (
+        id: string,
+        fqn: string,
         props: WorkerProps,
         selfUrl?: string,
       ) {
@@ -2313,6 +2314,7 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               viteEnvironments: props.vite?.viteEnvironments,
             },
+            fqn,
           );
         const [assets, bundle, input] = yield* Effect.all(
           [
@@ -2364,6 +2366,7 @@ export const LiveWorkerProvider = () =>
 
       const prepareAssetsAndBundle = (
         id: string,
+        fqn: string,
         workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
@@ -2378,6 +2381,7 @@ export const LiveWorkerProvider = () =>
             const source = yield* resolveSource(props);
             const ctx = makeSourceContext({
               id,
+              fqn,
               workerName,
               props,
               compatibility: getCompatibility(props),
@@ -2420,7 +2424,7 @@ export const LiveWorkerProvider = () =>
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props, opts.selfUrl);
+            return yield* viteBuild(id, fqn, props, opts.selfUrl);
           }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset
@@ -2449,7 +2453,7 @@ export const LiveWorkerProvider = () =>
               opts.skipAssetsRead
                 ? Effect.succeed(undefined)
                 : prepareAssets(props.assets),
-              prepareBundle(id, props),
+              prepareBundle(id, fqn, props),
             ],
             { concurrency: "unbounded" },
           );
@@ -2802,6 +2806,7 @@ export const LiveWorkerProvider = () =>
        */
       const putWorkerVersion = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
@@ -2849,7 +2854,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, parentName, news, {
+        } = yield* prepareAssetsAndBundle(id, fqn, parentName, news, {
           skipAssetsRead: false,
         });
         const metadataHash = yield* resolveWorkerMetadataHash({
@@ -3068,6 +3073,7 @@ export const LiveWorkerProvider = () =>
 
       const putWorker = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         olds: WorkerProps | undefined,
@@ -3118,7 +3124,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, name, news, {
+        } = yield* prepareAssetsAndBundle(id, fqn, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -4105,6 +4111,7 @@ export const LiveWorkerProvider = () =>
 
       const hasChanged = Effect.fn(function* (
         id: string,
+        fqn: string,
         props: WorkerProps,
         output: Worker["Attributes"],
         bindings: readonly ResourceBinding<Worker["Binding"]>[] | undefined,
@@ -4159,6 +4166,7 @@ export const LiveWorkerProvider = () =>
           const slots = yield* source.hash(
             makeSourceContext({
               id,
+              fqn,
               workerName: output.workerName,
               props,
               compatibility: getCompatibility(props),
@@ -4219,7 +4227,7 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, props).pipe(
+        const bundleHash = yield* prepareBundle(id, fqn, props).pipe(
           Effect.map((b) => b.hash),
         );
         if (bundleHash !== output.hash?.bundle) {
@@ -4287,6 +4295,7 @@ export const LiveWorkerProvider = () =>
           }),
         diff: Effect.fn(function* ({
           id,
+          fqn,
           news: desired,
           olds,
           output,
@@ -4461,6 +4470,7 @@ export const LiveWorkerProvider = () =>
             cronsChanged ||
             (yield* hasChanged(
               id,
+              fqn,
               news,
               output,
               Array.isArray(newBindings)
@@ -4884,6 +4894,9 @@ export const LiveWorkerProvider = () =>
                 // `streaming_tail_consumers` field. Carry the last deployed
                 // value forward like other provider-managed caches.
                 streamingTailConsumers: output?.streamingTailConsumers,
+                // The bundle hash is computed locally during deployment and
+                // cannot be reconstructed from Cloudflare's read APIs.
+                hash: output?.hash,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -5017,6 +5030,9 @@ export const LiveWorkerProvider = () =>
               // `streaming_tail_consumers` field. Carry the last deployed
               // value forward like other provider-managed caches.
               streamingTailConsumers: output?.streamingTailConsumers,
+              // The bundle hash is computed locally during deployment and
+              // cannot be reconstructed from Cloudflare's read APIs.
+              hash: output?.hash,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
@@ -5055,6 +5071,7 @@ export const LiveWorkerProvider = () =>
         ),
         reconcile: Effect.fn(function* ({
           id,
+          fqn,
           news,
           olds,
           bindings,
@@ -5065,7 +5082,14 @@ export const LiveWorkerProvider = () =>
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
-            return yield* putWorkerVersion(id, news, bindings, session, output);
+            return yield* putWorkerVersion(
+              id,
+              fqn,
+              news,
+              bindings,
+              session,
+              output,
+            );
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name =
@@ -5126,6 +5150,7 @@ export const LiveWorkerProvider = () =>
 
           return yield* putWorker(
             id,
+            fqn,
             news,
             bindings,
             olds,

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { AuthError } from "../Auth/AuthProvider.ts";
-import { resolveProviderConfig } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubAuthConfig,

@@ -3,7 +3,7 @@ import { ConfigError } from "@distilled.cloud/core/errors";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import { resolveProviderConfig } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   AXIOM_AUTH_PROVIDER_NAME,
   type AxiomAuthConfig,

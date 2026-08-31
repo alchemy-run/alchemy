@@ -14,6 +14,7 @@ import {
   AuthError,
   AuthProviderLayer,
   NeedsReauth,
+  reconfigureHint,
   refreshHint,
   type ConfigureField,
   type ConfigureMethod,
@@ -33,7 +34,6 @@ import {
 } from "../../Auth/Env.ts";
 import { browserOAuth } from "../../Auth/BrowserOAuth.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
-import { profileCommandHint } from "../../Util/interactive.ts";
 import { CREDENTIALS_FILE as STATE_STORE_CREDENTIALS_FILE } from "../StateStore/CredentialsFile.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 import {
@@ -441,10 +441,7 @@ export const CloudflareAuth = AuthProviderLayer<
       config: CloudflareAuthConfig,
     ) =>
       Effect.gen(function* () {
-        const reauth = yield* refreshHint(
-          CLOUDFLARE_AUTH_PROVIDER_NAME,
-          profileName,
-        );
+        const reauth = refreshHint(CLOUDFLARE_AUTH_PROVIDER_NAME, profileName);
         return yield* Match.value(config).pipe(
           Match.when({ method: "stored" }, () =>
             store
@@ -669,8 +666,9 @@ export const CloudflareAuth = AuthProviderLayer<
                 OAUTH_STORAGE_KEY,
                 OAuthClient.OAuthCredentials,
               );
-              const reconfigureCommand = yield* profileCommandHint(
-                `alchemy profile edit ${profileName} --reconfigure Cloudflare`,
+              const reconfigure = reconfigureHint(
+                CLOUDFLARE_AUTH_PROVIDER_NAME,
+                profileName,
               );
               // Any path that falls back to a full browser login rebuilds the
               // authorize URL from the profile's stored scopes. Those scopes
@@ -684,7 +682,7 @@ export const CloudflareAuth = AuthProviderLayer<
                     new AuthError({
                       message:
                         `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
-                        `Run \`${reconfigureCommand}\` to pick scopes again.`,
+                        `Scopes must be picked again. ${reconfigure}`,
                     }),
                   );
                 }
@@ -693,7 +691,7 @@ export const CloudflareAuth = AuthProviderLayer<
                     ? Effect.void
                     : prompt.output.warning(
                         `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
-                          `Run \`${reconfigureCommand}\` to re-pick scopes.`,
+                          `Scopes must be picked again. ${reconfigure}`,
                       )
                 ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
               });

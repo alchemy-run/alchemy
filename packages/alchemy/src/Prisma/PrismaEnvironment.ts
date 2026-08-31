@@ -2,7 +2,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { resolveProviderConfig } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   PRISMA_AUTH_PROVIDER_NAME,
   type PrismaAuthConfig,

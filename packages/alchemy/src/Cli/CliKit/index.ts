@@ -13,11 +13,8 @@ export {
   ANSI_RESET,
   ansiFg,
   colorsEnabled,
-  hyperlink,
-  linePrefix,
   paint,
   pipedColorEnv,
-  stripAnsi,
   truncate,
   unicodeEnabled,
 } from "./terminal.ts";
@@ -44,4 +41,4 @@ export {
   type CliKitOptions,
   type TextInputOptions,
   type View,
-} from "./types.ts";
+} from "../components/types.ts";

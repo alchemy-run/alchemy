@@ -65,7 +65,8 @@ was explicitly selected. See
 `environment` declares every variable `readEnvironment` consumes
 (`name`, `required`, `secret`, `description`, `alternatives`). Alchemy validates
 this declaration during registration. Registration fails when a provider has
-`readEnvironment` but no declaration.
+`readEnvironment` but no declaration. `alchemy provider check-env` uses the
+declaration as a CI preflight.
 
 Providers register by name into a single `AuthProviders` registry
 via `AuthProviderLayer`, inside each cloud's `providers()` Layer:

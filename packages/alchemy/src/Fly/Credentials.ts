@@ -2,7 +2,7 @@ import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/fly-io";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { resolveProviderConfig } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   FLY_AUTH_PROVIDER_NAME,
   type FlyAuthConfig,

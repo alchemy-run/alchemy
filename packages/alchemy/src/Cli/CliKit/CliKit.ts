@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
+import type { TerminalProgressState } from "@alchemy.run/sigil/ansi";
 import type { NonInteractiveTerminal } from "./errors.ts";
 import type {
   ConfirmOptions,
@@ -21,13 +22,21 @@ import type {
   CliKitCapabilities,
   TextInputOptions,
   View,
-} from "./types.ts";
+} from "../components/types.ts";
 
 /** The sole injected owner of terminal rendering and input for a CLI process. */
 export class CliKit extends Context.Service<
   CliKit,
   {
     readonly terminal: CliKitCapabilities;
+
+    /** Terminal-emulator progress displayed outside the rendered TUI. */
+    readonly nativeProgress: {
+      readonly set: (
+        state: TerminalProgressState,
+        value?: number,
+      ) => Effect.Effect<void>;
+    };
 
     readonly output: {
       /** Append a completed layout to terminal scrollback/output. */
@@ -161,10 +170,9 @@ export const accessors = {
   },
 };
 
-const ApplicationPresentation = Context.Reference<"inline" | "alternate">(
-  "Alchemy::CliKit/ApplicationPresentation",
-  { defaultValue: () => "inline" },
-);
+export const ApplicationPresentation = Context.Reference<
+  "inline" | "alternate"
+>("Alchemy::CliKit/ApplicationPresentation", { defaultValue: () => "inline" });
 
 /** Pipeable presentation modifiers for {@link CliKit.application}. */
 export const Application = {
@@ -173,5 +181,3 @@ export const Application = {
       Effect.provideService(ApplicationPresentation, "alternate" as const),
     ),
 };
-
-export const applicationPresentation = ApplicationPresentation;

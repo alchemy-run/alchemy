@@ -1,206 +1,170 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
+import { Progress } from "../../../Alchemist/Progress.ts";
+import * as Profiles from "../../../Alchemist/routes/profile.ts";
+import { importStack } from "../../../Alchemist/Session.ts";
+import { DEFAULT_PROFILE_NAME } from "../../../Auth/Profile.ts";
+import { CliKit } from "../../CliKit/index.ts";
+import { isPromptCancellation } from "../errors.ts";
 
-import { DEFAULT_PROFILE_NAME, ProfileStore } from "../../../Auth/Profile.ts";
-import { resolveProfileName } from "../../../Cli/ProfileSelection.ts";
-
-import {
-  importStack,
-  isPromptCancellation,
-  resolveProfileDisplay,
-} from "../_shared.ts";
-import {
-  applyRename,
-  collectAuthProviders,
-  compareProfileNames,
-  editProfileFlow,
-  refreshProfileFlow,
-  removeProfileWithCredentials,
-} from "./flows.ts";
-
-/**
- * The interactive hub behind bare `alchemy profile`: pick a profile (or
- * create one), then act on it. Every action delegates to the same flow the
- * corresponding subcommand runs, so the hub is purely a discovery layer.
- *
- * Prompt cancellation (Esc / Ctrl+C inside a nested prompt) backs out one
- * level instead of aborting the whole session; cancelling a top-level menu
- * exits the hub.
- */
 export const profileHub = Effect.fn(function* (options: {
   envFile: Option.Option<string>;
   main: string;
 }) {
-  const { envFile, main } = options;
-  const profiles = yield* ProfileStore;
-
-  // Import/evaluate user code before Ink mounts. A dynamic import may perform
-  // synchronous module compilation and top-level evaluation, during which no
-  // animation in this JavaScript isolate can advance. collectAuthProviders
-  // imports the same URL later, but that is then an immediate module-cache hit.
-  // Preserve the profile command's built-ins-from-any-directory behavior when
-  // the conventional entrypoint is absent.
-  const fs = yield* FileSystem.FileSystem;
-  if (main !== "alchemy.run.ts" || (yield* fs.exists(main))) {
-    yield* importStack(main);
-  }
-
-  // `default` first, then alphabetical — matches the tab order.
-  const computeEntries = Effect.gen(function* () {
-    const manifest = yield* profiles.readManifest;
-    const activeProfile = yield* resolveProfileName(envFile, undefined);
-    return Object.keys(manifest.profiles)
-      .sort(compareProfileNames)
-      .map((name) => ({
-        name,
-        isActive: name === activeProfile,
-        isDefault: name === DEFAULT_PROFILE_NAME,
-      }));
-  });
-  let lastEntries: ReadonlyArray<{
-    name: string;
-    isActive: boolean;
-    isDefault: boolean;
-  }> = [];
-
-  const { runProfileDashboardSession } = yield* Effect.promise(
-    () => import("../../views/ProfileDashboard.tsx"),
+  const envFile = Option.getOrUndefined(options.envFile);
+  const computeEntries = Profiles.list().pipe(
+    Effect.map((profiles) =>
+      profiles.map((profile) => ({
+        name: profile.name,
+        isActive: profile.active,
+        isDefault: profile.name === DEFAULT_PROFILE_NAME,
+      })),
+    ),
   );
-  const entries = yield* computeEntries;
-  lastEntries = entries;
+  const initialEntries = yield* computeEntries;
+  // The dashboard falls back to the last good listing when a reload fails.
+  const lastEntries = yield* Ref.make(initialEntries);
+  const refreshEntries = computeEntries.pipe(
+    Effect.tap((entries) => Ref.set(lastEntries, entries)),
+  );
+  const { runProfileDashboardSession } = yield* Effect.promise(
+    () => import("../../components/view/ProfileDashboard.tsx"),
+  );
+  // Warm the entrypoint module cache before the dashboard mounts: the user's
+  // stack module evaluates synchronously on the main thread and would freeze
+  // the credential spinner mid-frame. Like deploy's planning session, show a
+  // static (non-spinning) row that makes no motion promise. Failures are
+  // ignored here — `loadDetails` re-imports from the cache and surfaces them.
+  const cli = yield* CliKit;
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      yield* cli.live.progress({
+        label: "Importing stack module",
+        spinning: false,
+      });
+      // let the row paint before synchronous module evaluation starts
+      yield* Effect.sleep("1 millis");
+      yield* importStack(options.main).pipe(Effect.ignore);
+    }),
+  );
 
-  // The session owns the terminal until the user quits; pure actions and
-  // edit/refresh flows all share CliKit's application frame.
   yield* runProfileDashboardSession({
-    entries,
-    // Land on the last acted-on profile, else the active one.
-    selected: entries.find((entry) => entry.isActive)?.name,
+    entries: initialEntries,
+    selected: initialEntries.find(({ isActive }) => isActive)?.name,
     loadDetails: (name) =>
       Effect.gen(function* () {
-        // Read fresh — profiles can be created/renamed mid-session.
-        const latest = yield* profiles.readManifest;
-        const stored = latest.profiles[name]?.providers ?? {};
-        const authProviders = yield* collectAuthProviders({
-          main,
-          envFile,
-          profile: name,
-        });
-        const providers = yield* resolveProfileDisplay(
-          name,
-          stored,
-          authProviders,
-        );
-        const available = Object.keys(authProviders)
-          .filter((provider) => stored[provider] == null)
-          .sort();
-        return { providers, available };
-      }).pipe(
-        Effect.catch((e) =>
-          Effect.succeed({
-            providers: [
-              {
-                name: "error",
-                method: "",
-                status: "error" as const,
-                lines: [e.message],
-              },
-            ],
-            available: [],
+        const [profile, providers] = yield* Effect.all([
+          Profiles.get({
+            name,
+            includeProviderStatus: true,
+            entrypoint: options.main,
+            envFile,
           }),
-        ),
-      ),
+          Profiles.providers({
+            profile: name,
+            entrypoint: options.main,
+            envFile,
+          }),
+        ]);
+        return {
+          providers: profile.providers.map((provider) => ({
+            name: provider.name,
+            method: provider.method,
+            status:
+              provider.status === "connected"
+                ? ("configured" as const)
+                : provider.status === "needs-reauth"
+                  ? ("reauth" as const)
+                  : ("error" as const),
+            lines: [
+              ...provider.details.map(({ key, value }) => `${key}: ${value}`),
+              ...(provider.diagnostic ? [provider.diagnostic.message] : []),
+            ],
+          })),
+          available: providers
+            .filter(({ connected }) => !connected)
+            .map(({ name }) => name),
+        };
+      }),
     execute: (action) =>
       Effect.gen(function* () {
-        switch (action.kind) {
-          case "create": {
-            yield* profiles.createProfile(action.name);
-            return {
-              message: `Created profile '${action.name}'.`,
-              selected: action.name,
-            };
-          }
-          case "rename": {
-            const newName = yield* applyRename(action.name, action.newName);
-            return {
-              message: `Renamed '${action.name}' to '${newName}'.`,
-              selected: newName,
-            };
-          }
-          case "delete": {
-            yield* removeProfileWithCredentials(action.name);
-            return {
-              message: `Deleted '${action.name}' and its credentials.`,
-              selected: undefined,
-            };
-          }
+        let selected: string | undefined;
+        let message: string;
+        if (action.kind === "create") {
+          yield* Profiles.create({ name: action.name });
+          selected = action.name;
+          message = `Created profile '${action.name}'.`;
+        } else if (action.kind === "rename") {
+          yield* Profiles.rename({
+            name: action.name,
+            newName: action.newName,
+          });
+          selected = action.newName;
+          message = `Renamed '${action.name}' to '${action.newName}'.`;
+        } else {
+          yield* Profiles.deleteProfile({ name: action.name });
+          message = `Deleted '${action.name}' and its credentials.`;
         }
+        const entries = yield* refreshEntries;
+        return { ok: true, message, entries, selected };
       }).pipe(
-        Effect.flatMap(({ message, selected: focus }) =>
-          computeEntries.pipe(
-            Effect.map((entries) => {
-              lastEntries = entries;
-              return { ok: true, message, entries, selected: focus };
-            }),
-          ),
-        ),
-        Effect.catch((e) =>
-          Effect.succeed({
+        Effect.catch((error) =>
+          Effect.map(Ref.get(lastEntries), (entries) => ({
             ok: false,
-            message: e.message,
-            entries: lastEntries,
-          }),
+            message: error.message,
+            entries,
+          })),
         ),
       ),
     runFlow: (action, events) =>
       Effect.gen(function* () {
-        if (action.kind === "edit-apply") {
-          const outcomes = yield* editProfileFlow({
-            selectedProfile: action.name,
-            add: action.add,
-            reconfigure: action.reconfigure,
-            remove: action.remove,
+        if (action.kind === "refresh") {
+          yield* Profiles.refresh({
+            profile: action.name,
+            entrypoint: options.main,
             envFile,
-            main,
-            printSummary: false,
-            continueOnError: true,
-          });
-          // The toast reports what actually happened per provider — never
-          // a blanket "updated" over a failed or cancelled step.
-          const verb = (o: (typeof outcomes)[number]) =>
-            o.outcome === "done"
-              ? o.action === "add"
-                ? "added"
-                : o.action === "remove"
-                  ? "removed"
-                  : "updated"
-              : o.outcome === "skipped"
-                ? "skipped"
-                : `failed: ${o.message}`;
-          const failed = outcomes.some((o) => o.outcome === "failed");
-          const changed = outcomes.some((o) => o.outcome === "done");
-          return {
-            ok: !failed,
-            message:
-              outcomes.length === 0
-                ? "No changes."
-                : failed || !changed
-                  ? outcomes.map((o) => `${o.provider} ${verb(o)}`).join("; ")
-                  : outcomes.every((o) => o.outcome === "done")
-                    ? "Accounts updated."
-                    : outcomes
-                        .map((o) => `${o.provider} ${verb(o)}`)
-                        .join("; "),
-          };
+          }).pipe(
+            Effect.provideService(Progress, (event) =>
+              event._tag === "provider.refresh.started"
+                ? events.onProviderStart(event.provider)
+                : Effect.void,
+            ),
+          );
+          return { ok: true, message: "Credentials refreshed." };
         }
-        yield* refreshProfileFlow({
-          selectedProfile: action.name,
-          providers: [],
-          envFile,
-          main,
-          onProviderStart: events.onProviderStart,
-        });
-        return { ok: true, message: "Credentials refreshed." };
+
+        const outcomes: string[] = [];
+        for (const provider of action.remove) {
+          yield* Profiles.removeProvider({
+            profile: action.name,
+            provider,
+            entrypoint: options.main,
+            envFile,
+          });
+          outcomes.push(`${provider} removed`);
+        }
+        for (const [kind, names] of [
+          ["add", action.add],
+          ["reconfigure", action.reconfigure],
+        ] as const) {
+          for (const provider of names) {
+            yield* Profiles.configure({
+              profile: action.name,
+              provider,
+              entrypoint: options.main,
+              envFile,
+              action: kind,
+            });
+            outcomes.push(
+              `${provider} ${kind === "add" ? "added" : "updated"}`,
+            );
+          }
+        }
+        return {
+          ok: true,
+          message: outcomes.length === 0 ? "No changes." : outcomes.join("; "),
+        };
       }).pipe(
         Effect.catch((error) =>
           Effect.succeed(
@@ -210,12 +174,8 @@ export const profileHub = Effect.fn(function* (options: {
           ),
         ),
       ),
-    reloadEntries: computeEntries.pipe(
-      Effect.map((entries) => {
-        lastEntries = entries;
-        return entries;
-      }),
-      Effect.catch(() => Effect.succeed(lastEntries)),
+    reloadEntries: refreshEntries.pipe(
+      Effect.catch(() => Ref.get(lastEntries)),
     ),
   });
 });

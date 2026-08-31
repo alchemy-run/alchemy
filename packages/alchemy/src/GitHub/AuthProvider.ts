@@ -341,7 +341,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                 return yield* new NeedsReauth({
                   provider: GITHUB_AUTH_PROVIDER_NAME,
                   profile: profileName,
-                  message: `GitHub stored credentials not found. ${yield* refreshHint(GITHUB_AUTH_PROVIDER_NAME, profileName)}`,
+                  message: `GitHub stored credentials not found. ${refreshHint(GITHUB_AUTH_PROVIDER_NAME, profileName)}`,
                 });
               }
               return {

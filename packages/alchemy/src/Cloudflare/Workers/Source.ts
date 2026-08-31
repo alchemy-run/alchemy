@@ -78,6 +78,8 @@ export interface SourceBuildOutput {
 export interface SourceContext {
   /** Logical id of the Worker resource. */
   readonly id: string;
+  /** Namespace-qualified id (`ns/Worker`) — the display prefix for log lines. */
+  readonly fqn: string;
   /** Physical script name. */
   readonly workerName: string;
   readonly compatibility: {
@@ -385,12 +387,14 @@ export const resolveSource = (
  */
 export const makeSourceContext = (params: {
   id: string;
+  fqn: string;
   workerName: string;
   props: WorkerProps;
   compatibility: { date: string; flags: string[] };
   stack: { name: string; stage: string };
 }): SourceContext => ({
   id: params.id,
+  fqn: params.fqn,
   workerName: params.workerName,
   compatibility: params.compatibility,
   entry: params.props.isExternal
