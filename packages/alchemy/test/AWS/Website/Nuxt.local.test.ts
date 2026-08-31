@@ -47,10 +47,8 @@ describe("AWS.Website.Nuxt local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.Nuxt("NuxtSite", {
               rootDir,
-              server: {
-                environment: {
-                  NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-dev-env-marker",
-                },
+              env: {
+                NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-dev-env-marker",
               },
             });
             return { site };

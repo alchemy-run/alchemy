@@ -40,7 +40,10 @@ import path from "pathe";
 const foregroundChild = (program, args, stderrFilter) => {
   /** @type {import("node:child_process").StdioOptions} */
   const stdio = process.send ? [0, 1, "pipe", "ipc"] : [0, 1, "pipe"];
-  const child = spawn(program, args, { stdio });
+  const child = spawn(program, args, {
+    env: { ...process.env, NODE_ENV: "production" },
+    stdio,
+  });
   /** @type {Map<NodeJS.Signals, () => void>} */
   const listeners = new Map();
 

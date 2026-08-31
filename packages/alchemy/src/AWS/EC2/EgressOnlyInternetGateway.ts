@@ -1,4 +1,5 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -128,6 +129,16 @@ export interface EgressOnlyInternetGateway extends Resource<
 export const EgressOnlyInternetGateway = Resource<EgressOnlyInternetGateway>(
   "AWS.EC2.EgressOnlyInternetGateway",
 );
+
+/** `DeleteEgressOnlyInternetGateway` returned `ReturnCode: false` (no error). */
+class EigwDeleteFailed extends Data.TaggedError("EigwDeleteFailed")<{
+  readonly eigwId: string;
+}> {}
+
+/** The gateway is still observable after a successful delete call. */
+class EigwStillExists extends Data.TaggedError("EigwStillExists")<{
+  readonly eigwId: string;
+}> {}
 
 export const EgressOnlyInternetGatewayProvider = () =>
   Provider.effect(
@@ -339,6 +350,18 @@ export const EgressOnlyInternetGatewayProvider = () =>
             })
             .pipe(
               Effect.tapError(Effect.logDebug),
+              // `DeleteEgressOnlyInternetGateway` reports failure as
+              // `ReturnCode: false` with NO error. Treating that as success
+              // orphans the gateway: the engine drops the state row while the
+              // gateway stays attached, wedging the parent VPC's delete on
+              // DependencyViolation forever. Surface it so the retry below
+              // re-drives the call (and the delete fails loudly if it never
+              // takes).
+              Effect.flatMap((result) =>
+                result.ReturnCode === false
+                  ? Effect.fail(new EigwDeleteFailed({ eigwId }))
+                  : Effect.void,
+              ),
               Effect.catchTag("InvalidGatewayID.NotFound", () => Effect.void),
               Effect.catchTag(
                 "InvalidEgressOnlyInternetGatewayId.NotFound",
@@ -346,8 +369,9 @@ export const EgressOnlyInternetGatewayProvider = () =>
               ),
               // Retry on dependency violations (e.g., routes still using the EIGW)
               Effect.retry({
-                while: (e: { _tag: string }) =>
-                  e._tag === "DependencyViolation",
+                while: (e) =>
+                  e._tag === "DependencyViolation" ||
+                  e._tag === "EigwDeleteFailed",
                 schedule: Schedule.max([
                   Schedule.fixed(5000),
                   Schedule.recurs(30),
@@ -359,6 +383,32 @@ export const EgressOnlyInternetGatewayProvider = () =>
                   ),
                 ),
               }),
+            );
+
+          // Deletion is asynchronous: wait until the gateway is actually gone
+          // before reporting success, so the parent VPC's delete (which the
+          // engine runs next) never races a still-attached gateway.
+          yield* ec2
+            .describeEgressOnlyInternetGateways({
+              EgressOnlyInternetGatewayIds: [eigwId],
+            })
+            .pipe(
+              Effect.flatMap((r) =>
+                (r.EgressOnlyInternetGateways ?? []).length === 0
+                  ? Effect.void
+                  : Effect.fail(new EigwStillExists({ eigwId })),
+              ),
+              Effect.retry({
+                while: (e) => e._tag === "EigwStillExists",
+                schedule: Schedule.max([
+                  Schedule.fixed(2000),
+                  Schedule.recurs(15),
+                ]),
+              }),
+              Effect.catchTag(
+                "InvalidEgressOnlyInternetGatewayId.NotFound",
+                () => Effect.void,
+              ),
             );
 
           yield* session.note(`Egress-Only Internet Gateway ${eigwId} deleted`);

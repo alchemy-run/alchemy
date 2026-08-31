@@ -7,13 +7,13 @@
   },
   "dependencies": {
     "next": "catalog:frontend",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react": "catalog:frontend",
+    "react-dom": "catalog:frontend"
   },
   "devDependencies": {
     "@opennextjs/aws": "catalog:frontend",
-    "@types/node": "^26.0.0",
-    "@types/react": "^19.2.0",
-    "typescript": "catalog:build"
+    "@types/node": "catalog:tooling",
+    "@types/react": "catalog:frontend",
+    "typescript": "catalog:frontend"
   }
 }

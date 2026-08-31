@@ -3,17 +3,43 @@ name: PR Package
 on:
   push:
     branches: [main]
+    paths:
+      - "distilled"
+      - "packages/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.json"
+      - ".github/workflows/pr-package.yml"
   pull_request:
     # `labeled` so adding the `force-ci` label re-triggers the run. We
     # intentionally do NOT listen to `closed` — pr-package tags persist
     # past PR close so existing install URLs keep resolving.
     types: [opened, synchronize, reopened, labeled]
+    paths:
+      - "distilled"
+      - "packages/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.json"
+      - ".github/workflows/pr-package.yml"
 
 # The action can't widen permissions, so the job must grant write access for
 # the sticky install-instructions comment.
 permissions:
   contents: read
   pull-requests: write
+
+concurrency:
+  group: pr-package-${{ github.ref }}
+  # A newer PR commit supersedes its preview packages. Never interrupt a main
+  # publish, where cancellation could leave only part of the package set live.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pr-package:
@@ -27,30 +53,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # pnpm needs the distilled submodule (workspace member)
-          submodules: true
           fetch-depth: 0
 
-      - name: Setup pnpm, Node.js, Bun
-        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
-        with:
-          cache: true
-          install: false
-
-      - name: Install Node 24
-        run: pnpm runtime set node 24 -g
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Checkout distilled
+        run: git submodule update --init --depth=1 --checkout -- distilled
 
       - name: Restore Turbo cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.repository_id }}-${{ github.sha }}-${{ github.run_attempt }}
+          key: turbo-${{ runner.os }}-${{ github.repository_id }}-${{ github.sha }}-${{ github.workflow }}-${{ github.run_attempt }}
           restore-keys: |
             turbo-${{ runner.os }}-${{ github.repository_id }}-${{ github.sha }}-
             turbo-${{ runner.os }}-${{ github.repository_id }}-
+
+      # The root install runs Turbo-backed prepare builds, so restore its
+      # cache before the setup action installs dependencies.
+      - name: Setup pnpm, Node.js, Bun and install dependencies
+        uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
+        with:
+          cache: true
+          install: true
+          require-lockfile: true
 
       - name: Build packages
         run: pnpm build:pr-packages
@@ -73,6 +97,7 @@ jobs:
               { "dir": "distilled/packages/aws",         "name": "@distilled.cloud/aws",               "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/axiom",       "name": "@distilled.cloud/axiom",             "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/cloudflare",  "name": "@distilled.cloud/cloudflare",        "group": "Distilled", "submodule": true },
+              { "dir": "distilled/packages/hetzner",     "name": "@distilled.cloud/hetzner",           "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/neon",        "name": "@distilled.cloud/neon",              "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/planetscale", "name": "@distilled.cloud/planetscale",       "group": "Distilled", "submodule": true }
             ]

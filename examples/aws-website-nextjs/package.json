@@ -24,9 +24,10 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
     "effect": "catalog:effect",
     "tailwindcss": "catalog:frontend",
-    "typescript": "catalog:build"
+    "typescript": "catalog:frontend"
   },
   "engines": {
     "node": ">=22"

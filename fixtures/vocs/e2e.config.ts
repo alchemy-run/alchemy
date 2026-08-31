@@ -1,5 +1,6 @@
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import vocsFramework from "./framework.ts";
+import vocsFramework from "@alchemy.run/frontend-frameworks/vocs";
+import cloudflare from "@alchemy.run/frontend-frameworks/vocs/cloudflare";
 
 export default Options.make({
   target: {
@@ -38,7 +39,12 @@ export default Options.make({
       },
     },
   },
-  // Fixture-local framework layer: vocs's plugin stack (`vocs/vite`) over the
-  // waku cloudflare deploy target. See ./framework.ts.
-  framework: (options) => vocsFramework(options, { port: 3105 }),
+  framework: (options) =>
+    vocsFramework({
+      root: options.root,
+      port: 3105,
+      target: cloudflare({
+        worker: Options.resolveCloudflareOptions(options).worker,
+      }),
+    }),
 });

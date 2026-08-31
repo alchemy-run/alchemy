@@ -16,8 +16,7 @@ import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -48,7 +47,6 @@ import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
-  type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
@@ -989,13 +987,8 @@ type MetadataHashValue =
  * values contribute by value, not by reference identity, so two
  * independently-constructed secrets with the same contents hash identically.
  *
- * Effects are dropped, never executed: resource-typed `env` entries (Worker
- * effect-classes, R2 buckets, Provider/Context tags, ...) are all Effects
- * whose evaluation requires plan-phase context that is not available inside
- * lifecycle operations (running one here fails with `Service not found:
- * Cloudflare.Worker`). Their deploy-time identity is already captured by the
- * resolved `bindings` data hashed alongside `env`, so skipping them loses no
- * change-detection.
+ * Effects are dropped, never executed: evaluating one here may require
+ * plan-phase context that is not available inside lifecycle operations.
  */
 const resolveMetadataHashValue = (
   value: unknown,
@@ -1053,8 +1046,8 @@ const resolveMetadataHashValue = (
 /**
  * The deploy-time metadata surface of a Worker whose changes must trigger an
  * update but that never touch the bundle/vite/asset-content hashes:
- * compatibility, env literals, bindings, asset routing config, cache,
- * limits, logpush, observability, placement, subdomain, and tags. See #745.
+ * compatibility, env/bindings, asset routing config, cache, limits, logpush,
+ * observability, placement, subdomain, and tags. See #745.
  */
 interface WorkerMetadataHashInput {
   readonly props: WorkerProps;
@@ -1105,7 +1098,12 @@ const resolveWorkerMetadataHash = ({
     selfUrl,
     stack: { name: stack.name, stage: stack.stage },
     compatibility: getCompatibility(props),
-    env: props.env,
+    // Every `env` entry is lowered into binding data by
+    // `bindWorkerAsyncBindings`, including literals and VITE_ values. Hash only
+    // that canonical wire representation. Resource-backed env values can be
+    // materialized as different attribute projections between reconcile and a
+    // later plan; hashing props.env as well would turn those irrelevant shape
+    // differences into perpetual updates.
     bindings: bindings.map((binding) => ({
       sid: binding.sid,
       data: binding.data,
@@ -1287,6 +1285,7 @@ export const LiveWorkerProvider = () =>
           if (desired.length > 0 || previous.length > 0 || live.length > 0) {
             yield* session.note(
               `Reconciling Cron Triggers (${desired.length}) ...`,
+              { kind: "status" },
             );
           }
 
@@ -2216,10 +2215,11 @@ export const LiveWorkerProvider = () =>
         );
       });
 
-      const prepareBundle = (id: string, props: WorkerProps) =>
+      const prepareBundle = (id: string, fqn: string, props: WorkerProps) =>
         (isPythonMain(props.main)
           ? readPythonWorkerBundle({
               id,
+              fqn,
               main: props.main,
               compatibility: getCompatibility(props),
             })
@@ -2251,6 +2251,8 @@ export const LiveWorkerProvider = () =>
         );
 
       const viteBuild = Effect.fn(function* (
+        id: string,
+        fqn: string,
         props: WorkerProps,
         selfUrl?: string,
       ) {
@@ -2313,6 +2315,7 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               viteEnvironments: props.vite?.viteEnvironments,
             },
+            fqn,
           );
         const [assets, bundle, input] = yield* Effect.all(
           [
@@ -2364,6 +2367,7 @@ export const LiveWorkerProvider = () =>
 
       const prepareAssetsAndBundle = (
         id: string,
+        fqn: string,
         workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
@@ -2378,6 +2382,7 @@ export const LiveWorkerProvider = () =>
             const source = yield* resolveSource(props);
             const ctx = makeSourceContext({
               id,
+              fqn,
               workerName,
               props,
               compatibility: getCompatibility(props),
@@ -2420,7 +2425,7 @@ export const LiveWorkerProvider = () =>
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props, opts.selfUrl);
+            return yield* viteBuild(id, fqn, props, opts.selfUrl);
           }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset
@@ -2449,7 +2454,7 @@ export const LiveWorkerProvider = () =>
               opts.skipAssetsRead
                 ? Effect.succeed(undefined)
                 : prepareAssets(props.assets),
-              prepareBundle(id, props),
+              prepareBundle(id, fqn, props),
             ],
             { concurrency: "unbounded" },
           );
@@ -2735,7 +2740,6 @@ export const LiveWorkerProvider = () =>
         const forbidden = (
           [
             ["name", news.name],
-            ["assets", news.assets],
             ["namespace", news.namespace],
             ["crons", news.crons],
             ["tailConsumers", news.tailConsumers],
@@ -2803,6 +2807,7 @@ export const LiveWorkerProvider = () =>
        */
       const putWorkerVersion = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
@@ -2846,12 +2851,13 @@ export const LiveWorkerProvider = () =>
         yield* Effect.logInfo(
           `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
         );
-        const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
-          id,
-          parentName,
-          news,
-          { skipAssetsRead: true },
-        );
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, fqn, parentName, news, {
+          skipAssetsRead: false,
+        });
         const metadataHash = yield* resolveWorkerMetadataHash({
           props: news,
           bindings,
@@ -2881,6 +2887,25 @@ export const LiveWorkerProvider = () =>
                 : item,
           ),
         );
+        let metadataAssets:
+          | workers.CreateScriptVersionRequest["metadata"]["assets"]
+          | undefined;
+        if (assets) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker version: uploading assets for ${parentName}`,
+          );
+          const { jwt } = yield* uploadAssets(
+            accountId,
+            parentName,
+            assets,
+            session,
+          );
+          metadataAssets = {
+            jwt,
+            config: mergeAssetsConfigFiles(assets.config, assets),
+          };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
         appendAlchemyAndEnvBindings(
           metadataBindings,
           news,
@@ -2888,13 +2913,16 @@ export const LiveWorkerProvider = () =>
           parentName,
         );
         const compatibility = getCompatibility(news);
-        yield* session.note(`Uploading version of ${parentName} ...`);
+        yield* session.note(`Uploading version of ${parentName} ...`, {
+          kind: "status",
+        });
         const created = yield* workers
           .createScriptVersion({
             accountId,
             scriptName: parentName,
             metadata: {
               mainModule: bundle.main!,
+              assets: metadataAssets,
               bindings: metadataBindings,
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
@@ -2937,6 +2965,7 @@ export const LiveWorkerProvider = () =>
         if (traffic > 0) {
           yield* session.note(
             `Deploying version at ${traffic}% of ${parentName}'s traffic ...`,
+            { kind: "status" },
           );
           deploymentId = yield* deployVersionTraffic({
             accountId,
@@ -2997,7 +3026,9 @@ export const LiveWorkerProvider = () =>
                 }),
               );
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", {
+              kind: "status",
+            });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: parentName,
@@ -3048,6 +3079,7 @@ export const LiveWorkerProvider = () =>
 
       const putWorker = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         olds: WorkerProps | undefined,
@@ -3098,7 +3130,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, name, news, {
+        } = yield* prepareAssetsAndBundle(id, fqn, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -3214,6 +3246,7 @@ export const LiveWorkerProvider = () =>
               name,
               assets,
               session,
+              dispatchNamespace,
             );
             metadataAssets = {
               jwt,
@@ -3237,7 +3270,9 @@ export const LiveWorkerProvider = () =>
         const sizeKB = size / 1024;
         const sizeMB = sizeKB / 1024;
         const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
-        yield* session.note(`Uploading worker (${bundleSize}) ...`);
+        yield* session.note(`Uploading worker (${bundleSize}) ...`, {
+          kind: "status",
+        });
 
         // Read existing worker settings for migration tracking
         const oldSettings =
@@ -3602,13 +3637,6 @@ export const LiveWorkerProvider = () =>
           output?.hash !== undefined &&
           !dispatchNamespace
         ) {
-          if (metadataAssets !== undefined) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `Worker '${name}' has static assets, which the versions API cannot carry — gradual rollouts (version.traffic) are not supported for Workers with assets.`,
-              }),
-            );
-          }
           const migratedClasses = [
             ...migrations.newClasses,
             ...migrations.newSqliteClasses,
@@ -3625,6 +3653,7 @@ export const LiveWorkerProvider = () =>
           }
           yield* session.note(
             `Uploading version of ${name} (${bundleSize}) ...`,
+            { kind: "status" },
           );
           const created = yield* workers
             .createScriptVersion({
@@ -3632,7 +3661,9 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
               metadata: {
                 mainModule: metadata.mainModule!,
+                assets: metadata.assets,
                 bindings: metadata.bindings,
+                keepAssets: metadata.keepAssets,
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
                 cacheOptions: metadata.cacheOptions,
@@ -3666,6 +3697,7 @@ export const LiveWorkerProvider = () =>
           if (rolloutTraffic > 0) {
             yield* session.note(
               `Deploying version at ${rolloutTraffic}% of traffic ...`,
+              { kind: "status" },
             );
             deploymentId = yield* deployVersionTraffic({
               accountId,
@@ -3797,6 +3829,7 @@ export const LiveWorkerProvider = () =>
         ) {
           yield* session.note(
             `${workersDev.enabled || workersDev.previewsEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            { kind: "status" },
           );
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
@@ -3876,6 +3909,7 @@ export const LiveWorkerProvider = () =>
             : [];
           yield* session.note(
             `Reconciling custom domains (${desiredHostnames.length}) ...`,
+            { kind: "status" },
           );
           // Capture hostname → zone for *currently attached* domains before
           // reconcile detaches removed ones — a removed redirect hostname's
@@ -3921,6 +3955,7 @@ export const LiveWorkerProvider = () =>
         if (desiredRoutes.length > 0 || previousRoutes.length > 0) {
           yield* session.note(
             `Reconciling worker routes (${desiredRoutes.length}) ...`,
+            { kind: "status" },
           );
         }
         const routes = yield* reconcileRoutes(
@@ -3978,7 +4013,9 @@ export const LiveWorkerProvider = () =>
                 }),
               );
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", {
+              kind: "status",
+            });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: name,
@@ -4089,6 +4126,7 @@ export const LiveWorkerProvider = () =>
 
       const hasChanged = Effect.fn(function* (
         id: string,
+        fqn: string,
         props: WorkerProps,
         output: Worker["Attributes"],
         bindings: readonly ResourceBinding<Worker["Binding"]>[] | undefined,
@@ -4143,6 +4181,7 @@ export const LiveWorkerProvider = () =>
           const slots = yield* source.hash(
             makeSourceContext({
               id,
+              fqn,
               workerName: output.workerName,
               props,
               compatibility: getCompatibility(props),
@@ -4203,7 +4242,7 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, props).pipe(
+        const bundleHash = yield* prepareBundle(id, fqn, props).pipe(
           Effect.map((b) => b.hash),
         );
         if (bundleHash !== output.hash?.bundle) {
@@ -4271,6 +4310,7 @@ export const LiveWorkerProvider = () =>
           }),
         diff: Effect.fn(function* ({
           id,
+          fqn,
           news: desired,
           olds,
           output,
@@ -4445,6 +4485,7 @@ export const LiveWorkerProvider = () =>
             cronsChanged ||
             (yield* hasChanged(
               id,
+              fqn,
               news,
               output,
               Array.isArray(newBindings)
@@ -4472,42 +4513,39 @@ export const LiveWorkerProvider = () =>
               stables: stables.length > 0 ? stables : undefined,
             };
           }
-          // Machine-local source locations (`main`, `assets.directory`,
-          // `vite.rootDir`) name WHERE the source lives; their deploy-relevant
-          // effect is fully captured by the content hashes `hasChanged` just
-          // compared (bundle, asset content, vite input — all deliberately
-          // path-independent). Left alone, the engine's raw-props fallback
-          // would still flag a relocated checkout (CI runner ↔ laptop, temp
-          // build dirs) as changed forever. When the ONLY residual raw-prop
-          // difference is such a path, suppress the fallback with an explicit
-          // noop; any other residual difference still falls through to the
-          // engine's conservative comparison, so props outside the hashed
-          // metadata surface keep deploying (#745). Guarded on resolved
-          // bindings — without them the metadata hash was skipped above and
-          // the raw-props fallback is the only net for metadata edits.
+          // Machine-local source paths and resource-backed `env` values have
+          // already been compared by their content hashes and canonical
+          // binding data. Ignore those representations in the raw fallback so
+          // checkout paths and resource attribute projections do not force
+          // perpetual updates (#745).
           if (Array.isArray(newBindings)) {
-            const normalizeSourcePaths = (props: WorkerProps) => ({
-              ...props,
-              ...(props.main !== undefined ? { main: "<source>" } : undefined),
-              ...(props.assets
-                ? {
-                    assets: {
-                      ...(typeof props.assets === "string"
-                        ? undefined
-                        : props.assets),
-                      directory: "<source>",
-                    },
-                  }
-                : undefined),
-              ...(props.vite
-                ? { vite: { ...props.vite, rootDir: "<source>" } }
-                : undefined),
-            });
+            const normalizeComparedProps = (props: WorkerProps) => {
+              const { env: _env, ...rest } = props;
+              return {
+                ...rest,
+                ...(props.main !== undefined
+                  ? { main: "<source>" }
+                  : undefined),
+                ...(props.assets
+                  ? {
+                      assets: {
+                        ...(typeof props.assets === "string"
+                          ? undefined
+                          : props.assets),
+                        directory: "<source>",
+                      },
+                    }
+                  : undefined),
+                ...(props.vite
+                  ? { vite: { ...props.vite, rootDir: "<source>" } }
+                  : undefined),
+              };
+            };
             if (
               olds !== undefined &&
               !havePropsChanged(
-                normalizeSourcePaths(olds),
-                normalizeSourcePaths(news),
+                normalizeComparedProps(olds),
+                normalizeComparedProps(news),
               )
             ) {
               return { action: "noop" };
@@ -4667,7 +4705,7 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: reusing existing ${name}`,
             );
           } else {
-            yield* session.note("Pre-creating worker...");
+            yield* session.note("Pre-creating worker...", { kind: "status" });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
             const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...") } };\n${doClasses
@@ -4871,6 +4909,9 @@ export const LiveWorkerProvider = () =>
                 // `streaming_tail_consumers` field. Carry the last deployed
                 // value forward like other provider-managed caches.
                 streamingTailConsumers: output?.streamingTailConsumers,
+                // The bundle hash is computed locally during deployment and
+                // cannot be reconstructed from Cloudflare's read APIs.
+                hash: output?.hash,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -5004,6 +5045,9 @@ export const LiveWorkerProvider = () =>
               // `streaming_tail_consumers` field. Carry the last deployed
               // value forward like other provider-managed caches.
               streamingTailConsumers: output?.streamingTailConsumers,
+              // The bundle hash is computed locally during deployment and
+              // cannot be reconstructed from Cloudflare's read APIs.
+              hash: output?.hash,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
@@ -5042,6 +5086,7 @@ export const LiveWorkerProvider = () =>
         ),
         reconcile: Effect.fn(function* ({
           id,
+          fqn,
           news,
           olds,
           bindings,
@@ -5052,7 +5097,14 @@ export const LiveWorkerProvider = () =>
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
-            return yield* putWorkerVersion(id, news, bindings, session, output);
+            return yield* putWorkerVersion(
+              id,
+              fqn,
+              news,
+              bindings,
+              session,
+              output,
+            );
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name =
@@ -5113,6 +5165,7 @@ export const LiveWorkerProvider = () =>
 
           return yield* putWorker(
             id,
+            fqn,
             news,
             bindings,
             olds,

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -576,8 +576,10 @@ const waitForVolumeDeleted = (
       while: (e) => e instanceof VolumeStillExists,
       schedule: Schedule.max([
         Schedule.fixed(2000),
-        // give the delete call ~60s to be reflected by describeVolumes
-        Schedule.recurs(30),
+        // DeleteVolume is accepted immediately but describe can keep
+        // returning `deleting` well past a minute after a snapshot (the
+        // suite log hit the old 60s cap with the volume still present).
+        Schedule.recurs(45),
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session.note(

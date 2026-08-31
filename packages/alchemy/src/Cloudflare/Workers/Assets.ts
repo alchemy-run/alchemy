@@ -1,11 +1,12 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import type { PlatformError } from "effect/PlatformError";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import createIgnore from "@alchemy.run/node-utils/ignore";
@@ -428,10 +429,10 @@ export const uploadAssets = Effect.fn(function* (
   workerName: string,
   assets: AssetReadResult,
   { note }: ScopedPlanStatusSession,
+  dispatchNamespace?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const createScriptAssetUpload = yield* workers.createScriptAssetUpload;
   const createAssetUpload = yield* workers.createAssetUpload;
 
   // Manifest keys are the paths Cloudflare *serves*, so they carry the
@@ -462,12 +463,19 @@ export const uploadAssets = Effect.fn(function* (
   // stopped, and a fresh session with nothing left to upload returns
   // the completion JWT directly.
   const runSession = Effect.fn(function* () {
-    yield* note("Checking assets...");
-    const session = yield* createScriptAssetUpload({
-      accountId,
-      scriptName: workerName,
-      manifest: assets.manifest,
-    });
+    yield* note("Checking assets...", { kind: "status" });
+    const session = dispatchNamespace
+      ? yield* wfp.createDispatchNamespaceScriptAssetUpload({
+          accountId,
+          dispatchNamespace,
+          scriptName: workerName,
+          manifest: assets.manifest,
+        })
+      : yield* workers.createScriptAssetUpload({
+          accountId,
+          scriptName: workerName,
+          manifest: assets.manifest,
+        });
     if (!session.buckets?.length) {
       if (!session.jwt) {
         return yield* new AssetUploadSessionError({

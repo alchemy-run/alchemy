@@ -1,8 +1,9 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as Cloudflare from "@/Cloudflare";
-import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthProvider.ts";
+import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Drift from "@/Drift.ts";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
@@ -54,6 +55,7 @@ test.provider("create and delete bucket with default props", (stack) =>
     expect(bucket.bucketName).toBeDefined();
     expect(bucket.storageClass).toEqual("Standard");
     expect(bucket.jurisdiction).toEqual("default");
+    expect(bucket.publicDomain).toBeUndefined();
 
     const actualBucket = yield* getBucketWhenReady(
       bucket.bucketName,
@@ -77,7 +79,6 @@ test.provider("create, update, delete bucket", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("TestBucket", {
           forceDestroy: true,
-          name: "test-bucket-initial",
           storageClass: "Standard",
         });
       }),
@@ -94,11 +95,15 @@ test.provider("create, update, delete bucket", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.R2.Bucket("TestBucket", {
           forceDestroy: true,
-          name: "test-bucket-initial",
           storageClass: "InfrequentAccess",
         });
       }),
     );
+
+    // The storage-class change is an IN-PLACE update (PATCH with the
+    // `cf-r2-storage-class` header), never a replacement: same physical
+    // bucket name and unchanged creation date.
+    expect(updatedBucket.bucketName).toEqual(bucket.bucketName);
 
     const actualUpdatedBucket = yield* getBucketWhenReady(
       updatedBucket.bucketName,
@@ -106,10 +111,11 @@ test.provider("create, update, delete bucket", (stack) =>
     );
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
     expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
+    expect(actualUpdatedBucket.creationDate).toEqual(actualBucket.creationDate);
 
     yield* stack.destroy();
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    yield* waitForBucketToBeDeleted(updatedBucket.bucketName, accountId);
   }).pipe(logLevel),
 );
 
@@ -692,6 +698,109 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
   }).pipe(logLevel),
 );
 
+test.provider(
+  "drift detects and repairs a live storage-class change",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const bucketName = "alchemy-test-r2-drift-repair";
+
+      yield* forceDeleteBucket(accountId, bucketName);
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("DriftRepairBucket", {
+            forceDestroy: true,
+            name: bucketName,
+            storageClass: "Standard",
+          });
+        }),
+      );
+
+      yield* r2.patchBucket({
+        accountId,
+        bucketName,
+        storageClass: "InfrequentAccess",
+      });
+
+      const detected = yield* Drift.detect({
+        name: stack.name,
+        stage: "test",
+      }).pipe(Effect.provide(stack.state));
+      expect(detected.resources.DriftRepairBucket).toMatchObject({
+        action: "drifted",
+        resourceType: "Cloudflare.R2.Bucket",
+      });
+
+      const repaired = yield* Drift.repair({
+        name: stack.name,
+        stage: "test",
+      }).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftRepairBucket).toMatchObject({
+        action: "repaired",
+      });
+
+      const bucket = yield* getBucketWhenReady(bucketName, accountId);
+      expect(bucket.storageClass).toEqual("Standard");
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucketName, accountId);
+    }).pipe(logLevel),
+);
+
+test.provider(
+  "drift detects and recreates a bucket deleted out of band",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const bucketName = "alchemy-test-r2-drift-recreate";
+
+      yield* forceDeleteBucket(accountId, bucketName);
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("DriftRecreateBucket", {
+            forceDestroy: true,
+            name: bucketName,
+          });
+        }),
+      );
+      const before = yield* stateOf(stack, "DriftRecreateBucket");
+
+      yield* forceDeleteBucket(accountId, bucketName);
+      yield* waitForBucketToBeDeleted(bucketName, accountId);
+
+      const detected = yield* Drift.detect({
+        name: stack.name,
+        stage: "test",
+      }).pipe(Effect.provide(stack.state));
+      expect(detected.resources.DriftRecreateBucket).toMatchObject({
+        action: "missing",
+        resourceType: "Cloudflare.R2.Bucket",
+      });
+
+      const repaired = yield* Drift.repair({
+        name: stack.name,
+        stage: "test",
+      }).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftRecreateBucket).toMatchObject({
+        action: "recreated",
+      });
+
+      const after = yield* stateOf(stack, "DriftRecreateBucket");
+      expect(after?.instanceId).toEqual(before?.instanceId);
+      expect((yield* getBucketWhenReady(bucketName, accountId)).name).toEqual(
+        bucketName,
+      );
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucketName, accountId);
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
 test.provider("cors is applied to the new bucket on replacement", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
@@ -755,6 +864,197 @@ test.provider("cors is applied to the new bucket on replacement", (stack) =>
     ]);
 
     // The replaced bucket is cleaned up.
+    yield* waitForBucketToBeDeleted(oldName, accountId);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(newName, accountId);
+  }).pipe(logLevel),
+);
+
+test.provider("managed r2.dev domain is enabled and disabled", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("PublicBucket", {
+          forceDestroy: true,
+          publicAccess: true,
+        });
+      }),
+    );
+
+    expect(initial.publicDomain).toBeDefined();
+    expect(initial.publicDomain).toMatch(/\.r2\.dev$/);
+
+    const enabled = yield* r2.listBucketDomainManageds({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(enabled.enabled).toEqual(true);
+    expect(enabled.domain).toEqual(initial.publicDomain);
+
+    const disabled = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("PublicBucket", {
+          forceDestroy: true,
+          publicAccess: false,
+        });
+      }),
+    );
+
+    expect(disabled.bucketName).toEqual(initial.bucketName);
+    expect(disabled.publicDomain).toBeUndefined();
+
+    const observed = yield* r2.listBucketDomainManageds({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(observed.enabled).toEqual(false);
+    expect(observed.domain).toEqual(enabled.domain);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+  }).pipe(logLevel),
+);
+
+test.provider("managed r2.dev domain converges drift and adoption", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    // Pin the physical name on every deploy so adding `name` cannot be
+    // what schedules the update — same shape as the CORS drift case
+    // above. A PR/user suffix keeps concurrent runs from colliding.
+    const suffix = (process.env.PULL_REQUEST ?? process.env.USER ?? "local")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 24);
+    const bucketName = `alchemy-test-r2-pub-drift-${suffix}`;
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftPublicBucket", {
+          forceDestroy: true,
+          name: bucketName,
+          publicAccess: false,
+        });
+      }),
+    );
+    expect(initial.publicDomain).toBeUndefined();
+
+    // Drift: enable the managed domain out of band.
+    yield* r2.putBucketDomainManaged({
+      accountId,
+      bucketName,
+      enabled: true,
+    });
+
+    // Re-deploy with publicAccess still false. The storage-class change
+    // is what makes Plan run reconcile (unchanged props skip it); the
+    // managed-domain sync must still disable the leaked enable because
+    // it diffs desired against *observed* cloud state, not olds.
+    const repaired = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftPublicBucket", {
+          forceDestroy: true,
+          name: bucketName,
+          publicAccess: false,
+          storageClass: "InfrequentAccess",
+        });
+      }),
+    );
+    expect(repaired.bucketName).toEqual(bucketName);
+    expect(repaired.storageClass).toEqual("InfrequentAccess");
+    expect(repaired.publicDomain).toBeUndefined();
+
+    const afterRepair = yield* r2.listBucketDomainManageds({
+      accountId,
+      bucketName,
+    });
+    expect(afterRepair.enabled).toEqual(false);
+
+    // Adoption: re-enable out of band, wipe local state, then adopt
+    // with publicAccess: true (output defined, olds undefined).
+    yield* r2.putBucketDomainManaged({
+      accountId,
+      bucketName,
+      enabled: true,
+    });
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: "test",
+        fqn: "DriftPublicBucket",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftPublicBucket", {
+          forceDestroy: true,
+          name: bucketName,
+          publicAccess: true,
+        });
+      }),
+    );
+    expect(adopted.bucketName).toEqual(bucketName);
+    expect(adopted.publicDomain).toMatch(/\.r2\.dev$/);
+
+    const converged = yield* r2.listBucketDomainManageds({
+      accountId,
+      bucketName,
+    });
+    expect(converged.enabled).toEqual(true);
+    expect(converged.domain).toEqual(adopted.publicDomain);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(bucketName, accountId);
+  }).pipe(logLevel),
+);
+
+test.provider("managed r2.dev domain is applied on replacement", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("ReplacePublicBucket", {
+          forceDestroy: true,
+          publicAccess: true,
+        });
+      }),
+    );
+    const oldName = initial.bucketName;
+    // Flip the first character so the replacement name is unique and
+    // stays within R2's 63-char limit regardless of the original length.
+    const newName = `x${oldName.slice(1)}`;
+
+    const replaced = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("ReplacePublicBucket", {
+          forceDestroy: true,
+          name: newName,
+          publicAccess: true,
+        });
+      }),
+    );
+    expect(replaced.bucketName).toEqual(newName);
+    expect(replaced.publicDomain).toMatch(/\.r2\.dev$/);
+
+    const replacedDomain = yield* r2.listBucketDomainManageds({
+      accountId,
+      bucketName: newName,
+    });
+    expect(replacedDomain.enabled).toEqual(true);
+    expect(replacedDomain.domain).toEqual(replaced.publicDomain);
+
     yield* waitForBucketToBeDeleted(oldName, accountId);
 
     yield* stack.destroy();
@@ -986,6 +1286,7 @@ const stubbedOutput = {
   domains: [],
   lifecycleRules: [],
   cors: [],
+  publicDomain: undefined,
 };
 
 /** `DELETE .../r2/buckets/{name}/objects` — the request that wipes data. */

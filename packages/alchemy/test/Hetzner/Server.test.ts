@@ -4,6 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -26,6 +27,41 @@ const waitUntilGone = (id: number) =>
       times: 10,
     }),
   );
+
+test(
+  "composes user data with the alchemy bootstrap",
+  Effect.gen(function* () {
+    // No user data: the bootstrap script is sent as-is.
+    const bootstrap = Hetzner.composeUserData(undefined);
+    expect(bootstrap.startsWith("#!/bin/bash")).toBe(true);
+    expect(bootstrap).toContain("setup_26.x");
+
+    // A cloud-config document becomes the second part of a multipart
+    // cloud-init document, behind the bootstrap script.
+    const composed = Hetzner.composeUserData(
+      ["#cloud-config", "packages:", "  - nginx"].join("\n"),
+    );
+    expect(
+      composed.startsWith('Content-Type: multipart/mixed; boundary="'),
+    ).toBe(true);
+    expect(composed).toContain("Content-Type: text/x-shellscript");
+    expect(composed).toContain("Content-Type: text/cloud-config");
+    expect(composed).toContain("  - nginx");
+    expect(composed.indexOf("setup_26.x")).toBeLessThan(
+      composed.indexOf("#cloud-config"),
+    );
+
+    // A shell script keeps its shebang; a bare snippet gets one.
+    expect(Hetzner.composeUserData("#!/bin/sh\nid")).toContain("#!/bin/sh\nid");
+    expect(Hetzner.composeUserData("apt-get install -y nginx")).toContain(
+      "#!/bin/bash\napt-get install -y nginx",
+    );
+
+    // A caller-supplied MIME document owns the whole payload.
+    const raw = 'Content-Type: multipart/mixed; boundary="x"\n\n--x--\n';
+    expect(Hetzner.composeUserData(raw)).toEqual(raw);
+  }),
+);
 
 test.provider.skipIf(!hasHetznerCreds)(
   "create, update, and delete a server",
@@ -97,7 +133,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -146,7 +182,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -180,5 +216,78 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
+);
+
+test.provider.skipIf(!hasHetznerCreds)(
+  "runs a custom init script alongside the alchemy bootstrap",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const server = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("InitWeb", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            userData: [
+              "#!/bin/bash",
+              "echo alchemy-init-ok > /etc/alchemy-init-marker",
+            ].join("\n"),
+          });
+        }),
+      );
+
+      expect(server.ipv4).toEqual(expect.any(String));
+      expect(server.privateKey).toBeDefined();
+      const host = server.ipv4 ?? "";
+      const privateKey =
+        server.privateKey === undefined
+          ? ""
+          : Redacted.value(server.privateKey);
+
+      // Both cloud-init parts must have run: the user script (marker file)
+      // and Alchemy's bootstrap (Node 26). Probed as one command — the box is
+      // still booting when the create action completes.
+      const probe = yield* Effect.gen(function* () {
+        const ssh = yield* Hetzner.openSshClient({ host, privateKey });
+        const { stdout } = yield* ssh.exec(
+          "cat /etc/alchemy-init-marker && command -v node && echo node-ok",
+        );
+        return stdout;
+      }).pipe(
+        Effect.scoped,
+        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 30 }),
+      );
+
+      expect(probe).toContain("alchemy-init-ok");
+      expect(probe).toContain("node-ok");
+
+      // Cloud-init only runs on first boot, so a changed script replaces.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("InitWeb", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            userData: [
+              "#!/bin/bash",
+              "echo alchemy-init-v2 > /etc/alchemy-init-marker",
+            ].join("\n"),
+          });
+        }),
+      );
+
+      expect(replaced.id).not.toEqual(server.id);
+
+      const oldGone = yield* waitUntilGone(server.id);
+      expect(oldGone).toEqual("gone");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(replaced.id);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 300_000, exclusive: true },
 );

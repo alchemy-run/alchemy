@@ -162,7 +162,16 @@ export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
     }),
   );
 
-export const NodeHttpServer = () =>
+export interface NodeHttpServerOptions {
+  /**
+   * Address the Node HTTP server binds. Fly / Hetzner / Railway machines
+   * need `0.0.0.0`; omit to use that default.
+   * @default "0.0.0.0"
+   */
+  hostname?: string;
+}
+
+export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -176,7 +185,10 @@ export const NodeHttpServer = () =>
             const port = yield* resolvePort(options);
             const server = yield* NodeHttpServerPlatform.make(
               NodeHttp.createServer,
-              { port },
+              {
+                port,
+                host: serverOptions?.hostname ?? "0.0.0.0",
+              },
             );
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),

@@ -7,6 +7,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -51,10 +52,28 @@ import {
   type EventInvokeConfig,
 } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
+import {
+  decodeFunctionImageSource,
+  type FunctionImageAttributes,
+  type FunctionImageIdentity,
+  type FunctionImageSource,
+  makeFunctionImage,
+} from "./FunctionImage.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
+
+export type { FunctionImageSource } from "./FunctionImage.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
+
+class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
+  functionName: string;
+}> {}
+
+class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
+  functionName: string;
+  reason?: string;
+}> {}
 
 export class HandlerContext extends Context.Service<
   HandlerContext,
@@ -121,6 +140,20 @@ export interface FunctionBuildOptions
 export type FunctionArchitecture = "x86_64" | "arm64";
 
 /**
+ * Overrides for instructions declared by a Lambda container image. Set
+ * directly on {@link FunctionImageProps.image} alongside the image source;
+ * omit to use the image's own `CMD` / `ENTRYPOINT` / `WORKDIR`.
+ */
+export interface FunctionImageConfig {
+  /** Parameters passed to the image entry point, overriding Dockerfile `CMD`. */
+  command?: readonly string[];
+  /** Runtime executable, overriding Dockerfile `ENTRYPOINT`. */
+  entryPoint?: readonly string[];
+  /** Working directory, overriding Dockerfile `WORKDIR`. */
+  workingDirectory?: string;
+}
+
+/**
  * Reference to an EFS access point: a raw access point ARN or anything
  * exposing an `accessPointArn` attribute (e.g. an `AWS.EFS.AccessPoint`
  * resource).
@@ -171,28 +204,7 @@ export interface FunctionUrlConfig {
   invokeMode?: Lambda.InvokeMode;
 }
 
-export interface FunctionProps extends PlatformProps {
-  /**
-   * Entry module for the bundled Lambda function.
-   */
-  main: string;
-  /**
-   * Exported handler symbol inside the bundled module.
-   * @default "handler"
-   */
-  handler?: string;
-  /**
-   * Set to `false` to skip bundling and deploy `main`'s directory as-is:
-   * every file in the directory containing `main` ships in the code
-   * archive, preserving relative paths. Use for framework outputs that are
-   * already self-contained deployment units (e.g. nitro's
-   * `.output/server`, OpenNext's server functions) where re-bundling can
-   * break `require`s of packaged `node_modules`. Implies external mode:
-   * `handler` names an export of `main`, and the Lambda handler string is
-   * derived from `main`'s basename (e.g. `index.mjs` → `index.handler`).
-   * @default true
-   */
-  bundle?: false;
+export interface FunctionCommonProps extends PlatformProps {
   /**
    * Whether to create a Lambda function URL, or its configuration.
    * `functionUrl: true` creates a public Function URL with `authType: "NONE"`.
@@ -201,35 +213,12 @@ export interface FunctionProps extends PlatformProps {
    */
   functionUrl?: boolean | FunctionUrlConfig;
   functionName?: string;
-  // TODO(sam): use a Layer instead so we can manage Effect platform?
-  runtime?: "nodejs22.x" | "nodejs24.x";
   /**
    * Instruction set architecture for the Lambda function.
-   *
-   * @default "x86_64"
    */
   architecture?: FunctionArchitecture;
   memorySize?: number;
-  /**
-   * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
-   * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
-   * are extracted into `/opt` in the order given. Omit or pass `[]` to detach
-   * every layer.
-   */
-  layers?: LayerRef[];
-  /**
-   * Bundler configuration for {@link main}: rolldown input options (flat),
-   * `output` overrides, `install` for native packages, plus pure-annotation
-   * options (`pure`) and the bundle analyzer. Top-level calls in `effect`,
-   * `@effect/*`, `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are
-   * annotated as pure by default so unused code from those packages is
-   * tree-shaken; list additional packages via `pure.packages`, or disable
-   * with `pure: false`.
-   */
-  build?: FunctionBuildOptions;
-  uploadSourceMap?: boolean;
   env?: Record<string, any>;
-  exports?: string[];
   /**
    * Attach the function to a VPC for private AWS connectivity such as Aurora.
    */
@@ -301,6 +290,52 @@ export interface FunctionProps extends PlatformProps {
    * config to an alias instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
+}
+
+export interface FunctionZipProps extends FunctionCommonProps {
+  /**
+   * Entry module for the bundled Lambda function.
+   */
+  main: string;
+  /**
+   * Set to `false` to skip bundling and deploy `main`'s directory as-is:
+   * every file in the directory containing `main` ships in the code
+   * archive, preserving relative paths. Use for framework outputs that are
+   * already self-contained deployment units (e.g. nitro's
+   * `.output/server`, OpenNext's server functions) where re-bundling can
+   * break `require`s of packaged `node_modules`. Implies external mode:
+   * `handler` names an export of `main`, and the Lambda handler string is
+   * derived from `main`'s basename (e.g. `index.mjs` → `index.handler`).
+   * @default true
+   */
+  bundle?: false;
+  image?: never;
+  /**
+   * Exported handler symbol inside the bundled module.
+   * @default "handler"
+   */
+  handler?: string;
+  // TODO(sam): use a Layer instead so we can manage Effect platform?
+  runtime?: "nodejs22.x" | "nodejs24.x";
+  /**
+   * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
+   * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
+   * are extracted into `/opt` in the order given. Omit or pass `[]` to detach
+   * every layer.
+   */
+  layers?: LayerRef[];
+  /**
+   * Bundler configuration for {@link main}: rolldown input options (flat),
+   * `output` overrides, `install` for native packages, plus pure-annotation
+   * options (`pure`) and the bundle analyzer. Top-level calls in `effect`,
+   * `@effect/*`, `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are
+   * annotated as pure by default so unused code from those packages is
+   * tree-shaken; list additional packages via `pure.packages`, or disable
+   * with `pure: false`.
+   */
+  build?: FunctionBuildOptions;
+  uploadSourceMap?: boolean;
+  exports?: string[];
   /**
    * Wire-level `DurableConfig` applied at `CreateFunction`.
    *
@@ -313,13 +348,120 @@ export interface FunctionProps extends PlatformProps {
   durableConfig?: Lambda.DurableConfig;
 }
 
+export interface FunctionImageProps extends FunctionCommonProps {
+  main?: never;
+  /**
+   * Instruction set architecture for the Lambda function and its image build.
+   * `x86_64` builds `linux/amd64`; `arm64` builds `linux/arm64`.
+   */
+  architecture: FunctionArchitecture;
+  /**
+   * Deploy an existing private ECR image, or build a Lambda-compatible image
+   * from a local Docker context. Local builds use a managed private ECR
+   * repository with content-addressed tags.
+   */
+  image: FunctionImageSource;
+  handler?: never;
+  runtime?: never;
+  layers?: never;
+  build?: never;
+  uploadSourceMap?: never;
+  exports?: never;
+  // Durability needs a `main` for the orchestrator body — see
+  // DurableFunctionProps.
+  durableConfig?: never;
+}
+
+export type FunctionProps = FunctionZipProps | FunctionImageProps;
+
+const isFunctionImageProps = (
+  props: FunctionProps,
+): props is FunctionImageProps => props.image !== undefined;
+
+interface FunctionPackageValidationProps {
+  image?: unknown;
+  main?: unknown;
+  handler?: unknown;
+  runtime?: unknown;
+  layers?: unknown;
+  build?: unknown;
+  uploadSourceMap?: unknown;
+  exports?: unknown;
+  durableConfig?: unknown;
+}
+
+/**
+ * Validate package-mode exclusivity before any Lambda or ECR mutation.
+ * @internal
+ */
+export const validateFunctionPackageProps = Effect.fn(
+  "AWS.Lambda.validateFunctionPackageProps",
+)(function* (id: string, props: FunctionPackageValidationProps) {
+  if (props.image === undefined) {
+    if (props.main === undefined) {
+      return yield* Effect.fail(
+        new Error(`Function(${id}): declare exactly one of main or image`),
+      );
+    }
+    return;
+  }
+
+  const incompatible = [
+    ["main", props.main],
+    ["handler", props.handler],
+    ["runtime", props.runtime],
+    ["layers", props.layers],
+    ["build", props.build],
+    ["uploadSourceMap", props.uploadSourceMap],
+    ["exports", props.exports],
+    ["durableConfig", props.durableConfig],
+  ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
+  if (incompatible.length > 0) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
+      ),
+    );
+  }
+});
+
+/**
+ * The Lambda `ImageConfig` for an image source's overrides; `undefined` when
+ * the source declares none, so the image's own instructions apply.
+ */
+const toLambdaImageConfig = (
+  config: FunctionImageConfig | undefined,
+): Lambda.ImageConfig | undefined =>
+  config === undefined ||
+  (config.command === undefined &&
+    config.entryPoint === undefined &&
+    config.workingDirectory === undefined)
+    ? undefined
+    : {
+        Command: config.command === undefined ? undefined : [...config.command],
+        EntryPoint:
+          config.entryPoint === undefined ? undefined : [...config.entryPoint],
+        WorkingDirectory: config.workingDirectory,
+      };
+
+/**
+ * `UpdateFunctionConfiguration` preserves old image overrides when the field
+ * is omitted. An empty object therefore means "clear overrides" on update.
+ */
+const imageConfigForUpdate = (
+  props: FunctionProps,
+): Lambda.ImageConfig | undefined =>
+  isFunctionImageProps(props)
+    ? (toLambdaImageConfig(props.image) ?? {})
+    : undefined;
+
 /**
  * The Lambda `Handler` string for a function's props: `<file>.<export>`.
  * Bundled functions always emit `index.js`; prebuilt directories
  * (`bundle: false`) keep `main`'s own basename. The export half honors
  * `handler` only outside Effect mode (see the note at the call site).
  */
-const handlerStringOf = (props: FunctionProps): string => {
+const handlerStringOf = (props: FunctionZipProps): string => {
   const externalMode = props.isExternal || props.bundle === false;
   // `main` may be an unresolved Output during precreate (the stub's mock
   // code exports `index.*` anyway); the real Handler is applied at
@@ -379,6 +521,7 @@ export interface Function extends Resource<
     roleArn: string;
     code: {
       hash: string;
+      image?: Omit<FunctionImageAttributes, "hash">;
     };
     reservedConcurrentExecutions?: number;
   },
@@ -443,12 +586,13 @@ export const normalizeFunctionUrl = (
  * An AWS Lambda host resource that combines code bundling, IAM role
  * provisioning, and runtime binding collection.
  *
- * `Function` is the canonical runtime host for AWS. Alchemy automatically
- * bundles your TypeScript entry module with Rolldown, creates an IAM
- * execution role, and uploads the zip artifact. On subsequent deploys, the
- * function is only updated when the bundle hash changes.
+ * `Function` is the canonical runtime host for AWS. It can either bundle a
+ * TypeScript entry module into a zip artifact or build a user-authored
+ * Dockerfile into a Lambda container image. In both modes Alchemy creates the
+ * execution role and applies bindings; image mode additionally owns the
+ * private ECR repository and Lambda pull policy.
  *
- * There are two ways to define a Lambda Function:
+ * Zip-packaged functions can be defined in two ways:
  *
  * - **Async** — plain handler export, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation with typed bindings and event sources.
@@ -515,6 +659,54 @@ export const normalizeFunctionUrl = (
  *     body: JSON.stringify({ message: "Hello from Lambda!" }),
  *   };
  * };
+ * ```
+ *
+ * ### Container Image Functions
+ * Set `image` instead of `main` to deploy an existing private ECR image or to
+ * build and publish a local Docker context. Image sources must be literal
+ * because Lambda's pre-create phase needs the deployable image before normal
+ * Output resolution.
+ *
+ * #### Existing ECR image with runtime overrides
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("Worker", {
+ *   image: {
+ *     uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker@sha256:...",
+ *     command: ["app.handler"],
+ *     entryPoint: ["/lambda-entrypoint.sh"],
+ *     workingDirectory: "/var/task",
+ *   },
+ *   architecture: "x86_64",
+ * });
+ * ```
+ *
+ * Tagged URIs are resolved through ECR on each plan. If a tag is repointed to
+ * a new digest, Alchemy updates the Lambda function even though the URI string
+ * is unchanged. External repositories are never modified or deleted.
+ *
+ * #### Build a Lambda container image
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JavaFunction", {
+ *   image: {
+ *     context: "./lambda",
+ *     dockerfile: "Dockerfile",
+ *     buildArgs: {
+ *       APP_ENV: "production",
+ *     },
+ *   },
+ *   architecture: "arm64",
+ *   functionUrl: false,
+ * });
+ * ```
+ *
+ * The Dockerfile owns the runtime and handler. Alchemy does not generate a
+ * Node.js adapter or otherwise impose a language. For example,
+ * `./lambda/Dockerfile` can use AWS's Java base image:
+ *
+ * ```dockerfile
+ * FROM public.ecr.aws/lambda/java:21
+ * COPY target/function.jar ${LAMBDA_TASK_ROOT}/lib/
+ * CMD ["com.example.Handler::handleRequest"]
  * ```
  *
  * ### Effect Functions
@@ -805,7 +997,9 @@ export const Function: Platform<
   Function,
   FunctionServices,
   FunctionShape,
-  Serverless.FunctionContext
+  Serverless.FunctionContext,
+  {},
+  FunctionZipProps
 > = Platform(FunctionTypeId, {
   createRuntimeContext: (id: string): Serverless.FunctionContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
@@ -930,6 +1124,7 @@ export const FunctionProvider = () =>
       // Code bundling lives in FunctionBundle.ts so the floci local
       // provider's watch loop can rebuild the identical artifact.
       const { bundleCode } = yield* makeFunctionBundler;
+      const functionImage = yield* makeFunctionImage;
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
         ALCHEMY_STAGE: stack.stage,
@@ -1160,7 +1355,7 @@ export const FunctionProvider = () =>
 
       const withNodeSourceMaps = (
         env: Record<string, string> | undefined,
-        props: FunctionProps,
+        props: FunctionZipProps,
       ) => {
         const sourcemap = props.build?.output?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
@@ -1196,6 +1391,48 @@ export const FunctionProvider = () =>
       }) as <A, R, Err>(
         self: Effect.Effect<A, Err, R>,
       ) => Effect.Effect<A, Err, R>;
+
+      const waitForFunctionUpdate = Effect.fn(function* (
+        functionName: string,
+        session: { note: (note: string) => Effect.Effect<void> },
+      ) {
+        return yield* Effect.gen(function* () {
+          const configuration = (yield* Lambda.getFunction({
+            FunctionName: functionName,
+          })).Configuration;
+          if (
+            configuration?.State === "Failed" ||
+            configuration?.LastUpdateStatus === "Failed"
+          ) {
+            return yield* new FunctionUpdateFailed({
+              functionName,
+              reason:
+                configuration.LastUpdateStatusReason ??
+                configuration.StateReason,
+            });
+          }
+          if (
+            configuration?.State === "Active" &&
+            (configuration.LastUpdateStatus === undefined ||
+              configuration.LastUpdateStatus === "Successful")
+          ) {
+            return;
+          }
+          return yield* new FunctionUpdatePending({ functionName });
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "FunctionUpdatePending",
+            schedule: Schedule.spaced("2 seconds").pipe(
+              Schedule.tap(({ attempt }) =>
+                session.note(
+                  `Waiting for Lambda image update before repository cleanup: ${functionName} (${attempt * 2}s)`,
+                ),
+              ),
+            ),
+            times: 30,
+          }),
+        );
+      });
 
       const getReservedConcurrentExecutions = Effect.fn(function* (
         functionName: string,
@@ -1241,12 +1478,122 @@ export const FunctionProvider = () =>
         );
       });
 
+      type FunctionDeploymentCode =
+        | {
+            packageType: "Zip";
+            archive: Uint8Array<ArrayBufferLike>;
+            hash: string;
+          }
+        | {
+            packageType: "Image";
+            imageUri: string;
+            hash: string;
+          };
+
+      interface PreparedFunctionCode {
+        deployment: FunctionDeploymentCode;
+        attributes: Function["Attributes"]["code"];
+      }
+
+      const prepareImageFunctionCode = Effect.fn(function* ({
+        id,
+        props,
+        previousImage,
+        session,
+      }: {
+        id: string;
+        props: FunctionImageProps;
+        previousImage?: Omit<FunctionImageAttributes, "hash">;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) {
+        const { hash, ...image } = yield* functionImage.resolve({
+          id,
+          source: props.image,
+          architecture: props.architecture,
+          previousImage,
+          session,
+        });
+        return {
+          deployment: {
+            packageType: "Image",
+            imageUri: image.imageUri,
+            hash,
+          },
+          attributes: { hash, image },
+        } satisfies PreparedFunctionCode;
+      });
+
+      const preparePrecreatedFunctionCode = Effect.fn(function* ({
+        id,
+        props,
+        session,
+      }: {
+        id: string;
+        props: FunctionProps;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) {
+        if (isFunctionImageProps(props)) {
+          return yield* prepareImageFunctionCode({ id, props, session });
+        }
+
+        // Mock code for the pre-created stub. It responds 503 (rather than a
+        // bare 200) so that, during the brief window where the real code/config
+        // update is still `InProgress`, a Function URL hit serves an honest
+        // "not ready" signal. Downstream readiness probes already retry on
+        // non-200, so they wait for the real handler without blocking the
+        // provider.
+        const code = new TextEncoder().encode(
+          `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
+        );
+        const archive = yield* zipCode(code);
+        const hash = yield* hashBundle(code);
+        return {
+          deployment: {
+            packageType: "Zip",
+            archive,
+            hash,
+          },
+          attributes: { hash },
+        } satisfies PreparedFunctionCode;
+      });
+
+      const prepareFunctionCode = Effect.fn(function* ({
+        id,
+        props,
+        previousImage,
+        session,
+      }: {
+        id: string;
+        props: FunctionProps;
+        previousImage?: Omit<FunctionImageAttributes, "hash">;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) {
+        if (isFunctionImageProps(props)) {
+          return yield* prepareImageFunctionCode({
+            id,
+            props,
+            previousImage,
+            session,
+          });
+        }
+
+        const { identityHash, buildArchive } = yield* bundleCode(id, props);
+        const { archive, archiveHash } = yield* buildArchive;
+        return {
+          deployment: {
+            packageType: "Zip",
+            archive,
+            hash: archiveHash,
+          },
+          attributes: { hash: identityHash },
+        } satisfies PreparedFunctionCode;
+      });
+
       const createOrUpdateFunction: (input: {
         id: string;
         news: FunctionProps;
         roleArn: string;
-        archive: Uint8Array<ArrayBufferLike>;
-        hash: string;
+        code: FunctionDeploymentCode;
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
@@ -1268,8 +1615,7 @@ export const FunctionProvider = () =>
         id,
         news,
         roleArn,
-        archive,
-        hash,
+        code,
         env,
         functionName,
         preferUpdate,
@@ -1280,8 +1626,7 @@ export const FunctionProvider = () =>
         id: string;
         news: FunctionProps;
         roleArn: string;
-        archive: Uint8Array<ArrayBufferLike>;
-        hash: string;
+        code: FunctionDeploymentCode;
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
@@ -1320,47 +1665,59 @@ export const FunctionProvider = () =>
 
         const tags = yield* createInternalTags(id);
 
-        // Try to use S3 if assets bucket is available, otherwise fall back to inline ZipFile
-        const assets = (yield* Effect.serviceOption(Assets)).pipe(
-          Option.getOrUndefined,
-        );
-
         const codeLocation = yield* Effect.gen(function* () {
-          if (assets) {
-            const key = yield* assets.uploadAsset(hash, archive);
-            yield* Effect.logDebug(
-              `Using S3 for code: s3://${yield* assets.bucketName}/${key}`,
-            );
-            return {
-              S3Bucket: yield* assets.bucketName,
-              S3Key: key,
-            } as const;
-          } else {
-            return { ZipFile: archive } as const;
+          if (code.packageType === "Image") {
+            return { ImageUri: code.imageUri } as const;
           }
+          // Try to use S3 if the assets bucket is available, otherwise fall
+          // back to an inline ZipFile.
+          const assets = (yield* Effect.serviceOption(Assets)).pipe(
+            Option.getOrUndefined,
+          );
+          if (!assets) {
+            return { ZipFile: code.archive } as const;
+          }
+          const key = yield* assets.uploadAsset(code.hash, code.archive);
+          yield* Effect.logDebug(
+            `Using S3 for code: s3://${yield* assets.bucketName}/${key}`,
+          );
+          return {
+            S3Bucket: yield* assets.bucketName,
+            S3Key: key,
+          } as const;
         });
-        const runtimeEnv = withNodeSourceMaps(env, news);
+        const runtimeEnv = isFunctionImageProps(news)
+          ? env
+          : withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
-          // Effect-mode functions are wrapped in a generated entry whose ONLY
-          // export is `default` — `handler` names an export of the USER's
-          // module and can only address it when the module is bundled as-is
-          // (isExternal / bundle: false). Honoring it in Effect mode deploys
-          // a Lambda that dies at init with Runtime.HandlerNotFound.
-          // Prebuilt directories keep their own entry filename, so the
-          // handler prefix is `main`'s basename instead of the bundler's
-          // fixed `index`.
-          Handler: handlerStringOf(news),
           Role: roleArn,
           Code: codeLocation,
-          Runtime: news.runtime ?? "nodejs24.x",
+          ...(isFunctionImageProps(news)
+            ? {
+                PackageType: "Image" as const,
+                ImageConfig: toLambdaImageConfig(news.image),
+              }
+            : {
+                // Effect-mode functions are wrapped in a generated entry whose
+                // ONLY export is `default` — `handler` names an export of the
+                // USER's module and can only address it when the module is
+                // bundled as-is (isExternal). Honoring it in Effect mode
+                // deploys a Lambda that dies at init with
+                // Runtime.HandlerNotFound.
+                Handler: handlerStringOf(news),
+                Runtime: news.runtime ?? "nodejs24.x",
+                PackageType: "Zip" as const,
+              }),
           Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
           // previously-attached layers.
-          Layers: (news.layers ?? []).map(layerVersionArnOf),
+          Layers: isFunctionImageProps(news)
+            ? undefined
+            : (news.layers ?? []).map(layerVersionArnOf),
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1417,13 +1774,7 @@ export const FunctionProvider = () =>
               yield* Lambda.updateFunctionCode({
                 FunctionName: createFunctionRequest.FunctionName,
                 Architectures: createFunctionRequest.Architectures,
-                // Use S3 or ZipFile based on what was used for create
-                ...("S3Bucket" in codeLocation
-                  ? {
-                      S3Bucket: codeLocation.S3Bucket,
-                      S3Key: codeLocation.S3Key,
-                    }
-                  : { ZipFile: codeLocation.ZipFile }),
+                ...codeLocation,
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
@@ -1446,7 +1797,7 @@ export const FunctionProvider = () =>
                 EphemeralStorage: createFunctionRequest.EphemeralStorage,
                 FileSystemConfigs: createFunctionRequest.FileSystemConfigs,
                 Handler: createFunctionRequest.Handler,
-                ImageConfig: createFunctionRequest.ImageConfig,
+                ImageConfig: imageConfigForUpdate(news),
                 KMSKeyArn: createFunctionRequest.KMSKeyArn,
                 Layers: createFunctionRequest.Layers,
                 LoggingConfig: createFunctionRequest.LoggingConfig,
@@ -1635,19 +1986,66 @@ export const FunctionProvider = () =>
         return undefined;
       });
 
-      const summary = ({ archive }: { archive: Uint8Array<ArrayBufferLike> }) =>
-        `${
-          archive.length >= 1024 * 1024
-            ? `${(archive.length / (1024 * 1024)).toFixed(2)}MB`
-            : archive.length >= 1024
-              ? `${(archive.length / 1024).toFixed(2)}KB`
-              : `${archive.length}B`
-        }`;
+      const summary = (code: FunctionDeploymentCode) =>
+        code.packageType === "Image"
+          ? code.imageUri
+          : code.archive.length >= 1024 * 1024
+            ? `${(code.archive.length / (1024 * 1024)).toFixed(2)}MB`
+            : code.archive.length >= 1024
+              ? `${(code.archive.length / 1024).toFixed(2)}KB`
+              : `${code.archive.length}B`;
+
+      const refreshPersistedFunctionCode = ({
+        output,
+        packageType,
+        observed,
+      }: {
+        output: Function["Attributes"] | undefined;
+        packageType: Lambda.PackageType | undefined;
+        observed:
+          | {
+              ImageUri?: string;
+              ResolvedImageUri?: string;
+            }
+          | undefined;
+      }): Function["Attributes"]["code"] => {
+        if (output?.code === undefined) {
+          // Cold adoption has no persisted source hash. Return a complete
+          // Attributes shape and let the forced post-adoption reconcile write
+          // the desired code and replace this placeholder.
+          return { hash: "" };
+        }
+        if (packageType !== "Image" || output.code.image === undefined) {
+          return output.code;
+        }
+
+        // Lambda can refresh the deployed URI and digest, but it cannot
+        // reconstruct Alchemy's source hash or prove repository ownership.
+        // Preserve that metadata from state instead of inferring a managed
+        // repository from an arbitrary image during adoption.
+        const resolvedImageUri = observed?.ResolvedImageUri;
+        const digest = resolvedImageUri?.split("@").at(-1);
+        return {
+          ...output.code,
+          image: {
+            ...output.code.image,
+            ...(observed?.ImageUri === undefined
+              ? {}
+              : { imageUri: observed.ImageUri }),
+            ...(resolvedImageUri === undefined ? {} : { resolvedImageUri }),
+            ...(digest === undefined ? {} : { digest }),
+          },
+        };
+      };
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
+          yield* validateFunctionPackageProps(id, news);
+          if (isFunctionImageProps(news)) {
+            yield* decodeFunctionImageSource(id, news.image);
+          }
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
             return undefined;
@@ -1658,13 +2056,30 @@ export const FunctionProvider = () =>
           // can force a replace.
           const newFunctionName = news.functionName ?? output.functionName;
           if (output.functionName !== newFunctionName) {
+            // The new physical name differs from the deployed name, so it can
+            // be created before dependents switch over and the old function is
+            // deleted. delete-first is only needed by replacements that reuse
+            // the same explicit name below.
             return { action: "replace" };
           }
-          if (!!olds.durableConfig !== !!news.durableConfig) {
+          if (isFunctionImageProps(olds) !== isFunctionImageProps(news)) {
+            return {
+              action: "replace",
+              deleteFirst: news.functionName !== undefined,
+            };
+          }
+          if (
+            !isFunctionImageProps(olds) &&
+            !isFunctionImageProps(news) &&
+            !!olds.durableConfig !== !!news.durableConfig
+          ) {
             // DurableConfig can only be enabled/disabled at CreateFunction —
             // switching a logical id between Function and DurableFunction (or
             // vice versa) must replace the physical function.
-            return { action: "replace" };
+            return {
+              action: "replace",
+              deleteFirst: news.functionName !== undefined,
+            };
           }
           if (
             !deepEqual(
@@ -1674,18 +2089,55 @@ export const FunctionProvider = () =>
           ) {
             return { action: "update" };
           }
-          if (output.code.hash !== (yield* bundleCode(id, news)).identityHash) {
+          let imageIdentity: FunctionImageIdentity | undefined;
+          let codeHash: string;
+          if (isFunctionImageProps(news)) {
+            imageIdentity = yield* functionImage.identity(
+              id,
+              news.image,
+              news.architecture,
+            );
+            codeHash = imageIdentity.hash;
+          } else {
+            codeHash = (yield* bundleCode(id, news)).identityHash;
+          }
+          if (output.code.hash !== codeHash) {
             // code changed
             return { action: "update" };
+          }
+          if (isFunctionImageProps(news)) {
+            const image = output.code.image;
+            if (
+              image === undefined ||
+              image.source !== imageIdentity?.source ||
+              (imageIdentity?.source === "uri"
+                ? image.imageUri !== imageIdentity.imageUri ||
+                  image.resolvedImageUri !== imageIdentity.resolvedImageUri
+                : image.imageUri !== `${image.repositoryUri}:${codeHash}` ||
+                  !(yield* functionImage.isReady(
+                    id,
+                    image.repositoryName,
+                    codeHash,
+                  )))
+            ) {
+              return { action: "update" };
+            }
+            if (
+              isFunctionImageProps(olds) &&
+              !deepEqual(
+                toLambdaImageConfig(olds.image),
+                toLambdaImageConfig(news.image),
+              )
+            ) {
+              return { action: "update" };
+            }
           }
           if (
             toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
           ) {
             return { action: "update" };
           }
-          if (
-            (olds.architecture ?? "x86_64") !== (news.architecture ?? "x86_64")
-          ) {
+          if (olds.architecture !== news.architecture) {
             return { action: "update" };
           }
           if (
@@ -1712,14 +2164,14 @@ export const FunctionProvider = () =>
             output?.functionName ??
             (yield* createFunctionName(id, olds?.functionName));
           yield* Effect.logDebug(`reading function ${functionName}`);
-          const fn = yield* Lambda.getFunction({
+          const result = yield* Lambda.getFunction({
             FunctionName: functionName,
           }).pipe(
-            Effect.map((r) => r.Configuration),
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed(undefined),
             ),
           );
+          const fn = result?.Configuration;
           if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) {
             return undefined;
           }
@@ -1754,8 +2206,13 @@ export const FunctionProvider = () =>
             functionUrl,
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+            code: refreshPersistedFunctionCode({
+              output,
+              packageType: fn.PackageType,
+              observed: result?.Code,
+            }),
             reservedConcurrentExecutions,
-          } as any;
+          } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult))
             ? attrs
             : Unowned(attrs);
@@ -1813,6 +2270,15 @@ export const FunctionProvider = () =>
           }),
 
         precreate: Effect.fn(function* ({ id, news, session }) {
+          yield* validateFunctionPackageProps(id, news);
+          if (isFunctionImageProps(news)) {
+            // Resolve and validate the image before creating the execution
+            // role. External references perform only ECR reads here; local
+            // sources only hash their build inputs. A bad URI, wrong region,
+            // inaccessible image, or invalid build source therefore cannot
+            // strand an IAM role when pre-create fails before persisting state.
+            yield* functionImage.identity(id, news.image, news.architecture);
+          }
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
@@ -1825,23 +2291,17 @@ export const FunctionProvider = () =>
             vpc: news.vpc,
           });
 
-          // Mock code for the pre-created stub. It responds 503 (rather than a
-          // bare 200) so that, during the brief window where the real
-          // code/config update is still `InProgress`, a Function URL hit serves
-          // an honest "not ready" signal instead of a successful-but-empty 200.
-          // Downstream readiness probes already retry on non-200, so they wait
-          // for the real handler to go live without the provider blocking.
-          const code = new TextEncoder().encode(
-            `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
-          );
-          const archive = yield* zipCode(code);
-          const hash = yield* hashBundle(code);
+          const prepared = yield* preparePrecreatedFunctionCode({
+            id,
+            props: news,
+            session,
+          });
+
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn: role.Role.Arn,
-            archive,
-            hash,
+            code: prepared.deployment,
             functionName,
             env: alchemyEnv,
             session,
@@ -1852,9 +2312,7 @@ export const FunctionProvider = () =>
             functionName,
             functionUrl: undefined,
             roleName,
-            code: {
-              hash,
-            },
+            code: prepared.attributes,
             roleArn,
           };
         }),
@@ -1866,6 +2324,10 @@ export const FunctionProvider = () =>
           output,
           session,
         }) {
+          yield* validateFunctionPackageProps(id, news);
+          if (isFunctionImageProps(news)) {
+            yield* decodeFunctionImageSource(id, news.image);
+          }
           const generated = yield* createNames(id, news.functionName);
           // Prefer the deployed identifiers: regenerating would target
           // different physical resources if the generator's output for this
@@ -1979,15 +2441,18 @@ export const FunctionProvider = () =>
             });
           }
 
-          const { identityHash, buildArchive } = yield* bundleCode(id, news);
-          const { archive, archiveHash } = yield* buildArchive;
+          const prepared = yield* prepareFunctionCode({
+            id,
+            props: news,
+            previousImage: output?.code?.image,
+            session,
+          });
 
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
-            archive,
-            hash: archiveHash,
+            code: prepared.deployment,
             env: {
               ...env,
               ...news.env,
@@ -2007,6 +2472,22 @@ export const FunctionProvider = () =>
             session,
           });
 
+          const previousImage = output?.code.image;
+          const nextImage =
+            "image" in prepared.attributes
+              ? prepared.attributes.image
+              : undefined;
+          if (
+            previousImage?.ownsRepository === true &&
+            previousImage.repositoryUri !== nextImage?.repositoryUri
+          ) {
+            // The function has moved from an Alchemy-owned local image to a
+            // different source. Wait until Lambda has adopted the new digest
+            // before deleting the now-unreferenced managed repository.
+            yield* waitForFunctionUpdate(functionName, session);
+            yield* functionImage.deleteRepository(previousImage.repositoryName);
+          }
+
           const reservedConcurrentExecutions =
             yield* syncReservedConcurrentExecutions({
               functionName,
@@ -2025,7 +2506,7 @@ export const FunctionProvider = () =>
             currentFunctionUrl: output?.functionUrl,
           });
 
-          yield* session.note(summary({ archive }));
+          yield* session.note(summary(prepared.deployment));
 
           return {
             ...output,
@@ -2034,9 +2515,7 @@ export const FunctionProvider = () =>
             functionUrl: functionUrl as any,
             roleName,
             roleArn,
-            code: {
-              hash: identityHash,
-            },
+            code: prepared.attributes,
             reservedConcurrentExecutions,
           };
         }),
@@ -2099,6 +2578,15 @@ export const FunctionProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
 
+          if (output.code.image?.ownsRepository) {
+            // Lambda must release its image before the owned repository is
+            // force-deleted. Both operations are idempotent, so an interrupted
+            // destroy converges on the next run.
+            yield* functionImage.deleteRepository(
+              output.code.image.repositoryName,
+            );
+          }
+
           // Release the execution role before the auxiliary CloudWatch Logs
           // reap below. A recently invoked function can keep that reap alive
           // for ~40 seconds while Lambda flushes its final log batches; if the
@@ -2116,6 +2604,14 @@ export const FunctionProvider = () =>
               times: 10,
             }),
           );
+
+          // CloudWatch Logs is not implemented by the floci emulator. The
+          // live reap below (flush watch + observe→delete) would sit on
+          // describe/delete timeouts for minutes; emulator log groups die
+          // with the container anyway.
+          if (yield* AWSEnvironment.isLocalEmulator) {
+            return null as any;
+          }
 
           // Lambda auto-creates /aws/lambda/{name} on the first invoke and
           // deleteFunction does NOT remove it — without this every deleted

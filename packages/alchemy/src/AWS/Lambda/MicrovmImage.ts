@@ -204,8 +204,12 @@ export interface MicrovmImage extends Resource<
     createdAt?: string;
     /** When the image was last updated (ISO 8601). */
     updatedAt?: string;
-    /** The resolved code artifact and its build identity hash. */
-    codeArtifact?: { uri?: string; hash?: string };
+    /**
+     * The resolved code artifact and its build identity hash. `contentHash`
+     * covers only the bundled program / packaged context (no props), so a
+     * content-only edit is detectable at plan time before the props resolve.
+     */
+    codeArtifact?: { uri?: string; hash?: string; contentHash?: string };
   },
   {
     env?: Record<string, any>;
@@ -253,7 +257,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * - A **build role** (`buildRole`) Lambda assumes to read the code artifact and
  *   write build logs. Pass a {@link Role} instance and the required permissions
  *   are granted automatically — see the example below.
- * - A **bootstrapped Assets bucket** (`alchemy aws bootstrap`) for effectful /
+ * - A **bootstrapped Assets bucket** (`alchemy provider aws bootstrap`) for effectful /
  *   external modes, which upload the artifact to S3.
  * - The account must be **onboarded to the Lambda MicroVM preview**.
  *

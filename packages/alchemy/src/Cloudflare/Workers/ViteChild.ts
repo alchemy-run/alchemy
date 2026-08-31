@@ -2,15 +2,24 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
 import * as NodeV8 from "node:v8";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { BundleError } from "../../Bundle/Bundle.ts";
-import { transformTypesFlags } from "../../Util/Node.ts";
+import { pipedColorEnv } from "../../Cli/CliKit/index.ts";
+import {
+  fromProcessEnv,
+  RPC_SERVER_ENVIRONMENT_KEY,
+  type RpcServerEnvironment,
+} from "../../Local/RpcServerEnvironment.ts";
+import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
+import { transformTypesFlags } from "../../Util/Node.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,
@@ -39,19 +48,68 @@ const resolveRunner = (basename: string) =>
 
 export const startViteChild = (
   config: ViteChildConfig,
-  onOutput: (channel: "stdout" | "stderr", line: string) => void,
+  onOutput: (channel: "stdout" | "stderr", line: string) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runner = resolveRunner("ViteChildRunner");
     const isBun = typeof globalThis.Bun !== "undefined";
+    // A source provider can pin the dev child to node (e.g. `next dev`
+    // cold-starts broken under bun). Honored only when node is installed;
+    // otherwise fall back to the engine's own runtime.
+    const nodeExecPath =
+      isBun && config.source?.descriptor.runtime === "node"
+        ? (globalThis.Bun.which("node") ?? undefined)
+        : undefined;
     // Redacted values can't cross the process boundary — the config is
-    // plain data once unwrapped.
-    const serializedConfig = NodeV8.serialize(unwrapRedacted(config));
+    // plain data once unwrapped. bun's `v8.serialize` output is not
+    // readable by real V8 (and vice versa), so a cross-runtime spawn
+    // sends JSON instead; the runner sniffs the encoding (V8 payloads
+    // start with 0xFF, JSON with `{`).
+    const serializedConfig =
+      nodeExecPath !== undefined
+        ? Buffer.from(JSON.stringify(unwrapRedacted(config)))
+        : NodeV8.serialize(unwrapRedacted(config));
+    // The Vite child boots the legacy single-stack environment
+    // (RpcServerEnvironment.fromEnv). The sidecar's own process env no
+    // longer carries a stack (one sidecar serves many stacks; sessions
+    // carry theirs), so pass the CURRENT session's stack explicitly, with
+    // profile/envFile taken from the sidecar's spawn-time env when present.
+    // Resolved via serviceOption so this helper's requirements stay
+    // unchanged; the provider context this runs in always carries both.
+    const alchemyContext = yield* Effect.serviceOption(AlchemyContext);
+    const stack = yield* Effect.serviceOption(Stack);
+    const base = yield* fromProcessEnv.pipe(
+      Effect.orElseSucceed((): RpcServerEnvironment => ({
+        profile: process.env.ALCHEMY_PROFILE,
+        envFile: undefined,
+      })),
+    );
+    const childEnvironment: RpcServerEnvironment = {
+      profile: base.profile,
+      envFile: base.envFile,
+      alchemyContext: Option.getOrElse(
+        alchemyContext,
+        () => base.alchemyContext as AlchemyContext["Service"],
+      ),
+      stack: Option.getOrElse(
+        Option.map(stack, (s) => ({ name: s.name, stage: s.stage })),
+        () => base.stack as { name: string; stage: string },
+      ),
+    };
+    const childEnv = {
+      ...process.env,
+      [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(childEnvironment),
+    };
+    // The parent CLI process sets NODE_ENV for its own React/renderer
+    // needs; that hack must not leak into the user's dev server (Vite
+    // derives its default mode from NODE_ENV, so an inherited value would
+    // silently override the project's own mode).
+    delete childEnv.NODE_ENV;
     const child = yield* spawner.spawn(
       ChildProcess.make(
-        process.execPath,
-        isBun
+        nodeExecPath ?? process.execPath,
+        isBun && nodeExecPath === undefined
           ? ["run", runner]
           : [...(runner.endsWith(".ts") ? transformTypesFlags() : []), runner],
         {
@@ -59,7 +117,8 @@ export const startViteChild = (
           stdin: Stream.succeed(serializedConfig),
           stdout: "pipe",
           stderr: "pipe",
-          extendEnv: true,
+          env: childEnv,
+          extendEnv: false,
           killSignal: "SIGKILL",
         },
       ),
@@ -76,14 +135,14 @@ export const startViteChild = (
           const value = line.slice(start + VITE_CHILD_READY_PREFIX.length, end);
           return Deferred.succeed(ready, new URL(value));
         }
-        return Effect.sync(() => onOutput("stdout", line));
+        return onOutput("stdout", line);
       }),
       Effect.forkScoped,
     );
     yield* child.stderr.pipe(
       Stream.decodeText,
       Stream.splitLines,
-      Stream.runForEach((line) => Effect.sync(() => onOutput("stderr", line))),
+      Stream.runForEach((line) => onOutput("stderr", line)),
       Effect.forkScoped,
     );
 
@@ -119,7 +178,7 @@ const BUILD_ERROR_TAIL = 50;
  */
 export const runViteBuildChild = (
   config: Omit<ViteBuildChildConfig, "outputPath">,
-  onOutput: (channel: "stdout" | "stderr", line: string) => void,
+  onOutput: (channel: "stdout" | "stderr", line: string) => Effect.Effect<void>,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -157,7 +216,7 @@ export const runViteBuildChild = (
             // NODE_ENV=test) would otherwise bake `import.meta.env.DEV`
             // into the server bundle (e.g. SolidStart then ships its
             // dev-only manifest and every SSR request 500s).
-            env: { NODE_ENV: "production" },
+            env: { ...pipedColorEnv(), NODE_ENV: "production" },
             killSignal: "SIGKILL",
           },
         ),
@@ -168,8 +227,7 @@ export const runViteBuildChild = (
         Effect.sync(() => {
           tail.push(line);
           if (tail.length > BUILD_ERROR_TAIL) tail.shift();
-          onOutput(channel, line);
-        });
+        }).pipe(Effect.andThen(onOutput(channel, line)));
       const stdoutFiber = yield* Effect.forkChild(
         child.stdout.pipe(
           Stream.decodeText,

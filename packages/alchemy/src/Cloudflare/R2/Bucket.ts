@@ -160,6 +160,18 @@ export type BucketProps = {
    */
   domains?: BucketCustomDomain[];
   /**
+   * Whether the bucket is publicly readable at Cloudflare's managed
+   * `r2.dev` domain. Cloudflare's default is off; omit or pass `false`
+   * to disable it.
+   *
+   * Once enabled, the hostname is reported on `publicDomain`. This
+   * endpoint is rate-limited and intended for non-production use — use
+   * `domains` for production public access.
+   *
+   * @default false
+   */
+  publicAccess?: boolean;
+  /**
    * Object lifecycle rules applied to the bucket. Pass an empty array (or
    * omit) to clear all lifecycle rules. See the Cloudflare R2 docs for
    * supported transitions.
@@ -203,6 +215,12 @@ export type Bucket = Resource<
     domains: Bucket.CustomDomain[];
     lifecycleRules: Bucket.LifecycleRule[];
     cors: Bucket.CorsRule[];
+    /**
+     * Hostname of the bucket's Cloudflare-managed `r2.dev` domain.
+     * Set only while `publicAccess` is enabled; `undefined` when
+     * disabled (the domain still exists but serves 401).
+     */
+    publicDomain: string | undefined;
   },
   never,
   Cloudflare.Providers
@@ -296,6 +314,28 @@ export type Bucket = Resource<
  *       minTLS: "1.2",
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Public Development URL
+ *
+ * Enable Cloudflare's managed `r2.dev` domain so objects are publicly
+ * readable without attaching a custom domain. The hostname is reported
+ * on `publicDomain`. This endpoint is rate-limited and intended for
+ * non-production use — use `domains` for production public access.
+ *
+ * **Example:** Enable public access at r2.dev
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   publicAccess: true,
+ * });
+ * // objects are at https://${bucket.publicDomain}/<key>
+ * ```
+ *
+ * **Example:** Disable public access
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   publicAccess: false,
  * });
  * ```
  *
@@ -714,6 +754,77 @@ export const ProviderLive = () =>
           return applied.sort((a, b) => a.domain.localeCompare(b.domain));
         });
 
+      const listManagedDomain = Effect.fn(function* (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        options?: { retryMissing?: boolean },
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fetch = r2.listBucketDomainManageds({
+          accountId,
+          bucketName,
+          jurisdiction,
+        });
+        return yield* (
+          options?.retryMissing === false
+            ? fetch
+            : fetch.pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              )
+        ).pipe(
+          // The hostname exists whether or not public access is on; a
+          // disabled domain serves 401, so only report it while enabled.
+          Effect.map((response) =>
+            response.enabled ? response.domain : undefined,
+          ),
+          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+        );
+      });
+
+      const reconcileManagedDomain = (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        desired: boolean,
+      ) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* r2
+            .listBucketDomainManageds({
+              accountId,
+              bucketName,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          if (observed.enabled === desired) {
+            return desired ? observed.domain : undefined;
+          }
+
+          const updated = yield* r2
+            .putBucketDomainManaged({
+              accountId,
+              bucketName,
+              enabled: desired,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          return updated.enabled ? updated.domain : undefined;
+        });
+
       // R2's `listBuckets` is not modelled as paginated by distilled and its
       // response omits a continuation cursor, so paginate exhaustively with the
       // `startAfter` query param: keep fetching full pages (capped at 1000)
@@ -907,47 +1018,51 @@ export const ProviderLive = () =>
               buckets,
               (bucket) =>
                 Effect.gen(function* () {
-                  // The three hydration reads are independent — issue them
+                  // The hydration reads are independent — issue them
                   // concurrently so each bucket costs one round-trip of wall
-                  // clock instead of three (a large leaked-bucket census can
+                  // clock instead of four (a large leaked-bucket census can
                   // otherwise blow the nuke scan's per-provider timeout).
-                  const [domains, lifecycleRules, cors] = yield* Effect.all(
-                    [
-                      listCustomDomains(bucket.name, bucket.jurisdiction, {
-                        retryMissing: false,
-                      }).pipe(Effect.map((d) => d ?? [])),
-                      r2
-                        .getBucketLifecycle({
-                          accountId,
-                          bucketName: bucket.name,
-                          jurisdiction: bucket.jurisdiction,
-                        })
-                        .pipe(
-                          Effect.map((observed) =>
-                            (observed.rules ?? []).map(toLifecycleRule),
+                  const [domains, lifecycleRules, cors, publicDomain] =
+                    yield* Effect.all(
+                      [
+                        listCustomDomains(bucket.name, bucket.jurisdiction, {
+                          retryMissing: false,
+                        }).pipe(Effect.map((d) => d ?? [])),
+                        r2
+                          .getBucketLifecycle({
+                            accountId,
+                            bucketName: bucket.name,
+                            jurisdiction: bucket.jurisdiction,
+                          })
+                          .pipe(
+                            Effect.map((observed) =>
+                              (observed.rules ?? []).map(toLifecycleRule),
+                            ),
+                            Effect.catchTag("NoSuchBucket", () =>
+                              Effect.succeed([] as Bucket.LifecycleRule[]),
+                            ),
                           ),
-                          Effect.catchTag("NoSuchBucket", () =>
-                            Effect.succeed([] as Bucket.LifecycleRule[]),
+                        r2
+                          .getBucketCors({
+                            accountId,
+                            bucketName: bucket.name,
+                            jurisdiction: bucket.jurisdiction,
+                          })
+                          .pipe(
+                            Effect.map((observed) =>
+                              (observed.rules ?? []).map(toCorsRule),
+                            ),
+                            Effect.catchTag(
+                              ["NoSuchBucket", "NoCorsConfiguration"],
+                              () => Effect.succeed([] as Bucket.CorsRule[]),
+                            ),
                           ),
-                        ),
-                      r2
-                        .getBucketCors({
-                          accountId,
-                          bucketName: bucket.name,
-                          jurisdiction: bucket.jurisdiction,
-                        })
-                        .pipe(
-                          Effect.map((observed) =>
-                            (observed.rules ?? []).map(toCorsRule),
-                          ),
-                          Effect.catchTag(
-                            ["NoSuchBucket", "NoCorsConfiguration"],
-                            () => Effect.succeed([] as Bucket.CorsRule[]),
-                          ),
-                        ),
-                    ] as const,
-                    { concurrency: 3 },
-                  );
+                        listManagedDomain(bucket.name, bucket.jurisdiction, {
+                          retryMissing: false,
+                        }),
+                      ] as const,
+                      { concurrency: 4 },
+                    );
                   return {
                     bucketName: bucket.name,
                     storageClass: bucket.storageClass,
@@ -957,6 +1072,7 @@ export const ProviderLive = () =>
                     domains,
                     lifecycleRules,
                     cors,
+                    publicDomain,
                   };
                 }).pipe(
                   // The custom-domain endpoint intermittently 500s ("Failed to
@@ -978,6 +1094,7 @@ export const ProviderLive = () =>
                       domains: [] as Bucket.CustomDomain[],
                       lifecycleRules: [] as Bucket.LifecycleRule[],
                       cors: [] as Bucket.CorsRule[],
+                      publicDomain: undefined,
                     }),
                   ),
                 ),
@@ -1023,6 +1140,9 @@ export const ProviderLive = () =>
             return { action: "update" } as const;
           }
           if (!deepEqual(olds.cors, news.cors)) {
+            return { action: "update" } as const;
+          }
+          if ((olds.publicAccess ?? false) !== (news.publicAccess ?? false)) {
             return { action: "update" } as const;
           }
         }),
@@ -1081,17 +1201,21 @@ export const ProviderLive = () =>
               );
           }
 
-          // Sync — storage class is the only mutable property; location
-          // and jurisdiction are immutable (the diff function flags those
-          // as `replace`). Only patch when the desired class drifts from
-          // observed to avoid unnecessary API calls.
+          // Sync — storage class is the only mutable bucket property
+          // (location and jurisdiction are immutable; the diff flags those
+          // as `replace`). PATCH carries the class in the
+          // `cf-r2-storage-class` header. Address the bucket by the
+          // RESOLVED name, never `observed.name` — a response missing the
+          // name would collapse the URI to the collection path, which the
+          // control plane rejects with `PATCH not supported for requested
+          // URI`. Only patch when the desired class drifts from observed.
           const desiredStorageClass = news.storageClass ?? "Standard";
           const observedStorageClass = observed.storageClass ?? "Standard";
           if (observedStorageClass !== desiredStorageClass) {
             observed = yield* r2
               .patchBucket({
                 accountId: acct,
-                bucketName: observed.name!,
+                bucketName: name,
                 storageClass: desiredStorageClass,
                 jurisdiction: observed.jurisdiction ?? jurisdiction,
               })
@@ -1106,7 +1230,7 @@ export const ProviderLive = () =>
           }
 
           const attrs = {
-            bucketName: observed.name!,
+            bucketName: observed.name ?? name,
             // Distilled widened generated string enums to open unions.
             storageClass: (observed.storageClass ??
               "Standard") as Bucket.StorageClass,
@@ -1135,11 +1259,18 @@ export const ProviderLive = () =>
             news.cors ?? [],
           );
 
+          const publicDomain = yield* reconcileManagedDomain(
+            attrs.bucketName,
+            attrs.jurisdiction,
+            news.publicAccess ?? false,
+          );
+
           return {
             ...attrs,
             domains,
             lifecycleRules,
             cors,
+            publicDomain,
           };
         }),
         delete: Effect.fn(function* ({ olds = {}, output, force }) {
@@ -1209,6 +1340,7 @@ export const ProviderLive = () =>
                 domains: output?.domains ?? [],
                 lifecycleRules: output?.lifecycleRules ?? [],
                 cors: output?.cors ?? [],
+                publicDomain: output?.publicDomain,
               })),
               Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
             );
@@ -1225,8 +1357,9 @@ export const ProviderLive = () =>
  * opaque id — the name IS the identity — so the `dev:` marker rides on the
  * name (a `:` can never appear in a real R2 bucket name).
  *
- * Custom domains, lifecycle rules, and CORS are deploy-side concerns with
- * no local behavior; the local attributes report them empty.
+ * Custom domains, lifecycle rules, CORS, and the managed r2.dev domain
+ * are deploy-side concerns with no local behavior; the local attributes
+ * report them empty.
  */
 export const ProviderLocal = () =>
   Provider.succeed(Bucket, {
@@ -1255,6 +1388,7 @@ export const ProviderLocal = () =>
         domains: [],
         lifecycleRules: [],
         cors: [],
+        publicDomain: undefined,
       };
     }),
     delete: Effect.fn(function* () {

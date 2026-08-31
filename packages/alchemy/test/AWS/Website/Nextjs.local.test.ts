@@ -4,8 +4,8 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { spawn } from "node:child_process";
 import * as pathe from "pathe";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -23,41 +23,6 @@ const fixtureEntries = [
   "app",
   "public",
 ];
-
-/**
- * Run a command to completion in a child process (Effect-wrapped spawn —
- * the suite shares one bun process, so a sync spawn would stall every
- * concurrently running test). Fails with the combined output on a
- * non-zero exit.
- */
-const run = (options: {
-  cmd: string;
-  args: string[];
-  cwd: string;
-}): Effect.Effect<string, Error> =>
-  Effect.callback<string, Error>((resume) => {
-    const child = spawn(options.cmd, options.args, {
-      cwd: options.cwd,
-      env: { ...process.env, NO_COLOR: "1" },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let output = "";
-    child.stdout.on("data", (chunk) => (output += chunk));
-    child.stderr.on("data", (chunk) => (output += chunk));
-    child.once("error", (error) => resume(Effect.fail(error)));
-    child.once("close", (code) =>
-      resume(
-        code === 0
-          ? Effect.succeed(output)
-          : Effect.fail(
-              new Error(
-                `${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`,
-              ),
-            ),
-      ),
-    );
-    return Effect.sync(() => child.kill("SIGKILL"));
-  });
 
 describe("AWS.Website.Nextjs local", () => {
   test.provider(
@@ -77,13 +42,7 @@ describe("AWS.Website.Nextjs local", () => {
           prefix: "alchemy-nextjs-aws-local-",
           entries: fixtureEntries,
         });
-        // Hoisted install in the clone so output tracing sees a plain
-        // node_modules tree — the representative user-project shape.
-        yield* run({
-          cmd: "bun",
-          args: ["install", "--linker=hoisted"],
-          cwd: rootDir,
-        });
+        yield* prepareNextjsFixture(rootDir);
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {

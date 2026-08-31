@@ -1,3 +1,4 @@
+import type { Crypto } from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -47,6 +48,7 @@ export const platformLayer = <A, E, R>(constructors: {
 
 export type PlatformServices =
   | ChildProcessSpawner
+  | Crypto
   | FileSystem
   | Path
   | Stdio

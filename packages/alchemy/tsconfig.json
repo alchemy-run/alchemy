@@ -12,9 +12,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    // Solid is the default JSX runtime in this package; React files opt in per-file.
     "jsx": "react-jsx",
-    "jsxImportSource": "@opentui/solid",
     "lib": ["DOM", "DOM.Iterable", "ES2023"],
     "plugins": [
       {
@@ -57,6 +55,12 @@
     },
     {
       "path": "../../distilled/packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/fly-io/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/railway/tsconfig.json"
     },
     {
       "path": "../cloudflare-runtime/tsconfig.json"
