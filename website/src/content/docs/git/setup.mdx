@@ -9,8 +9,10 @@ Workers, Durable Objects, and R2 enabled — see
 
 ## Install
 
+Git ships inside the `alchemy` package — no extra dependency:
+
 ```sh
-bun add @alchemy.run/git
+bun add alchemy
 ```
 
 ## Define the host
@@ -21,7 +23,7 @@ layers:
 
 ```typescript
 // src/git-host.ts
-import * as Git from "@alchemy.run/git";
+import * as Git from "alchemy/Git";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

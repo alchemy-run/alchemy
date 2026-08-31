@@ -3,7 +3,7 @@ title: Git
 description: Self-hosted git on Cloudflare Workers, Durable Objects, and R2 — assembled from swappable Effect layers into a Worker you own.
 ---
 
-`@alchemy.run/git` is git hosting you run yourself: `git clone` and
+`alchemy/Git` is git hosting you run yourself: `git clone` and
 `git push` over smart HTTP, a typed REST plane, pull requests, and a
 GitHub-compatible API — deployed to your own Cloudflare account.
 
@@ -13,7 +13,7 @@ swappable `Layer` implementations, and you assemble them into a Worker
 you control:
 
 ```typescript
-import * as Git from "@alchemy.run/git";
+import * as Git from "alchemy/Git";
 import * as Cloudflare from "alchemy/Cloudflare";
 
 const GitObjects = Cloudflare.R2.Bucket("GitObjects");

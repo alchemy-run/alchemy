@@ -8,7 +8,7 @@ Repositories are managed at `/api/v1/repos`, declared as an Effect
 and your tests.
 
 ```typescript
-import { GitApi } from "@alchemy.run/git";
+import { GitApi } from "alchemy/Git";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
 const client = yield* HttpApiClient.make(GitApi, { baseUrl: host });

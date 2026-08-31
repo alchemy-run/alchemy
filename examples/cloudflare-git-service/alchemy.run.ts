@@ -1,6 +1,6 @@
 /**
  * Deployable git-service example: a git host assembled from
- * `@alchemy.run/git` building blocks, plus a GitHub-style web UI, on ONE
+ * `alchemy/Git` building blocks, plus a GitHub-style web UI, on ONE
  * origin.
  *
  * - `src/git-host.ts` — the block assembly: `Git.ServerLive` +

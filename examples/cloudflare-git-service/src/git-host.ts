@@ -1,5 +1,5 @@
 /**
- * The git host, assembled from `@alchemy.run/git` building blocks — the
+ * The git host, assembled from `alchemy/Git` building blocks — the
  * RFC's headline snippet, live.
  *
  * The package ships no Worker: `Git.Server` is a `Context.Service`
@@ -8,7 +8,7 @@
  * assembly — one layer graph, one `Effect.provide`, every block
  * swappable.
  */
-import * as Git from "@alchemy.run/git";
+import * as Git from "alchemy/Git";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

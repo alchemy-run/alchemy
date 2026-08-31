@@ -1,7 +1,7 @@
 /**
  * Plain-fetch client of the git-service REST API (`/api/v1`).
  *
- * The types mirror `@alchemy.run/git`'s API schemas (`src/api/Schema.ts`)
+ * The types mirror `alchemy/Git`'s API schemas (`src/api/Schema.ts`)
  * by hand — the SPA deliberately ships no Effect runtime; it is an example
  * of consuming the service from any plain JS frontend.
  */

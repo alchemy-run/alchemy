@@ -14,9 +14,6 @@
   "references": [
     {
       "path": "../../packages/alchemy/tsconfig.json"
-    },
-    {
-      "path": "../../packages/git/tsconfig.json"
     }
   ]
 }

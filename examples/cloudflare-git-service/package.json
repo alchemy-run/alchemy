@@ -17,7 +17,6 @@
     "tail": "alchemy tail"
   },
   "dependencies": {
-    "@alchemy.run/git": "workspace:*",
     "@pierre/diffs": "^1.3.5",
     "alchemy": "workspace:*",
     "effect": "catalog:effect",
