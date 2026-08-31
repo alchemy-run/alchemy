@@ -1376,6 +1376,13 @@ export default defineConfig({
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
+            {
+              label: "Prisma ORM",
+              items: [
+                { label: "Postgres", link: "/sql/prisma/postgres" },
+                { label: "Migrations", link: "/sql/prisma/migrations" },
+              ],
+            },
             providerResourcesEntry("SQL", "Drizzle"),
           ],
         },

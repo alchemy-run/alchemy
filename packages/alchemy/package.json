@@ -468,6 +468,8 @@
     "@opennextjs/aws": "catalog:frontend",
     "@opennextjs/cloudflare": "catalog:frontend",
     "@oxc-project/types": "^0.146.0",
+    "@prisma/orm-family-sql": "catalog:database",
+    "@prisma/orm-postgres": "catalog:database",
     "@react-router/dev": "catalog:frontend",
     "@react-router/node": "catalog:frontend",
     "@solidjs/router": "catalog:frontend",
@@ -502,6 +504,7 @@
     "nuxt": "catalog:frontend",
     "octane": "catalog:frontend",
     "pg": "catalog:database",
+    "prisma": "catalog:database",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:frontend",
     "react-router": "catalog:frontend",
@@ -523,6 +526,7 @@
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
+    "@prisma/orm-postgres": "catalog:database",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/sql-mysql2": "catalog:effect",
@@ -534,6 +538,7 @@
     "mongodb": "catalog:database",
     "mysql2": "catalog:database",
     "pg": "catalog:database",
+    "prisma": "catalog:database",
     "vite": "catalog:build",
     "ws": "catalog:shared"
   },
@@ -572,6 +577,12 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "@prisma/orm-postgres": {
+      "optional": true
+    },
+    "prisma": {
       "optional": true
     },
     "vite": {

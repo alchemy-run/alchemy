@@ -81,6 +81,8 @@ catalogs:
   database:
     "@libsql/client": ^0.17.0
     "@neondatabase/serverless": ^1.0.1
+    "@prisma/orm-family-sql": 8.0.0-rc.8
+    "@prisma/orm-postgres": 8.0.0-rc.8
     "@types/pg": ^8.20.0
     drizzle-kit: 1.0.0-rc.5-ab785fc
     drizzle-orm: 1.0.0-rc.5-ab785fc
@@ -88,6 +90,7 @@ catalogs:
     mysql2: ^3.24.2
     mongodb: ^6.10.0
     pg: ^8.22.0
+    prisma: 8.0.0-rc.12
   effect:
     "@effect/atom-react": ">=4.0.0-rc.112 || >=4.0.0"
     "@effect/platform-bun": ">=4.0.0-rc.112 || >=4.0.0"

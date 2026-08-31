@@ -31,6 +31,8 @@ import {
   PrismaUploadClientLive,
 } from "./Internal/HttpClient.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
+import { Contract, ContractProvider } from "./ORM/Contract.ts";
+import { Migrate, MigrateProvider } from "./ORM/Migrate.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import {
   SourceRepository,
@@ -192,6 +194,8 @@ export const providers = () =>
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
+      Contract,
+      Migrate,
     ]),
   ).pipe(
     Layer.provideMerge(
@@ -208,6 +212,11 @@ export const providers = () =>
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
+        // The ORM providers (Contract, Migrate) are mode-agnostic local
+        // resources — they emit contracts and shell the Prisma CLI
+        // regardless of dev/live mode.
+        ContractProvider(),
+        MigrateProvider(),
       ),
     ),
     // The management client layer is shared by every live variant. It is

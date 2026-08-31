@@ -1,0 +1,129 @@
+---
+title: Migrations
+description: How Prisma.Contract and Prisma.Migrate run Prisma's contract emission, migration planning, and graph-ordered apply inside alchemy deploy.
+---
+
+Prisma ORM v8 replaces `prisma migrate dev`/`deploy` with a
+contract-first migration system: `prisma migration plan` writes
+**migration packages** and `prisma db migrate` applies them in graph
+order. Alchemy runs both as resources in the deploy graph —
+`Prisma.Contract` plans, `Prisma.Migrate` applies:
+
+```typescript
+const contract = yield* Prisma.Contract("contract");
+
+yield* Prisma.Migrate("migrate", {
+  url: branch.connectionUri,
+  contract,
+});
+```
+
+## What a deploy actually does
+
+On every `alchemy deploy`, `Prisma.Contract`:
+
+1. Runs `prisma contract emit` — regenerating `contract.json`
+   (runtime IR) and `contract.d.ts` (types) from your contract source.
+2. Compares the emitted contract's hash against the head of the
+   on-disk migration graph.
+3. If the graph doesn't cover the contract, runs
+   `prisma migration plan` with an explicit `--from` at the
+   current head, writing a new package under `migrations/app/`.
+
+`Prisma.Migrate` then observes the database's **contract marker** (a
+`prisma_contract.marker` row Prisma maintains) and applies only
+the pending part of the graph — a fresh database is bootstrapped from
+empty, an up-to-date one is a no-op, and re-running after a crash
+converges. During plan (`alchemy plan`), drift detection emits into a
+temp directory so your workspace is never mutated.
+
+## Migration packages, not SQL files
+
+A planned migration is a directory, not a `.sql` file:
+
+```
+migrations/
+├── app/
+│   └── 20260812T1014_migration-03524e20/
+│       ├── migration.json   # from/to contract hashes + package hash
+│       ├── migration.ts     # the operations, as reviewable TypeScript
+│       └── ops.json         # rendered operations (content-addressed)
+└── snapshots/
+    └── 03524e20.../         # content-addressed contract snapshots
+```
+
+Commit all of it — `migrations/`, `contract.json`, and
+`contract.d.ts`. Other environments (and the Worker bundle, which
+imports `contract.json`) consume the checked-in artifacts; the deploy
+only plans a new package when the contract actually changed.
+
+## Placeholders need your decision
+
+Some changes cannot be planned mechanically — making a column required
+needs a backfill for existing rows. Prisma renders those as
+`placeholder(...)` closures in the package's `migration.ts`, and
+alchemy **fails the deploy** rather than guessing (the SQL runs
+against your real database later in the same deploy):
+
+1. Edit `migrations/app/<dir>/migration.ts` and replace each
+   `placeholder(...)` with a typed query plan.
+2. Self-emit the package: `node migrations/app/<dir>/migration.ts`.
+3. Commit and re-deploy — the contract sees no drift and
+   `Prisma.Migrate` applies the finished package.
+
+Or abandon the change: delete the package directory and revert the
+contract source.
+
+## Or: run the CLI yourself
+
+The resources shell the same `prisma` CLI you would run by hand,
+against the same `prisma.config.ts`. Planning locally and letting the
+deploy only apply is fully supported:
+
+```sh
+prisma contract emit
+prisma migration plan --name add-posts
+git add migrations src/prisma && git commit
+```
+
+The next deploy detects no drift (the committed package already covers
+the contract) and `Prisma.Migrate` applies it. `prisma db migrate
+--show --db $DATABASE_URL` previews what a deploy would run.
+
+## The contract marker
+
+Prisma records the applied contract hash in the database itself
+(`prisma_contract.marker`). `Prisma.Migrate`'s diff compares the
+marker against the contract's hash, so databases changed out-of-band —
+a marker reset, a branch recreated from another parent — are detected
+and re-converged on the next deploy. The runtime client also verifies
+the marker on first use by default, so a Worker deployed against a
+stale database surfaces the drift instead of returning wrong answers.
+
+## Destroy never unwinds the database
+
+Removing `Prisma.Contract` from the stack does not delete migration
+packages or emitted artifacts (they are checked in), and destroying
+`Prisma.Migrate` never drops tables or reverts migrations — the
+database's contents outlive the stack by design. Rolling back a schema
+is itself a migration: plan to an earlier contract with
+`prisma migration plan --to <ref>`.
+
+## Scope: Postgres 17+, RC caveats
+
+Prisma v8 currently ships one production-track target: **PostgreSQL
+17+** (`@prisma/orm-postgres`). There is no MySQL and no D1 in the v8
+line, so unlike [Drizzle](/sql/drizzle/migrations) there are no other
+dialects to choose between — for those databases, use Drizzle or the
+raw [Effect SQL clients](/sql/effect-sql/postgres). Alchemy pins the
+exact RC version in its catalog; expect the RC line to keep moving
+until 8.0.0 final.
+
+## Where next
+
+- [Postgres](/sql/prisma/postgres) — the full contract → database →
+  Worker flow.
+- [Effect SQL: Migrations](/sql/effect-sql/migrations) — the plain
+  `.sql` migration contract used by Drizzle and the raw clients.
+- [Prisma Postgres](/prisma) — provision the database with the Prisma
+  platform provider.
