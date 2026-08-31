@@ -13,7 +13,9 @@ function StackOutputs({ value }: StackOutputsProps) {
   return (
     <Box flexDirection="column">
       {output.split("\n").map((line, index) => (
-        <AnsiText key={index}>{line || " "}</AnsiText>
+        <AnsiText key={index} wrap="none">
+          {line || " "}
+        </AnsiText>
       ))}
     </Box>
   );

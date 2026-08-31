@@ -640,7 +640,12 @@ export const DockerLive = Layer.effect(
             session
               ? Stream.tapSink(
                   Sink.make<string>()(
-                    flow(Stream.splitLines, Stream.runForEach(session.note)),
+                    flow(
+                      Stream.splitLines,
+                      Stream.runForEach((line) =>
+                        session.note(line, { kind: "output" }),
+                      ),
+                    ),
                   ),
                 )
               : undefined,

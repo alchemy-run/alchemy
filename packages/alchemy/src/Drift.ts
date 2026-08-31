@@ -162,12 +162,13 @@ const runDrift = (
 
       const scopedSession = {
         ...session,
-        note: (note: string) =>
+        note: (note, options?) =>
           session.emit({
             fqn,
             id: logicalId,
             _tag: "apply.resource.note",
             message: note,
+            kind: options?.kind,
           }),
       } satisfies ScopedPlanStatusSession;
 

@@ -234,16 +234,17 @@ it("ignores state explorer responses from before a refresh", async () => {
   }
 });
 
-it("prints stack outputs using inspect", () => {
+it("prints stack outputs using inspect without wrapping long lines", () => {
   const { service } = makeStatic();
   const apiUrl =
     "https://cloudflareworkerexample-api-clxp5k3fbtqacxdev7mx7uuxmw.testing-2b2.workers.dev";
+  // Narrow width: `wrap="none"` output lines must overflow, not break.
   const output = service.output.format(
     stackOutputsView({
       apiUrl,
       metadata: { region: "us-east-1", replicas: 2 },
     }),
-    { columns: 10_000 },
+    { columns: 40 },
   );
 
   expect(output).toBe(

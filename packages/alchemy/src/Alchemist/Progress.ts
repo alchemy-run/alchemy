@@ -80,6 +80,9 @@ const spanEventOf = (
           "alchemy.resource.fqn": event.fqn,
           "alchemy.resource.logical_id": event.id,
           "alchemy.apply.message": event.message,
+          ...(event.kind === undefined
+            ? {}
+            : { "alchemy.apply.note.kind": event.kind }),
         },
       };
     case "state.bootstrap.started":
