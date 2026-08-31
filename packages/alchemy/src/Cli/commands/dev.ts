@@ -10,7 +10,15 @@ import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { transformTypesFlags } from "../../Util/Node.ts";
 import { DevOptions } from "../DevOptions.ts";
-import { config, envFile, force, profile, stage } from "./flags.ts";
+import {
+  configPath,
+  envFile,
+  force,
+  optionalConfig,
+  profile,
+  resolveConfig,
+  stage,
+} from "./flags.ts";
 import { suppressInterruptMessages } from "./errors.ts";
 
 /**
@@ -29,13 +37,15 @@ export const devCommand = Command.make(
   "dev",
   {
     force,
-    main: config,
+    config: optionalConfig,
+    configPath,
     envFile,
     stage,
     profile,
   },
   Effect.fn(
-    function* (args) {
+    function* (rawArgs) {
+      const args = yield* resolveConfig(rawArgs);
       // This process is only the exec child's supervisor; the child owns the
       // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
       // hits both processes and the interrupt message prints twice.

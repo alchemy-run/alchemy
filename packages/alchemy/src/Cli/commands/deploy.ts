@@ -12,11 +12,13 @@ import { stackOutputsView } from "../components/view/StackOutputs.tsx";
 
 import { exitDeclined } from "./errors.ts";
 import {
-  config,
+  configPath,
   dryRun as dryRunFlag,
   envFile,
   force,
+  optionalConfig,
   profile,
+  resolveConfig,
   stage,
   yes,
 } from "./flags.ts";
@@ -216,7 +218,8 @@ export const deployCommand = Command.make(
   {
     dryRun: dryRunFlag,
     force,
-    main: config,
+    config: optionalConfig,
+    configPath,
     envFile,
     stage,
     yes,
@@ -225,47 +228,62 @@ export const deployCommand = Command.make(
     detailed,
     detectDrift,
   },
-  instrumentCommand("deploy", stackSpanAttrs)(runStack),
+  (args) =>
+    resolveConfig(args).pipe(
+      Effect.flatMap(instrumentCommand("deploy", stackSpanAttrs)(runStack)),
+    ),
 );
 
 export const destroyCommand = Command.make(
   "destroy",
   {
     dryRun: dryRunFlag,
-    main: config,
+    config: optionalConfig,
+    configPath,
     envFile,
     stage,
     yes,
     profile,
   },
-  instrumentCommand(
-    "destroy",
-    stackSpanAttrs,
-  )((args) =>
-    runStack({
-      ...args,
-      destroy: true,
-    }),
-  ),
+  (args) =>
+    resolveConfig(args).pipe(
+      Effect.flatMap(
+        instrumentCommand(
+          "destroy",
+          stackSpanAttrs,
+        )((options) =>
+          runStack({
+            ...options,
+            destroy: true,
+          }),
+        ),
+      ),
+    ),
 );
 
 export const planCommand = Command.make(
   "plan",
   {
-    main: config,
+    config: optionalConfig,
+    configPath,
     envFile,
     stage,
     profile,
     detailed,
   },
-  instrumentCommand(
-    "plan",
-    stackSpanAttrs,
-  )((args) =>
-    runStack({
-      ...args,
-      // plan is the same as deploy with dryRun always set to true
-      dryRun: true,
-    }),
-  ),
+  (args) =>
+    resolveConfig(args).pipe(
+      Effect.flatMap(
+        instrumentCommand(
+          "plan",
+          stackSpanAttrs,
+        )((options) =>
+          runStack({
+            ...options,
+            // plan is the same as deploy with dryRun always set to true
+            dryRun: true,
+          }),
+        ),
+      ),
+    ),
 );

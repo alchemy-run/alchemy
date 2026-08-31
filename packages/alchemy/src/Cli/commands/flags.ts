@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 import { UserInputError } from "./errors.ts";
@@ -75,6 +76,40 @@ export const config = Flag.file("config", { mustExist: true }).pipe(
   Flag.withAlias("c"),
   Flag.withDefault("alchemy.run.ts"),
 );
+
+export const optionalConfig = Flag.file("config", { mustExist: true }).pipe(
+  Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
+  Flag.withAlias("c"),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
+export const configPath = Argument.file("config", { mustExist: true }).pipe(
+  Argument.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
+  Argument.optional,
+  Argument.map(Option.getOrUndefined),
+);
+
+export const resolveConfig = <
+  A extends {
+    readonly config: string | undefined;
+    readonly configPath: string | undefined;
+  },
+>(
+  args: A,
+) =>
+  Effect.gen(function* () {
+    if (args.config !== undefined && args.configPath !== undefined) {
+      return yield* new UserInputError({
+        message:
+          "Pass the config path either positionally or with --config, not both.",
+      });
+    }
+    return {
+      ...args,
+      main: args.config ?? args.configPath ?? "alchemy.run.ts",
+    };
+  });
 
 export const profile = Flag.string("profile").pipe(
   Flag.withDescription(
