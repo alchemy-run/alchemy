@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import type { Api } from "./entrypoint-target-worker.ts";
 
 const targetMain = pathe.resolve(
   import.meta.dirname,
@@ -34,7 +35,7 @@ export default Alchemy.Stack(
     const caller = yield* Cloudflare.Worker("EntrypointCaller", {
       main: callerMain,
       env: {
-        API: Cloudflare.WorkerEntrypoint(target, {
+        API: Cloudflare.WorkerEntrypoint<typeof Api>(target, {
           entrypoint: "Api",
           props: { tenant: "acme" },
         }),

@@ -471,16 +471,33 @@ workerd treats every named class export of an entry module as an
 entrypoint. Bind one by name with `Cloudflare.WorkerEntrypoint`:
 
 ```typescript
+import type { Api } from "./src/target.ts";
+
 const caller = yield* Cloudflare.Worker("Caller", {
   main: "./src/caller.ts",
   env: {
-    API: Cloudflare.WorkerEntrypoint(target, "Api"),
+    API: Cloudflare.WorkerEntrypoint<typeof Api>(target, "Api"),
   },
 });
 ```
 
-`InferEnv` types the entry as a `Fetcher` service stub; RPC methods on
-the target class are called on it directly (`env.API.greet("alice")`).
+The entrypoint name is a runtime string, so nothing links it to the
+target module's exports — pass the class as a type argument and
+`InferEnv` types the entry as that class's RPC surface, so
+`env.API.greet("alice")` is checked against the entrypoint:
+
+```typescript
+import type { CallerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: CallerEnv) {
+    return new Response(await env.API.greet("alice"));
+  },
+};
+```
+
+Without the type argument the entry is a bare `Fetcher` service stub
+(`fetch` + `connect` only) and RPC calls do not type-check.
 
 ## Entrypoint props
 
