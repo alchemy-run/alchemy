@@ -1,4 +1,4 @@
-import { localStage, stage } from "@/Cli/commands/flags.ts";
+import { devStage, stage } from "@/Cli/commands/flags.ts";
 import { encodeStagePathSegment, isUserStage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
@@ -57,10 +57,10 @@ describe("STAGE environment variable", () => {
 describe("default stages", () => {
   test("user stages reject ':'", () => {
     expect(isUserStage("live_sam")).toBe(true);
-    expect(isUserStage("local_sam")).toBe(true);
+    expect(isUserStage("dev_sam")).toBe(true);
     expect(isUserStage("prod")).toBe(true);
     expect(isUserStage("local:sam")).toBe(false);
-    expect(encodeStagePathSegment("local_sam")).toBe("local_sam");
+    expect(encodeStagePathSegment("dev_sam")).toBe("dev_sam");
   });
 
   test.effect("deploy/destroy default to live_${USER}", () =>
@@ -70,19 +70,19 @@ describe("default stages", () => {
     }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
   );
 
-  test.effect("alchemy dev defaults to local_${USER}", () =>
+  test.effect("alchemy dev defaults to dev_${USER}", () =>
     Effect.gen(function* () {
-      const [, selected] = yield* localStage.parse({
+      const [, selected] = yield* devStage.parse({
         arguments: [],
         flags: {},
       });
-      expect(selected).toBe("local_sam");
+      expect(selected).toBe("dev_sam");
     }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
   );
 
   test.effect("alchemy dev honors --stage", () =>
     Effect.gen(function* () {
-      const [, selected] = yield* localStage.parse({
+      const [, selected] = yield* devStage.parse({
         arguments: [],
         flags: { stage: ["prod"] },
       });
@@ -92,7 +92,7 @@ describe("default stages", () => {
 
   test.effect("alchemy dev honors $STAGE", () =>
     Effect.gen(function* () {
-      const [, selected] = yield* localStage.parse({
+      const [, selected] = yield* devStage.parse({
         arguments: [],
         flags: {},
       });

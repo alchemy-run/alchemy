@@ -27,18 +27,18 @@ const invalidUserStage = (value: string) =>
     kind: "flag",
   });
 
-const defaultStage = (kind: "live" | "local") =>
+const defaultStage = (kind: "live" | "dev") =>
   USER.pipe(
     Effect.map((user) => `${kind}_${user}`),
     Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
   );
 
-const makeStageFlag = (kind: "live" | "local") =>
+const makeStageFlag = (kind: "live" | "dev") =>
   Flag.string("stage").pipe(
     Flag.withDescription(
       kind === "live"
         ? "Stage to target, defaults to live_${USER}"
-        : "Stage to target, defaults to local_${USER}",
+        : "Stage to target, defaults to dev_${USER}",
     ),
     Flag.optional,
     Flag.map(Option.getOrUndefined),
@@ -69,8 +69,8 @@ const makeStageFlag = (kind: "live" | "local") =>
 /** `--stage` for deploy / destroy / plan / logs / drift. Default: `live_$USER`. */
 export const stage = makeStageFlag("live");
 
-/** `--stage` for `alchemy dev`. Default: `local_$USER`. */
-export const localStage = makeStageFlag("local");
+/** `--stage` for `alchemy dev`. Default: `dev_$USER`. */
+export const devStage = makeStageFlag("dev");
 
 export const envFile = Flag.file("env-file").pipe(
   Flag.optional,

@@ -1,6 +1,6 @@
 ---
 title: Stages
-description: Stages are isolated instances of a Stack — live_sam, local_sam, staging, prod, pr-42 — each with their own state and physical names.
+description: Stages are isolated instances of a Stack — live_sam, dev_sam, staging, prod, pr-42 — each with their own state and physical names.
 sidebar:
   hidden: true
 ---
@@ -14,10 +14,11 @@ dedicated environment — all from one program.
 ## The default stage
 
 If you don't pass `--stage`, **`alchemy deploy`** uses **`live_$USER`**
-(e.g. `live_sam`) and **`alchemy dev`** uses **`local_$USER`** (e.g.
-`local_sam`). Each developer gets a personal cloud sandbox and a
-separate local-dev sandbox without any config — so a bare `alchemy dev`
-cannot replace resources you deployed.
+(e.g. `live_sam`) and **`alchemy dev`** uses **`dev_$USER`** (e.g.
+`dev_sam`). Each developer gets a personal cloud sandbox and a
+separate local-dev sandbox without any config — so a bare `alchemy
+dev` cannot replace resources you deployed. Existing default `alchemy
+dev` stacks keep the `dev_$USER` name.
 
 ```sh
 $ whoami
@@ -27,9 +28,9 @@ $ alchemy deploy
 # deploys to stage `live_sam`
 
 $ alchemy dev
-# emulates locally as stage `local_sam`
+# emulates locally as stage `dev_sam`
 
-$ alchemy destroy --stage local_sam
+$ alchemy destroy --stage dev_sam
 # tears down the local-dev stage
 ```
 
@@ -42,15 +43,15 @@ The resolution order is:
 1. `--stage <name>` flag
 2. `$STAGE` environment variable
 3. `live_${USER}` for deploy / destroy / plan / logs / drift
-   (`local_${USER}` for `alchemy dev`)
-4. `live_unknown` / `local_unknown` if no user is set
+   (`dev_${USER}` for `alchemy dev`)
+4. `live_unknown` / `dev_unknown` if no user is set
 
 ## Common stage patterns
 
 | Stage             | Purpose                                              |
 | ----------------- | ---------------------------------------------------- |
 | `live_<user>`     | Per-developer cloud sandbox (`alchemy deploy` default) |
-| `local_<user>`    | Per-developer local-dev sandbox (`alchemy dev` default) |
+| `dev_<user>`      | Per-developer local-dev sandbox (`alchemy dev` default) |
 | `pr-<n>`          | Per-pull-request preview environment                 |
 | `staging`         | Shared pre-production                                |
 | `prod`            | Production                                           |

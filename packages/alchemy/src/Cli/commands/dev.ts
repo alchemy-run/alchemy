@@ -14,7 +14,7 @@ import {
   configPath,
   envFile,
   force,
-  localStage,
+  devStage,
   optionalConfig,
   profile,
   resolveConfig,
@@ -40,7 +40,7 @@ export const devCommand = Command.make(
     config: optionalConfig,
     configPath,
     envFile,
-    stage: localStage,
+    stage: devStage,
     profile,
   },
   Effect.fn(

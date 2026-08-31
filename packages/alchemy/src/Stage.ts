@@ -4,7 +4,7 @@ export class Stage extends Context.Service<Stage, string>()("Stage") {}
 
 /**
  * User-chosen stages (`--stage`, `$STAGE`, and the per-command defaults
- * `live_$USER` / `local_$USER`). Must match `[a-z0-9]+([-_a-z0-9]+)*`.
+ * `live_$USER` / `dev_$USER`). Must match `[a-z0-9]+([-_a-z0-9]+)*`.
  */
 export const USER_STAGE_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
 
