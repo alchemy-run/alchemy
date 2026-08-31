@@ -170,32 +170,6 @@ prepend the endpoint name configured in GCP before connecting.
 `PostgresDefaultRole` exposes the same details, though `PostgresRole`
 remains the safer choice for applications.
 
-### Why these outputs exist
-
-PlanetScale returns the private host and service name through role
-responses, but both are shared by every role on a branch. Exposing
-them lets one Stack declare the endpoint and the workload together,
-instead of copying connection details from the dashboard into a second
-system. Alchemy deliberately does not synthesize private URLs: GCP
-needs the endpoint name you choose in addition to `privateHost`.
-
-### Verifying an AWS PrivateLink deployment
-
-The provider tests verify PlanetScale's field mapping. A full private
-network test needs an entitled PlanetScale Postgres database and AWS
-resources in the same region. A future opt-in integration test should:
-
-1. Deploy a `PostgresRole`, VPC, Interface `VpcEndpoint`, subnets, and
-   security group permitting TCP ports 5432 and 6432.
-2. Assert the endpoint's `serviceName` equals
-   `role.privateConnectionServiceName`, then resolve `role.privateHost`
-   from a Lambda or EC2 instance in the VPC.
-3. Run a database query through the private host on both ports and
-   confirm that the resolved address is private.
-
-Keep this behind `PLANETSCALE_AWS_PRIVATELINK_TEST=1`: it provisions
-real, billable AWS and PlanetScale infrastructure.
-
 ## Where next
 
 - [Migrations](/planetscale/data/migrations) — `migrations` and
