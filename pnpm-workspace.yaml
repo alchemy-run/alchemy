@@ -75,7 +75,7 @@ catalogs:
     toucan-js: 4.0.0
     unenv: ^2.0.0-rc.24
     vite: ^7.0.0 || ^8.0.0
-    workerd: 1.20260704.1
+    workerd: 1.20260831.1
     ws: ^8.21.0
     yauzl: ^3.4.0
   database:
@@ -187,3 +187,9 @@ minimumReleaseAgeExclude:
   - effect@4.0.0-rc.112
   - foldkit@0.148.2
   - '@solidjs/start@2.0.4'
+  - '@cloudflare/workerd-darwin-64@1.20260831.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20260831.1'
+  - '@cloudflare/workerd-linux-64@1.20260831.1'
+  - '@cloudflare/workerd-linux-arm64@1.20260831.1'
+  - '@cloudflare/workerd-windows-64@1.20260831.1'
+  - workerd@1.20260831.1
