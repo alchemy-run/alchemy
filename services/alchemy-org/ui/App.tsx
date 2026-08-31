@@ -65,6 +65,7 @@ import {
   GitMerge,
   GitPullRequestArrow,
   MessageSquare,
+  Pencil,
   Play,
   Square,
   SquareTerminal,
@@ -535,6 +536,63 @@ export const App = () => {
     { repo: string | undefined; name: string } | undefined
   >(undefined);
 
+  /** Display-name overrides — RENAME is a UI act; session/thread/pty
+   *  keys are identity and never change. Persisted locally, keyed
+   *  `session:<key>` / `thread:<id>` / `terminal:<session>\u001f<pty>`. */
+  const [names, setNames] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("alchemy-org:display-names") ?? "{}",
+      ) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem("alchemy-org:display-names", JSON.stringify(names));
+  }, [names]);
+  const displayName = (key: string, fallback: string) =>
+    names[key] ?? fallback;
+
+  const [renamePrompt, setRenamePrompt] = useState<
+    | {
+        what: "session" | "thread" | "terminal";
+        nameKey: string;
+        /** The default label — shown when the override is cleared. */
+        fallback: string;
+        value: string;
+      }
+    | undefined
+  >(undefined);
+
+  const startRename = (
+    what: "session" | "thread" | "terminal",
+    nameKey: string,
+    fallback: string,
+  ) =>
+    setRenamePrompt({
+      what,
+      nameKey,
+      fallback,
+      value: names[nameKey] ?? fallback,
+    });
+
+  const commitRename = () => {
+    if (renamePrompt === undefined) return;
+    const value = renamePrompt.value.trim();
+    setNames((current) => {
+      const next = { ...current };
+      // emptied or reverted to the default → drop the override
+      if (value.length === 0 || value === renamePrompt.fallback) {
+        delete next[renamePrompt.nameKey];
+      } else {
+        next[renamePrompt.nameKey] = value;
+      }
+      return next;
+    });
+    setRenamePrompt(undefined);
+  };
+
   /** A new SESSION under a connected repo — one sandbox MicroVM. The
    *  dialog opens with a generated name selected: type to replace it,
    *  or just press Enter to take it. */
@@ -926,6 +984,62 @@ export const App = () => {
           </form>
         </DialogContent>
       </Dialog>
+      {/* RENAME — a display-name override only; the underlying
+          session/thread/pty key is identity and never changes.
+          Clearing the field restores the default label. */}
+      <Dialog
+        open={renamePrompt !== undefined}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setRenamePrompt(undefined);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="max-w-sm">
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitRename();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Rename {renamePrompt?.what}</DialogTitle>
+              <DialogDescription>
+                Display name only — clear it to restore{" "}
+                <span className="font-mono">{renamePrompt?.fallback}</span>.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              autoFocus
+              value={renamePrompt?.value ?? ""}
+              onChange={(event) =>
+                setRenamePrompt((current) =>
+                  current === undefined
+                    ? current
+                    : { ...current, value: event.target.value },
+                )
+              }
+              onFocus={(event) => event.currentTarget.select()}
+              spellCheck={false}
+              autoComplete="off"
+              className="font-mono text-sm"
+              aria-label="Display name"
+            />
+            <DialogFooter showCloseButton={false}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRenamePrompt(undefined)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm">
+                Rename
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       {/* KILL-THREAD CONFIRMATION — deleting a thread purges its
           transcript (the session's machine survives; only the root
           thread owns it, and that tab has no ×). */}
@@ -1172,7 +1286,7 @@ export const App = () => {
                         />
                       )}
                       <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
-                        {group.label}
+                        {displayName(`session:${group.session}`, group.label)}
                       </span>
                       {!deleting.has(group.session) && (
                         <>
@@ -1246,6 +1360,18 @@ export const App = () => {
                         }}
                       >
                         <SquareTerminal /> New terminal
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() =>
+                          startRename(
+                            "session",
+                            `session:${group.session}`,
+                            group.label,
+                          )
+                        }
+                      >
+                        <Pencil /> Rename session…
                       </ContextMenuItem>
                       <ContextMenuSeparator />
                       {(group.status === "running" ||
@@ -1417,7 +1543,10 @@ export const App = () => {
                               )}
                             />
                             <span className="max-w-48 truncate">
-                              {tabTitle(tab.thread)}
+                              {displayName(
+                                `thread:${tab.thread.id}`,
+                                tabTitle(tab.thread),
+                              )}
                             </span>
                             {/* the ROOT thread owns the session's machine —
                                 the session delete is its only eraser */}
@@ -1446,7 +1575,11 @@ export const App = () => {
                                 : "border-transparent text-muted-foreground hover:text-foreground",
                             )}
                           >
-                            {">_"} {tab.nth + 1}
+                            {">_"}{" "}
+                            {displayName(
+                              `terminal:${session}\u001f${tab.ptyId}`,
+                              `${tab.nth + 1}`,
+                            )}
                             <span
                               role="button"
                               title="Kill terminal (the shell dies)"
@@ -1494,6 +1627,32 @@ export const App = () => {
                         >
                           Close all
                         </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {tab.kind === "thread" ? (
+                          <ContextMenuItem
+                            onSelect={() =>
+                              startRename(
+                                "thread",
+                                `thread:${tab.thread.id}`,
+                                tabTitle(tab.thread),
+                              )
+                            }
+                          >
+                            <Pencil /> Rename thread…
+                          </ContextMenuItem>
+                        ) : (
+                          <ContextMenuItem
+                            onSelect={() =>
+                              startRename(
+                                "terminal",
+                                `terminal:${session}\u001f${tab.ptyId}`,
+                                `${tab.nth + 1}`,
+                              )
+                            }
+                          >
+                            <Pencil /> Rename terminal…
+                          </ContextMenuItem>
+                        )}
                         <ContextMenuSeparator />
                         {tab.kind === "thread" ? (
                           tab.thread.key.includes("::") ? (
