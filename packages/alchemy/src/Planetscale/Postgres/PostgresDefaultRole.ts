@@ -62,7 +62,7 @@ export interface PostgresDefaultRoleAttributes {
   databaseName: string;
   /** Direct connection URL for the database (Redacted). */
   connectionUrl: Redacted.Redacted<string>;
-  /** Pooled connection URL via PgBouncer (Redacted). */
+  /** Pooled connection URL via PSBouncer (Redacted). */
   connectionUrlPooled: Redacted.Redacted<string>;
   /**
    * Private connection host or DNS zone for this branch, supplied by

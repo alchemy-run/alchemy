@@ -122,7 +122,7 @@ into consumers like [Cloudflare Hyperdrive](/cloudflare/data/hyperdrive):
 
 - `role.origin` — the **direct** connection (port 5432). Use it where
   the consumer does its own pooling, e.g. as a Hyperdrive origin.
-- `role.pooledOrigin` — the **pooled** connection via PgBouncer
+- `role.pooledOrigin` — the **pooled** connection via PSBouncer
   (port 6432). Use it where each request would otherwise open a fresh
   direct connection, e.g. Hyperdrive's local-dev origin.
 
@@ -161,7 +161,7 @@ const endpoint = yield* AWS.EC2.VpcEndpoint("postgres-private-link", {
 
 const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("private-db", {
   origin: { ...role.origin, host: role.privateHost }, // direct, port 5432
-  dev: { ...role.pooledOrigin, host: role.privateHost }, // PgBouncer, port 6432
+  dev: { ...role.pooledOrigin, host: role.privateHost }, // PSBouncer, port 6432
 });
 ```
 
