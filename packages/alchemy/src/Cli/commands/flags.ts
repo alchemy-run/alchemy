@@ -19,32 +19,43 @@ export const STAGE = Config.string("STAGE").pipe(
   Effect.map(Option.getOrUndefined),
 );
 
-export const stage = Flag.string("stage").pipe(
-  Flag.withSchema(
-    Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
-  ),
-  Flag.withDescription("Stage to deploy to, defaults to dev_${USER}"),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-  Flag.mapEffect(
-    Effect.fn(function* (stage) {
-      if (stage) return stage;
-      return yield* STAGE.pipe(
-        Effect.catch(() =>
-          Effect.fail(new CliError.MissingOption({ option: "stage" })),
-        ),
-        Effect.flatMap((configured) =>
-          configured === undefined
-            ? USER.pipe(
-                Effect.map((user) => `dev_${user}`),
-                Effect.catch(() => Effect.succeed("unknown")),
-              )
-            : Effect.succeed(configured),
-        ),
-      );
-    }),
-  ),
-);
+const makeStageFlag = (kind: "live" | "dev") =>
+  Flag.string("stage").pipe(
+    Flag.withSchema(
+      Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
+    ),
+    Flag.withDescription(
+      kind === "live"
+        ? "Stage to deploy to, defaults to live_${USER}"
+        : "Stage to use for dev, defaults to dev_${USER}",
+    ),
+    Flag.optional,
+    Flag.map(Option.getOrUndefined),
+    Flag.mapEffect(
+      Effect.fn(function* (stage) {
+        if (stage) return stage;
+        return yield* STAGE.pipe(
+          Effect.catch(() =>
+            Effect.fail(new CliError.MissingOption({ option: "stage" })),
+          ),
+          Effect.flatMap((configured) =>
+            configured === undefined
+              ? USER.pipe(
+                  Effect.map((user) => `${kind}_${user}`),
+                  Effect.catch(() => Effect.succeed("unknown")),
+                )
+              : Effect.succeed(configured),
+          ),
+        );
+      }),
+    ),
+  );
+
+/** `--stage` for deploy / destroy / plan / logs / drift. Default: `live_$USER`. */
+export const stage = makeStageFlag("live");
+
+/** `--stage` for `alchemy dev`. Default: `dev_$USER`. */
+export const devStage = makeStageFlag("dev");
 
 export const envFile = Flag.file("env-file").pipe(
   Flag.optional,

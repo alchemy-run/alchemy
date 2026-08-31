@@ -14,10 +14,10 @@ import {
   configPath,
   envFile,
   force,
+  devStage,
   optionalConfig,
   profile,
   resolveConfig,
-  stage,
 } from "./flags.ts";
 import { suppressInterruptMessages } from "./errors.ts";
 
@@ -40,7 +40,7 @@ export const devCommand = Command.make(
     config: optionalConfig,
     configPath,
     envFile,
-    stage,
+    stage: devStage,
     profile,
   },
   Effect.fn(
