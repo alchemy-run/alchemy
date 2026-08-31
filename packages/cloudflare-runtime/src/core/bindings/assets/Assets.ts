@@ -32,6 +32,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Plugin from "../../Plugin.ts";
+import { PluginContext, type BindingHook } from "../../PluginContext.ts";
+import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
+import type { RuntimeWorker } from "../../RuntimeWorker.ts";
+import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
+
 const AssetsKvWorker = {
   worker: () =>
     loadInternalWorker(
@@ -50,11 +57,6 @@ const RouterWorker = {
       "#cloudflare-runtime-core-worker/bindings/assets/router.worker",
     ),
 };
-import * as Plugin from "../../Plugin.ts";
-import { PluginContext, type BindingHook } from "../../PluginContext.ts";
-import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
-import type { RuntimeWorker } from "../../RuntimeWorker.ts";
-import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 
 export class Assets extends Plugin.Service<Assets, { isConfigured: boolean }>()(
   "cloudflare-runtime/plugin/Assets",
@@ -312,9 +314,7 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:worker",
               worker: {
-                compatibilityDate: "2026-07-04",
-                // enable_ctx_exports is default-on since 2025-11-17; listing it
-                // explicitly is a workerd config error for later compat dates.
+                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
                 compatibilityFlags: ["nodejs_compat"],
                 bindings: [
                   {
@@ -340,7 +340,7 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:router",
               worker: {
-                compatibilityDate: "2026-07-04",
+                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
                 compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
                 bindings: [
                   {

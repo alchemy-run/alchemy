@@ -1,5 +1,6 @@
 import * as Floci from "@alchemy.run/floci";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
@@ -18,10 +19,10 @@ import { ExecStackOptions } from "./deploy.ts";
  * reads its trusted certificates from `NODE_EXTRA_CA_CERTS` at runtime init, so
  * this must be present in the env of every spawned child (the exec worker, the
  * RPC sidecar, and the workerd instances they start). `ensureFloci` refreshes
- * the bundle at this stable path; never clobber a value the caller set.
+ * the bundle at this stable path (and sets the variable itself once written);
+ * never clobber a value the caller set, and don't point at a missing file —
+ * Node/Bun warn about it on every startup.
  */
-const NODE_EXTRA_CA_CERTS =
-  process.env.NODE_EXTRA_CA_CERTS ?? Floci.FLOCI_CA_PATH;
 
 export const devCommand = Command.make(
   "dev",
@@ -39,10 +40,14 @@ export const devCommand = Command.make(
         yes: true,
         dev: true,
       });
+
+      const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
       // child below.
-      process.env.NODE_EXTRA_CA_CERTS = NODE_EXTRA_CA_CERTS;
+      if (yield* fs.exists(Floci.FLOCI_CA_PATH)) {
+        process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
+      }
       const spawner = yield* RpcSpawner.RpcSpawner;
       // We no longer force Bun in development because this prevents us from testing in Node.
       const command =
@@ -70,7 +75,9 @@ export const devCommand = Command.make(
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
           ALCHEMY_DEV: "true",
-          NODE_EXTRA_CA_CERTS,
+          ...(process.env.NODE_EXTRA_CA_CERTS
+            ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }
+            : {}),
           [SPAWNER_URL_ENV_KEY]: spawner.url,
         },
         extendEnv: true,

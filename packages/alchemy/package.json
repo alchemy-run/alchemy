@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.74",
+  "version": "2.0.0-beta.76",
   "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -37,7 +37,7 @@
     "generate:eval-runtime": "bun scripts/generate-eval-effect-runtime.ts",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
-    "test": "alchemy-test",
+    "test": "alchemy-test --exclude test/Railway",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
     "nuke": "cd ../../ && bun nuke"
   },

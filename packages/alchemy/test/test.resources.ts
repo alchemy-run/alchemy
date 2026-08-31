@@ -1,6 +1,7 @@
 import { Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { Artifacts } from "@/Artifacts";
+import * as Binding from "@/Binding.ts";
 import { isResolved } from "@/Diff.ts";
 import * as ProviderLayer from "@/Dev/ProviderLayer.ts";
 import * as Provider from "@/Provider.ts";
@@ -1287,7 +1288,45 @@ export const modalResourceProvider = () =>
   ProviderLayer.dual(ModalResource, {
     live: () => modalVariant("live"),
     local: () => modalVariant("local"),
+    dataPlane: () => modalLocalDataPlane,
+    liveDataPlane: () => modalLiveDataPlane,
   });
+
+/**
+ * Which data-plane override a deploy-time binding client ran under.
+ * The local/live layers below stamp this; ambient (no wrap) is `"ambient"`.
+ */
+export class DataPlaneTag extends Context.Service<
+  DataPlaneTag,
+  "local" | "live"
+>()("Test.DataPlaneTag") {}
+
+export const modalLocalDataPlane = Layer.succeed(DataPlaneTag, "local");
+export const modalLiveDataPlane = Layer.succeed(DataPlaneTag, "live");
+
+/**
+ * Deploy-time binding used to pin Binding client routing: the returned
+ * client reads {@link DataPlaneTag}, which is only in context when the wrap
+ * provided the matching plane layer closest.
+ */
+export interface ProbeBinding extends Binding.Service<
+  ProbeBinding,
+  "Test.ProbeBinding",
+  (
+    resource: ModalResource | readonly ModalResource[],
+  ) => Effect.Effect<() => Effect.Effect<"local" | "live" | "ambient">>
+> {}
+export const ProbeBinding = Binding.Service<ProbeBinding>("Test.ProbeBinding");
+
+export const ProbeBindingLive = Layer.succeed(
+  ProbeBinding,
+  Effect.fn(function* (_resource: ModalResource | readonly ModalResource[]) {
+    return () =>
+      Effect.serviceOption(DataPlaneTag).pipe(
+        Effect.map((opt) => (Option.isSome(opt) ? opt.value : "ambient")),
+      );
+  }),
+);
 
 // Layers
 export const TestLayers = () =>
@@ -1309,6 +1348,7 @@ export const TestLayers = () =>
     deleteFirstResourceProvider(),
     driftResourceProvider(),
     modalResourceProvider(),
+    ProbeBindingLive,
   );
 
 export const InMemoryTestLayers = () =>

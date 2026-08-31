@@ -429,6 +429,22 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
+/** Companion deploy keys are not stack resources — delete must be idempotent. */
+const deleteDeployKey = (id: number | undefined) =>
+  id === undefined
+    ? Effect.void
+    : Services.sshKeys.deleteSshKey({ id }).pipe(
+        Effect.retry({
+          while: (e) =>
+            retryable(e) ||
+            e._tag === "UnprocessableEntity" ||
+            e._tag === "Conflict",
+          times: 8,
+          schedule: backoff,
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
+
 const createServerName = (
   id: string,
   name: string | undefined,
@@ -1031,6 +1047,12 @@ export const ServerProvider = () =>
               times: 8,
             }),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            // The deploy key is a side-effect, not a stack resource. If
+            // createServer fails after minting it (quota skip, timeout),
+            // nothing is persisted for Server.delete to clean up.
+            Effect.tapError(() =>
+              deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore),
+            ),
           );
         if (created !== undefined) {
           if (created.action) {
@@ -1162,10 +1184,6 @@ export const ServerProvider = () =>
         yield* waitUntilGone(current.id);
       }
 
-      if (output.deploySshKeyId !== undefined) {
-        yield* Services.sshKeys
-          .deleteSshKey({ id: output.deploySshKeyId })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }
+      yield* deleteDeployKey(output.deploySshKeyId);
     }),
   });

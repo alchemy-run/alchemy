@@ -51,6 +51,8 @@ export class Docker extends Context.Service<
         "health-start-interval": string | undefined;
         "stop-timeout": string | undefined;
         p: Array<string> | undefined;
+        /** `--add-host` entries, each `hostname:address`. */
+        "add-host"?: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
         context?: string;
@@ -397,6 +399,7 @@ export declare namespace Docker {
         Array<{ HostIp: string; HostPort: string }> | null
       > | null;
       Binds: string[] | null;
+      ExtraHosts: string[] | null;
       RestartPolicy: {
         Name: string;
         MaximumRetryCount: number;

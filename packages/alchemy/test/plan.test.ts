@@ -39,6 +39,7 @@ import {
   ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
+  ProbeBinding,
   Queue,
   TestLayers,
   TestResource,
@@ -4286,6 +4287,82 @@ describe("provider modes (local ⇄ live)", () => {
       const same = yield* inDev(makePlan(program));
       expect(same.resources.A).toMatchObject({ action: "noop" });
       expect(same.resources.B).toMatchObject({ action: "noop" });
+    }),
+  );
+});
+
+describe("binding client data-plane routing (plan)", () => {
+  // Binding.Service wraps deploy-time clients so they hit the plane the
+  // bound resource actually lives on. In a `dev` run ambient is the
+  // emulator; `Alchemy.remote()` must still wrap with the live layer (the
+  // inverse of the local wrap). Plan-time `yield* client()` is the same
+  // routing `Service.execute` uses.
+
+  test(
+    "in a dev run, a local resource's binding client hits the emulator plane",
+    Effect.gen(function* () {
+      const plan = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            const a = yield* ModalResource("A", { value: "v1" });
+            const read = yield* ProbeBinding(a);
+            return yield* read();
+          }),
+        ),
+      );
+      expect(plan.output).toBe("local");
+    }),
+  );
+
+  test(
+    "in a dev run, a remote() resource's binding client hits the live plane",
+    Effect.gen(function* () {
+      const plan = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            const a = yield* ModalResource("A", { value: "v1" }).pipe(remote());
+            const read = yield* ProbeBinding(a);
+            return yield* read();
+          }),
+        ),
+      );
+      expect(plan.output).toBe("live");
+    }),
+  );
+
+  test(
+    "a live-mode run wraps remote/live clients with the live plane (not ambient)",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          const a = yield* ModalResource("A", { value: "v1" });
+          const read = yield* ProbeBinding(a);
+          return yield* read();
+        }),
+      );
+      expect(plan.output).toBe("live");
+    }),
+  );
+
+  test(
+    "a binding spanning local and remote() resources dies",
+    Effect.gen(function* () {
+      const exit = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            const local = yield* ModalResource("A", { value: "v1" });
+            const live = yield* ModalResource("B", { value: "v1" }).pipe(
+              remote(),
+            );
+            const read = yield* ProbeBinding([local, live]);
+            return yield* read();
+          }),
+        ),
+      ).pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(String(Cause.squash(exit.cause))).toContain("mixed data planes");
+      }
     }),
   );
 });

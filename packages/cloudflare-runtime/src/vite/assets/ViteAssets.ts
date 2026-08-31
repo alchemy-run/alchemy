@@ -2,6 +2,7 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../core/internal/internal-worker.ts";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
+import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../core/internal/constants.ts";
 import * as Loopback from "../../core/globals/Loopback.ts";
 import { PluginContext } from "../../core/PluginContext.ts";
 import * as Effect from "effect/Effect";
@@ -76,9 +77,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
               {
                 name: "assets:worker",
                 worker: {
-                  compatibilityDate: "2026-07-04",
-                  // enable_ctx_exports is default-on since 2025-11-17; listing
-                  // it explicitly is a workerd config error for later dates.
+                  compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
                   compatibilityFlags: ["nodejs_compat"],
                   bindings: [
                     {
@@ -108,7 +107,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
               {
                 name: "assets:router",
                 worker: {
-                  compatibilityDate: "2026-07-04",
+                  compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
                   compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
                   bindings: [
                     {
