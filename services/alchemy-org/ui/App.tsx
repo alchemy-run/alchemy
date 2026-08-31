@@ -712,9 +712,7 @@ export const App = () => {
     }
   };
 
-  /** The thread tab awaiting kill confirmation (the dialog's subject).
-   *  The session's ROOT thread never offers a × — the session delete
-   *  is its eraser. */
+  /** The thread tab awaiting kill confirmation (the dialog's subject). */
   const [confirmKillThread, setConfirmKillThread] = useState<
     BoardThread | undefined
   >(undefined);
@@ -722,8 +720,9 @@ export const App = () => {
   const killThreadConfirmRef = useRef<HTMLButtonElement>(null);
 
   /** The thread tab's ×, once confirmed: delete the thread (transcript
-   *  and directory row) and land on a sibling tab. The shared machine
-   *  survives — only the session's root thread owns it. */
+   *  and directory row) and land on a sibling tab. No thread is
+   *  special — the server terminates the shared machine only when the
+   *  deleted thread was the session's last. */
   const killThread = (thread: BoardThread) => {
     setConfirmKillThread(undefined);
     const id = thread.id;
@@ -736,7 +735,6 @@ export const App = () => {
       return rest;
     });
     if (codeId === id && session !== undefined) {
-      // the root thread is unkillable, so a sibling always exists
       const sibling = threads.find(
         (row) => row.id !== id && sessionOfId(row.id) === session,
       );
@@ -763,21 +761,19 @@ export const App = () => {
   const closeTabsConfirmRef = useRef<HTMLButtonElement>(null);
 
   /** Request a bulk tab close: terminal-only closes run immediately;
-   *  anything deleting thread transcripts asks first. The root thread
-   *  is never closable (it owns the session's machine). */
+   *  anything deleting thread transcripts asks first. */
   const requestCloseTabs = (
     session: string,
     threadRows: ReadonlyArray<BoardThread>,
     ptyIds: ReadonlyArray<string>,
   ) => {
-    const closable = threadRows.filter((row) => row.key.includes("::"));
-    if (closable.length === 0) {
+    if (threadRows.length === 0) {
       killTerminals(session, ptyIds);
       return;
     }
     setConfirmCloseTabs({
       session,
-      threads: closable,
+      threads: [...threadRows],
       terminals: [...ptyIds],
     });
   };
@@ -802,18 +798,22 @@ export const App = () => {
       return rest;
     });
     if (codeId !== undefined && ids.has(codeId)) {
-      // the root thread is unclosable, so a sibling always survives
       const sibling = threads.find(
         (row) => !ids.has(row.id) && sessionOfId(row.id) === input.session,
       );
       if (sibling !== undefined) open(sibling.id);
       else closeCode();
     }
-    for (const id of ids) {
-      void fetch(`/api/chats/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      }).catch(() => {});
-    }
+    // SEQUENTIAL: the server terminates the shared machine on the
+    // delete that empties the session — parallel deletes would race
+    // the directory query that decides which one that is
+    void (async () => {
+      for (const id of ids) {
+        await fetch(`/api/chats/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }).catch(() => {});
+      }
+    })();
   };
 
   /** The session awaiting delete confirmation (the dialog's subject). */
@@ -848,11 +848,13 @@ export const App = () => {
       return rest;
     });
     if (sessionOfId(codeId) === group.session) closeCode();
-    await Promise.allSettled(
-      [...ids].map((id) =>
-        fetch(`/api/chats/${encodeURIComponent(id)}`, { method: "DELETE" }),
-      ),
-    );
+    // SEQUENTIAL: the delete that empties the session terminates the
+    // machine — parallel deletes would race the directory query
+    for (const id of ids) {
+      await fetch(`/api/chats/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }).catch(() => {});
+    }
     setThreads((current) => current.filter((thread) => !ids.has(thread.id)));
     setDeleting((current) => {
       const next = new Set(current);
@@ -1041,8 +1043,8 @@ export const App = () => {
         </DialogContent>
       </Dialog>
       {/* KILL-THREAD CONFIRMATION — deleting a thread purges its
-          transcript (the session's machine survives; only the root
-          thread owns it, and that tab has no ×). */}
+          transcript. The shared machine survives unless this is the
+          session's last thread — then the machine dies with it. */}
       <Dialog
         open={confirmKillThread !== undefined}
         onOpenChange={(isOpen) => {
@@ -1066,8 +1068,15 @@ export const App = () => {
                   <span className="font-mono text-foreground">
                     {threadTitle(confirmKillThread)}
                   </span>{" "}
-                  — its transcript will be permanently deleted. The
-                  session and its machine stay.
+                  — its transcript will be permanently deleted.{" "}
+                  {threads.some(
+                    (row) =>
+                      row.id !== confirmKillThread.id &&
+                      sessionOfId(row.id) ===
+                        sessionOfId(confirmKillThread.id),
+                  )
+                    ? "The session and its machine stay."
+                    : "It is the session's last thread — the session and its machine go with it."}
                 </>
               )}
             </DialogDescription>
@@ -1548,21 +1557,17 @@ export const App = () => {
                                 tabTitle(tab.thread),
                               )}
                             </span>
-                            {/* the ROOT thread owns the session's machine —
-                                the session delete is its only eraser */}
-                            {tab.thread.key.includes("::") && (
-                              <span
-                                role="button"
-                                title="Delete thread"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setConfirmKillThread(tab.thread);
-                                }}
-                                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
-                              >
-                                <X className="size-3" />
-                              </span>
-                            )}
+                            <span
+                              role="button"
+                              title="Delete thread"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setConfirmKillThread(tab.thread);
+                              }}
+                              className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
+                            >
+                              <X className="size-3" />
+                            </span>
                           </button>
                         ) : (
                           <button
@@ -1655,18 +1660,12 @@ export const App = () => {
                         )}
                         <ContextMenuSeparator />
                         {tab.kind === "thread" ? (
-                          tab.thread.key.includes("::") ? (
-                            <ContextMenuItem
-                              variant="destructive"
-                              onSelect={() => setConfirmKillThread(tab.thread)}
-                            >
-                              <Trash2 /> Delete thread
-                            </ContextMenuItem>
-                          ) : (
-                            <ContextMenuItem disabled>
-                              <Trash2 /> Root thread — delete the session
-                            </ContextMenuItem>
-                          )
+                          <ContextMenuItem
+                            variant="destructive"
+                            onSelect={() => setConfirmKillThread(tab.thread)}
+                          >
+                            <Trash2 /> Delete thread
+                          </ContextMenuItem>
                         ) : (
                           <ContextMenuItem
                             variant="destructive"

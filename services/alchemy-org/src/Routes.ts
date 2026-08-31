@@ -328,7 +328,10 @@ export const routes = Effect.gen(function* () {
   );
 
   /** The operator's eraser: stop the session, purge its transcript,
-   *  drop it from the directory. Idempotent. */
+   *  drop it from the directory. Idempotent. The MACHINE dies with the
+   *  last thread of its group — no thread is special: deleting any
+   *  thread while siblings remain leaves their shared machine alone;
+   *  the one that empties the group carries the teardown. */
   const removeSession = HttpRouter.add(
     "DELETE",
     "/api/chats/:id",
@@ -336,8 +339,21 @@ export const routes = Effect.gen(function* () {
       const params = yield* HttpRouter.params;
       const id = decodeURIComponent(String(params.id ?? ""));
       const { term, key } = parseSessionId(id);
+      // thread keys are `<session>` or `<session>::<thread>` — the
+      // session part names the machine (Worker.ts's machineKey)
+      const machineOf = (threadKey: string): string => {
+        const at = threadKey.indexOf("::");
+        return at < 0 ? threadKey : threadKey.slice(0, at);
+      };
+      const rows = yield* sessions.list();
+      const siblings = rows.filter(
+        (row) =>
+          row.term === term &&
+          row.key !== key &&
+          machineOf(row.key) === machineOf(key),
+      );
       yield* sessions
-        .remove(term, key)
+        .remove(term, key, { machine: siblings.length === 0 })
         .pipe(Effect.provide(RuntimeContext.phantom));
       return yield* HttpServerResponse.json({ removed: id });
     }),

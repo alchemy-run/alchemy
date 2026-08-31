@@ -197,8 +197,12 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   /** Reopen a settled session (the operator's undo for `stop`). */
   readonly resume: () => Effect.Effect<void, unknown, RuntimeContext>;
-  /** Erase this session: settle, detach views, purge storage. */
-  readonly destroy: () => Effect.Effect<void, unknown, RuntimeContext>;
+  /** Erase this session: settle, detach views, purge storage.
+   *  `machine` (default true) also terminates the session's sandbox
+   *  machine — pass false when sibling threads still share it. */
+  readonly destroy: (
+    machine?: boolean,
+  ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly alarm: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** The live-view seam: WebSocket attach + the session-socket frames. */
   readonly fetch: HttpEffect<DurableObjectState | RuntimeContext>;
@@ -801,7 +805,7 @@ export const DurableObjectHost: Layer.Layer<
            * name admits a FRESH session over empty storage instead of
            * finding a settled tombstone.
            */
-          destroy: () =>
+          destroy: (machine = true) =>
             Effect.gen(function* () {
               // settle is BEST-EFFORT and NON-ADMITTING: admitting runs
               // the charter's per-session INIT, whose side effects
@@ -824,8 +828,13 @@ export const DurableObjectHost: Layer.Layer<
               for (const socket of yield* state.getWebSockets()) {
                 yield* Effect.ignore(socket.close(1000, "session removed"));
               }
-              // a removed session's machine is terminated, not idled out
-              yield* machineLifecycle("destroy");
+              // a removed session's machine is terminated, not idled
+              // out — unless sibling threads still share it (the
+              // caller's directory decides; the last one out carries
+              // the teardown)
+              if (machine) {
+                yield* machineLifecycle("destroy");
+              }
               yield* storage.deleteAlarm();
               yield* storage.deleteAll();
               engineRef = undefined;
@@ -956,11 +965,11 @@ export const DurableObjectHost: Layer.Layer<
             .getByName(sessionName(term, key))
             .resume()
             .pipe(Effect.orDie, Effect.asVoid),
-        remove: (term, key) =>
+        remove: (term, key, options) =>
           Effect.gen(function* () {
             yield* sessions
               .getByName(sessionName(term, key))
-              .destroy()
+              .destroy(options?.machine ?? true)
               .pipe(Effect.orDie);
             yield* Option.match(sessionIndex, {
               onNone: () => Effect.void,

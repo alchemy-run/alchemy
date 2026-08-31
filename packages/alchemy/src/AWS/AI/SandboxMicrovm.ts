@@ -462,21 +462,24 @@ export const SandboxMicrovmSession = (
             }),
           ),
           /**
-           * Terminate the session's machine on remove — machine OWNER
-           * only: deleting one `::thread` of a session must not kill
-           * the machine its siblings share. The CACHED id is
-           * authoritative when this isolate knows the machine — a
-           * just-suspended VM is INVISIBLE to `RunMicrovm`'s
-           * clientToken reattach (it only matches running instances),
-           * so a blind reattach would mint a fresh machine, terminate
-           * that, and leak the suspended one. Only a cold isolate
-           * (no cache) falls back to the reattach: it finds the live
-           * machine, or pays one throwaway launch — the price of
-           * guaranteeing "removed session ⇒ no machine".
+           * Terminate the session's machine on remove. WHETHER to
+           * terminate is the caller's call, not this layer's: the
+           * driver only invokes `destroy` for the LAST thread of the
+           * machine group (`Sessions.remove`'s `machine` flag, decided
+           * against the caller's directory) — deleting one `::thread`
+           * of a session while siblings live never reaches here. The
+           * CACHED id is authoritative when this isolate knows the
+           * machine — a just-suspended VM is INVISIBLE to
+           * `RunMicrovm`'s clientToken reattach (it only matches
+           * running instances), so a blind reattach would mint a
+           * fresh machine, terminate that, and leak the suspended
+           * one. Only a cold isolate (no cache) falls back to the
+           * reattach: it finds the live machine, or pays one
+           * throwaway launch — the price of guaranteeing "removed
+           * session ⇒ no machine".
            */
-          destroy: withMachine(({ token, owner }) =>
+          destroy: withMachine(({ token }) =>
             Effect.gen(function* () {
-              if (!owner) return;
               const launched = vms.get(token);
               const vm =
                 launched !== undefined

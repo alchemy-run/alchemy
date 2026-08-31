@@ -73,10 +73,18 @@ export class Sessions extends Context.Service<
      * (its `ThreadStorage` rows), its clock, and its index row. After
      * `remove` the session no longer lists and its history is gone.
      * Idempotent.
+     *
+     * `options.machine` controls the shared machine's fate: `true`
+     * (the default) also terminates the session's sandbox machine —
+     * "removed session ⇒ no machine". Pass `false` when sibling
+     * threads still share the machine (the caller consults its
+     * directory); the machine then lives on for them, and the
+     * platform's idle policy reaps it if everyone is gone.
      */
     readonly remove: (
       term: string,
       key: string,
+      options?: { readonly machine?: boolean },
     ) => Effect.Effect<void, never, RuntimeContext>;
   }
 >()("alchemy/AI/Sessions") {}
