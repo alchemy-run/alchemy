@@ -98,19 +98,26 @@ const makeFakeRequest = (overrides: {
   protocol?: string;
 }): NodeHttp.IncomingMessage => {
   const readable = Readable.from([]);
+  const headers: NodeHttp.IncomingHttpHeaders = {
+    host: overrides.host,
+    upgrade: "websocket",
+    connection: "Upgrade",
+    "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+    "sec-websocket-version": "13",
+    ...(overrides.protocol
+      ? { "sec-websocket-protocol": overrides.protocol }
+      : {}),
+  };
   return Object.assign(readable, {
     url: overrides.url ?? "/",
     method: "GET",
-    headers: {
-      host: overrides.host,
-      upgrade: "websocket",
-      connection: "Upgrade",
-      "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-      "sec-websocket-version": "13",
-      ...(overrides.protocol
-        ? { "sec-websocket-protocol": overrides.protocol }
-        : {}),
-    },
+    headers,
+    // Real IncomingMessages always carry rawHeaders; the proxy relays
+    // them verbatim, so the fake must provide the [name, value, ...] form.
+    rawHeaders: Object.entries(headers).flatMap(([name, value]) => [
+      name,
+      value as string,
+    ]),
   }) as unknown as NodeHttp.IncomingMessage;
 };
 
