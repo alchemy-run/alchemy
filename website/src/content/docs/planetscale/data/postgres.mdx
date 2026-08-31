@@ -148,7 +148,6 @@ an Interface VPC endpoint. With private DNS enabled, use
 
 ```typescript
 import * as AWS from "alchemy/AWS";
-import * as Cloudflare from "alchemy/Cloudflare";
 
 const endpoint = yield* AWS.EC2.VpcEndpoint("postgres-private-link", {
   vpcId: vpc.vpcId,
@@ -157,11 +156,6 @@ const endpoint = yield* AWS.EC2.VpcEndpoint("postgres-private-link", {
   subnetIds: [privateSubnet.subnetId],
   securityGroupIds: [databaseSecurityGroup.groupId],
   privateDnsEnabled: true,
-});
-
-const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("private-db", {
-  origin: { ...role.origin, host: role.privateHost }, // direct, port 5432
-  dev: { ...role.pooledOrigin, host: role.privateHost }, // PSBouncer, port 6432
 });
 ```
 
