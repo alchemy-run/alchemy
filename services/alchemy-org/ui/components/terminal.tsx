@@ -75,6 +75,11 @@ export const GhosttyTerminal = ({
   const activeRef = useRef(active);
   activeRef.current = active;
   const [phase, setPhase] = useState<Phase>("connecting");
+  // read inside socket handlers without re-subscribing the effect
+  const phaseRef = useRef<Phase>("connecting");
+  phaseRef.current = phase;
+  // the guarded focus-stealer, rebound by the socket effect
+  const takeFocusRef = useRef<() => void>(() => {});
   const [statusMessage, setStatusMessage] = useState(
     "starting the session's machine",
   );
@@ -103,6 +108,31 @@ export const GhosttyTerminal = ({
         socket.send(JSON.stringify({ t: "close" }));
       }
     });
+
+    /** Steal focus only when it would not interrupt the operator:
+     *  focus is free (body), already ours, or parked on a plain
+     *  button — the + menu trigger or a tab. The machine can take
+     *  seconds to spin up; if the operator moved to a text surface
+     *  (chat input, rename dialog) in the meantime, they keep it. */
+    const canTakeFocus = () => {
+      const focused = document.activeElement;
+      if (focused === null || focused === document.body) return true;
+      if (container.contains(focused)) return true;
+      return (
+        focused instanceof HTMLElement && focused.tagName === "BUTTON"
+      );
+    };
+    const takeFocus = () => {
+      if (disposed || killed || !activeRef.current) return;
+      if (!canTakeFocus()) return;
+      terminal?.focus();
+      // ghostty's focus() targets the canvas parent; fall back to the
+      // host div (contenteditable) if it didn't take
+      if (!container.contains(document.activeElement)) {
+        container.focus();
+      }
+    };
+    takeFocusRef.current = takeFocus;
 
     const clearSlow = () => {
       if (slowTimer !== undefined) clearTimeout(slowTimer);
@@ -156,7 +186,10 @@ export const GhosttyTerminal = ({
           }
           return;
         }
-        // output = the machine is ALIVE
+        // output = the machine is ALIVE — the moment typing becomes
+        // meaningful; re-assert focus (guarded) in case the boot was
+        // slow and nothing else claimed it
+        if (phaseRef.current !== "live") takeFocus();
         setPhase("live");
         clearSlow();
         terminal.write(new Uint8Array(event.data as ArrayBuffer));
@@ -198,8 +231,10 @@ export const GhosttyTerminal = ({
       fit.observeResize();
       // a new tab mounts active — take focus as soon as the terminal
       // exists (menus that spawned the tab must not keep it; see the
-      // onCloseAutoFocus preventDefault on their Content)
-      if (activeRef.current) term.focus();
+      // onCloseAutoFocus preventDefault on their Content). The retry
+      // outruns any focus juggling still pending from the menu close.
+      takeFocus();
+      setTimeout(takeFocus, 0);
 
       term.onData((data) => {
         if (socket?.readyState === WebSocket.OPEN) {
@@ -369,7 +404,7 @@ export const GhosttyTerminal = ({
   }, [sessionId, ptyId]);
 
   useEffect(() => {
-    if (active) terminalRef.current?.focus();
+    if (active) takeFocusRef.current();
   }, [active]);
 
   return (
