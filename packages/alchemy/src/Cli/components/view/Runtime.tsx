@@ -413,7 +413,7 @@ export const makeRuntime = (
       const parts = `${buffers[stream]}${data}`.split(/\r?\n/);
       buffers[stream] = parts.pop() ?? "";
       for (const line of parts) {
-        store.appendStatic(<AnsiText>{line || " "}</AnsiText>);
+        store.appendStatic(<AnsiText wrap="none">{line || " "}</AnsiText>);
       }
     };
     const sigil = render(
@@ -447,7 +447,7 @@ export const makeRuntime = (
         ? () => {
             for (const stream of ["stdout", "stderr"] as const) {
               if (buffers[stream] !== "") {
-                store.appendStatic(<Text>{buffers[stream]}</Text>);
+                store.appendStatic(<Text wrap="none">{buffers[stream]}</Text>);
                 buffers[stream] = "";
               }
             }

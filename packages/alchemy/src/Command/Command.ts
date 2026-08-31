@@ -385,8 +385,16 @@ export const CommandExecutorLive = () =>
             const execution = Effect.all(
               {
                 exitCode: child.exitCode,
-                stdout: collect(child.stdout, session.note, redactor),
-                stderr: collect(child.stderr, session.note, redactor),
+                stdout: collect(
+                  child.stdout,
+                  (line) => session.note(line, { kind: "output" }),
+                  redactor,
+                ),
+                stderr: collect(
+                  child.stderr,
+                  (line) => session.note(line, { kind: "output" }),
+                  redactor,
+                ),
               },
               { concurrency: "unbounded" },
             ).pipe(mapError(props));

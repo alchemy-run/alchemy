@@ -463,7 +463,7 @@ export const uploadAssets = Effect.fn(function* (
   // stopped, and a fresh session with nothing left to upload returns
   // the completion JWT directly.
   const runSession = Effect.fn(function* () {
-    yield* note("Checking assets...");
+    yield* note("Checking assets...", { kind: "status" });
     const session = dispatchNamespace
       ? yield* wfp.createDispatchNamespaceScriptAssetUpload({
           accountId,

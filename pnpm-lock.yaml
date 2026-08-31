@@ -5344,8 +5344,8 @@ importers:
         specifier: workspace:*
         version: link:../node-utils
       '@alchemy.run/sigil':
-        specifier: 0.0.0-alpha.5
-        version: 0.0.0-alpha.5(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)
+        specifier: 0.0.0-alpha.6
+        version: 0.0.0-alpha.6(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)
       '@aws-sdk/credential-providers':
         specifier: catalog:aws
         version: 3.1095.0
@@ -6060,8 +6060,8 @@ packages:
   '@actions/io@1.1.3':
     resolution: {integrity: sha512-wi9JjgKLYS7U/z8PPbco+PvTb/nRWjeoFlJ1Qer83k/3C5PHQi28hiVdeE2kHXmIL99mQFawx8qt/JPjZilJ8Q==}
 
-  '@alchemy.run/sigil@0.0.0-alpha.5':
-    resolution: {integrity: sha512-meY3ccl6PO2Hw4bbhTwmdQHTJJ22b2KXey+U6HDotHGNMeyDi5Vu5d4O44vbqOONNRzpTg8AQCaqXgA5RcuAgw==}
+  '@alchemy.run/sigil@0.0.0-alpha.6':
+    resolution: {integrity: sha512-kbFZCNxVv1rIkuJcq23hELB3aF63zZDKMgrBLRzOtVaweAJ2ZCEKfRqC1iWgaUh/J4vERDvFE/tnNiipfwOHyQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -19070,7 +19070,7 @@ snapshots:
 
   '@actions/io@1.1.3': {}
 
-  '@alchemy.run/sigil@0.0.0-alpha.5(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)':
+  '@alchemy.run/sigil@0.0.0-alpha.6(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)':
     dependencies:
       react: 19.2.8
       react-reconciler: 0.33.0(react@19.2.8)

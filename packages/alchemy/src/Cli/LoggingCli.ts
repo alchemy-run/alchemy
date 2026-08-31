@@ -274,6 +274,7 @@ export const LoggingCli = Layer.succeed(
         const started = new Map<string, number>();
         const terminal = new Map<string, ApplyStatus>();
         const notes = new Map<string, string>();
+        const statusNotes = new Map<string, string>();
         return {
           // Progress is an Effect log record, just like provider and build
           // diagnostics, so the append-only renderer gives every line the
@@ -283,12 +284,18 @@ export const LoggingCli = Layer.succeed(
               Effect.flatMap((now) =>
                 Effect.suspend(() => {
                   if (event._tag === "apply.resource.note") {
+                    // `status` notes only surface as the settle line's suffix;
+                    // everything else streams, deduping consecutive repeats.
+                    if (event.kind === "status") {
+                      statusNotes.set(event.fqn, event.message);
+                      return Effect.void;
+                    }
+                    if (notes.get(event.fqn) === event.message)
+                      return Effect.void;
                     notes.set(event.fqn, event.message);
-                    return terminal.has(event.fqn)
-                      ? Effect.logInfo(
-                          `${tag(event.fqn)} ${blue(event.message)}`,
-                        )
-                      : Effect.void;
+                    return Effect.logInfo(
+                      `${tag(event.fqn)} ${blue(event.message)}`,
+                    );
                   }
                   const id = event.bindingId
                     ? `${event.fqn}/${event.bindingId}`
@@ -312,7 +319,7 @@ export const LoggingCli = Layer.succeed(
                     from === undefined
                       ? ""
                       : ` ${dim(`(${formatElapsed(now - from)})`)}`;
-                  const message = event.message ?? notes.get(event.fqn);
+                  const message = event.message ?? statusNotes.get(event.fqn);
                   // Failures carry their error as the message — paint it
                   // red so the line reads as the error line for that
                   // resource, without waiting for the final cause dump.
