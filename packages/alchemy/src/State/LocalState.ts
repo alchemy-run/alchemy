@@ -5,7 +5,6 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { existsSync } from "node:fs";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
-import { decodeStagePathSegment, encodeStagePathSegment } from "../Stage.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
@@ -105,7 +104,7 @@ export const makeLocalState = () =>
       );
 
     const stageDir = ({ stack, stage }: { stack: string; stage: string }) =>
-      path.join(stateDir, stack, encodeStagePathSegment(stage));
+      path.join(stateDir, stack, stage);
 
     const resource = ({
       stack,
@@ -115,21 +114,10 @@ export const makeLocalState = () =>
       stack: string;
       stage: string;
       fqn: string;
-    }) =>
-      path.join(
-        stateDir,
-        stack,
-        encodeStagePathSegment(stage),
-        `${encodeFqn(fqn)}.json`,
-      );
+    }) => path.join(stateDir, stack, stage, `${encodeFqn(fqn)}.json`);
 
     const outputFile = ({ stack, stage }: { stack: string; stage: string }) =>
-      path.join(
-        stateDir,
-        stack,
-        encodeStagePathSegment(stage),
-        `__stack_output__.json`,
-      );
+      path.join(stateDir, stack, stage, `__stack_output__.json`);
 
     // Write state files atomically so a concurrent `get` (e.g. a parallel
     // test reading shared `.alchemy/state`) never observes a truncated,
@@ -167,7 +155,7 @@ export const makeLocalState = () =>
       listStages: (stack: string) =>
         fs.readDirectory(path.join(stateDir, stack)).pipe(
           recover,
-          Effect.map((files) => (files ?? []).map(decodeStagePathSegment)),
+          Effect.map((files) => files ?? []),
         ),
       get: (request) =>
         fs.readFile(resource(request)).pipe(

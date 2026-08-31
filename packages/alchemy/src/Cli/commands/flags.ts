@@ -6,8 +6,9 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
-import { isUserStage } from "../../Stage.ts";
 import { UserInputError } from "./errors.ts";
+
+const USER_STAGE_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -45,7 +46,7 @@ const makeStageFlag = (kind: "live" | "dev") =>
     Flag.mapEffect(
       Effect.fn(function* (stage) {
         if (stage) {
-          if (!isUserStage(stage)) {
+          if (!USER_STAGE_PATTERN.test(stage)) {
             return yield* invalidUserStage(stage);
           }
           return stage;
@@ -56,7 +57,7 @@ const makeStageFlag = (kind: "live" | "dev") =>
           ),
           Effect.flatMap((configured) => {
             if (configured === undefined) return defaultStage(kind);
-            if (!isUserStage(configured)) {
+            if (!USER_STAGE_PATTERN.test(configured)) {
               return invalidUserStage(configured);
             }
             return Effect.succeed(configured);

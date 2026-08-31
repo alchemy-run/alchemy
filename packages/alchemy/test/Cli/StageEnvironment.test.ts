@@ -1,5 +1,4 @@
 import { devStage, stage } from "@/Cli/commands/flags.ts";
-import { encodeStagePathSegment, isUserStage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -55,14 +54,6 @@ describe("STAGE environment variable", () => {
 });
 
 describe("default stages", () => {
-  test("user stages reject ':'", () => {
-    expect(isUserStage("live_sam")).toBe(true);
-    expect(isUserStage("dev_sam")).toBe(true);
-    expect(isUserStage("prod")).toBe(true);
-    expect(isUserStage("local:sam")).toBe(false);
-    expect(encodeStagePathSegment("dev_sam")).toBe("dev_sam");
-  });
-
   test.effect("deploy/destroy default to live_${USER}", () =>
     Effect.gen(function* () {
       const [, selected] = yield* stage.parse({ arguments: [], flags: {} });
