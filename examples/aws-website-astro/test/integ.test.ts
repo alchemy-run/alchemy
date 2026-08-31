@@ -83,7 +83,7 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read via
     // `process.env` in the page frontmatter — proves the Lambda
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Astro on AWS!");
     expect(html).toContain("server-rendered in an AWS Lambda");
   }),
   { timeout: 180_000 },

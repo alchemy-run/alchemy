@@ -57,33 +57,40 @@ export interface AstroProps<
    */
   prerenderEnvironment?: "workerd" | "node";
   /**
-   * Serializable Astro config merged into the in-memory configuration.
-   * The project's `astro.config.*` file loads natively; astro merges
-   * these options OVER it (scalars override the file). The Cloudflare
-   * adapter, output target, and Vite environments are managed for you —
-   * do not declare an `adapter` in the config file.
+   * Deploy-time Astro config overrides, merged OVER your natively-loaded
+   * `astro.config.*` (values here win). Use it for values that vary per
+   * stage or derive from other resources' Outputs — everything else
+   * belongs in the config file.
    */
   astro?: {
-    /** The full URL the site deploys to (`Astro.site`). */
+    /** Deployed URL origin (astro's `site`). */
     site?: string;
-    /** Base path the site deploys under. */
+    /** Base path the site is served from (astro's `base`). */
     base?: string;
     /**
-     * Astro output target. `"server"` renders pages on demand in the
-     * Worker; individual pages opt into prerendering with
-     * `export const prerender = true`.
+     * Astro output target — a deploy-topology decision (whether Worker
+     * code runs at request time). `"server"` renders pages on demand in
+     * the Worker; individual pages opt into prerendering with
+     * `export const prerender = true`. `"static"` prerenders every page
+     * at build time and deploys assets-only. Supersedes a file-level
+     * `output`.
      * @default "server"
      */
     output?: "server" | "static";
-    /** Source directory, relative to `rootDir`. @default "./src" */
+    /** Source directory (astro's `srcDir`). */
     srcDir?: string;
-    /** Public (static passthrough) directory. @default "./public" */
+    /** Public assets directory (astro's `publicDir`). */
     publicDir?: string;
-    /** Build output directory. @default "./dist" */
+    /** Build output directory (astro's `outDir`). */
     outDir?: string;
-    /** Trailing-slash handling for routes. */
+    /** Trailing-slash handling (astro's `trailingSlash`). */
     trailingSlash?: "always" | "never" | "ignore";
   };
+  /**
+   * Path to an alternate astro config file, relative to `rootDir`.
+   * Defaults to astro's own config discovery.
+   */
+  config?: string;
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -127,16 +134,18 @@ export interface AstroProps<
  * ### Static Sites
  * With `astro: { output: "static" }` every page is prerendered at build
  * time and the deploy is **assets-only**: no server bundle is uploaded —
- * Cloudflare's asset layer answers every request (including the built
- * `404.html` via `assets.notFoundHandling: "404-page"`). Session
- * provisioning is skipped for declared-static sites since no Worker code
- * runs at request time.
+ * Cloudflare's asset layer answers every request (serve the built
+ * `404.html` via `assets: { notFoundHandling: "404-page" }`). Session
+ * provisioning is skipped for declared-static sites since no Worker
+ * code runs at request time.
  *
  * **Example:** Fully static Astro site
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Docs", {
  *   astro: { output: "static" },
- *   assets: { notFoundHandling: "404-page" },
+ *   assets: {
+ *     notFoundHandling: "404-page",
+ *   },
  * });
  * ```
  *
@@ -198,23 +207,22 @@ export interface AstroProps<
  * ```
  *
  * ### Astro Configuration
- * Your `astro.config.*` file loads natively — integrations, Vite
- * plugins, and other non-serializable options work as usual. Common
- * serializable options are exposed under `astro` for deploy-specific
- * overrides; astro merges them OVER the config file (scalars override,
- * arrays like `integrations` concatenate). The Cloudflare adapter is
- * injected for you — declaring an `adapter` in the config file fails
- * the build. `output` defaults to `"server"`, superseding a file-level
- * `output`; opt into a fully prerendered site with
- * `astro: { output: "static" }`.
+ * Your `astro.config.*` is the home for Astro configuration
+ * (integrations, Vite plugins, `site`, `base`, ...) and loads natively.
+ * The Cloudflare adapter is injected for you — declaring an `adapter`
+ * in the config file fails the build. The `astro` prop is a
+ * deploy-time override bag merged OVER the file (values here win) for
+ * settings that vary per stage or derive from other resources'
+ * Outputs, which a config file cannot consume. `output` defaults to
+ * `"server"` — astro's zero-config `"static"` default would prerender
+ * every page inside workerd, where the Worker's bindings don't exist.
+ * Use `config` to point at an alternate config file (relative to
+ * `rootDir`).
  *
- * **Example:** Setting the site URL and source directory
+ * **Example:** Per-stage site URL override
  * ```typescript
  * const site = yield* Cloudflare.Website.Astro("Blog", {
- *   astro: {
- *     site: "https://blog.example.com",
- *     srcDir: "./app",
- *   },
+ *   astro: { site: "https://blog.example.com" },
  * });
  * ```
  *
@@ -311,14 +319,17 @@ export const Astro: {
                 // opt-out.
                 sessionKVBindingName: props.sessionKVBindingName,
                 prerenderEnvironment: props.prerenderEnvironment,
-                // Server output is the documented default: astro's own
-                // zero-config default is `"static"`, which would prerender
-                // every page at build time inside workerd — where the
-                // Worker's bindings don't exist. The inline config merges
-                // OVER a project's `astro.config.*`, so an explicit
-                // file-level `output` is superseded; opt into a fully
-                // prerendered site with `astro: { output: "static" }`.
-                astro: { output: "server", ...props.astro },
+                // The `astro` bag is the deploy-time overlay merged OVER
+                // the natively-loaded `astro.config.*`. Server output is
+                // the documented default: astro's own zero-config default
+                // is `"static"`, which would prerender every page at
+                // build time inside workerd — where the Worker's bindings
+                // don't exist.
+                astro: {
+                  ...props.astro,
+                  output: props.astro?.output ?? "server",
+                },
+                config: props.config,
               },
             },
           };

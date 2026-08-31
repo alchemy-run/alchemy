@@ -1,3 +1,4 @@
+import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../internal/constants.ts";
 import { loadInternalWorker } from "../internal/internal-worker.ts";
 /**
  * Node-side platform proxy: our reimplementation of wrangler's
@@ -78,7 +79,7 @@ export type {
   PlatformProxyCacheStorage,
 } from "./connect.ts";
 
-const DEFAULT_COMPATIBILITY_DATE = "2026-03-10";
+const DEFAULT_COMPATIBILITY_DATE = INTERNAL_WORKER_COMPATIBILITY_DATE;
 
 // ---------------------------------------------------------------------------
 // Public types

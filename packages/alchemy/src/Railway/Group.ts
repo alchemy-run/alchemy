@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   EnvironmentResponse,
   ProjectResponse,
@@ -16,8 +15,9 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -320,12 +320,13 @@ const sameIds = (left: readonly string[], right: readonly string[]) =>
   uniqueSorted(left).join("\0") === uniqueSorted(right).join("\0");
 
 const classifyMember = (
-  member: GroupMember,
+  member: GroupMember | null | undefined,
 ):
   | { kind: "service"; id: string }
   | { kind: "volume"; id: string }
   | { kind: "bucket"; id: string }
   | undefined => {
+  if (member == null) return undefined;
   if (typeof member.serviceId === "string" && member.serviceId.length > 0) {
     return { kind: "service", id: member.serviceId };
   }
@@ -512,12 +513,6 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
     return yield* createRailwayName(id);
   });
 
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
-};
-
 const getProject = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => (project.deletedAt != null ? undefined : project)),
@@ -571,19 +566,18 @@ const commitPatch = (input: {
   commitMessage: string;
   patch: Record<string, unknown>;
 }) =>
-  railway
-    .environmentPatchCommit({
+  withEnvironmentConfigLock(
+    input.environmentId,
+    railway.environmentPatchCommit({
       environmentId: input.environmentId,
       commitMessage: input.commitMessage,
       patch: input.patch,
-    })
-    .pipe(
-      RailwayRetry.none,
-      Effect.retry(rateLimited),
-      Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () =>
-        Effect.succeed(""),
-      ),
-    );
+    }),
+  ).pipe(
+    Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () =>
+      Effect.succeed(""),
+    ),
+  );
 
 const previewCanvas = (environmentId: string) =>
   railway
@@ -613,8 +607,6 @@ const mergeCanvas = (
       targetEnvironmentId,
     })
     .pipe(
-      RailwayRetry.none,
-      Effect.retry(rateLimited),
       Effect.catchTag(
         [
           "RailwayNotFound",
@@ -930,71 +922,38 @@ export const GroupProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listEnvironmentIds(project).pipe(
-            Effect.flatMap((environmentIds) =>
-              Effect.forEach(
-                environmentIds,
-                (environmentId) =>
-                  Effect.gen(function* () {
-                    const config = yield* getEnvironmentConfig(
-                      environmentId,
-                      project.projectId,
-                    );
-                    const live = yield* getProject(project.projectId);
-                    const fromConfig = Object.entries(
-                      config.groups ?? {},
-                    ).flatMap(([groupId, row]) => {
-                      if (row === null || row.isDeleted === true) return [];
-                      const name = row.name ?? "";
-                      if (!matchesAlchemyPhysicalName(name)) return [];
-                      return [{ groupId, name }];
-                    });
-                    const fromProject = projectGroups(live).flatMap((group) => {
-                      const name = group.name ?? "";
-                      if (!matchesAlchemyPhysicalName(name)) return [];
-                      return [{ groupId: group.id, name }];
-                    });
-                    const seen = new Set<string>();
-                    const ids = [...fromConfig, ...fromProject].filter(
-                      (row) => {
-                        if (seen.has(row.groupId)) return false;
-                        seen.add(row.groupId);
-                        return true;
-                      },
-                    );
-                    const observed = yield* Effect.forEach(
-                      ids,
-                      (row) =>
-                        observe({
-                          projectId: project.projectId,
-                          environmentId,
-                          groupId: row.groupId,
-                          name: row.name,
-                        }).pipe(
-                          Effect.map((group) =>
-                            group === undefined
-                              ? []
-                              : [
-                                  toAttrs(group, {
-                                    projectId: project.projectId,
-                                    environmentId,
-                                  }),
-                                ],
-                          ),
-                        ),
-                      { concurrency: 4 },
-                    );
-                    return observed.flat();
-                  }),
-                { concurrency: 4 },
-              ).pipe(Effect.map((nested) => nested.flat())),
-            ),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        railway.project({ id: project.projectId }).pipe(
+          Effect.map((live) =>
+            live.groups.edges.flatMap((edge) => {
+              const group = edge.node;
+              const name = group.name ?? "";
+              if (!matchesAlchemyPhysicalName(name)) return [];
+              return [
+                toAttrs(
+                  {
+                    groupId: group.id,
+                    name,
+                    color: group.color ?? undefined,
+                    icon: group.icon ?? undefined,
+                    collapsed: group.isCollapsed === true,
+                    serviceIds: [] as string[],
+                    volumeIds: [] as string[],
+                    bucketIds: [] as string[],
+                  },
+                  {
+                    projectId: project.projectId,
+                    environmentId: project.environmentId,
+                  },
+                ),
+              ];
+            }),
           ),
-        { concurrency: 8 },
+          Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+            Effect.succeed([] as Group["Attributes"][]),
+          ),
+        ),
       );
       const seen = new Set<string>();
       const unique: Group["Attributes"][] = [];

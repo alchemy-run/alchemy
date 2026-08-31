@@ -58,20 +58,23 @@ export interface NuxtProps<
    */
   memo?: MemoOptions;
   /**
-   * Nuxt configuration overrides merged over the project's own
-   * `nuxt.config.ts` (the override wins). The project's config file is
-   * loaded natively — modules, layers, and all — so this is for
-   * deploy-specific tweaks (`routeRules`, `runtimeConfig`, ...). Must be
-   * JSON-serializable (it persists in state). Do not set `nitro.preset`
-   * here — the Cloudflare deploy target owns the preset and a foreign
-   * preset is a hard error.
-   */
-  nuxt?: Record<string, unknown>;
-  /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
   assets?: AssetsConfig;
+  /**
+   * Nuxt config overrides merged over the project's own `nuxt.config.ts`
+   * (the highest-priority c12 layer — a value here wins over the file).
+   * Use it for deploy-time values the config file can't express, e.g.
+   * per-stage `runtimeConfig`; `nuxt.config.ts` remains the primary home
+   * for everything else.
+   *
+   * Must be JSON-serializable — no functions, plugins, or modules (the
+   * value persists in state and participates in the rebuild hash).
+   * `nitro.preset` is always owned by the deploy target and cannot be
+   * overridden here.
+   */
+  nuxt?: Record<string, unknown>;
 }
 
 /**
@@ -155,14 +158,34 @@ export interface NuxtProps<
  * ### Prerendering
  * Routes marked for prerendering in `routeRules` (or via
  * `nitro.prerender`) render at build time into `.output/public` and are
- * served as static assets — no Worker invocation.
+ * served as static assets — no Worker invocation. Configure them in
+ * your `nuxt.config.ts`, which loads natively:
  *
- * **Example:** Prerendering a route
+ * **Example:** Prerendering a route (nuxt.config.ts)
+ * ```typescript
+ * // nuxt.config.ts
+ * export default defineNuxtConfig({
+ *   routeRules: {
+ *     "/about": { prerender: true },
+ *   },
+ * });
+ * ```
+ *
+ * ### Config Overrides
+ * `nuxt.config.ts` is the primary home for Nuxt configuration — it loads
+ * natively. The `nuxt` prop layers deploy-time overrides on top (the
+ * highest-priority c12 layer) for values the file can't express, like
+ * per-stage settings. The bag must be JSON-serializable — no functions,
+ * plugins, or modules — and `nitro.preset` stays owned by the deploy
+ * target.
+ *
+ * **Example:** Deploy-time config overrides
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   nuxt: {
- *     routeRules: {
- *       "/about": { prerender: true },
+ *     app: { baseURL: "/docs/" },
+ *     runtimeConfig: {
+ *       public: { apiBase: "https://api.example.com" },
  *     },
  *   },
  * });

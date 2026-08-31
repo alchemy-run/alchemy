@@ -48,7 +48,31 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       // The spawner returns one shared child per entry URL; the stack-specific
       // environment rides the session websocket so the child can build (and
       // memoize) a provider context per stack.
-      const websocketUrl = new URL(yield* response.text);
+      const body = yield* response.text;
+      if (response.status !== 200) {
+        return yield* Effect.fail(
+          new Error(
+            `RPC spawner POST ${spawnerUrl} returned ${response.status}: ${body.slice(0, 300)}`,
+          ),
+        );
+      }
+      let websocketUrl: URL;
+      try {
+        websocketUrl = new URL(body);
+      } catch {
+        return yield* Effect.fail(
+          new Error(
+            `RPC spawner POST ${spawnerUrl} did not return a websocket URL (got ${JSON.stringify(body.slice(0, 200))})`,
+          ),
+        );
+      }
+      if (websocketUrl.protocol !== "ws:" && websocketUrl.protocol !== "wss:") {
+        return yield* Effect.fail(
+          new Error(
+            `RPC spawner POST ${spawnerUrl} returned a non-websocket URL: ${websocketUrl.toString()}`,
+          ),
+        );
+      }
       websocketUrl.searchParams.set(SESSION_ENV_PARAM, sessionEnv);
       return newWebSocketRpcSession<RpcProxyApi>(websocketUrl.toString());
     },

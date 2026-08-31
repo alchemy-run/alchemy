@@ -22,7 +22,7 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
   one. `https://railway.com/project/{projectId}` is the dashboard.
 - **[Services](/railway/compute/services)** — a container in a
   Project. Pass `image` for a public tag (`hashicorp/http-echo`),
-  `main` + `registry` for an Effect program, or `repo` for GitHub.
+  `main` for an Effect program, or `repo` for GitHub.
   `healthcheck` / `cronSchedule` / `buildCommand` match Railway IaC.
   `url` is `https://{name}.up.railway.app`. Railway load-balances
   public traffic; Alchemy does not pin a replica count.
@@ -36,6 +36,26 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 - **[Regions](/railway/compute/regions)** — where a Service, Volume,
   or database instance runs (`us-west2`, `us-east4`, …). Buckets use
   a shorter set (`sjc`, `iad`, `ams`, `sin`).
+
+## Frontend
+
+- **[Websites](/railway/frontend/websites)** — Vite, Astro,
+  Next.js, Nuxt, React Router, SolidStart, SvelteKit, TanStack
+  Start, Waku, Octane, Foldkit, Vocs, and StaticSite. Each builds
+  your app and deploys a
+  [Service](/railway/compute/services) from a generated Dockerfile
+  Railway builds. URL is `*.up.railway.app` or a
+  [custom domain](/railway/networking#custom-domains).
+- [`Vite`](/railway/frontend/vite), [`Astro`](/railway/frontend/astro),
+  [`Next.js`](/railway/frontend/nextjs), [`Nuxt`](/railway/frontend/nuxt),
+  [`React Router`](/railway/frontend/react-router),
+  [`SolidStart`](/railway/frontend/solidstart),
+  [`SvelteKit`](/railway/frontend/sveltekit),
+  [`TanStack Start`](/railway/frontend/tanstack-start),
+  [`Waku`](/railway/frontend/waku),
+  [`Octane`](/railway/frontend/octane), [`Foldkit`](/railway/frontend/foldkit),
+  [`Vocs`](/railway/frontend/vocs),
+  [`StaticSite`](/railway/frontend/static-site).
 
 ## Data
 
@@ -77,6 +97,8 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 | You're building              | Reach for                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------- |
 | An HTTP API on Railway       | [Project](/railway/compute/projects) + [Service](/railway/compute/services) |
+| A Vite SPA                   | [`Website.Vite`](/railway/frontend/vite)           |
+| An SSR site (Astro, Next, Nuxt, …) | [`Website`](/railway/frontend/websites)                             |
 | A raw container              | [Service](/railway/compute/services) with an `image`                      |
 | An Effect Function (no registry) | [Function](/railway/compute/functions)                                 |
 | A canvas / cron Function     | [Function](/railway/compute/functions) with `source`                      |
@@ -103,6 +125,8 @@ a resource — Alchemy uses `me.workspace ?? me.workspaces[0]`.
 - [Tutorial](/railway/tutorial/part-1) — from empty directory to a
   Project running an HTTP Service with a mounted Volume and a
   Variable.
+- [Websites](/railway/frontend/websites) — Vite, Astro, Next.js, and
+  other framework sites as a container Service.
 - `examples/railway-service` — every resource and binding in one
   stack (Project, Environment, Variable, Volume, Postgres, MySQL,
   Redis, Bucket, TcpProxy, image Service, Effect Function, canvas

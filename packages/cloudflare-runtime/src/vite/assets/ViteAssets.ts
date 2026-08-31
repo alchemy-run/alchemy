@@ -2,6 +2,7 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../core/internal/internal-worker.ts";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
+import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../core/internal/constants.ts";
 import * as Loopback from "../../core/globals/Loopback.ts";
 import { PluginContext } from "../../core/PluginContext.ts";
 import * as Effect from "effect/Effect";
@@ -76,8 +77,8 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
               {
                 name: "assets:worker",
                 worker: {
-                  compatibilityDate: "2024-07-31",
-                  compatibilityFlags: ["nodejs_compat", "enable_ctx_exports"],
+                  compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                  compatibilityFlags: ["nodejs_compat"],
                   bindings: [
                     {
                       name: "CONFIG",
@@ -106,12 +107,8 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
               {
                 name: "assets:router",
                 worker: {
-                  compatibilityDate: "2024-07-31",
-                  compatibilityFlags: [
-                    "nodejs_compat",
-                    "no_nodejs_compat_v2",
-                    "enable_ctx_exports",
-                  ],
+                  compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                  compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
                   bindings: [
                     {
                       name: "ASSET_WORKER",

@@ -1,3 +1,1 @@
-import { Project } from "@/Railway/Project.ts";
-
-export const Site = Project("Site");
+export { Partition, Site } from "./suite-env.ts";

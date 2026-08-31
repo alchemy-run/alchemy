@@ -115,10 +115,15 @@ export const pinCollectionEnvironment = <
   collection: A,
   environment: Layer.Layer<any, never, never>,
 ): A => {
-  const wrap = (provider: ProviderService | undefined) =>
-    provider === undefined
-      ? undefined
-      : withProviderContext(provider, environment);
+  const wrap = (provider: ProviderService | undefined) => {
+    if (provider === undefined) return undefined;
+    // Stamp the registration-captured live environment so Binding clients
+    // for `Alchemy.remote()` resources can provide it closest — in a
+    // `dev` run ambient is the emulator, and an unwrapped live client
+    // would miss the real cloud.
+    Object.assign(provider, { liveDataPlane: () => environment });
+    return withProviderContext(provider, environment);
+  };
   const wrapped: Record<string, ProviderService> = {};
   for (const [type, provider] of Object.entries(collection.providers)) {
     wrapped[type] = wrap(provider)!;

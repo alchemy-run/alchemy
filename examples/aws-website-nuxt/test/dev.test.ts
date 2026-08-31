@@ -148,7 +148,7 @@ test(
 
     // SSR env parity: GREETING from alchemy.run.ts reaches the dev server.
     const home = await (await fetchOk(url)).text();
-    expect(home).toContain("Hello from alchemy");
+    expect(home).toContain("Hello from Nuxt on AWS!");
     expect(home).toContain(MARKER);
 
     // Prerendered route serves through the dev server.
@@ -159,7 +159,7 @@ test(
     const hello = (await (
       await fetchOk(new URL("/api/hello", url))
     ).json()) as { greeting: string | null };
-    expect(hello).toEqual({ greeting: "Hello from alchemy" });
+    expect(hello).toEqual({ greeting: "Hello from Nuxt on AWS!" });
 
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();

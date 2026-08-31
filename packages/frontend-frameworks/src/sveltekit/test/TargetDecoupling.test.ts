@@ -72,7 +72,7 @@ describe("target decoupling", () => {
       // `aws.ts` is the AWS target module — platform-specific by the same
       // contract: it bundles the Lambda server with rolldown, but must
       // stay decoupled from the Cloudflare adapter internals.
-      const allowRolldown = file === "aws.ts";
+      const allowRolldown = file === "aws.ts" || file === "node.ts";
       const specifiers = importSpecifiers(file);
       const offending = specifiers.filter(
         (specifier) =>

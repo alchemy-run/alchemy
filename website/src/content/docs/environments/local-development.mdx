@@ -154,6 +154,16 @@ is torn down. Dev state never silently becomes cloud state.
 
 To automate the deploy side, see the [CI guide](/environments/ci).
 
+## Testing in dev mode
+
+The [test harness](/testing/test-harness) has the same switch:
+`Test.make({ dev: true })` (off by default, on both the Bun and
+Vitest adapters) runs a suite's `deploy(Stack)` against the local
+emulators — Cloudflare in workerd, AWS in Docker — instead of the
+real cloud, so integration tests run on your machine with no cloud
+calls and no separate `alchemy dev` terminal. See
+[Test harness → dev](/testing/test-harness#dev).
+
 ## Where next
 
 - [Cloudflare local development](/cloudflare/local-development) — what runs in workerd and which bindings are simulated.
@@ -161,4 +171,5 @@ To automate the deploy side, see the [CI guide](/environments/ci).
 - [CI](/environments/ci) — deploy the same stack from GitHub Actions with PR previews.
 - [Stages](/environments/stages) — how `dev_$USER`, `pr-42`, and `prod` stay isolated.
 - [Dev servers](/command/dev-servers) — run any framework dev server as a `Command.Dev` resource in the dev loop.
+- [Testing](/testing) — run the same test suite against the local emulators with `Test.make({ dev: true })`.
 - [Local Providers](/infrastructure-as-code/local-provider) — build the local implementation of a resource.

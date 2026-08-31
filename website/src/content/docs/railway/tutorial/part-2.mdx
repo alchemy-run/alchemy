@@ -10,17 +10,12 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 In [Part 1](/railway/tutorial/part-1) you deployed a Project. Now you
 will deploy a `Railway.Service`: an Effect program running in a
-Railway container. Alchemy bundles it, builds a Docker image, and
-pushes it to a registry Railway can pull. No Dockerfile.
+Railway container. Alchemy bundles it, generates a Dockerfile, and
+uploads the context. Railway builds the image.
 
-:::note[Prerequisites]
-Docker must be running. Alchemy builds `linux/amd64` images locally
-and pushes them to `registry` (GHCR or Docker Hub). Set
-`RAILWAY_REGISTRY` to a prefix you can push to (`ghcr.io/you`) and
-one of `GITHUB_TOKEN`, `RAILWAY_REGISTRY_PASSWORD`, or
-`DOCKERHUB_TOKEN`. Image-based Services
-(`image: "hashicorp/http-echo"`) skip this — see
-[Services](/railway/compute/services).
+:::note[Image Services]
+Pass `image: "hashicorp/http-echo"` to skip the build and pull a
+public tag instead — see [Services](/railway/compute/services).
 :::
 
 ## Move the Project to a module
@@ -88,7 +83,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/acme",
   },
   Effect.gen(function* () {
     return {};
@@ -120,7 +114,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/acme",
   },
   Effect.gen(function* () {
 -    return {};
@@ -151,8 +144,8 @@ add in Part 3 can match:
 ```diff lang="typescript"
 export default class Api extends Railway.Service<Api>()(
   "Api",
--  { project: Site, main: import.meta.url, registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/acme" },
-+  { project: Site, main: import.meta.url, registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/acme", region: "us-west2" },
+-  { project: Site, main: import.meta.url },
++  { project: Site, main: import.meta.url, region: "us-west2" },
 ```
 
 Updating `region` later is in place.
@@ -165,8 +158,8 @@ forward:
 ```diff lang="typescript"
 export default class Api extends Railway.Service<Api>()(
   "Api",
--  { project: Site, main: import.meta.url, registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/acme", region: "us-west2" },
-+  { project: Site, main: import.meta.url, registry: process.env.RAILWAY_REGISTRY ?? "ghcr.io/acme", region: "us-west2", port: 3000 },
+-  { project: Site, main: import.meta.url, region: "us-west2" },
++  { project: Site, main: import.meta.url, region: "us-west2", port: 3000 },
 ```
 
 The port is written to the process environment as `PORT` and used as
@@ -264,8 +257,8 @@ Proceed?
 A lot just happened:
 
 1. `src/api.ts` was bundled with Rolldown into a single ESM file.
-2. Alchemy built a `linux/amd64` image from `oven/bun:1` and pushed
-   it to `{registry}/{name}:{id}-{hash}`.
+2. Alchemy generated a Dockerfile (`FROM oven/bun:1`) and uploaded
+   the context. Railway built the image.
 3. It created the Service, attached a `*.up.railway.app` domain, and
    pointed Railway's edge at port 3000.
 

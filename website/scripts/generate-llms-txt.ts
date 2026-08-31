@@ -289,6 +289,42 @@ const SECTIONS: Section[] = [
     pages: { directory: "aws/networking" },
   },
   {
+    heading: "Fly — start here",
+    intro:
+      "The Fly hub: overview (Apps, Machines, Services, Sprites) and setup (org, API token, profile).",
+    pages: {
+      slugs: ["fly/index", "fly/setup"],
+    },
+  },
+  {
+    heading: "Fly — Frontend",
+    pages: { directory: "fly/frontend" },
+  },
+  {
+    heading: "Hetzner — start here",
+    intro:
+      "The Hetzner hub: overview (Servers and Services) and setup (project, API token, profile).",
+    pages: {
+      slugs: ["hetzner/index", "hetzner/setup"],
+    },
+  },
+  {
+    heading: "Hetzner — Frontend",
+    pages: { directory: "hetzner/frontend" },
+  },
+  {
+    heading: "Railway — start here",
+    intro:
+      "The Railway hub: overview (Projects, Services, databases) and setup (workspace, API token, profile).",
+    pages: {
+      slugs: ["railway/index", "railway/setup"],
+    },
+  },
+  {
+    heading: "Railway — Frontend",
+    pages: { directory: "railway/frontend" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
