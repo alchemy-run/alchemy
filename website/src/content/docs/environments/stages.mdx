@@ -1,6 +1,6 @@
 ---
 title: Stages
-description: Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+description: Stages are isolated instances of a Stack — live_sam, local_sam, staging, prod, pr-42 — each with their own state and physical names.
 sidebar:
   hidden: true
 ---
@@ -13,53 +13,49 @@ dedicated environment — all from one program.
 
 ## The default stage
 
-If you don't pass `--stage`, **`alchemy deploy`** uses **`dev_$USER`**
-(e.g. `dev_sam`). Each developer on your team automatically gets a
-personal cloud sandbox without any config.
+If you don't pass `--stage`, **`alchemy deploy`** uses **`live_$USER`**
+(e.g. `live_sam`) and **`alchemy dev`** uses **`local_$USER`** (e.g.
+`local_sam`). Each developer gets a personal cloud sandbox and a
+separate local-dev sandbox without any config — so a bare `alchemy dev`
+cannot replace resources you deployed.
 
 ```sh
 $ whoami
 sam
 
 $ alchemy deploy
-# deploys to stage `dev_sam`
-```
+# deploys to stage `live_sam`
 
-**`alchemy dev` does not use that stage.** It always writes to an
-engine-owned stage named **`local:<user>`** (e.g. `local:sam`). Colon is
-illegal in user stage names, so a deploy and a local-dev session can
-never share a state row — and `alchemy dev` cannot replace (or delete)
-resources you deployed.
-
-```sh
 $ alchemy dev
-# always uses stage `local:sam`
+# emulates locally as stage `local_sam`
 
-$ alchemy destroy --dev
-# tears down `local:sam`
+$ alchemy destroy --stage local_sam
+# tears down the local-dev stage
 ```
 
-The resolution order for **deploy / destroy / plan / logs / drift** is:
+`--stage` and `$STAGE` still work on both commands. Pointing `alchemy
+dev` at the same stage as a deploy (`--stage prod`, or a shared
+`$STAGE`) is a live ⇄ local replacement of that stage.
 
-1. `--dev` — the engine-owned `local:<user>` stage (same row `alchemy dev` uses)
-2. `--stage <name>` flag
-3. `$STAGE` environment variable
-4. `dev_${USER}` (or `dev_${USERNAME}` on Windows)
-5. `dev_unknown` if no user is set
+The resolution order is:
+
+1. `--stage <name>` flag
+2. `$STAGE` environment variable
+3. `live_${USER}` for deploy / destroy / plan / logs / drift
+   (`local_${USER}` for `alchemy dev`)
+4. `live_unknown` / `local_unknown` if no user is set
 
 ## Common stage patterns
 
-| Stage             | Purpose                                           |
-| ----------------- | ------------------------------------------------- |
-| `dev_<user>`      | Per-developer cloud sandbox (`alchemy deploy` default) |
-| `local:<user>`    | Engine-owned local-dev stage (`alchemy dev`)      |
-| `pr-<n>`          | Per-pull-request preview environment              |
-| `staging`         | Shared pre-production                             |
-| `prod`            | Production                                        |
-| `dev`             | Shared development                                |
+| Stage             | Purpose                                              |
+| ----------------- | ---------------------------------------------------- |
+| `live_<user>`     | Per-developer cloud sandbox (`alchemy deploy` default) |
+| `local_<user>`    | Per-developer local-dev sandbox (`alchemy dev` default) |
+| `pr-<n>`          | Per-pull-request preview environment                 |
+| `staging`         | Shared pre-production                                |
+| `prod`            | Production                                           |
 
-User stage names must match `[a-z0-9][-_a-z0-9]*`. `:` is reserved for
-`local:<user>`.
+Stage names must match `[a-z0-9][-_a-z0-9]*`.
 
 ```sh
 alchemy deploy --stage prod
@@ -73,14 +69,14 @@ Each stage gets its own:
 
 - **State file** — the persisted record of what's deployed
 - **Physical names** — `myapp-prod-bucket-abc123` vs
-  `myapp-dev_sam-bucket-9b2c`
+  `myapp-live_sam-bucket-9b2c`
 - **Logs and metrics** — scoped per deployed function/worker
 
 Because of this, deploying or destroying one stage **never touches**
 another:
 
 ```sh
-$ alchemy deploy --stage dev_sam     # -> myapp-dev_sam-photos-a3f1
+$ alchemy deploy --stage live_sam    # -> myapp-live_sam-photos-a3f1
 $ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
 $ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
 

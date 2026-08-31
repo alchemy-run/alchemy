@@ -39,8 +39,7 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 
 | Option              | Description                                                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `--stage <name>`    | Stage to target. Falls back to `$STAGE`, then `dev_$USER`. Must match `[a-z0-9]+([-_a-z0-9]+)*` (case-insensitive). `:` is reserved. |
-| `--dev`             | Target the engine-owned `local:<user>` stage that `alchemy dev` uses. `destroy`, `plan`, `logs`, and `drift` accept it. |
+| `--stage <name>`    | Stage to target. Falls back to `$STAGE`, then `live_$USER` (`local_$USER` for `alchemy dev`). Must match `[a-z0-9]+([-_a-z0-9]+)*`. |
 | `--profile <name>`  | Auth profile from `~/.alchemy/profiles.json`. Overrides `$ALCHEMY_PROFILE`; defaults to `default`.                                      |
 | `--env-file <path>` | File to load environment variables from. Defaults to `.env`.                                                                             |
 | `--yes`             | Yes to all prompts.                                                                                                                       |

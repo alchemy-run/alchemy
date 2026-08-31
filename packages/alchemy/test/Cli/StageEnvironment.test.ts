@@ -1,16 +1,5 @@
-import {
-  applyLocalDevStage,
-  localDevStageFromUser,
-  rejectedDevStage,
-  stage,
-} from "@/Cli/commands/flags.ts";
-import {
-  encodeStagePathSegment,
-  isLocalDevStage,
-  isUserStage,
-  localDevStage,
-  sanitizeLocalDevUser,
-} from "@/Stage.ts";
+import { localStage, stage } from "@/Cli/commands/flags.ts";
+import { encodeStagePathSegment, isUserStage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -63,66 +52,51 @@ describe("STAGE environment variable", () => {
       expect(Exit.isFailure(exit)).toBe(true);
     }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
   );
-
-  test.effect("defaults to dev_${USER} when STAGE is unset", () =>
-    Effect.gen(function* () {
-      const [, selected] = yield* stage.parse({ arguments: [], flags: {} });
-      expect(selected).toBe("dev_sam");
-    }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
-  );
 });
 
-describe("local-dev stage", () => {
-  test("local:<user> is not a user stage and colon is reserved", () => {
-    expect(isUserStage("dev_sam")).toBe(true);
+describe("default stages", () => {
+  test("user stages reject ':'", () => {
+    expect(isUserStage("live_sam")).toBe(true);
+    expect(isUserStage("local_sam")).toBe(true);
     expect(isUserStage("prod")).toBe(true);
     expect(isUserStage("local:sam")).toBe(false);
-    expect(isLocalDevStage("local:sam")).toBe(true);
-    expect(isLocalDevStage("dev_sam")).toBe(false);
-    expect(sanitizeLocalDevUser("Sam.Goodwin")).toBe("sam_goodwin");
-    expect(localDevStage("Sam")).toBe("local:sam");
-    expect(encodeStagePathSegment("local:sam")).toBe("local%3Asam");
-    expect(encodeStagePathSegment("dev_sam")).toBe("dev_sam");
+    expect(encodeStagePathSegment("local_sam")).toBe("local_sam");
   });
 
-  test.effect("applyLocalDevStage rewrites to local:<user>", () =>
+  test.effect("deploy/destroy default to live_${USER}", () =>
     Effect.gen(function* () {
-      const rewritten = yield* applyLocalDevStage({
-        stage: "production",
-        dev: true,
-      });
-      expect(rewritten.stage).toBe("local:name");
-    }).pipe(Effect.provide(TestEnv)),
+      const [, selected] = yield* stage.parse({ arguments: [], flags: {} });
+      expect(selected).toBe("live_sam");
+    }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
   );
 
-  test.effect("applyLocalDevStage is a no-op without --dev", () =>
+  test.effect("alchemy dev defaults to local_${USER}", () =>
     Effect.gen(function* () {
-      const same = yield* applyLocalDevStage({
-        stage: "production",
-        dev: false,
-      });
-      expect(same.stage).toBe("production");
-    }).pipe(Effect.provide(TestEnv)),
-  );
-
-  test.effect("localDevStageFromUser folds the username", () =>
-    Effect.gen(function* () {
-      expect(yield* localDevStageFromUser).toBe("local:name");
-    }).pipe(Effect.provide(TestEnv)),
-  );
-
-  test.effect("alchemy dev --stage is parsed as an explicit override", () =>
-    Effect.gen(function* () {
-      const [, explicit] = yield* rejectedDevStage.parse({
-        arguments: [],
-        flags: { stage: ["prod"] },
-      });
-      expect(explicit).toBe("prod");
-      const [, omitted] = yield* rejectedDevStage.parse({
+      const [, selected] = yield* localStage.parse({
         arguments: [],
         flags: {},
       });
-      expect(omitted).toBeUndefined();
+      expect(selected).toBe("local_sam");
+    }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
+  );
+
+  test.effect("alchemy dev honors --stage", () =>
+    Effect.gen(function* () {
+      const [, selected] = yield* localStage.parse({
+        arguments: [],
+        flags: { stage: ["prod"] },
+      });
+      expect(selected).toBe("prod");
+    }).pipe(Effect.provide(envLayer({ USER: "sam" }))),
+  );
+
+  test.effect("alchemy dev honors $STAGE", () =>
+    Effect.gen(function* () {
+      const [, selected] = yield* localStage.parse({
+        arguments: [],
+        flags: {},
+      });
+      expect(selected).toBe("production");
     }).pipe(Effect.provide(TestEnv)),
   );
 });

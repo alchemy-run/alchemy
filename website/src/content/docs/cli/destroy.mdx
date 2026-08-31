@@ -28,14 +28,11 @@ Proceed?
 | Option              | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
 | `--config, -c <file>`            | Stack file to destroy (defaults to `alchemy.run.ts`)              |
-| `--stage <name>`    | Stage to destroy (defaults to `dev_$USER`)                        |
-| `--dev`             | Destroy the engine-owned local-dev stage (`local:<user>`) used by `alchemy dev` |
+| `--stage <name>`    | Stage to destroy (defaults to `live_$USER`)                       |
 | `--yes`             | Skip the approval prompt                                          |
 | `--dry-run`         | Show what would be deleted without actually deleting              |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
 | `--env-file <path>` | Load environment variables from a file                            |
-
-`--dev` wins over `--stage` / `$STAGE`.
 
 ## Examples
 
@@ -44,10 +41,10 @@ Proceed?
 alchemy destroy --stage pr-42 --yes
 
 # Destroy your personal cloud sandbox
-alchemy destroy --stage dev_sam
+alchemy destroy --stage live_sam
 
 # Destroy the local-dev stage created by alchemy dev
-alchemy destroy --dev
+alchemy destroy --stage local_sam
 ```
 
 ## Retained resources

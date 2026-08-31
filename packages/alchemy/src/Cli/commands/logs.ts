@@ -7,15 +7,7 @@ import { Command, Flag } from "effect/unstable/cli";
 import * as Logs from "../../Alchemist/routes/logs.ts";
 import { paint } from "../CliKit/index.ts";
 import { formatLocalTimestamp, TAIL_COLORS } from "../Format.ts";
-import {
-  applyLocalDevStage,
-  config,
-  envFile,
-  localDev,
-  parseSince,
-  profile,
-  stage,
-} from "./flags.ts";
+import { config, envFile, parseSince, profile, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 const logsLimit = Flag.integer("limit").pipe(
@@ -57,103 +49,95 @@ export const logsCommand = Command.make(
     limit: logsLimit,
     since: logsSince,
     tail,
-    dev: localDev,
   },
-  (rawArgs) =>
-    applyLocalDevStage(rawArgs).pipe(
-      Effect.flatMap(
-        instrumentCommand(
-          "logs",
-          (a: {
-            main: string;
-            stage: string;
-            profile: string | undefined;
-            limit: number;
-            tail: boolean;
-          }) => ({
-            "alchemy.stage": a.stage,
-            "alchemy.profile": a.profile ?? "",
-            "alchemy.main": a.main,
-            "alchemy.limit": a.limit,
-            "alchemy.tail": a.tail,
-          }),
-        )(
-          Effect.fn(function* ({
-            main,
-            stage,
-            envFile,
-            profile,
-            resources,
-            limit,
-            since,
-            tail,
-          }) {
-            const sinceDate = since ? yield* parseSince(since) : undefined;
-            const selected = (resources ?? "")
-              .split(",")
-              .map((resource) => resource.trim())
-              .filter((resource) => resource.length > 0);
-            const target = {
-              entrypoint: main,
-              stage,
-              profile,
-              envFile: Option.getOrUndefined(envFile),
-            };
-            const available = yield* Logs.resources(target);
-            const selectedSet = new Set(selected);
-            const matching = available.filter(
-              (resource) =>
-                selectedSet.size === 0 ||
-                selectedSet.has(resource.fqn) ||
-                selectedSet.has(resource.logicalId),
-            );
-            const colors = new Map(
-              matching.map((resource, index) => [
-                resource.fqn,
-                TAIL_COLORS[index % TAIL_COLORS.length]!,
-              ]),
-            );
-            const format = (entry: {
-              resource: { fqn: string };
-              timestamp: Date;
-              message: string;
-            }) =>
-              `${paint(colors.get(entry.resource.fqn) ?? "gray", `${formatLocalTimestamp(entry.timestamp)} [${entry.resource.fqn}]`)} ${entry.message}`;
+  instrumentCommand(
+    "logs",
+    (a: {
+      main: string;
+      stage: string;
+      profile: string | undefined;
+      limit: number;
+      tail: boolean;
+    }) => ({
+      "alchemy.stage": a.stage,
+      "alchemy.profile": a.profile ?? "",
+      "alchemy.main": a.main,
+      "alchemy.limit": a.limit,
+      "alchemy.tail": a.tail,
+    }),
+  )(
+    Effect.fn(function* ({
+      main,
+      stage,
+      envFile,
+      profile,
+      resources,
+      limit,
+      since,
+      tail,
+    }) {
+      const sinceDate = since ? yield* parseSince(since) : undefined;
+      const selected = (resources ?? "")
+        .split(",")
+        .map((resource) => resource.trim())
+        .filter((resource) => resource.length > 0);
+      const target = {
+        entrypoint: main,
+        stage,
+        profile,
+        envFile: Option.getOrUndefined(envFile),
+      };
+      const available = yield* Logs.resources(target);
+      const selectedSet = new Set(selected);
+      const matching = available.filter(
+        (resource) =>
+          selectedSet.size === 0 ||
+          selectedSet.has(resource.fqn) ||
+          selectedSet.has(resource.logicalId),
+      );
+      const colors = new Map(
+        matching.map((resource, index) => [
+          resource.fqn,
+          TAIL_COLORS[index % TAIL_COLORS.length]!,
+        ]),
+      );
+      const format = (entry: {
+        resource: { fqn: string };
+        timestamp: Date;
+        message: string;
+      }) =>
+        `${paint(colors.get(entry.resource.fqn) ?? "gray", `${formatLocalTimestamp(entry.timestamp)} [${entry.resource.fqn}]`)} ${entry.message}`;
 
-            if (tail) {
-              const tailing = matching.filter(
-                (resource) => resource.supportsTail,
-              );
-              if (tailing.length === 0) {
-                yield* Console.log("No matching resources support live logs.");
-                return;
-              }
-              yield* Console.log(
-                `Tailing: ${tailing.map(({ logicalId }) => logicalId).join(", ")}`,
-              );
-              yield* Logs.tail({ target, resources: selected }).pipe(
-                Stream.runForEach((entry) => Console.log(format(entry))),
-              );
-              return;
-            }
+      if (tail) {
+        const tailing = matching.filter((resource) => resource.supportsTail);
+        if (tailing.length === 0) {
+          yield* Console.log("No matching resources support live logs.");
+          return;
+        }
+        yield* Console.log(
+          `Tailing: ${tailing.map(({ logicalId }) => logicalId).join(", ")}`,
+        );
+        yield* Logs.tail({ target, resources: selected }).pipe(
+          Stream.runForEach((entry) => Console.log(format(entry))),
+        );
+        return;
+      }
 
-            const entries = yield* Logs.entries({
-              target,
-              resources: selected,
-              limit,
-              since: sinceDate,
-            });
-            if (entries.length === 0) {
-              yield* Console.log(
-                selected.length > 0
-                  ? "No resources with logs match --resource (deploy first, or selected resources may not expose logs)."
-                  : "No resources with logs found. Deploy first, then run logs.",
-              );
-              return;
-            }
-            for (const entry of entries) yield* Console.log(format(entry));
-          }),
-        ),
-      ),
-    ),
+      const entries = yield* Logs.entries({
+        target,
+        resources: selected,
+        limit,
+        since: sinceDate,
+      });
+      if (entries.length === 0) {
+        yield* Console.log(
+          selected.length > 0
+            ? "No resources with logs match --resource (deploy first, or selected resources may not expose logs)."
+            : "No resources with logs found. Deploy first, then run logs.",
+        );
+        return;
+      }
+      for (const entry of entries) yield* Console.log(format(entry));
+    }),
+  ),
 ).pipe(Command.withDescription("Fetch or tail logs from stack resources"));
