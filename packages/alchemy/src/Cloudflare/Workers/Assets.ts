@@ -1,15 +1,11 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import {
-  BadGateway,
-  GatewayTimeout,
-  Retry,
-  ServiceUnavailable,
-} from "@distilled.cloud/cloudflare";
+import { Retry } from "@distilled.cloud/cloudflare";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import type { PlatformError } from "effect/PlatformError";
@@ -443,9 +439,9 @@ const BULK_UPLOAD_CONCURRENCY = 3;
 const MAX_UPLOAD_GATEWAY_RETRIES = 5;
 
 const isGatewayError = (error: unknown) =>
-  error instanceof BadGateway ||
-  error instanceof ServiceUnavailable ||
-  error instanceof GatewayTimeout;
+  Predicate.isTagged(error, "BadGateway") ||
+  Predicate.isTagged(error, "ServiceUnavailable") ||
+  Predicate.isTagged(error, "GatewayTimeout");
 
 /**
  * The SDK's default policy retries gateway errors internally (~20s of
