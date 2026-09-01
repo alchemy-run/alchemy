@@ -190,22 +190,22 @@ const deployFailed = (status: string | undefined) =>
 const undef = <T>(value: T | null | undefined): T | undefined =>
   value == null ? undefined : value;
 
-/** @internal */
-export const normalizePreDeployCommand = (
-  value: unknown,
-): string | undefined => {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return undefined;
-    if (value.length === 1 && typeof value[0] === "string") return value[0];
-  }
-  return undefined;
-};
-
 const sameWatchPatterns = (
   observed: readonly string[] | null | undefined,
   desired: readonly string[] | undefined,
 ) => desired === undefined || deepEqual([...(observed ?? [])], [...desired]);
+
+const samePreDeployCommand = (
+  observed: unknown,
+  desired: string | null | undefined,
+) =>
+  desired === undefined ||
+  (desired === null
+    ? observed == null || (Array.isArray(observed) && observed.length === 0)
+    : observed === desired ||
+      (Array.isArray(observed) &&
+        observed.length === 1 &&
+        observed[0] === desired));
 
 const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
   input: ServiceInstanceUpdateInput,
@@ -219,33 +219,8 @@ const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
   return true;
 };
 
-type ObservedServiceInstanceSettings = Partial<
-  Pick<
-    ServiceInstanceResponse,
-    | "buildCommand"
-    | "builder"
-    | "cronSchedule"
-    | "dockerfilePath"
-    | "drainingSeconds"
-    | "healthcheckPath"
-    | "healthcheckTimeout"
-    | "numReplicas"
-    | "overlapSeconds"
-    | "preDeployCommand"
-    | "region"
-    | "restartPolicyMaxRetries"
-    | "restartPolicyType"
-    | "rootDirectory"
-    | "sleepApplication"
-    | "source"
-    | "startCommand"
-    | "watchPatterns"
-  >
->;
-
-/** @internal */
-export const instanceSettingsDelta = (input: {
-  instance: ObservedServiceInstanceSettings | undefined;
+const instanceSettingsDelta = (input: {
+  instance: ServiceInstanceResponse | undefined;
   sourceImage: string | undefined;
   sourceRepo: string | undefined;
   registryCredentials: { username: string; password: string } | undefined;
@@ -308,16 +283,14 @@ export const instanceSettingsDelta = (input: {
       input.props.buildCommand,
       instance?.buildCommand,
     ) || changed;
-  if (input.props.preDeployCommand !== undefined) {
-    const desired = undef(input.props.preDeployCommand);
-    const observed = normalizePreDeployCommand(instance?.preDeployCommand);
-    if (observed !== desired) {
-      delta.preDeployCommand =
-        input.props.preDeployCommand === null
-          ? null
-          : [input.props.preDeployCommand];
-      changed = true;
-    }
+  const preDeployCommand = input.props.preDeployCommand;
+  if (
+    preDeployCommand !== undefined &&
+    !samePreDeployCommand(instance?.preDeployCommand, preDeployCommand)
+  ) {
+    delta.preDeployCommand =
+      preDeployCommand === null ? null : [preDeployCommand];
+    changed = true;
   }
   changed =
     assignIfChanged(
@@ -742,7 +715,6 @@ const toAttrs = (input: {
   healthcheckTimeout: input.instance?.healthcheckTimeout ?? undefined,
   replicas: input.instance?.numReplicas ?? undefined,
   buildCommand: input.instance?.buildCommand ?? undefined,
-  preDeployCommand: normalizePreDeployCommand(input.instance?.preDeployCommand),
   startCommand: input.instance?.startCommand ?? undefined,
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   rootDirectory: input.instance?.rootDirectory ?? undefined,
@@ -898,7 +870,6 @@ export const ServiceProvider = () =>
             healthcheckTimeout: undefined,
             replicas: undefined,
             buildCommand: undefined,
-            preDeployCommand: undefined,
             startCommand: undefined,
             cronSchedule: undefined,
             rootDirectory: undefined,

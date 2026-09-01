@@ -233,8 +233,6 @@ export type Service = Resource<
     replicas: number | undefined;
     /** Observed build command. */
     buildCommand: string | undefined;
-    /** Observed Railway pre-deploy command. */
-    preDeployCommand: string | undefined;
     /** Observed start command. */
     startCommand: string | undefined;
     /** Observed cron schedule. */
