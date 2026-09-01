@@ -346,6 +346,15 @@ export const make = (
         build: Effect.fn(function* (buildOptions) {
           const root = yield* resolveRoot(buildOptions?.root);
           const target = yield* resolveTarget(root);
+          if (target.build !== undefined) {
+            return yield* target
+              .build({ root, framework: "vocs", env: buildOptions?.env })
+              .pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Path.Path, path),
+                Effect.mapError(fail("The deploy target's build failed")),
+              );
+          }
           const { adapterPath, plugins } = yield* prepareTarget(
             target,
             root,
@@ -443,7 +452,23 @@ export const make = (
               },
               catch: fail("Failed to start the vocs dev server"),
             }),
-            (server) => Effect.promise(async () => await server.close()),
+            (server) =>
+              Effect.promise(async () => {
+                try {
+                  (
+                    server.httpServer as
+                      | { closeAllConnections?: () => void }
+                      | null
+                      | undefined
+                  )?.closeAllConnections?.();
+                  await server.close();
+                } catch {
+                  // teardown is best-effort
+                }
+              }).pipe(
+                Effect.timeout("3 seconds"),
+                Effect.orElseSucceed(() => undefined),
+              ),
           );
           const url = server.resolvedUrls?.local[0];
           if (url === undefined) {

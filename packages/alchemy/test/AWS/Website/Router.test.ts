@@ -16,9 +16,9 @@ const fixtureDir = fileURLToPath(
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
 // ~5-15 min), so the full Router lifecycle exceeds any sane test budget.
-// Run with ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS=true (same gate as the
+// Skipped under --fast (FAST=1) (same gate as the
 // AWS.CloudFront suites).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 describe.skipIf(!runLive)("AWS.Website.Router", () => {
   test.provider(
@@ -55,10 +55,11 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
         expect(deployed.router.kvStoreArn).toBeDefined();
 
         // urls contract (cloudfront-default arm): a router without a
-        // domain serves only at its CloudFront default domain, and `url`
-        // is always `urls[0]`.
+        // domain serves only at the distribution's own URL (its CloudFront
+        // default domain live, a local edge port under the emulator), and
+        // `url` is always `urls[0]`.
         expect(deployed.router.urls).toEqual([
-          `https://${deployed.router.distribution.domainName}`,
+          deployed.router.distribution.url,
         ]);
         expect(deployed.router.url).toBe(deployed.router.urls[0]);
         // A path-only attached site inherits the router's primary URL.

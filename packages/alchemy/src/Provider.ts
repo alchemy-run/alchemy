@@ -3,9 +3,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
-import type { ScopedPlanStatusSession } from "./Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "./Report.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
@@ -150,6 +151,15 @@ export interface ProviderService<
    */
   localDataPlane?: () => Layer.Layer<any, any, never>;
   /**
+   * Data-plane override context for this provider's **live** mode: the
+   * cloud environment captured at provider registration (credentials,
+   * region, endpoint). In an `alchemy dev` run the ambient environment IS
+   * the emulator, so an unwrapped live client would hit floci. Stamp this
+   * so `Alchemy.remote()` binding calls are provided the live chain
+   * closest, the inverse of {@link localDataPlane}.
+   */
+  liveDataPlane?: () => Layer.Layer<any, any, never>;
+  /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
@@ -211,7 +221,7 @@ export interface ProviderService<
   list(): Effect.Effect<Res["Attributes"][], any, ListReq>;
   /**
    * Returns a stream of log lines for a deployed resource.
-   * Used by `alchemy tail` to stream real-time logs.
+   * Used by `alchemy logs --tail` to stream real-time logs.
    */
   tail?(input: {
     id: string;
@@ -566,13 +576,12 @@ export const collection = <
     };
   }) as any;
 
-const isProviderCollectionService = (
+export const isProviderCollectionService = (
   value: unknown,
 ): value is ProviderCollectionService => {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
+    Predicate.isObject(value) &&
+    Predicate.hasProperty(value, "kind") &&
     value.kind === "ProviderCollection"
   );
 };
@@ -583,13 +592,12 @@ const isProviderCollectionService = (
  * searching for a legacy alias, the tag key won't match, so lookup has to
  * recognize provider services by shape.
  */
-const isProviderService = (value: unknown): value is ProviderService =>
-  typeof value === "object" &&
-  value !== null &&
-  "reconcile" in value &&
-  typeof (value as ProviderService).reconcile === "function" &&
-  "delete" in value &&
-  typeof (value as ProviderService).delete === "function";
+export const isProviderService = (value: unknown): value is ProviderService =>
+  Predicate.isObject(value) &&
+  Predicate.hasProperty(value, "reconcile") &&
+  Predicate.isFunction(value.reconcile) &&
+  Predicate.hasProperty(value, "delete") &&
+  Predicate.isFunction(value.delete);
 
 /**
  * Resolve the concrete service for `mode` from a provider found in context.
@@ -618,7 +626,10 @@ export const providerForMode = <R extends ResourceLike>(
  * - `local` — the resource runs on its provider's local emulator; `layer`
  *   is the override to provide closest around every client call.
  * - `live` — the resource targets the real cloud: either pinned there
- *   (`Alchemy.remote()`) or the run is a plain deploy.
+ *   (`Alchemy.remote()`) or the run is a plain deploy. `layer` is the
+ *   registration-captured live environment, provided closest around every
+ *   client call so a `remote()` resource still hits the real cloud when the
+ *   ambient environment is the emulator.
  * - `undeclared` — the resource resolves to local mode, but its provider
  *   is a dual registration without a {@link ProviderService.localDataPlane}
  *   (a process-hosted local variant with no API to route to, or a missing
@@ -630,7 +641,10 @@ export const providerForMode = <R extends ResourceLike>(
  */
 export type DataPlaneResolution =
   | { readonly kind: "local"; readonly layer: Layer.Layer<any, any, never> }
-  | { readonly kind: "live" }
+  | {
+      readonly kind: "live";
+      readonly layer?: Layer.Layer<any, any, never> | undefined;
+    }
   | { readonly kind: "undeclared"; readonly providerType: string }
   | { readonly kind: "agnostic" }
   | { readonly kind: "unregistered" };
@@ -652,7 +666,12 @@ export const describeDataPlane = (resource: {
     const provider = found.value;
     if (provider.modes === undefined) return { kind: "agnostic" as const };
     const mode = resource.Mode ?? (yield* defaultProviderMode);
-    if (mode !== "local") return { kind: "live" as const };
+    if (mode !== "local") {
+      const layer = provider.liveDataPlane?.();
+      return layer !== undefined
+        ? { kind: "live" as const, layer }
+        : { kind: "live" as const };
+    }
     if (provider.localDataPlane === undefined) {
       return { kind: "undeclared" as const, providerType: resource.Type };
     }

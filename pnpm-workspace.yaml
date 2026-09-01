@@ -70,14 +70,14 @@ catalogs:
     magic-string: ^0.30.21
     mime: ^4.0.7
     miniflare: ^4.20260701.0
-    mysql2: ^3.22.3
+    mysql2: ^3.24.2
     nuxt: ">=4.5.0"
     postal-mime: ^2.4.3
     sharp: ^0.35.3
     toucan-js: 4.0.0
     unenv: ^2.0.0-rc.24
     vite: ^7.0.0 || ^8.0.0
-    workerd: 1.20260704.1
+    workerd: 1.20260831.1
     ws: ^8.21.0
     yauzl: ^3.4.0
   database:
@@ -87,20 +87,20 @@ catalogs:
     drizzle-kit: 1.0.0-rc.5-ab785fc
     drizzle-orm: 1.0.0-rc.5-ab785fc
     kysely: ^0.29.4
-    mysql2: ^3.23.2
+    mysql2: ^3.24.2
     mongodb: ^6.10.0
     pg: ^8.22.0
   effect:
-    "@effect/atom-react": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/platform-bun": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/platform-node": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/platform-node-shared": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-d1": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-mysql2": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-pg": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/sql-sqlite-do": ">=4.0.0-rc.111 || >=4.0.0"
-    "@effect/vitest": ">=4.0.0-rc.111 || >=4.0.0"
-    effect: ">=4.0.0-rc.111 || >=4.0.0"
+    "@effect/atom-react": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/platform-bun": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/platform-node": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/platform-node-shared": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-d1": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-mysql2": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-pg": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/sql-sqlite-do": ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/vitest": ">=4.0.0-rc.112 || >=4.0.0"
+    effect: ">=4.0.0-rc.112 || >=4.0.0"
   frontend:
     "@astrojs/internal-helpers": 0.10.1
     "@astrojs/underscore-redirects": 1.0.3
@@ -109,20 +109,26 @@ catalogs:
     "@octanejs/vite-plugin": 0.1.22
     "@opennextjs/aws": 4.1.0
     "@opennextjs/cloudflare": 1.20.1
+    "@react-router/dev": ^7.16.0
+    "@react-router/node": ^7.16.0
     "@sveltejs/kit": 3.0.0-next.9
     "@sveltejs/vite-plugin-svelte": ^7.2.0
     "@solidjs/meta": ^0.29.4
-    "@solidjs/vite-plugin-nitro-2": ^0.1.0
+    "@solidjs/router": ^0.16.0
+    "@solidjs/start": ^2.0.4
+    "@solidjs/vite-plugin-nitro-2": ^0.3.2
     "@tailwindcss/postcss": ^4.1.13
     "@tailwindcss/vite": ^4.1.13
     "@tanstack/react-router": ^1.167.4
     "@tanstack/react-start": ^1.166.15
     "@types/react": ^19.2.17
+    "@types/react-dom": ^19.2.4
     "@vitejs/plugin-react": ^6.0.2
     "@vitejs/plugin-rsc": ^0.5.27
     astro: 7.2.0
     foldkit: ^0.148.2
     hono: ^4.12.14
+    isbot: ^5.2.1
     next: 16.2.10
     nitropack: 2.13.4
     nuxt: 4.5.1
@@ -130,9 +136,9 @@ catalogs:
     postcss: ^8.4.49
     react: ^19.2.7
     react-dom: ^19.2.7
-    react-router: 7.16.0
+    react-router: ^7.16.0
     react-server-dom-webpack: ~19.2.6
-    solid-js: latest
+    solid-js: ^1.9.5
     solid-devtools: ^0.34.3
     svelte: ^5.56.6
     tailwindcss: ^4.1.13
@@ -161,8 +167,8 @@ catalogs:
     tsx: ^4.20.6
 overrides:
   "@cloudflare/workers-types": 5.20260812.1
-  effect: 4.0.0-rc.111
-  "@effect/platform-browser": 4.0.0-rc.111
+  effect: 4.0.0-rc.112
+  "@effect/platform-browser": 4.0.0-rc.112
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
@@ -170,15 +176,23 @@ patchedDependencies:
   "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
   starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
 minimumReleaseAgeExclude:
-  - '@effect/atom-react@4.0.0-rc.111'
-  - '@effect/platform-bun@4.0.0-rc.111'
-  - '@effect/platform-node-shared@4.0.0-rc.111'
-  - '@effect/platform-node@4.0.0-rc.111'
-  - '@effect/sql-d1@4.0.0-rc.111'
-  - '@effect/sql-mysql2@4.0.0-rc.111'
-  - '@effect/sql-pg@4.0.0-rc.111'
-  - '@effect/sql-sqlite-do@4.0.0-rc.111'
-  - '@effect/vitest@4.0.0-rc.111'
+  - '@alchemy.run/sigil@0.0.0-alpha.6'
+  - '@effect/atom-react@4.0.0-rc.112'
+  - '@effect/platform-bun@4.0.0-rc.112'
+  - '@effect/platform-node-shared@4.0.0-rc.112'
+  - '@effect/platform-node@4.0.0-rc.112'
+  - '@effect/sql-d1@4.0.0-rc.112'
+  - '@effect/sql-mysql2@4.0.0-rc.112'
+  - '@effect/sql-pg@4.0.0-rc.112'
+  - '@effect/sql-sqlite-do@4.0.0-rc.112'
+  - '@effect/vitest@4.0.0-rc.112'
   - '@foldkit/vite-plugin@0.16.1'
-  - effect@4.0.0-rc.111
+  - effect@4.0.0-rc.112
   - foldkit@0.148.2
+  - '@solidjs/start@2.0.4'
+  - '@cloudflare/workerd-darwin-64@1.20260831.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20260831.1'
+  - '@cloudflare/workerd-linux-64@1.20260831.1'
+  - '@cloudflare/workerd-linux-arm64@1.20260831.1'
+  - '@cloudflare/workerd-windows-64@1.20260831.1'
+  - workerd@1.20260831.1

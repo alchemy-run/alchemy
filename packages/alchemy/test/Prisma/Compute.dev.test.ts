@@ -210,6 +210,7 @@ test.provider(
 
       yield* stack.destroy();
     }),
+  { exclusive: true },
 );
 
 test.provider(

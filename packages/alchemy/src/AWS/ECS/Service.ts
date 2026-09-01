@@ -28,6 +28,7 @@ import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
+import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import {
   SecurityGroup,
@@ -1059,16 +1060,13 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -1078,18 +1076,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -1485,35 +1472,6 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.VpcId, subnets: subnetIds };
 });
 
-/**
- * Find the most specific PUBLIC Route 53 hosted zone containing
- * `domainName`, walking up its labels (`svc.api.example.com` →
- * `api.example.com` → `example.com`). Returns the bare zone id (no
- * `/hostedzone/` prefix), or undefined when no zone matches.
- */
-const findHostedZoneId = Effect.fn(function* (domainName: string) {
-  const labels = domainName
-    .replace(/\.$/, "")
-    .split(".")
-    .filter((label) => label.length > 0);
-  for (let i = 0; i < labels.length - 1; i++) {
-    const candidate = `${labels.slice(i).join(".")}.`;
-    const listed = yield* route53.listHostedZonesByName({
-      DNSName: candidate,
-      MaxItems: 1,
-    });
-    const zone = listed.HostedZones?.[0];
-    if (
-      zone?.Id !== undefined &&
-      zone.Name === candidate &&
-      zone.Config?.PrivateZone !== true
-    ) {
-      return zone.Id.replace(/^\/hostedzone\//, "");
-    }
-  }
-  return undefined;
-});
-
 const toValuesArray = (value: string | string[] | undefined) =>
   value === undefined ? undefined : Array.isArray(value) ? value : [value];
 
@@ -1847,7 +1805,7 @@ const composeManagedIngress = (
     const domainZones = new Map<string, string>();
     if (domain !== undefined) {
       for (const name of domainNames) {
-        const zoneId = yield* findHostedZoneId(name);
+        const zoneId = yield* findPublicHostedZoneId(name);
         if (zoneId === undefined) {
           return yield* Effect.fail(
             new ServiceHostedZoneNotFound({

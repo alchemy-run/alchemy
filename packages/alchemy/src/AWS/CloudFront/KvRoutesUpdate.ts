@@ -11,6 +11,7 @@ import {
   extractValue,
   getKvsEtag,
   isKvsPreconditionFailed,
+  cappedKvsRetrySchedule,
   retryForKvsReadiness,
   withKvsRegionFn,
 } from "./common.ts";
@@ -200,10 +201,7 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.max([
-              Schedule.exponential("100 millis"),
-              Schedule.recurs(24),
-            ]),
+            schedule: cappedKvsRetrySchedule,
           }),
         );
 
@@ -233,10 +231,7 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.max([
-              Schedule.exponential("100 millis"),
-              Schedule.recurs(24),
-            ]),
+            schedule: cappedKvsRetrySchedule,
           }),
         );
 

@@ -24,7 +24,7 @@ export default Alchemy.Stack(
         ],
       },
       env: {
-        GREETING: "Hello from Alchemy!",
+        GREETING: "Hello from Next.js on Cloudflare!",
       },
     });
 

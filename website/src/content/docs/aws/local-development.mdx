@@ -42,9 +42,7 @@ We hold the emulator to the same bar as the real cloud: alchemy's
 live AWS test suites — the control-plane lifecycle tests and the
 data-plane binding tests that normally run against real AWS —
 also run against the emulator, and every fidelity gap they
-surface becomes a fix in the fork. See
-[Looping the Generation of Local Emulators](/blog/2026-08-20-generating-local-emulators)
-for how that loop works.
+surface becomes a fix in the fork.
 
 ## Lambda runs in containers
 
@@ -181,9 +179,10 @@ If a remote resource needs credentials you don't have,
 `alchemy dev` tells you before touching anything:
 
 ```text
-CredentialsRequired: 1 resource runs against the real cloud via Alchemy.remote():
-  - ProdSecret (AWS.SecretsManager.Secret)
-Run `alchemy login --profile <name>`, or set CI=1 to use environment credentials.
+AWS credentials are required, but none are configured for profile 'default'.
+These resources require AWS credentials:
+  - ProdSecret (runs against the real cloud via Alchemy.remote())
+Run `alchemy profile edit default --add AWS` to configure credentials, or set CI=1 to use environment-variable credentials.
 ```
 
 Switching a resource between local and live (or dev → deploy)
@@ -217,6 +216,27 @@ implementation, so it only ever sees emulated resources — no
 cloud credentials are involved and nothing in a real AWS account
 can be touched.
 
+## Test against the local stack
+
+The [test harness](/testing/test-harness) has the same dev mode —
+`Test.make({ dev: true })` (available on both the Bun and Vitest
+adapters, off by default) runs the suite's `deploy(Stack)` against
+the local emulator instead of the real account, no separate
+`alchemy dev` terminal needed:
+
+```typescript
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: AWS.providers(),
+  dev: true,
+});
+```
+
+Lambda functions run in local containers, the emulated services
+back them, and function URL outputs point at the local gateway —
+so the same HTTP assertions run with zero cloud credentials. See
+[Test harness → dev](/testing/test-harness#dev) for the full
+semantics.
+
 ## Where next
 
 - [Local development](/environments/local-development) — the
@@ -226,5 +246,7 @@ can be touched.
   under `alchemy dev`.
 - [Stages](/environments/stages) — how live-in-dev resources stay
   isolated per developer.
+- [Testing](/testing) — run the same test suite against the local
+  emulator with `Test.make({ dev: true })`.
 - [Local Providers](/infrastructure-as-code/local-provider) —
   build the local implementation of a resource.

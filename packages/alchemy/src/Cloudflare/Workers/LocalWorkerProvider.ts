@@ -12,10 +12,13 @@ import {
 import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
+import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import type * as FileSystem from "effect/FileSystem";
+import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -26,9 +29,23 @@ import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import {
+  ANSI_RESET,
+  ansiFg,
+  colorsEnabled,
+  theme,
+} from "../../Cli/CliKit/index.ts";
+import {
+  formatResourceTag,
+  makeResourceLogger,
+  makeResourceOutput,
+} from "../../Cli/Output.ts";
+import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
+import { FQN_SEPARATOR } from "../../FQN.ts";
 import * as LocalProvider from "../../Local/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
+import { sha256 } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
@@ -64,6 +81,26 @@ import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
   port: number;
+};
+
+const workerStartedMessage = (
+  fqn: string,
+  elapsed: number,
+  url: URL,
+  logDir: string,
+): string => {
+  const duration = `${Math.round(elapsed)}ms`;
+  if (!colorsEnabled()) {
+    return `${formatResourceTag(fqn, false)} Started in ${duration} → ${url} (logs: ${logDir})`;
+  }
+  return `${formatResourceTag(fqn, true)} Started in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET} → ${ansiFg(theme.color.info)}\x1b[4m${url}${ANSI_RESET} ${ansiFg(theme.color.muted)}(logs: ${logDir})${ANSI_RESET}`;
+};
+
+const workerUpdatedMessage = (fqn: string, elapsed: number): string => {
+  const duration = `${Math.round(elapsed)}ms`;
+  return colorsEnabled()
+    ? `${formatResourceTag(fqn, true)} Updated in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET}`
+    : `${formatResourceTag(fqn, false)} Updated in ${duration}`;
 };
 
 // Hosts that bind every interface — the dev server is then reachable at
@@ -108,6 +145,18 @@ export const LocalWorkerProvider = () =>
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
+      const openDevLog = yield* makeDevLogOpener;
+      const devLogDir = yield* makeDevLogDirectory;
+      // Per-resource logs nest by FQN (log/{stage}/Site/Worker/…) so two
+      // workers sharing a logical id in different namespaces never share a
+      // directory.
+      const workerLogSegments = (worker: { fqn: string }) => [
+        stack.stage,
+        ...worker.fqn.split(FQN_SEPARATOR),
+      ];
+      const workerLogDir = (worker: { fqn: string }) =>
+        devLogDir(...workerLogSegments(worker));
+      const baseConsole = yield* ConsoleService.Console;
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
@@ -307,6 +356,7 @@ export const LocalWorkerProvider = () =>
        */
       const resolveConfig = Effect.fn(function* ({
         id,
+        fqn,
         news,
         bindings,
       }: LocalProvider.LocalProviderInput<Worker>) {
@@ -327,6 +377,12 @@ export const LocalWorkerProvider = () =>
         // opt-out restarts the instance.
         const devRemote: Record<string, boolean> = {};
         const containers: Record<string, ContainerImage> = {};
+        // Content hashes of the container images, keyed like `containers`.
+        // `ContainerImage` itself only carries stable paths (context /
+        // dockerfile / imageUri), so without the hash an image CONTENT
+        // change (a Dockerfile edit, a rebuilt bundle) would never change
+        // the config and the running container would serve stale code.
+        const containerHashes: Record<string, string> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -391,6 +447,9 @@ export const LocalWorkerProvider = () =>
                 ...container.dev,
                 env: unwrapRedacted(container.dev.env),
               };
+              if (container.hash !== undefined) {
+                containerHashes[container.className] = container.hash;
+              }
             }
           }
         }
@@ -416,6 +475,8 @@ export const LocalWorkerProvider = () =>
               };
         return {
           id,
+          /** Namespace-qualified id — the display prefix for every log line. */
+          fqn,
           name,
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
@@ -446,6 +507,14 @@ export const LocalWorkerProvider = () =>
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
           hyperdrives,
+          /**
+           * Container image CONTENT hashes (className → hash). The DO
+           * namespace records above only carry the image's stable paths, so
+           * this is what makes an image content change — a Dockerfile edit,
+           * a rebuilt effectful bundle — restart the instance (which is
+           * what re-runs the docker build).
+           */
+          containerHashes,
           /**
            * External source-provider descriptor (plain JSON). Part of the
            * hashed config so changing the provider or its options restarts
@@ -531,7 +600,7 @@ export const LocalWorkerProvider = () =>
         );
       });
 
-      // Latest successful serve per worker id, so runtime wiring changes
+      // Latest successful serve per worker FQN, so runtime wiring changes
       // that arrive AFTER workerd started (e.g. a sibling `Consumer`
       // resource registering this script as a queue consumer) can restart
       // the instance with the same bundle.
@@ -543,7 +612,7 @@ export const LocalWorkerProvider = () =>
           proxy: WorkerProxy.WorkerProxyInstance;
         }
       >();
-      // Serializes serves per worker id: a restart triggered by a sibling
+      // Serializes serves per worker FQN: a restart triggered by a sibling
       // resource may otherwise interleave with a rebuild-triggered serve
       // and leak a workerd scope.
       const serveLocks = new Map<string, Semaphore.Semaphore>();
@@ -577,13 +646,159 @@ export const LocalWorkerProvider = () =>
       // last good instance keeps serving until the replacement's first
       // serve completes. Ownership is tracked in `workerdScopes`, closed by
       // the next successful serve, by `delete`, or by provider shutdown.
+      /**
+       * One container-context watcher per worker FQN, keyed by the watched
+       * path set. Registry-held (NOT per-serve-scope): a worker restarts
+       * through several code paths that overlap scopes, and a watcher per
+       * serve produced DUPLICATES whose simultaneous restarts storm the
+       * instance until the DO's container link breaks.
+       */
+      const containerWatchers = new Map<
+        string,
+        { key: string; fiber: Fiber.Fiber<void> }
+      >();
+
+      const stopContainerWatcher = (id: string) =>
+        Effect.suspend(() => {
+          const existing = containerWatchers.get(id);
+          if (existing === undefined) return Effect.void;
+          containerWatchers.delete(id);
+          return Fiber.interrupt(existing.fiber).pipe(Effect.asVoid);
+        });
+
+      /**
+       * Watch a worker's Build-variant container contexts and restart the
+       * instance when their CONTENT changes — the docker build happens at
+       * instance start, so a restart IS the image rebuild.
+       *
+       * This is the reload path for USER-supplied Dockerfile/context
+       * containers: those files are not imported by the stack, so
+       * `bun --watch` never re-runs the exec child for them and no replan
+       * (hence no config-hash restart) ever fires. Generated contexts
+       * (under `.alchemy/`) are excluded — the effectful `main` variant
+       * rewrites its bundle there on every plan, which would loop; that
+       * variant reloads through the config's `containerHashes` instead.
+       *
+       * Events are debounced and gated on a content fingerprint
+       * (`node_modules`/`.git` skipped), so editor double-saves and
+       * metadata-only churn don't bounce the instance.
+       */
+      const ensureContainerWatcher = (
+        worker: RunnableWorkerConfig,
+        restart: Effect.Effect<
+          void,
+          never,
+          | ChildProcessSpawner.ChildProcessSpawner
+          | PlatformFileSystem.FileSystem
+          | Path.Path
+        >,
+      ) =>
+        Effect.gen(function* () {
+          const fs = yield* PlatformFileSystem.FileSystem;
+          const watched = new Map<string, { dockerfile: string | undefined }>();
+          for (const namespace of worker.durableObjectNamespaces) {
+            const image = namespace.container;
+            if (image === undefined || !("dockerfile" in image)) continue;
+            const context = path.resolve(image.context ?? ".");
+            if (context.split(path.sep).includes(".alchemy")) continue;
+            watched.set(context, {
+              dockerfile:
+                image.dockerfile !== undefined
+                  ? path.resolve(context, image.dockerfile)
+                  : undefined,
+            });
+          }
+          const key = JSON.stringify([...watched.entries()].sort());
+          const existing = containerWatchers.get(worker.fqn);
+          if (existing !== undefined) {
+            if (existing.key === key) return; // same watcher keeps running
+            yield* stopContainerWatcher(worker.fqn);
+          }
+          if (watched.size === 0) return;
+
+          const fingerprint = Effect.gen(function* () {
+            const hashes: string[] = [];
+            const walk = (dir: string): Effect.Effect<void, any> =>
+              Effect.gen(function* () {
+                const entries = yield* fs.readDirectory(dir);
+                for (const entry of entries.sort()) {
+                  if (entry === "node_modules" || entry === ".git") continue;
+                  const file = path.join(dir, entry);
+                  const stat = yield* fs.stat(file);
+                  if (stat.type === "Directory") {
+                    yield* walk(file);
+                  } else {
+                    hashes.push(
+                      `${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`,
+                    );
+                  }
+                }
+              });
+            for (const [context, { dockerfile }] of watched) {
+              yield* walk(context);
+              if (dockerfile !== undefined && !dockerfile.startsWith(context)) {
+                hashes.push(
+                  `${dockerfile}:${yield* fs.readFile(dockerfile).pipe(Effect.flatMap(sha256))}`,
+                );
+              }
+            }
+            return yield* sha256(hashes.join("\n"));
+          }).pipe(Effect.orElseSucceed(() => undefined));
+
+          const streams = [...watched.entries()].flatMap(
+            ([context, { dockerfile }]) => [
+              fs.watch(context, { recursive: true }),
+              ...(dockerfile !== undefined && !dockerfile.startsWith(context)
+                ? [fs.watch(path.dirname(dockerfile))]
+                : []),
+            ],
+          );
+          const watchLoop = Effect.gen(function* () {
+            let last = yield* fingerprint;
+            yield* Stream.mergeAll(streams, {
+              concurrency: streams.length,
+            }).pipe(
+              Stream.debounce("500 millis"),
+              Stream.runForEach(() =>
+                Effect.gen(function* () {
+                  const next = yield* fingerprint;
+                  if (next === undefined || next === last) return;
+                  last = next;
+                  yield* Effect.logInfo(
+                    `[${worker.fqn}] Container build context changed, restarting instance`,
+                  );
+                  yield* restart;
+                }),
+              ),
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  `[${worker.fqn}] Container context watch failed`,
+                  Cause.squash(cause),
+                ),
+              ),
+            );
+          });
+          const fiber = yield* watchLoop.pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                const current = containerWatchers.get(worker.fqn);
+                if (current?.fiber === fiber) {
+                  containerWatchers.delete(worker.fqn);
+                }
+              }),
+            ),
+            Effect.forkIn(rootScope),
+          );
+          containerWatchers.set(worker.fqn, { key, fiber });
+        });
+
       const serveWith = (
         worker: RunnableWorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
       ) =>
         Semaphore.withPermits(
-          serveLock(worker.id),
+          serveLock(worker.fqn),
           1,
         )(
           // The bookkeeping around `runtime.start` must not be torn in half
@@ -593,7 +808,7 @@ export const LocalWorkerProvider = () =>
           // shutdown while holding the shared registry key.
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
-              const previous = workerdScopes.get(worker.id);
+              const previous = workerdScopes.get(worker.fqn);
               // Instances whose queue-consumer wiring went stale while they
               // were starting; never exposed via the proxy, closed together
               // with `previous` after the cutover below.
@@ -608,10 +823,37 @@ export const LocalWorkerProvider = () =>
               while (true) {
                 const queueConsumers = yield* getQueueConsumers(worker.name);
                 scope = yield* Scope.fork(rootScope);
+                // One log file per workerd generation, closed with its scope:
+                // log/{stage}/{fqn…}/{timestamp}.log. `logging.onOutput`
+                // REPLACES workerd's stdio inheritance, so this is the only
+                // path its output takes: raw chunks go to the file, complete
+                // lines go to the console with the worker's pnpm-style prefix.
+                const devLog = yield* openDevLog(
+                  ...workerLogSegments(worker),
+                ).pipe(Scope.provide(scope));
+                // One splitter per channel: a shared buffer would splice a
+                // partial stdout line onto the next stderr chunk, and stderr
+                // would lose its severity on the way to the console.
+                const splitters = makeResourceOutput(worker.fqn, baseConsole);
+                yield* Scope.addFinalizer(
+                  scope,
+                  Effect.sync(() => {
+                    splitters.stdout.flush();
+                    splitters.stderr.flush();
+                  }),
+                );
                 url = yield* restore(
                   runtime
                     .start({
                       name: worker.name,
+                      logging: {
+                        // `(chunk, stream)` — chunk first; the stream name
+                        // indexes the splitters directly.
+                        onOutput: (chunk, stream) => {
+                          devLog.write(chunk);
+                          splitters[stream].push(chunk);
+                        },
+                      },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
                       bindings: worker.workerBindings as never,
@@ -656,15 +898,22 @@ export const LocalWorkerProvider = () =>
                       : Effect.void,
                   ),
                 );
-                workerdScopes.set(worker.id, scope);
-                latestServes.set(worker.id, { worker, bundle, proxy });
+                workerdScopes.set(worker.fqn, scope);
+                latestServes.set(worker.fqn, { worker, bundle, proxy });
                 // Register the restart hook before the re-check below: changes
                 // landing after the re-check find the hook; changes before it
                 // are caught by the re-check. Nothing falls in between.
                 MutableHashMap.set(
                   localRuntimeState.workerRestarts,
                   worker.name,
-                  restartWorker(worker.id),
+                  restartWorker(worker.fqn),
+                );
+                // Idempotent: the registry keeps ONE watcher per worker FQN
+                // across restarts (a new one only when the watched path set
+                // changed).
+                yield* ensureContainerWatcher(
+                  worker,
+                  Effect.suspend(() => restartWorker(worker.fqn)),
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (
@@ -690,7 +939,7 @@ export const LocalWorkerProvider = () =>
                 yield* Scope.close(replaced, Exit.void).pipe(
                   Effect.catchCause((cause) =>
                     Effect.logWarning(
-                      `[${worker.id}] Failed to stop previous local worker instance`,
+                      `[${worker.fqn}] Failed to stop previous local worker instance`,
                       Cause.squash(cause),
                     ),
                   ),
@@ -708,21 +957,29 @@ export const LocalWorkerProvider = () =>
        * served yet — the pending first serve will already observe the
        * updated state.
        */
-      const logRestartFailure = (id: string) =>
+      const logRestartFailure = (fqn: string) =>
         Effect.catchCause((cause: Cause.Cause<unknown>) =>
           Effect.logWarning(
-            `[${id}] Failed to restart local worker`,
+            `[${fqn}] Failed to restart local worker`,
             Cause.squash(cause),
           ),
         );
 
-      const restartWorker = (id: string) =>
+      const restartWorker = (
+        id: string,
+      ): Effect.Effect<
+        void,
+        never,
+        | ChildProcessSpawner.ChildProcessSpawner
+        | PlatformFileSystem.FileSystem
+        | Path.Path
+      > =>
         Effect.suspend(() => {
           const latest = latestServes.get(id);
           if (latest) {
             return serveWith(latest.worker, latest.bundle, latest.proxy).pipe(
               Effect.asVoid,
-              logRestartFailure(id),
+              logRestartFailure(latest.worker.fqn),
             );
           }
           const vite = latestViteServes.get(id);
@@ -733,17 +990,18 @@ export const LocalWorkerProvider = () =>
             // on the serve lock).
             return serveVite(vite, { onlyIfConsumersChanged: true }).pipe(
               Effect.asVoid,
-              logRestartFailure(id),
+              logRestartFailure(vite.worker.fqn),
             );
           }
           return Effect.void;
         });
 
-      // Tear down the running workerd for a worker id, if any. Used when the
+      // Tear down the running workerd for a worker FQN, if any. Used when the
       // Worker is deleted or handed off to an external dev process —
       // instance replacement does NOT go through this: the previous workerd
       // keeps serving until the replacement's first serve closes it.
       const closeWorkerd = Effect.fn(function* (id: string) {
+        yield* stopContainerWatcher(id);
         const scope = workerdScopes.get(id);
         if (scope) {
           workerdScopes.delete(id);
@@ -790,7 +1048,7 @@ export const LocalWorkerProvider = () =>
               start = Date.now();
               if (status === "update") {
                 return Effect.all([
-                  Effect.log(`[${worker.id}] Rebuilding`),
+                  Effect.log(`[${worker.fqn}] Rebuilding`),
                   // Tells the proxy to queue requests until the updated
                   // worker is ready.
                   Effect.forkChild(proxy.unset()),
@@ -798,7 +1056,7 @@ export const LocalWorkerProvider = () =>
               }
             } else if (event._tag === "Error") {
               return Effect.logError(
-                `[${worker.id}] Bundle error`,
+                `[${worker.fqn}] Bundle error`,
                 event.error,
               );
             }
@@ -814,14 +1072,23 @@ export const LocalWorkerProvider = () =>
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
+                  // URL on first start only — vite-banner style; rebuild
+                  // lines stay compact.
                   const message = Effect.log(
-                    `[${worker.id}] ${status === "update" ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
+                    status === "update"
+                      ? workerUpdatedMessage(worker.fqn, Date.now() - start)
+                      : workerStartedMessage(
+                          worker.fqn,
+                          Date.now() - start,
+                          proxy.url,
+                          workerLogDir(worker),
+                        ),
                   );
                   status = "update";
                   return message;
                 } else {
                   return Effect.logError(
-                    `[${worker.id}] Error`,
+                    `[${worker.fqn}] Error`,
                     Cause.squash(exit.cause),
                   );
                 }
@@ -835,7 +1102,7 @@ export const LocalWorkerProvider = () =>
 
       const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         // Inline `script` workers bypass the bundler entirely — the string
         // IS the module (mirroring the deploy path, which uploads it as a
         // single `main.js`). There is nothing to watch: script changes flow
@@ -850,7 +1117,12 @@ export const LocalWorkerProvider = () =>
             proxy,
           );
           yield* Effect.log(
-            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url}`,
+            workerStartedMessage(
+              worker.fqn,
+              Date.now() - start,
+              proxy.url,
+              workerLogDir(worker),
+            ),
           );
           return proxy.url;
         }
@@ -864,6 +1136,7 @@ export const LocalWorkerProvider = () =>
         > = isPythonMain(worker.bundleOptions.main)
           ? watchPythonWorkerBundle({
               id: worker.bundleOptions.id,
+              fqn: worker.fqn,
               main: worker.bundleOptions.main,
               compatibility: worker.compatibility,
             })
@@ -901,10 +1174,15 @@ export const LocalWorkerProvider = () =>
 
       const runAssetsOnly = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
         yield* Effect.log(
-          `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
+          workerStartedMessage(
+            worker.fqn,
+            Date.now() - start,
+            proxy.url,
+            workerLogDir(worker),
+          ),
         );
         return proxy.url;
       });
@@ -943,7 +1221,7 @@ export const LocalWorkerProvider = () =>
         options?: { onlyIfConsumersChanged?: boolean },
       ) =>
         Semaphore.withPermits(
-          serveLock(args.worker.id),
+          serveLock(args.worker.fqn),
           1,
         )(
           // The bookkeeping around `startViteChild` must not be torn in half
@@ -956,8 +1234,9 @@ export const LocalWorkerProvider = () =>
               if (options?.onlyIfConsumersChanged) {
                 const current = yield* getQueueConsumers(worker.name);
                 if (
-                  workerdScopes.has(worker.id) &&
-                  JSON.stringify(current) === servedViteConsumers.get(worker.id)
+                  workerdScopes.has(worker.fqn) &&
+                  JSON.stringify(current) ===
+                    servedViteConsumers.get(worker.fqn)
                 ) {
                   return;
                 }
@@ -978,8 +1257,12 @@ export const LocalWorkerProvider = () =>
                 // Break-before-make: tear the previous child down before
                 // starting its replacement (also covers a superseded child
                 // from the previous loop iteration).
-                yield* closeWorkerd(worker.id);
+                yield* closeWorkerd(worker.fqn);
                 const scope = yield* Scope.fork(rootScope);
+                const devLog = yield* openDevLog(
+                  ...workerLogSegments(worker),
+                ).pipe(Scope.provide(scope));
+                const logResourceOutput = makeResourceLogger(worker.fqn);
                 const child = yield* restore(
                   startViteChild(
                     {
@@ -1010,9 +1293,12 @@ export const LocalWorkerProvider = () =>
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
-                    (channel, line) => {
-                      process[channel].write(`${worker.id} | ${line}\n`);
-                    },
+                    (channel, line) =>
+                      logResourceOutput(channel, line).pipe(
+                        Effect.andThen(
+                          Effect.sync(() => devLog.writeLine(line)),
+                        ),
+                      ),
                   ).pipe(Scope.provide(scope)),
                 ).pipe(
                   // The scope hangs off `rootScope`, so a failed or
@@ -1024,8 +1310,8 @@ export const LocalWorkerProvider = () =>
                       : Effect.void,
                   ),
                 );
-                workerdScopes.set(worker.id, scope);
-                latestViteServes.set(worker.id, args);
+                workerdScopes.set(worker.fqn, scope);
+                latestViteServes.set(worker.fqn, args);
                 // Unexpected child death: log, park the proxy, and mark the
                 // instance for update on the next plan. Forked into the
                 // child's scope so a deliberate restart or teardown
@@ -1033,7 +1319,7 @@ export const LocalWorkerProvider = () =>
                 yield* child.exitCode.pipe(
                   Effect.flatMap((exitCode) =>
                     Effect.logWarning(
-                      `[${worker.id}] Dev server child exited unexpectedly with code ${exitCode}`,
+                      `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`,
                     ),
                   ),
                   Effect.andThen(proxy.unset().pipe(Effect.ignore)),
@@ -1047,7 +1333,7 @@ export const LocalWorkerProvider = () =>
                 MutableHashMap.set(
                   localRuntimeState.workerRestarts,
                   worker.name,
-                  restartWorker(worker.id),
+                  restartWorker(worker.fqn),
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (
@@ -1059,7 +1345,7 @@ export const LocalWorkerProvider = () =>
                   continue;
                 }
                 servedViteConsumers.set(
-                  worker.id,
+                  worker.fqn,
                   JSON.stringify(queueConsumers),
                 );
                 yield* proxy.set(child.url);
@@ -1075,8 +1361,20 @@ export const LocalWorkerProvider = () =>
         invalidate: Effect.Effect<void>,
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const start = Date.now();
+        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
+        // The programmatic vite API never prints the CLI's URL banner — and
+        // vite's own URL is the internal (port-shuffled) server behind the
+        // stable proxy, so advertise the proxy instead.
+        yield* Effect.log(
+          workerStartedMessage(
+            worker.fqn,
+            Date.now() - start,
+            proxy.url,
+            workerLogDir(worker),
+          ),
+        );
         return proxy.url;
       });
 
@@ -1088,7 +1386,7 @@ export const LocalWorkerProvider = () =>
       //   bundle is served through the same make-before-break `serveWith`
       //   path the built-in bundler uses.
       const runSource = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         // Queue requests until the source's first output is served —
         // whether that's the first workerd serve (bundle mode) or the dev
         // server URL (server mode).
@@ -1100,11 +1398,12 @@ export const LocalWorkerProvider = () =>
         const source = yield* loadSource(worker.source!).pipe(
           Effect.provideService(
             AlchemyArtifacts,
-            makeScopedArtifacts(createArtifactStore(), worker.id),
+            makeScopedArtifacts(createArtifactStore(), worker.fqn),
           ),
         );
         const devCtx: DevContext = {
           id: worker.id,
+          fqn: worker.fqn,
           workerName: worker.name,
           compatibility: worker.compatibility,
           entry: worker.bundleOptions.entry,
@@ -1146,7 +1445,7 @@ export const LocalWorkerProvider = () =>
               : undefined,
           ),
 
-        precreate: Effect.fn(function* ({ id, news, bindings }) {
+        precreate: Effect.fn(function* ({ id, fqn, news, bindings }) {
           const name = yield* createWorkerName(id, news.name);
           const durableObjectNamespaces: Record<string, string> = {};
           for (const { data } of bindings) {
@@ -1165,7 +1464,7 @@ export const LocalWorkerProvider = () =>
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
                 []
-              : yield* maybeStartProxy(id, {
+              : yield* maybeStartProxy(fqn, {
                   ...news.dev,
                   mode: "worker" as const,
                   port: news.dev?.port ?? DEFAULT_DEV_PORT,
@@ -1191,20 +1490,20 @@ export const LocalWorkerProvider = () =>
           };
         }),
 
-        start: Effect.fn(function* ({ id, config, invalidate }) {
+        start: Effect.fn(function* ({ fqn, config, invalidate }) {
           const { accountId } = yield* cloudflareEnv;
 
           // `dev: { mode: "external" }` opts out of running a local Worker
           // entirely — typically because an external dev process
           // (Command.Dev) is serving requests. The instance exists in the
           // registry (with an empty scope) but has no workerd behind it. A
-          // previous worker-mode instance for this id may have registered
+          // previous worker-mode instance for this FQN may have registered
           // serve/restart state — drop it, and tear down its workerd (with
           // make-before-break the running workerd outlives instance scopes
           // and must be closed explicitly on handoff).
           if (config.dev.mode === "external") {
-            dropServeState(id);
-            yield* closeWorkerd(id);
+            dropServeState(fqn);
+            yield* closeWorkerd(fqn);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
               workerId: `dev:${config.name}`,
@@ -1225,14 +1524,14 @@ export const LocalWorkerProvider = () =>
           }
 
           // `Worker.URL` locally resolves to the worker's dev-proxy URL —
-          // the proxy is stable per worker id (the same instance `runWorker`
+          // the proxy is stable per worker FQN (the same instance `runWorker`
           // / `runVite` attach to below), so the URL is known before workerd
           // starts. Trailing slash stripped to match the cloud value's shape.
           const needsSelfUrl =
             config.bindingDescriptors.some((b) => b.type === "self_url") ||
             Object.values(config.env ?? {}).some(isSelfUrl);
           const selfUrl = needsSelfUrl
-            ? (yield* maybeStartProxy(id, config.dev)).url
+            ? (yield* maybeStartProxy(fqn, config.dev)).url
                 .toString()
                 .replace(/\/$/, "")
             : undefined;
@@ -1263,6 +1562,7 @@ export const LocalWorkerProvider = () =>
               ? runVite(worker, config.source.rootDir, invalidate, {
                   descriptor: config.source,
                   id: worker.id,
+                  fqn: worker.fqn,
                   assets: worker.assets,
                 })
               : runSource(worker)
@@ -1298,14 +1598,14 @@ export const LocalWorkerProvider = () =>
           } satisfies Worker["Attributes"];
         }),
 
-        stop: Effect.fn(function* ({ id }) {
+        stop: Effect.fn(function* ({ fqn }) {
           // Cross-restart state: the serve/restart bookkeeping, the running
           // workerd (which outlives instance scopes for make-before-break),
           // and the URL proxy live outside instance scopes and are only
           // reclaimed on a real delete.
-          dropServeState(id);
-          yield* closeWorkerd(id);
-          yield* stopProxy(id);
+          dropServeState(fqn);
+          yield* closeWorkerd(fqn);
+          yield* stopProxy(fqn);
         }),
       } satisfies LocalProvider.LocalProviderSpec<
         Worker,

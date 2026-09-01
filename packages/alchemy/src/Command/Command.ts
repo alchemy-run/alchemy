@@ -22,7 +22,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../Report.ts";
 import { isNonInteractive } from "../Util/interactive.ts";
 import {
   makeCommandRedactor,
@@ -51,8 +51,11 @@ export interface CommandProps {
   shell?: string | boolean;
   /**
    * Extra environment variables passed to the command on top of `process.env`.
+   * Entries whose value is `undefined` are dropped — this lets website
+   * composites forward optional values (e.g. an `Output` service URL that
+   * resolves to `undefined`) without filtering first.
    */
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
 }
 
 /**
@@ -315,10 +318,19 @@ export const CommandExecutorLive = () =>
                 cwd: path.resolve(initialCwd, props.cwd ?? "."),
                 shell: props.shell ?? false,
                 env: Object.fromEntries(
-                  Object.entries(props.env ?? {}).map(([k, v]) => [
-                    k,
-                    Redacted.isRedacted(v) ? Redacted.value(v) : v,
-                  ]),
+                  Object.entries(props.env ?? {})
+                    .filter(
+                      (
+                        entry,
+                      ): entry is [
+                        string,
+                        string | Redacted.Redacted<string>,
+                      ] => entry[1] !== undefined,
+                    )
+                    .map(([k, v]) => [
+                      k,
+                      Redacted.isRedacted(v) ? Redacted.value(v) : v,
+                    ]),
                 ),
                 extendEnv: true,
                 stdin: isNonInteractive() ? "ignore" : "inherit",
@@ -373,8 +385,16 @@ export const CommandExecutorLive = () =>
             const execution = Effect.all(
               {
                 exitCode: child.exitCode,
-                stdout: collect(child.stdout, session.note, redactor),
-                stderr: collect(child.stderr, session.note, redactor),
+                stdout: collect(
+                  child.stdout,
+                  (line) => session.note(line, { kind: "output" }),
+                  redactor,
+                ),
+                stderr: collect(
+                  child.stderr,
+                  (line) => session.note(line, { kind: "output" }),
+                  redactor,
+                ),
               },
               { concurrency: "unbounded" },
             ).pipe(mapError(props));

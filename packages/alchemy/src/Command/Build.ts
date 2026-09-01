@@ -118,15 +118,21 @@ export const Build = Resource<Build>("Command.Build");
 /**
  * Resolves `Redacted` env values to their plain string so that a change in a
  * secret's value still busts the memo hash (the hash is one-way, so the secret
- * itself is never recoverable from state).
+ * itself is never recoverable from state). `undefined`-valued entries are
+ * dropped (they mean "unset").
  */
 const resolveEnv = (env: CommandRunProps["env"]) =>
   env
     ? Object.fromEntries(
-        Object.entries(env).map(([key, value]) => [
-          key,
-          Redacted.isRedacted(value) ? Redacted.value(value) : value,
-        ]),
+        Object.entries(env)
+          .filter(
+            (entry): entry is [string, string | Redacted.Redacted<string>] =>
+              entry[1] !== undefined,
+          )
+          .map(([key, value]) => [
+            key,
+            Redacted.isRedacted(value) ? Redacted.value(value) : value,
+          ]),
       )
     : undefined;
 

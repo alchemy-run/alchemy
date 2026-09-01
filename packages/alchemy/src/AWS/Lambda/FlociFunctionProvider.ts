@@ -16,7 +16,9 @@
  *   the emulator's assets bucket. The first swap repoints the function's
  *   code at that key with `UpdateFunctionCode`, which enrolls floci's
  *   reactive S3 sync; every later swap is a bare `PutObject` (measured
- *   111–138 ms re-extract, warm containers drained, no stale invoke).
+ *   111–138 ms re-extract, warm containers drained, no stale invoke) —
+ *   until an engine reconcile re-points the function at a content-addressed
+ *   key, after which the next swap re-enrolls it (see `enrolledAttrs`).
  *   `bundle: false` props fs-watch the prebuilt directory instead.
  * - **Replacement rules** — functionName and durableConfig-presence changes
  *   replace, mirroring the live diff.
@@ -146,7 +148,19 @@ export const FlociFunctionProvider = () =>
           const bundler = yield* makeFunctionBundler;
           const assets = yield* Assets;
           let lastHash = ctx.attrs.code?.hash ?? "";
-          let enrolledKey: string | undefined;
+          // The attributes object that was current when the watch loop
+          // last pointed the function at the stable dev key. Every
+          // engine-driven reconcile (a binding added, an env var changed,
+          // …) re-uploads the bundle to a content-addressed key and
+          // re-points the function THERE, silently detaching it from the
+          // dev key: floci's reactive S3 sync only follows the key the
+          // function is enrolled at, so every later PutObject would be
+          // ignored and hot swap would be dead until the next engine
+          // update. The skeleton hands the watcher a fresh attrs object per
+          // reconcile, so identity (not the code hash — a source edited
+          // back to its original content hashes the same) is the signal
+          // that a re-point happened and the function must be re-enrolled.
+          let enrolledAttrs: Function["Attributes"] | undefined;
           let startedAt = Date.now();
 
           const swap = Effect.fn(function* (result: FunctionBundleResult) {
@@ -160,10 +174,12 @@ export const FlociFunctionProvider = () =>
               Body: archive,
               ContentType: "application/zip",
             });
-            if (enrolledKey !== key) {
-              // First swap: repoint the function's code at the stable dev
-              // key — floci's reactive S3 sync then re-extracts on every
-              // subsequent PutObject with no further Lambda API calls.
+            const current = yield* ctx.currentAttrs;
+            if (enrolledAttrs !== current) {
+              // First swap, or the engine re-pointed the function since the
+              // last one: (re)point its code at the stable dev key — floci's
+              // reactive S3 sync then re-extracts on every subsequent
+              // PutObject with no further Lambda API calls.
               yield* Lambda.updateFunctionCode({
                 FunctionName: functionName,
                 S3Bucket: bucket,
@@ -175,7 +191,7 @@ export const FlociFunctionProvider = () =>
                   times: 8,
                 }),
               );
-              enrolledKey = key;
+              enrolledAttrs = current;
             }
             lastHash = result.identityHash;
             yield* Effect.logInfo(

@@ -244,6 +244,12 @@ export interface AstroSourceOptions {
     readonly outDir?: string;
     readonly trailingSlash?: "always" | "never" | "ignore";
   };
+  /**
+   * Path to an alternate Astro config file, resolved against
+   * {@link rootDir} when relative. Defaults to astro's own config
+   * discovery (`astro.config.*` in the project root).
+   */
+  readonly config?: string;
 }
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/astro/source";
@@ -843,6 +849,7 @@ export interface AstroBuildChildConfig {
   readonly sessionDevKV: boolean | undefined;
   readonly prerenderEnvironment: "workerd" | "node" | undefined;
   readonly astro: AstroSourceOptions["astro"];
+  readonly config: string | undefined;
 }
 
 export const buildInChild = (config: AstroBuildChildConfig) =>
@@ -869,6 +876,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
             prerenderEnvironment: config.prerenderEnvironment,
           }),
           astro: config.astro,
+          config: config.config,
         }),
       ),
     );
@@ -899,6 +907,7 @@ const makeAstroSourceProvider = (
             prerenderEnvironment: options.prerenderEnvironment,
           }),
           astro: options.astro,
+          config: options.config,
         }),
       ),
     );
@@ -924,6 +933,7 @@ const makeAstroSourceProvider = (
             sessionDevKV: options.sessionDevKV,
             prerenderEnvironment: options.prerenderEnvironment,
             astro: options.astro,
+            config: options.config,
           } satisfies AstroBuildChildConfig,
         }).pipe(
           Effect.mapError((error) =>

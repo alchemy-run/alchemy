@@ -1,7 +1,8 @@
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
 import { HetznerAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
@@ -33,6 +34,10 @@ import {
   VolumeAttachmentProvider,
 } from "./VolumeAttachment.ts";
 import { Zone, ZoneProvider } from "./Zone.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Hetzner",
@@ -85,6 +90,7 @@ export const providers = () =>
       SshKey,
       Volume,
       VolumeAttachment,
+      WebsiteServer,
       Zone,
     ]),
   ).pipe(
@@ -105,6 +111,7 @@ export const providers = () =>
         SshKeyProvider(),
         VolumeProvider(),
         VolumeAttachmentProvider(),
+        WebsiteServerProvider(),
         ZoneProvider(),
       ),
     ),
@@ -116,8 +123,9 @@ export const providers = () =>
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(HetznerAuth),
-    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.provideMerge(FetchHttpClient.layer),
+    Layer.provideMerge(Command.providers()),
     Layer.orDie,
   );

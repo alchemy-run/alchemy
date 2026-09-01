@@ -15,6 +15,7 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 
 export interface CertificateProps {
   /**
@@ -33,8 +34,12 @@ export interface CertificateProps {
   /**
    * Route 53 hosted zone used to auto-create DNS validation records.
    *
-   * When provided together with `validationMethod: "DNS"`, the certificate
-   * provider will upsert the validation records and wait for issuance.
+   * With `validationMethod: "DNS"` the certificate provider upserts the
+   * validation records into this zone and waits for issuance. When
+   * omitted, the most specific PUBLIC hosted zone in the account
+   * containing `domainName` is inferred; if none matches, validation is
+   * left to the caller (external DNS) and the certificate is returned
+   * pending.
    */
   hostedZoneId?: string;
   /**
@@ -498,7 +503,11 @@ export const CertificateProvider = () =>
             ) ||
             (olds.validationMethod ?? defaultValidationMethod) !==
               (news.validationMethod ?? defaultValidationMethod) ||
-            olds.hostedZoneId !== news.hostedZoneId ||
+            // An undefined side means "inferred" — only two explicit,
+            // differing zones are a replacement.
+            (olds.hostedZoneId !== undefined &&
+              news.hostedZoneId !== undefined &&
+              olds.hostedZoneId !== news.hostedZoneId) ||
             olds.keyAlgorithm !== news.keyAlgorithm ||
             // Certificates cannot move regions — a region change replaces.
             (olds.region ?? ACM_REGION) !== (news.region ?? ACM_REGION) ||
@@ -620,30 +629,35 @@ export const CertificateProvider = () =>
           const certificateArn = certificate.CertificateArn;
           yield* session.note(certificateArn);
 
-          // Sync DNS validation. If the user wired a hostedZoneId, ensure
-          // validation records are upserted and the cert reaches `ISSUED`.
-          // For an already-issued cert this is mostly a fast-path: we only
-          // wait for validation records when the cert isn't already issued.
-          const shouldAutoValidate =
+          // Sync DNS validation: ensure validation records are upserted and
+          // the cert reaches `ISSUED`. The zone is the explicit
+          // `hostedZoneId` when given; otherwise the most specific public
+          // zone containing `domainName` is inferred. When neither yields a
+          // zone, validation is left to the caller (external DNS) and the
+          // certificate is returned pending — the pre-inference behavior.
+          // For an already-issued cert this is a fast-path: we only wait
+          // for validation records when the cert isn't already issued.
+          if (
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
-            news.hostedZoneId !== undefined;
-
-          if (shouldAutoValidate && certificate.Status !== "ISSUED") {
-            const withRecords = yield* waitForValidationRecords(certificateArn);
-            yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
-            certificate = yield* waitForIssued(certificateArn);
-          } else if (
-            (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
-            certificate.Status !== "ISSUED" &&
-            (certificate.DomainValidationOptions ?? []).some(
-              (option) => option.ResourceRecord === undefined,
-            )
+            certificate.Status !== "ISSUED"
           ) {
-            // No hostedZoneId: the caller validates externally (e.g. through
-            // the Dns seam) and reads the validation CNAME off this
-            // resource's attributes — ACM populates `ResourceRecord` a few
-            // seconds after the request, so wait for it (NOT for issuance).
-            certificate = yield* waitForValidationRecords(certificateArn);
+            const validationZoneId =
+              news.hostedZoneId ??
+              (yield* findPublicHostedZoneId(news.domainName));
+            if (validationZoneId !== undefined) {
+              const withRecords =
+                yield* waitForValidationRecords(certificateArn);
+              yield* upsertValidationRecords(validationZoneId, withRecords);
+              certificate = yield* waitForIssued(certificateArn);
+            } else {
+              // No governing Route53 zone: the caller validates externally
+              // (e.g. through the Dns seam — the domain's DNS may live on
+              // another provider entirely) and reads the validation CNAME
+              // off this resource's attributes. ACM populates
+              // `ResourceRecord` a few seconds after the request, so wait
+              // for the RECORDS, not for issuance.
+              certificate = yield* waitForValidationRecords(certificateArn);
+            }
           }
 
           // Sync options — only the CT logging preference is mutable in

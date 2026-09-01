@@ -1,3 +1,4 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
@@ -11,8 +12,15 @@ export const NUXT_AWS_TARGET_SPECIFIER =
 export interface NuxtProps extends FrameworkSiteProps {
   /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
-   * (highest-priority layer). `nitro.preset` is owned by the AWS deploy
-   * target and may not be set here.
+   * (the highest-priority c12 layer — a value here wins over the file).
+   * Use it for deploy-time values the config file can't express, e.g.
+   * per-stage `runtimeConfig`; `nuxt.config.ts` remains the primary home
+   * for everything else.
+   *
+   * Must be JSON-serializable — no functions, plugins, or modules (the
+   * value persists in state and participates in the rebuild hash).
+   * `nitro.preset` is always owned by the deploy target and cannot be
+   * overridden here.
    */
   nuxt?: Record<string, unknown>;
 }
@@ -51,10 +59,29 @@ export interface NuxtProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.Nuxt("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       NUXT_PUBLIC_API_BASE: api.url,
+ *   memorySize: 2048,
+ *   env: {
+ *     NUXT_PUBLIC_API_BASE: api.url,
+ *   },
+ * });
+ * ```
+ *
+ * ### Config Overrides
+ * `nuxt.config.ts` is the primary home for Nuxt configuration — it loads
+ * natively. The `nuxt` prop layers deploy-time overrides on top (the
+ * highest-priority c12 layer) for values the file can't express, like
+ * per-stage settings. The bag must be JSON-serializable — no functions,
+ * plugins, or modules — and `nitro.preset` stays owned by the deploy
+ * target.
+ *
+ * **Example:** Deploy-time config overrides
+ * ```typescript
+ * const site = yield* AWS.Website.Nuxt("Web", {
+ *   rootDir: "./app",
+ *   nuxt: {
+ *     app: { baseURL: "/docs/" },
+ *     runtimeConfig: {
+ *       public: { apiBase: "https://api.example.com" },
  *     },
  *   },
  * });
@@ -62,10 +89,12 @@ export interface NuxtProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Nuxt = (id: string, props: NuxtProps = {}) =>
-  makeFrameworkSite(id, props, {
+export const Nuxt = (id: string, props: InputProps<NuxtProps> = {}) => {
+  const p = props as NuxtProps;
+  return makeFrameworkSite(id, props, {
     name: "Nuxt",
     framework: NUXT_FRAMEWORK_SPECIFIER,
     target: NUXT_AWS_TARGET_SPECIFIER,
-    options: props.nuxt ? { nuxt: props.nuxt } : undefined,
+    options: p.nuxt !== undefined ? { nuxt: p.nuxt } : undefined,
   }).pipe(Namespace.push(id));
+};

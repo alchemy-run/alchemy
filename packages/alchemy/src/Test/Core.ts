@@ -21,7 +21,9 @@ import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { withProfileOverride } from "../Auth/Resolve.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -51,7 +53,7 @@ export interface MakeOptions<ROut = any> {
   providers: Layer.Layer<ROut, never, StackServices>;
   /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
   state?: Layer.Layer<State.State, never, StackServices>;
-  /** Override `ALCHEMY_PROFILE`; otherwise resolved from env / .env. */
+  /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
   /** Default stage for deploy/destroy (default `"test"`). */
   stage?: string;
@@ -181,8 +183,8 @@ interface SidecarSingleton {
 
 const sidecarSingletons = new Map<string, SidecarSingleton>();
 
-export const makeSidecarHandle = (
-  options: MakeOptions,
+export const makeSidecarHandle = <ROut = any>(
+  options: MakeOptions<ROut>,
 ): SidecarHandle | undefined => {
   if (!resolveSidecar(options)) return undefined;
   const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
@@ -197,14 +199,19 @@ export const makeSidecarHandle = (
         // Capture the ambient platform context (provided by `toEffect`) so
         // the deferred spawner build can run inside a provider's `get`
         // without leaking platform requirements onto the RpcProviderProxy
-        // interface. The shared MemoMap dedupes concurrent first calls, so
-        // the PROCESS gets exactly one spawner no matter how many files race.
-        const context = yield* Effect.context<never>();
+        // interface. Omit Scope: that key is the calling file's sharedScope
+        // (closed in afterAll). Merging it in would pin the process-wide
+        // spawner HTTP server to a file that exits while others still need
+        // it. Provide the sidecar singleton scope instead.
+        const ambient = Context.omit(Scope.Scope)(
+          yield* Effect.context<never>(),
+        );
         const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
           Effect.map((built) =>
             Context.get(built, RpcProviderProxy.RpcProviderProxy),
           ),
-          Effect.provideContext(context as Context.Context<any>),
+          Effect.provideContext(ambient as Context.Context<any>),
+          Scope.provide(scope),
           Effect.orDie,
         );
         return RpcProviderProxy.RpcProviderProxy.of({
@@ -310,11 +317,15 @@ const platformLayer = () =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
       ? flociWebsiteHttp
       : FetchHttpClient.layer,
-    Layer.provide(ProfileLive, PlatformServices),
+    Layer.provide(ProfileStoreLive, PlatformServices),
     Layer.provide(CredentialsStoreLive, PlatformServices),
   );
 
-const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
+const alchemyLayer = Layer.mergeAll(
+  LoggingCli,
+  CliKit.layer({ input: false }),
+  AlchemyContextLive,
+);
 
 /**
  * Build the per-test runtime and return a self-contained Effect.
@@ -332,9 +343,9 @@ const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
  * When `scope` is omitted, the effect runs with `Effect.scoped` and any
  * scoped resources are torn down as soon as it resolves.
  */
-export const toEffect = <A>(
+export const toEffect = <A, ROut = any>(
   effect: TestEffect<A>,
-  options: MakeOptions,
+  options: MakeOptions<ROut>,
   scope?: Scope.Scope,
   sidecar?: SidecarHandle,
 ): Effect.Effect<A, any, never> => {
@@ -374,9 +385,9 @@ export const toEffect = <A>(
 };
 
 /** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
-export const run = <A>(
+export const run = <A, ROut = any>(
   effect: TestEffect<A>,
-  options: MakeOptions,
+  options: MakeOptions<ROut>,
   scope?: Scope.Scope,
   sidecar?: SidecarHandle,
 ): Promise<A> => Effect.runPromise(toEffect(effect, options, scope, sidecar));

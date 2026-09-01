@@ -32,6 +32,7 @@ import * as AWS from "@/AWS";
 import { flociServices } from "@/AWS/Local/FlociServices.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
+import { liveContext } from "./fixtures/live.ts";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
@@ -147,11 +148,13 @@ test.provider(
       }).pipe(Effect.provide(flociServices()));
       expect(received.Messages?.[0]?.Body).toBe("uploads/hello.txt");
 
-      // …and the bucket never existed on the real cloud (the test body's
-      // ambient SDK is the live `testing` environment).
+      // …and the bucket never existed on the real cloud. The ambient
+      // environment in a dev run is the emulator, so the real cloud is
+      // reached EXPLICITLY via the live environment chain.
       const live = yield* S3.headBucket({ Bucket: outputs.bucketName }).pipe(
         Effect.map(() => "found" as const),
         Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
+        Effect.provide(liveContext),
       );
       expect(live).toBe("not-found");
 
