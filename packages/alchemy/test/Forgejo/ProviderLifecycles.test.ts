@@ -11,7 +11,13 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import {
+  json,
+  jsonList,
+  mockForgejo,
+  noContent,
+  status,
+} from "./support/mock.ts";
 
 interface StoredOrganization {
   readonly id: number;
@@ -69,11 +75,12 @@ const labelPayload = (label: StoredLabel) => ({
   color: label.color,
 });
 
-const server = mockForgejo(({ method, path, body }) => {
+const server = mockForgejo((request) => {
+  const { method, path, body } = request;
   const payload = body as Record<string, string | number> | undefined;
 
   if (method === "GET" && path === "/user/orgs") {
-    return json([...organizations.values()]);
+    return jsonList(request, [...organizations.values()]);
   }
 
   const adminOrgs = path.match(/^\/admin\/users\/([^/]+)\/orgs$/);
@@ -109,7 +116,8 @@ const server = mockForgejo(({ method, path, body }) => {
   const orgTeams = path.match(/^\/orgs\/([^/]+)\/teams$/);
   if (orgTeams !== null) {
     if (method === "GET") {
-      return json(
+      return jsonList(
+        request,
         [...teams.values()]
           .filter((team) => team.organization === orgTeams[1])
           .map(teamPayload),
@@ -145,7 +153,8 @@ const server = mockForgejo(({ method, path, body }) => {
 
   const teamMembers = path.match(/^\/teams\/(\d+)\/members$/);
   if (method === "GET" && teamMembers !== null) {
-    return json(
+    return jsonList(
+      request,
       [...members]
         .filter((key) => key.startsWith(`${teamMembers[1]}:`))
         .map((key) => ({ login: key.split(":")[1] })),
@@ -173,7 +182,8 @@ const server = mockForgejo(({ method, path, body }) => {
   const labelCollection = path.match(/^\/repos\/([^/]+\/[^/]+)\/labels$/);
   if (labelCollection !== null) {
     if (method === "GET") {
-      return json(
+      return jsonList(
+        request,
         [...labels.values()]
           .filter((label) => label.repository === labelCollection[1])
           .map(labelPayload),
@@ -216,7 +226,8 @@ const server = mockForgejo(({ method, path, body }) => {
   );
   if (ruleCollection !== null) {
     if (method === "GET") {
-      return json(
+      return jsonList(
+        request,
         [...rules.values()].filter(
           (rule) => rule.repository === ruleCollection[1],
         ),

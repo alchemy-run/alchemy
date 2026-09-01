@@ -9,7 +9,13 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import {
+  json,
+  jsonList,
+  mockForgejo,
+  noContent,
+  status,
+} from "./support/mock.ts";
 
 /**
  * Account-wide teardown (`alchemy nuke`) enumerates straight from the cloud,
@@ -35,16 +41,18 @@ const reset = () => {
   server.reset();
 };
 
-const server = mockForgejo(({ method, path, body }) => {
+const server = mockForgejo((request) => {
+  const { method, path, body } = request;
   const fields = body as Record<string, unknown> | undefined;
 
   if (method === "GET" && path === "/user/repos") {
-    return json([{ owner: { login: "acme" }, name: "api" }]);
+    return jsonList(request, [{ owner: { login: "acme" }, name: "api" }]);
   }
 
   if (path === "/repos/acme/api/hooks") {
     if (method === "GET") {
-      return json(
+      return jsonList(
+        request,
         [...hooks.values()].map((hook) => ({
           id: hook.id,
           url: hook.url,
@@ -72,7 +80,8 @@ const server = mockForgejo(({ method, path, body }) => {
 
   if (path === "/repos/acme/api/labels") {
     if (method === "GET") {
-      return json(
+      return jsonList(
+        request,
         [...labels.values()].map((label) => ({
           id: label.id,
           name: label.name,
@@ -98,7 +107,7 @@ const server = mockForgejo(({ method, path, body }) => {
   }
 
   if (path === "/repos/acme/api/branch_protections") {
-    if (method === "GET") return json([...rules.values()]);
+    if (method === "GET") return jsonList(request, [...rules.values()]);
     if (method === "POST") {
       const rule = { rule_name: String(fields?.rule_name) };
       rules.set(rule.rule_name, rule);

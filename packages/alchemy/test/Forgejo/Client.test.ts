@@ -227,11 +227,17 @@ describe("ignoreInaccessible", () => {
 });
 
 describe("paginate", () => {
-  test("walks every page until a short page is returned", async () => {
+  test("walks every page until an empty page is returned", async () => {
     const page1 = Array.from({ length: 50 }, (_, index) => ({ id: index }));
     const page2 = [{ id: 50 }, { id: 51 }];
     const server = mockForgejo((request) =>
-      json(request.query.page === "1" ? page1 : page2),
+      json(
+        request.query.page === "1"
+          ? page1
+          : request.query.page === "2"
+            ? page2
+            : [],
+      ),
     );
 
     const items = await run(server.layer, (client) =>
@@ -242,17 +248,42 @@ describe("paginate", () => {
     expect(server.requests.map((request) => request.query.page)).toEqual([
       "1",
       "2",
+      "3",
     ]);
   });
 
-  test("stops after a single short page", async () => {
-    const server = mockForgejo(() => json([{ id: 1 }]));
+  test("keeps paging when the instance clamps the page size", async () => {
+    // Forgejo clamps `limit` to `[api] MAX_RESPONSE_ITEMS`. On an instance
+    // where that is below PAGE_LIMIT every full page looks short, so stopping
+    // at the first short page would report page one as the whole list.
+    const clamped = 20;
+    const server = mockForgejo((request) => {
+      const page = Number(request.query.page);
+      return json(
+        page > 2
+          ? []
+          : Array.from({ length: clamped }, (_, index) => ({
+              id: (page - 1) * clamped + index,
+            })),
+      );
+    });
 
     const items = await run(server.layer, (client) =>
       paginate<{ id: number }>(client, "/user/orgs"),
     );
 
-    expect(items).toEqual([{ id: 1 }]);
+    expect(items).toHaveLength(40);
+    expect(server.requests).toHaveLength(3);
+  });
+
+  test("stops after a single empty page", async () => {
+    const server = mockForgejo(() => json([]));
+
+    const items = await run(server.layer, (client) =>
+      paginate<{ id: number }>(client, "/user/orgs"),
+    );
+
+    expect(items).toEqual([]);
     expect(server.requests).toHaveLength(1);
   });
 
