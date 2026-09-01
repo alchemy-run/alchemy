@@ -1,12 +1,15 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
+import { RailwayEnvironment } from "@/Railway/Environment.ts";
 import { Service } from "@/Railway/Service.ts";
 import { ServiceProvider } from "@/Railway/ServiceProvider.ts";
 import { Stack } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { CredentialsFromToken } from "@distilled.cloud/railway";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import type * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -211,6 +214,16 @@ const reconcile = (source: { image: string } | { repo: string }) =>
         bindings: {},
         actions: {},
       }),
+      Layer.succeed(Stage, "test-stage"),
+      Layer.succeed(
+        RailwayEnvironment,
+        Effect.succeed({
+          token: Redacted.make("credential-free-test-token"),
+          tokenKind: "account" as const,
+          apiBaseUrl: "https://railway.test",
+          workspaceId: "workspace-1",
+        }),
+      ),
       Layer.succeed(AlchemyContext, {
         dotAlchemy: "/tmp/.alchemy-railway-service-provider-test",
         dev: false,

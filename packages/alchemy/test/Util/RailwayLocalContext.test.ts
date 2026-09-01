@@ -8,8 +8,20 @@ import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as zlib from "node:zlib";
+
+const expectFailureTag = (
+  result: Result.Result<unknown, unknown>,
+  tag: string,
+) => {
+  expect(Result.isFailure(result)).toBe(true);
+  if (!Result.isFailure(result)) return;
+  expect(
+    Predicate.hasProperty(result.failure, "_tag") && result.failure._tag,
+  ).toBe(tag);
+};
 
 const describe = layer(NodeServices.layer);
 
@@ -166,9 +178,7 @@ describe("Railway local Docker contexts", (it) => {
       const missing = yield* Effect.result(
         hashRailwayLocalContext({ context: path.join(root, "missing") }),
       );
-      expect(Result.isFailure(missing) && missing.failure._tag).toBe(
-        "Railway.ServiceContextPathInvalid",
-      );
+      expectFailureTag(missing, "Railway.ServiceContextPathInvalid");
 
       const context = path.join(root, "context");
       yield* fs.makeDirectory(context);
@@ -176,9 +186,7 @@ describe("Railway local Docker contexts", (it) => {
       const wrongType = yield* Effect.result(
         hashRailwayLocalContext({ context }),
       );
-      expect(Result.isFailure(wrongType) && wrongType.failure._tag).toBe(
-        "Railway.ServiceContextPathInvalid",
-      );
+      expectFailureTag(wrongType, "Railway.ServiceContextPathInvalid");
 
       yield* fs.remove(path.join(context, "Dockerfile"), { recursive: true });
       yield* fs.writeFileString(
@@ -188,9 +196,7 @@ describe("Railway local Docker contexts", (it) => {
       const outside = yield* Effect.result(
         hashRailwayLocalContext({ context, dockerfilePath: "../Dockerfile" }),
       );
-      expect(Result.isFailure(outside) && outside.failure._tag).toBe(
-        "Railway.ServiceDockerfileOutsideContext",
-      );
+      expectFailureTag(outside, "Railway.ServiceDockerfileOutsideContext");
 
       yield* fs.writeFileString(
         path.join(context, "Dockerfile"),
@@ -200,9 +206,7 @@ describe("Railway local Docker contexts", (it) => {
       const unicode = yield* Effect.result(
         prepareRailwayLocalContext({ context }),
       );
-      expect(Result.isFailure(unicode) && unicode.failure._tag).toBe(
-        "Railway.ServiceContextPathUnsupported",
-      );
+      expectFailureTag(unicode, "Railway.ServiceContextPathUnsupported");
     }),
   );
 
@@ -229,9 +233,7 @@ describe("Railway local Docker contexts", (it) => {
       const final = yield* Effect.result(
         hashRailwayLocalContext({ context: finalContext }),
       );
-      expect(Result.isFailure(final) && final.failure._tag).toBe(
-        "Railway.ServiceContextSymlinkUnsupported",
-      );
+      expectFailureTag(final, "Railway.ServiceContextSymlinkUnsupported");
 
       const intermediateContext = path.join(root, "intermediate");
       yield* fs.makeDirectory(intermediateContext);
@@ -242,7 +244,8 @@ describe("Railway local Docker contexts", (it) => {
           dockerfilePath: "linked/Dockerfile",
         }),
       );
-      expect(Result.isFailure(intermediate) && intermediate.failure._tag).toBe(
+      expectFailureTag(
+        intermediate,
         "Railway.ServiceContextSymlinkUnsupported",
       );
 
@@ -251,9 +254,7 @@ describe("Railway local Docker contexts", (it) => {
       const linked = yield* Effect.result(
         hashRailwayLocalContext({ context: linkedContext }),
       );
-      expect(Result.isFailure(linked) && linked.failure._tag).toBe(
-        "Railway.ServiceContextSymlinkUnsupported",
-      );
+      expectFailureTag(linked, "Railway.ServiceContextSymlinkUnsupported");
 
       const containingContext = path.join(root, "containing");
       yield* fs.makeDirectory(containingContext);
@@ -265,9 +266,7 @@ describe("Railway local Docker contexts", (it) => {
       const containing = yield* Effect.result(
         prepareRailwayLocalContext({ context: containingContext }),
       );
-      expect(Result.isFailure(containing) && containing.failure._tag).toBe(
-        "Railway.ServiceContextSymlinkUnsupported",
-      );
+      expectFailureTag(containing, "Railway.ServiceContextSymlinkUnsupported");
     }),
   );
 
@@ -289,9 +288,7 @@ describe("Railway local Docker contexts", (it) => {
       const overhead = yield* Effect.result(
         hashRailwayLocalContext({ context }),
       );
-      expect(Result.isFailure(overhead) && overhead.failure._tag).toBe(
-        "Railway.ServiceContextTooLarge",
-      );
+      expectFailureTag(overhead, "Railway.ServiceContextTooLarge");
 
       const many = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-railway-many-",
@@ -309,9 +306,7 @@ describe("Railway local Docker contexts", (it) => {
       const entries = yield* Effect.result(
         hashRailwayLocalContext({ context: many }),
       );
-      expect(Result.isFailure(entries) && entries.failure._tag).toBe(
-        "Railway.ServiceContextTooLarge",
-      );
+      expectFailureTag(entries, "Railway.ServiceContextTooLarge");
     }),
   );
 });
