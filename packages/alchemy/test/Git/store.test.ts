@@ -5,6 +5,7 @@
  * are verified.
  */
 import {
+  encodeTypeSize,
   makeSha1,
   hashObject,
   type Oid,
@@ -14,8 +15,13 @@ import { bufferRandomAccess, ingestPack } from "@/Git/git/PackParser.ts";
 import { packHeader } from "@/Git/git/PackWriter.ts";
 import type { ManifestEntry } from "@/Git/git/Store.ts";
 import * as Zlib from "@/Git/git/Zlib.ts";
-import { runCompactJob, shouldCompact, BLOB_TYPE } from "@/Git/jobs/Compact.ts";
-import { packKey } from "@/Git/store/Keys.ts";
+import {
+  runCompactJob,
+  runGeometricMergeJob,
+  shouldCompact,
+  BLOB_TYPE,
+} from "@/Git/jobs/Compact.ts";
+import { packKey, packKeyOf, wirePackId } from "@/Git/store/Keys.ts";
 import {
   makeObjectStore,
   STAGE_INSERT_ROWS,
@@ -467,6 +473,139 @@ describe("insertStagedBatch", () => {
           objects[1]!.oid,
         );
         expect(other?.staged_push).toBe("push-C");
+      }),
+    );
+  });
+});
+
+describe("promoted wire packs (DESIGN §22.5)", () => {
+  /** Lays fixtures out the way a wire pack does: typeSize header + zdata per entry. */
+  const layout = (fixtures: ReadonlyArray<Fixture>, base: number) => {
+    const pieces: Array<Uint8Array> = [new Uint8Array(base)];
+    const offsets = new Map<Oid, number>();
+    let at = base;
+    for (const f of fixtures) {
+      const head = encodeTypeSize(f.type as 3, f.content.length);
+      pieces.push(head, f.zdata);
+      offsets.set(f.oid, at + head.length);
+      at += head.length + f.zdata.length;
+    }
+    return { bytes: concat(pieces), offsets };
+  };
+
+  test("rows staged as pack references read back through the wire key on every path", async () => {
+    await run(
+      Effect.gen(function* () {
+        const sql = makeTestSqlClient();
+        const blobs = makeMemoryBlobStore();
+        const store = makeObjectStore({ sql, blobs, repoId: REPO });
+        const fixtures: Array<Fixture> = [];
+        for (let i = 0; i < 40; i++)
+          fixtures.push(yield* makeFixture(3, bytes(3000, i + 1)));
+        const packId = wirePackId("01RECEIVE00000000000000000");
+        const { bytes: wire, offsets } = layout(fixtures, 137); // 137 bytes of pkt-line commands first
+        yield* blobs.put(packKeyOf(REPO, packId), wire);
+        expect(packKeyOf(REPO, packId)).toContain("/incoming/");
+        yield* store.insertStagedBatch(
+          "push-P",
+          fixtures.map((f) => ({
+            oid: f.oid,
+            type: f.type,
+            size: f.content.length,
+            zdata: f.zdata,
+            pack: { packId, offset: offsets.get(f.oid)! },
+          })),
+        );
+        const staged = yield* sql.all<{
+          location: string;
+          n: number;
+          withBlob: number;
+        }>(
+          `SELECT location, COUNT(*) AS n, SUM(zdata IS NOT NULL) AS withBlob FROM objects GROUP BY location`,
+        );
+        expect(staged).toEqual([{ location: "pack", n: 40, withBlob: 0 }]);
+        yield* sql.run(
+          `UPDATE objects SET staged_push = NULL WHERE staged_push = 'push-P'`,
+        );
+        // Single reads, batched reads, and pack emission all resolve the wire key.
+        const one = yield* store.readContent(fixtures[7]!.oid);
+        expect(Array.from(one)).toEqual(Array.from(fixtures[7]!.content));
+        const many = yield* store.readContentBatch(fixtures.map((f) => f.oid));
+        expect(many.size).toBe(40);
+        const pack = yield* buildPack(store, manifestOf(fixtures, "pack"));
+        expect(verifyPack(pack).error).toBeUndefined();
+        const parsed = yield* parsePack(
+          pack,
+          makeObjectStore({
+            sql: makeTestSqlClient(),
+            blobs: makeMemoryBlobStore(),
+            repoId: "X",
+          }),
+        );
+        expect(parsed.seen.size).toBe(40);
+      }),
+    );
+  });
+
+  test("compaction leaves promoted rows alone and geometric merge never touches a wire pack", async () => {
+    await run(
+      Effect.gen(function* () {
+        const { sql, blobs, store, fixtures } = yield* seedRepo({
+          blobs: 30,
+          blobSize: 2000,
+          trees: 3,
+        });
+        const promotedFixtures: Array<Fixture> = [];
+        for (let i = 0; i < 12; i++)
+          promotedFixtures.push(yield* makeFixture(3, bytes(2000, i + 500)));
+        const packId = wirePackId("01RECEIVE00000000000000001");
+        const { bytes: wire, offsets } = layout(promotedFixtures, 0);
+        yield* blobs.put(packKeyOf(REPO, packId), wire);
+        yield* store.insertStagedBatch(
+          "push-Q",
+          promotedFixtures.map((f) => ({
+            oid: f.oid,
+            type: f.type,
+            size: f.content.length,
+            zdata: f.zdata,
+            pack: { packId, offset: offsets.get(f.oid)! },
+          })),
+        );
+        yield* sql.run(`UPDATE objects SET staged_push = NULL`);
+        // Two compaction runs make two small packs; the wire pack is a third.
+        const p1 = yield* runCompactJob({
+          repoId: REPO,
+          sql,
+          blobs,
+          maxObjects: 15,
+          maxBytes: 1 << 30,
+        });
+        const p2 = yield* runCompactJob({
+          repoId: REPO,
+          sql,
+          blobs,
+          maxObjects: 15,
+          maxBytes: 1 << 30,
+        });
+        expect(p1.moved + p2.moved).toBe(30);
+        const merge = yield* runGeometricMergeJob({ repoId: REPO, sql, blobs });
+        const packs = yield* sql.all<{ pack_id: string; n: number }>(
+          `SELECT pack_id, COUNT(*) AS n FROM objects WHERE location = 'pack' GROUP BY pack_id ORDER BY n`,
+        );
+        const wireRows = packs.find((p) => p.pack_id === packId);
+        expect(wireRows?.n).toBe(12); // untouched by merge
+        expect(
+          packs
+            .filter((p) => p.pack_id !== packId)
+            .every((p) => p.n === 30 || p.n === 15),
+        ).toBe(true);
+        expect(blobs.objects.has(packKeyOf(REPO, packId))).toBe(true);
+        void merge;
+        // Everything still reads.
+        const all = yield* store.readContentBatch(
+          [...fixtures, ...promotedFixtures].map((f) => f.oid),
+        );
+        expect(all.size).toBe(45);
       }),
     );
   });

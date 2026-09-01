@@ -38,7 +38,7 @@ import {
   type ObjectSource,
 } from "../git/Store.ts";
 import * as Zlib from "../git/Zlib.ts";
-import { objectKey, packKey } from "./Keys.ts";
+import { objectKey, packKeyOf } from "./Keys.ts";
 import type { ObjectMetaRow, SqlClient } from "./Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,6 +152,14 @@ export class NotImplementedError extends Schema.TaggedError<NotImplementedError>
  */
 export interface StagedObject {
   readonly oid: Oid;
+  /**
+   * Set when the bytes already live in a pack in blob storage (a promoted
+   * wire pack, DESIGN §22.5): the row is staged as `location='pack'` with
+   * these coordinates and `zdata` is NOT stored.
+   */
+  readonly pack?:
+    | { readonly packId: string; readonly offset: number }
+    | undefined;
   readonly type: ObjectType;
   /** Uncompressed content size in bytes. */
   readonly size: number;
@@ -426,7 +434,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         }),
       );
     }
-    const key = packKey(repoId, row.pack_id);
+    const key = packKeyOf(repoId, row.pack_id);
     const offset = row.pack_offset;
     const windowIndex = Math.floor(offset / WINDOW_BYTES);
     const slab = yield* readWindow(key, windowIndex);
@@ -774,7 +782,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
                   }),
                 );
               }
-              const key = packKey(repoId, coord.pack_id);
+              const key = packKeyOf(repoId, coord.pack_id);
               const window = Math.floor(coord.pack_offset / WINDOW_BYTES);
               let run = runs[runs.length - 1];
               if (
@@ -870,12 +878,57 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     ) {
       if (objects.length === 0) return;
       const inline: Array<StagedObject> = [];
+      const promoted: Array<StagedObject> = [];
       for (const object of objects) {
-        if (object.zdata.byteLength > R2_OFFLOAD_THRESHOLD) {
-          // Needs its own R2 write; rare enough to keep on the slow path.
+        if (object.pack !== undefined) {
+          promoted.push(object);
+        } else if (object.zdata.byteLength > R2_OFFLOAD_THRESHOLD) {
           yield* insertStagedOne(pushId, object);
         } else {
           inline.push(object);
+        }
+      }
+      if (promoted.length > 0) {
+        // Rows that point into a pack already in blob storage: no BLOB
+        // written to SQLite at all. 7 bindings per row → 14 rows per
+        // statement under the 100-parameter cap.
+        const sorted = [...promoted].sort((a, b) =>
+          a.oid < b.oid ? -1 : a.oid > b.oid ? 1 : 0,
+        );
+        const written = yield* sql.transactionSync((raw) => {
+          let changed = 0;
+          for (let at = 0; at < sorted.length; at += 14) {
+            const part = sorted.slice(at, at + 14);
+            const values = part
+              .map(() => "(?, ?, ?, ?, 'pack', NULL, ?, ?, ?)")
+              .join(", ");
+            const bindings: Array<string | number> = [];
+            for (const object of part) {
+              bindings.push(
+                object.oid,
+                object.type,
+                object.size,
+                object.zdata.byteLength,
+                object.pack!.packId,
+                object.pack!.offset,
+                pushId,
+              );
+            }
+            changed += raw.exec(
+              `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, pack_id, pack_offset, staged_push) VALUES ${values}`,
+              ...bindings,
+            ).rowsWritten;
+          }
+          return changed;
+        });
+        if (written < sorted.length) {
+          yield* sql.inChunks(
+            (ph) =>
+              `UPDATE objects SET staged_push = ? WHERE oid IN (${ph})
+                 AND staged_push IS NOT NULL AND staged_push != ?`,
+            sorted.map((object) => object.oid),
+            { prefix: [pushId], suffix: [pushId] },
+          );
         }
       }
       if (inline.length === 0) return;

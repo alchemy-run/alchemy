@@ -130,7 +130,7 @@ import {
   runGeometricMergeJob,
   shouldCompact,
 } from "./jobs/Compact.ts";
-import { headKey, incomingKey } from "./store/Keys.ts";
+import { headKey, incomingKey, wirePackId } from "./store/Keys.ts";
 import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
 import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
 import { receiveWireBody } from "./store/IncomingBody.ts";
@@ -1213,6 +1213,8 @@ export interface IngestResult {
   readonly stageMs?: number | undefined;
   /** Per-phase CPU split of ingest (ms) — see `PackParser` `phases`. */
   readonly phases?: Record<string, number> | undefined;
+  /** Objects staged as references into a promoted wire pack (DESIGN §22.5). */
+  readonly promoted?: number | undefined;
   /** The pack's trailer checksum (hex). */
   readonly packSha: string;
   /** Staged commits (commit-graph rows are inserted at finalize). */
@@ -1276,6 +1278,15 @@ interface RawEntry {
 export interface IngestOptions {
   readonly store: ObjectStore;
   readonly pushId: string;
+  /**
+   * When the wire body was spilled to blob storage, stage non-delta blobs
+   * as references into it (DESIGN §22.5): `packId` is the wire pack's id,
+   * `base` the pack's byte offset within the spilled object (the request's
+   * pkt-line commands precede it).
+   */
+  readonly promote?:
+    | { readonly packId: string; readonly base: number }
+    | undefined;
   /**
    * Shallow-import mode: commit parents may be absent (they become walk
    * boundaries); trees/blobs/tags must still be fully connected.
@@ -1380,6 +1391,7 @@ export const ingestPackFrom = (
     // (DESIGN.md §16.6).
     let batch: Array<StagedObject> = [];
     let batchBytes = 0;
+    let promoted = 0;
     /** Time spent in SQL staging; the rest of ingest is CPU. */
     let stageMs = 0;
     const flush = Effect.fn(function* () {
@@ -1400,13 +1412,27 @@ export const ingestPackFrom = (
       phases,
       sink: (entry) =>
         Effect.gen(function* () {
+          const pack =
+            options.promote !== undefined &&
+            !entry.fromDelta &&
+            entry.type === ObjectType.blob &&
+            entry.dataOffset >= 0
+              ? {
+                  packId: options.promote.packId,
+                  offset: options.promote.base + entry.dataOffset,
+                }
+              : undefined;
+          if (pack !== undefined) promoted += 1;
           batch.push({
             oid: entry.oid,
             type: entry.type,
             size: entry.size,
             zdata: entry.zdata,
+            pack,
           });
-          batchBytes += entry.zdata.byteLength;
+          // Promoted rows carry no BLOB; only inline bytes count toward the
+          // staging batch's memory cap.
+          batchBytes += pack === undefined ? entry.zdata.byteLength : 0;
           if (
             batch.length >= STAGE_BATCH_OBJECTS ||
             batchBytes >= STAGE_BATCH_BYTES
@@ -1431,6 +1457,7 @@ export const ingestPackFrom = (
     return {
       stageMs,
       phases,
+      promoted,
       objectCount: summary.count,
       // The parser verifies the trailer itself; the checksum is not used
       // downstream, so it is not re-derived here.
@@ -3078,6 +3105,10 @@ export const GitRepoLive = GitRepo.make(
           // probe, read-only, semaphore timeout) drops the spilled object
           // through the single `ensuring` at the bottom.
           let parkedKey: string | undefined;
+          // Set once staged rows reference the spilled object as a wire
+          // pack: it is then repo data, not scratch, and must outlive the
+          // request (DESIGN §22.5).
+          let keepParked = false;
           const receiveId = yield* ulid();
           const receivedResult = yield* Effect.result(
             receiveWireBody(request.stream, {
@@ -3270,6 +3301,13 @@ export const GitRepoLive = GitRepo.make(
                   ingestPackFrom(source, {
                     store: objects,
                     pushId,
+                    promote:
+                      incoming.parkedKey === undefined
+                        ? undefined
+                        : {
+                            packId: wirePackId(receiveId),
+                            base: parsed.packStart,
+                          },
                   }),
                 );
                 ingestMs = yield* since(ingestStarted);
@@ -3281,6 +3319,7 @@ export const GitRepoLive = GitRepo.make(
                   return respond(reason, allNg("unpacker error"));
                 }
                 ingest = outcome.success;
+                if ((ingest.promoted ?? 0) > 0) keepParked = true;
               }
 
               // Full connectivity check (§3.6 step 5).
@@ -3370,7 +3409,7 @@ export const GitRepoLive = GitRepo.make(
             // parked R2 object is dropped after ingest (or non-ingest).
             Effect.ensuring(
               Effect.suspend(() =>
-                parkedKey === undefined
+                parkedKey === undefined || keepParked
                   ? Effect.void
                   : blobs
                       .delete(parkedKey)

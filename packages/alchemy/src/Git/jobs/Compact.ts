@@ -37,7 +37,7 @@ import {
   type PackEntryType,
 } from "../git/ObjectCodec.ts";
 import { StoreError } from "../git/Store.ts";
-import { packKey } from "../store/Keys.ts";
+import { packKey, packKeyOf } from "../store/Keys.ts";
 import type { SqlClient } from "../store/Sql.ts";
 
 /** Objects moved per alarm run. */
@@ -336,8 +336,12 @@ export const runGeometricMergeJob = (options: {
     const maxInput = options.maxInputBytes ?? MAX_MERGE_INPUT_BYTES;
 
     const rows = yield* options.sql.all<{ pack_id: string; n: number }>(
+      // Promoted wire packs (`wire-…`, DESIGN §22.5) are excluded: they also
+      // carry the push's trees, commits and delta entries, so they cannot be
+      // concatenated; they stay as-is until a rewrite path exists.
       `SELECT pack_id, COUNT(*) AS n FROM objects
         WHERE location = 'pack' AND pack_id IS NOT NULL
+          AND pack_id NOT LIKE 'wire-%'
         GROUP BY pack_id`,
     );
     if (rows.length < 2) return noMerge;
@@ -347,7 +351,7 @@ export const runGeometricMergeJob = (options: {
     const packs: Array<{ id: string; count: number; size: number }> = [];
     for (const row of rows) {
       const meta = yield* runR2(`merge head ${row.pack_id}`)(
-        options.blobs.head(packKey(options.repoId, row.pack_id)),
+        options.blobs.head(packKeyOf(options.repoId, row.pack_id)),
       );
       // A pack R2 lost (or a crash orphaned) cannot be merged; skip it —
       // reads through it will surface the real error on their own path.
@@ -388,7 +392,7 @@ export const runGeometricMergeJob = (options: {
     let bodyOffset = 0;
     for (const source of sources) {
       const object = yield* runR2(`merge get ${source.id}`)(
-        options.blobs.get(packKey(options.repoId, source.id)),
+        options.blobs.get(packKeyOf(options.repoId, source.id)),
       );
       if (object === null) return noMerge; // vanished mid-run: retry later
       const bytes = yield* runR2(`merge read ${source.id}`)(object.bytes);
@@ -461,7 +465,7 @@ export const runGeometricMergeJob = (options: {
       bytes: merged.length,
       packId,
       pendingDelete: sources.map((source) =>
-        packKey(options.repoId, source.id),
+        packKeyOf(options.repoId, source.id),
       ),
       more,
     };

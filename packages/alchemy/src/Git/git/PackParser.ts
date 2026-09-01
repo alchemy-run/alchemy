@@ -156,6 +156,13 @@ export interface ResolvedEntry {
   /** `true` when the entry arrived as a delta and was re-deflated. */
   readonly fromDelta: boolean;
   /**
+   * Byte offset of `zdata` within the pack SOURCE for non-delta entries
+   * (the compressed span is the pack's bytes verbatim, so a store may
+   * reference it in place — DESIGN §22.5); `-1` for delta-resolved entries,
+   * whose `zdata` is a fresh deflate that exists nowhere in the pack.
+   */
+  readonly dataOffset: number;
+  /**
    * The inflated bytes. The parser already holds them at this point, so
    * passing them through spares every consumer a second inflate just to
    * read a commit or tree.
@@ -460,6 +467,7 @@ export const ingestPack = <E, R>(
             size: content.length,
             zdata,
             fromDelta: true,
+            dataOffset: -1,
             content,
           }),
         );
@@ -613,6 +621,7 @@ export const ingestPack = <E, R>(
             size: content.length,
             zdata,
             fromDelta: false,
+            dataOffset,
             content,
           }),
         );

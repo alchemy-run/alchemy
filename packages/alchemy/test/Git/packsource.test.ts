@@ -52,15 +52,25 @@ const parseWith = (source: ReturnType<typeof bufferRandomAccess>) =>
       repoId: "R",
     });
     const seen: Array<string> = [];
+    const offsets: Array<{
+      dataOffset: number;
+      zdata: Uint8Array;
+      fromDelta: boolean;
+    }> = [];
     const summary = yield* ingestPack({
       source,
       store,
       sink: (entry) =>
         Effect.sync(() => {
           seen.push(entry.oid);
+          offsets.push({
+            dataOffset: entry.dataOffset,
+            zdata: entry.zdata,
+            fromDelta: entry.fromDelta,
+          });
         }),
     });
-    return { count: summary.count, seen };
+    return { count: summary.count, seen, offsets };
   });
 
 describe("blobRandomAccess", () => {
@@ -118,6 +128,16 @@ describe("blobRandomAccess", () => {
         );
         const windowed = yield* parseWith(spilled);
         expect(windowed.count).toBe(300);
+        // dataOffset addresses the compressed span in the SOURCE (promotion
+        // relies on this): reading it back yields exactly zdata.
+        for (const entry of windowed.offsets.slice(0, 50)) {
+          expect(entry.fromDelta).toBe(false);
+          const span = yield* spilled.read(
+            entry.dataOffset,
+            entry.zdata.length,
+          );
+          expect(Array.from(span)).toEqual(Array.from(entry.zdata));
+        }
         expect(windowed.seen).toEqual(memory.seen);
         expect(new Set(windowed.seen)).toEqual(new Set(oids));
       }),

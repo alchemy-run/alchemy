@@ -16,6 +16,7 @@ import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -95,6 +96,19 @@ if (PROFILE_REPO === undefined) {
       const meta = yield* client.repos.get({
         params: { owner: "profile", repo: "repo" },
       });
+      // Clone it back and let real git verify — a promoted push must read
+      // back byte-for-byte through the wire pack.
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectory({
+        prefix: "git-ingest-profile-",
+      });
+      const clone = yield* git(tmp, "clone", "-q", remote, "back");
+      expect(clone.exitCode, clone.stderr).toBe(0);
+      const fsck = yield* git(`${tmp}/back`, "fsck", "--connectivity-only");
+      expect(fsck.exitCode, fsck.stderr).toBe(0);
+      console.log(
+        `[ingest-profile] objects: ${JSON.stringify(meta.objects)}; clone back + fsck ok`,
+      );
       const p = meta.lastPush!;
       const phases = Object.entries(p.phases ?? {})
         .sort((a, b) => b[1] - a[1])

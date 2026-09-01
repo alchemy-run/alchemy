@@ -65,6 +65,26 @@ export const incomingKey = (repoId: string, pushId: string): string =>
   `${repoId}/incoming/${pushId}.pack`;
 
 /**
+ * Pack-id prefix of a **promoted wire pack** (DESIGN §22.5): a push whose
+ * body spilled to blob storage already holds every non-delta blob in the
+ * compaction layout (`typeSize header + zdata`), so ingest points those
+ * rows straight into the incoming object instead of copying 40 MiB of
+ * blobs through SQLite and compacting them out again later. The pack id
+ * is `wire-<receiveId>`; the object stays at its `incomingKey`.
+ */
+export const WIRE_PACK_PREFIX = "wire-";
+export const wirePackId = (receiveId: string): string =>
+  `${WIRE_PACK_PREFIX}${receiveId}`;
+export const isWirePackId = (packId: string): boolean =>
+  packId.startsWith(WIRE_PACK_PREFIX);
+
+/** R2 key of any pack by id — compacted (`packKey`) or promoted wire pack. */
+export const packKeyOf = (repoId: string, packId: string): string =>
+  isWirePackId(packId)
+    ? incomingKey(repoId, packId.slice(WIRE_PACK_PREFIX.length))
+    : packKey(repoId, packId);
+
+/**
  * R2 key reserved for a future LFS object (DESIGN.md §10):
  * `{repoId}/lfs/{sha256}`.
  */
