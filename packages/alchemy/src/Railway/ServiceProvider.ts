@@ -1038,6 +1038,7 @@ export const ServiceProvider = () =>
               projectId,
               environmentId,
               serviceId: current.id,
+              domainId: output?.domainId ?? null,
             });
           } else if (output?.domainId !== undefined) {
             // Only the recorded generated domain belongs to this resource.
@@ -1130,6 +1131,7 @@ export const ServiceProvider = () =>
               projectId,
               environmentId,
               serviceId: current.id,
+              domainId: domain?.id,
               targetPort: port,
             });
           }

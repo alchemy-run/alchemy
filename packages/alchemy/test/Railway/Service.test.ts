@@ -241,6 +241,65 @@ test.provider(
       );
       expect(publicUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
 
+      // Put a second generated domain first/alongside the recorded one. The
+      // provider must keep refreshing and deleting by its recorded id only.
+      const foreignDomain = yield* railway.serviceDomainCreate({
+        input: {
+          environmentId: publicUpdate.api.environmentId,
+          serviceId: publicUpdate.api.serviceId,
+        },
+      });
+      expect(foreignDomain.id).not.toEqual(publicUpdate.api.domainId);
+
+      const publicWithForeignDomain = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Api", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            name: nextName,
+            healthcheckPath: "/health",
+            publicDomain: true,
+          });
+          return { api };
+        }),
+      );
+      expect(publicWithForeignDomain.api.domainId).toEqual(
+        publicUpdate.api.domainId,
+      );
+
+      const privateWithForeignDomain = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Api", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            name: nextName,
+            healthcheckPath: "/health",
+            publicDomain: false,
+          });
+          return { api };
+        }),
+      );
+      expect(privateWithForeignDomain.api.domainId).toBeUndefined();
+      const remainingDomains = yield* railway.domains({
+        projectId: publicUpdate.api.projectId,
+        environmentId: publicUpdate.api.environmentId,
+        serviceId: publicUpdate.api.serviceId,
+      });
+      const remainingIds = remainingDomains.serviceDomains
+        .filter(
+          (domain) =>
+            domain.deletedAt == null && domain.syncStatus !== "DELETED",
+        )
+        .map((domain) => domain.id);
+      expect(remainingIds).toContain(foreignDomain.id);
+      expect(remainingIds).not.toContain(publicUpdate.api.domainId);
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.api.serviceId);
