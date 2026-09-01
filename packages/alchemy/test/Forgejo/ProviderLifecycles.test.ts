@@ -55,6 +55,8 @@ const rules = new Map<string, StoredRule>();
 let nextId = 1;
 /** Simulates a credential that is not an instance administrator. */
 let forbidAdminOrgs = false;
+/** Simulates repositories the organization still owns on its first deletes. */
+let organizationDeletesBlocked = 0;
 
 const reset = () => {
   organizations.clear();
@@ -64,6 +66,7 @@ const reset = () => {
   rules.clear();
   nextId = 1;
   forbidAdminOrgs = false;
+  organizationDeletesBlocked = 0;
   server.reset();
 };
 
@@ -113,6 +116,15 @@ const server = mockForgejo((request) => {
       return json(existing);
     }
     if (method === "DELETE") {
+      if (organizationDeletesBlocked > 0) {
+        organizationDeletesBlocked -= 1;
+        // Verbatim shape of the failure Forgejo 16.0.3 returns while the
+        // organization still owns repositories: a 500, not a conflict status.
+        return status(
+          500,
+          '{"message":"user still has ownership of repositories [uid: 16]"}',
+        );
+      }
       organizations.delete(org[1]!);
       return noContent();
     }
@@ -388,6 +400,30 @@ test.provider("deletes an organization when removal is opted in", (stack) =>
   }),
 );
 
+test.provider(
+  "retries an organization delete while it still owns repositories",
+  (stack) =>
+    Effect.gen(function* () {
+      reset();
+
+      yield* stack.deploy(
+        Organization("Acme", { owner: "alice", username: "acme" }).pipe(
+          destroy(),
+        ),
+      );
+      server.reset();
+
+      // The engine deletes independent resources concurrently, so an
+      // organization races the repositories it owns. Failing out on the first
+      // rejection makes destroy succeed only on a re-run.
+      organizationDeletesBlocked = 2;
+      yield* stack.destroy();
+
+      expect(server.count("DELETE", "/orgs/acme")).toBe(3);
+      expect(organizations.has("acme")).toBe(false);
+    }),
+);
+
 test.provider("creates, updates and deletes a team", (stack) =>
   Effect.gen(function* () {
     reset();
@@ -575,5 +611,90 @@ test.provider(
         server.count("DELETE", "/repos/alice/alchemy/branch_protections/main"),
       ).toBe(1);
       expect(rules.size).toBe(0);
+    }),
+);
+
+test.provider(
+  "enables push enforcement when a whitelist is declared",
+  (stack) =>
+    Effect.gen(function* () {
+      reset();
+
+      yield* stack.deploy(
+        BranchProtection("Main", {
+          owner: "alice",
+          repository: "alchemy",
+          ruleName: "main",
+          pushWhitelistUsernames: ["release-bot"],
+        }),
+      );
+
+      // A whitelist Forgejo is not enforcing silently permits everyone.
+      expect(
+        server.find("POST", "/repos/alice/alchemy/branch_protections")?.body,
+      ).toMatchObject({
+        push_whitelist_usernames: ["release-bot"],
+        enable_push: true,
+        enable_push_whitelist: true,
+      });
+    }),
+);
+
+test.provider("leaves the push flags alone when none are declared", (stack) =>
+  Effect.gen(function* () {
+    reset();
+
+    yield* stack.deploy(
+      BranchProtection("Main", {
+        owner: "alice",
+        repository: "alchemy",
+        ruleName: "main",
+      }),
+    );
+
+    // Omitted props stay unmanaged, so neither flag may reach the wire at
+    // all. Asserted as absence rather than a falsy value: `toMatchObject`
+    // ignores extra keys, so emitting `enable_push_whitelist: false` here
+    // would start managing a setting nobody declared and still pass every
+    // other test in this file.
+    const body = server.find(
+      "POST",
+      "/repos/alice/alchemy/branch_protections",
+    )?.body;
+    // Pins the rule down first — absence assertions hold vacuously on the
+    // `undefined` an unsent create would leave behind.
+    expect(body).toMatchObject({ rule_name: "main" });
+    expect(body).not.toHaveProperty("enable_push");
+    expect(body).not.toHaveProperty("enable_push_whitelist");
+  }),
+);
+
+test.provider(
+  "records a push whitelist as unenforced when direct pushes are off",
+  (stack) =>
+    Effect.gen(function* () {
+      reset();
+
+      yield* stack.deploy(
+        BranchProtection("Main", {
+          owner: "alice",
+          repository: "alchemy",
+          ruleName: "main",
+          pushWhitelistUsernames: ["release-bot"],
+          enablePush: false,
+        }),
+      );
+
+      // Forgejo stores `enable_push_whitelist: false` whenever `enable_push`
+      // is false. Asking for a `true` it will not keep leaves a desired state
+      // the instance cannot hold, so every later deploy would observe drift
+      // and re-issue the same edit forever.
+      expect(
+        server.find("POST", "/repos/alice/alchemy/branch_protections")?.body,
+      ).toMatchObject({
+        push_whitelist_usernames: ["release-bot"],
+        enable_push: false,
+        enable_push_whitelist: false,
+      });
     }),
 );
