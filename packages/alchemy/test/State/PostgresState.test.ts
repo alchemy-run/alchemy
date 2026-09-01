@@ -4,8 +4,10 @@ import {
   type PostgresStateOptions,
 } from "@/State/PostgresState";
 import { StateStoreError, type StateService } from "@/State/State";
+import { encodeState } from "@/State/StateEncoding";
 import { describe, expect, it } from "alchemy-test";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -708,4 +710,100 @@ describe("Postgres state store", () => {
       }),
     );
   });
+});
+
+/**
+ * Secret-encryption compatibility for the Postgres store. Postgres state is
+ * shared across machines, so encryption is opt-in via `ALCHEMY_PASSWORD`;
+ * without it the store must behave exactly as before, and with it the
+ * plaintext rows written by older versions must still revive.
+ */
+describe("Postgres state store: secret encryption compatibility", () => {
+  const noPassword = ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }));
+  const withPassword = (password: string) =>
+    ConfigProvider.layer(
+      ConfigProvider.fromEnv({ env: { ALCHEMY_PASSWORD: password } }),
+    );
+  const rowKey = "app prod app/prod/db";
+  /** The exact row a pre-encryption version wrote: plaintext markers. */
+  const legacyRow = JSON.parse(JSON.stringify(encodeState(sampleState)));
+  const passwordOf = (revived: unknown) =>
+    Redacted.value(
+      (revived as { output: { password: Redacted.Redacted<string> } }).output
+        .password,
+    );
+
+  it.effect(
+    "without ALCHEMY_PASSWORD nothing changes: plaintext markers are written and legacy rows revive",
+    () => {
+      const fake = makeFakePostgres();
+      return withStore(fake, {}, (store) =>
+        Effect.gen(function* () {
+          yield* store.set({ ...request, value: sampleState });
+          const stored = JSON.stringify(fake.resources.get(rowKey));
+          expect(stored).toContain("__redacted__");
+          expect(stored).not.toContain("__secret__");
+          expect(stored).toContain("s3cret");
+
+          fake.resources.set(rowKey, legacyRow);
+          expect(passwordOf(yield* store.get(request))).toBe("s3cret");
+        }),
+      ).pipe(Effect.provide(noPassword));
+    },
+  );
+
+  it.effect(
+    "with ALCHEMY_PASSWORD rows are encrypted, legacy plaintext rows still revive, and a wrong password fails typed",
+    () => {
+      const fake = makeFakePostgres();
+      return Effect.gen(function* () {
+        yield* withStore(fake, {}, (store) =>
+          Effect.gen(function* () {
+            yield* store.set({ ...request, value: sampleState });
+            const stored = JSON.stringify(fake.resources.get(rowKey));
+            expect(stored).toContain("__secret__");
+            expect(stored).not.toContain("__redacted__");
+            expect(stored).not.toContain("s3cret");
+            expect(passwordOf(yield* store.get(request))).toBe("s3cret");
+
+            // Replaced-resource scans decrypt too.
+            fake.resources.set(rowKey, {
+              ...(fake.resources.get(rowKey) as object),
+              status: "replaced",
+            });
+            const replaced = yield* store.getReplacedResources(request);
+            expect(replaced).toHaveLength(1);
+            expect(passwordOf(replaced[0])).toBe("s3cret");
+
+            // A row written by a pre-encryption version revives unchanged.
+            fake.resources.set(rowKey, legacyRow);
+            expect(passwordOf(yield* store.get(request))).toBe("s3cret");
+            // ...and is re-encrypted on its next write.
+            yield* store.set({
+              ...request,
+              value: (yield* store.get(request)) as never,
+            });
+            expect(JSON.stringify(fake.resources.get(rowKey))).toContain(
+              "__secret__",
+            );
+          }),
+        ).pipe(Effect.provide(withPassword("password-a")));
+
+        // Another machine reading the same rows with the wrong password
+        // gets a typed StateStoreError, never a defect.
+        const error = yield* withStore(fake, {}, (store) =>
+          store.get(request).pipe(Effect.flip),
+        ).pipe(Effect.provide(withPassword("password-b")));
+        expect(error._tag).toBe("StateStoreError");
+        expect(error.message).toMatch(/does not match/);
+
+        // ...and with no password at all the failure names the fix.
+        const missing = yield* withStore(fake, {}, (store) =>
+          store.get(request).pipe(Effect.flip),
+        ).pipe(Effect.provide(noPassword));
+        expect(missing._tag).toBe("StateStoreError");
+        expect(missing.message).toContain("ALCHEMY_PASSWORD");
+      });
+    },
+  );
 });
