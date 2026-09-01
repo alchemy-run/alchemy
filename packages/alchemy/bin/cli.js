@@ -63,7 +63,15 @@ const foregroundChild = (program, args, stderrFilter) => {
   child.stderr?.on("data", (chunk) => {
     buffer += chunk.toString();
     const lines = buffer.split(/(?<=\n)/);
-    buffer = lines.pop() ?? "";
+    // The lookbehind split KEEPS separators, so a chunk ending in "\n"
+    // yields a COMPLETE final element — unconditionally popping it held
+    // the last line of every stderr burst (e.g. an error trace's final
+    // frame) until the next write or stream end, where it surfaced after
+    // Ctrl+C looking like unrelated output. Only buffer a genuine partial.
+    buffer =
+      lines.length > 0 && !lines[lines.length - 1].endsWith("\n")
+        ? (lines.pop() ?? "")
+        : "";
     for (const line of lines) {
       if (stderrFilter(line)) process.stderr.write(line);
     }
