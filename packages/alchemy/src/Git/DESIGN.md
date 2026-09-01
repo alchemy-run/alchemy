@@ -1562,6 +1562,13 @@ Effect-stream code at the start of the sweep; the rest are cumulative.
 | dynamic fetch — TTFB | 1.4 s (rows) / 27.5 s (packed) | 12.0 s | **0.43 s** | 0.56 s |
 | dynamic fetch — transfer | 6.2 MiB/s (rows) / 0.2 (packed) | 7.9 | 7.0 | 7.9 |
 
+Run-to-run variance on the client link is large; the best verified run of
+the final code (every pack de-framed and trailer-checked): raw 98.4 MiB/s
+(0.56 s end to end), sideband **80.2 MiB/s** (0.69 s — a real `git clone`
+of the 40 MiB repo), dynamic 9.8 MiB/s with 0.72 s TTFB, four concurrent
+raw streams at 93 MiB/s aggregate. Before the sweep the same clone took
+about 3 s.
+
 What each step bought, and what it did not:
 
 - **Native pump** (§22.3): the raw path went from an Effect stream to a
