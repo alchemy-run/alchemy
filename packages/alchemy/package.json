@@ -203,6 +203,12 @@
       "worker": "./src/GitHub/index.ts",
       "import": "./lib/GitHub/index.js"
     },
+    "./Forgejo": {
+      "types": "./lib/Forgejo/index.d.ts",
+      "bun": "./src/Forgejo/index.ts",
+      "worker": "./src/Forgejo/index.ts",
+      "import": "./lib/Forgejo/index.js"
+    },
     "./Endpoint": {
       "types": "./lib/Endpoint/index.d.ts",
       "bun": "./src/Endpoint/index.ts",

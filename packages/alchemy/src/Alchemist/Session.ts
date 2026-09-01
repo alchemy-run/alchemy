@@ -22,6 +22,7 @@ import { withProfileOverride } from "../Auth/Resolve.ts";
 import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
+import { ForgejoAuth } from "../Forgejo/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
@@ -355,6 +356,7 @@ const builtinAuth = Layer.mergeAll(
   AwsAuth,
   AxiomAuth,
   CloudflareAuth,
+  ForgejoAuth,
   GitHubAuth,
   HetznerAuth,
   NeonAuth,

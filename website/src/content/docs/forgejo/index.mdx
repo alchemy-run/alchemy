@@ -1,0 +1,167 @@
+---
+title: Forgejo
+description: Repositories, organizations, teams, Actions secrets and variables, and webhooks on a self-hosted Forgejo instance, as Stack resources.
+---
+
+The Forgejo provider manages a self-hosted [Forgejo](https://forgejo.org/)
+instance as resources: organizations and teams, repositories and their
+labels and branch protection, Actions secrets and variables, and
+webhooks. It talks to Forgejo's REST API directly, so it works against
+any instance you can reach with a token — no vendor SDK, no hosted
+service.
+
+New here? [Set up credentials](/forgejo/setup) first.
+
+## Resources
+
+`Repository` creates and converges a repository's settings — see
+[Repositories](/forgejo/repository). Destroying the stack retains the
+repository by default, protecting its history:
+
+```typescript
+const repo = yield* Forgejo.Repository("api", {
+  owner: "acme",
+  name: "api",
+  description: "API service",
+  private: true,
+  autoInit: true,
+  topics: ["typescript", "effect"],
+});
+```
+
+`Secrets` and `Variables` bulk-seed Forgejo Actions configuration —
+values can be outputs of other resources. See
+[Actions secrets & variables](/forgejo/actions-config):
+
+```typescript
+yield* Forgejo.Secrets({
+  owner: "acme",
+  repository: "api",
+  secrets: {
+    DEPLOY_TOKEN: Redacted.make(process.env.DEPLOY_TOKEN!),
+  },
+});
+
+yield* Forgejo.Variables({
+  owner: "acme",
+  repository: "api",
+  variables: {
+    DEPLOY_STAGE: "production",
+  },
+});
+```
+
+`Organization`, `Team`, and `TeamMember` model the ownership side —
+see [Organizations & teams](/forgejo/organizations):
+
+```typescript
+const org = yield* Forgejo.Organization("acme", {
+  owner: "admin",
+  username: "acme",
+  fullName: "Acme Corporation",
+});
+
+const platform = yield* Forgejo.Team("platform", {
+  organization: "acme",
+  name: "platform",
+  permission: "write",
+});
+
+yield* Forgejo.TeamMember("alice", {
+  teamId: platform.teamId,
+  username: "alice",
+});
+```
+
+`Webhook` manages a repository webhook pointed at any URL:
+
+```typescript
+yield* Forgejo.Webhook("deploy", {
+  owner: "acme",
+  repository: "api",
+  url: "https://deploy.example/hooks/forgejo",
+  events: ["push", "pull_request"],
+  secret: Redacted.make(process.env.WEBHOOK_SECRET!),
+});
+```
+
+`Label` and `BranchProtection` converge a repository's issue labels
+and its protected-branch rules:
+
+```typescript
+yield* Forgejo.Label("bug", {
+  owner: "acme",
+  repository: "api",
+  name: "bug",
+  color: "d73a4a",
+});
+
+yield* Forgejo.BranchProtection("main", {
+  owner: "acme",
+  repository: "api",
+  ruleName: "main",
+  requiredApprovals: 1,
+  enableStatusCheck: true,
+  statusCheckContexts: ["ci/test"],
+});
+```
+
+## Mint a token as code
+
+`ApiToken` generates a Forgejo API access token for a user, which you
+can hand straight to another resource. Forgejo returns the plaintext
+only in the create response, so it is exposed as a `Redacted` output
+and any change to the token's identity or scopes replaces it. Creating
+one uses Forgejo's admin endpoints, so the provider credential must
+belong to an administrator:
+
+```typescript
+const token = yield* Forgejo.ApiToken("ci", {
+  username: "ci-bot",
+  name: "ci",
+  scopes: ["write:repository"],
+  repositories: [{ owner: "acme", name: "api" }],
+});
+
+yield* Forgejo.Secret("forgejo-token", {
+  owner: "acme",
+  repository: "api",
+  name: "FORGEJO_TOKEN",
+  value: token.token,
+});
+```
+
+That is the canonical pattern: the stack mints a scoped credential and
+stores it as an Actions secret in the same deploy, so CI runs with a
+credential that was itself provisioned as code.
+
+## Differences from GitHub
+
+The resource surface deliberately mirrors [GitHub](/github), but the
+two APIs are not identical:
+
+- **Secrets are plaintext over TLS.** Forgejo has no public-key
+  encryption handshake for Actions secrets, so values are sent
+  directly to an authenticated endpoint.
+- **Organizations, teams, and API tokens need an admin credential.**
+  They are created through Forgejo's `/admin` endpoints.
+- **The instance URL is part of the credential.** Forgejo is
+  self-hosted, so a profile stores an instance URL alongside the token
+  rather than assuming a single host.
+- **No repository event source.** There is no `consumeRepositoryEvents`
+  equivalent yet — use `Webhook` and handle deliveries yourself.
+
+## Reference
+
+[Repository](/providers/forgejo/repository) ·
+[Organization](/providers/forgejo/organization) ·
+[Team](/providers/forgejo/team) ·
+[TeamMember](/providers/forgejo/teammember) ·
+[Label](/providers/forgejo/label) ·
+[BranchProtection](/providers/forgejo/branchprotection) ·
+[Secret](/providers/forgejo/secret) ·
+[Secrets](/providers/forgejo/secrets) ·
+[Variable](/providers/forgejo/variable) ·
+[Variables](/providers/forgejo/variables) ·
+[Webhook](/providers/forgejo/webhook) ·
+[ApiToken](/providers/forgejo/apitoken)

@@ -103,6 +103,14 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "repos · secrets · events",
   },
   {
+    label: "Forgejo",
+    href: "/forgejo",
+    prefixes: ["/forgejo", "/providers/forgejo"],
+    slot: "more",
+    category: "Source & CI",
+    hint: "repos · orgs · secrets",
+  },
+  {
     label: "Docker",
     href: "/docker",
     prefixes: ["/docker", "/providers/docker"],
