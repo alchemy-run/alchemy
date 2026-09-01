@@ -27,13 +27,13 @@ on:
       - "turbo.json"
       - ".github/workflows/website.yml"
   pull_request:
-    # `labeled` so adding `deploy-website` on an open PR triggers a
-    # deploy without needing another push.
+    # Label changes create and remove previews without needing another push.
     types:
       - opened
       - reopened
       - synchronize
       - labeled
+      - unlabeled
       - closed
     paths:
       - "distilled"
@@ -54,6 +54,9 @@ concurrency:
     startsWith(github.event.head_commit.message, 'chore(release):')) &&
     'prod' || (github.ref == 'refs/heads/main' && 'main' || github.ref_name)
     }}
+  # Deploy and destroy mutate the same stack and must finish atomically. Each
+  # run checks the PR's current state before mutation, so queued label events
+  # converge to the latest desired state even when GitHub reorders them.
   cancel-in-progress: false
 
 env:
@@ -73,10 +76,13 @@ jobs:
     #   - the PR carries the `deploy-website` label (opt-in — most PRs
     #     don't need a website preview, so default to skipping).
     if: >-
-      github.event.action != 'closed' &&
       (github.event_name != 'pull_request' ||
        (github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'deploy-website')))
+        contains(github.event.pull_request.labels.*.name, 'deploy-website') &&
+        github.event.action != 'closed' &&
+        github.event.action != 'unlabeled' &&
+        (github.event.action != 'labeled' ||
+         github.event.label.name == 'deploy-website')))
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -126,8 +132,21 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Check current preview state
+        if: github.event_name == 'pull_request'
+        id: preview-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          active="$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.number }}" \
+            --jq '[.state == "open", any(.labels[]; .name == "deploy-website")] | all')"
+          echo "active=$active" >> "$GITHUB_OUTPUT"
+
       # Main/prod use the production account; PR stages use the test account.
       - name: Deploy
+        if: >-
+          github.event_name != 'pull_request' ||
+          steps.preview-state.outputs.active == 'true'
         working-directory: website
         run: bun alchemy deploy --stage "$STAGE" --yes
         env:
@@ -152,8 +171,11 @@ jobs:
     name: Cleanup
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: >-
-      github.event_name == 'pull_request' && github.event.action == 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.action == 'closed' &&
+        contains(github.event.pull_request.labels.*.name, 'deploy-website')) ||
+       (github.event.action == 'unlabeled' &&
+        github.event.label.name == 'deploy-website'))
     permissions:
       contents: read
       pull-requests: write
@@ -182,10 +204,20 @@ jobs:
         # bundle anything. Skip native postinstalls and the root prepare build.
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Check current preview state
+        id: preview-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          active="$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.number }}" \
+            --jq '[.state == "open", any(.labels[]; .name == "deploy-website")] | all')"
+          echo "active=$active" >> "$GITHUB_OUTPUT"
+
       # Allowlist, not denylist: cleanup must only ever destroy pr-N stages,
       # so refuse anything else outright (prod/main/preview-base) even if a
       # future STAGE refactor changes what a pull_request event resolves to.
       - name: Safety Check
+        if: steps.preview-state.outputs.active != 'true'
         run: |-
           case "${{ env.STAGE }}" in
             pr-[0-9]*) ;;
@@ -196,6 +228,7 @@ jobs:
           esac
 
       - name: Destroy Preview Environment
+        if: steps.preview-state.outputs.active != 'true'
         working-directory: website
         run: bun alchemy destroy --stage "$STAGE" --yes
         env:
