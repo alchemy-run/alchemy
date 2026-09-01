@@ -22,6 +22,7 @@
 // bundled `.js` and never load it (it is excluded from the tarball, and
 // tsx is a devDependency).
 import { registerHooks } from "node:module";
+import { fileURLToPath } from "node:url";
 import { register } from "tsx/esm/api";
 
 /** @param {string} specifier */
@@ -41,4 +42,13 @@ registerHooks({
   },
 });
 
-register();
+register({
+  // Pin tsx to alchemy's tsconfig, not whatever happens to be in the
+  // invoking project's cwd (tsx resolves its tsconfig from the working
+  // directory). Running `alchemy dev` from an example would otherwise
+  // transpile alchemy's own .tsx with that project's JSX settings — e.g.
+  // classic-runtime `React.createElement` with no React import, or
+  // `jsxImportSource: "solid-js"` — breaking the React files inside the
+  // CLI. Same trade the bun launcher makes with `--tsconfig-override`.
+  tsconfig: fileURLToPath(new URL("../tsconfig.json", import.meta.url)),
+});

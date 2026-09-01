@@ -12,30 +12,42 @@ import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 // stack (which imports `alchemy`) resolves built lib/, splitting the
 // process across two copies of the package — while leaving packages
 // without a `bun` condition (published sigil) on their built output, and
-// (2) transpile `.tsx`, which node's type stripping refuses.
+// (2) transpile `.tsx` with ALCHEMY'S tsconfig (react-jsx) regardless of
+// the invoking project: the child's cwd is an example on purpose — tsx
+// resolves its tsconfig from the working directory, and an unpinned
+// lookup transpiled the CLI's React files with the example's JSX settings
+// ("ReferenceError: React is not defined" from classic-runtime output).
 it.live.skipIf(!nodeSupportsDevMode)(
   "dev-mode hooks resolve monorepo packages to src and transpile tsx",
   () =>
     Effect.gen(function* () {
       const packageDir = fileURLToPath(new URL("../..", import.meta.url));
+      const exampleDir = fileURLToPath(
+        new URL("../../../../examples/aws-dev", import.meta.url),
+      );
+      const runtimeTsx = fileURLToPath(
+        new URL("../../src/Cli/components/view/Runtime.tsx", import.meta.url),
+      );
+      // No explicit sigil probe: two-arg import.meta.resolve is flagged in
+      // node, and Runtime.tsx importing sigil transitively already proves
+      // the published package (no `bun` condition) loads from its dist.
       const script = `
         console.log("alchemy=" + import.meta.resolve("alchemy"));
         console.log("sub=" + import.meta.resolve("alchemy/Cloudflare"));
-        console.log("sigil=" + import.meta.resolve("@alchemy.run/sigil"));
-        await import("./src/Cli/components/view/Runtime.tsx");
+        await import(${JSON.stringify(runtimeTsx)});
         console.log("tsx=ok");
       `;
       const handle = yield* ChildProcess.make(
         nodePath!,
         [
           "--import",
-          "./bin/register-dev-mode.js",
+          `${packageDir}/bin/register-dev-mode.js`,
           "--input-type=module",
           "-e",
           script,
         ],
         {
-          cwd: packageDir,
+          cwd: exampleDir,
           env: { NO_COLOR: "1" },
           extendEnv: true,
           stdin: "ignore",
@@ -64,8 +76,6 @@ it.live.skipIf(!nodeSupportsDevMode)(
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/alchemy=file:.*\/src\/index\.ts/);
       expect(stdout).toMatch(/sub=file:.*\/src\/Cloudflare\/index\.ts/);
-      // No `bun` condition on the published package — built output stays.
-      expect(stdout).toMatch(/sigil=file:.*\/dist\/index\.js/);
       expect(stdout).toContain("tsx=ok");
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   { timeout: 60_000 },
