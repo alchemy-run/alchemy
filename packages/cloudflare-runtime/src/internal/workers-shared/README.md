@@ -14,7 +14,7 @@ The source tree is split into three buckets that correspond to three tsconfig
 project references:
 
 - `src/internal/workers-shared/workers/` — code that runs in the Workers runtime. Typechecked against
-  `@cloudflare/workers-types` only (plus `@cloudflare/vitest-pool-workers/types`
+  `@cloudflare/workers-types` only (plus `@cloudflare/vitest-plugin/types`
   for the colocated `tests/` directories).
 - `src/internal/workers-shared/shared/` — isomorphic code (web-platform APIs only) used by both Workers
   and Node consumers. Typechecked against the intersection of Workers and Node
