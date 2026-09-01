@@ -35,23 +35,29 @@ export const SANDBOX_DOCKERFILE = `
 ${AWS.AI.SANDBOX_MICROVM_DOCKERFILE.trim()}
 
 # ── binaries FIRST: stable layers shared by every bake ─────────────
-# node + pnpm: the repo declares packageManager pnpm@11 — its prepare
-# script resolves that exact binary, and pnpm itself runs on node.
-# unzip is for the bun installer; the JDK builds .vendor/floci
-# (maven.compiler.release 25).
-RUN dnf install -y unzip nodejs22 java-25-amazon-corretto-devel && dnf clean all \\
-  && npm install -g pnpm@11.21.0
+# node 24 + pnpm 11.24 + bun 1.3.13 match the repo's devEngines /
+# packageManager pins. unzip is for the bun installer; the JDK builds
+# .vendor/floci (maven.compiler.release 25).
+RUN dnf install -y unzip nodejs24 nodejs24-npm java-25-amazon-corretto-devel \\
+  && dnf clean all \\
+  && npm install -g pnpm@11.24.0
 
-RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
 
 ENV PATH="/root/.bun/bin:\${PATH}"
 
-# ── the workspace: a fresh depth-1 clone of main ───────────────────
-# distilled and floci come from their PINNED submodule commits (the
-# workspace only compiles against the distilled it pins), shallow,
-# and NOT recursive — distilled's own spec-mirror submodules are
-# multi-GB codegen inputs sessions never need. floci's .gitmodules
-# entry says update=none (hosts skip it), so the bake overrides it.
+# ── the SEED: one cold first-checkout build, frozen as layers ───────
+# A depth-1 clone of main plus distilled and floci at their PINNED
+# submodule commits (the workspace only compiles against the distilled
+# it pins; NOT recursive — distilled's spec-mirror submodules are
+# multi-GB codegen inputs sessions never need; floci's .gitmodules
+# says update=none, overridden here). Then the full build: install
+# (the prepare chain patches tsc, builds the cloudflare packages,
+# generates the eval runtime), tsc -b, and the floci jar.
+#
+# These layers are the CACHE the tip layer below builds on: the pnpm
+# store, every tsbuildinfo, and ~/.m2 stay warm inside them, so they
+# re-run only when this Dockerfile changes.
 RUN git clone --depth 1 https://github.com/alchemy-run/alchemy.git /workspace/alchemy \\
   && cd /workspace/alchemy \\
   && git submodule update --init --depth 1 distilled \\
@@ -62,14 +68,28 @@ RUN git clone --depth 1 https://github.com/alchemy-run/alchemy.git /workspace/al
 
 WORKDIR /workspace/alchemy
 
-# ── install + compile: the first-checkout experience, prebaked ─────
-# full install (the prepare chain patches tsc, builds the cloudflare
-# packages, and generates the eval runtime — a fresh clone needs all
-# of it), then the workspace type-check/build and the floci jar.
 RUN pnpm install --frozen-lockfile
 RUN cd distilled && pnpm install --frozen-lockfile
-RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsc -b
+RUN pnpm exec tsc -b
 RUN cd .vendor/floci && ./mvnw --quiet --batch-mode -DskipTests package
+
+# ── the TIP: converge to the branch head, INCREMENTALLY ─────────────
+# Same steps as the seed, but over its warm caches — a few minutes,
+# the local-rebuild experience. REFRESH busts only this layer (the
+# warm-bake script passes a timestamp); the snapshot may lag main
+# between refreshes, which is harmless: sessions fetch and land on
+# the branch tip at claim time anyway.
+ARG REFRESH=0
+RUN echo "refresh \${REFRESH}" \\
+  && git fetch --depth 1 origin main \\
+  && git reset --hard origin/main \\
+  && git submodule update --depth 1 distilled \\
+  && git -c submodule."vendor/floci".update=checkout \\
+       submodule update --depth 1 .vendor/floci \\
+  && pnpm install --frozen-lockfile \\
+  && (cd distilled && pnpm install --frozen-lockfile) \\
+  && pnpm exec tsc -b \\
+  && (cd .vendor/floci && ./mvnw --quiet --batch-mode -DskipTests package)
 `;
 
 /**
