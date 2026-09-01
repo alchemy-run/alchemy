@@ -803,8 +803,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   );
 
   // #1443: local Effect Worker with RateLimit, explicit nodejs_compat,
-  // default compatibility date, and Cloudflare.providers() in the same
-  // module as main: import.meta.url.
+  // and the default compatibility date.
   devTest.provider(
     "dev mode: RateLimit worker with default compatibility serves locally",
     (stack) =>
