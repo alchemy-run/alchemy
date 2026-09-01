@@ -1,5 +1,5 @@
-import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
+import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -437,19 +437,24 @@ export const ProfileStoreLive = Layer.effect(
           ) {
             return;
           }
-          const now = yield* Clock.currentTimeMillis;
-          const stamp = new Date(now)
-            .toISOString()
+          // Second precision, `:` swapped out for a filename-safe stamp.
+          const stamp = DateTime.formatIso(yield* DateTime.now)
             .slice(0, 19)
             .replaceAll(":", "-");
-          const backupDir = path.join(rootDir(), `.v0-profiles-${stamp}`);
-          const credentialsBackupDir = path.join(backupDir, "credentials");
+          const backupDir = pathService.join(
+            rootDir(),
+            `.v0-profiles-${stamp}`,
+          );
+          const credentialsBackupDir = pathService.join(
+            backupDir,
+            "credentials",
+          );
           yield* fs.makeDirectory(backupDir, { recursive: true });
           // The backup holds credential secrets — keep it owner-only.
           yield* fs.chmod(backupDir, 0o700);
           yield* fs.copyFile(
             configFilePath(),
-            path.join(backupDir, "profiles.json"),
+            pathService.join(backupDir, "profiles.json"),
           );
           // The manifest predates the current storage layout, so every file
           // under credentials/ does too — move them all into the backup.
@@ -462,16 +467,16 @@ export const ProfileStoreLive = Layer.effect(
               ),
             );
           for (const entry of entries) {
-            const profileDir = path.join(credentialsRoot, entry);
+            const profileDir = pathService.join(credentialsRoot, entry);
             const info = yield* fs.stat(profileDir);
             if (info.type !== "Directory") continue;
             const files = yield* fs.readDirectory(profileDir);
-            const target = path.join(credentialsBackupDir, entry);
+            const target = pathService.join(credentialsBackupDir, entry);
             yield* fs.makeDirectory(target, { recursive: true });
             for (const file of files) {
               yield* fs.rename(
-                path.join(profileDir, file),
-                path.join(target, file),
+                pathService.join(profileDir, file),
+                pathService.join(target, file),
               );
             }
             // Now empty (every entry was renamed away); the next credential
@@ -482,9 +487,9 @@ export const ProfileStoreLive = Layer.effect(
           }
           yield* writeManifest(toCurrentManifest(stored));
           yield* Effect.logWarning(
-            "Alchemy's profile storage layout changed: your profiles were kept, but connected accounts " +
-              "must be configured again — run `alchemy profile`. The previous profiles.json and " +
-              `credential files were backed up to '${backupDir}'.`,
+            "Alchemy's profile storage layout changed: your profiles were kept, but some connected " +
+              "accounts must be configured again — run `alchemy profile`. The previous profiles.json " +
+              `and credential files were backed up to '${backupDir}'.`,
           );
         }),
       ),
