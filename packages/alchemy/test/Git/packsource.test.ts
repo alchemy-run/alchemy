@@ -20,6 +20,8 @@ import { packHeader } from "@/Git/git/PackWriter.ts";
 import * as Zlib from "@/Git/git/Zlib.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { blobRandomAccess, sliceRandomAccess } from "@/Git/store/PackSource.ts";
+import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import * as Fiber from "effect/Fiber";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { concat } from "./harness/pack.ts";
@@ -207,6 +209,77 @@ describe("synchronous fast path", () => {
         expect(batches.every((n) => n <= SINK_BATCH && n > 0)).toBe(true);
         expect(batches.reduce((a, b) => a + b, 0)).toBe(700);
         expect(seen).toEqual(new Set(oids));
+      }),
+    );
+  });
+});
+
+describe("parsing a pack while it streams in (DESIGN §22.6)", () => {
+  test(
+    "parse runs concurrently with the feed, in random chunk sizes, and verifies the trailer",
+    async () => {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const { pack, oids } = yield* buildPack(500, {
+            incompressible: true,
+          });
+          const feeder = makeStreamingSource({
+            slabBytes: 64 * 1024,
+            retainBytes: 256 * 1024,
+            backpressureBytes: 128 * 1024,
+          });
+          const prefix = new TextEncoder().encode(
+            "0021push refs/heads/main x\n0000".padEnd(37, "\0"),
+          );
+          const parse = yield* Effect.forkChild(
+            parseWith(sliceRandomAccess(feeder.source, prefix.length)),
+          );
+          const body = concat([prefix, pack]);
+          let at = 0;
+          let seed = 7;
+          while (at < body.length) {
+            seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+            const n = 1 + (seed % 20_000);
+            yield* feeder.push(body.subarray(at, at + n));
+            at += n;
+            if (seed % 5 === 0) yield* Effect.yieldNow;
+          }
+          feeder.end();
+          const parsed = yield* Fiber.join(parse);
+          expect(parsed.count).toBe(500);
+          expect(new Set(parsed.seen)).toEqual(new Set(oids));
+        }),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
+  test("a body that ends early is a truncated-pack error, not a hang", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack } = yield* buildPack(50);
+        const feeder = makeStreamingSource({ slabBytes: 4096 });
+        const parse = yield* Effect.forkChild(
+          Effect.result(parseWith(feeder.source)),
+        );
+        yield* feeder.push(pack.subarray(0, Math.floor(pack.length / 2)));
+        feeder.end();
+        const r = yield* Fiber.join(parse);
+        expect(r._tag).toBe("Failure");
+      }),
+    );
+  });
+
+  test("a corrupted trailer is rejected even though the hash is accumulated incrementally", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack } = yield* buildPack(20);
+        const bad = Uint8Array.from(pack);
+        bad[bad.length - 1] ^= 0xff;
+        const r = yield* Effect.result(parseWith(bufferRandomAccess(bad)));
+        expect(r._tag).toBe("Failure");
+        if (r._tag === "Failure")
+          expect(String(r.failure._tag)).toBe("PackChecksumMismatch");
       }),
     );
   });

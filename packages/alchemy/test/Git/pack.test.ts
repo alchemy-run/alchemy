@@ -33,6 +33,8 @@ import {
 import { writePackBytes } from "@/Git/git/PackWriter.ts";
 import type { ManifestEntry, ObjectSource } from "@/Git/git/Store.ts";
 import { inflate, inflateEntry } from "@/Git/git/Zlib.ts";
+import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import * as Fiber from "effect/Fiber";
 
 // ── manifest shape (test/fixtures/packs/manifest.json) ──────────────────────
 
@@ -211,6 +213,42 @@ describe("fixture pack parsing", () => {
         expect(store.objects.get(manifest.blobs.data1)?.type).toBe(3);
         expect(store.objects.get(manifest.tag.oid)?.type).toBe(4);
       }).pipe(platform),
+  );
+
+  it.live(
+    "streaming: delta bases evicted before the body ends are deferred and resolved through the fallback (DESIGN §22.6)",
+    () =>
+      Effect.gen(function* () {
+        const manifest = yield* readManifest;
+        const pack = yield* readFixture("ofs-delta.pack");
+        // Retain almost nothing, so every base is evicted before its
+        // delta arrives; a parser that blocked on evicted bytes would
+        // deadlock against backpressure here.
+        const feeder = makeStreamingSource({
+          slabBytes: 256,
+          retainBytes: 512,
+          backpressureBytes: 1024,
+        });
+        const store = makeMemoryStore();
+        const parse = yield* Effect.forkChild(
+          ingestPack({
+            source: feeder.source,
+            store: store.source,
+            sink: store.sink,
+          }),
+        );
+        for (let at = 0; at < pack.length; at += 300) {
+          yield* feeder.push(
+            pack.subarray(at, Math.min(at + 300, pack.length)),
+          );
+        }
+        feeder.setFallback(bufferRandomAccess(pack));
+        feeder.end();
+        const summary = yield* Fiber.join(parse);
+        expect(sortedOids(summary.oids)).toEqual(
+          sortedOids(manifest.packs["ofs-delta"]!.oids),
+        );
+      }),
   );
 
   it.live(

@@ -29,6 +29,7 @@ import * as Cloudflare from "../Cloudflare/index.ts";
 import type { HttpEffect } from "../Http.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
@@ -73,7 +74,7 @@ import {
 } from "./Auth.ts";
 import { applyDelta } from "./git/Delta.ts";
 import * as PackParser from "./git/PackParser.ts";
-import { bufferRandomAccess, type RandomAccess } from "./git/PackParser.ts";
+import type { RandomAccess } from "./git/PackParser.ts";
 import {
   bytesToHex,
   concatBytes,
@@ -133,12 +134,12 @@ import {
 import { headKey, incomingKey, wirePackId } from "./store/Keys.ts";
 import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
 import {
-  blobRandomAccess,
   PACK_MAX_WINDOWS,
   PACK_WINDOW_BYTES,
   sliceRandomAccess,
 } from "./store/PackSource.ts";
-import { receiveWireBody } from "./store/IncomingBody.ts";
+import { HEAD_BYTES, receiveWireBodyStreaming } from "./store/IncomingBody.ts";
+import { makeStreamingSource } from "./store/StreamingSource.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { RegistryStore, ulid } from "./RegistryObject.ts";
@@ -1309,7 +1310,7 @@ export interface IngestOptions {
    * pkt-line commands precede it).
    */
   readonly promote?:
-    | { readonly packId: string; readonly base: number }
+    | (() => { readonly packId: string; readonly base: number } | undefined)
     | undefined;
   /**
    * Shallow-import mode: commit parents may be absent (they become walk
@@ -1437,16 +1438,22 @@ export const ingestPackFrom = (
     const stage = (entries: ReadonlyArray<PackParser.ResolvedEntry>) =>
       Effect.gen(function* () {
         for (const entry of entries) {
-          const pack =
-            options.promote !== undefined &&
+          // Evaluated per entry: a streaming body only becomes a wire pack
+          // once it crosses the spill threshold (DESIGN §22.6), so entries
+          // seen before that are staged inline.
+          const target =
             !entry.fromDelta &&
             entry.type === ObjectType.blob &&
             entry.dataOffset >= 0
-              ? {
-                  packId: options.promote.packId,
-                  offset: options.promote.base + entry.dataOffset,
-                }
+              ? options.promote?.()
               : undefined;
+          const pack =
+            target === undefined
+              ? undefined
+              : {
+                  packId: target.packId,
+                  offset: target.base + entry.dataOffset,
+                };
           if (pack !== undefined) promoted += 1;
           batch.push({
             oid: entry.oid,
@@ -3142,51 +3149,76 @@ export const GitRepoLive = GitRepo.make(
           // request (DESIGN §22.5).
           let keepParked = false;
           const receiveId = yield* ulid();
-          const receivedResult = yield* Effect.result(
-            receiveWireBody(request.stream, {
-              blobs,
-              key: incomingKey(meta.repoId, receiveId),
-              spillThreshold: MAX_PACK_BYTES,
-            }),
+          // Streaming ingest (DESIGN §22.6): the body is parsed while it
+          // arrives. The receiver runs as a child fiber feeding the
+          // streaming source (and the spill past MAX_PACK_BYTES); the
+          // parser reads through the source and only ever waits for bytes
+          // not yet received. gzip bodies (small, by git's own rules) are
+          // collected and inflated first, then fed the same way.
+          const feeder = makeStreamingSource();
+          const spill = { started: false };
+          const isGzip = /\bgzip\b/i.test(
+            request.headers["content-encoding"] ?? "",
           );
-          if (Result.isFailure(receivedResult)) {
-            return HttpServerResponse.uint8Array(
-              errPkt(receivedResult.failure.reason),
-              { contentType: resultType, headers: noCache },
-            );
-          }
-          const incoming = receivedResult.success;
-          parkedKey = incoming.parkedKey;
-
+          const receiving = yield* Effect.forkChild(
+            Effect.result(
+              isGzip
+                ? Effect.gen(function* () {
+                    const raw = yield* Stream.runCollect(request.stream).pipe(
+                      Effect.map((chunks) => concatBytes(Array.from(chunks))),
+                      Effect.mapError(
+                        (error) =>
+                          new StoreError({
+                            reason: `incoming body read: ${String(error)}`,
+                          }),
+                      ),
+                    );
+                    const decoded = yield* gunzipIfNeeded(
+                      raw,
+                      request.headers["content-encoding"],
+                    ).pipe(
+                      Effect.mapError(
+                        (error) => new StoreError({ reason: error.reason }),
+                      ),
+                    );
+                    yield* feeder.push(decoded);
+                    feeder.end();
+                    return { total: decoded.length, parkedKey: undefined };
+                  }).pipe(
+                    Effect.tapError((error) =>
+                      Effect.sync(() => feeder.fail(error)),
+                    ),
+                  )
+                : receiveWireBodyStreaming(request.stream, {
+                    blobs,
+                    key: incomingKey(meta.repoId, receiveId),
+                    spillThreshold: MAX_PACK_BYTES,
+                    feeder,
+                    onSpill: () => {
+                      spill.started = true;
+                    },
+                  }),
+            ),
+          );
           return yield* Effect.gen(function* () {
-            // git gzips a push body only when it buffered the whole request
-            // (small pushes), so a spilled body is never gzip — reject the
-            // combination rather than decompressing unboundedly.
-            let body: Uint8Array;
-            if (incoming.parkedKey === undefined) {
-              const bodyResult = yield* Effect.result(
-                gunzipIfNeeded(
-                  incoming.head,
-                  request.headers["content-encoding"],
-                ),
+            // The pkt-line command section precedes the pack and is small:
+            // the first MiB (or the whole body, if shorter) has it.
+            const headResult = yield* Effect.result(
+              feeder.source.read(0, HEAD_BYTES),
+            );
+            if (Result.isFailure(headResult)) {
+              return HttpServerResponse.uint8Array(
+                errPkt(headResult.failure.reason),
+                { contentType: resultType, headers: noCache },
               );
-              if (Result.isFailure(bodyResult)) {
-                return HttpServerResponse.uint8Array(
-                  errPkt(bodyResult.failure.reason),
-                  { contentType: resultType, headers: noCache },
-                );
-              }
-              body = bodyResult.success;
-            } else {
-              if (incoming.head[0] === 0x1f && incoming.head[1] === 0x8b) {
-                return HttpServerResponse.uint8Array(
-                  errPkt("gzip-encoded push too large to stream"),
-                  { contentType: resultType, headers: noCache },
-                );
-              }
-              body = incoming.head;
             }
-
+            const body = headResult.success;
+            if (!isGzip && body[0] === 0x1f && body[1] === 0x8b) {
+              return HttpServerResponse.uint8Array(
+                errPkt("gzip-encoded push without content-encoding"),
+                { contentType: resultType, headers: noCache },
+              );
+            }
             const parsedResult = yield* Effect.result(
               parseReceivePackRequest(body),
             );
@@ -3304,28 +3336,24 @@ export const GitRepoLive = GitRepo.make(
                 Date.now(),
               );
               const objects = storeFor(meta.repoId);
-              const bodyLength =
-                incoming.parkedKey === undefined ? body.length : incoming.total;
-              const hasPack = parsed.packStart < bodyLength;
-              const packLength = hasPack ? bodyLength - parsed.packStart : 0;
-
+              // Is there a pack at all? A delete-only push ends right after
+              // the commands. This waits only for 12 bytes (or the end).
+              const probe = yield* feeder.source
+                .read(parsed.packStart, 12)
+                .pipe(Effect.result);
+              const hasPack =
+                Result.isSuccess(probe) && probe.success.length === 12;
+              let packLength = 0;
               let ingest: IngestResult | undefined;
               if (hasPack) {
-                // A body that fit in memory parses straight out of it; a
-                // spilled one is read back from R2 through bounded windows,
-                // offset past the command section. Either way ingest memory
-                // never scales with the pack (DESIGN §3.6).
-                const source =
-                  incoming.parkedKey === undefined
-                    ? bufferRandomAccess(body.subarray(parsed.packStart))
-                    : sliceRandomAccess(
-                        blobRandomAccess({
-                          blobs,
-                          key: incoming.parkedKey,
-                          size: incoming.total,
-                        }),
-                        parsed.packStart,
-                      );
+                const source = sliceRandomAccess(
+                  feeder.source,
+                  parsed.packStart,
+                );
+                const wire = {
+                  packId: wirePackId(receiveId),
+                  base: parsed.packStart,
+                };
                 const ingestStarted = yield* Effect.sync(() =>
                   performance.now(),
                 );
@@ -3333,13 +3361,7 @@ export const GitRepoLive = GitRepo.make(
                   ingestPackFrom(source, {
                     store: objects,
                     pushId,
-                    promote:
-                      incoming.parkedKey === undefined
-                        ? undefined
-                        : {
-                            packId: wirePackId(receiveId),
-                            base: parsed.packStart,
-                          },
+                    promote: () => (spill.started ? wire : undefined),
                   }),
                 );
                 ingestMs = yield* since(ingestStarted);
@@ -3351,10 +3373,25 @@ export const GitRepoLive = GitRepo.make(
                   return respond(reason, allNg("unpacker error"));
                 }
                 ingest = outcome.success;
-                if ((ingest.promoted ?? 0) > 0) keepParked = true;
               }
 
               // Full connectivity check (§3.6 step 5).
+              // The body has been fully consumed by now (the parser read
+              // through the trailer); wait for the receiver to finish the
+              // spill, then learn the total and whether a wire pack exists.
+              const received = yield* Fiber.join(receiving);
+              if (Result.isFailure(received)) {
+                return HttpServerResponse.uint8Array(
+                  errPkt(received.failure.reason),
+                  { contentType: resultType, headers: noCache },
+                );
+              }
+              const incoming = received.success;
+              parkedKey = incoming.parkedKey;
+              if ((ingest?.promoted ?? 0) > 0 && parkedKey !== undefined) {
+                keepParked = true;
+              }
+              packLength = hasPack ? incoming.total - parsed.packStart : 0;
               const referenced = new Set<string>(ingest?.referenced ?? []);
               for (const parent of ingest?.referencedParents ?? []) {
                 referenced.add(parent);
@@ -3440,7 +3477,7 @@ export const GitRepoLive = GitRepo.make(
             // Single owner of the spilled body: whatever path exits, the
             // parked R2 object is dropped after ingest (or non-ingest).
             Effect.ensuring(
-              Effect.suspend(() =>
+              Effect.andThen(Fiber.interrupt(receiving), () =>
                 parkedKey === undefined || keepParked
                   ? Effect.void
                   : blobs

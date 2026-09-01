@@ -88,6 +88,7 @@ export const blobRandomAccess = (options: {
 
   return {
     size: options.size,
+    awaitEnd: Effect.succeed(options.size),
     readSync: (offset, length) => {
       const end = Math.min(offset + length, options.size);
       if (end <= offset) return new Uint8Array(0);
@@ -148,4 +149,12 @@ export const sliceRandomAccess = (
     source.readSync === undefined
       ? undefined
       : (offset, length) => source.readSync!(start + offset, length),
+  awaitEnd:
+    source.awaitEnd === undefined
+      ? undefined
+      : source.awaitEnd.pipe(Effect.map((total) => total - start)),
+  release:
+    source.release === undefined
+      ? undefined
+      : (offset) => source.release!(start + offset),
 });

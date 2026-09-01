@@ -68,7 +68,21 @@ export interface RandomAccess {
   readonly readSync?:
     | ((offset: number, length: number) => Uint8Array | undefined)
     | undefined;
-  /** Total size of the pack in bytes. */
+  /**
+   * For sources whose total size is not known up front (`size` is
+   * `Infinity` while a body is still arriving — DESIGN §22.6): resolves
+   * with the final size once the body has ended.
+   */
+  readonly awaitEnd?: Effect.Effect<number, StoreError> | undefined;
+  /** The parser is done with every byte below `offset` (retention hint). */
+  readonly release?: ((offset: number) => void) | undefined;
+  /**
+   * True when `offset` has been dropped from memory and the body has NOT
+   * ended yet, i.e. reading it would block on the spill completing. The
+   * parser defers such delta entries until the end (DESIGN §22.6).
+   */
+  readonly evictedBeforeEnd?: ((offset: number) => boolean) | undefined;
+  /** Total size of the pack in bytes (`Infinity` while streaming). */
   readonly size: number;
   /**
    * Reads up to `length` bytes at `offset`. May return fewer bytes only when
@@ -93,6 +107,7 @@ export const bufferRandomAccess = (buf: Uint8Array): RandomAccess => ({
     ),
   readSync: (offset, length) =>
     buf.subarray(offset, Math.min(offset + length, buf.length)),
+  awaitEnd: Effect.succeed(buf.length),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,6 +150,16 @@ export class ObjectTooLargeError extends Schema.TaggedError<ObjectTooLargeError>
  * Error raised when a REF_DELTA's base cannot be found in the pack or in the
  * object store (a thin pack whose base we do not have).
  */
+/**
+ * A delta's base was evicted from a streaming source before the body ended
+ * (DESIGN §22.6). Retried after the end, when the spilled object is
+ * readable; never reaches callers.
+ */
+export class BaseEvictedError extends Schema.TaggedError<BaseEvictedError>()(
+  "BaseEvictedError",
+  { offset: Schema.Number },
+) {}
+
 export class MissingDeltaBaseError extends Schema.TaggedError<MissingDeltaBaseError>()(
   "MissingDeltaBaseError",
   { baseOid: Schema.String },
@@ -151,7 +176,8 @@ export type PackIngestError =
   | ZlibError
   | DeltaFormatError
   | ObjectParseError
-  | StoreError;
+  | StoreError
+  | BaseEvictedError;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Resolved entries / options
@@ -327,12 +353,17 @@ const readU32BE = (buf: Uint8Array, offset: number): number =>
  * count).
  */
 export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
-  if (source.size < 12 + 20) {
+  if (Number.isFinite(source.size) && source.size < 12 + 20) {
     return yield* new PackFormatError({
       reason: `pack too small: ${source.size} bytes`,
     });
   }
   const header = yield* source.read(0, 12);
+  if (header.length < 12) {
+    return yield* new PackFormatError({
+      reason: `pack too small: ${header.length} bytes`,
+    });
+  }
   if (
     header.length < 12 ||
     header[0] !== 0x50 || // P
@@ -393,7 +424,17 @@ export const ingestPack = <E, R>(
     const maxObjectSize = options.maxObjectSize ?? DEFAULT_MAX_OBJECT_SIZE;
     const cache = new ByteLru(options.cacheBytes ?? DEFAULT_CACHE_BYTES);
     const { count } = yield* readPackHeader(source);
-    const dataEnd = source.size - 20;
+    // Unknown while a streaming body is still arriving (DESIGN §22.6); the
+    // loop is driven by `count`, and the true end is learned from
+    // `awaitEnd` before the trailer is checked.
+    let dataEnd = Number.isFinite(source.size)
+      ? source.size - 20
+      : Number.POSITIVE_INFINITY;
+    // The trailer SHA-1 is accumulated as entries are consumed instead of
+    // re-reading the whole pack afterwards (on a spilled source that was
+    // another full pass of window reads).
+    const trailerSha = makeSha1();
+    trailerSha.update(yield* source.read(0, 12));
 
     const byOffset = new Map<number, IndexedEntry>();
     /** oid → entry offset, for in-pack REF_DELTA base lookup. */
@@ -402,10 +443,16 @@ export const ingestPack = <E, R>(
     const deferred: Array<IndexedEntry> = [];
 
     /** Inflates an already-indexed entry's own zlib stream (exact span). */
-    const inflateOwn = (entry: IndexedEntry) =>
-      source
-        .read(entry.dataOffset, entry.span)
-        .pipe(Effect.flatMap((z) => inflate(z)));
+    const inflateOwn = (
+      entry: IndexedEntry,
+    ): Effect.Effect<Uint8Array, PackIngestError> =>
+      Effect.suspend((): Effect.Effect<Uint8Array, PackIngestError> =>
+        source.evictedBeforeEnd?.(entry.dataOffset) === true
+          ? Effect.fail(new BaseEvictedError({ offset: entry.dataOffset }))
+          : source
+              .read(entry.dataOffset, entry.span)
+              .pipe(Effect.flatMap((z) => inflate(z))),
+      );
 
     /**
      * Resolves an entry to its full content, walking delta chains. Bases come
@@ -582,6 +629,8 @@ export const ingestPack = <E, R>(
         dataOffset,
         content,
       });
+      trailerSha.update(window.subarray(0, pos + bytesConsumed));
+      source.release?.(offset);
       return dataOffset + bytesConsumed;
     };
 
@@ -621,6 +670,11 @@ export const ingestPack = <E, R>(
         if (next !== undefined) return yield* Effect.fail(next);
       }
       let window = yield* source.read(offset, probeLength);
+      if (window.length === 0) {
+        return yield* new PackFormatError({
+          reason: `truncated pack: entry ${i} of ${count} starts past the end`,
+        });
+      }
       /**
        * Re-reads a bigger window when an entry's compressed stream runs past
        * the current one. Doubling from the entry window reaches the whole
@@ -753,33 +807,40 @@ export const ingestPack = <E, R>(
             content,
           }),
         );
-      } else if (
-        baseOid !== undefined &&
-        offsetByOid.get(baseOid) === undefined
-      ) {
-        // REF_DELTA: base may be a thin base (store) or a later pack entry.
+      } else {
         const result = yield* Effect.result(emitDelta(entry));
         if (Result.isFailure(result)) {
-          if (result.failure instanceof MissingDeltaBaseError) {
-            deferred.push(entry); // base may appear later in the pack
+          if (
+            result.failure instanceof MissingDeltaBaseError ||
+            result.failure instanceof BaseEvictedError
+          ) {
+            // The base may appear later in the pack (thin ref-delta), or
+            // it was evicted from a streaming source and is readable once
+            // the body has ended: retry in the deferred pass.
+            deferred.push(entry);
           } else {
             return yield* Effect.fail(result.failure);
           }
         }
-      } else {
-        yield* emitDelta(entry);
       }
+      trailerSha.update(window.subarray(0, pos + bytesConsumed));
+      source.release?.(offset);
       offset = dataOffset + bytesConsumed;
     }
 
     yield* flushPending;
-    if (offset !== dataEnd) {
-      return yield* new PackFormatError({
-        reason: `pack has ${dataEnd - offset} unconsumed bytes after ${count} entries`,
-      });
+    if (!Number.isFinite(dataEnd)) {
+      if (source.awaitEnd === undefined) {
+        return yield* new PackFormatError({
+          reason: "pack source has unknown size and no awaitEnd",
+        });
+      }
+      dataEnd = (yield* source.awaitEnd) - 20;
     }
-
-    // ── deferred REF_DELTAs (base later in pack): fixpoint passes ────────────
+    // ── deferred deltas: fixpoint passes AFTER the end ───────────────────────
+    // REF_DELTAs whose base came later in the pack, and (streaming) deltas
+    // whose base had been evicted before the body ended — readable now
+    // through the spilled object.
     let pending = deferred;
     while (pending.length > 0) {
       const next: Array<IndexedEntry> = [];
@@ -790,6 +851,10 @@ export const ingestPack = <E, R>(
           if (result.failure instanceof MissingDeltaBaseError) {
             firstMissing ??= result.failure;
             next.push(entry);
+          } else if (result.failure instanceof BaseEvictedError) {
+            return yield* new PackFormatError({
+              reason: `delta base at ${result.failure.offset} unreadable after the body ended`,
+            });
           } else {
             return yield* Effect.fail(result.failure);
           }
@@ -801,17 +866,19 @@ export const ingestPack = <E, R>(
       }
       pending = next;
     }
+    if (offset !== dataEnd) {
+      return yield* new PackFormatError({
+        reason: `pack has ${dataEnd - offset} unconsumed bytes after ${count} entries`,
+      });
+    }
 
     // ── trailer verification ─────────────────────────────────────────────────
-    const sha = yield* Effect.sync(() => makeSha1());
-    const CHUNK = 1024 * 1024;
-    for (let pos = 0; pos < dataEnd; pos += CHUNK) {
-      const chunk = yield* source.read(pos, Math.min(CHUNK, dataEnd - pos));
-      yield* Effect.sync(() => sha.update(chunk));
-    }
     const trailer = yield* source.read(dataEnd, 20);
+    if (trailer.length < 20) {
+      return yield* new PackFormatError({ reason: "truncated pack trailer" });
+    }
     const expected = bytesToHex(trailer);
-    const actual = yield* Effect.sync(() => sha.digestHex());
+    const actual = yield* Effect.sync(() => trailerSha.digestHex());
     if (expected !== actual) {
       return yield* new PackChecksumMismatch({ expected, actual });
     }
