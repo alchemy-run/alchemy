@@ -80,6 +80,15 @@ export interface ServiceProps extends PlatformProps {
    */
   port?: number;
   /**
+   * Whether to create and manage a generated `*.up.railway.app` domain.
+   * Set to `false` for services that are reachable only through Railway's
+   * private network. Private services still expose {@link Service.dnsName},
+   * while `url`, `domain`, and `domainId` are `undefined`.
+   *
+   * @default true
+   */
+  publicDomain?: boolean;
+  /**
    * Additional environment variables. Merged after binding-injected
    * `env`. Upserted as service-scoped Railway variables with
    * `skipDeploys: true`; this Service owns the subsequent deploy.
@@ -298,8 +307,9 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
 /**
  * A Railway.Service is a container in a Project. Point it at a public
  * image (`hashicorp/http-echo`) or an Effect program (`main`). Alchemy
- * stamps the name, creates a `*.up.railway.app` domain via
- * `serviceDomainCreate`, and deploys.
+ * stamps the name, creates a `*.up.railway.app` domain by default via
+ * `serviceDomainCreate`, and deploys. Set `publicDomain: false` to keep the
+ * Service private.
  *
  * @see https://docs.railway.com/guides/services
  *
@@ -358,6 +368,23 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *     return { url: api.url };
  *   }),
  * );
+ * ```
+ *
+ * ### Private Service
+ * Set `publicDomain: false` to skip the generated public domain. The Service
+ * keeps its private `dnsName`, while `url`, `domain`, and `domainId` remain
+ * `undefined`.
+ *
+ * **Example:** Private worker
+ * ```typescript
+ * const worker = yield* Railway.Service("Worker", {
+ *   project: site,
+ *   image: "acme/worker",
+ *   publicDomain: false,
+ * });
+ *
+ * console.log(worker.dnsName); // worker.railway.internal
+ * console.log(worker.url); // undefined
  * ```
  *
  * ### Pin a region

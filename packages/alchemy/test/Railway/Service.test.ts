@@ -32,6 +32,29 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
+const waitUntilNoServiceDomains = (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+}) =>
+  railway.domains(input).pipe(
+    Effect.map((domains) =>
+      domains.serviceDomains.some(
+        (domain) =>
+          domain.deletedAt == null &&
+          domain.syncStatus !== "DELETED" &&
+          domain.syncStatus !== "DELETING",
+      )
+        ? ("found" as const)
+        : ("gone" as const),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
+
 test.provider(
   "create, serve, list, update, and delete an image service",
   (stack) =>
@@ -166,10 +189,124 @@ test.provider(
       expect(fetchedUpdate.id).toEqual(updated.api.serviceId);
       expect(fetchedUpdate.name).toEqual(nextName);
 
+      const privateUpdate = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Api", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            name: nextName,
+            healthcheckPath: "/health",
+            publicDomain: false,
+          });
+          return { api };
+        }),
+      );
+
+      expect(privateUpdate.api.serviceId).toEqual(created.api.serviceId);
+      expect(privateUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
+      expect(privateUpdate.api.url).toBeUndefined();
+      expect(privateUpdate.api.domain).toBeUndefined();
+      expect(privateUpdate.api.domainId).toBeUndefined();
+      expect(
+        yield* waitUntilNoServiceDomains({
+          projectId: privateUpdate.api.projectId,
+          environmentId: privateUpdate.api.environmentId,
+          serviceId: privateUpdate.api.serviceId,
+        }),
+      ).toEqual("gone");
+
+      const publicUpdate = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Api", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            name: nextName,
+            healthcheckPath: "/health",
+            publicDomain: true,
+          });
+          return { api };
+        }),
+      );
+
+      expect(publicUpdate.api.serviceId).toEqual(created.api.serviceId);
+      expect(publicUpdate.api.domainId).toEqual(expect.any(String));
+      expect(publicUpdate.api.url).toEqual(
+        `https://${publicUpdate.api.domain}`,
+      );
+      expect(publicUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 3_600_000 },
+);
+
+test.provider(
+  "create, read, and delete a private image service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const worker = yield* Railway.Service("Worker", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+          });
+          return { worker };
+        }),
+      );
+
+      expect(created.worker.serviceId).toEqual(expect.any(String));
+      expect(created.worker.dnsName).toEqual(
+        `${created.worker.name}.railway.internal`,
+      );
+      expect(created.worker.url).toBeUndefined();
+      expect(created.worker.domain).toBeUndefined();
+      expect(created.worker.domainId).toBeUndefined();
+      expect(
+        yield* waitUntilNoServiceDomains({
+          projectId: created.worker.projectId,
+          environmentId: created.worker.environmentId,
+          serviceId: created.worker.serviceId,
+        }),
+      ).toEqual("gone");
+
+      // A second deploy exercises refresh/read without claiming or creating a
+      // generated domain.
+      const refreshed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const worker = yield* Railway.Service("Worker", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+          });
+          return { worker };
+        }),
+      );
+      expect(refreshed.worker.serviceId).toEqual(created.worker.serviceId);
+      expect(refreshed.worker.dnsName).toEqual(created.worker.dnsName);
+      expect(refreshed.worker.url).toBeUndefined();
+      expect(refreshed.worker.domain).toBeUndefined();
+      expect(refreshed.worker.domainId).toBeUndefined();
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.worker.serviceId)).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 3_600_000 },
 );
