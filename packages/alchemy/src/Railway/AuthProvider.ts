@@ -457,7 +457,7 @@ export const RailwayAuth = AuthProviderLayer<
                       new AuthError({
                         message:
                           `Railway: ${RAILWAY_API_TOKEN_ENV} is not set. Export it, or run ` +
-                          `\`alchemy profile edit ${profileName} --reconfigure ${RAILWAY_AUTH_PROVIDER_NAME}\` to switch methods.`,
+                          `\`alchemy profile edit --profile ${profileName} --reconfigure ${RAILWAY_AUTH_PROVIDER_NAME}\` to switch methods.`,
                       }),
                     ),
               ),

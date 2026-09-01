@@ -27,6 +27,7 @@ import {
   TextField,
   useLiveStore,
 } from "@/Cli/components/ui/index.ts";
+import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
 import { makeResourceLogger, makeResourceOutput } from "@/Cli/Output.ts";
@@ -1474,6 +1475,68 @@ it.effect(
       expect(rendered).toContain("2/4");
     }),
 );
+
+it.effect("tabs scroll horizontally instead of wrapping when overflowing", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    const tabs = Array.from({ length: 20 }, (_, i) => {
+      const label = `profile-${String(i + 1).padStart(2, "0")}`;
+      return { id: label, label, marked: i === 0 };
+    });
+
+    // Active tab in the middle: window centers on it, arrows on both sides.
+    const middle = yield* service.output.render(
+      <Tabs tabs={tabs} active="profile-10" />,
+    );
+    expect(middle).toContain("profile-10");
+    expect(middle).toContain("‹");
+    expect(middle).toContain("›");
+    expect(middle).not.toContain("profile-01");
+    expect(middle).not.toContain("profile-20");
+    // every rendered tab stays on the single tab row — no wrapped chips
+    expect(middle.trimEnd()).not.toContain("\n");
+
+    // Active tab at the start: no left arrow, right arrow only.
+    const first = yield* service.output.render(
+      <Tabs tabs={tabs} active="profile-01" />,
+    );
+    expect(first).toContain("profile-01");
+    expect(first).not.toContain("‹");
+    expect(first).toContain("›");
+
+    // Active tab at the end: left arrow only.
+    const last = yield* service.output.render(
+      <Tabs tabs={tabs} active="profile-20" />,
+    );
+    expect(last).toContain("profile-20");
+    expect(last).toContain("‹");
+    expect(last).not.toContain("›");
+
+    // Everything fits: no arrows at all.
+    const fitting = yield* service.output.render(
+      <Tabs tabs={tabs.slice(0, 3)} active="profile-02" />,
+    );
+    expect(fitting).toContain("profile-01");
+    expect(fitting).toContain("profile-03");
+    expect(fitting).not.toContain("‹");
+    expect(fitting).not.toContain("›");
+  }),
+);
+
+it("tabsWindow keeps the active tab visible within the available width", () => {
+  // 5 chips of width 12, gap 1, 74 columns → 5 fit exactly around the middle
+  const widths = Array.from({ length: 20 }, () => 12);
+  expect(tabsWindow(widths, 9, 74)).toEqual({ start: 7, end: 12 });
+  // at the edges the window pins to the boundary
+  expect(tabsWindow(widths, 0, 74)).toEqual({ start: 0, end: 5 });
+  expect(tabsWindow(widths, 19, 74)).toEqual({ start: 15, end: 20 });
+  // active always inside, even when nothing else fits
+  expect(tabsWindow(widths, 3, 12)).toEqual({ start: 3, end: 4 });
+  expect(tabsWindow(widths, 3, 5)).toEqual({ start: 3, end: 4 });
+  // out-of-range active clamps; empty input yields an empty window
+  expect(tabsWindow(widths, 99, 74)).toEqual({ start: 15, end: 20 });
+  expect(tabsWindow([], 0, 74)).toEqual({ start: 0, end: 0 });
+});
 
 it.live(
   "state explorer confirms deletes inline and keeps its position afterwards",

@@ -89,7 +89,7 @@ export const CredentialsStoreLive = Layer.effect(
           ),
         );
         const command = yield* profileCommandHint(
-          `alchemy profile edit ${profile} --reconfigure ${provider}`,
+          `alchemy profile edit --profile ${profile} --reconfigure ${provider}`,
         );
         return yield* Schema.decodeUnknownEffect(schema)(json).pipe(
           Effect.mapError(

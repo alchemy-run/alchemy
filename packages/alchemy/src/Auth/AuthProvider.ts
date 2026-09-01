@@ -69,14 +69,14 @@ export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()(
  * top later without touching call sites.
  */
 export const refreshHint = (provider: string, profileName: string): string =>
-  `Run \`alchemy profile refresh ${profileName} --provider ${provider}\`.`;
+  `Run \`alchemy profile refresh --profile ${profileName} --provider ${provider}\`.`;
 
 /** {@link refreshHint}'s sibling for reconfiguration. */
 export const reconfigureHint = (
   provider: string,
   profileName: string,
 ): string =>
-  `Run \`alchemy profile edit ${profileName} --reconfigure ${provider}\` to reconfigure.`;
+  `Run \`alchemy profile edit --profile ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
 export class AuthProviders extends Context.Service<
   AuthProviders,

@@ -332,7 +332,7 @@ Rather than hand those rights to your default
 
 ```sh
 alchemy profile create admin
-alchemy profile edit admin
+alchemy profile edit --profile admin
 ```
 
 :::danger[Heads up]
@@ -603,7 +603,7 @@ not sensitive).
 
 Your `--profile admin` AWS credentials need IAM admin rights for
 this stack: it creates an `OpenIDConnectProvider` and an IAM `Role`.
-Run `alchemy profile edit admin --add AWS` and choose a credential
+Run `alchemy profile edit --profile admin --add AWS` and choose a credential
 (SSO/OIDC, access keys, etc.) that's authorized for IAM
 administration.
 

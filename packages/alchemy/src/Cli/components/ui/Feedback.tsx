@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { useAnimation } from "@alchemy.run/sigil";
 import type { ReactNode } from "react";
+import stringWidth from "string-width";
 import {
   spinnerFramesFor,
   statusColor,
@@ -13,7 +14,7 @@ import {
   useCliEnvironment,
   useGlyphs,
 } from "./Environment.tsx";
-import { Box } from "./Layout.tsx";
+import { Box, tabsWindow } from "./Layout.tsx";
 import { Text } from "./Typography.tsx";
 
 export interface StatusProps {
@@ -209,15 +210,44 @@ type TabsProps = {
 
 export function Tabs({ tabs, active }: TabsProps) {
   const glyphs = useGlyphs();
+  const { columns } = useCliEnvironment();
+  const gap = 1;
+  const activeIndex = Math.max(
+    0,
+    tabs.findIndex((tab) => tab.id === active),
+  );
+  // chip width = paddingX (2) + optional marker glyph + space + label
+  const widths = tabs.map(
+    (tab) =>
+      2 +
+      stringWidth(tab.label) +
+      (tab.marked ? stringWidth(glyphs.selected) + 1 : 0),
+  );
+  const totalWidth =
+    widths.reduce((sum, width) => sum + width, 0) +
+    Math.max(0, tabs.length - 1) * gap;
+  const contentWidth = Math.max(1, columns - theme.space.indent);
+  const { start, end } =
+    totalWidth <= contentWidth
+      ? { start: 0, end: tabs.length }
+      : // reserve an arrow cell + gap on each side so the window stays put
+        // whether or not the edge arrows render
+        tabsWindow(
+          widths,
+          activeIndex,
+          Math.max(1, contentWidth - 2 * (1 + gap)),
+          gap,
+        );
   return (
     <Box
       width="100%"
-      gap={1}
+      gap={gap}
       paddingLeft={theme.space.indent}
       marginBottom={1}
       aria-role="tablist"
     >
-      {tabs.map((tab) => {
+      {start > 0 ? <Text tone="muted">{glyphs.overflowLeft}</Text> : null}
+      {tabs.slice(start, end).map((tab) => {
         const selected = tab.id === active;
         return (
           <Box
@@ -245,6 +275,9 @@ export function Tabs({ tabs, active }: TabsProps) {
           </Box>
         );
       })}
+      {end < tabs.length ? (
+        <Text tone="muted">{glyphs.overflowRight}</Text>
+      ) : null}
     </Box>
   );
 }

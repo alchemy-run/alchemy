@@ -63,6 +63,8 @@ export const theme = {
     bullet: "·",
     overflowUp: "↑",
     overflowDown: "↓",
+    overflowLeft: "‹",
+    overflowRight: "›",
   },
   /**
    * Key-hint labels for KeyBar footers. Resolve through `useKeyGlyphs()`
@@ -107,6 +109,8 @@ export const asciiGlyphs: { readonly [Key in GlyphName]: string } = {
   bullet: ".",
   overflowUp: "^",
   overflowDown: "v",
+  overflowLeft: "<",
+  overflowRight: ">",
 };
 
 export const glyphsFor = (unicode: boolean) =>
