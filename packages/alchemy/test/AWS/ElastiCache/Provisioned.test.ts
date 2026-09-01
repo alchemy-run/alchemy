@@ -55,7 +55,10 @@ test(
       { replicasPerNodeGroup: 6 },
       { numNodeGroups: 0 },
       { port: 0 },
-      { transitEncryptionMode: "preferred" as const },
+      {
+        transitEncryptionEnabled: false,
+        transitEncryptionMode: "preferred" as const,
+      },
     ];
     for (const props of invalid) {
       const error = validateReplicationGroupProps({
