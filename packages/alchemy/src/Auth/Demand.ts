@@ -6,18 +6,29 @@
  * out of local emulation via `Alchemy.remote()`, a local Worker binding
  * that proxies to a remote resource (`dev: { remote: true }`), or the
  * deletion of a row that was last reconciled live — credentials are
- * validated AND warmed exactly once, up front, BEFORE apply begins: the
- * gate resolves each demanded provider's credentials through the same
- * precedence the run will use, which silently refreshes an expired token
- * and persists it for the child processes to read. The seam never starts
- * a login flow: missing credentials fail with the typed
+ * validated up front, BEFORE apply begins: the gate resolves each demanded
+ * provider's credentials through the same precedence the run will use. The
+ * seam never starts a login flow: missing credentials fail with the typed
  * {@link CredentialsRequired} error naming the demanding resources and
  * pointing at `alchemy profile edit` — the profile command is the only
- * place logins happen — and a dead refresh token fails with the typed
- * `NeedsReauth` before any lifecycle operation runs.
+ * place logins happen.
  *
- * The RPC sidecar only ever reads credentials persisted by a prior
- * `alchemy profile edit` or warmed by this gate.
+ * How deep the up-front resolution goes is PROVIDER-DEPENDENT — it runs
+ * the provider's `read`, no more:
+ *
+ * - Cloudflare's `read` eagerly checks OAuth expiry, silently refreshes,
+ *   and persists under the profile lock — so a dead refresh token fails
+ *   here as a typed `NeedsReauth`, and child processes (which only ever
+ *   read what a parent persisted) start with a warm token.
+ * - AWS's `read` returns a credentials RECIPE whose inner effect stays
+ *   unevaluated (SSO tokens are loaded lazily by consumers), so an
+ *   expired SSO token passes the gate and still surfaces mid-run; an
+ *   `{ method: "local" }` profile's read ensures the floci emulator,
+ *   which the gate consequently starts before apply.
+ *
+ * The demand scan keys on provider MODE, not plan action — noop live rows
+ * still demand (their runtime proxies need live credentials to serve), so
+ * a watch restart re-runs this resolution even for an unchanged plan.
  *
  * Non-dev runs (`alchemy deploy` / `destroy`) never enter this seam:
  * state-store init and live providers drive the pre-existing lazy
@@ -238,18 +249,17 @@ const attachDemandContext =
     );
 
 /**
- * Validate AND warm up credentials for every demand. Never starts a login
- * flow — logging in belongs to `alchemy profile edit` exclusively:
+ * Validate credentials for every demand. Never starts a login flow —
+ * logging in belongs to `alchemy profile edit` exclusively:
  *
  *   - configured for the active profile → resolve the credentials through
  *     the exact precedence the run will use ({@link resolveProviderConfig}:
- *     CI environment, explicit env vars, then the profile). Resolution runs
- *     the provider's `read`, which silently refreshes an expired token and
- *     persists it under the cross-process profile lock — so child processes
- *     (RPC sidecar, dev children), which can only read what a parent
- *     persisted, start with a warm token. A dead refresh token fails HERE,
- *     before apply, as a typed {@link NeedsReauth} naming the demanding
- *     resources — instead of mid-run inside a child.
+ *     CI environment, explicit env vars, then the profile). Resolution
+ *     runs the provider's `read` — how much that validates and warms is
+ *     provider-dependent (see the module header): Cloudflare eagerly
+ *     refreshes and persists so a dead refresh token fails HERE as a
+ *     typed {@link NeedsReauth} naming the demanding resources, while
+ *     AWS's lazy credential recipe defers SSO-token failures to mid-run.
  *   - missing → typed {@link CredentialsRequired} failure with the exact
  *     `alchemy profile edit` invocation to run
  *   - CI → validates the provider's environment credentials directly,
