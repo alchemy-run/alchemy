@@ -132,7 +132,12 @@ import {
 } from "./jobs/Compact.ts";
 import { headKey, incomingKey, wirePackId } from "./store/Keys.ts";
 import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
-import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
+import {
+  blobRandomAccess,
+  PACK_MAX_WINDOWS,
+  PACK_WINDOW_BYTES,
+  sliceRandomAccess,
+} from "./store/PackSource.ts";
 import { receiveWireBody } from "./store/IncomingBody.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
@@ -173,7 +178,12 @@ import {
  * R2. The R2 path costs about 2x, and is unbounded — the full 67 MiB
  * alchemy history (44k objects) pushed in 92 s.
  */
-export const MAX_PACK_BYTES = 24 * 1024 * 1024;
+export const MAX_PACK_BYTES = 4 * 1024 * 1024;
+// 4 MiB (was 50, then 24): with promoted wire packs (DESIGN §22.5) the
+// spilled path is the FAST one — it never writes blob bytes to SQLite, so
+// staging and the staged→live flip cost milliseconds instead of seconds
+// (a 5.7 MiB in-memory push spent 6 s in finalize on production; a 40 MiB
+// spilled one 0.7 s). Only genuinely small pushes stay in memory.
 // 24 MiB, down from the 50 MiB v1 validated with ONE active repo: instances
 // of this class share an isolate, so the in-memory pack, the ingest's
 // resolved-content LRU (20 MiB) and staging batch (8 MiB) sit beside every
@@ -266,12 +276,18 @@ const isolatePushGate: Effect.Effect<Semaphore.Semaphore> = Effect.suspend(
  * (chunked upload) is charged the same worst case.
  */
 export const pushPermitsFor = (contentLength: number | undefined): number => {
-  const bytes =
-    contentLength === undefined || !Number.isFinite(contentLength)
-      ? MAX_PACK_BYTES
-      : Math.min(Math.max(contentLength, 0), MAX_PACK_BYTES);
-  const mib = Math.ceil(bytes / (1024 * 1024));
-  return Math.max(1, Math.min(PUSH_MEMORY_BUDGET_MB, mib));
+  const mib = (bytes: number) => Math.ceil(bytes / (1024 * 1024));
+  // A spilled push holds at most its reader's window working set
+  // (`PACK_MAX_WINDOWS` × `PACK_WINDOW_BYTES`) plus the parser's bounded
+  // caches — not its body. An unknown length is treated as spilled.
+  const spilled = mib(PACK_MAX_WINDOWS * PACK_WINDOW_BYTES);
+  const permits =
+    contentLength === undefined ||
+    !Number.isFinite(contentLength) ||
+    contentLength > MAX_PACK_BYTES
+      ? spilled
+      : mib(Math.max(contentLength, 0));
+  return Math.max(1, Math.min(PUSH_MEMORY_BUDGET_MB, permits));
 };
 
 /** How long crashed push staging survives before the GC alarm reaps it. */

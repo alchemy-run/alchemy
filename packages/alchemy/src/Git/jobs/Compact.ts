@@ -31,13 +31,14 @@ import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import {
+  concatBytes,
   bytesToHex,
   encodeTypeSize,
   makeSha1,
   type PackEntryType,
 } from "../git/ObjectCodec.ts";
 import { StoreError } from "../git/Store.ts";
-import { packKey, packKeyOf } from "../store/Keys.ts";
+import { packKey, isWirePackId, packKeyOf } from "../store/Keys.ts";
 import type { SqlClient } from "../store/Sql.ts";
 
 /** Objects moved per alarm run. */
@@ -336,12 +337,8 @@ export const runGeometricMergeJob = (options: {
     const maxInput = options.maxInputBytes ?? MAX_MERGE_INPUT_BYTES;
 
     const rows = yield* options.sql.all<{ pack_id: string; n: number }>(
-      // Promoted wire packs (`wire-…`, DESIGN §22.5) are excluded: they also
-      // carry the push's trees, commits and delta entries, so they cannot be
-      // concatenated; they stay as-is until a rewrite path exists.
       `SELECT pack_id, COUNT(*) AS n FROM objects
         WHERE location = 'pack' AND pack_id IS NOT NULL
-          AND pack_id NOT LIKE 'wire-%'
         GROUP BY pack_id`,
     );
     if (rows.length < 2) return noMerge;
@@ -388,6 +385,12 @@ export const runGeometricMergeJob = (options: {
     // Read + validate each source, strip framing, record body deltas.
     const bodies: Array<Uint8Array> = [];
     const deltas: Array<{ id: string; delta: number }> = [];
+    // Promoted wire packs (DESIGN §22.5) also carry the push's trees,
+    // commits and delta entries, so they are REWRITTEN rather than
+    // concatenated: only the rows that reference them are copied, each as
+    // a regenerated typeSize header + its compressed span, and every row
+    // is repointed individually.
+    const rewrites: Array<{ oid: string; offset: number }> = [];
     let totalCount = 0;
     let bodyOffset = 0;
     for (const source of sources) {
@@ -396,6 +399,40 @@ export const runGeometricMergeJob = (options: {
       );
       if (object === null) return noMerge; // vanished mid-run: retry later
       const bytes = yield* runR2(`merge read ${source.id}`)(object.bytes);
+      if (isWirePackId(source.id)) {
+        const rows = yield* options.sql.all<{
+          oid: string;
+          type: number;
+          size: number;
+          zsize: number;
+          pack_offset: number;
+        }>(
+          `SELECT oid, type, size, zsize, pack_offset FROM objects
+             WHERE location = 'pack' AND pack_id = ? ORDER BY pack_offset`,
+          source.id,
+        );
+        const pieces: Array<Uint8Array> = [];
+        let at = bodyOffset;
+        for (const row of rows) {
+          if (row.pack_offset + row.zsize > bytes.length) {
+            return yield* new StoreError({
+              reason: `merge: ${row.oid} points past the end of wire pack ${source.id}`,
+            });
+          }
+          const head = encodeTypeSize(row.type as PackEntryType, row.size);
+          pieces.push(
+            head,
+            bytes.subarray(row.pack_offset, row.pack_offset + row.zsize),
+          );
+          rewrites.push({ oid: row.oid, offset: 12 + at + head.length });
+          at += head.length + row.zsize;
+        }
+        const body = concatBytes(pieces);
+        totalCount += rows.length;
+        bodies.push(body);
+        bodyOffset += body.length;
+        continue;
+      }
       if (
         bytes.length < 32 ||
         bytes[0] !== 0x50 ||
@@ -414,7 +451,6 @@ export const runGeometricMergeJob = (options: {
       bodies.push(body);
       bodyOffset += body.length;
     }
-
     const header = packHeader(totalCount);
     const trailer = yield* Effect.sync(() => {
       const hash = makeSha1();
@@ -453,6 +489,14 @@ export const runGeometricMergeJob = (options: {
             packId,
             delta,
             id,
+          );
+        }
+        for (const { oid, offset } of rewrites) {
+          raw.exec(
+            `UPDATE objects SET pack_id = ?, pack_offset = ? WHERE oid = ?`,
+            packId,
+            offset,
+            oid,
           );
         }
       })

@@ -547,7 +547,7 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
     );
   });
 
-  test("compaction leaves promoted rows alone and geometric merge never touches a wire pack", async () => {
+  test("compaction leaves promoted rows alone; geometric merge REWRITES a wire pack into the merged pack", async () => {
     await run(
       Effect.gen(function* () {
         const { sql, blobs, store, fixtures } = yield* seedRepo({
@@ -559,8 +559,11 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
         for (let i = 0; i < 12; i++)
           promotedFixtures.push(yield* makeFixture(3, bytes(2000, i + 500)));
         const packId = wirePackId("01RECEIVE00000000000000001");
-        const { bytes: wire, offsets } = layout(promotedFixtures, 0);
-        yield* blobs.put(packKeyOf(REPO, packId), wire);
+        // The wire object carries junk around the referenced spans (a real
+        // one carries trees, commits and delta entries): only spans move.
+        const { bytes: wire, offsets } = layout(promotedFixtures, 333);
+        const withJunk = concat([wire, bytes(5000, 9)]);
+        yield* blobs.put(packKeyOf(REPO, packId), withJunk);
         yield* store.insertStagedBatch(
           "push-Q",
           promotedFixtures.map((f) => ({
@@ -572,7 +575,6 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
           })),
         );
         yield* sql.run(`UPDATE objects SET staged_push = NULL`);
-        // Two compaction runs make two small packs; the wire pack is a third.
         const p1 = yield* runCompactJob({
           repoId: REPO,
           sql,
@@ -589,23 +591,22 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
         });
         expect(p1.moved + p2.moved).toBe(30);
         const merge = yield* runGeometricMergeJob({ repoId: REPO, sql, blobs });
+        expect(merge.packs).toBe(3);
+        expect(merge.pendingDelete).toContain(packKeyOf(REPO, packId));
         const packs = yield* sql.all<{ pack_id: string; n: number }>(
-          `SELECT pack_id, COUNT(*) AS n FROM objects WHERE location = 'pack' GROUP BY pack_id ORDER BY n`,
+          `SELECT pack_id, COUNT(*) AS n FROM objects WHERE location = 'pack' GROUP BY pack_id`,
         );
-        const wireRows = packs.find((p) => p.pack_id === packId);
-        expect(wireRows?.n).toBe(12); // untouched by merge
-        expect(
-          packs
-            .filter((p) => p.pack_id !== packId)
-            .every((p) => p.n === 30 || p.n === 15),
-        ).toBe(true);
-        expect(blobs.objects.has(packKeyOf(REPO, packId))).toBe(true);
-        void merge;
-        // Everything still reads.
+        expect(packs).toEqual([{ pack_id: merge.packId, n: 42 }]);
+        // The merged pack is a clean packfile the parser accepts, and every
+        // object — promoted ones included — reads back through it.
+        const merged = blobs.objects.get(packKey(REPO, merge.packId!))!;
+        expect(verifyPack(merged)).toEqual({ objects: 42 });
         const all = yield* store.readContentBatch(
           [...fixtures, ...promotedFixtures].map((f) => f.oid),
         );
         expect(all.size).toBe(45);
+        for (const f of promotedFixtures)
+          expect(Array.from(all.get(f.oid)!)).toEqual(Array.from(f.content));
       }),
     );
   });
