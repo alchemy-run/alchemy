@@ -6,7 +6,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
-import { rootDir } from "../Auth/Profile.ts";
+import { rootDir } from "../Auth/Paths.ts";
 import { StateStoreError } from "./State.ts";
 
 /**
@@ -168,7 +168,8 @@ export const resolveLocalSecretCodec: Effect.Effect<
   }
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const keyFile = path.join(rootDir, localStateKeyFileName);
+  const home = rootDir();
+  const keyFile = path.join(home, localStateKeyFileName);
 
   // Corrupted key material (truncated hex, wrong length) fails as a
   // typed StateStoreError, not a defect escaping through Effect.map.
@@ -195,7 +196,7 @@ export const resolveLocalSecretCodec: Effect.Effect<
             const fresh = yield* Effect.sync(() =>
               Buffer.from(NodeCrypto.randomBytes(32)).toString("hex"),
             );
-            yield* fs.makeDirectory(rootDir, { recursive: true });
+            yield* fs.makeDirectory(home, { recursive: true });
             // `wx` fails if the file already exists, so a concurrent
             // creator can never be overwritten; the read-back below
             // converges every process on the winning key.

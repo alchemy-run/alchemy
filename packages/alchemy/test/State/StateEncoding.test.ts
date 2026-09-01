@@ -1,4 +1,4 @@
-import { rootDir } from "@/Auth/Profile.ts";
+import { rootDir } from "@/Auth/Paths.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
 import {
@@ -327,7 +327,7 @@ describe("StateEncoding secrets", () => {
         );
         yield* store.set({ ...key, value });
 
-        const keyFile = path.join(rootDir, localStateKeyFileName);
+        const keyFile = path.join(rootDir(), localStateKeyFileName);
         expect(yield* fs.exists(keyFile)).toBe(true);
 
         const raw = yield* fs.readFileString(
