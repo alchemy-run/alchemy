@@ -366,6 +366,22 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * );
  * ```
  *
+ * ### Private service
+ * `publicDomain: false` skips the generated `*.up.railway.app` hostname.
+ * `url` / `domain` stay unset. Reach it on the private mesh at
+ * `{name}.railway.internal`. Unowned generated or custom domains are
+ * left alone.
+ *
+ * **Example:** Private-only service
+ * ```typescript
+ * const worker = yield* Railway.Service("Worker", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   publicDomain: false,
+ * });
+ * ```
+ *
  * ### Pin a region
  * Omit `region` to use Railway's default. Updating it is in place.
  *
