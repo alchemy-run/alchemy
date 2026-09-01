@@ -288,8 +288,9 @@ const instanceSettingsDelta = (input: {
     preDeployCommand !== undefined &&
     !samePreDeployCommand(instance?.preDeployCommand, preDeployCommand)
   ) {
+    // Railway's GraphQL field is `[String]`. `null` is a no-op; `[]` clears.
     delta.preDeployCommand =
-      preDeployCommand === null ? null : [preDeployCommand];
+      preDeployCommand === null ? [] : [preDeployCommand];
     changed = true;
   }
   changed =
