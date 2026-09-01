@@ -1624,3 +1624,60 @@ SHA-1 trailer, so bytes-received can never again stand in for a pack.
 Real git was never at risk of a silent bad clone — it verifies the same
 trailer — but it would have seen "unexpected EOF" on a fetch that raced a
 compaction.
+
+### §22.5 The push-ingest sweep
+
+Measured with the platform's own per-invocation `cpuTime`/`wallTime`
+(a `wrangler tail`), because workerd freezes `performance.now()` during
+synchronous work — server-side timers only advance across awaits, which
+is itself diagnostic but cannot attribute CPU. The 15.6k-object, 40 MiB
+push of this repository, real `git push`, same edge:
+
+| | push wall | DO cpu / wall | ingest | staging | finalize |
+| --- | --- | --- | --- | --- | --- |
+| start of sweep (in memory, per-row staging) | 63.6 s | — | 46 s | 3.1 s | 2.0 s |
+| spilled reads as views, 64 KiB probe | 34 s | 10.0 / 34.9 s | 20 s | 6.6 s | 2.7 s |
+| **promoted wire pack** | **24 s** | 8.3 / 16.0 s | 11–15 s | **0.4 s** | **0.7 s** |
+
+What the numbers taught, in order:
+
+1. **Production CPU is ~10x this laptop, uniformly.** A probe worker
+   timing every per-object primitive (sync/streaming inflate, SHA-1,
+   copies, a JS loop, Effect overhead, deflate) found nothing
+   pathological — each is 8–15x slower there. Local ingest at
+   0.14 ms/object *is* production ingest at ~1.5 ms. Every microsecond
+   per object is worth ten. (`ZlibProbe.e2e.test.ts`; the local variant
+   pins that workerd keeps the synchronous exact-span inflate.)
+2. **The spilled reader copied 512 KiB per entry.** `blobRandomAccess`
+   returned `slice()` for in-window reads and the parser probes each
+   entry with a window-sized read: ~8 GB of memcpy per push, 31.9 s of
+   CPU. Views fixed it (the in-memory reader always handed out views);
+   the probe dropped to 64 KiB so crossing a window edge is rare and
+   small, and the window grows to the header's declared size in one step.
+3. **Durable Object storage cost is bytes WRITTEN, not statements.**
+   Multi-row inserts and 8x larger batches did nothing on production
+   (locally they halved staging time — commits are cheap there); finalize
+   was 55 ms locally vs 4.9 s in production for the same 7.3k-object push.
+   Staging writes every blob into SQLite; the staged→live flip rewrites
+   every one of those records. Both are proportional to blob bytes.
+4. **So don't write blobs to SQLite: promote the wire pack.** A push whose
+   body spilled already holds every non-delta blob in exactly the
+   compaction layout (typeSize header + zdata). Ingest now stages those
+   rows as `location='pack'` references into the incoming object (pack id
+   `wire-<receiveId>`, `packKeyOf` maps it), which then outlives the
+   request as repo data. 9,633 of this push's 15.6k objects never touch a
+   row; staging 6.6 s → 0.4 s, finalize 2.7 s → 0.7 s, and the later
+   compaction rewrite of those blobs never happens. Delta-resolved blobs
+   (fresh deflate, in no pack), trees, commits and tags still take rows.
+5. **Spill early; merge rewrites wire packs.** With promotion the spilled
+   path is the fast path, so the in-memory threshold is 4 MiB (a 5.7 MiB
+   in-memory push spent 6 s in finalize; spilled, 2.2 s), and a spilled
+   push's admission permit is its window working set, not its body. Wire
+   packs also carry trees, commits and delta entries, so geometric merge
+   *rewrites* them — copies only the referenced spans with regenerated
+   headers and repoints each row — into a clean pack, then grace-deletes
+   the wire object like any other source. Read fan-out stays geometric.
+
+Left: the remaining ingest CPU (inflate + SHA-1 + parse, ~8 s here) is
+the work git itself requires to trust a pack; finalize's residual is the
+flip of the delta-resolved rows. Both scale with object count, not bytes.
