@@ -12,7 +12,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
 import type { MessageOptions, View } from "../components/types.ts";
 import { CliKit } from "./CliKit.ts";
 import { NonInteractiveTerminal } from "./errors.ts";
