@@ -224,6 +224,12 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     );
     if (registry === undefined || profile === undefined) return;
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+    // Mirror Resolve.ts: an EXPLICIT profile selection is authoritative
+    // even under CI=true (the alchemy-test runner defaults CI to "true");
+    // only an implicit profile is unavailable in CI.
+    const explicitProfile = Option.getOrUndefined(
+      yield* Config.option(ALCHEMY_PROFILE),
+    );
     // CI credentials come exclusively from the environment. Do not require
     // or inspect a local profile first: CI runners intentionally have no
     // profile manifest, and doing so would also risk consulting a developer's
@@ -234,7 +240,7 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     for (const demand of demands) {
       const auth = registry[demand.provider];
       if (auth == null) continue;
-      if (ci) {
+      if (ci && explicitProfile === undefined) {
         if (auth.readEnvironment === undefined) {
           return yield* credentialsRequired(demand, profileName);
         }

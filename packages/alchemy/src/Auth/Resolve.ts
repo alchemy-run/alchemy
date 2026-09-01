@@ -62,7 +62,20 @@ export const resolveProviderConfig = <
   Effect.gen(function* () {
     const auth = yield* getAuthProvider<C, Credentials>(providerName);
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    if (ci) {
+    // Explicit profile selection is authoritative — even under CI=true.
+    // (The alchemy-test runner defaults CI to "true", and PR #1234's
+    // contract is that an explicitly selected profile wins; only an
+    // IMPLICIT profile is unavailable in CI.)
+    const explicitProfile = yield* Config.option(ALCHEMY_PROFILE).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProfileError({
+            message: "Could not resolve ALCHEMY_PROFILE.",
+            cause,
+          }),
+      ),
+    );
+    if (ci && Option.isNone(explicitProfile)) {
       if (auth.readEnvironment === undefined) {
         return yield* Effect.fail(
           new AuthError({
@@ -79,15 +92,7 @@ export const resolveProviderConfig = <
       };
     }
     const profile = yield* ProfileStore;
-    const configuredProfile = yield* Config.option(ALCHEMY_PROFILE).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProfileError({
-            message: "Could not resolve ALCHEMY_PROFILE.",
-            cause,
-          }),
-      ),
-    );
+    const configuredProfile = explicitProfile;
     if (
       Option.isNone(configuredProfile) &&
       auth.readEnvironment !== undefined
