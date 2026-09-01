@@ -19,7 +19,7 @@ it.effect("renders auth failures as user-facing CLI errors", () =>
       Effect.fail(
         new AuthError({
           message:
-            "Cloudflare credentials need refreshing. Run: alchemy profile refresh admin --provider Cloudflare",
+            "Cloudflare credentials need refreshing. Run: alchemy profile refresh --profile admin --provider Cloudflare",
         }),
       ),
     ).pipe(
@@ -30,7 +30,7 @@ it.effect("renders auth failures as user-facing CLI errors", () =>
     expect(Result.isFailure(result)).toBe(true);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("error:");
-    expect(errors[0]).toContain("alchemy profile refresh admin");
+    expect(errors[0]).toContain("alchemy profile refresh --profile admin");
     expect(errors[0]).not.toContain("at Effect.fn");
   }),
 );

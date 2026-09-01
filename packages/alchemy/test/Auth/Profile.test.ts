@@ -177,7 +177,7 @@ it.live(
 
         expect(error).toBeInstanceOf(AuthError);
         expect((error as AuthError).message).toContain(
-          `alchemy profile edit explicit-login --add ${FAKE_PROVIDER}`,
+          `alchemy profile edit --profile explicit-login --add ${FAKE_PROVIDER}`,
         );
         expect(state.configureCalls).toBe(0);
       }),

@@ -101,7 +101,7 @@ describe("Prisma auth provider", () => {
 
         expect(error._tag).toBe("NeedsReauth");
         expect(error.message).toContain(
-          "alchemy profile refresh default --provider Prisma",
+          "alchemy profile refresh --profile default --provider Prisma",
         );
       }).pipe(Effect.provide(testLayer())),
   );

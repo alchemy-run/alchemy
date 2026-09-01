@@ -656,7 +656,7 @@ export const ProfileStoreLive = Layer.effect(
           new AuthError({
             message:
               `No credentials configured for '${auth.name}' in profile '${profileName}'. ` +
-              `Run \`${yield* profileCommandHint(`alchemy profile edit ${profileName} --add ${auth.name}`)}\` to connect it.`,
+              `Run \`${yield* profileCommandHint(`alchemy profile edit --profile ${profileName} --add ${auth.name}`)}\` to connect it.`,
           }),
         );
       });

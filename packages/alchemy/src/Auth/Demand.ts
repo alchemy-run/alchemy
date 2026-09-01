@@ -106,7 +106,7 @@ export const credentialsRequired = (
 ): Effect.Effect<never, CredentialsRequired> =>
   Effect.gen(function* () {
     const command = yield* profileCommandHint(
-      `alchemy profile edit ${profileName} --add ${demand.provider}`,
+      `alchemy profile edit --profile ${profileName} --add ${demand.provider}`,
     );
     return yield* new CredentialsRequired({
       provider: demand.provider,
