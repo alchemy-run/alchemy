@@ -4,8 +4,8 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "alchemy-test";
-import { importStack } from "../../src/Cli/commands/_shared";
-import { devKeepAlive } from "../../src/Cli/commands/deploy";
+import { importStack } from "@/Alchemist/Session.ts";
+import { devKeepAlive } from "../../src/Cli/exec";
 import { PlatformServices } from "../../src/Util/PlatformServices";
 
 // `alchemy dev` runs under `--watch`: exiting the process on error cancels

@@ -20,7 +20,7 @@
     "emit": "prisma-next contract emit",
     "seed": "tsx scripts/seed.ts",
     "start": "node .output/server/index.mjs",
-    "tail": "alchemy tail",
+    "tail": "alchemy logs --tail",
     "typecheck": "tsc -b"
   },
   "dependencies": {

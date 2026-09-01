@@ -1,3 +1,28 @@
+## v2.0.0-beta.76
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - **cognito**:
+    - Add ManagedLoginBranding resource &nbsp;-&nbsp; by **Thiago Felix** in https://github.com/alchemy-run/alchemy/issues/1396 [<samp>(5ef8d)</samp>](https://github.com/alchemy-run/alchemy/commit/5ef8d9e62)
+    - Add emailConfiguration to UserPool for SES-backed email delivery &nbsp;-&nbsp; by **Thiago Felix** in https://github.com/alchemy-run/alchemy/issues/1395 [<samp>(a57a8)</samp>](https://github.com/alchemy-run/alchemy/commit/a57a8cacb)
+- **planetscale**:
+  - Expose Postgres private connection details for AWS Privatelink etc. &nbsp;-&nbsp; by **henningpokriefke** in https://github.com/alchemy-run/alchemy/issues/1414 [<samp>(e1a7f)</samp>](https://github.com/alchemy-run/alchemy/commit/e1a7fac51)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**:
+  - **website**: Dev-connectable site URLs; green test:aws:floci with floci 1.6.0-alchemy.9 &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1417 [<samp>(1380b)</samp>](https://github.com/alchemy-run/alchemy/commit/1380b3485)
+- **cli**:
+  - Only load floci CA when it exists &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/1412 [<samp>(1a3f7)</samp>](https://github.com/alchemy-run/alchemy/commit/1a3f7ad5f)
+- **cloudflare**:
+  - Route asset upload sessions to the dispatch-namespace endpoint &nbsp;-&nbsp; by **Pedro Toledo** in https://github.com/alchemy-run/alchemy/issues/1405 [<samp>(90185)</samp>](https://github.com/alchemy-run/alchemy/commit/901859886)
+  - **email**: Unblock the Email suite on scope-limited credentials &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/1408 [<samp>(e1b01)</samp>](https://github.com/alchemy-run/alchemy/commit/e1b016c90)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.75...HEAD)
+
+---
+
 ## v2.0.0-beta.75
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
