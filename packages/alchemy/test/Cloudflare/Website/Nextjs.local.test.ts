@@ -205,9 +205,8 @@ describe.concurrent("Nextjs dev", () => {
           Effect.gen(function* () {
             const site = yield* Cloudflare.Website.Nextjs("NextjsHmrLocal", {
               rootDir,
-              dev: { port: 0 },
+              dev: { mode: "hmr", port: 0 },
               memo: { include: memoInclude },
-              nextjs: { devMode: "hmr" },
               env: {
                 TEST_TEXT: bindingMarker,
               },

@@ -69,7 +69,7 @@ export interface FoldkitProps<
    * Foldkit apps route on the client, so `notFoundHandling` defaults to
    * `"single-page-application"` — unmatched paths serve `index.html` and
    * the app's router takes over. Set `notFoundHandling` explicitly to
-   * override.
+   * override (e.g. `"404-page"` to serve the built `404.html`).
    *
    * @default { notFoundHandling: "single-page-application" }
    */
@@ -111,9 +111,8 @@ export interface FoldkitProps<
  *
  * ### Single-Page Application Routing
  * Unmatched paths serve `index.html` by default so deep links boot the
- * app and the Foldkit router resolves the route. An explicit `assets`
- * config merges over the default — a site that ships real 404 content
- * can opt out.
+ * app and the Foldkit router resolves the route. A site that ships real
+ * 404 content overrides the default with `notFoundHandling: "404-page"`.
  *
  * **Example:** Serving a real 404 page
  * ```typescript
@@ -215,7 +214,8 @@ export const Foldkit: {
           (props) => ({
             ...props,
             // Foldkit routes on the client; serve index.html for unmatched
-            // paths so deep links boot the app instead of 404ing.
+            // paths so deep links boot the app instead of 404ing. An
+            // explicit `assets.notFoundHandling` wins over the default.
             assets: {
               notFoundHandling: "single-page-application" as const,
               ...props?.assets,

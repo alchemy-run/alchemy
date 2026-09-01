@@ -64,6 +64,26 @@ export const dual = <
   input: {
     live: () => LayerLive;
     local: () => LayerLocal;
+    /**
+     * Data-plane override context for the local mode — the layer of cloud
+     * environment services (endpoint, credentials, region) the local
+     * lifecycle variant runs under (e.g. AWS's `flociServices()`). Stamped
+     * onto the registered service as
+     * {@link ProviderService.localDataPlane} so `Binding.Service` clients
+     * can route deploy-time data-plane calls (Action bodies, plan-time
+     * `execute`) to the emulator when the bound resource resolves local.
+     * Pass a module-memoized layer reference.
+     */
+    dataPlane?: () => Layer.Layer<any, any, never>;
+    /**
+     * Data-plane override for **live** mode — the inverse of
+     * {@link dataPlane}. Stamped as {@link ProviderService.liveDataPlane} so
+     * `Alchemy.remote()` binding clients in a `dev` run provide the live
+     * chain closest (ambient is the emulator). Pass a module-memoized
+     * layer reference. AWS duals also get this from
+     * `pinCollectionEnvironment`.
+     */
+    liveDataPlane?: () => Layer.Layer<any, any, never>;
   },
 ): Layer.Layer<
   Layer.Success<LayerLive | LayerLocal>,
@@ -119,6 +139,8 @@ export const dual = <
         ...defaultService,
         mode: defaultMode,
         modes,
+        localDataPlane: input.dataPlane,
+        liveDataPlane: input.liveDataPlane,
       } satisfies ProviderService<R>);
     }),
   ) as any;

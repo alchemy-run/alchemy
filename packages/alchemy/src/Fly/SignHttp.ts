@@ -6,7 +6,6 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {
   base64ToBytes,
   bytesToBase64,
-  flyKmsPost,
   makeHttpSecretKeyBinding,
 } from "./SecretKeyHttp.ts";
 import { Sign, type SignRequest } from "./Sign.ts";
@@ -34,19 +33,6 @@ export const SignHttp = Layer.effect(
     makeHttpSecretKeyBinding({
       makeClient: (auth, appName, secretName) =>
         Effect.fn("Fly.Sign")(function* (request: SignRequest) {
-          if (globalThis.__ALCHEMY_RUNTIME__) {
-            const res = yield* flyKmsPost(
-              yield* appName,
-              yield* secretName,
-              "sign",
-              { plaintext: bytesToBase64(request.plaintext) },
-            );
-            return {
-              signature: base64ToBytes(
-                typeof res.signature === "string" ? res.signature : undefined,
-              ),
-            };
-          }
           const res = yield* auth.authorize(
             machines.signSecretKey({
               app_name: yield* appName,

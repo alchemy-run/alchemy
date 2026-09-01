@@ -17,9 +17,14 @@
  *   the emulator: the image pipeline is content-addressed, so a real change
  *   builds and pushes a NEW `<repositoryUri>:<hash>` tag and registers a
  *   new task definition revision (an unchanged hash is a cheap no-op).
+ * - **Task restart** lives in the skeleton's `onReconciled` hook — NOT in
+ *   the watch loop — so it also fires for engine-driven reconciles.
+ *   Prop-only changes (an inline `dockerfile` edit, a new env var) never
+ *   produce a file event: before the hook, they registered a new revision
+ *   and running tasks kept serving the old one until the next source edit.
  *   RUNNING standalone tasks of the family (launched via `RunTask`) are
- *   then stopped and re-run on the new revision — service-managed tasks
- *   belong to [FlociServiceProvider](./FlociServiceProvider.ts).
+ *   stopped and re-run on the new revision — service-managed tasks belong
+ *   to [FlociServiceProvider](./FlociServiceProvider.ts).
  */
 
 import * as Effect from "effect/Effect";
@@ -64,6 +69,29 @@ export const FlociTaskProvider = () =>
             ? { action: "replace" as const }
             : undefined,
         ),
+      // Fires on every reconcile — watcher-triggered AND engine-driven
+      // (prop changes never produce a file event, so restarting only from
+      // the watch loop left running tasks on the old revision).
+      onReconciled: ({ id, previous, attrs }) =>
+        Effect.gen(function* () {
+          if (previous?.taskDefinitionArn === attrs.taskDefinitionArn) return;
+          const startedAt = Date.now();
+          const restarted = yield* restartFamilyTasks({
+            family: attrs.taskFamily,
+            nextTaskDefinitionArn: attrs.taskDefinitionArn,
+            serviceManaged: false,
+          });
+          yield* Effect.logInfo(
+            `[alchemy dev] ${attrs.taskFamily}: task definition swapped (${restarted} task(s) restarted) in ${Date.now() - startedAt}ms`,
+          );
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `[alchemy dev] ${id}: task restart failed`,
+              cause,
+            ),
+          ),
+        ),
       startWatch: (ctx) =>
         Effect.gen(function* () {
           const trigger = yield* imageSourceTrigger({
@@ -72,21 +100,10 @@ export const FlociTaskProvider = () =>
             isExternal: ctx.news.isExternal,
           });
           yield* trigger.pipe(
+            // The reconcile registers the new revision; the `onReconciled`
+            // hook (shared with engine-driven updates) restarts the tasks.
             Stream.runForEach(() =>
-              Effect.gen(function* () {
-                const startedAt = Date.now();
-                const previous = yield* ctx.currentAttrs;
-                const attrs = yield* ctx.rerunReconcile;
-                if (attrs.code.hash === previous.code.hash) return;
-                const restarted = yield* restartFamilyTasks({
-                  family: attrs.taskFamily,
-                  nextTaskDefinitionArn: attrs.taskDefinitionArn,
-                  serviceManaged: false,
-                });
-                yield* Effect.logInfo(
-                  `[alchemy dev] ${attrs.taskFamily}: image swapped (${restarted} task(s) restarted) in ${Date.now() - startedAt}ms`,
-                );
-              }).pipe(
+              ctx.rerunReconcile.pipe(
                 Effect.catchCause((cause) =>
                   Effect.logWarning(
                     `[alchemy dev] ${ctx.id}: image swap failed`,

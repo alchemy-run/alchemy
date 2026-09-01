@@ -50,7 +50,7 @@ One `ReadWriteBucket(Bucket)` call wires the binding, env var, and typed client 
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
 
 ```sh
-bun add alchemy@next effect@next
+bun add alchemy@latest effect@rc
 ```
 
 ## GitHub Action
@@ -94,6 +94,12 @@ dependencies or breaking conventions.
 - [llms.txt](https://alchemy.run/llms.txt) — agent-ready documentation index
 
 > **alchemy** is in alpha. Expect breaking changes. Come hang in our [Discord](https://discord.gg/jwKw8dBJdN).
+
+## Credits
+
+### Blacksmith
+
+Thanks to [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. Their fast Linux, macOS, and Windows runners help us test our packages across platforms and deploy our content-heavy website in mere minutes.
 
 ## License
 

@@ -6,8 +6,10 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import AsyncContainerStack from "./fixtures/async/stack.ts";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import ExternalStack from "./fixtures/external/stack.ts";
+import InferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import RemoteStack from "./fixtures/remote/stack.ts";
 
@@ -203,6 +205,114 @@ describe.concurrent.each([
         expect(echoed.env.DEMO_PLAIN).toBe(DEMO_PLAIN);
         expect(echoed.env.DEMO_SECRET).toBe(DEMO_SECRET);
         expect(echoed.env.DEMO_BUCKET).toBe(bucketName);
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
+    // worker → DO fetch handler → container port, forwarding the raw incoming
+    // request. In the live variant the incoming web Request carries an
+    // https:// URL and workerd rejects TLS on container ports ("Connecting to
+    // a container using HTTPS is not currently supported"), so this pins the
+    // runtime's scheme downgrade on the container hop; dev serves http:// and
+    // just pins the passthrough itself.
+    test(
+      "proxies the raw incoming request through the DO to the container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        // The echo image reflects the request as JSON ("method" only appears
+        // in a real echo response, never in an error page).
+        const body = yield* fetchReady(new URL("/passthrough", url), "method");
+        expect(body).toContain("method");
+      }).pipe(logLevel),
+      { timeout },
+    );
+  });
+  /**
+   * Container bound directly on a plain async Worker's `env` (issue #953),
+   * with the Container's logical id EQUAL to the env key
+   * (`ECHO: Container("ECHO", …)`). The Worker's two halves — the
+   * `durable_object_namespace` binding and the `containers` script metadata —
+   * describe the same env entry, so they are contributed under one `sid`.
+   * Contributing them under two (the env key and the ContainerApplication's
+   * logical id) made them collide for exactly this shape, and binding rows
+   * are collapsed by sid — last write wins — so the namespace binding was
+   * silently dropped. Live, the Worker then uploads the Container declaration
+   * itself as a `json` binding (`{"_id":"Effect","op":"alchemy/EffectClass"}`)
+   * and `getContainer` dies with `t.idFromName is not a function`; in dev the
+   * local runtime holds container metadata for a class it has no namespace
+   * for and the deploy dies with
+   * `Durable Object namespace AsyncEchoObject not found`.
+   */
+  describe("async container bound on env", () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = make();
+    const stack = beforeAll(deploy(AsyncContainerStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(AsyncContainerStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "binds the container class as a durable object namespace",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const body = yield* fetchReady(new URL("/binding", url), "kind");
+        expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    test(
+      "serves through the container-backed DO class",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        // The echo image reflects the request as JSON ("method" only appears
+        // in a real echo response, never in an error page) — proof the
+        // request went Worker → DO class → container port 8080 and back.
+        const hello = yield* fetchReady(new URL("/hello", url), "method");
+        expect(hello).toContain("method");
+      }).pipe(logLevel),
+      { timeout },
+    );
+  });
+  /**
+   * Issue #1321 — the same sid collision as above in the shape the
+   * Containers guide documents: `className` omitted, so the env key, the
+   * Container's logical id and the DO class are all one name
+   * (`Probe: Container("Probe", …)`). Deployed and driven over HTTP: the
+   * Worker must see a real namespace and reach the container through it.
+   */
+  describe("async container with inferred class name", () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = make();
+    const stack = beforeAll(deploy(InferredClassStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(InferredClassStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "binds the container class as a durable object namespace",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const body = yield* fetchReady(new URL("/binding", url), "kind");
+        expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    test(
+      "serves through the container-backed DO class",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const hello = yield* fetchReady(new URL("/hello", url), "method");
+        expect(hello).toContain("method");
       }).pipe(logLevel),
       { timeout },
     );

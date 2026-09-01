@@ -15,7 +15,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Gated with the rest of the AWS.Website suites: the OpenNext build plus the
 // CloudFront lifecycle dominate the runtime (create ~10-20 min, destroy
 // ~5-15 min).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-app");
 
@@ -63,7 +63,13 @@ const run = (options: {
     return Effect.sync(() => child.kill("SIGKILL"));
   });
 
-describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
+// Skipped under the floci runner: in dev the composite deploys only the
+// framework dev server (no Lambda/S3/CloudFront), so this test's live
+// topology assertions are meaningless there. Dev behavior is covered by
+// the co-located Nextjs.local.test.ts suite.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
+describe.skipIf(!runLive || runEmulated)("AWS.Website.Nextjs", () => {
   test.provider(
     "deploys the OpenNext topology: streaming SSR Lambda, S3 assets, image optimizer, ISR wiring",
     (stack) =>

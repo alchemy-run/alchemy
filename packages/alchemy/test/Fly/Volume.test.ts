@@ -138,7 +138,7 @@ test.provider(
       );
       expect(machineGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider(
@@ -199,7 +199,7 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider(

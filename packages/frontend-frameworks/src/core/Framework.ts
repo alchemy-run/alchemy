@@ -16,6 +16,12 @@ export class FrameworkError extends Data.TaggedError<"FrameworkError">(
 export interface FrameworkBuildOptions {
   /** Project root. Defaults to the implementation's configured root / cwd. */
   readonly root?: string | undefined;
+  /**
+   * Process environment for the production-build child. Never applied to
+   * the parent: framework plugins mutate `process.env`, so the engine
+   * process must not share it with concurrent deploys.
+   */
+  readonly env?: Record<string, string> | undefined;
 }
 
 export interface FrameworkDevOptions {

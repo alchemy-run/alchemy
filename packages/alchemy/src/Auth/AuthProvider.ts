@@ -181,7 +181,13 @@ export const AuthProvider =
                   if (LOCKED_METHODS.has(methodName)) {
                     // First positional arg is always `profileName`.
                     const profileName = args[0] as string;
-                    eff = withLock(`${profileName}-${name}`, eff);
+                    eff = withLock(`${profileName}-${name}`, eff, {
+                      label: `${name}.${methodName} (profile '${profileName}')`,
+                      // `login`/`configure` legitimately block on the user
+                      // (browser OAuth, `aws sso login`), and a periodic
+                      // notice would trample the prompt they are answering.
+                      watchdog: !INTERACTIVE_METHODS.has(methodName),
+                    });
                   }
                   if (INTERACTIVE_METHODS.has(methodName)) {
                     eff = Semaphore.withPermits(interactiveMutex, 1)(eff);

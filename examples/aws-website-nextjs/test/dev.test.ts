@@ -147,7 +147,7 @@ test(
 
     // SSR env parity: GREETING from alchemy.run.ts reaches the dev server.
     const home = await (await fetchOk(url)).text();
-    expect(home).toContain("Hello from Alchemy!");
+    expect(home).toContain("Hello from Next.js on AWS!");
     expect(home).toContain(MARKER);
 
     // App Router API route serves through the dev server.

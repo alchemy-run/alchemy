@@ -34,6 +34,24 @@ the same TypeScript program.
   Volume, Postgres cluster, or Redis primary lives in. Default
   `iad`. Changing `region` replaces the resource.
 
+## Frontend
+
+- **[Websites](/fly/frontend/websites)** — Vite, Astro, Next.js,
+  Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku,
+  Octane, Foldkit, Vocs, and StaticSite. Each builds your app and
+  deploys a Node [Service](/fly/compute/services) on a Fly App
+  (`https://{app}.fly.dev`).
+- [`Vite`](/fly/frontend/vite), [`Astro`](/fly/frontend/astro),
+  [`Next.js`](/fly/frontend/nextjs), [`Nuxt`](/fly/frontend/nuxt),
+  [`React Router`](/fly/frontend/react-router),
+  [`SolidStart`](/fly/frontend/solidstart),
+  [`SvelteKit`](/fly/frontend/sveltekit),
+  [`TanStack Start`](/fly/frontend/tanstack-start),
+  [`Waku`](/fly/frontend/waku),
+  [`Octane`](/fly/frontend/octane), [`Foldkit`](/fly/frontend/foldkit),
+  [`Vocs`](/fly/frontend/vocs),
+  [`StaticSite`](/fly/frontend/static-site).
+
 ## Data
 
 - **[Volumes](/fly/data/volumes)** — region-local block storage.
@@ -66,6 +84,8 @@ the same TypeScript program.
 | You're building              | Reach for                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------- |
 | An HTTP API on Fly           | [App](/fly/compute/apps) + [Service](/fly/compute/services)               |
+| A Vite SPA                   | [`Website.Vite`](/fly/frontend/vite)                                      |
+| An SSR site (Astro, Next, Nuxt, …) | [`Website`](/fly/frontend/websites)                                 |
 | A sandbox that can sleep     | [Sprite](/fly/compute/sprites)                                            |
 | A raw container              | [Machine](/fly/compute/machines) with an `image`                          |
 | A background worker          | [Service](/fly/compute/services) with `ServerHost.run`                    |
@@ -86,5 +106,7 @@ the same TypeScript program.
   connect alchemy.
 - [Tutorial](/fly/tutorial/part-1) — from empty directory to an App
   running an HTTP Service with a mounted Volume and a secret.
+- [Websites](/fly/frontend/websites) — Vite, Astro, Next.js, and
+  other framework sites as a Node Service.
 - [Providers reference](/providers) — generated API docs for every
   Fly resource Alchemy ships.
