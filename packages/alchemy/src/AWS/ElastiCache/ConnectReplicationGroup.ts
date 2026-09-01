@@ -1,6 +1,7 @@
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -52,7 +53,9 @@ export interface ConnectReplicationGroup extends Binding.Service<
   (
     group: ReplicationGroup,
     options?: ConnectReplicationGroupOptions,
-  ) => Effect.Effect<Effect.Effect<ReplicationGroupConnectionInfo>>
+  ) => Effect.Effect<
+    Effect.Effect<ReplicationGroupConnectionInfo, never, RuntimeContext>
+  >
 > {}
 export const ConnectReplicationGroup = Binding.Service<ConnectReplicationGroup>(
   "AWS.ElastiCache.ConnectReplicationGroup",

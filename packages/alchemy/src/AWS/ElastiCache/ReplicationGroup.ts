@@ -36,6 +36,7 @@ export interface ReplicationGroupProps {
   snapshotRetentionLimit?: number;
   snapshotWindow?: string;
   autoMinorVersionUpgrade?: boolean;
+  /** Enables TLS for client connections. @default true */
   transitEncryptionEnabled?: boolean;
   transitEncryptionMode?: elasticache.TransitEncryptionMode;
   atRestEncryptionEnabled?: boolean;
@@ -129,11 +130,9 @@ export const validateReplicationGroupProps = (
   }
   if (
     props.transitEncryptionMode !== undefined &&
-    props.transitEncryptionEnabled !== true
+    props.transitEncryptionEnabled === false
   ) {
-    return invalid(
-      "transitEncryptionMode requires transitEncryptionEnabled to be true",
-    );
+    return invalid("transitEncryptionMode requires transitEncryptionEnabled");
   }
   return undefined;
 };
@@ -345,7 +344,8 @@ export const ReplicationGroupProvider = () =>
                 SnapshotRetentionLimit: props.snapshotRetentionLimit,
                 SnapshotWindow: props.snapshotWindow,
                 AutoMinorVersionUpgrade: props.autoMinorVersionUpgrade,
-                TransitEncryptionEnabled: props.transitEncryptionEnabled,
+                TransitEncryptionEnabled:
+                  props.transitEncryptionEnabled ?? true,
                 TransitEncryptionMode: props.transitEncryptionMode,
                 AtRestEncryptionEnabled: props.atRestEncryptionEnabled,
                 KmsKeyId: props.kmsKeyId,
@@ -463,7 +463,13 @@ export const ReplicationGroupProvider = () =>
             group = yield* waitForAvailable(name);
           }
           const setAutomaticFailover = Effect.fn(function* (enabled: boolean) {
-            if ((group.AutomaticFailover === "enabled") === enabled) return;
+            const current = group;
+            if (!current) {
+              return yield* Effect.die(
+                `Replication group '${name}' disappeared while updating automatic failover`,
+              );
+            }
+            if ((current.AutomaticFailover === "enabled") === enabled) return;
             yield* retryWhileCacheTransitioning(
               elasticache.modifyReplicationGroup({
                 ReplicationGroupId: name,
@@ -474,7 +480,13 @@ export const ReplicationGroupProvider = () =>
             group = yield* waitForAvailable(name);
           });
           const setMultiAz = Effect.fn(function* (enabled: boolean) {
-            if ((group.MultiAZ === "enabled") === enabled) return;
+            const current = group;
+            if (!current) {
+              return yield* Effect.die(
+                `Replication group '${name}' disappeared while updating Multi-AZ`,
+              );
+            }
+            if ((current.MultiAZ === "enabled") === enabled) return;
             yield* retryWhileCacheTransitioning(
               elasticache.modifyReplicationGroup({
                 ReplicationGroupId: name,

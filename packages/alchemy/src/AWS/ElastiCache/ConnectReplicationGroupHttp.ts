@@ -87,7 +87,7 @@ export const ConnectReplicationGroupHttp = Layer.effect(
             port,
             readerHost: readerHost || undefined,
             readerPort: readerHost ? readerPort : undefined,
-            tls,
+            tls: tls ?? true,
           };
         }
         const endpoint = yield* yield* endpointHost;
