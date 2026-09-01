@@ -152,7 +152,7 @@ describe("Assets / buildAssetConfigs", () => {
   // Regression for https://github.com/alchemy-run/alchemy/pull/1418:
   // a `_headers` / `_redirects` file used to crash local asset serving
   // because constructHeaders/constructRedirects called logger.log with no
-  // logger. Parse counts go through Effect.log so the CLI logger sees them.
+  // logger. They now log through Effect.log.
   it("constructs header and redirect configs from _headers/_redirects contents", () => {
     const { assetsConfig } = assetConfigs({
       compatibilityDate: "2026-03-10",

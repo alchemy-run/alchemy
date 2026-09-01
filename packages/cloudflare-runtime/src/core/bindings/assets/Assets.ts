@@ -377,37 +377,17 @@ export const buildAssetConfigs = Effect.fn("buildAssetConfigs")(function* (
 ) {
   let headers: AssetConfig["headers"] | undefined;
   if (worker.assets?.headers) {
-    const parsedHeaders = parseHeaders(worker.assets.headers);
-    yield* Effect.log(
-      `Parsed ${parsedHeaders.rules.length} valid header rule${parsedHeaders.rules.length === 1 ? "" : "s"}.`,
-    );
-    if (parsedHeaders.invalid.length > 0) {
-      yield* Effect.logWarning(
-        `Found ${parsedHeaders.invalid.length} invalid header rule${parsedHeaders.invalid.length === 1 ? "" : "s"}:\n` +
-          parsedHeaders.invalid.map((rule) => rule.message).join("\n"),
-      );
-    }
-    headers = constructHeaders({
-      headers: parsedHeaders,
+    headers = (yield* constructHeaders({
+      headers: parseHeaders(worker.assets.headers),
       headersFile: worker.assets.headers,
-    }).headers;
+    })).headers;
   }
   let redirects: AssetConfig["redirects"] | undefined;
   if (worker.assets?.redirects) {
-    const parsedRedirects = parseRedirects(worker.assets.redirects);
-    yield* Effect.log(
-      `Parsed ${parsedRedirects.rules.length} valid redirect rule${parsedRedirects.rules.length === 1 ? "" : "s"}.`,
-    );
-    if (parsedRedirects.invalid.length > 0) {
-      yield* Effect.logWarning(
-        `Found ${parsedRedirects.invalid.length} invalid redirect rule${parsedRedirects.invalid.length === 1 ? "" : "s"}:\n` +
-          parsedRedirects.invalid.map((rule) => rule.message).join("\n"),
-      );
-    }
-    redirects = constructRedirects({
-      redirects: parsedRedirects,
+    redirects = (yield* constructRedirects({
+      redirects: parseRedirects(worker.assets.redirects),
       redirectsFile: worker.assets.redirects,
-    }).redirects;
+    })).redirects;
   }
   let staticRouting: StaticRouting | undefined;
   if (Array.isArray(worker.assets?.runWorkerFirst)) {
