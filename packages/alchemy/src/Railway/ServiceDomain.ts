@@ -219,12 +219,33 @@ const domainCreateRetry = railway.Retry.policy((lastError) => {
   };
 });
 
+const waitForServiceDomainById = (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+  domainId: string;
+}) =>
+  findCloudDomainById(input).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (domain) => domain !== undefined && !isGone(domain),
+      times: 8,
+    }),
+    Effect.map((domain) =>
+      domain !== undefined && !isGone(domain) ? domain : undefined,
+    ),
+  );
+
 const createViaMutation = (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
+  domainId?: string;
 }) => {
-  const listed = listedOrUndefined(input);
+  const listed =
+    input.domainId === undefined
+      ? listedOrUndefined(input)
+      : waitForServiceDomainById({ ...input, domainId: input.domainId });
   const missing = () =>
     new ServiceDomainNotCreated({
       serviceId: input.serviceId,
@@ -245,48 +266,40 @@ const createViaMutation = (input: {
     })
     .pipe(domainCreateRetry)
     .pipe(
-      Effect.flatMap(() => listedOrFail(missing())),
+      Effect.flatMap((created) =>
+        input.domainId === undefined
+          ? listedOrFail(missing())
+          : Effect.succeed(created),
+      ),
       Effect.catchTag("RailwayServiceDomainCreateFailed", (error) =>
         listedOrFail(error),
       ),
+      Effect.catchTag("RailwayNotFound", (error) =>
+        input.domainId !== undefined &&
+        error.message.includes("ServiceInstance not found")
+          ? listedOrFail(error)
+          : Effect.fail(error),
+      ),
       Effect.catchTag("RailwayValidationError", (error) =>
-        alreadyExists(error.message) ? listedOrFail(error) : Effect.fail(error),
+        input.domainId !== undefined || alreadyExists(error.message)
+          ? listedOrFail(error)
+          : Effect.fail(error),
       ),
       Effect.catchTag("Conflict", () => listedOrFail(missing())),
     );
 
   return withEnvironmentConfigLock(input.environmentId, create).pipe(
     Effect.retry({
-      // `RailwayNotFound: ServiceInstance not found` is eventual
-      // consistency: `serviceCreate` fans the instance out to each
-      // environment asynchronously, and the domain mutation 404s until it
-      // lands there.
-      while: (e) =>
-        e._tag === "RailwayServiceDomainCreateFailed" ||
-        (e._tag === "RailwayNotFound" &&
-          e.message.includes("ServiceInstance not found")),
+      while: (error) =>
+        (input.domainId === undefined &&
+          error._tag === "RailwayServiceDomainCreateFailed") ||
+        (error._tag === "RailwayNotFound" &&
+          error.message.includes("ServiceInstance not found")),
       times: 12,
       schedule: Schedule.spaced("5 seconds"),
     }),
   );
 };
-
-const createOwnedViaMutation = (input: {
-  projectId: string;
-  environmentId: string;
-  serviceId: string;
-}) =>
-  withEnvironmentConfigLock(
-    input.environmentId,
-    railway
-      .serviceDomainCreate({
-        input: {
-          environmentId: input.environmentId,
-          serviceId: input.serviceId,
-        },
-      })
-      .pipe(domainCreateRetry),
-  );
 
 /**
  * Terraform `railway_service_domain` requires `subdomain` and, after
@@ -365,19 +378,31 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
 }) {
   let current: CloudDomain | undefined = yield* listedOrUndefined(input);
 
+  let createdDomainId: string | undefined;
   if (current === undefined) {
-    const domainId = yield* createViaEnvironmentPatch({
+    createdDomainId = yield* createViaEnvironmentPatch({
       environmentId: input.environmentId,
       serviceId: input.serviceId,
     });
-    current = yield* listedOrUndefined({ ...input, domainId });
+    current = yield* waitForServiceDomainById({
+      ...input,
+      domainId: createdDomainId,
+    });
   }
 
   if (current === undefined) {
-    current =
-      input.domainId === undefined
-        ? yield* createViaMutation(input)
-        : yield* createOwnedViaMutation(input);
+    if (input.domainId === undefined) {
+      current = yield* createViaMutation(input);
+    } else {
+      const domainId = createdDomainId;
+      if (domainId === undefined) {
+        return yield* new ServiceDomainNotCreated({
+          serviceId: input.serviceId,
+          environmentId: input.environmentId,
+        });
+      }
+      current = yield* createViaMutation({ ...input, domainId });
+    }
   }
 
   if (current === undefined || isGone(current)) {

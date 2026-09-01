@@ -1,6 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
 import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -241,15 +242,47 @@ test.provider(
       );
       expect(publicUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
 
-      // Put a second generated domain first/alongside the recorded one. The
-      // provider must keep refreshing and deleting by its recorded id only.
-      const foreignDomain = yield* railway.serviceDomainCreate({
-        input: {
+      // Rebuild the generated-domain map with a foreign row first. The old
+      // positional selection would switch ownership to this id.
+      const foreignDomainId = yield* Effect.sync(() => crypto.randomUUID());
+      yield* withEnvironmentConfigLock(
+        publicUpdate.api.environmentId,
+        railway.environmentPatchCommit({
+          environmentId: publicUpdate.api.environmentId,
+          commitMessage: "Arrange generated domains for ownership test",
+          patch: {
+            services: {
+              [publicUpdate.api.serviceId]: {
+                networking: {
+                  serviceDomains: {
+                    [foreignDomainId]: {},
+                    [publicUpdate.api.domainId!]: {},
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const orderedDomains = yield* railway
+        .domains({
+          projectId: publicUpdate.api.projectId,
           environmentId: publicUpdate.api.environmentId,
           serviceId: publicUpdate.api.serviceId,
-        },
-      });
-      expect(foreignDomain.id).not.toEqual(publicUpdate.api.domainId);
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (domains) =>
+              domains.serviceDomains[0]?.id === foreignDomainId &&
+              domains.serviceDomains.some(
+                (domain) => domain.id === publicUpdate.api.domainId,
+              ),
+            times: 10,
+          }),
+        );
+      expect(orderedDomains.serviceDomains[0]?.id).toEqual(foreignDomainId);
+      expect(foreignDomainId).not.toEqual(publicUpdate.api.domainId);
 
       const publicWithForeignDomain = yield* stack.deploy(
         Effect.gen(function* () {
@@ -297,7 +330,7 @@ test.provider(
             domain.deletedAt == null && domain.syncStatus !== "DELETED",
         )
         .map((domain) => domain.id);
-      expect(remainingIds).toContain(foreignDomain.id);
+      expect(remainingIds).toContain(foreignDomainId);
       expect(remainingIds).not.toContain(publicUpdate.api.domainId);
 
       yield* stack.destroy();
