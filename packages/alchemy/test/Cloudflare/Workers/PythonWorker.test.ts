@@ -48,10 +48,11 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
           main,
           compatibility: { date: "2026-03-17", flags: ["python_workers"] },
         });
-        expect(expected.files.map((file) => file.path)).toEqual([
-          "worker.py",
-          "util.py",
-        ]);
+        const paths = expected.files.map((file) => file.path);
+        expect(paths.slice(0, 2)).toEqual(["worker.py", "util.py"]);
+        // Current workerd releases externalize the Python Workers SDK, so
+        // Alchemy vendors the managed runtime even without a pyproject.toml.
+        expect(paths).toContain("python_modules/workers/__init__.py");
 
         const worker = yield* stack.deploy(
           Effect.gen(function* () {
@@ -63,8 +64,8 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
           }),
         );
 
-        // The stored bundle hash equals the hash of the source bytes only
-        // when no bundling/minification ran.
+        // The stored bundle hash covers the source and managed SDK bytes;
+        // Python modules are uploaded directly without JS bundling.
         expect(worker.hash?.bundle).toEqual(expected.hash);
 
         // End-to-end: the response interpolates a constant from the
