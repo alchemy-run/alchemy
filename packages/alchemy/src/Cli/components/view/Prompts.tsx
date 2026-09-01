@@ -12,7 +12,7 @@ import type {
   SelectOptions,
   TextInputOptions,
 } from "../types.ts";
-import { theme } from "../../CliKit/theme.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { useGlyphs, useKeyGlyphs } from "../ui/Environment.tsx";
 import { Alert } from "../ui/Feedback.tsx";
 import {

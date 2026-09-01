@@ -14,7 +14,10 @@ import {
   type ViteBuildOutput,
 } from "../../../Bundle/Vite.ts";
 import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
-import { makeResourceLogger, makeResourceOutput } from "../../../Cli/Output.ts";
+import {
+  makeResourceLogger,
+  makeResourceOutput,
+} from "../../../Util/ResourceOutput.ts";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";

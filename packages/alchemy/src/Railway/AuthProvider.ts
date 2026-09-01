@@ -27,7 +27,7 @@ import {
   storedValueText,
   validateFieldValues,
 } from "../Auth/StoredAuthProvider.ts";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import {
   loginSessionUrl,
   pollLoginSessionToken,
@@ -123,11 +123,11 @@ export const RailwayAuth = AuthProviderLayer<
 >()(
   RAILWAY_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const prompt = CliKit.accessors;
+    const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
     const loginStored = Effect.fn(function* (profileName: string) {
-      const token = yield* prompt.prompt
+      const token = yield* interaction.prompt
         .password({
           message: "Railway API Token",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -135,7 +135,7 @@ export const RailwayAuth = AuthProviderLayer<
         .pipe(mapPromptCancellation, Effect.map(Redacted.make));
 
       const envUrl = yield* getEnv(RAILWAY_API_URL_ENV);
-      const urlPrompt = yield* prompt.prompt
+      const urlPrompt = yield* interaction.prompt
         .text({
           message: "Railway API URL (Enter for default)",
           placeholder: DEFAULT_API_BASE_URL,
@@ -153,7 +153,7 @@ export const RailwayAuth = AuthProviderLayer<
         token,
         apiBaseUrl,
       });
-      yield* prompt.output.success("Railway: credentials saved.");
+      yield* interaction.output.success("Railway: credentials saved.");
       return { method: "stored" as const };
     });
 
@@ -182,14 +182,14 @@ export const RailwayAuth = AuthProviderLayer<
       );
 
       const url = loginSessionUrl(code, { hostname });
-      // `awaitExternal` is only on the CliKit service, not the `accessors`
+      // `awaitExternal` is only on the Interaction service, not the `accessors`
       // helper (same acquisition as BrowserOAuth / the AWS SSO flow).
-      const cli = yield* CliKit.CliKit;
+      const interaction = yield* Interaction.Interaction;
       const services = yield* Effect.context<ChildProcessSpawner>();
       // Invoked later by the prompt's keyboard event boundary, not while the
       // surrounding Effect is executing.
       const runOpenUrl = Effect.runPromiseWith(services);
-      const openFailed = yield* CliKit.openUrl(url).pipe(
+      const openFailed = yield* Interaction.openUrl(url).pipe(
         Effect.as(false),
         Effect.catch(() => Effect.succeed(true)),
       );
@@ -203,7 +203,7 @@ export const RailwayAuth = AuthProviderLayer<
       // demand, so it must never win the race — park it after it returns.
       const token = yield* withAnonymous(pollLoginSessionToken(code)).pipe(
         Effect.raceFirst(
-          cli.prompt
+          interaction.prompt
             .awaitExternal({
               message: "Railway authorization",
               waitingLabel:
@@ -211,7 +211,7 @@ export const RailwayAuth = AuthProviderLayer<
               url,
               code,
               openFailed,
-              onOpen: () => runOpenUrl(CliKit.openUrl(url)),
+              onOpen: () => runOpenUrl(Interaction.openUrl(url)),
               allowManualInput: false,
             })
             .pipe(mapPromptCancellation, Effect.andThen(Effect.never)),
@@ -246,12 +246,12 @@ export const RailwayAuth = AuthProviderLayer<
             apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
         },
       );
-      yield* prompt.output.success("Railway: OAuth credentials saved.");
+      yield* interaction.output.success("Railway: OAuth credentials saved.");
       return { method: "oauth" as const };
     });
 
     const configureInteractive = (profileName: string) =>
-      prompt.prompt
+      interaction.prompt
         .select({
           message: "Railway authentication method",
           options,
@@ -263,7 +263,7 @@ export const RailwayAuth = AuthProviderLayer<
                 Effect.gen(function* () {
                   const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
                   if (!token) {
-                    yield* prompt.output.warning(
+                    yield* interaction.output.warning(
                       `Railway: ${RAILWAY_API_TOKEN_ENV} is not currently set — export it before deploying.`,
                     );
                   }
@@ -314,7 +314,7 @@ export const RailwayAuth = AuthProviderLayer<
         readonly method: string;
         readonly values: Record<string, string>;
       },
-    ): Effect.Effect<RailwayAuthConfig, AuthError, CliKit.CliKit> =>
+    ): Effect.Effect<RailwayAuthConfig, AuthError, Interaction.Interaction> =>
       input.method === "token"
         ? validateFieldValues(
             RAILWAY_AUTH_PROVIDER_NAME,
@@ -329,7 +329,7 @@ export const RailwayAuth = AuthProviderLayer<
               }),
             ),
             Effect.andThen(
-              prompt.output.success("Railway: credentials saved."),
+              interaction.output.success("Railway: credentials saved."),
             ),
             Effect.as({ method: "stored" as const }),
           )
@@ -427,7 +427,9 @@ export const RailwayAuth = AuthProviderLayer<
             .delete(profileName, STORAGE_KEY)
             .pipe(
               Effect.andThen(
-                prompt.output.success("Railway: stored credentials removed"),
+                interaction.output.success(
+                  "Railway: stored credentials removed",
+                ),
               ),
             ),
         ),
@@ -438,7 +440,9 @@ export const RailwayAuth = AuthProviderLayer<
             .delete(profileName, OAUTH_STORAGE_KEY)
             .pipe(
               Effect.andThen(
-                prompt.output.success("Railway: OAuth credentials removed"),
+                interaction.output.success(
+                  "Railway: OAuth credentials removed",
+                ),
               ),
             ),
         ),

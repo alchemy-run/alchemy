@@ -30,7 +30,10 @@ import {
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
-import { makeResourceLogger, makeResourceOutput } from "@/Cli/Output.ts";
+import {
+  makeResourceLogger,
+  makeResourceOutput,
+} from "@/Util/ResourceOutput.ts";
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan } from "@/Cli/components/view/PlanView.tsx";
 import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";

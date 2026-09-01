@@ -24,7 +24,7 @@ import { Text } from "../ui/Typography.tsx";
 import {
   NonInteractiveTerminal,
   TerminalCancelled,
-} from "../../CliKit/errors.ts";
+} from "../../../Interaction.ts";
 import {
   confirmScreen,
   cycleSelectScreen,
@@ -36,7 +36,7 @@ import {
   textScreen,
 } from "./Prompts.tsx";
 import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
-import { setNativeProgress } from "../../CliKit/terminal.ts";
+import { setNativeProgress } from "../../../Util/Terminal.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
@@ -105,6 +105,25 @@ const normalizeView = (view: View): View => {
     );
   }
   return view;
+};
+
+const formatStaticView = (
+  view: ReactNode,
+  options: RenderOptions,
+  capabilities: CliKitCapabilities,
+): string => {
+  const colors = options.colors ?? capabilities.colors;
+  // The renderer and the components must agree on the width: components size
+  // themselves from the environment's `columns`, so an explicit render width
+  // has to flow into the capabilities too, not only into renderToString.
+  const columns = options.columns ?? capabilities.columns;
+  const output = renderToString(
+    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>
+      {view}
+    </CliEnvironment>,
+    { columns },
+  ).replace(/[\s\n]+$/, "");
+  return colors ? output : stripVTControlCharacters(output);
 };
 
 interface StoreState {
@@ -288,25 +307,6 @@ function TerminalRoot({ store }: TerminalRootProps) {
     </Box>
   );
 }
-
-const formatStaticView = (
-  view: ReactNode,
-  options: RenderOptions,
-  capabilities: CliKitCapabilities,
-): string => {
-  const colors = options.colors ?? capabilities.colors;
-  // The renderer and the components must agree on the width: components size
-  // themselves from the environment's `columns`, so an explicit render width
-  // has to flow into the capabilities too, not only into renderToString.
-  const columns = options.columns ?? capabilities.columns;
-  const output = renderToString(
-    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>
-      {view}
-    </CliEnvironment>,
-    { columns },
-  ).replace(/[\s\n]+$/, "");
-  return colors ? output : stripVTControlCharacters(output);
-};
 
 /** Progress rows are ordinary live views over a runtime-owned store. */
 interface ProgressState {

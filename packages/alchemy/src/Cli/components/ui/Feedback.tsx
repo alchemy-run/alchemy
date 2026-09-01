@@ -8,7 +8,7 @@ import {
   statusPaint,
   theme,
   type StatusVariant,
-} from "../../CliKit/theme.ts";
+} from "../../../Util/Theme.ts";
 import {
   useBorderStyle,
   useCliEnvironment,

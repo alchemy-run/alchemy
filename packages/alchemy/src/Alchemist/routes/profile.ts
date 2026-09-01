@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import type { Interaction } from "../../Interaction.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import {
   inspectProvider,
@@ -139,7 +140,11 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
     active: selected.name === input.name,
     providers: yield* Effect.forEach(
       entries,
-      ([provider, config]): Effect.Effect<ProviderConnection> =>
+      ([provider, config]): Effect.Effect<
+        ProviderConnection,
+        never,
+        Interaction
+      > =>
         includeProviderStatus
           ? inspectProvider(input.name, provider, config, registered)
           : Effect.succeed({

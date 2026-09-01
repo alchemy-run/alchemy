@@ -10,7 +10,7 @@
  */
 import * as Effect from "effect/Effect";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import { CallbackServerStartError } from "./OAuthFlow.ts";
 
 export interface BrowserOAuthOptions<A, E1, R1, E2, R2> {
@@ -33,7 +33,7 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
   // This runner is invoked later by React's keyboard event boundary, not
   // while the surrounding Effect is executing.
   const openUrl = Effect.runPromiseWith(services);
-  const openFailed = yield* CliKit.openUrl(options.url).pipe(
+  const openFailed = yield* Interaction.openUrl(options.url).pipe(
     Effect.as(false),
     Effect.catch(() => Effect.succeed(true)),
   );
@@ -44,13 +44,13 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
     options.callback.pipe(
       Effect.catch((e) =>
         e instanceof CallbackServerStartError
-          ? CliKit.accessors.output
+          ? Interaction.accessors.output
               .warning(`${e.message} — paste the authorization code instead.`)
               .pipe(Effect.andThen(Effect.never))
           : Effect.fail(e),
       ),
     ),
-    (yield* CliKit.CliKit).prompt
+    (yield* Interaction.Interaction).prompt
       .awaitExternal({
         message: `${options.provider} authorization`,
         waitingLabel:
@@ -58,7 +58,7 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
           "waiting for browser authorization (up to 5 minutes)…",
         url: options.url,
         openFailed,
-        onOpen: () => openUrl(CliKit.openUrl(options.url)),
+        onOpen: () => openUrl(Interaction.openUrl(options.url)),
         inputLabel: "Paste the authorization code or callback URL",
         validate: (value) =>
           value.trim().length > 0 ? undefined : "Paste a code or URL",

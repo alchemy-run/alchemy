@@ -29,7 +29,10 @@ import { selectCliServices } from "./selectCli.ts";
 // and other non-interactive terminals still select the append-only renderer.
 // `ALCHEMY_TUI` remains the explicit override in either direction.
 const services = Layer.mergeAll(
-  Layer.provideMerge(selectCliServices(), CliKit.layer()),
+  Layer.provideMerge(
+    Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
+    CliKit.layer(),
+  ),
   ConsoleLogLive,
   RpcProviderProxy.fromEnv(),
   Layer.succeed(ArtifactStore, createArtifactStore()),

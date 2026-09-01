@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefAttributes,
 } from "react";
-import { theme } from "../../CliKit/theme.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { useCliEnvironment, useGlyphs } from "./Environment.tsx";
 import { Text } from "./Typography.tsx";
 

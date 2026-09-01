@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as Semaphore from "effect/Semaphore";
+import type { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
 
@@ -27,9 +28,9 @@ export const AUTH_ERROR_URL = `${AUTH_LANDING_HOST}/auth/error`;
  * before Planetscale's begins — even when the two auth provider Layers
  * are built in parallel as part of a single `providers()` Layer.
  *
- * CliKit enforces per-prompt
- * serialization; this mutex enforces per-flow serialization so the user
- * sees one provider's prompts grouped together rather than interleaved.
+ * The interactive renderer enforces per-prompt serialization; this mutex
+ * enforces per-flow serialization so the user sees one provider's prompts
+ * grouped together rather than interleaved.
  */
 const interactiveMutex = Semaphore.makeUnsafe(1);
 
@@ -220,7 +221,7 @@ export interface AuthProviderImpl<
   configure(
     profileName: string,
     currentConfig?: Config,
-  ): Effect.Effect<Config, AuthError, R>;
+  ): Effect.Effect<Config, AuthError, R | Interaction>;
 
   /**
    * Flag-driven configuration for scripts and agents: validated `--set`
@@ -233,7 +234,7 @@ export interface AuthProviderImpl<
       readonly method: string;
       readonly values: Record<string, string>;
     },
-  ): Effect.Effect<Config, AuthError, R>;
+  ): Effect.Effect<Config, AuthError, R | Interaction>;
 
   /**
    * The methods {@link configureWith} accepts and their fields. Required
@@ -242,12 +243,15 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
-  login(profileName: string, config: Config): Effect.Effect<void, AuthError, R>;
+  login(
+    profileName: string,
+    config: Config,
+  ): Effect.Effect<void, AuthError, R | Interaction>;
 
   logout(
     profileName: string,
     config: Config,
-  ): Effect.Effect<void, AuthError, R>;
+  ): Effect.Effect<void, AuthError, R | Interaction>;
 
   /**
    * Structured credential details for display. Fails with
@@ -258,8 +262,15 @@ export interface AuthProviderImpl<
   details(
     profileName: string,
     config: Config,
-  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, R>;
+  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, R | Interaction>;
 
+  /**
+   * Resolve credentials from the store/config, silently refreshing when the
+   * provider supports it. MUST be non-interactive — this is the only method
+   * (with {@link readEnvironment}) that child processes exercise, and their
+   * graphs carry no interaction services. When re-authentication is needed,
+   * fail with {@link NeedsReauth} instead of prompting.
+   */
   read(
     profileName: string,
     config: Config,

@@ -1,7 +1,7 @@
 import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider";
 import { CredentialsStore } from "@/Auth/Credentials";
 import { ProfileStore } from "@/Auth/Profile";
-import * as CliKit from "@/Cli/CliKit";
+import * as Interaction from "@/Interaction.ts";
 import {
   PRISMA_AUTH_PROVIDER_NAME,
   PrismaAuth,
@@ -31,7 +31,7 @@ const testLayer = (
     Layer.succeed(ProfileStore, fakeProfile),
     Layer.succeed(CredentialsStore, makeFakeCredentialsStore(stored)),
     ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
-    CliKit.layer({ input: false }),
+    Interaction.layerNonInteractive(),
   );
   return PrismaAuth.pipe(Layer.provideMerge(base));
 };

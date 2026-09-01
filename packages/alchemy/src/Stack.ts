@@ -18,7 +18,7 @@ import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "./Auth/Profile.ts";
-import { CliKit } from "./Cli/CliKit/CliKit.ts";
+import { Interaction } from "./Interaction.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -44,7 +44,7 @@ export type StackServices =
   | ProfileStore
   | ArtifactStore
   | CredentialsStore
-  | CliKit;
+  | Interaction;
 
 export type ProviderServices =
   | ProviderCollectionLike
@@ -75,7 +75,7 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   | Scope.Scope
   | AuthProviders
   | AlchemyContext
-  | CliKit
+  | Interaction
   | ProfileStore
   | CredentialsStore
   | ArtifactStore

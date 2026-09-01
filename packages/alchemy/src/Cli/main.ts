@@ -164,7 +164,10 @@ const services = Layer.mergeAll(
   TelemetryLive,
   routeCacheLayer,
   Layer.provide(
-    Layer.provideMerge(selectCliServices(), CliKit.layer()),
+    Layer.provideMerge(
+      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
+      CliKit.layer(),
+    ),
     PlatformServices,
   ),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at

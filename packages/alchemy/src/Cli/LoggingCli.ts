@@ -5,7 +5,7 @@ import * as Prompt from "effect/unstable/cli/Prompt";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
-import { NonInteractiveTerminal } from "./CliKit/errors.ts";
+import { NonInteractiveTerminal } from "../Interaction.ts";
 import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
 import { formatElapsed } from "./Format.ts";
 import {
@@ -15,7 +15,7 @@ import {
 } from "./components/view/statusStyle.ts";
 import type { ApplyEvent, ApplyStatus } from "../Report.ts";
 import { formatModeNote } from "./ModeTag.ts";
-import { formatResourceTag } from "./Output.ts";
+import { formatResourceTag } from "../Util/ResourceOutput.ts";
 import {
   formatDeclaredPropertyYaml,
   matchYamlChange,
