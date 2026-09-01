@@ -409,11 +409,41 @@ export const makeRuntime = (
     // Static transcript renders it instead of the built-in splicing. The
     // renderer restores console and stream writes itself on unmount.
     const buffers = { stdout: "", stderr: "" };
+    // A captured write that ends mid-line parks its tail here waiting for
+    // the rest of the line. A real terminal would display the partial
+    // immediately — so when no continuation arrives promptly, flush the
+    // tail as its own row instead of holding it until unmount. Without the
+    // deadline, a writer whose final chunk lacks a trailing newline (e.g.
+    // a pretty-printed cause written raw to stderr) has its last line
+    // appear only when the process exits.
+    let pendingPartialFlush: ReturnType<typeof setTimeout> | undefined;
+    const clearPartialFlush = () => {
+      if (pendingPartialFlush !== undefined) {
+        clearTimeout(pendingPartialFlush);
+        pendingPartialFlush = undefined;
+      }
+    };
+    const flushPartialLines = () => {
+      pendingPartialFlush = undefined;
+      for (const stream of ["stdout", "stderr"] as const) {
+        if (buffers[stream] !== "") {
+          store.appendStatic(
+            <AnsiText wrap="none">{buffers[stream]}</AnsiText>,
+          );
+          buffers[stream] = "";
+        }
+      }
+    };
     const appendLines = (stream: keyof typeof buffers, data: string) => {
       const parts = `${buffers[stream]}${data}`.split(/\r?\n/);
       buffers[stream] = parts.pop() ?? "";
       for (const line of parts) {
         store.appendStatic(<AnsiText wrap="none">{line || " "}</AnsiText>);
+      }
+      clearPartialFlush();
+      if (buffers.stdout !== "" || buffers.stderr !== "") {
+        pendingPartialFlush = setTimeout(flushPartialLines, 50);
+        pendingPartialFlush.unref?.();
       }
     };
     const sigil = render(
@@ -445,6 +475,7 @@ export const makeRuntime = (
       exit: Promise.resolve(),
       flushDirectStdio: captureDirectStdio
         ? () => {
+            clearPartialFlush();
             for (const stream of ["stdout", "stderr"] as const) {
               if (buffers[stream] !== "") {
                 store.appendStatic(<Text wrap="none">{buffers[stream]}</Text>);

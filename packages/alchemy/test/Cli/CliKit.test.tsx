@@ -732,6 +732,26 @@ it.effect("commits stdio above active Sigil views", () =>
   }),
 );
 
+it.effect("flushes a captured partial line without waiting for unmount", () =>
+  Effect.gen(function* () {
+    const { service, stdout, stderr } = yield* makeLive({
+      captureConsole: true,
+    });
+    const store = new LiveStore("Deploying");
+    const live = yield* service.live.open(<LiveLabel store={store} />);
+    // A writer whose final chunk has no trailing newline (e.g. an error
+    // block written raw to stderr): its tail must render within the
+    // partial-flush deadline — before this, it sat buffered until the
+    // renderer unmounted at process exit, so the last line of an error
+    // only ever appeared on shutdown.
+    yield* Effect.sync(() => {
+      stderr.write("stack tail without newline");
+    });
+    yield* Effect.promise(() => stdout.waitFor("stack tail without newline"));
+    yield* live.close;
+  }),
+);
+
 it.effect("progress settles into success and failure status output", () =>
   Effect.gen(function* () {
     const { service, stdout } = makeStatic();
