@@ -23,6 +23,7 @@
 // Own the spawn so bun's hard-coded watcher warning can be filtered while
 // signals, IPC messages, and the child's exit status are forwarded.
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { constants } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
@@ -100,7 +101,12 @@ const foregroundChild = (program, args, stderrFilter) => {
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
-const invokedByBun = execpath.includes("bun") || userAgent.startsWith("bun/");
+// `typeof Bun`: someone ran `bun bin/cli.js` directly (no bun env markers,
+// shebang bypassed) — the launcher itself IS bun, so bun is the runtime.
+const invokedByBun =
+  execpath.includes("bun") ||
+  userAgent.startsWith("bun/") ||
+  typeof globalThis.Bun !== "undefined";
 
 // Derive the bin dir from this launcher's own location rather than
 // require.resolve("alchemy/bin/alchemy.js"). The bundled alchemy.js is a
@@ -111,20 +117,31 @@ const binDir = path.dirname(fileURLToPath(import.meta.url));
 const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
 
+const [nodeMajor = 0, nodeMinor = 0] = process.versions.node
+  .split(".")
+  .map(Number);
+
 /**
- * Whether this node supports `--experimental-transform-types` (and the
- * synchronous `module.registerHooks` API the .tsx loader hook needs).
- * Mirrors `src/Util/Node.ts#isTransformTypesSupported` — duplicated because
- * this launcher must run under plain node before any .ts can load.
+ * Whether this node has `module.registerHooks` (v22.15 / v23.5 / v24+) —
+ * the capability gate for running the CLI from source: every hooks-capable
+ * node also loads `.ts` (via the transform flag below v26, natively from
+ * v26). Mirrors `src/Util/Node.ts#isRegisterHooksSupported` — duplicated
+ * because this launcher must run under plain node before any .ts can load.
  */
-const nodeRunsTypeScript = (() => {
-  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-  return (
-    (major === 22 && minor >= 15) ||
-    (major === 23 && minor >= 5) ||
-    (major >= 24 && major < 26)
-  );
-})();
+const nodeRunsTypeScript =
+  (nodeMajor === 22 && nodeMinor >= 15) ||
+  (nodeMajor === 23 && nodeMinor >= 5) ||
+  nodeMajor >= 24;
+
+/**
+ * `--experimental-transform-types` is required below v26 and gone in v26+
+ * (type stripping became default behavior). Mirrors
+ * `src/Util/Node.ts#transformTypesFlags`.
+ */
+const transformTypesFlags =
+  nodeMajor < 26
+    ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
+    : [];
 
 // Treat any install-tree path as published.
 const isDev = !(
@@ -155,16 +172,25 @@ if (runtime === "node" && isDev && nodeRunsTypeScript) {
   // and every workspace dependency load one source universe instead of
   // whatever built lib/ happens to be lying around.
   args.push(
-    "--experimental-transform-types",
-    "--no-warnings=ExperimentalWarning",
+    ...transformTypesFlags,
     "--import",
     new URL("register-dev-mode.js", import.meta.url).href,
   );
 }
-args.push(
-  runtime === "bun" || (isDev && nodeRunsTypeScript) ? tsEntry : jsEntry,
-  ...process.argv.slice(2),
-);
+const entry =
+  runtime === "bun" || (isDev && nodeRunsTypeScript) ? tsEntry : jsEntry;
+if (entry === jsEntry && isDev && !existsSync(jsEntry)) {
+  // The version gate declined source mode and there is no built output to
+  // fall back to — fail with a diagnosis instead of a raw MODULE_NOT_FOUND.
+  process.stderr.write(
+    `alchemy: node ${process.versions.node} cannot run the TypeScript source ` +
+      "(module.registerHooks needs node 22.15+, 23.5+, or 24+) and " +
+      `${jsEntry} has not been built.\n` +
+      "Use bun or a newer node, or run `pnpm build` in packages/alchemy.\n",
+  );
+  process.exit(1);
+}
+args.push(entry, ...process.argv.slice(2));
 
 // Substring match (not regex) — bun may wrap the line in ANSI color codes
 // when stderr is piped to a TTY-aware parent, so anchored regex is fragile.
@@ -175,8 +201,22 @@ args.push(
 // back to an absolute open, and logs. Bun's own tsconfig-override tests
 // tolerate the same line. Only our dev path passes --tsconfig-override, which
 // is why published installs never see it.
+// For node, spawn the launcher's OWN binary rather than whatever PATH
+// resolves: the version gates above interrogated process.versions, so the
+// flags must go to that exact node (an explicit `/opt/node24/bin/node
+// bin/cli.js` with an older PATH node would otherwise die on unknown
+// options). `runtime === "node"` implies the launcher IS node — a bun
+// launcher forces the bun branch. For bun, the usual shebang case means the
+// launcher is node and bun comes from PATH; a direct `bun bin/cli.js` run
+// reuses that same bun via execPath.
+const program =
+  runtime === "bun"
+    ? typeof globalThis.Bun !== "undefined"
+      ? process.execPath
+      : "bun"
+    : process.execPath;
 foregroundChild(
-  runtime,
+  program,
   args,
   (line) =>
     !line.includes("is not in the project directory and will not be watched") &&

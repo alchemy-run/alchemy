@@ -7,6 +7,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { nodePath, nodeSupportsDevMode, nodeVersion } from "./nodeProbe.ts";
 
 class CaptureStream extends PassThrough {
   readonly columns = 80;
@@ -70,10 +71,7 @@ it("task prints a start line and settles with a status line", () => {
 // under node and proceed to config resolution — the original bug was an
 // eager CliKit/TSX import killing every `runtime: "node"` dev child at
 // startup.
-const nodePath = typeof Bun !== "undefined" ? Bun.which("node") : null;
-const nodeFlags = transformTypesFlags();
-
-it.live.skipIf(nodePath === null || nodeFlags.length === 0)(
+it.live.skipIf(!nodeSupportsDevMode)(
   "the vite child runner's module graph loads under plain node",
   () =>
     Effect.gen(function* () {
@@ -85,7 +83,7 @@ it.live.skipIf(nodePath === null || nodeFlags.length === 0)(
       );
       const handle = yield* ChildProcess.make(
         nodePath!,
-        [...nodeFlags, runner],
+        [...transformTypesFlags(nodeVersion ?? undefined), runner],
         {
           cwd: fileURLToPath(new URL("..", import.meta.url)),
           env: { NO_COLOR: "1" },

@@ -5,9 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
-
-const nodePath = typeof Bun !== "undefined" ? Bun.which("node") : null;
-const nodeFlags = transformTypesFlags();
+import { nodePath, nodeSupportsDevMode, nodeVersion } from "../nodeProbe.ts";
 
 // Pins buildless node dev end to end: the register-dev-mode hooks must
 // (1) resolve the monorepo's own packages through their `bun` export
@@ -16,7 +14,7 @@ const nodeFlags = transformTypesFlags();
 // process across two copies of the package — while leaving packages
 // without a `bun` condition (published sigil) on their built output, and
 // (2) transpile `.tsx`, which node's type stripping refuses.
-it.live.skipIf(nodePath === null || nodeFlags.length === 0)(
+it.live.skipIf(!nodeSupportsDevMode)(
   "dev-mode hooks resolve monorepo packages to src and transpile tsx",
   () =>
     Effect.gen(function* () {
@@ -31,7 +29,9 @@ it.live.skipIf(nodePath === null || nodeFlags.length === 0)(
       const handle = yield* ChildProcess.make(
         nodePath!,
         [
-          ...nodeFlags,
+          // Flags for the SPAWNED node's version (bun's emulated
+          // process.versions.node may differ from PATH node's).
+          ...transformTypesFlags(nodeVersion ?? undefined),
           "--import",
           "./bin/register-dev-mode.js",
           "--input-type=module",

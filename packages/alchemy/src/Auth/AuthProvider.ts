@@ -6,7 +6,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as Semaphore from "effect/Semaphore";
-import type { Interaction } from "../Interaction.ts";
+import { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
 
@@ -324,9 +324,26 @@ export const AuthProvider =
     Effect.gen(function* () {
       // FileSystem/Path back the cross-process credentials lock that wraps
       // `logout`/`read` below, so capture them with the impl's own services.
-      const ctx = yield* Effect.context<
-        FileSystem.FileSystem | Path.Path | R | ImplReq
-      >();
+      //
+      // `Effect.context()` snapshots the ENTIRE fiber context (the type
+      // parameter only narrows the type), and `Effect.provideContext` makes
+      // the provided side win — so an Interaction that happens to be
+      // ambient at REGISTRATION would silently shadow whatever the caller
+      // provides at call time, making the interactive methods' declared
+      // `Interaction` requirement a dead letter. Omit it from the snapshot:
+      // interactive flows resolve Interaction from the caller, exactly as
+      // their signatures promise (a scripted test Interaction, a
+      // browser-driven Alchemist login).
+      // SAFETY: the assertion restores the pre-omit type — tsc cannot reduce
+      // `Exclude<R, … Exclude<R, Interaction>>` over the generic R. It only
+      // over-promises Interaction, which every registered method signature
+      // re-declares as a requirement anyway, so no call site can rely on the
+      // capture satisfying it.
+      const ctx = Context.omit(Interaction)(
+        yield* Effect.context<
+          FileSystem.FileSystem | Path.Path | R | ImplReq
+        >(),
+      ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl)
         ? impl

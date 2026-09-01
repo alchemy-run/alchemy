@@ -1,7 +1,8 @@
-import { transformTypesFlags } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
+import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as FileSystem from "effect/FileSystem";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
@@ -63,24 +64,50 @@ describe("CLI exit codes", () => {
   );
 
   // Pins buildless node dev: the launcher must run the checkout's .ts/.tsx
-  // source under plain node (type stripping + the register-tsx hook) —
-  // --help renders the TSX help view through the full terminal runtime.
-  const nodePath = typeof Bun !== "undefined" ? Bun.which("node") : null;
-  it.live.skipIf(nodePath === null || transformTypesFlags().length === 0)(
+  // source under plain node (type stripping + the register-dev-mode hooks)
+  // — --help renders the TSX help view through the full terminal runtime.
+  // Stderr is captured: this is the one test in the file whose failure
+  // mode is environmental, so "expected 9 to be 0" alone is useless.
+  it.live.skipIf(!nodeSupportsDevMode)(
     "--help exits 0 under node from source, no build required",
     () =>
       Effect.gen(function* () {
-        expect(
-          yield* exitCodeOf(
-            ["--help"],
-            // The test runner is bun and marks every child's env as
-            // bun-invoked; blank the markers so the launcher takes its
-            // node path like a real `node bin/cli.js` invocation.
-            { npm_execpath: "", npm_config_user_agent: "" },
-            nodePath!,
-          ),
-        ).toBe(0);
-      }),
+        const fs = yield* FileSystem.FileSystem;
+        const home = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-exit-codes-",
+        });
+        const handle = yield* ChildProcess.make(nodePath!, [CLI, "--help"], {
+          // The test runner is bun and marks every child's env as
+          // bun-invoked; blank the markers so the launcher takes its
+          // node path like a real `node bin/cli.js` invocation.
+          env: {
+            ALCHEMY_HOME: home,
+            npm_execpath: "",
+            npm_config_user_agent: "",
+          },
+          extendEnv: true,
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "pipe",
+          killSignal: "SIGTERM",
+          forceKillAfter: "1 second",
+        });
+        const [stderr, exitCode] = yield* Effect.all(
+          [
+            handle.stderr.pipe(
+              Stream.decodeText,
+              Stream.runCollect,
+              Effect.map((chunks) => chunks.join("")),
+            ),
+            handle.exitCode,
+          ],
+          { concurrency: 2 },
+        );
+        expect({
+          exitCode,
+          stderr: exitCode === 0 ? "" : stderr,
+        }).toEqual({ exitCode: 0, stderr: "" });
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
 
   it.live("provider check-env exits 1 when a required var is missing", () =>
