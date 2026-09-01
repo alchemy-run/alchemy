@@ -30,6 +30,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi } from "@/Git/Api.ts";
+import { makeSha1 } from "@/Git/git/ObjectCodec.ts";
 import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -134,6 +135,84 @@ const purgeRepo = Effect.fn(function* (
     }),
   );
 });
+
+/**
+ * Parses an upload-pack result (pkt-line NAK/ACK head, then the pack either
+ * raw or in band-1 sideband frames) and verifies the pack: `PACK` magic,
+ * version 2, and the trailing SHA-1 over everything before it.
+ */
+const verifyPackResponse = (
+  raw: Uint8Array,
+  sideband: boolean,
+): { readonly objects: number; readonly error?: string } => {
+  const text = (b: Uint8Array) => new TextDecoder().decode(b);
+  let pos = 0;
+  const pieces: Array<Uint8Array> = [];
+  // pkt-line head: ACK/NAK lines (and, if sideband, everything is framed).
+  for (;;) {
+    if (pos + 4 > raw.length) break;
+    const four = text(raw.subarray(pos, pos + 4));
+    if (four === "PACK" && !sideband) break; // raw mode: the pack starts here
+    const len = Number.parseInt(four, 16);
+    if (Number.isNaN(len))
+      return { objects: 0, error: `bad pkt length at ${pos}` };
+    if (len === 0) {
+      pos += 4;
+      if (sideband) break; // trailing flush after the last frame
+      continue;
+    }
+    const payload = raw.subarray(pos + 4, pos + len);
+    pos += len;
+    if (sideband) {
+      if (payload[0] === 1) pieces.push(payload.subarray(1));
+      else if (payload[0] !== 2 && payload[0] !== 3) {
+        // not a sideband frame: a NAK/ACK line before framing starts
+      }
+      continue;
+    }
+    const line = text(payload);
+    if (line.startsWith("NAK") || line.startsWith("ACK")) continue;
+    return {
+      objects: 0,
+      error: `unexpected pkt-line before pack: ${line.slice(0, 40)}`,
+    };
+  }
+  if (!sideband) pieces.push(raw.subarray(pos));
+  const pack =
+    pieces.length === 1
+      ? pieces[0]!
+      : (() => {
+          const total = pieces.reduce((n, p) => n + p.length, 0);
+          const out = new Uint8Array(total);
+          let at = 0;
+          for (const p of pieces) {
+            out.set(p, at);
+            at += p.length;
+          }
+          return out;
+        })();
+  if (pack.length < 32)
+    return { objects: 0, error: `pack too short (${pack.length} bytes)` };
+  if (text(pack.subarray(0, 4)) !== "PACK")
+    return { objects: 0, error: "missing PACK magic" };
+  const view = new DataView(pack.buffer, pack.byteOffset, pack.byteLength);
+  if (view.getUint32(4) !== 2)
+    return { objects: 0, error: `pack version ${view.getUint32(4)}` };
+  const objects = view.getUint32(8);
+  const hash = makeSha1();
+  hash.update(pack.subarray(0, pack.length - 20));
+  const digest = hash.digest();
+  const trailer = pack.subarray(pack.length - 20);
+  for (let i = 0; i < 20; i++) {
+    if (digest[i] !== trailer[i]) {
+      return {
+        objects,
+        error: `trailer SHA-1 mismatch (${pack.length} bytes, ${objects} objects)`,
+      };
+    }
+  }
+  return { objects };
+};
 
 const freshRepo = Effect.fn(function* (
   url: string,
@@ -958,18 +1037,29 @@ test.skipIf(skipBench)(
       dynamic: `${pkt(`want ${head}\n`)}${pkt(`have ${"f".repeat(40)}\n`)}0000${pkt("done\n")}`,
     };
 
-    /** One clone, timed in two halves: headers (TTFB) and body drain. */
+    /**
+     * One clone, timed in two halves: headers (TTFB) and body drain — and
+     * VERIFIED: the pack is de-framed and its SHA-1 trailer checked. A
+     * stream that aborts mid-body can reach a lenient HTTP client as a
+     * clean end (seen once: 0.5 MiB of a 40.6 MiB pack, test green), so
+     * bytes alone prove nothing.
+     */
     const timedClone = (body: string) =>
       Effect.gen(function* () {
         const t0 = performance.now();
         const response = yield* request(body);
         const ttfbMs = performance.now() - t0;
-        const bytes = (yield* response.arrayBuffer).byteLength;
+        const raw = new Uint8Array(yield* response.arrayBuffer);
         const totalMs = performance.now() - t0;
+        const pack = yield* Effect.sync(() =>
+          verifyPackResponse(raw, body.includes("side-band-64k")),
+        );
+        expect(pack.error, `pack response: ${pack.error}`).toBeUndefined();
         return {
           ttfbMs,
           totalMs,
-          bytes,
+          bytes: raw.byteLength,
+          objects: pack.objects,
           via: response.headers["x-git-served-by"] ?? "dynamic",
         };
       });
@@ -977,10 +1067,11 @@ test.skipIf(skipBench)(
       ttfbMs: number;
       totalMs: number;
       bytes: number;
+      objects: number;
       via: string;
     }) =>
       `ttfb ${r.ttfbMs.toFixed(0)}ms, total ${(r.totalMs / 1000).toFixed(2)}s, ` +
-      `${(r.bytes / 1048576).toFixed(1)} MiB @ ` +
+      `${(r.bytes / 1048576).toFixed(1)} MiB (${r.objects} objects, trailer ok) @ ` +
       `${(r.bytes / 1048576 / ((r.totalMs - r.ttfbMs) / 1000)).toFixed(1)} MiB/s transfer ` +
       `[${r.via}]`;
 

@@ -1602,3 +1602,18 @@ the window cache and the push-admission semaphore **isolate-wide**
 (one 32 MiB LRU, one 64-permit gate) and lowering the in-memory spill
 threshold to 24 MiB. The same push then succeeded with the first repo's
 caches warm; the clone back through the DO was fsck-clean.
+
+**Truncation finding, same sweep.** One bench run reported the dynamic
+arm at 0.5 MiB of a 40.6 MiB pack — and passed. The compaction alarm
+had moved rows to a pack between the closure (which recorded
+`location='row'`) and emission (whose batched `SELECT oid, zdata` then
+saw NULL); the emitter failed the stream, the bridge errored the
+`ReadableStream`, the pump aborted the writable — and the client's HTTP
+library read the aborted body as a clean end. Two fixes: the row emitter
+now re-dispatches a moved object on its *current* location instead of
+failing (compaction and fetches run concurrently by design), and every
+timed clone in the bench de-frames the response and verifies the pack's
+SHA-1 trailer, so bytes-received can never again stand in for a pack.
+Real git was never at risk of a silent bad clone — it verifies the same
+trailer — but it would have seen "unexpected EOF" on a fetch that raced a
+compaction.

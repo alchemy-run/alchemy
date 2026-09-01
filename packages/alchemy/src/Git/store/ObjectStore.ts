@@ -703,11 +703,12 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
               for (const entry of run) {
                 const zdata = zdataOf.get(entry.oid);
                 if (zdata === undefined || zdata === null) {
-                  return yield* Effect.fail(
-                    new StoreError({
-                      reason: `object ${entry.oid} vanished during pack emission`,
-                    }),
-                  );
+                  // The manifest said 'row', but compaction may have moved
+                  // the bytes to a pack between closure and emission (the
+                  // alarm runs concurrently with fetches). Re-dispatch on
+                  // the CURRENT location; only a truly absent object fails.
+                  pieces.push(header(entry), yield* readZBytes(entry.oid));
+                  continue;
                 }
                 pieces.push(header(entry), new Uint8Array(zdata));
               }
