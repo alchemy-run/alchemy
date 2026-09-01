@@ -1,11 +1,10 @@
-import { transformTypesFlags } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
-import { nodePath, nodeSupportsDevMode, nodeVersion } from "../nodeProbe.ts";
+import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 // Pins buildless node dev end to end: the register-dev-mode hooks must
 // (1) resolve the monorepo's own packages through their `bun` export
@@ -29,9 +28,6 @@ it.live.skipIf(!nodeSupportsDevMode)(
       const handle = yield* ChildProcess.make(
         nodePath!,
         [
-          // Flags for the SPAWNED node's version (bun's emulated
-          // process.versions.node may differ from PATH node's).
-          ...transformTypesFlags(nodeVersion ?? undefined),
           "--import",
           "./bin/register-dev-mode.js",
           "--input-type=module",

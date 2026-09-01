@@ -133,16 +133,6 @@ const nodeRunsTypeScript =
   (nodeMajor === 23 && nodeMinor >= 5) ||
   nodeMajor >= 24;
 
-/**
- * `--experimental-transform-types` is required below v26 and gone in v26+
- * (type stripping became default behavior). Mirrors
- * `src/Util/Node.ts#transformTypesFlags`.
- */
-const transformTypesFlags =
-  nodeMajor < 26
-    ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
-    : [];
-
 // Treat any install-tree path as published.
 const isDev = !(
   binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
@@ -164,18 +154,13 @@ if (runtime === "bun" && isDev) {
 }
 
 if (runtime === "node" && isDev && nodeRunsTypeScript) {
-  // Run the checkout's source directly, no build required: node's own type
-  // stripping handles .ts, and the register-dev-mode hooks transpile the
-  // CLI's .tsx (terminal UI) with oxc AND resolve the monorepo's own
-  // packages (`alchemy/*`, `@alchemy.run/*`, `@distilled.cloud/*`) through
-  // their `bun` export condition onto src/ — so the CLI, the user's stack,
-  // and every workspace dependency load one source universe instead of
-  // whatever built lib/ happens to be lying around.
-  args.push(
-    ...transformTypesFlags,
-    "--import",
-    new URL("register-dev-mode.js", import.meta.url).href,
-  );
+  // Run the checkout's source directly, no build required: the
+  // register-dev-mode hooks load .ts/.tsx through tsx's loader AND resolve
+  // the monorepo's own packages (`alchemy/*`, `@alchemy.run/*`,
+  // `@distilled.cloud/*`) through their `bun` export condition onto src/ —
+  // so the CLI, the user's stack, and every workspace dependency load one
+  // source universe instead of whatever built lib/ happens to be around.
+  args.push("--import", new URL("register-dev-mode.js", import.meta.url).href);
 }
 const entry =
   runtime === "bun" || (isDev && nodeRunsTypeScript) ? tsEntry : jsEntry;

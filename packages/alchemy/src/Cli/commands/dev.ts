@@ -82,15 +82,14 @@ export const devCommand = Command.make(
           : import.meta.url.endsWith(".ts") && isRegisterHooksSupported()
             ? [
                 // Source checkout under node: run the .ts exec entry with
-                // type stripping plus the dev-mode hooks (tsx transform +
-                // src-condition resolution), so dev works without a build
-                // (mirrors bin/cli.js's launcher path). `process.execPath`,
-                // not "node": the flags are gated on THIS node's version. A
+                // the dev-mode hooks (tsx loader + src-condition
+                // resolution), so dev works without a build (mirrors
+                // bin/cli.js's launcher path). `process.execPath`, not
+                // "node": the hooks are gated on THIS node's version. A
                 // duplicate --import inherited via execArgv is harmless —
                 // the second import of the same URL hits the module cache.
                 process.execPath,
                 ...process.execArgv,
-                ...transformTypesFlags(),
                 "--import",
                 import.meta.resolve("../../../bin/register-dev-mode.js"),
                 "--watch",
