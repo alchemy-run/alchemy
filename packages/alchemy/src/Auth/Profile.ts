@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -15,7 +16,12 @@ import { profileCommandHint } from "../Util/interactive.ts";
 import { AuthError } from "./AuthProvider.ts";
 import type { AuthProvider } from "./AuthProvider.ts";
 import { withLock, withProfileCredentialsLock } from "./Lock.ts";
-import { configFilePath, profileCredentialsDirPath } from "./Paths.ts";
+import {
+  configFilePath,
+  credentialsDirPath,
+  profileCredentialsDirPath,
+  rootDir,
+} from "./Paths.ts";
 
 export {
   configFilePath,
@@ -327,7 +333,12 @@ export const ProfileStoreLive = Layer.effect(
       };
     };
 
-    const readManifest = Effect.suspend(() => {
+    /**
+     * Read + decode the raw manifest file. `undefined` when the file does
+     * not exist; decode failures are typed `ProfileError`s that leave the
+     * file untouched.
+     */
+    const decodeStoredManifest = Effect.suspend(() => {
       const manifestPath = configFilePath();
       return fs.readFileString(manifestPath).pipe(
         Effect.flatMap((data) =>
@@ -354,45 +365,33 @@ export const ProfileStoreLive = Layer.effect(
             ),
           ),
         ),
-        Effect.flatMap((stored) =>
-          // Versions 0 and 1 (flat pre-id manifests) migrate in memory and
-          // are upgraded on the next `writeManifest`, which always stamps
-          // the current version.
-          stored.version <= PROFILE_MANIFEST_VERSION
-            ? Effect.sync(() => {
-                // Manifests from the short-lived stored-default-selection
-                // scheme carry a `defaultProfile` key; the built-in `default`
-                // profile replaced it, so the key is dropped — the removal is
-                // persisted by the next manifest write.
-                const { defaultProfile: _dropped, ...rest } = stored;
-                return {
-                  ...rest,
-                  version: PROFILE_MANIFEST_VERSION,
-                  profiles: Object.fromEntries(
-                    Object.entries(stored.profiles).map(([name, value]) => [
-                      name,
-                      normalizeProfile(name, value),
-                    ]),
-                  ),
-                } satisfies ProfileManifest;
-              })
-            : Effect.fail(
-                new ProfileError({
-                  message:
-                    `Profile manifest version ${stored.version} is not supported by this Alchemy version. ` +
-                    "The file was left untouched.",
-                }),
-              ),
-        ),
         Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(emptyManifest()),
+          Effect.succeed(undefined),
         ),
-        // The built-in `default` profile always exists from the reader's
-        // perspective; the synthesized entry is persisted by the next
-        // manifest write.
-        Effect.map(withDefaultProfile),
       );
     });
+
+    /**
+     * Normalize a decoded manifest to the current shape: stamp the version,
+     * drop the short-lived stored-default-selection `defaultProfile` key,
+     * and normalize each profile entry (pre-id entries get their name as id,
+     * legacy `method: "env"` provider entries are dropped).
+     */
+    const toCurrentManifest = (
+      stored: typeof StoredManifestSchema.Type,
+    ): ProfileManifest => {
+      const { defaultProfile: _dropped, ...rest } = stored;
+      return {
+        ...rest,
+        version: PROFILE_MANIFEST_VERSION,
+        profiles: Object.fromEntries(
+          Object.entries(stored.profiles).map(([name, value]) => [
+            name,
+            normalizeProfile(name, value),
+          ]),
+        ),
+      } satisfies ProfileManifest;
+    };
 
     const writeManifest = (config: ProfileManifest) =>
       Effect.suspend(() => {
@@ -410,6 +409,113 @@ export const ProfileStoreLive = Layer.effect(
             ),
           );
       });
+
+    /**
+     * One-shot on-disk upgrade of a pre-v2 store. The credential storage
+     * layout changed with the manifest (renamed file keys, schema-validated
+     * contents), so stored secrets from a v0/v1 store cannot be trusted to
+     * load — instead of migrating values, the whole legacy state is moved
+     * into `~/.alchemy/.v0-profiles-<timestamp>/` and the manifest is
+     * rewritten in the current format with every profile/provider entry
+     * kept. Providers then report
+     * a clean "credentials not found — reconfigure" instead of a schema
+     * error, and the backup allows manual recovery.
+     *
+     * Runs under its own cross-process lock (distinct from
+     * `profiles-manifest`, which may already be held by `modifyManifest`
+     * when this is reached) and re-checks the stored version after
+     * acquisition, so concurrent processes migrate exactly once.
+     */
+    const migrateLegacyStore = provideLockServices(
+      withLock(
+        "profiles-migrate",
+        Effect.gen(function* () {
+          const stored = yield* decodeStoredManifest;
+          if (
+            stored === undefined ||
+            stored.version >= PROFILE_MANIFEST_VERSION
+          ) {
+            return;
+          }
+          const now = yield* Clock.currentTimeMillis;
+          const stamp = new Date(now)
+            .toISOString()
+            .slice(0, 19)
+            .replaceAll(":", "-");
+          const backupDir = path.join(rootDir(), `.v0-profiles-${stamp}`);
+          const credentialsBackupDir = path.join(backupDir, "credentials");
+          yield* fs.makeDirectory(backupDir, { recursive: true });
+          // The backup holds credential secrets — keep it owner-only.
+          yield* fs.chmod(backupDir, 0o700);
+          yield* fs.copyFile(
+            configFilePath(),
+            path.join(backupDir, "profiles.json"),
+          );
+          // The manifest predates the current storage layout, so every file
+          // under credentials/ does too — move them all into the backup.
+          const credentialsRoot = credentialsDirPath();
+          const entries = yield* fs
+            .readDirectory(credentialsRoot)
+            .pipe(
+              Effect.catchReason("PlatformError", "NotFound", () =>
+                Effect.succeed<string[]>([]),
+              ),
+            );
+          for (const entry of entries) {
+            const profileDir = path.join(credentialsRoot, entry);
+            const info = yield* fs.stat(profileDir);
+            if (info.type !== "Directory") continue;
+            const files = yield* fs.readDirectory(profileDir);
+            const target = path.join(credentialsBackupDir, entry);
+            yield* fs.makeDirectory(target, { recursive: true });
+            for (const file of files) {
+              yield* fs.rename(
+                path.join(profileDir, file),
+                path.join(target, file),
+              );
+            }
+            // Now empty (every entry was renamed away); the next credential
+            // write recreates it with 0o700.
+            yield* fs
+              .remove(profileDir, { recursive: true })
+              .pipe(Effect.ignore);
+          }
+          yield* writeManifest(toCurrentManifest(stored));
+          yield* Effect.logWarning(
+            "Alchemy's profile storage layout changed: your profiles were kept, but connected accounts " +
+              "must be configured again — run `alchemy profile`. The previous profiles.json and " +
+              `credential files were backed up to '${backupDir}'.`,
+          );
+        }),
+      ),
+    );
+
+    const readManifest = decodeStoredManifest.pipe(
+      Effect.flatMap((stored) =>
+        stored !== undefined && stored.version < PROFILE_MANIFEST_VERSION
+          ? // Pre-v2 store: upgrade it on disk (backing up the legacy
+            // manifest + credential files), then re-read the result.
+            migrateLegacyStore.pipe(Effect.andThen(decodeStoredManifest))
+          : Effect.succeed(stored),
+      ),
+      Effect.flatMap((stored) =>
+        stored === undefined
+          ? Effect.succeed(emptyManifest())
+          : stored.version <= PROFILE_MANIFEST_VERSION
+            ? Effect.succeed(toCurrentManifest(stored))
+            : Effect.fail(
+                new ProfileError({
+                  message:
+                    `Profile manifest version ${stored.version} is not supported by this Alchemy version. ` +
+                    "The file was left untouched.",
+                }),
+              ),
+      ),
+      // The built-in `default` profile always exists from the reader's
+      // perspective; the synthesized entry is persisted by the next
+      // manifest write.
+      Effect.map(withDefaultProfile),
+    );
 
     /**
      * Run `f` against the freshly-read manifest under the cross-process
