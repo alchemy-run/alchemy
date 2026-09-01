@@ -1638,6 +1638,7 @@ push of this repository, real `git push`, same edge:
 | start of sweep (in memory, per-row staging) | 63.6 s | — | 46 s | 3.1 s | 2.0 s |
 | spilled reads as views, 64 KiB probe | 34 s | 10.0 / 34.9 s | 20 s | 6.6 s | 2.7 s |
 | **promoted wire pack** | **24 s** | 8.3 / 16.0 s | 11–15 s | **0.4 s** | **0.7 s** |
+| + synchronous per-entry fast path | 16–18 s | 7.2 / 16.9 s | 8.7–10.8 s | 0.3–0.6 s | 0.6–0.7 s |
 
 What the numbers taught, in order:
 
@@ -1678,6 +1679,23 @@ What the numbers taught, in order:
    headers and repoints each row — into a clean pack, then grace-deletes
    the wire object like any other source. Read fan-out stays geometric.
 
-Left: the remaining ingest CPU (inflate + SHA-1 + parse, ~8 s here) is
+6. **A synchronous inner loop.** With sources exposing `readSync` (a
+   view into the buffer or a cached window), a non-delta entry is decoded,
+   inflated, hashed and copied with no fiber hop, and entries reach the
+   staging sink 256 at a time. 13% of production ingest CPU; workerd's
+   `_processChunk` closes its binding after one chunk, so an inflate
+   engine cannot be reused there (probed and recorded).
+
+Where this leaves a 40 MiB push: about 6.7 s is the client (git's own
+pack build plus the upload; GitHub pays the same), ~7 s is the server's
+per-object verification CPU on a core roughly 10x slower than a laptop's,
+and ~1 s is staging plus finalize. The verification is what git requires
+to trust a pack — every entry inflated and hashed before any ref moves —
+and it runs single-threaded in the repo's Durable Object. Going meaningfully
+below this means parallelizing that verification across isolates (a pack
+has no index, so boundaries are only known by inflating; hashing could be
+fanned out but is under half the work) or changing what the client sends.
+
+Left: the remaining ingest CPU (inflate + SHA-1 + parse, ~7 s here) is
 the work git itself requires to trust a pack; finalize's residual is the
 flip of the delta-resolved rows. Both scale with object count, not bytes.
