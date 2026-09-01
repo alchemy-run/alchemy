@@ -5,15 +5,15 @@ Private workspace package vendoring raw TypeScript source from
 This package does not bundle or publish; consumer packages in this monorepo
 import the `.ts` files directly and apply their own bundling.
 
-The upstream source and tests are co-located under `src/internal/workflows-shared/`, with no
-modifications. Only the project metadata (`package.json`, `tsconfig.json`,
-`vitest.config.ts`) is rewritten to fit this monorepo's tooling. The upstream
-`wrangler.jsonc` is also copied unchanged.
+The upstream source and tests are co-located under
+`src/internal/workflows-shared/`. Deliberate behavioral differences from
+upstream are documented with `Alchemy modifications:` comments in the affected
+files. Project metadata and imports are adapted to this monorepo's tooling.
 
 ## Provenance
 
 Sourced from [`cloudflare/workers-sdk`](https://github.com/cloudflare/workers-sdk)
-at commit `b973ed30015e4e4bface3c0733c33f624066523a` (path:
+at commit `b7b4ff84477982e7c770bb93928287893fcf2e03` (path:
 `packages/workflows-shared`). Upstream license: MIT OR Apache-2.0.
 
 ## Consumer imports

@@ -1,4 +1,4 @@
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
 import { loadInternalWorker } from "../core/internal/internal-worker.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
@@ -203,8 +203,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   return yield* runtime.start({
     name,
     modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
-    compatibilityDate:
-      options.compatibilityDate ?? INTERNAL_WORKER_COMPATIBILITY_DATE,
+    compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
       UnsafeEval.local("__DISTILLED_UNSAFE_EVAL__"),

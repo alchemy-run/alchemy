@@ -1719,7 +1719,7 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: import.meta.url,
  *   compatibility: {
  *     flags: ["nodejs_compat"],
- *     date: "2026-03-17",
+ *     date: "2026-08-31",
  *   },
  * }
  * ```
@@ -2274,7 +2274,7 @@ export const isSelf = (value: unknown): value is Self =>
  * return {
  *   fetch: Effect.gen(function* () {
  *     const worker = yield* loader.load({
- *       compatibilityDate: "2026-01-28",
+ *       compatibilityDate: "2026-08-31",
  *       mainModule: "worker.js",
  *       modules: {
  *         "worker.js": `export default {

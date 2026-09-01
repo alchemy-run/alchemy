@@ -16,7 +16,7 @@ const SendEmailBindingWorker = {
     ),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import {
   formatExtensionModule,
   formatInternalWorkerModules,
@@ -135,7 +135,7 @@ export const SendEmailLive = Layer.effect(
             const sendEmailService: WorkerdConfig.Service = {
               name: SERVICE_SEND_EMAIL,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(SendEmailBindingWorker.worker),
                 ),

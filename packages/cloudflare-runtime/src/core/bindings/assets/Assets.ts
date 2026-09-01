@@ -36,7 +36,7 @@ import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
 import type { RuntimeWorker } from "../../RuntimeWorker.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 
 const AssetsKvWorker = {
@@ -314,8 +314,8 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:worker",
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
-                compatibilityFlags: ["nodejs_compat"],
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                // Node.js compatibility is default-on for the internal date.
                 bindings: [
                   {
                     name: "ASSETS_KV_NAMESPACE",
@@ -340,8 +340,9 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:router",
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
-                compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                // Keep the intentional v2 opt-out; the date supplies v1.
+                compatibilityFlags: ["no_nodejs_compat_v2"],
                 bindings: [
                   {
                     name: "ASSET_WORKER",
