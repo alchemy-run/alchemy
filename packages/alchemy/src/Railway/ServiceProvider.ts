@@ -12,7 +12,6 @@ import type {
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
@@ -22,12 +21,8 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import {
-  assertHostDisk,
-  type MountSpec,
-  type ServiceBinding,
-} from "./MountVolume.ts";
-import { ownedProjects, type Project } from "./Project.ts";
+import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
+import { ownedProjects } from "./Project.ts";
 import { listServiceVolumes } from "./Volume.ts";
 import {
   deleteOwnedServiceDomain,
@@ -44,12 +39,26 @@ import {
 } from "./hosted.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
 import { tarGzipDirectory } from "../Util/tarGzip.ts";
-import { uploadDeployTarball } from "./Up.ts";
 import {
-  Service,
-  type ServiceEnvironment,
-  type ServiceProps,
-} from "./Service.ts";
+  hashRailwayLocalContext,
+  prepareRailwayLocalContext,
+  resolveRailwayServiceSource,
+  ServiceSourceInvalid,
+  type RailwayLocalContextSource,
+} from "./local-context.ts";
+import { uploadDeployTarball } from "./Up.ts";
+import { Service } from "./Service.ts";
+
+export {
+  ServiceContextPathInvalid,
+  ServiceContextPathUnsupported,
+  ServiceContextSymlinkUnsupported,
+  ServiceContextTooLarge,
+  ServiceDockerfileOutsideContext,
+  ServiceDockerfilePathInvalid,
+  ServiceImageOrMainRequired,
+  ServiceSourceInvalid,
+} from "./local-context.ts";
 
 export class ServiceNotCreated extends Data.TaggedError(
   "Railway.ServiceNotCreated",
@@ -60,12 +69,6 @@ export class ServiceNotCreated extends Data.TaggedError(
 
 export class ServiceProjectRequired extends Data.TaggedError(
   "Railway.ServiceProjectRequired",
-)<{
-  message: string;
-}> {}
-
-export class ServiceImageOrMainRequired extends Data.TaggedError(
-  "Railway.ServiceImageOrMainRequired",
 )<{
   message: string;
 }> {}
@@ -216,7 +219,13 @@ const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
   observed: unknown,
 ): boolean => {
   if (desired === undefined) return false;
-  if (deepEqual(undef(observed as never), desired)) return false;
+  if (
+    desired === null
+      ? observed == null
+      : deepEqual(undef(observed as never), desired)
+  ) {
+    return false;
+  }
   input[key] = desired;
   return true;
 };
@@ -241,7 +250,7 @@ const instanceSettingsDelta = (input: {
     drainingSeconds?: number;
     overlapSeconds?: number;
     sleepApplication?: boolean;
-    dockerfilePath?: string;
+    dockerfilePath?: string | null;
     builder?: Builder;
     watchPatterns?: string[];
   };
@@ -449,6 +458,23 @@ const syncBranch = Effect.fn(function* (input: {
     },
   });
   return true;
+});
+
+const clearDeploymentTriggers = Effect.fn(function* (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+}) {
+  const triggers = yield* listDeploymentTriggers(
+    input.projectId,
+    input.environmentId,
+    input.serviceId,
+  );
+  const github = triggers.filter((trigger) => trigger.provider === "github");
+  yield* Effect.forEach(github, (trigger) =>
+    railway.deploymentTriggerDelete({ id: trigger.id }),
+  );
+  return github.length > 0;
 });
 
 const syncAutoUpdates = Effect.fn(function* (input: {
@@ -754,7 +780,7 @@ export const ServiceProvider = () =>
         stables: ["serviceId", "projectId", "environmentId"],
         nuke: { dependsOn: ["Railway.Project"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news, output }) {
           if (news === undefined || !isResolved(news)) return undefined;
           if (output === undefined) return undefined;
           const nextProject = projectIdOf(news.project);
@@ -766,9 +792,10 @@ export const ServiceProvider = () =>
           if (projectChanged || environmentChanged) {
             return { action: "replace" as const };
           }
-          if (news.main !== undefined && news.main.length > 0) {
+          const source = yield* resolveRailwayServiceSource(news);
+          if (source.mode === "main") {
             const hash = yield* hosted.hash({
-              main: news.main,
+              main: source.main,
               handler: news.handler,
               port: news.port,
               image: news.image,
@@ -777,6 +804,11 @@ export const ServiceProvider = () =>
               build: news.build,
               extraFiles: news.extraFiles,
             });
+            if (hash !== output.code.hash) {
+              return { action: "update" as const };
+            }
+          } else if (source.mode === "context") {
+            const hash = yield* hashRailwayLocalContext(source);
             if (hash !== output.code.hash) {
               return { action: "update" as const };
             }
@@ -920,6 +952,7 @@ export const ServiceProvider = () =>
         reconcile: Effect.fn(function* ({
           id,
           news,
+          olds,
           output,
           bindings,
           session,
@@ -942,10 +975,10 @@ export const ServiceProvider = () =>
             });
           }
           const name = yield* resolveName(id, props.name, output?.name);
-          const hostedMain =
-            props.main !== undefined && props.main.length > 0
-              ? props.main
-              : undefined;
+          const source = yield* resolveRailwayServiceSource(props);
+          const hostedMain = source.mode === "main" ? source.main : undefined;
+          const localContext: RailwayLocalContextSource | undefined =
+            source.mode === "context" ? source : undefined;
           const bound = collectBindingState(bindings ?? []);
           yield* assertHostDisk({
             name,
@@ -967,6 +1000,13 @@ export const ServiceProvider = () =>
 
           let sourceImage: string | undefined;
           let sourceRepo: string | undefined;
+          let localPrepared:
+            | {
+                codeHash: string;
+                dockerfilePath: string;
+                tarball: Uint8Array;
+              }
+            | undefined;
           let codeHash = output?.code.hash ?? "";
           let hashed:
             | {
@@ -981,12 +1021,12 @@ export const ServiceProvider = () =>
                 packageJson: string | undefined;
               }
             | undefined;
-          if (hostedMain !== undefined) {
+          if (source.mode === "main") {
             yield* (session?.note ?? ((_message: string) => Effect.void))(
               `Bundling ${id} program...`,
             );
             hashed = yield* hosted.computeCodeHash({
-              main: hostedMain,
+              main: source.main,
               handler: props.handler,
               port,
               image: props.image,
@@ -996,15 +1036,13 @@ export const ServiceProvider = () =>
               extraFiles: props.extraFiles,
             });
             codeHash = hashed.codeHash;
-          } else if (props.image !== undefined && props.image.length > 0) {
-            sourceImage = props.image;
-          } else if (props.repo !== undefined && props.repo.length > 0) {
-            sourceRepo = props.repo;
+          } else if (source.mode === "context") {
+            localPrepared = yield* prepareRailwayLocalContext(source);
+            codeHash = localPrepared.codeHash;
+          } else if (source.mode === "image") {
+            sourceImage = source.image;
           } else {
-            return yield* new ServiceImageOrMainRequired({
-              message:
-                "Railway.Service requires `image` (public image), `main` (Effect-native Dockerfile), or `repo` (GitHub).",
-            });
+            sourceRepo = source.repo;
           }
 
           let current: CloudService | undefined =
@@ -1108,7 +1146,26 @@ export const ServiceProvider = () =>
             ],
           });
           let needsDeploy = false;
+          let localSourceChanged =
+            localContext !== undefined &&
+            (instance?.source?.repo != null || instance?.source?.image != null);
 
+          if (localSourceChanged) {
+            yield* railway.serviceDisconnect({ id: current.id });
+            needsDeploy = true;
+            instance =
+              (yield* getInstance(environmentId, current.id)) ?? instance;
+          }
+
+          const leavingContext =
+            olds?.context !== undefined && olds.context.length > 0;
+          const clearsDockerfilePath =
+            leavingContext &&
+            (source.mode === "image" ||
+              (source.mode === "repo" && props.dockerfilePath === undefined));
+          const dockerfilePath =
+            localPrepared?.dockerfilePath ??
+            (clearsDockerfilePath ? null : props.dockerfilePath);
           const instanceDelta = instanceSettingsDelta({
             instance,
             sourceImage,
@@ -1116,6 +1173,7 @@ export const ServiceProvider = () =>
             registryCredentials: undefined,
             props: {
               ...props,
+              dockerfilePath,
               // Effect-native images must answer HTTP before Railway
               // stamps SUCCESS — otherwise waitForDeploymentById returns
               // while `/up` is still building and public GET hangs.
@@ -1152,6 +1210,18 @@ export const ServiceProvider = () =>
             if (branchChanged) needsDeploy = true;
           }
 
+          if (localContext !== undefined) {
+            const triggersChanged = yield* clearDeploymentTriggers({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+            });
+            if (triggersChanged) {
+              needsDeploy = true;
+              localSourceChanged = true;
+            }
+          }
+
           yield* syncAutoUpdates({
             projectId,
             environmentId,
@@ -1183,34 +1253,40 @@ export const ServiceProvider = () =>
             mounts: bound.mounts,
           });
 
+          const uploadSource =
+            hostedMain !== undefined || localContext !== undefined;
           const latestOk = deployReady(instance?.latestDeployment?.status);
           const shouldUpload =
-            hostedMain !== undefined &&
-            hashed !== undefined &&
-            (codeHash !== output?.code.hash || !latestOk);
+            uploadSource &&
+            (codeHash !== output?.code.hash || !latestOk || localSourceChanged);
 
-          if (
-            hostedMain !== undefined &&
-            hashed !== undefined &&
-            shouldUpload
-          ) {
+          if (shouldUpload) {
             const note = session?.note ?? ((_message: string) => Effect.void);
-            const contextDir = yield* hosted.writeContext({
-              id,
-              props: {
-                main: hostedMain,
-                handler: props.handler,
-                port,
-                image: props.image,
-                env: props.env,
-                isExternal: props.isExternal,
-                build: props.build,
-                extraFiles: props.extraFiles,
-              },
-              hashed,
-            });
+            yield* note(`Preparing ${id} build context...`);
+            const tarball =
+              localPrepared !== undefined
+                ? localPrepared.tarball
+                : hostedMain !== undefined && hashed !== undefined
+                  ? yield* hosted
+                      .writeContext({
+                        id,
+                        props: {
+                          main: hostedMain,
+                          handler: props.handler,
+                          port,
+                          image: props.image,
+                          env: props.env,
+                          isExternal: props.isExternal,
+                          build: props.build,
+                          extraFiles: props.extraFiles,
+                        },
+                        hashed,
+                      })
+                      .pipe(Effect.flatMap(tarGzipDirectory))
+                  : yield* new ServiceSourceInvalid({
+                      message: "Railway.Service upload source was not prepared",
+                    });
             yield* note(`Uploading ${id} build context to Railway...`);
-            const tarball = yield* tarGzipDirectory(contextDir);
             const uploaded = yield* uploadDeployTarball({
               projectId,
               environmentId,
@@ -1226,7 +1302,7 @@ export const ServiceProvider = () =>
                 environmentId,
               })) ?? instance;
           } else if (
-            hostedMain === undefined &&
+            !uploadSource &&
             (needsDeploy || instance?.latestDeployment == null)
           ) {
             yield* railway
@@ -1242,7 +1318,7 @@ export const ServiceProvider = () =>
                 ? ((yield* getInstance(environmentId, current.id)) ?? instance)
                 : ((yield* waitForDeployment(environmentId, current.id)) ??
                   instance);
-          } else if (hostedMain !== undefined && needsDeploy) {
+          } else if (uploadSource && needsDeploy) {
             yield* railway
               .serviceInstanceDeployV2({
                 environmentId,
