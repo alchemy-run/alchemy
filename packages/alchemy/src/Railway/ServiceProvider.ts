@@ -30,7 +30,7 @@ import {
 import { ownedProjects, type Project } from "./Project.ts";
 import { listServiceVolumes } from "./Volume.ts";
 import {
-  deleteServiceDomainById,
+  deleteOwnedServiceDomain,
   ensureServiceDomain,
   findServiceDomainById,
   type ServiceDomainRecord,
@@ -812,7 +812,19 @@ export const ServiceProvider = () =>
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
           });
-          if (output !== undefined) return attrs;
+          if (output !== undefined) {
+            // Keep the recorded ownership id even if the live list lags.
+            // Wiping it makes `publicDomain: false` a no-op.
+            if (domain === undefined && output.domainId !== undefined) {
+              return {
+                ...attrs,
+                domainId: output.domainId,
+                domain: output.domain,
+                url: output.url,
+              };
+            }
+            return attrs;
+          }
           return matchesAlchemyPhysicalName(found.name)
             ? attrs
             : Unowned(attrs);
@@ -1040,14 +1052,17 @@ export const ServiceProvider = () =>
               serviceId: current.id,
               domainId: output?.domainId ?? null,
             });
-          } else if (output?.domainId !== undefined) {
+          } else {
             // Only the recorded generated domain belongs to this resource.
-            // Adoption does not populate domainId, so a foreign domain stays.
-            yield* deleteServiceDomainById({
+            // Adoption does not populate domainId/domain, so a foreign
+            // domain stays. Null the environment-config key — GraphQL
+            // delete alone is not enough; Railway recreates from config.
+            yield* deleteOwnedServiceDomain({
               projectId,
               environmentId,
               serviceId: current.id,
-              domainId: output.domainId,
+              domainId: output?.domainId,
+              domain: output?.domain,
             });
           }
 

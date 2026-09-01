@@ -99,34 +99,93 @@ export const findServiceDomainById = Effect.fn(function* (input: {
   return domain === undefined || isGone(domain) ? undefined : toRecord(domain);
 });
 
-const conclusivelyGone = (domain: CloudDomain | undefined) =>
-  domain === undefined ||
-  domain.deletedAt != null ||
-  domain.syncStatus === "DELETED";
-
 export const deleteServiceDomainById = Effect.fn(function* (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
   domainId: string;
 }) {
-  const domain = yield* findCloudDomainById(input);
-  if (conclusivelyGone(domain)) return;
-  if (domain?.syncStatus !== "DELETING") {
+  yield* deleteOwnedServiceDomain(input);
+});
+
+/**
+ * Remove the owned generated domain. Environment config is the source of
+ * truth (`serviceDomains[id]: null`); GraphQL delete is the fallback.
+ * Matches the recorded id and, if that id is missing from the live list,
+ * the recorded hostname — never every generated domain.
+ */
+export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+  domainId?: string;
+  domain?: string;
+}) {
+  if (input.domainId === undefined && input.domain === undefined) return;
+
+  const live = yield* listServiceDomains(
+    input.projectId,
+    input.environmentId,
+    input.serviceId,
+  );
+  const owned = live.filter(
+    (row) =>
+      (input.domainId !== undefined && row.id === input.domainId) ||
+      (input.domain !== undefined && row.domain === input.domain),
+  );
+  const keys = new Set<string>([
+    ...(input.domainId !== undefined ? [input.domainId] : []),
+    ...owned.map((row) => row.id),
+  ]);
+  if (keys.size === 0) return;
+
+  yield* withEnvironmentConfigLock(
+    input.environmentId,
+    railway.environmentPatchCommit({
+      environmentId: input.environmentId,
+      commitMessage: "Remove Railway service domain",
+      patch: {
+        services: {
+          [input.serviceId]: {
+            networking: {
+              serviceDomains: Object.fromEntries(
+                [...keys].map((id) => [id, null]),
+              ),
+            },
+          },
+        },
+      },
+    }),
+  ).pipe(Effect.ignore);
+
+  for (const row of owned) {
+    if (row.syncStatus === "DELETING") continue;
     yield* withEnvironmentConfigLock(
       input.environmentId,
-      railway.serviceDomainDelete({ id: input.domainId }),
+      railway.serviceDomainDelete({ id: row.id }),
     ).pipe(
       Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
       Effect.asVoid,
     );
   }
-  const gone = yield* findCloudDomainById(input).pipe(
-    Effect.map(conclusivelyGone),
+
+  const gone = yield* listServiceDomains(
+    input.projectId,
+    input.environmentId,
+    input.serviceId,
+  ).pipe(
+    Effect.map(
+      (rows) =>
+        !rows.some(
+          (row) =>
+            keys.has(row.id) ||
+            (input.domain !== undefined && row.domain === input.domain),
+        ),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (deleted) => deleted,
-      times: 8,
+      times: 12,
     }),
   );
   if (!gone) {
@@ -233,6 +292,42 @@ const waitForServiceDomainById = (input: {
     }),
     Effect.map((domain) =>
       domain !== undefined && !isGone(domain) ? domain : undefined,
+    ),
+  );
+
+/**
+ * The environment-config map key is supposed to be the GraphQL domain id,
+ * but the live `domains` list can lag or mint a different id. Prefer the
+ * patch key; otherwise take a domain that was not in the pre-patch set so
+ * we do not claim a foreign generated domain and do not `serviceDomainCreate`
+ * a second hostname.
+ */
+const waitForNewServiceDomain = (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+  preferId: string;
+  preexistingIds: ReadonlySet<string>;
+}) =>
+  listServiceDomains(
+    input.projectId,
+    input.environmentId,
+    input.serviceId,
+  ).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (rows) =>
+        rows.some(
+          (domain) =>
+            domain.id === input.preferId ||
+            !input.preexistingIds.has(domain.id),
+        ),
+      times: 15,
+    }),
+    Effect.map(
+      (rows) =>
+        rows.find((domain) => domain.id === input.preferId) ??
+        rows.find((domain) => !input.preexistingIds.has(domain.id)),
     ),
   );
 
@@ -380,13 +475,21 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
 
   let createdDomainId: string | undefined;
   if (current === undefined) {
+    const preexisting = yield* listServiceDomains(
+      input.projectId,
+      input.environmentId,
+      input.serviceId,
+    );
     createdDomainId = yield* createViaEnvironmentPatch({
       environmentId: input.environmentId,
       serviceId: input.serviceId,
     });
-    current = yield* waitForServiceDomainById({
-      ...input,
-      domainId: createdDomainId,
+    current = yield* waitForNewServiceDomain({
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      preferId: createdDomainId,
+      preexistingIds: new Set(preexisting.map((domain) => domain.id)),
     });
   }
 

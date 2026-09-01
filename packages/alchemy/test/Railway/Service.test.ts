@@ -242,9 +242,34 @@ test.provider(
       );
       expect(publicUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
 
-      // Rebuild the generated-domain map with a foreign row first. The old
-      // positional selection would switch ownership to this id.
-      const foreignDomainId = yield* Effect.sync(() => crypto.randomUUID());
+      // Add a foreign generated domain. The config map key may not equal
+      // the GraphQL id, and list order is not ownership — wait for a new
+      // live row rather than assuming `[0] === patch UUID`.
+      const liveDomainIds = (domains: {
+        serviceDomains: ReadonlyArray<{
+          id: string;
+          deletedAt: string | null;
+          syncStatus: string;
+        }>;
+      }) =>
+        domains.serviceDomains
+          .filter(
+            (domain) =>
+              domain.deletedAt == null &&
+              domain.syncStatus !== "DELETED" &&
+              domain.syncStatus !== "DELETING",
+          )
+          .map((domain) => domain.id);
+      const beforeForeign = new Set(
+        liveDomainIds(
+          yield* railway.domains({
+            projectId: publicUpdate.api.projectId,
+            environmentId: publicUpdate.api.environmentId,
+            serviceId: publicUpdate.api.serviceId,
+          }),
+        ),
+      );
+      const foreignPatchId = yield* Effect.sync(() => crypto.randomUUID());
       yield* withEnvironmentConfigLock(
         publicUpdate.api.environmentId,
         railway.environmentPatchCommit({
@@ -255,7 +280,7 @@ test.provider(
               [publicUpdate.api.serviceId]: {
                 networking: {
                   serviceDomains: {
-                    [foreignDomainId]: {},
+                    [foreignPatchId]: {},
                     [publicUpdate.api.domainId!]: {},
                   },
                 },
@@ -264,25 +289,32 @@ test.provider(
           },
         }),
       );
-      const orderedDomains = yield* railway
+      const orderedIds = yield* railway
         .domains({
           projectId: publicUpdate.api.projectId,
           environmentId: publicUpdate.api.environmentId,
           serviceId: publicUpdate.api.serviceId,
         })
         .pipe(
+          Effect.map(liveDomainIds),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
-            until: (domains) =>
-              domains.serviceDomains[0]?.id === foreignDomainId &&
-              domains.serviceDomains.some(
-                (domain) => domain.id === publicUpdate.api.domainId,
-              ),
-            times: 10,
+            until: (ids) =>
+              ids.includes(publicUpdate.api.domainId!) &&
+              (ids.includes(foreignPatchId) ||
+                ids.some((id) => !beforeForeign.has(id))),
+            times: 15,
           }),
         );
-      expect(orderedDomains.serviceDomains[0]?.id).toEqual(foreignDomainId);
+      const foreignDomainId =
+        orderedIds.find((id) => id === foreignPatchId) ??
+        orderedIds.find((id) => !beforeForeign.has(id));
+      expect(foreignDomainId).toBeDefined();
+      if (foreignDomainId === undefined) {
+        return;
+      }
       expect(foreignDomainId).not.toEqual(publicUpdate.api.domainId);
+      expect(orderedIds).toContain(publicUpdate.api.domainId);
 
       const publicWithForeignDomain = yield* stack.deploy(
         Effect.gen(function* () {
