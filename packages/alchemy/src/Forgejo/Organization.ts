@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
@@ -120,6 +121,39 @@ export const Organization = Resource<Organization>("Forgejo.Organization", {
   defaultRemovalPolicy: "retain",
 });
 
+/**
+ * Raised when a deployed organization's `owner` is changed.
+ *
+ * Forgejo creates an organization under a user account but offers no endpoint
+ * to hand it to another one; ownership moves by editing the Owners team. The
+ * login identifies the organization globally, so a changed `owner` would
+ * otherwise resolve to the same organization and converge as though the
+ * transfer had happened.
+ */
+export class UnsupportedOwnerChange extends Data.TaggedError(
+  "UnsupportedOwnerChange",
+)<{
+  /**
+   * Login of the organization whose owner was changed.
+   */
+  readonly username: string;
+  /**
+   * Owner recorded in state.
+   */
+  readonly from: string;
+  /**
+   * Owner the resource now declares.
+   */
+  readonly to: string;
+}> {
+  /**
+   * Human-readable description of the unsupported transfer, naming the way out.
+   */
+  override get message(): string {
+    return `Organization '${this.username}' is recorded as owned by '${this.from}' and cannot be transferred to '${this.to}': Forgejo has no ownership-transfer API. Change the organization's Owners team membership in Forgejo and restore the original 'owner', or remove and re-create the organization under the new owner.`;
+  }
+}
+
 interface ApiOrganization {
   readonly id: number;
   readonly username: string;
@@ -175,11 +209,15 @@ const observe = Effect.fn(function* (
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
     stables: ["organizationId"],
+    // Only the login identifies a different organization. `owner` names the
+    // account the create was issued under, and Forgejo exposes no ownership
+    // transfer, so replacing on it would tear down and re-adopt the very same
+    // organization — see the guard in `reconcile`.
     diff: ({ news, olds }) =>
       Effect.succeed(
         isResolved(news) &&
           olds !== undefined &&
-          (news.owner !== olds.owner || news.username !== olds.username)
+          news.username !== olds.username
           ? { action: "replace" as const }
           : undefined,
       ),
@@ -197,8 +235,20 @@ export const OrganizationProvider = () =>
         ? undefined
         : attributesOf(client, observed);
     }),
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, olds }) {
       const client = yield* ForgejoCredentials;
+
+      // An organization's login is globally unique, so a changed `owner` still
+      // resolves to the same organization. Forgejo has no ownership-transfer
+      // endpoint, so there is no way to honor the change: converging silently
+      // would report success for something that never happened.
+      if (olds !== undefined && olds.owner !== news.owner) {
+        return yield* new UnsupportedOwnerChange({
+          username: news.username,
+          from: olds.owner,
+          to: news.owner,
+        });
+      }
 
       // Observe: live state decides whether this is a create or a settings
       // sync, so an adopted organization converges the same way as one we

@@ -4,6 +4,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import {
   json,
   jsonList,
@@ -118,4 +119,41 @@ test.provider(
       yield* stack.destroy();
       expect(tokens.size).toBe(0);
     }),
+);
+
+test.provider("refuses to mint a second token of the same name", (stack) =>
+  Effect.gen(function* () {
+    tokens.clear();
+    nextId = 1;
+    server.reset();
+    // A create that succeeded against Forgejo but whose state write never
+    // landed: the token is live, and its secret went out in the create
+    // response that was lost. It cannot be read back and Forgejo will not
+    // issue a second token under the name, so this must be reported rather
+    // than retried into a duplicate-name rejection on every future deploy.
+    tokens.set(7, {
+      id: 7,
+      name: "automation",
+      scopes: ["read:repository"],
+      token_last_eight: "existing",
+      created_at: "2026-01-01T00:00:00Z",
+    });
+    nextId = 8;
+
+    const result = yield* Effect.result(
+      stack.deploy(
+        ApiToken("Automation", {
+          username: "alice",
+          name: "automation",
+          scopes: ["read:repository"],
+        }),
+      ),
+    );
+
+    expect(Result.isFailure(result)).toBe(true);
+    expect(JSON.stringify(result)).toContain("UnrecoverableApiToken");
+    // The live token is left exactly as found; nothing was created or revoked.
+    expect(tokens.size).toBe(1);
+    expect(server.count("POST", "/admin/users/alice/tokens")).toBe(0);
+  }),
 );
