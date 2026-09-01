@@ -1,5 +1,5 @@
 import { defineConfig, type UserConfig } from "tsdown";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "./src/core/internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "./src/core/internal/constants.ts";
 import {
   InternalWorkerExportPlugin,
   RuntimeSubpathExportPlugin,
@@ -32,7 +32,7 @@ const workerConfig = (
   // depth limit, so bridge through `unknown`.
   plugins: [
     cloudflare({
-      compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+      compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
       compatibilityFlags: options.compatibilityFlags,
     }),
     InternalWorkerExportPlugin(),
@@ -125,7 +125,7 @@ export default defineConfig([
       mangle: false,
     },
     plugins: [
-      cloudflare({ compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE }),
+      cloudflare({ compatibilityDate: DEFAULT_COMPATIBILITY_DATE }),
       InternalWorkerExportPlugin(),
     ],
     deps: {

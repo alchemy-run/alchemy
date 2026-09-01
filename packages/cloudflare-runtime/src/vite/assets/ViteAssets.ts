@@ -2,7 +2,7 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../core/internal/internal-worker.ts";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../core/internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../core/internal/constants.ts";
 import * as Loopback from "../../core/globals/Loopback.ts";
 import { PluginContext } from "../../core/PluginContext.ts";
 import * as Effect from "effect/Effect";
@@ -77,7 +77,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
               {
                 name: "assets:worker",
                 worker: {
-                  compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                  compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                   // Node.js compatibility is supplied by the 2026-08-31
                   // internal compatibility date.
                   bindings: [
@@ -108,7 +108,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
               {
                 name: "assets:router",
                 worker: {
-                  compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                  compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                   // The date supplies nodejs_compat; this worker deliberately
                   // retains only its v2 opt-out.
                   compatibilityFlags: ["no_nodejs_compat_v2"],

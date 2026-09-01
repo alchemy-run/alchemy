@@ -12,7 +12,7 @@ const EntryWorker = {
     loadInternalWorker("#cloudflare-runtime-core-worker/globals/entry.worker"),
 };
 import {
-  INTERNAL_WORKER_COMPATIBILITY_DATE,
+  DEFAULT_COMPATIBILITY_DATE,
   SERVICE_USER_WORKER,
   SOCKET_USER_ENTRY,
 } from "../internal/constants.ts";
@@ -156,7 +156,7 @@ export const GlobalsLive = Layer.effect(
             {
               name: "plugin:entry",
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 compatibilityFlags: [
                   "experimental",
                   "enable_request_signal",

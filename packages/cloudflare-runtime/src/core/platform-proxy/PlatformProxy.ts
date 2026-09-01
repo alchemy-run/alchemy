@@ -1,4 +1,4 @@
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
 import { loadInternalWorker } from "../internal/internal-worker.ts";
 /**
  * Node-side platform proxy: our reimplementation of wrangler's
@@ -196,8 +196,7 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
   const modules = yield* makeModules(options as PlatformProxyOptions);
   const url = yield* runtime.start({
     name: options.name ?? "platform-proxy",
-    compatibilityDate:
-      options.compatibilityDate ?? INTERNAL_WORKER_COMPATIBILITY_DATE,
+    compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
       Text.local(BINDING_PLATFORM_PROXY_TOKEN, token),

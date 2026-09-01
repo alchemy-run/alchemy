@@ -1,4 +1,4 @@
-import { INTERNAL_WORKER_COMPATIBILITY_DATE as DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
+import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";

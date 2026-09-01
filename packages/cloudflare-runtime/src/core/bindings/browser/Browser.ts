@@ -32,7 +32,7 @@ import * as Plugin from "../../Plugin.ts";
 import type { BindingHook, PluginContext } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import type { ConfigError } from "../../RuntimeError.shared.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { kVoid } from "../../workerd/Config.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
 import type { BrowserProps } from "./BrowserOptions.shared.ts";
@@ -181,7 +181,7 @@ export const BrowserLive = Layer.effect(
                 // websocket_standard_binary_type: its Blob-default behavior,
                 // introduced on 2026-03-17, stops cross-service CDP WebSockets
                 // from delivering binary frames to the proxy.
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 compatibilityFlags: ["no_websocket_standard_binary_type"],
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(BrowserWorker.worker),

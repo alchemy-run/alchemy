@@ -1,4 +1,4 @@
-import { INTERNAL_WORKER_COMPATIBILITY_DATE as DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
+import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";

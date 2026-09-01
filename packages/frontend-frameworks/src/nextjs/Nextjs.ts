@@ -3,7 +3,7 @@ import type {
   Module,
   RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE as DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
+import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
 import * as DurableObjectNamespace from "@alchemy.run/cloudflare-runtime/core/bindings/DurableObjectNamespace";

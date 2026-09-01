@@ -5,7 +5,7 @@ export const SERVICE_USER_WORKER = "user-worker";
  * Default date shared by deployed Workers, framework runners, previews, and
  * internal isolates. It is the newest date supported by catalog workerd.
  */
-export const INTERNAL_WORKER_COMPATIBILITY_DATE = "2026-08-31";
+export const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
 export const defaultDurableObjectUniqueKey = (
   scriptName: string,
