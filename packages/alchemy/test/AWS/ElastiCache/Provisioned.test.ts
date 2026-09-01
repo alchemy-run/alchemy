@@ -11,8 +11,7 @@ import {
 } from "@/AWS/ElastiCache";
 import * as AWS from "@/AWS";
 import { sameStringSet } from "@/AWS/ElastiCache/internal.ts";
-import * as Test from "../EC2/VpcTest.ts";
-import { assertVpcGone } from "../EC2/Gone.ts";
+import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -22,10 +21,14 @@ import * as Schedule from "effect/Schedule";
 import {
   assertCacheClusterGone,
   assertReplicationGroupGone,
-  cacheFixture,
+  getProvisionedNetwork,
+  shareProvisionedNetwork,
 } from "./ProvisionedFixture.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+shareProvisionedNetwork({ beforeAll, afterAll });
 test(
   "connection names and unordered subnet IDs are stable",
   Effect.sync(() => {
@@ -205,21 +208,20 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const net = yield* getProvisionedNetwork;
       const deploy = (description: string) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture(description);
-            return {
-              group: fixture.subnetGroup,
-              subnetIds: fixture.network.privateSubnetIds,
-              vpcId: fixture.network.vpcId,
-            };
+            const group = yield* AWS.ElastiCache.SubnetGroup("Subnets", {
+              description,
+              subnetIds: net.privateSubnetIds,
+              tags: { fixture: "elasticache-provisioned" },
+            });
+            return { group, subnetIds: net.privateSubnetIds };
           }),
         );
 
-      const { group, subnetIds, vpcId } = yield* deploy(
-        "alchemy cache subnets",
-      );
+      const { group, subnetIds } = yield* deploy("alchemy cache subnets");
       expect(group.subnetGroupArn).toContain(":subnetgroup:");
       expect(new Set(group.subnetIds)).toEqual(new Set(subnetIds));
 
@@ -236,7 +238,6 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertSubnetGroupGone(group.subnetGroupName);
-      yield* assertVpcGone(vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -246,24 +247,24 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const net = yield* getProvisionedNetwork;
       const deploy = (description: string) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
             const cache = yield* ReplicationGroup("Cache", {
               description,
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               replicasPerNodeGroup: 0,
               transitEncryptionEnabled: true,
               tags: { fixture: "elasticache-provisioned" },
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
-      const { cache, vpcId } = yield* deploy("alchemy provisioned cache");
+      const { cache } = yield* deploy("alchemy provisioned cache");
       expect(cache.status).toBe("available");
       expect(cache.replicationGroupArn).toContain(":replicationgroup:");
       expect(cache.primaryEndpointAddress).toBeDefined();
@@ -278,7 +279,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(cache.replicationGroupId);
-      yield* assertVpcGone(vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -288,21 +288,21 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const net = yield* getProvisionedNetwork;
       const deploy = (numCacheNodes: number) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
             const cache = yield* CacheCluster("Cache", {
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               numCacheNodes,
               tags: { fixture: "elasticache-memcached" },
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
 
-      const { cache, vpcId } = yield* deploy(1);
+      const { cache } = yield* deploy(1);
       expect(cache.status).toBe("available");
       expect(cache.endpoints).toHaveLength(1);
 
@@ -318,7 +318,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertCacheClusterGone(cache.cacheClusterId);
-      yield* assertVpcGone(vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -328,25 +327,25 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const net = yield* getProvisionedNetwork;
       const deploy = (port: number) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
             const cache = yield* ReplicationGroup("Cache", {
               description: "alchemy replacement cache",
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               replicasPerNodeGroup: 0,
               transitEncryptionEnabled: true,
               port,
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
 
-      const { cache, vpcId } = yield* deploy(6379);
+      const { cache } = yield* deploy(6379);
       const { cache: replaced } = yield* deploy(6380);
       expect(replaced.replicationGroupId).not.toBe(cache.replicationGroupId);
       expect(replaced.primaryEndpointPort).toBe(6380);
@@ -354,7 +353,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(replaced.replicationGroupId);
-      yield* assertVpcGone(vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -364,25 +362,25 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const net = yield* getProvisionedNetwork;
       const deploy = (replicasPerNodeGroup: number) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
             const cache = yield* ReplicationGroup("Cache", {
               description: "alchemy scaling cache",
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               replicasPerNodeGroup,
               automaticFailoverEnabled: replicasPerNodeGroup > 0,
               transitEncryptionEnabled: true,
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
 
-      const { cache, vpcId } = yield* deploy(0);
+      const { cache } = yield* deploy(0);
       const { cache: scaled } = yield* deploy(1);
       expect(scaled.replicationGroupId).toBe(cache.replicationGroupId);
 
@@ -404,7 +402,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(reduced.replicationGroupId);
-      yield* assertVpcGone(vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -415,20 +412,20 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     Effect.gen(function* () {
       yield* stack.destroy();
       yield* deleteFinalSnapshot();
-      const { cache, vpcId } = yield* stack.deploy(
+      const net = yield* getProvisionedNetwork;
+      const { cache } = yield* stack.deploy(
         Effect.gen(function* () {
-          const fixture = yield* cacheFixture();
           const cache = yield* ReplicationGroup("Cache", {
             description: "alchemy final snapshot cache",
             engine: "valkey",
             nodeType: "cache.t4g.micro",
-            subnetGroupName: fixture.subnetGroup.subnetGroupName,
-            securityGroupIds: [fixture.securityGroup.groupId],
+            subnetGroupName: net.subnetGroupName,
+            securityGroupIds: [net.securityGroupId],
             replicasPerNodeGroup: 0,
             transitEncryptionEnabled: true,
             finalSnapshotName,
           });
-          return { cache, vpcId: fixture.network.vpcId };
+          return { cache };
         }),
       );
 
@@ -436,7 +433,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertReplicationGroupGone(cache.replicationGroupId);
       yield* assertFinalSnapshotAvailable();
       yield* deleteFinalSnapshot();
-      yield* assertVpcGone(vpcId);
     }).pipe(Effect.ensuring(deleteFinalSnapshot().pipe(Effect.ignore))),
   { timeout: 2_700_000 },
 );

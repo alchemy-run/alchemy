@@ -1,16 +1,19 @@
 import * as AWS from "@/AWS";
-import * as Test from "../EC2/VpcTest.ts";
-import { assertVpcGone } from "../EC2/Gone.ts";
+import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
   assertReplicationGroupGone,
-  cacheFixture,
+  getProvisionedNetwork,
+  shareProvisionedNetwork,
 } from "./ProvisionedFixture.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+shareProvisionedNetwork({ beforeAll, afterAll });
 const listTagsWhenAvailable = (resourceName: string) =>
   ElastiCache.listTagsForResource({ ResourceName: resourceName }).pipe(
     Effect.retry({
@@ -32,11 +35,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const deploy = (phase: "one" | "two") =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
+            const net = yield* getProvisionedNetwork;
             const replacementSecurityGroup = yield* AWS.EC2.SecurityGroup(
               "ReplacementSecurityGroup",
               {
-                vpcId: fixture.network.vpcId,
+                vpcId: net.vpcId,
                 description: "ElastiCache replacement integration-test access",
                 tags: { fixture: "elasticache-provisioned" },
               },
@@ -45,10 +48,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               description: "alchemy configuration cache",
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
+              subnetGroupName: net.subnetGroupName,
               securityGroupIds: [
                 phase === "one"
-                  ? fixture.securityGroup.groupId
+                  ? net.securityGroupId
                   : replacementSecurityGroup.groupId,
               ],
               replicasPerNodeGroup: 0,
@@ -64,10 +67,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             });
             return {
               cache,
-              vpcId: fixture.network.vpcId,
               activeSecurityGroupId:
                 phase === "one"
-                  ? fixture.securityGroup.groupId
+                  ? net.securityGroupId
                   : replacementSecurityGroup.groupId,
             };
           }),
@@ -121,7 +123,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(updated.cache.replicationGroupId);
-      yield* assertVpcGone(updated.vpcId);
     }),
   { timeout: 2_700_000 },
 );

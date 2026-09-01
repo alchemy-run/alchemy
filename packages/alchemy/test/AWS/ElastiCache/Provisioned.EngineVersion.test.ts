@@ -1,15 +1,18 @@
 import * as AWS from "@/AWS";
-import * as Test from "../EC2/VpcTest.ts";
-import { assertVpcGone } from "../EC2/Gone.ts";
+import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   assertReplicationGroupGone,
-  cacheFixture,
+  getProvisionedNetwork,
+  shareProvisionedNetwork,
 } from "./ProvisionedFixture.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+shareProvisionedNetwork({ beforeAll, afterAll });
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "updates a Valkey replication group to a newer supported engine version",
   (stack) =>
@@ -47,20 +50,20 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       }
 
       yield* stack.destroy();
+      const net = yield* getProvisionedNetwork;
       const program = (engineVersion: string) =>
         Effect.gen(function* () {
-          const fixture = yield* cacheFixture();
           const cache = yield* AWS.ElastiCache.ReplicationGroup("Cache", {
             description: "alchemy engine upgrade cache",
             engine: "valkey",
             engineVersion,
             nodeType: "cache.t4g.micro",
-            subnetGroupName: fixture.subnetGroup.subnetGroupName,
-            securityGroupIds: [fixture.securityGroup.groupId],
+            subnetGroupName: net.subnetGroupName,
+            securityGroupIds: [net.securityGroupId],
             replicasPerNodeGroup: 0,
             transitEncryptionEnabled: true,
           });
-          return { cache, vpcId: fixture.network.vpcId };
+          return { cache };
         });
 
       const created = yield* stack.deploy(program(initialVersion));
@@ -87,7 +90,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(updated.cache.replicationGroupId);
-      yield* assertVpcGone(updated.vpcId);
     }),
   { timeout: 2_700_000 },
 );

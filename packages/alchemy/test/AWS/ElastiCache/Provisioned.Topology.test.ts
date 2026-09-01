@@ -1,15 +1,18 @@
 import * as AWS from "@/AWS";
-import * as Test from "../EC2/VpcTest.ts";
-import { assertVpcGone } from "../EC2/Gone.ts";
+import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
   assertReplicationGroupGone,
-  cacheFixture,
+  getProvisionedNetwork,
+  shareProvisionedNetwork,
 } from "./ProvisionedFixture.ts";
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+shareProvisionedNetwork({ beforeAll, afterAll });
 const waitForAvailable = (replicationGroupId: string) =>
   ElastiCache.describeReplicationGroups({
     ReplicationGroupId: replicationGroupId,
@@ -39,20 +42,20 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const deploy = (numNodeGroups: number, replicasPerNodeGroup: number) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
+            const net = yield* getProvisionedNetwork;
             const cache = yield* AWS.ElastiCache.ReplicationGroup("Cache", {
               description: "alchemy topology cache",
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               numNodeGroups,
               replicasPerNodeGroup,
               automaticFailoverEnabled: replicasPerNodeGroup > 0,
               multiAzEnabled: replicasPerNodeGroup > 0,
               transitEncryptionEnabled: true,
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
 
@@ -67,7 +70,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(created.cache.replicationGroupId);
-      yield* assertVpcGone(created.vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -80,18 +82,18 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const deploy = (numNodeGroups: number) =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
+            const net = yield* getProvisionedNetwork;
             const cache = yield* AWS.ElastiCache.ReplicationGroup("Cache", {
               description: "alchemy shard topology cache",
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               numNodeGroups,
               replicasPerNodeGroup: 0,
               transitEncryptionEnabled: true,
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
 
@@ -107,7 +109,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(created.cache.replicationGroupId);
-      yield* assertVpcGone(created.vpcId);
     }),
   { timeout: 2_700_000 },
 );
@@ -120,23 +121,23 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
-            const fixture = yield* cacheFixture();
+            const net = yield* getProvisionedNetwork;
             const cache = yield* AWS.ElastiCache.ReplicationGroup("Cache", {
               description: "alchemy failover cache",
               engine: "valkey",
               nodeType: "cache.t4g.micro",
-              subnetGroupName: fixture.subnetGroup.subnetGroupName,
-              securityGroupIds: [fixture.securityGroup.groupId],
+              subnetGroupName: net.subnetGroupName,
+              securityGroupIds: [net.securityGroupId],
               replicasPerNodeGroup: 1,
               automaticFailoverEnabled: true,
               multiAzEnabled: true,
               transitEncryptionEnabled: true,
             });
-            return { cache, vpcId: fixture.network.vpcId };
+            return { cache };
           }),
         );
 
-      const { cache, vpcId } = yield* deploy();
+      const { cache } = yield* deploy();
 
       const before = yield* waitForAvailable(cache.replicationGroupId);
       const nodeGroupId = before.NodeGroups?.[0]?.NodeGroupId;
@@ -159,7 +160,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(cache.replicationGroupId);
-      yield* assertVpcGone(vpcId);
     }),
   { timeout: 2_700_000 },
 );

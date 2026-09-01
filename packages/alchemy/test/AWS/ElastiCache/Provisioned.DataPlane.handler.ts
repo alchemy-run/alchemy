@@ -7,7 +7,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Valkey from "iovalkey";
 import * as net from "node:net";
-import { cacheFixture } from "./ProvisionedFixture.ts";
+import { getProvisionedNetwork } from "./ProvisionedFixture.ts";
 
 export class ProvisionedCacheDataPlaneFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "ProvisionedCacheDataPlaneFunction",
@@ -78,16 +78,16 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
     memorySize: 256,
   }),
   Effect.gen(function* () {
-    const fixture = yield* cacheFixture();
+    const net = yield* getProvisionedNetwork;
     const lambdaSecurityGroup = yield* AWS.EC2.SecurityGroup(
       "LambdaSecurityGroup",
       {
-        vpcId: fixture.network.vpcId,
+        vpcId: net.vpcId,
         description: "Provisioned ElastiCache data-plane test Lambda",
       },
     );
     yield* AWS.EC2.SecurityGroupRule("ValkeyIngress", {
-      groupId: fixture.securityGroup.groupId,
+      groupId: net.securityGroupId,
       type: "ingress",
       ipProtocol: "tcp",
       fromPort: 6379,
@@ -95,7 +95,7 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
       referencedGroupId: lambdaSecurityGroup.groupId,
     });
     yield* AWS.EC2.SecurityGroupRule("MemcachedIngress", {
-      groupId: fixture.securityGroup.groupId,
+      groupId: net.securityGroupId,
       type: "ingress",
       ipProtocol: "tcp",
       fromPort: 11211,
@@ -106,28 +106,28 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
       description: "Alchemy provisioned Valkey data-plane test",
       engine: "valkey",
       nodeType: "cache.t4g.micro",
-      subnetGroupName: fixture.subnetGroup.subnetGroupName,
-      securityGroupIds: [fixture.securityGroup.groupId],
+      subnetGroupName: net.subnetGroupName,
+      securityGroupIds: [net.securityGroupId],
       replicasPerNodeGroup: 0,
       transitEncryptionEnabled: false,
     });
     const memcached = yield* AWS.ElastiCache.CacheCluster("Memcached", {
       nodeType: "cache.t4g.micro",
-      subnetGroupName: fixture.subnetGroup.subnetGroupName,
-      securityGroupIds: [fixture.securityGroup.groupId],
+      subnetGroupName: net.subnetGroupName,
+      securityGroupIds: [net.securityGroupId],
       numCacheNodes: 1,
     });
     const valkeyConnection = yield* AWS.ElastiCache.ConnectReplicationGroup(
       valkey,
       {
-        subnetIds: fixture.network.privateSubnetIds,
+        subnetIds: net.privateSubnetIds,
         securityGroupIds: [lambdaSecurityGroup.groupId],
       },
     );
     const memcachedConnection = yield* AWS.ElastiCache.ConnectCacheCluster(
       memcached,
       {
-        subnetIds: fixture.network.privateSubnetIds,
+        subnetIds: net.privateSubnetIds,
         securityGroupIds: [lambdaSecurityGroup.groupId],
       },
     );

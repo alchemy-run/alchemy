@@ -13,8 +13,12 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import ProvisionedCacheDataPlaneLive, {
   ProvisionedCacheDataPlaneFunction,
 } from "./Provisioned.DataPlane.handler.ts";
+import { shareProvisionedNetwork } from "./ProvisionedFixture.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+shareProvisionedNetwork({ beforeAll, afterAll });
 
 // A type alias so it stays comparable to `response.json`'s JsonObject.
 type ConnectionProbe = {
