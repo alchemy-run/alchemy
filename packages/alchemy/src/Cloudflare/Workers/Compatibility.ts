@@ -34,6 +34,29 @@ const NODEJS_COMPAT_V2_DATE = "2024-09-23";
 // identical runtime behavior. Older user-pinned dates still need the flag.
 const NODEJS_COMPAT_DEFAULT_ON = "2026-08-04";
 
+/**
+ * Compatibility settings passed to build tools and framework adapters.
+ * Cloudflare rejects a redundant `nodejs_compat` flag after its default-on
+ * date, but downstream tools may still detect Node support from the explicit
+ * flag only, so internal build configuration materializes the effective flag.
+ */
+export const getToolingCompatibility = (
+  compatibility: { date: string; flags: string[] },
+  main: unknown,
+) => ({
+  date: compatibility.date,
+  // TODO: Stop materializing `nodejs_compat` once supported downstream tools
+  // consistently derive the default from the compatibility date.
+  flags:
+    isPythonMain(main) ||
+    compatibility.date < NODEJS_COMPAT_DEFAULT_ON ||
+    compatibility.flags.includes("nodejs_compat") ||
+    compatibility.flags.includes("nodejs_compat_v2") ||
+    compatibility.flags.includes("no_nodejs_compat")
+      ? compatibility.flags
+      : [...compatibility.flags, "nodejs_compat"],
+});
+
 export const getCompatibility = (props: WorkerProps) => {
   const userFlags = props.compatibility?.flags ?? [];
   const python = isPythonMain(props.main);
