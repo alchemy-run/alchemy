@@ -67,6 +67,7 @@
     "./Drizzle": "./src/Drizzle/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GitHub": "./src/GitHub/index.ts",
+    "./Forgejo": "./src/Forgejo/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Neon": "./src/Neon/index.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
@@ -245,6 +246,11 @@
         "types": "./lib/GitHub/index.d.ts",
         "bun": "./src/GitHub/index.ts",
         "default": "./lib/GitHub/index.js"
+      },
+      "./Forgejo": {
+        "types": "./lib/Forgejo/index.d.ts",
+        "bun": "./src/Forgejo/index.ts",
+        "default": "./lib/Forgejo/index.js"
       },
       "./Endpoint": {
         "types": "./lib/Endpoint/index.d.ts",

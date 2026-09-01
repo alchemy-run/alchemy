@@ -35,6 +35,7 @@ function providersSidebarEntry() {
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
+      { label: "Forgejo", link: "/forgejo" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
@@ -1273,6 +1274,23 @@ export default defineConfig({
                 },
               ],
             },
+          ],
+        },
+        {
+          label: "Forgejo",
+          items: [
+            { label: "Overview", link: "/forgejo" },
+            { label: "Setup", link: "/forgejo/setup" },
+            { label: "Repositories", link: "/forgejo/repository" },
+            {
+              label: "Actions secrets & variables",
+              link: "/forgejo/actions-config",
+            },
+            {
+              label: "Organizations & teams",
+              link: "/forgejo/organizations",
+            },
+            providerResourcesEntry("Forgejo"),
           ],
         },
         {
