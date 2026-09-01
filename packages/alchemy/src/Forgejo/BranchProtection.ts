@@ -215,7 +215,7 @@ const bodyOf = (props: BranchProtectionProps) => {
  */
 export const BranchProtectionProvider = () =>
   Provider.succeed(BranchProtection, {
-    stables: ["ruleName"],
+    stables: ["ruleName", "owner", "repository"],
     diff: ({ news, olds }) =>
       Effect.succeed(
         isResolved(news) &&
