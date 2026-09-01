@@ -11,6 +11,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import {
   json,
   jsonList,
@@ -52,6 +53,8 @@ const members = new Set<string>();
 const labels = new Map<number, StoredLabel>();
 const rules = new Map<string, StoredRule>();
 let nextId = 1;
+/** Simulates a credential that is not an instance administrator. */
+let forbidAdminOrgs = false;
 
 const reset = () => {
   organizations.clear();
@@ -60,6 +63,7 @@ const reset = () => {
   labels.clear();
   rules.clear();
   nextId = 1;
+  forbidAdminOrgs = false;
   server.reset();
 };
 
@@ -85,6 +89,7 @@ const server = mockForgejo((request) => {
 
   const adminOrgs = path.match(/^\/admin\/users\/([^/]+)\/orgs$/);
   if (method === "POST" && adminOrgs !== null) {
+    if (forbidAdminOrgs) return status(403, "must be an administrator");
     const username = String(payload?.username);
     const organization: StoredOrganization = {
       id: nextId++,
@@ -309,6 +314,28 @@ test.provider("creates and then updates an organization", (stack) =>
       description: "second",
     });
   }),
+);
+
+test.provider(
+  "surfaces a non-admin credential rather than reporting the org missing",
+  (stack) =>
+    Effect.gen(function* () {
+      reset();
+      // Forgejo answers a non-administrator with the same 403 it uses for a
+      // duplicate, so the create-race recovery must not swallow it: with no
+      // organization to fall back to, the permissions error has to survive.
+      forbidAdminOrgs = true;
+
+      const result = yield* Effect.result(
+        stack.deploy(
+          Organization("Acme", { owner: "alice", username: "acme" }),
+        ),
+      );
+
+      forbidAdminOrgs = false;
+      expect(Result.isFailure(result)).toBe(true);
+      expect(JSON.stringify(result)).toContain("ForgejoForbidden");
+    }),
 );
 
 test.provider("adopts an organization that already exists", (stack) =>
