@@ -34,6 +34,7 @@ const workerConfig = (
     cloudflare({
       compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
       compatibilityFlags: options.compatibilityFlags,
+      externalRequire: false,
     }),
     InternalWorkerExportPlugin(),
   ] as unknown as UserConfig["plugins"],
@@ -125,7 +126,12 @@ export default defineConfig([
       mangle: false,
     },
     plugins: [
-      cloudflare({ compatibilityDate: DEFAULT_COMPATIBILITY_DATE }),
+      cloudflare({
+        compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+        // These workers are exported as single modules, so they cannot carry
+        // the helper chunk emitted by the external-require rewrite.
+        externalRequire: false,
+      }),
       InternalWorkerExportPlugin(),
     ],
     deps: {

@@ -14,17 +14,12 @@ export const formatExtensionModule = (self: {
   worker: () => Promise<{ main: string; modules: Record<string, string> }>;
 }): Effect.Effect<string> =>
   Effect.promise(self.worker).pipe(
-    Effect.map(({ main, modules }) => {
-      // Date-default Node compatibility can emit generated support chunks in
-      // addition to an internal Worker's entry module. Extensions still need
-      // the entry source only, so select the export's declared main module.
-      const entry = modules[main];
-      if (entry === undefined) {
-        throw new Error(
-          `Worker entry module ${JSON.stringify(main)} is missing`,
-        );
+    Effect.map(({ modules }) => {
+      const entries = Object.entries(modules);
+      if (entries.length !== 1) {
+        throw new Error(`Expected exactly one module, got ${entries.length}`);
       }
-      return entry;
+      return entries[0][1];
     }),
   );
 

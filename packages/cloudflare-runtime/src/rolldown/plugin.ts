@@ -22,6 +22,7 @@ export type RolldownPlugin = (
 
 const cloudflare: RolldownPlugin = (options = {}) => {
   return [
+    options.externalRequire !== false &&
     hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)
       ? esmExternalRequirePlugin({
           external: [...getUnenv(options).external],
