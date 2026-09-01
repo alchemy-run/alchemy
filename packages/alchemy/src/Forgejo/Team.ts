@@ -9,6 +9,7 @@ import {
   paginate,
 } from "./Client.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
+import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -26,7 +27,7 @@ export interface TeamProps {
   /**
    * Repository permission.
    */
-  readonly permission?: string;
+  readonly permission?: "read" | "write" | "admin";
   /**
    * Description.
    */
@@ -105,6 +106,11 @@ export const Team = Resource<Team>("Forgejo.Team");
 interface ApiTeam {
   readonly id: number;
   readonly name: string;
+  readonly description?: string;
+  readonly permission?: string;
+  readonly includes_all_repositories?: boolean;
+  readonly can_create_org_repo?: boolean;
+  readonly units?: readonly string[];
 }
 
 const collection = (props: Pick<TeamProps, "organization">) =>
@@ -201,13 +207,13 @@ export const TeamProvider = () =>
         return attributesOf(created);
       }
 
-      const updated = yield* client.request<ApiTeam>(
-        "PATCH",
-        path(observed.id),
-        {
-          body: bodyOf(news),
-        },
-      );
+      // Sync only when the live team differs from what was declared.
+      const desired = bodyOf(news);
+      const updated = matchesDesired(observed, desired)
+        ? observed
+        : yield* client.request<ApiTeam>("PATCH", path(observed.id), {
+            body: desired,
+          });
       return attributesOf(updated);
     }),
     delete: Effect.fn(function* ({ output }) {

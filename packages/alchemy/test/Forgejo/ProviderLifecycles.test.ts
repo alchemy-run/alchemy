@@ -411,7 +411,9 @@ test.provider("adopts a team that already exists by name", (stack) =>
     // creating a duplicate team.
     expect(output).toMatchObject({ teamId: 7 });
     expect(server.count("POST", "/orgs/acme/teams")).toBe(0);
-    expect(server.count("PATCH", "/teams/7")).toBe(1);
+    // The adopted team already matches what was declared, so adoption issues
+    // no write at all.
+    expect(server.count("PATCH", "/teams/7")).toBe(0);
   }),
 );
 

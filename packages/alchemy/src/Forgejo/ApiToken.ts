@@ -133,6 +133,19 @@ interface ApiAccessToken {
   readonly created_at: string;
 }
 
+/** Order-insensitive comparison of two optional string lists. */
+const sameSet = (
+  a: readonly string[] | undefined,
+  b: readonly string[] | undefined,
+): boolean => {
+  const left = [...(a ?? [])].sort();
+  const right = [...(b ?? [])].sort();
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+};
+
 const tokensPath = (username: string) =>
   `/admin/users/${encodeURIComponent(username)}/tokens`;
 
@@ -176,13 +189,24 @@ export const ApiTokenProvider = () =>
     stables: ["tokenId", "token"],
     diff: ({ news, olds }) => {
       if (!isResolved(news) || olds === undefined) return Effect.void;
+      // Replacing a token deletes the old one before minting the new one
+      // (Forgejo rejects a duplicate token name), so every consumer of the
+      // old value breaks in between. The trigger must therefore fire on a
+      // genuine change only, never on a cosmetic reorder.
+      const sameScopes = sameSet(news.scopes, olds.scopes);
+      const sameRepositories = sameSet(
+        news.repositories?.map(
+          (repository) => `${repository.owner}/${repository.name}`,
+        ),
+        olds.repositories?.map(
+          (repository) => `${repository.owner}/${repository.name}`,
+        ),
+      );
       return Effect.succeed(
         news.username !== olds.username ||
           news.name !== olds.name ||
-          JSON.stringify(news.scopes ?? []) !==
-            JSON.stringify(olds.scopes ?? []) ||
-          JSON.stringify(news.repositories ?? []) !==
-            JSON.stringify(olds.repositories ?? [])
+          !sameScopes ||
+          !sameRepositories
           ? { action: "replace" as const, deleteFirst: true }
           : undefined,
       );

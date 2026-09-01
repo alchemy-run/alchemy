@@ -4,6 +4,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { type ForgejoClient, ForgejoCredentials, optional } from "./Client.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
+import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -29,7 +30,7 @@ export interface OrganizationProps {
   /**
    * Visibility.
    */
-  readonly visibility?: string;
+  readonly visibility?: "public" | "limited" | "private";
   /**
    * Website.
    */
@@ -121,6 +122,12 @@ export const Organization = Resource<Organization>("Forgejo.Organization", {
 interface ApiOrganization {
   readonly id: number;
   readonly username: string;
+  readonly description?: string;
+  readonly full_name?: string;
+  readonly visibility?: string;
+  readonly website?: string;
+  readonly email?: string;
+  readonly location?: string;
 }
 
 /**
@@ -207,21 +214,24 @@ export const OrganizationProvider = () =>
             },
           )
           .pipe(
-            // A concurrent create wins the race; adopt what is there.
-            Effect.catchTag("ForgejoConflict", () =>
-              client.request<ApiOrganization>("GET", path(news)),
+            // A concurrent create wins the race; adopt what is there. The
+            // admin endpoint declares 403/422 for a duplicate, not 409, so
+            // the conflict surfaces under those tags.
+            Effect.catchTag(
+              ["ForgejoValidationError", "ForgejoForbidden"],
+              () => client.request<ApiOrganization>("GET", path(news)),
             ),
           );
         return attributesOf(client, created);
       }
 
-      const updated = yield* client.request<ApiOrganization>(
-        "PATCH",
-        path(news),
-        {
-          body: settingsOf(news),
-        },
-      );
+      // Sync only when the live organization differs from what was declared.
+      const desired = settingsOf(news);
+      const updated = matchesDesired(observed, desired)
+        ? observed
+        : yield* client.request<ApiOrganization>("PATCH", path(news), {
+            body: desired,
+          });
       return attributesOf(client, updated);
     }),
     delete: Effect.fn(function* ({ olds }) {
