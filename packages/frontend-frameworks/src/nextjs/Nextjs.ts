@@ -121,7 +121,7 @@ export const listEdgeFunctions = (manifest: unknown): Array<string> => {
 };
 
 /** The default compatibility date when the options provide none. */
-export const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
+export const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
 /** The server-module name of the worker entry (`serverModules[0]`). */
 export const WORKER_ENTRY_MODULE = `worker/${Bundle.WORKER_ENTRY_NAME}`;

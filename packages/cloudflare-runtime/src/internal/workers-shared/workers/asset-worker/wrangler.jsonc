@@ -63,8 +63,8 @@
   "env": {
     "staging": {
       "name": "asset-worker-staging",
-      // enable_version_api is set per-environment (not top-level) because
-      // the local workerd in vitest-pool-workers does not support it yet.
+      // Match upstream's environment-scoped behavior: only staging and
+      // fed-prod enable the experimental version API.
       "compatibility_flags": ["enable_version_api"],
       "unsafe": {
         "metadata": {

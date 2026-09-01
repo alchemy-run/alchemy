@@ -54,7 +54,7 @@ import {
 } from "./runtime/utils/prerender-constants.ts";
 
 /** Matches `dev-server.ts` in `@alchemy.run/cloudflare-runtime/vite`. */
-const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
+const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
 /** The subdirectory of the server output dir that hosts the prerender build. */
 const PRERENDER_OUTPUT_SUBDIR = "./.prerender/";
