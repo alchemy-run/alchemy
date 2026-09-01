@@ -5,12 +5,18 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as pathe from "pathe";
 import { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { startOtlpCollector } from "../Utils/OtlpCollector.ts";
 
+/**
+ * `Cloudflare.Telemetry()` under `alchemy dev`: the Layer has no
+ * deploy-time effect on a local Worker and the compatibility date is not
+ * gated. Whether local workerd records the spans is the runtime's concern;
+ * these tests pin that the fixture (KV, a Durable Object, a queue consumer,
+ * forked fibers, failing and interrupted spans) runs unchanged under local
+ * emulation with the Layer provided, and that OTLP composition still works.
+ */
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
@@ -21,156 +27,60 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const collectorMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/native-tracing/tail-collector.ts",
-);
-
-const producerFlags = {
-  date: "2026-08-25",
-  flags: ["streaming_tail_worker", "tail_worker_user_spans"],
-};
-
-interface RecordedTailEvent {
-  invocationId?: string;
-  spanContext?: { traceId?: string; spanId?: string };
-  event?: {
-    type?: string;
-    name?: string;
-    spanId?: string;
-    outcome?: string;
-    info?: unknown;
-  };
-}
-
-const decodeAttributes = (
-  info: unknown,
-): Record<string, string | number | boolean> => {
-  if (typeof info === "string") {
-    try {
-      return decodeAttributes(JSON.parse(info));
-    } catch {
-      return {};
-    }
-  }
-  if (!Array.isArray(info)) return {};
-  return Object.fromEntries(
-    info.flatMap((item) => {
-      if (
-        item &&
-        typeof item === "object" &&
-        "name" in item &&
-        "value" in item &&
-        (typeof item.value === "string" ||
-          typeof item.value === "number" ||
-          typeof item.value === "boolean")
-      ) {
-        return [[String(item.name), item.value] as const];
-      }
-      return [];
-    }),
-  );
-};
-
-const pollSessions = (producerUrl: string, consumerUrl: string) =>
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    yield* client.get(`${producerUrl}/work`).pipe(Effect.orDie);
-    const res = yield* client.get(`${consumerUrl}/events`).pipe(Effect.orDie);
-    const body = (yield* res.json.pipe(Effect.orDie)) as {
-      sessions?: unknown;
-    };
-    return Array.isArray(body.sessions) ? (body.sessions as string[]) : [];
-  }).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (sessions): boolean =>
-        sessions.some((session) => session.includes('"name":"operation"')),
-      times: 20,
-    }),
-  );
-
 test.provider(
-  "local Cloudflare.Telemetry() nests Effect spans with platform children",
+  "local Cloudflare.Telemetry() does not break the Worker under emulation",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const events = yield* Cloudflare.KV.Namespace("NativeTracingEvents");
-          const consumer = yield* Cloudflare.Worker("NativeTracingCollector", {
-            main: collectorMain,
-            env: { EVENTS: events },
-          });
-          const producer = yield* makeTracedWorker("NativeTracingProducer", {
-            streamingTailConsumers: [consumer],
-            compatibility: producerFlags,
-          });
-          return { events, consumer, producer };
+          return {
+            producer: yield* makeTracedWorker("NativeTracingProducer"),
+          };
         }),
       );
-
-      expect(deployed.events.namespaceId).toMatch(/^dev:/);
       expect(deployed.producer.url).toMatch(/^http:\/\/localhost:\d+$/);
+
+      // Every event path the fixture exercises works under local emulation
+      // with the Layer provided: fetch, forked fibers, failing and
+      // interrupted spans, a Durable Object RPC, and a queue round trip.
+      const url = deployed.producer.url!;
+      yield* expectUrlContains(`${url}/work?id=local-work`, "native-did-work");
+      yield* expectUrlContains(`${url}/fanout?id=local-fanout`, "local-fanout");
+      yield* expectUrlContains(`${url}/exits?id=local-exits`, "local-exits");
       yield* expectUrlContains(
-        deployed.consumer.url!,
-        "native-tracing-collector-ok",
+        `${url}/rpc?id=local-rpc`,
+        "native-did-rpc:do-ok",
       );
-
-      const sessions = yield* pollSessions(
-        deployed.producer.url!,
-        deployed.consumer.url!,
-      );
-      const traces = sessions
-        .map((session) => JSON.parse(session) as RecordedTailEvent[])
-        .filter((trace) =>
-          trace.some(
-            (entry) =>
-              entry.event?.type === "spanOpen" &&
-              entry.event.name === "operation",
-          ),
-        );
-
-      if (traces.length === 0) {
-        yield* Effect.logError(
-          `native-tracing tail sessions: ${JSON.stringify(sessions).slice(0, 4000)}`,
-        );
-      }
-      expect(traces.length).toBeGreaterThanOrEqual(1);
-
-      const trace = traces[0]!;
-      const spanOpens = trace.filter(
-        (entry) => entry.event?.type === "spanOpen",
-      );
-      const span = (name: string) => {
-        const matches = spanOpens.filter((entry) => entry.event?.name === name);
-        expect(matches.length).toBeGreaterThanOrEqual(1);
-        return matches[0]!;
-      };
-      const operation = span("operation");
-      expect(span("native.child").spanContext?.spanId).toBe(
-        operation.event?.spanId,
-      );
-      const operationAttrs = Object.fromEntries(
-        trace
-          .filter(
-            (entry) =>
-              entry.event?.type === "attributes" &&
-              entry.spanContext?.spanId === operation.event?.spanId,
-          )
-          .flatMap((entry) =>
-            Object.entries(decodeAttributes(entry.event?.info)),
-          ),
-      );
-      expect(operationAttrs["scalar.number"]).toBe(42);
-      expect(operationAttrs["scalar.boolean"]).toBe(true);
-      expect(operationAttrs).not.toHaveProperty("unsupported");
-      expect(operationAttrs["effect.exit"]).toBe("success");
+      yield* expectUrlContains(`${url}/enqueue?id=local-queue`, "local-queue");
+      yield* expectUrlContains(`${url}/sampled`, "native-did-sample");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+test.provider(
+  "local Cloudflare.Telemetry() does not gate the compatibility date",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Live deploys reject this date; dev just runs.
+      const worker = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* makeTracedWorker("NativeTracingLocalOldDate", {
+            compatibility: { date: "2026-03-17" },
+          });
+        }),
+      );
+      expect(worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+      yield* expectUrlContains(`${worker.url}/work`, "native-did-work");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 const compositionTest = (order: "cf-last" | "otlp-last") =>

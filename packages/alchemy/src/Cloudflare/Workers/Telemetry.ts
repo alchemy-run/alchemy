@@ -96,6 +96,8 @@ export const assertCloudflareTelemetryCompatibility = (
  *
  * Until the global default compatibility date is raised past 2026-07-28,
  * pin `compatibility: { date: "2026-08-25" }` (or later) or deploy fails.
+ * `alchemy dev` does not gate the date: what a local Worker records is the
+ * local runtime's concern.
  *
  * Compose it into the Function/Worker's single `Effect.provide`:
  *

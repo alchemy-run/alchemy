@@ -50,6 +50,11 @@ export — spans submit with the request, no `waitUntil` flush.
 
 Existing `Effect.withSpan` / `Effect.fn` instrumentation does not change.
 
+During `alchemy dev` the compatibility date is not gated and the Layer
+has no deploy-time effect; whether spans are recorded locally is up to
+the local runtime. A Worker opted out of local emulation with
+`Alchemy.remote()` traces normally.
+
 ## What you get
 
 - Effect spans nested with automatic fetch / KV / R2 / D1 spans in the
