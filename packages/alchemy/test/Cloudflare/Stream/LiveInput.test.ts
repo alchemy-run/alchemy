@@ -5,6 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -94,6 +95,97 @@ test.provider(
         }),
       );
       expect(noop.liveInputId).toEqual(input.liveInputId);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, input.liveInputId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// The Stream WebRTC beta adds no separate API resource: every live input
+// is simultaneously reachable over WHIP (publish) and WHEP (playback).
+// This pins that alchemy surfaces those endpoints verbatim as Cloudflare
+// returns them, and that they carry the documented shapes.
+//
+// https://developers.cloudflare.com/stream/webrtc-beta/
+test.provider(
+  "surfaces WHIP/WHEP and RTMPS/SRT endpoints",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const input = yield* stack.deploy(
+        Cloudflare.Stream.LiveInput("WebRTCInput", {
+          meta: { name: "alchemy-stream-webrtc-input" },
+        }),
+      );
+
+      // WHIP — the publish URL embeds a secret, so it is Redacted.
+      const whip = Redacted.value(input.webRTCUrl!);
+      expect(whip).toMatch(
+        /^https:\/\/customer-[a-z0-9]+\.cloudflarestream\.com\/.+\/webRTC\/publish$/,
+      );
+      // WHEP — the playback URL is what viewers connect to.
+      expect(input.webRTCPlaybackUrl!).toMatch(
+        /^https:\/\/customer-[a-z0-9]+\.cloudflarestream\.com\/.+\/webRTC\/play$/,
+      );
+
+      // Cloudflare's two docs disagree on the path segment of these URLs:
+      // the WebRTC beta guide says publish is keyed by a secret and play by
+      // the input uid, while the live-input API example shows BOTH keyed by
+      // the same secret. That distinction decides whether handing a viewer
+      // the WHEP URL also leaks publish access, so record what the live API
+      // actually returns rather than asserting either reading.
+      const publishSegment = new URL(whip).pathname.split("/")[1];
+      const playbackSegment = new URL(input.webRTCPlaybackUrl!).pathname.split(
+        "/",
+      )[1];
+      yield* Effect.log(
+        `webRTC publish segment is uid: ${publishSegment === input.liveInputId}; ` +
+          `playback segment is uid: ${playbackSegment === input.liveInputId}; ` +
+          `publish === playback: ${publishSegment === playbackSegment}`,
+      );
+
+      // The other ingest protocols come back on the same response.
+      expect(input.rtmps!.url).toContain("rtmps://");
+      expect(Redacted.value(input.rtmps!.streamKey)).toBeTruthy();
+      expect(input.rtmpsPlayback!.url).toContain("rtmps://");
+      expect(input.srt!.url).toContain("srt://");
+      // `srt.streamId` is its own Cloudflare-minted id, not the input uid.
+      expect(input.srt!.streamId).toBeTruthy();
+      expect(Redacted.value(input.srt!.passphrase)).toBeTruthy();
+      expect(input.srtPlayback!.url).toBeTruthy();
+
+      // Out-of-band: the endpoints alchemy persists are exactly what
+      // Cloudflare reports for the same input.
+      const observed = yield* getLiveInput(accountId, input.liveInputId);
+      expect(observed.webRTC?.url).toEqual(whip);
+      expect(observed.webRTCPlayback?.url).toEqual(input.webRTCPlaybackUrl);
+      expect(observed.rtmps?.url).toEqual(input.rtmps!.url);
+
+      // A no-op redeploy returns the observed (GET) response rather than an
+      // update response — the endpoints must survive that path too.
+      const noop = yield* stack.deploy(
+        Cloudflare.Stream.LiveInput("WebRTCInput", {
+          meta: { name: "alchemy-stream-webrtc-input" },
+        }),
+      );
+      expect(noop.liveInputId).toEqual(input.liveInputId);
+      expect(Redacted.value(noop.webRTCUrl!)).toEqual(whip);
+      expect(noop.webRTCPlaybackUrl).toEqual(input.webRTCPlaybackUrl);
+
+      // And the update path (dirty reconcile -> PUT response).
+      const updated = yield* stack.deploy(
+        Cloudflare.Stream.LiveInput("WebRTCInput", {
+          meta: { name: "alchemy-stream-webrtc-input-v2" },
+        }),
+      );
+      expect(updated.liveInputId).toEqual(input.liveInputId);
+      expect(Redacted.value(updated.webRTCUrl!)).toEqual(whip);
+      expect(updated.webRTCPlaybackUrl).toEqual(input.webRTCPlaybackUrl);
 
       yield* stack.destroy();
 

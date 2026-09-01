@@ -1,6 +1,7 @@
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -45,6 +46,38 @@ export type LiveInputRecording = {
    * @default 0
    */
   timeoutSeconds?: number;
+};
+
+/**
+ * An RTMPS ingest or playback endpoint of a live input.
+ */
+export type LiveInputRtmpsEndpoint = {
+  /**
+   * The RTMPS URL a broadcaster streams to (or a player pulls from).
+   */
+  url: string;
+  /**
+   * The secret stream key that authenticates against the URL.
+   */
+  streamKey: Redacted.Redacted<string>;
+};
+
+/**
+ * An SRT ingest or playback endpoint of a live input.
+ */
+export type LiveInputSrtEndpoint = {
+  /**
+   * The SRT URL a broadcaster streams to (or a player pulls from).
+   */
+  url: string;
+  /**
+   * The stream id to send in the SRT handshake.
+   */
+  streamId: string;
+  /**
+   * The secret passphrase that authenticates against the URL.
+   */
+  passphrase: Redacted.Redacted<string>;
 };
 
 export type LiveInputProps = {
@@ -109,6 +142,44 @@ export type LiveInputAttributes = {
    * The user-modifiable key-value store associated with the live input.
    */
   meta: Record<string, unknown>;
+  /**
+   * The WHIP endpoint a broadcaster publishes WebRTC video to
+   * (`https://customer-<code>.cloudflarestream.com/<secret>/webRTC/publish`).
+   *
+   * Redacted — the URL embeds a secret that grants publish access to this
+   * input, so it must only be handed to authorized broadcasters. Unwrap
+   * with `Redacted.value` server-side.
+   *
+   * `undefined` when the live input was hydrated from `list()`, which does
+   * not return endpoint details.
+   */
+  webRTCUrl: Redacted.Redacted<string> | undefined;
+  /**
+   * The WHEP endpoint viewers play WebRTC video from
+   * (`https://customer-<code>.cloudflarestream.com/<uid>/webRTC/play`).
+   *
+   * Safe to share publicly — it is keyed by the live input's uid and
+   * supports unlimited concurrent viewers.
+   *
+   * `undefined` when the live input was hydrated from `list()`.
+   */
+  webRTCPlaybackUrl: string | undefined;
+  /**
+   * The RTMPS ingest endpoint, or `undefined` when hydrated from `list()`.
+   */
+  rtmps: LiveInputRtmpsEndpoint | undefined;
+  /**
+   * The RTMPS playback endpoint, or `undefined` when hydrated from `list()`.
+   */
+  rtmpsPlayback: LiveInputRtmpsEndpoint | undefined;
+  /**
+   * The SRT ingest endpoint, or `undefined` when hydrated from `list()`.
+   */
+  srt: LiveInputSrtEndpoint | undefined;
+  /**
+   * The SRT playback endpoint, or `undefined` when hydrated from `list()`.
+   */
+  srtPlayback: LiveInputSrtEndpoint | undefined;
 };
 
 export type LiveInput = Resource<
@@ -147,6 +218,45 @@ export type LiveInput = Resource<
  * });
  * ```
  *
+ * ### Streaming over WebRTC (WHIP/WHEP)
+ * Every live input exposes sub-second-latency WebRTC endpoints alongside
+ * RTMPS and SRT — no extra configuration. `webRTCUrl` is the WHIP endpoint
+ * a broadcaster publishes to; `webRTCPlaybackUrl` is the WHEP endpoint
+ * viewers play from.
+ *
+ * **Example:** Hand the WHIP/WHEP endpoints to a browser client
+ * ```typescript
+ * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {});
+ *
+ * // WHIP publish URL — embeds a publish secret, so keep it server-side and
+ * // only hand it to authorized broadcasters.
+ * const whip = Redacted.value(input.webRTCUrl!);
+ * // WHEP playback URL — safe to hand to any viewer.
+ * const whep = input.webRTCPlaybackUrl;
+ * ```
+ *
+ * **Example:** Publish from the browser with Cloudflare's WHIP client
+ * ```typescript
+ * // npm i @cloudflare/webrtc-client
+ * import { WHIPClient } from "@cloudflare/webrtc-client";
+ *
+ * const media = await navigator.mediaDevices.getUserMedia({
+ *   video: true,
+ *   audio: true,
+ * });
+ * // `whipUrl` fetched from your Worker, which unwraps `input.webRTCUrl`.
+ * const client = new WHIPClient(whipUrl, media);
+ * ```
+ *
+ * ### Streaming over RTMPS or SRT
+ * **Example:** Read the RTMPS ingest URL and stream key
+ * ```typescript
+ * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {});
+ *
+ * const url = input.rtmps!.url;
+ * const streamKey = Redacted.value(input.rtmps!.streamKey);
+ * ```
+ *
  * ### Managing a live input
  * **Example:** Disable ingest without deleting the input
  * ```typescript
@@ -156,6 +266,7 @@ export type LiveInput = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/stream/stream-live/
+ * @see https://developers.cloudflare.com/stream/webrtc-beta/
  *
  * @resource
  * @product Stream
@@ -306,7 +417,44 @@ const toAttributes = (
   enabled: input.enabled ?? true,
   deleteRecordingAfterDays: input.deleteRecordingAfterDays ?? undefined,
   meta: (input.meta ?? {}) as Record<string, unknown>,
+  // Endpoint details are only returned by create/get/update. The list
+  // endpoint omits them, so a live input hydrated by `list()` carries
+  // `undefined` here rather than a fabricated URL.
+  webRTCUrl: input.webRTC?.url ? Redacted.make(input.webRTC.url) : undefined,
+  webRTCPlaybackUrl: input.webRTCPlayback?.url ?? undefined,
+  rtmps: toRtmpsEndpoint(input.rtmps),
+  rtmpsPlayback: toRtmpsEndpoint(input.rtmpsPlayback),
+  srt: toSrtEndpoint(input.srt),
+  srtPlayback: toSrtEndpoint(input.srtPlayback),
 });
+
+const toRtmpsEndpoint = (
+  endpoint:
+    | { url?: string | null; streamKey?: string | null }
+    | null
+    | undefined,
+): LiveInputRtmpsEndpoint | undefined =>
+  endpoint?.url
+    ? { url: endpoint.url, streamKey: Redacted.make(endpoint.streamKey ?? "") }
+    : undefined;
+
+const toSrtEndpoint = (
+  endpoint:
+    | {
+        url?: string | null;
+        streamId?: string | null;
+        passphrase?: string | null;
+      }
+    | null
+    | undefined,
+): LiveInputSrtEndpoint | undefined =>
+  endpoint?.url
+    ? {
+        url: endpoint.url,
+        streamId: endpoint.streamId ?? "",
+        passphrase: Redacted.make(endpoint.passphrase ?? ""),
+      }
+    : undefined;
 
 /**
  * Structural equality for plain-JSON values (`meta`, `recording`) —
