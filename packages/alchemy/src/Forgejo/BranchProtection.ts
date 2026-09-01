@@ -9,6 +9,7 @@ import {
   paginate,
 } from "./Client.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
+import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -167,6 +168,17 @@ export const BranchProtection = Resource<BranchProtection>(
 
 interface ApiBranchProtection {
   readonly rule_name: string;
+  readonly required_approvals?: number;
+  readonly require_signed_commits?: boolean;
+  readonly enable_status_check?: boolean;
+  readonly status_check_contexts?: readonly string[];
+  readonly block_on_rejected_reviews?: boolean;
+  readonly block_on_outdated_branch?: boolean;
+  readonly apply_to_admins?: boolean;
+  readonly push_whitelist_usernames?: readonly string[];
+  readonly push_whitelist_teams?: readonly string[];
+  readonly enable_push?: boolean;
+  readonly enable_push_whitelist?: boolean;
 }
 
 const collection = (
@@ -236,10 +248,16 @@ export const BranchProtectionProvider = () =>
             owner: repository.owner.login,
             repository: repository.name,
           };
+          // This is the one list endpoint Forgejo does not paginate: it
+          // accepts no `page`/`limit` and returns every rule at once.
           return ignoreInaccessible(
-            paginate<ApiBranchProtection>(client, collection(props)),
-            [] as readonly ApiBranchProtection[],
+            client.request<readonly ApiBranchProtection[] | undefined>(
+              "GET",
+              collection(props),
+            ),
+            undefined as readonly ApiBranchProtection[] | undefined,
           ).pipe(
+            Effect.map((found) => found ?? []),
             Effect.map((found) =>
               found.map((rule) => attributesOf(props, rule)),
             ),
@@ -272,23 +290,26 @@ export const BranchProtectionProvider = () =>
           })
           .pipe(
             // A concurrent create wins the race; converge onto the rule that
-            // is already there.
-            Effect.catchTag("ForgejoConflict", () =>
-              client.request<ApiBranchProtection>("PATCH", rulePath(news), {
-                body: bodyOf(news),
-              }),
+            // is already there. This endpoint declares 403/422/423 for an
+            // existing rule, not 409, so the conflict arrives under those.
+            Effect.catchTag(
+              ["ForgejoForbidden", "ForgejoValidationError"],
+              () =>
+                client.request<ApiBranchProtection>("PATCH", rulePath(news), {
+                  body: bodyOf(news),
+                }),
             ),
           );
         return attributesOf(news, created);
       }
 
-      const updated = yield* client.request<ApiBranchProtection>(
-        "PATCH",
-        rulePath(news),
-        {
-          body: bodyOf(news),
-        },
-      );
+      // Sync only when the live rule differs from what was declared.
+      const desired = bodyOf(news);
+      const updated = matchesDesired(observed, desired)
+        ? observed
+        : yield* client.request<ApiBranchProtection>("PATCH", rulePath(news), {
+            body: desired,
+          });
       return attributesOf(news, updated);
     }),
     delete: Effect.fn(function* ({ output }) {

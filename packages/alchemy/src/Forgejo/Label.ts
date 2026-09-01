@@ -9,6 +9,7 @@ import {
   paginate,
 } from "./Client.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
+import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -120,6 +121,9 @@ interface ApiLabel {
   readonly id: number;
   readonly name: string;
   readonly color: string;
+  readonly description?: string;
+  readonly exclusive?: boolean;
+  readonly is_archived?: boolean;
 }
 
 const collection = (props: Pick<LabelProps, "owner" | "repository">) =>
@@ -230,13 +234,13 @@ export const LabelProvider = () =>
         return attributesOf(news, created);
       }
 
-      const updated = yield* client.request<ApiLabel>(
-        "PATCH",
-        path(news, observed.id),
-        {
-          body: bodyOf(news),
-        },
-      );
+      // Sync only when the live label differs from what was declared.
+      const desired = bodyOf(news);
+      const updated = matchesDesired(observed, desired)
+        ? observed
+        : yield* client.request<ApiLabel>("PATCH", path(news, observed.id), {
+            body: desired,
+          });
       return attributesOf(news, updated);
     }),
     delete: Effect.fn(function* ({ output }) {

@@ -287,20 +287,14 @@ export const SecretProvider = () =>
         { concurrency: 8 },
       );
 
-      const userSecrets = yield* ignoreInaccessible(
-        paginate<ApiSecret>(client, "/user/actions/secrets"),
-        [] as readonly ApiSecret[],
-      );
-
-      return [
-        ...repositorySecrets.flat(),
-        ...organizationSecrets.flat(),
-        ...userSecrets.map((secret) => ({
-          scope: { kind: "user" as const },
-          name: secret.name,
-          updatedAt: secret.created_at ?? "",
-        })),
-      ];
+      // User-scoped secrets are deliberately absent: Forgejo exposes
+      // `/user/actions/secrets/{name}` for PUT and DELETE but has no
+      // collection endpoint to enumerate them, unlike the repository,
+      // organization, and user-variable collections. Requesting one would
+      // 404 on every sweep and be silently swallowed, which reads as if it
+      // worked. A user-scoped secret therefore has to be destroyed through
+      // the stack that declared it.
+      return [...repositorySecrets.flat(), ...organizationSecrets.flat()];
     }),
     reconcile: Effect.fn(function* ({ news }) {
       const client = yield* ForgejoCredentials;

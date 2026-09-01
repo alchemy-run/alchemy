@@ -405,8 +405,9 @@ test.provider("uses the webhook create and edit schemas", (stack) =>
       ({ method, pathname }) =>
         method === "PATCH" && pathname.endsWith("/hooks/11"),
     );
+    // `CreateHookOption` carries `type`; `EditHookOption` does not, so the
+    // edit body must not send it.
     expect(edit?.body).toEqual({
-      type: "forgejo",
       active: true,
       events: ["push"],
       config: {

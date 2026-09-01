@@ -34,6 +34,10 @@ export interface WebhookProps {
   readonly events?: readonly string[];
   /**
    * Secret used to sign webhook deliveries.
+   *
+   * Forgejo only overwrites the stored secret when the field is present in
+   * the request, so removing this prop leaves the previously-set secret in
+   * place rather than clearing it. Set it to an empty string to clear.
    */
   readonly secret?: Redacted.Redacted<string>;
   /**
@@ -50,6 +54,8 @@ export interface WebhookProps {
   readonly branchFilter?: string;
   /**
    * Optional Authorization header sent with deliveries.
+   *
+   * Cannot be cleared by removing the prop; see {@link secret}.
    */
   readonly authorizationHeader?: Redacted.Redacted<string>;
 }
@@ -197,7 +203,6 @@ const observe = Effect.fn(function* (
 });
 
 const bodyOf = (props: WebhookProps) => ({
-  type: "forgejo",
   active: props.active ?? true,
   events: props.events ?? [...DEFAULT_EVENTS],
   branch_filter: props.branchFilter,
@@ -264,10 +269,16 @@ export const WebhookProvider = () =>
       // re-run after a failed state write both converge onto one hook.
       const observed = yield* observe(news, output?.webhookId);
 
+      // `CreateHookOption` carries `type`; `EditHookOption` does not.
       const hook = yield* client.request<ApiHook>(
         observed === undefined ? "POST" : "PATCH",
         observed === undefined ? path : `${path}/${observed.id}`,
-        { body: bodyOf(news) },
+        {
+          body:
+            observed === undefined
+              ? { type: "forgejo", ...bodyOf(news) }
+              : bodyOf(news),
+        },
       );
       return attributesOf(news, hook);
     }),
