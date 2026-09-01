@@ -1421,13 +1421,14 @@ export const ingestPackFrom = (
     });
 
     const phases: Record<string, number> = {};
-    const summary = yield* PackParser.ingestPack({
-      source,
-      store,
-      maxObjectSize: MAX_OBJECT_SIZE,
-      phases,
-      sink: (entry) =>
-        Effect.gen(function* () {
+    /**
+     * Stages a run of resolved entries (DESIGN §22.5): the parser's
+     * synchronous fast path hands over up to SINK_BATCH non-delta entries
+     * per fiber hop; delta-resolved entries arrive one at a time.
+     */
+    const stage = (entries: ReadonlyArray<PackParser.ResolvedEntry>) =>
+      Effect.gen(function* () {
+        for (const entry of entries) {
           const pack =
             options.promote !== undefined &&
             !entry.fromDelta &&
@@ -1455,11 +1456,18 @@ export const ingestPackFrom = (
           ) {
             yield* flush();
           }
-          // The parser hands us the inflated bytes, so commits/trees/tags
-          // are parsed without a second inflate; blobs need no parse at all.
-          if (entry.type === ObjectType.blob) return;
-          yield* record(entry.oid, entry.type, entry.content);
-        }),
+          if (entry.type !== ObjectType.blob) {
+            yield* record(entry.oid, entry.type, entry.content);
+          }
+        }
+      });
+    const summary = yield* PackParser.ingestPack({
+      source,
+      store,
+      maxObjectSize: MAX_OBJECT_SIZE,
+      phases,
+      sink: (entry) => stage([entry]),
+      sinkBatch: stage,
     }).pipe(
       Effect.mapError((error) =>
         error._tag === "StoreError" || error._tag === "PackIngestError"

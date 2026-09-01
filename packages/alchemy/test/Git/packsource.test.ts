@@ -11,7 +11,11 @@ import {
   encodeTypeSize,
   type Oid,
 } from "@/Git/git/ObjectCodec.ts";
-import { bufferRandomAccess, ingestPack } from "@/Git/git/PackParser.ts";
+import {
+  bufferRandomAccess,
+  ingestPack,
+  SINK_BATCH,
+} from "@/Git/git/PackParser.ts";
 import { packHeader } from "@/Git/git/PackWriter.ts";
 import * as Zlib from "@/Git/git/Zlib.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
@@ -126,6 +130,7 @@ describe("blobRandomAccess", () => {
           }),
           prefix.length,
         );
+        expect(spilled.readSync).toBeDefined();
         const windowed = yield* parseWith(spilled);
         expect(windowed.count).toBe(300);
         // dataOffset addresses the compressed span in the SOURCE (promotion
@@ -166,6 +171,42 @@ describe("blobRandomAccess", () => {
         // Every window once, plus at most one re-read per window edge an
         // entry's probe straddles (the LRU holds 4, the parse is sequential).
         expect(blobs.gets.length).toBeLessThanOrEqual(windows * 2);
+      }),
+    );
+  });
+});
+
+describe("synchronous fast path", () => {
+  test("with a batched sink, non-delta entries arrive in runs of ≤ SINK_BATCH and the per-entry sink sees none", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack, oids } = yield* buildPack(700);
+        const store = makeObjectStore({
+          sql: makeTestSqlClient(),
+          blobs: makeMemoryBlobStore(),
+          repoId: "R",
+        });
+        const batches: Array<number> = [];
+        const single: Array<string> = [];
+        const seen = new Set<string>();
+        const summary = yield* ingestPack({
+          source: bufferRandomAccess(pack),
+          store,
+          sink: (entry) =>
+            Effect.sync(() => {
+              single.push(entry.oid);
+            }),
+          sinkBatch: (entries) =>
+            Effect.sync(() => {
+              batches.push(entries.length);
+              for (const e of entries) seen.add(e.oid);
+            }),
+        });
+        expect(summary.count).toBe(700);
+        expect(single).toEqual([]);
+        expect(batches.every((n) => n <= SINK_BATCH && n > 0)).toBe(true);
+        expect(batches.reduce((a, b) => a + b, 0)).toBe(700);
+        expect(seen).toEqual(new Set(oids));
       }),
     );
   });

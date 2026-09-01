@@ -31,6 +31,7 @@ test(
     const res = yield* client.get(`${url}/?path=probe`);
     for (const path of [
       "processChunk",
+      "processChunkReuse",
       "info",
       "plain",
       "stream",

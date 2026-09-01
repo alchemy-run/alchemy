@@ -264,6 +264,14 @@ export const looseHeader = (type: ObjectType, size: number): Uint8Array =>
  * Computes the object id: `sha1("<type> <size>\0" + content)` over the
  * uncompressed content.
  */
+/** Synchronous form of {@link hashObject} for hot loops (DESIGN §22.5). */
+export const hashObjectSync = (type: ObjectType, content: Uint8Array): Oid => {
+  const sha = makeSha1();
+  sha.update(looseHeader(type, content.length));
+  sha.update(content);
+  return sha.digestHex();
+};
+
 export const hashObject = (
   type: ObjectType,
   content: Uint8Array,

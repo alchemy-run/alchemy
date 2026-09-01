@@ -52,6 +52,7 @@ test(
     const nFor = (path: string) => (path.startsWith("deflate") ? 200 : N);
     for (const path of [
       "processChunk",
+      "processChunkReuse",
       "info",
       "plain",
       "stream",

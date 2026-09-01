@@ -32,6 +32,7 @@ import {
   decodeOfsDeltaOffset,
   decodeTypeSize,
   hashObject,
+  hashObjectSync,
   isDeltaType,
   makeSha1,
   ObjectParseError,
@@ -40,7 +41,13 @@ import {
   type PackEntryType,
 } from "./ObjectCodec.ts";
 import { type ObjectSource, StoreError } from "./Store.ts";
-import { deflate, inflate, inflateEntry, ZlibError } from "./Zlib.ts";
+import {
+  deflate,
+  inflate,
+  inflateEntry,
+  inflateEntrySync,
+  ZlibError,
+} from "./Zlib.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RandomAccess
@@ -52,6 +59,15 @@ import { deflate, inflate, inflateEntry, ZlibError } from "./Zlib.ts";
  * it with R2 ranged reads without touching the parser.
  */
 export interface RandomAccess {
+  /**
+   * Synchronous read when the range needs no I/O — a view into an
+   * in-memory buffer or an already-cached window — else `undefined`. The
+   * parser's inner loop uses it to stay synchronous between I/O points
+   * (DESIGN §22.5).
+   */
+  readonly readSync?:
+    | ((offset: number, length: number) => Uint8Array | undefined)
+    | undefined;
   /** Total size of the pack in bytes. */
   readonly size: number;
   /**
@@ -75,6 +91,8 @@ export const bufferRandomAccess = (buf: Uint8Array): RandomAccess => ({
     Effect.sync(() =>
       buf.subarray(offset, Math.min(offset + length, buf.length)),
     ),
+  readSync: (offset, length) =>
+    buf.subarray(offset, Math.min(offset + length, buf.length)),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,6 +224,9 @@ const MAX_CACHE_ENTRY_BYTES = 10 * 1024 * 1024;
  */
 const ENTRY_WINDOW_BYTES = 64 * 1024;
 
+/** Non-delta entries handed to `sinkBatch` per fiber hop (DESIGN §22.5). */
+export const SINK_BATCH = 256;
+
 /**
  * Options for {@link ingestPack}.
  */
@@ -216,6 +237,15 @@ export interface IngestPackOptions<E, R> {
   readonly store: ObjectSource;
   /** Receives each resolved entry as it is produced (staging inserts). */
   readonly sink: (entry: ResolvedEntry) => Effect.Effect<void, E, R>;
+  /**
+   * Optional batched sink: receives runs of entries the synchronous inner
+   * loop produced without any I/O between them (DESIGN §22.5). When set,
+   * non-delta entries go here in batches of up to `SINK_BATCH` and `sink`
+   * receives only delta-resolved entries.
+   */
+  readonly sinkBatch?:
+    | ((entries: ReadonlyArray<ResolvedEntry>) => Effect.Effect<void, E, R>)
+    | undefined;
   /** Per-object uncompressed cap; default {@link DEFAULT_MAX_OBJECT_SIZE}. */
   readonly maxObjectSize?: number | undefined;
   /**
@@ -474,6 +504,87 @@ export const ingestPack = <E, R>(
       });
 
     // ── main pass: index + resolve in pack order ─────────────────────────────
+    const sinkBatch = options.sinkBatch;
+    let pendingSink: Array<ResolvedEntry> = [];
+    const flushPending = Effect.suspend(() => {
+      if (pendingSink.length === 0 || sinkBatch === undefined)
+        return Effect.void;
+      const batch = pendingSink;
+      pendingSink = [];
+      return timed("sink", sinkBatch(batch));
+    });
+    /**
+     * The synchronous fast path (DESIGN §22.5): a non-delta entry whose
+     * bytes are already in memory is decoded, inflated, hashed and copied
+     * without a single fiber hop. Returns the next offset, `undefined` to
+     * fall through to the general path (a delta, an entry outrunning the
+     * window, or no sync inflate), or an error to fail with.
+     */
+    const syncEntry = (
+      window: Uint8Array,
+      offset: number,
+      i: number,
+    ): number | undefined | PackFormatError | ObjectTooLargeError => {
+      let header;
+      try {
+        header = decodeTypeSize(window, 0);
+      } catch (error) {
+        return new PackFormatError({
+          reason:
+            error instanceof ObjectParseError
+              ? `entry ${i}: ${error.reason}`
+              : `entry ${i}: ${String(error)}`,
+        });
+      }
+      if (isDeltaType(header.type)) return undefined;
+      if (header.size > maxObjectSize) {
+        return new ObjectTooLargeError({
+          size: header.size,
+          limit: maxObjectSize,
+        });
+      }
+      const pos = header.next;
+      const inflated = inflateEntrySync(window, pos, {
+        maxOutput: maxObjectSize,
+        expectedSize: header.size,
+      });
+      if (inflated === undefined) return undefined;
+      const { bytesConsumed, content } = inflated;
+      if (content.length !== header.size) {
+        return new PackFormatError({
+          reason: `entry ${i}: inflated ${content.length} bytes, header declared ${header.size}`,
+        });
+      }
+      const type = header.type as ObjectType;
+      const oid = hashObjectSync(type, content);
+      const dataOffset = offset + pos;
+      const zdata = Uint8Array.from(window.subarray(pos, pos + bytesConsumed));
+      const entry: IndexedEntry = {
+        offset,
+        entryType: header.type,
+        declaredSize: header.size,
+        dataOffset,
+        span: bytesConsumed,
+        baseOffset: undefined,
+        baseOid: undefined,
+        resolved: { oid, type },
+      };
+      byOffset.set(offset, entry);
+      offsetByOid.set(oid, offset);
+      cache.set(`ofs:${offset}`, { type, content });
+      oids.push(oid);
+      pendingSink.push({
+        oid,
+        type,
+        size: content.length,
+        zdata,
+        fromDelta: false,
+        dataOffset,
+        content,
+      });
+      return dataOffset + bytesConsumed;
+    };
+
     let offset = 12;
     for (let i = 0; i < count; i++) {
       if (offset >= dataEnd) {
@@ -489,10 +600,27 @@ export const ingestPack = <E, R>(
       // hundreds of GB and took minutes instead of seconds. An entry is
       // almost always a few KiB, so one small window covers it; the rare
       // large object grows the window on demand (below).
-      let window = yield* source.read(
-        offset,
-        Math.min(ENTRY_WINDOW_BYTES, dataEnd - offset),
-      );
+      const probeLength = Math.min(ENTRY_WINDOW_BYTES, dataEnd - offset);
+      const direct = source.readSync?.(offset, probeLength);
+      if (direct !== undefined) {
+        const at = phases === undefined ? 0 : performance.now();
+        const next = syncEntry(direct, offset, i);
+        if (phases !== undefined) {
+          phases["sync"] = (phases["sync"] ?? 0) + (performance.now() - at);
+        }
+        if (typeof next === "number") {
+          offset = next;
+          if (sinkBatch === undefined) {
+            const entry = pendingSink.pop()!;
+            yield* timed("sink", sink(entry));
+          } else if (pendingSink.length >= SINK_BATCH) {
+            yield* flushPending;
+          }
+          continue;
+        }
+        if (next !== undefined) return yield* Effect.fail(next);
+      }
+      let window = yield* source.read(offset, probeLength);
       /**
        * Re-reads a bigger window when an entry's compressed stream runs past
        * the current one. Doubling from the entry window reaches the whole
@@ -644,6 +772,7 @@ export const ingestPack = <E, R>(
       offset = dataOffset + bytesConsumed;
     }
 
+    yield* flushPending;
     if (offset !== dataEnd) {
       return yield* new PackFormatError({
         reason: `pack has ${dataEnd - offset} unconsumed bytes after ${count} entries`,

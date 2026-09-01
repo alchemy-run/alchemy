@@ -88,6 +88,16 @@ export const blobRandomAccess = (options: {
 
   return {
     size: options.size,
+    readSync: (offset, length) => {
+      const end = Math.min(offset + length, options.size);
+      if (end <= offset) return new Uint8Array(0);
+      const first = Math.floor(offset / windowBytes);
+      if (first !== Math.floor((end - 1) / windowBytes)) return undefined;
+      const slab = windows.get(first);
+      if (slab === undefined) return undefined;
+      const from = offset - slab.start;
+      return slab.bytes.subarray(from, from + (end - offset));
+    },
     read: (offset, length) =>
       Effect.gen(function* () {
         const end = Math.min(offset + length, options.size);
@@ -134,4 +144,8 @@ export const sliceRandomAccess = (
 ): RandomAccess => ({
   size: source.size - start,
   read: (offset, length) => source.read(start + offset, length),
+  readSync:
+    source.readSync === undefined
+      ? undefined
+      : (offset, length) => source.readSync!(start + offset, length),
 });

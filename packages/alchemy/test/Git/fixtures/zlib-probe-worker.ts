@@ -92,6 +92,27 @@ export default class ZlibProbeWorker extends Cloudflare.Worker<ZlibProbeWorker>(
                 ok++;
               engine.close?.();
             }
+          } else if (which === "processChunkReuse") {
+            // ONE engine for all entries: _processChunk, read the consumed
+            // delta from the cumulative bytesWritten, then reset().
+            const engine = zlib.createInflate() as unknown as {
+              _processChunk: (chunk: Uint8Array, flush: number) => Uint8Array;
+              bytesWritten: number;
+              reset: () => void;
+              close?: () => void;
+            };
+            let consumedBefore = 0;
+            for (let i = 0; i < n; i++) {
+              const out = engine._processChunk(
+                withTrailer,
+                zlib.constants.Z_SYNC_FLUSH,
+              );
+              const consumed = engine.bytesWritten - consumedBefore;
+              consumedBefore = engine.bytesWritten;
+              if (out.length === content.length && consumed === z.length) ok++;
+              engine.reset();
+            }
+            engine.close?.();
           } else if (which === "info") {
             for (let i = 0; i < n; i++) {
               const r = zlib.inflateSync(withTrailer, {

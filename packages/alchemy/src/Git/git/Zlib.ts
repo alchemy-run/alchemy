@@ -160,6 +160,28 @@ const inflateEntryUnsafeSync = (
   }
 };
 
+/**
+ * The synchronous fast path alone (DESIGN §22.5): the exact-span inflate
+ * when the whole compressed stream lies within `buf` and the platform
+ * offers a sync engine; `undefined` means "use {@link inflateEntry}".
+ */
+export const inflateEntrySync = (
+  buf: Uint8Array,
+  offset: number,
+  options: {
+    readonly maxOutput?: number | undefined;
+    readonly expectedSize: number;
+  },
+): InflatedEntry | undefined =>
+  offset >= 0 && offset < buf.length
+    ? inflateEntryUnsafeSync(
+        buf,
+        offset,
+        options.maxOutput,
+        options.expectedSize,
+      )
+    : undefined;
+
 export const inflateEntry = (
   buf: Uint8Array,
   offset: number,
