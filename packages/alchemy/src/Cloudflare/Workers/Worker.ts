@@ -23,6 +23,7 @@ import {
 import {
   isResourceOfType,
   Resource,
+  type ResourceClass,
   type ResourceClassLike,
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
@@ -2295,6 +2296,7 @@ export const isSelf = (value: unknown): value is Self =>
  * @category Workers & Compute
  */
 export const Worker: ResourceClassLike<Worker> &
+  Pick<ResourceClass<Worker>, "ref"> &
   Effect.Effect<
     Worker & WorkerRuntimeContext & RuntimeContext,
     never,
