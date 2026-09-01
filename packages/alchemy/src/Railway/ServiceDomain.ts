@@ -392,7 +392,11 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
 
   if (current === undefined) {
     if (input.domainId === undefined) {
-      current = yield* createViaMutation(input);
+      current = yield* createViaMutation({
+        projectId: input.projectId,
+        environmentId: input.environmentId,
+        serviceId: input.serviceId,
+      });
     } else {
       const domainId = createdDomainId;
       if (domainId === undefined) {
