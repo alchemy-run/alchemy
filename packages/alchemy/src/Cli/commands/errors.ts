@@ -69,7 +69,11 @@ export const installShutdownFeedback = Effect.sync(() => {
       // "Ctrl+C again" hint can even be visible — means "force quit".
       if (Date.now() - firstSignalAt < SHUTDOWN_FEEDBACK_DELAY_MS) return;
       if (!interruptMessagesSuppressed) {
-        process.stderr.write("\nForce quitting.\n");
+        process.stderr.write(
+          colorsEnabled()
+            ? `\n${ANSI_DIM}Force quitting.${ANSI_RESET}\n`
+            : "\nForce quitting.\n",
+        );
       }
       process.exit(EXIT_CANCELLED);
     }
