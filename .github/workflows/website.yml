@@ -73,10 +73,11 @@ jobs:
     #   - the PR carries the `deploy-website` label (opt-in — most PRs
     #     don't need a website preview, so default to skipping).
     if: >-
-      github.event.action != 'closed' &&
       (github.event_name != 'pull_request' ||
        (github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'deploy-website')))
+        contains(github.event.pull_request.labels.*.name, 'deploy-website') &&
+        (github.event.action != 'labeled' ||
+         github.event.label.name == 'deploy-website')))
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -153,7 +154,8 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: >-
       github.event_name == 'pull_request' && github.event.action == 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'deploy-website')
     permissions:
       contents: read
       pull-requests: write

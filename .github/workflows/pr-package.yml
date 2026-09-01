@@ -47,7 +47,9 @@ jobs:
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.action != 'closed' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.action != 'labeled' ||
+        github.event.label.name == 'force-ci'))
     runs-on: blacksmith-8vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
