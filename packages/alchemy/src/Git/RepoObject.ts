@@ -277,16 +277,24 @@ const isolatePushGate: Effect.Effect<Semaphore.Semaphore> = Effect.suspend(
  */
 export const pushPermitsFor = (contentLength: number | undefined): number => {
   const mib = (bytes: number) => Math.ceil(bytes / (1024 * 1024));
-  // A spilled push holds at most its reader's window working set
-  // (`PACK_MAX_WINDOWS` × `PACK_WINDOW_BYTES`) plus the parser's bounded
-  // caches — not its body. An unknown length is treated as spilled.
-  const spilled = mib(PACK_MAX_WINDOWS * PACK_WINDOW_BYTES);
+  // What a push can hold at once, in MiB. Spilled: the reader's window
+  // cache (PACK_MAX_WINDOWS × PACK_WINDOW_BYTES), the parser's resolved
+  // content LRU (DEFAULT_CACHE_BYTES) and one staging batch
+  // (STAGE_BATCH_BYTES) — never the body. In memory: the body plus the same
+  // LRU and batch. An unknown length is treated as spilled. Memory safety
+  // beats concurrency here: on a 64 MiB budget that admits one large push
+  // per isolate alongside several small ones.
+  const caches = mib(PackParser.DEFAULT_CACHE_BYTES + STAGE_BATCH_BYTES);
+  const spilled = mib(PACK_MAX_WINDOWS * PACK_WINDOW_BYTES) + caches;
+  // In memory the caches cannot outgrow what the (small) body can inflate
+  // to, so charge the body twice (compressed + inflated) plus one for the
+  // batch, rather than the caches' ceilings.
   const permits =
     contentLength === undefined ||
     !Number.isFinite(contentLength) ||
     contentLength > MAX_PACK_BYTES
       ? spilled
-      : mib(Math.max(contentLength, 0));
+      : mib(Math.max(contentLength, 0)) * 2 + 1;
   return Math.max(1, Math.min(PUSH_MEMORY_BUDGET_MB, permits));
 };
 
