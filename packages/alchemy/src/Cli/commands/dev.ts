@@ -76,14 +76,30 @@ export const devCommand = Command.make(
               "--no-clear-screen",
               fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
             ]
-          : [
-              "node",
-              ...process.execArgv,
-              ...transformTypesFlags(),
-              "--watch",
-              "--watch-preserve-output",
-              fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
-            ];
+          : import.meta.url.endsWith(".ts")
+            ? [
+                // Source checkout under node: run the .ts exec entry with
+                // type stripping plus the .tsx loader hook, so dev works
+                // without a build (mirrors bin/cli.js's launcher path). A
+                // duplicate --import inherited via execArgv is harmless —
+                // the second import of the same URL hits the module cache.
+                "node",
+                ...process.execArgv,
+                ...transformTypesFlags(),
+                "--import",
+                import.meta.resolve("../../../bin/register-tsx.js"),
+                "--watch",
+                "--watch-preserve-output",
+                fileURLToPath(import.meta.resolve("../../../bin/exec.dev.ts")),
+              ]
+            : [
+                "node",
+                ...process.execArgv,
+                ...transformTypesFlags(),
+                "--watch",
+                "--watch-preserve-output",
+                fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
+              ];
       const child = yield* ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",
         stdout: "inherit",

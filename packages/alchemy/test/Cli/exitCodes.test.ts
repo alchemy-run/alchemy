@@ -1,3 +1,4 @@
+import { transformTypesFlags } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -17,13 +18,14 @@ const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 const exitCodeOf = (
   args: ReadonlyArray<string>,
   env: Record<string, string> = {},
+  runtime = "bun",
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({
       prefix: "alchemy-exit-codes-",
     });
-    const handle = yield* ChildProcess.make("bun", [CLI, ...args], {
+    const handle = yield* ChildProcess.make(runtime, [CLI, ...args], {
       env: { ALCHEMY_HOME: home, ...env },
       extendEnv: true,
       stdin: "ignore",
@@ -58,6 +60,27 @@ describe("CLI exit codes", () => {
     Effect.gen(function* () {
       expect(yield* exitCodeOf(["--help"])).toBe(0);
     }),
+  );
+
+  // Pins buildless node dev: the launcher must run the checkout's .ts/.tsx
+  // source under plain node (type stripping + the register-tsx hook) —
+  // --help renders the TSX help view through the full terminal runtime.
+  const nodePath = typeof Bun !== "undefined" ? Bun.which("node") : null;
+  it.live.skipIf(nodePath === null || transformTypesFlags().length === 0)(
+    "--help exits 0 under node from source, no build required",
+    () =>
+      Effect.gen(function* () {
+        expect(
+          yield* exitCodeOf(
+            ["--help"],
+            // The test runner is bun and marks every child's env as
+            // bun-invoked; blank the markers so the launcher takes its
+            // node path like a real `node bin/cli.js` invocation.
+            { npm_execpath: "", npm_config_user_agent: "" },
+            nodePath!,
+          ),
+        ).toBe(0);
+      }),
   );
 
   it.live("provider check-env exits 1 when a required var is missing", () =>

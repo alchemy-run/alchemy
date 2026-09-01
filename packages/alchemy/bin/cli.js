@@ -110,6 +110,23 @@ const invokedByBun = execpath.includes("bun") || userAgent.startsWith("bun/");
 const binDir = path.dirname(fileURLToPath(import.meta.url));
 const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
+const nodeSourceEntry = path.join(binDir, "alchemy.dev.ts");
+const registerTsx = new URL("register-tsx.js", import.meta.url).href;
+
+/**
+ * Whether this node supports `--experimental-transform-types` (and the
+ * synchronous `module.registerHooks` API the .tsx loader hook needs).
+ * Mirrors `src/Util/Node.ts#isTransformTypesSupported` — duplicated because
+ * this launcher must run under plain node before any .ts can load.
+ */
+const nodeRunsTypeScript = (() => {
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  return (
+    (major === 22 && minor >= 15) ||
+    (major === 23 && minor >= 5) ||
+    (major >= 24 && major < 26)
+  );
+})();
 
 // Treat any install-tree path as published.
 const isDev = !(
@@ -131,8 +148,26 @@ if (runtime === "bun" && isDev) {
   args.push(`--tsconfig-override=${path.join(binDir, "..", "tsconfig.json")}`);
 }
 
-// .ts only runs under bun.
-args.push(runtime === "bun" ? tsEntry : jsEntry, ...process.argv.slice(2));
+if (runtime === "node" && isDev && nodeRunsTypeScript) {
+  // Run the checkout's source directly, no build required: node's own type
+  // stripping handles .ts, and the register-tsx hook transpiles the CLI's
+  // .tsx (terminal UI) with oxc. `alchemy.dev.ts` imports the source tree
+  // relatively — the package-specifier entry would resolve to built lib/.
+  args.push(
+    "--experimental-transform-types",
+    "--no-warnings=ExperimentalWarning",
+    "--import",
+    registerTsx,
+  );
+}
+args.push(
+  runtime === "bun"
+    ? tsEntry
+    : isDev && nodeRunsTypeScript
+      ? nodeSourceEntry
+      : jsEntry,
+  ...process.argv.slice(2),
+);
 
 // Substring match (not regex) — bun may wrap the line in ANSI color codes
 // when stderr is piped to a TTY-aware parent, so anchored regex is fragile.

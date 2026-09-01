@@ -67,6 +67,7 @@ examples/cloudflare-worker/src/scratch.ts
 /packages/alchemy/README.md
 
 !/packages/alchemy/bin/cli.js
+!/packages/alchemy/bin/register-tsx.js
 .vendor/*
 .tmp
 # the lockfile-pinning test fixture is a checked-in lockfile, not a generated one
