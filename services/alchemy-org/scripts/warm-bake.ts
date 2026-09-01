@@ -30,9 +30,13 @@ const { contextDir } = await Effect.runPromise(
     const path = yield* Path.Path;
     const bake = yield* stageBake;
     const contextDir = path.dirname(bake.dir);
+    // first FROM only, PRESERVING the stage alias (`FROM <image> AS base`)
+    // — the multi-stage workspace/final stages reference it
     const dockerfile =
-      SANDBOX_DOCKERFILE.trim().replace(/^FROM .*$/m, `FROM ${LOCAL_BASE}`) +
-      "\n";
+      SANDBOX_DOCKERFILE.trim().replace(
+        /^FROM \S+([^\n]*)$/m,
+        `FROM ${LOCAL_BASE}$1`,
+      ) + "\n";
     yield* fs.writeFileString(
       path.join(contextDir, "Dockerfile.warm"),
       dockerfile,

@@ -20,9 +20,16 @@ import { stageBake } from "./SandboxBake.ts";
  * session that needs newer code fetches it (session claims land on
  * the branch tip anyway — `CheckoutsSandbox`).
  *
- * Layer order is load-bearing for re-bake cost: binaries first
- * (stable), lockfile-only `pnpm fetch` next (the package store layer
- * survives commits), the full tree COPY last.
+ * TWO-STAGE for size: the `workspace` stage pays the pnpm store
+ * (~2.5GB that hardlinks cannot dedupe across docker layers) and is
+ * discarded — the final image is toolchain + one COPY of the built
+ * workspace. Layer order is load-bearing for re-bake cost: binaries
+ * first (stable), lockfile-only `pnpm fetch` next (the store layer
+ * survives tree edits), the full tree COPY last.
+ *
+ * No JDK ships: a session that wants to RUN the floci jar restores
+ * java per-session (`dnf install -y java-25-amazon-corretto-headless`,
+ * ~30s in the VM).
  *
  * bun is installed for sessions' scripts but deliberately NOT linked
  * into `/usr/local/bin` — the MicroVM codegen appends its own runtime
@@ -34,13 +41,15 @@ import { stageBake } from "./SandboxBake.ts";
  * changes.
  */
 export const SANDBOX_DOCKERFILE = `
-${AWS.AI.SANDBOX_MICROVM_DOCKERFILE.trim()}
+${AWS.AI.SANDBOX_MICROVM_DOCKERFILE.trim().replace(/^FROM (.*)$/m, "FROM $1 AS base")}
 
-# ── binaries FIRST: stable layers shared by every bake ─────────────
+# ── toolchain: stable layers shared by every bake AND both stages ──
 # node 24 + pnpm 11.24 + bun 1.3.13 match the repo's devEngines /
-# packageManager pins. unzip is for the bun installer; the JDK RUNS
-# the host-built floci jar (nothing is compiled in-image).
-RUN dnf install -y unzip findutils nodejs24 nodejs24-npm java-25-amazon-corretto-devel \\
+# packageManager pins; unzip is for the bun installer. Weak deps
+# (docs, i18n, fonts) stay out. NO JDK: floci's host-built jar ships
+# in the tree, and a session that wants to RUN it restores java
+# per-session with \`dnf install -y java-25-amazon-corretto-headless\`.
+RUN dnf install -y --setopt=install_weak_deps=False unzip findutils nodejs24 nodejs24-npm \\
   && dnf clean all \\
   && npm install -g pnpm@11.24.0
 
@@ -48,7 +57,14 @@ RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
 
 ENV PATH="/root/.bun/bin:\${PATH}"
 
-# ── dependency store: lockfiles only, so the layer survives edits ───
+# ── WORKSPACE stage: the pnpm store lives and dies HERE ─────────────
+# The store is ~2.5GB the final image must not carry: hardlinks do
+# not survive docker layer boundaries (overlayfs copies up), so a
+# same-image store + node_modules doubles the bill. This stage pays
+# it, the final stage copies only /workspace/alchemy out of it.
+FROM base AS workspace
+
+# dependency store: lockfiles only, so the layer survives tree edits
 COPY alchemy/package.json alchemy/pnpm-workspace.yaml alchemy/pnpm-lock.yaml /workspace/alchemy/
 COPY alchemy/patches/ /workspace/alchemy/patches/
 COPY alchemy/distilled/package.json alchemy/distilled/pnpm-workspace.yaml alchemy/distilled/pnpm-lock.yaml /workspace/alchemy/distilled/
@@ -58,7 +74,7 @@ WORKDIR /workspace/alchemy
 RUN pnpm fetch
 RUN cd distilled && pnpm fetch
 
-# ── the workspace: the host's tree, as-is ───────────────────────────
+# the host's tree, as-is
 COPY alchemy/ /workspace/alchemy/
 
 # Restore exec bits from the index (zip transport drops them; a plain
@@ -70,13 +86,20 @@ RUN git ls-files -s | grep ^100755 | cut -f2 | xargs -r -d '\\n' chmod +x \\
   && git config user.email "org@alchemy.run" \\
   && git config user.name "alchemy-org"
 
-# ── the ONLY install: linux node_modules from the warm store ────────
+# the ONLY install: linux node_modules from the warm store.
 # --ignore-scripts skips the prepare chain (its outputs shipped from
 # the host); effect-tsgo's tsc patch targets the FRESH node_modules,
 # so it re-runs — it is a patch, not a build.
 RUN pnpm install --frozen-lockfile --prefer-offline --ignore-scripts \\
   && cd distilled && pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
 RUN pnpm exec effect-tsgo patch
+
+# ── FINAL: toolchain + the built workspace, store left behind ───────
+FROM base
+
+COPY --from=workspace /workspace/alchemy /workspace/alchemy
+
+WORKDIR /workspace/alchemy
 `;
 
 /**
