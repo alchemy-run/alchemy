@@ -47,7 +47,7 @@ test.provider(
             image: "nginx:alpine",
             port: 80,
             healthcheckPath: "/",
-            preDeployCommand: "echo predeploy",
+            preDeploy: { command: "echo predeploy" },
           });
           return { project, environment, api };
         }),
@@ -151,7 +151,7 @@ test.provider(
             port: 80,
             name: nextName,
             healthcheckPath: "/",
-            preDeployCommand: null,
+            preDeploy: { command: null },
           });
           return { project, environment, api };
         }),

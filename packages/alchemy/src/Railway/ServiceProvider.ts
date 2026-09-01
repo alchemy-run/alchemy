@@ -228,7 +228,7 @@ const instanceSettingsDelta = (input: {
     region?: string;
     rootDirectory?: string;
     buildCommand?: string;
-    preDeployCommand?: string | null;
+    preDeploy?: { command: string | null };
     startCommand?: string;
     healthcheckPath?: string;
     healthcheck?: string;
@@ -283,7 +283,10 @@ const instanceSettingsDelta = (input: {
       input.props.buildCommand,
       instance?.buildCommand,
     ) || changed;
-  const preDeployCommand = input.props.preDeployCommand;
+  const preDeployCommand =
+    input.props.preDeploy === undefined
+      ? undefined
+      : input.props.preDeploy.command;
   if (
     preDeployCommand !== undefined &&
     !samePreDeployCommand(instance?.preDeployCommand, preDeployCommand)
