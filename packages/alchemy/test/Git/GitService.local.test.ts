@@ -45,6 +45,7 @@ import {
 } from "@/Git/git/ObjectCodec.ts";
 import ProtectedGitHost from "./fixtures/protected-stack.ts";
 import TestGitHost, { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import { verifyPackResponse } from "./harness/pack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -1148,6 +1149,91 @@ test(
     expect(new TextDecoder().decode(bytes.subarray(8, 12))).toBe("PACK");
   }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test(
+  "clone bundles: sideband clones are served from the pre-framed twin, raw from the bundle — both whole packs",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* createRepo(url, "acme", "bundle-framed");
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+    yield* mustGit(
+      tmp,
+      "-c",
+      "init.defaultBranch=main",
+      "clone",
+      repo.remote,
+      "work",
+    );
+    const work = path.join(tmp, "work");
+    for (let i = 0; i < 20; i++) {
+      yield* fs.writeFileString(
+        path.join(work, `f${i}.txt`),
+        `${"line\n".repeat(200)}${i}\n`,
+      );
+    }
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c1");
+    yield* mustGit(work, "push", "origin", "main");
+    const head = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
+
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const client = yield* HttpClient.HttpClient;
+    const fetchPack = (caps: string) =>
+      client
+        .execute(
+          HttpClientRequest.post(
+            `${url}/acme/bundle-framed.git/git-upload-pack`,
+          ).pipe(
+            HttpClientRequest.setHeaders({
+              authorization: `Bearer ${repo.token}`,
+              "content-type": "application/x-git-upload-pack-request",
+            }),
+            HttpClientRequest.bodyText(
+              `${pkt(`want ${head}${caps}\n`)}0000${pkt("done\n")}`,
+            ),
+          ),
+        )
+        .pipe(
+          Effect.flatMap((response) =>
+            response.arrayBuffer.pipe(
+              Effect.map((buffer) => ({
+                status: response.status,
+                via: response.headers["x-git-served-by"],
+                bytes: new Uint8Array(buffer),
+              })),
+            ),
+          ),
+        );
+
+    // The bundle job runs after the push; wait for it to cover HEAD.
+    const sideband = yield* fetchPack(" side-band-64k").pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("500 millis"),
+        until: (r) => r.via !== undefined,
+        times: 30,
+      }),
+    );
+    expect(sideband.status).toBe(200);
+    expect(sideband.via).toBe("do-bundle:bundle+framed");
+    const framed = verifyPackResponse(sideband.bytes, true);
+    expect(framed.error).toBeUndefined();
+    expect(framed.objects).toBeGreaterThan(20);
+
+    const raw = yield* fetchPack("");
+    expect(raw.via).toBe("do-bundle:bundle");
+    const plain = verifyPackResponse(raw.bytes, false);
+    expect(plain.error).toBeUndefined();
+    expect(plain.objects).toBe(framed.objects);
+
+    // And real git agrees.
+    yield* mustGit(tmp, "clone", repo.remote, "again");
+    yield* mustGit(path.join(tmp, "again"), "fsck", "--strict");
+  }),
+  { timeout: 90_000 },
 );
 
 test(

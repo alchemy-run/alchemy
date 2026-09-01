@@ -66,6 +66,47 @@ const CHUNK = 65536;
  * behaves unexpectedly) and the caller falls back to the stream path —
  * notably relevant on workerd, whose `node:zlib` is a compatibility shim.
  */
+/**
+ * Second synchronous path, on the PUBLIC API: `inflateSync(.., { info: true })`
+ * returns `{ buffer, engine }`, and `engine.bytesWritten` is the input
+ * consumed — the same pair `_processChunk` gives, without the internal.
+ * zlib stops at the deflate stream's end, so trailing pack bytes are
+ * ignored. Same `expectedSize` verification as above (a shim that returns
+ * only a first chunk is caught by it). `undefined` = use the stream path.
+ */
+const inflateEntryInfoSync = (
+  buf: Uint8Array,
+  offset: number,
+  maxOutput: number | undefined,
+  expectedSize: number | undefined,
+): InflatedEntry | undefined => {
+  try {
+    const result = zlib.inflateSync(buf.subarray(offset), {
+      info: true,
+    } as zlib.ZlibOptions) as unknown as {
+      buffer?: Uint8Array;
+      engine?: { bytesWritten?: number };
+    };
+    const output = result?.buffer;
+    const bytesConsumed = result?.engine?.bytesWritten;
+    if (
+      output === undefined ||
+      typeof bytesConsumed !== "number" ||
+      bytesConsumed <= 0 ||
+      (maxOutput !== undefined && output.length > maxOutput) ||
+      (expectedSize !== undefined && output.length !== expectedSize)
+    ) {
+      return undefined;
+    }
+    return {
+      content: new Uint8Array(output.buffer, output.byteOffset, output.length),
+      bytesConsumed,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 const inflateEntryUnsafeSync = (
   buf: Uint8Array,
   offset: number,
@@ -79,7 +120,7 @@ const inflateEntryUnsafeSync = (
   };
   if (typeof engine._processChunk !== "function") {
     engine.close?.();
-    return undefined;
+    return inflateEntryInfoSync(buf, offset, maxOutput, expectedSize);
   }
   try {
     const output = engine._processChunk(

@@ -98,6 +98,14 @@ const chunkArray = <T>(
  */
 export const WINDOW_CACHE_BYTES = 32 * 1024 * 1024;
 
+/**
+ * Windows fetched ahead of the one being emitted (DESIGN §22.4). Blob
+ * storage GETs cost ~150–250 ms each regardless of size, and a 40 MiB
+ * pack is ten of them; fetched one at a time they were half of the
+ * dynamic transfer time. 3 ahead + 1 current stays within the cache.
+ */
+export const PACK_LOOKAHEAD = 3;
+
 const windows = new Map<string, { start: number; bytes: Uint8Array }>();
 let windowBytes = 0;
 const retainWindow = (
@@ -783,19 +791,25 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
               pack_offset: coord.pack_offset,
               zsize: coord.zsize,
             });
+            // Lookahead: the next PACK_LOOKAHEAD windows are fetched
+            // concurrently with this one; each is a cache hit when its
+            // turn comes. Bounded by WINDOW_CACHE_BYTES (8 windows).
             return Stream.fromIterable(
-              runs.map((run, i) => [run, runs[i + 1]] as const),
+              runs.map(
+                (run, i) =>
+                  [run, runs.slice(i + 1, i + 1 + PACK_LOOKAHEAD)] as const,
+              ),
             ).pipe(
-              Stream.mapEffect(([run, next]) =>
+              Stream.mapEffect(([run, ahead]) =>
                 Effect.gen(function* () {
                   const [slab] = yield* Effect.all(
                     [
                       readWindow(run.key, run.window),
-                      next === undefined
-                        ? Effect.void
-                        : readWindow(next.key, next.window).pipe(Effect.ignore),
+                      ...ahead.map((next) =>
+                        readWindow(next.key, next.window).pipe(Effect.ignore),
+                      ),
                     ],
-                    { concurrency: 2 },
+                    { concurrency: 1 + PACK_LOOKAHEAD },
                   );
                   const pieces = yield* Effect.sync(() => {
                     const out: Array<Uint8Array> = [];

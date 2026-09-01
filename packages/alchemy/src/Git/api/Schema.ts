@@ -362,6 +362,8 @@ export class PushStats extends Schema.Class<PushStats>("PushStats")({
   finalizeMs: Schema.Number,
   /** Everything the DO did for this push. */
   totalMs: Schema.Number,
+  /** Ingest CPU split by phase (ms): inflate, hash, delta, deflate, copy, sink. */
+  phases: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 }) {}
 
 export class Repo extends Schema.Class<Repo>("Repo")({

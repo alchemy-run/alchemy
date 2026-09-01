@@ -202,6 +202,12 @@ export interface IngestPackOptions<E, R> {
   readonly sink: (entry: ResolvedEntry) => Effect.Effect<void, E, R>;
   /** Per-object uncompressed cap; default {@link DEFAULT_MAX_OBJECT_SIZE}. */
   readonly maxObjectSize?: number | undefined;
+  /**
+   * Optional per-phase CPU accounting (ms), accumulated in place:
+   * `inflate`, `hash`, `delta`, `deflate`, `copy`, `sink`. Cheap enough
+   * to leave on: two `performance.now()` calls per phase per object.
+   */
+  readonly phases?: Record<string, number> | undefined;
   /** Resolved-content LRU budget; default {@link DEFAULT_CACHE_BYTES}. */
   readonly cacheBytes?: number | undefined;
 }
@@ -322,6 +328,22 @@ export const ingestPack = <E, R>(
 ): Effect.Effect<IngestSummary, PackIngestError | E, R> =>
   Effect.gen(function* () {
     const { sink, source, store } = options;
+    const phases = options.phases;
+    const timed = <A, E2, R2>(
+      phase: string,
+      effect: Effect.Effect<A, E2, R2>,
+    ): Effect.Effect<A, E2, R2> =>
+      phases === undefined
+        ? effect
+        : Effect.suspend(() => {
+            const at = performance.now();
+            return Effect.ensuring(
+              effect,
+              Effect.sync(() => {
+                phases[phase] = (phases[phase] ?? 0) + (performance.now() - at);
+              }),
+            );
+          });
     const maxObjectSize = options.maxObjectSize ?? DEFAULT_MAX_OBJECT_SIZE;
     const cache = new ByteLru(options.cacheBytes ?? DEFAULT_CACHE_BYTES);
     const { count } = yield* readPackHeader(source);
@@ -357,8 +379,11 @@ export const ingestPack = <E, R>(
           result = { type: entry.entryType as ObjectType, content };
         } else {
           const base = yield* resolveBase(entry);
-          const payload = yield* inflateOwn(entry);
-          const content = yield* applyDelta(base.content, payload);
+          const payload = yield* timed("inflate", inflateOwn(entry));
+          const content = yield* timed(
+            "delta",
+            applyDelta(base.content, payload),
+          );
           if (content.length > maxObjectSize) {
             return yield* new ObjectTooLargeError({
               size: content.length,
@@ -413,19 +438,22 @@ export const ingestPack = <E, R>(
     const emitDelta = (entry: IndexedEntry) =>
       Effect.gen(function* () {
         const { content, type } = yield* resolveContent(entry);
-        const oid = yield* hashObject(type, content);
-        const zdata = yield* deflate(content);
+        const oid = yield* timed("hash", hashObject(type, content));
+        const zdata = yield* timed("deflate", deflate(content));
         entry.resolved = { oid, type };
         offsetByOid.set(oid, entry.offset);
         oids.push(oid);
-        yield* sink({
-          oid,
-          type,
-          size: content.length,
-          zdata,
-          fromDelta: true,
-          content,
-        });
+        yield* timed(
+          "sink",
+          sink({
+            oid,
+            type,
+            size: content.length,
+            zdata,
+            fromDelta: true,
+            content,
+          }),
+        );
       });
 
     // ── main pass: index + resolve in pack order ─────────────────────────────
@@ -518,7 +546,7 @@ export const ingestPack = <E, R>(
         expectedSize: header.size,
       };
       let attempt = yield* Effect.result(
-        inflateEntry(window, pos, inflateOptions),
+        timed("inflate", inflateEntry(window, pos, inflateOptions)),
       );
       while (
         Result.isFailure(attempt) &&
@@ -551,22 +579,28 @@ export const ingestPack = <E, R>(
 
       if (!isDeltaType(header.type)) {
         const type = header.type as ObjectType;
-        const oid = yield* hashObject(type, content);
+        const oid = yield* timed("hash", hashObject(type, content));
         // keep the compressed span verbatim — copy it out of the shared buffer
         const zview = yield* source.read(dataOffset, bytesConsumed);
-        const zdata = Uint8Array.from(zview);
+        const zdata = yield* timed(
+          "copy",
+          Effect.sync(() => Uint8Array.from(zview)),
+        );
         entry.resolved = { oid, type };
         offsetByOid.set(oid, entry.offset);
         cache.set(`ofs:${offset}`, { type, content });
         oids.push(oid);
-        yield* sink({
-          oid,
-          type,
-          size: content.length,
-          zdata,
-          fromDelta: false,
-          content,
-        });
+        yield* timed(
+          "sink",
+          sink({
+            oid,
+            type,
+            size: content.length,
+            zdata,
+            fromDelta: false,
+            content,
+          }),
+        );
       } else if (
         baseOid !== undefined &&
         offsetByOid.get(baseOid) === undefined

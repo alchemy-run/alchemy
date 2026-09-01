@@ -361,6 +361,8 @@ export interface PushStatsData {
   readonly connectivityMs: number;
   readonly finalizeMs: number;
   readonly totalMs: number;
+  /** Ingest CPU split by phase (ms): inflate, hash, delta, deflate, copy, sink. */
+  readonly phases?: Record<string, number> | undefined;
 }
 
 /** Where a repo's objects live — see the REST `ObjectStats` schema. */
@@ -1205,6 +1207,8 @@ export interface IngestResult {
   readonly objectCount: number;
   /** SQL staging time, when measured by the streaming ingest path. */
   readonly stageMs?: number | undefined;
+  /** Per-phase CPU split of ingest (ms) — see `PackParser` `phases`. */
+  readonly phases?: Record<string, number> | undefined;
   /** The pack's trailer checksum (hex). */
   readonly packSha: string;
   /** Staged commits (commit-graph rows are inserted at finalize). */
@@ -1384,10 +1388,12 @@ export const ingestPackFrom = (
       stageMs += yield* Effect.sync(() => performance.now() - at);
     });
 
+    const phases: Record<string, number> = {};
     const summary = yield* PackParser.ingestPack({
       source,
       store,
       maxObjectSize: MAX_OBJECT_SIZE,
+      phases,
       sink: (entry) =>
         Effect.gen(function* () {
           batch.push({
@@ -1420,6 +1426,7 @@ export const ingestPackFrom = (
 
     return {
       stageMs,
+      phases,
       objectCount: summary.count,
       // The parser verifies the trailer itself; the checksum is not used
       // downstream, so it is not re-derived here.
@@ -3313,6 +3320,15 @@ export const GitRepoLive = GitRepo.make(
                   objects: ingest?.objectCount ?? 0,
                   bytes: packLength,
                   ingestMs: Math.round(ingestMs),
+                  phases:
+                    ingest?.phases === undefined
+                      ? undefined
+                      : Object.fromEntries(
+                          Object.entries(ingest.phases).map(([k, v]) => [
+                            k,
+                            Math.round(v),
+                          ]),
+                        ),
                   stageMs: Math.round(ingest?.stageMs ?? 0),
                   connectivityMs: Math.round(connectivityMs),
                   finalizeMs: Math.round(finalizeMs),

@@ -253,6 +253,10 @@ test.skipIf(skipHuge)(
       yield* Effect.logInfo(
         `[real-world] SERVER ingest ${p.ingestMs}ms (sql ${p.stageMs}ms / cpu ${p.ingestMs - p.stageMs}ms) + connectivity ${p.connectivityMs}ms + ` +
           `finalize ${p.finalizeMs}ms = ${p.totalMs}ms for ${p.objects} objects ` +
+          `[phases: ${Object.entries(p.phases ?? {})
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => `${k} ${v}ms`)
+            .join(", ")}] ` +
           `(${(p.totalMs / Math.max(p.objects, 1)).toFixed(2)}ms/object); ` +
           `client+network = ${(pushMs - p.totalMs).toFixed(0)}ms of the ${(pushMs / 1000).toFixed(1)}s wall clock`,
       );

@@ -1,0 +1,397 @@
+/**
+ * Object store unit tests (src/Git/store/ObjectStore.ts, jobs/Compact.ts)
+ * over the bun:sqlite + in-memory blob harness. Every emitted pack is
+ * re-parsed by the real pack parser, so the bytes — not just the counts —
+ * are verified.
+ */
+import {
+  makeSha1,
+  hashObject,
+  type Oid,
+  type ObjectType,
+} from "@/Git/git/ObjectCodec.ts";
+import { bufferRandomAccess, ingestPack } from "@/Git/git/PackParser.ts";
+import { packHeader } from "@/Git/git/PackWriter.ts";
+import type { ManifestEntry } from "@/Git/git/Store.ts";
+import * as Zlib from "@/Git/git/Zlib.ts";
+import { runCompactJob, shouldCompact, BLOB_TYPE } from "@/Git/jobs/Compact.ts";
+import { packKey } from "@/Git/store/Keys.ts";
+import {
+  makeObjectStore,
+  WINDOW_BYTES,
+  WINDOW_CACHE_BYTES,
+} from "@/Git/store/ObjectStore.ts";
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { concat, verifyPack } from "./harness/pack.ts";
+import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
+
+const REPO = "01TESTREPO0000000000000000";
+
+/** Runs an effect, surfacing typed failures with their fields (not just `message`). */
+const run = <A>(effect: Effect.Effect<A, unknown>) =>
+  Effect.runPromise(
+    effect.pipe(
+      Effect.mapError((e) =>
+        e instanceof Error && !("reason" in e)
+          ? e
+          : new Error(JSON.stringify(e)),
+      ),
+    ),
+  );
+
+/** Incompressible bytes; `seed` only guarantees distinct content per call. */
+const bytes = (n: number, seed: number) => {
+  const out = new Uint8Array(n);
+  for (let at = 0; at < n; at += 65536) {
+    crypto.getRandomValues(out.subarray(at, Math.min(at + 65536, n)));
+  }
+  out[0] = seed & 0xff;
+  return out;
+};
+
+interface Fixture {
+  readonly oid: Oid;
+  readonly type: ObjectType;
+  readonly content: Uint8Array;
+  readonly zdata: Uint8Array;
+}
+
+const makeFixture = (type: ObjectType, content: Uint8Array) =>
+  Effect.gen(function* () {
+    const oid = yield* hashObject(type, content);
+    const zdata = yield* Zlib.deflate(content);
+    return { oid, type, content, zdata } satisfies Fixture;
+  });
+
+/** A repo with `blobs` incompressible blobs of `blobSize` and `trees` small trees. */
+const seedRepo = (options: {
+  blobs: number;
+  blobSize: number;
+  trees: number;
+}) =>
+  Effect.gen(function* () {
+    const sql = makeTestSqlClient();
+    const blobs = makeMemoryBlobStore();
+    const store = makeObjectStore({ sql, blobs, repoId: REPO });
+    const fixtures: Array<Fixture> = [];
+    for (let i = 0; i < options.blobs; i++) {
+      fixtures.push(yield* makeFixture(3, bytes(options.blobSize, i + 1)));
+    }
+    for (let i = 0; i < options.trees; i++) {
+      // Not a real tree encoding; the store never parses tree bytes here.
+      fixtures.push(
+        yield* makeFixture(
+          2,
+          new TextEncoder().encode(`tree ${i} ${"x".repeat(40)}`),
+        ),
+      );
+    }
+    yield* sql.transactionSync((raw) => {
+      for (const f of fixtures) {
+        raw.exec(
+          `INSERT INTO objects (oid, type, size, zsize, location, zdata) VALUES (?, ?, ?, ?, 'row', ?)`,
+          f.oid,
+          f.type,
+          f.content.length,
+          f.zdata.length,
+          f.zdata.buffer.slice(
+            f.zdata.byteOffset,
+            f.zdata.byteOffset + f.zdata.byteLength,
+          ),
+        );
+      }
+    });
+    return { sql, blobs, store, fixtures };
+  });
+
+const manifestOf = (
+  fixtures: ReadonlyArray<Fixture>,
+  location: ManifestEntry["location"],
+) =>
+  fixtures.map((f): ManifestEntry => ({
+    oid: f.oid,
+    type: f.type,
+    size: f.content.length,
+    zsize: f.zdata.length,
+    location,
+  }));
+
+/** Emits a full pack (header + entries + trailer) through `packEntries`. */
+const buildPack = (
+  store: ReturnType<typeof makeObjectStore>,
+  entries: ReadonlyArray<ManifestEntry>,
+) =>
+  Effect.gen(function* () {
+    const body = Array.from(
+      yield* Stream.runCollect(store.packEntries(entries)),
+    );
+    const head = packHeader(entries.length);
+    const sha = makeSha1();
+    sha.update(head);
+    for (const b of body) sha.update(b);
+    return concat([head, ...body, sha.digest()]);
+  });
+
+/** Parses a pack with the real parser and returns the oids it yields. */
+const parsePack = (
+  pack: Uint8Array,
+  store: ReturnType<typeof makeObjectStore>,
+) =>
+  Effect.gen(function* () {
+    const seen = new Map<string, number>();
+    const summary = yield* ingestPack({
+      source: bufferRandomAccess(pack),
+      store,
+      sink: (entry) =>
+        Effect.sync(() => {
+          seen.set(entry.oid, entry.size);
+        }),
+    });
+    return { count: summary.count, seen };
+  });
+
+const compactAll = (
+  sql: ReturnType<typeof makeTestSqlClient>,
+  blobs: ReturnType<typeof makeMemoryBlobStore>,
+  maxObjects = 100,
+) =>
+  Effect.gen(function* () {
+    const packIds: Array<string> = [];
+    for (;;) {
+      const out = yield* runCompactJob({
+        repoId: REPO,
+        sql,
+        blobs,
+        maxObjects,
+        maxBytes: 64 * 1024 * 1024,
+      });
+      if (out.packId !== undefined) packIds.push(out.packId);
+      if (!out.more) break;
+    }
+    return packIds;
+  });
+
+describe("compaction is blob-only", () => {
+  test("shouldCompact ignores commits/trees; runCompactJob leaves them as rows", async () => {
+    await run(
+      Effect.gen(function* () {
+        const { sql, blobs, fixtures } = yield* seedRepo({
+          blobs: 5,
+          blobSize: 100,
+          trees: 50,
+        });
+        expect(BLOB_TYPE).toBe(3);
+        // 55 rows total, but only 5 blobs: below a count threshold of 10.
+        expect(
+          yield* shouldCompact(sql, {
+            countThreshold: 10,
+            bytesThreshold: 1 << 30,
+          }),
+        ).toBe(false);
+        expect(
+          yield* shouldCompact(sql, {
+            countThreshold: 5,
+            bytesThreshold: 1 << 30,
+          }),
+        ).toBe(true);
+        const packs = yield* compactAll(sql, blobs);
+        expect(packs.length).toBe(1);
+        const rows = yield* sql.all<{
+          location: string;
+          type: number;
+          n: number;
+        }>(
+          `SELECT location, type, COUNT(*) AS n FROM objects GROUP BY location, type ORDER BY location, type`,
+        );
+        expect(rows).toEqual([
+          { location: "pack", type: 3, n: 5 },
+          { location: "row", type: 2, n: 50 },
+        ]);
+        expect(
+          yield* runCompactJob({ repoId: REPO, sql, blobs }),
+        ).toMatchObject({ moved: 0, more: false });
+        expect(fixtures.length).toBe(55);
+      }),
+    );
+  });
+});
+
+describe("packEntries", () => {
+  test(
+    "rows + multi-window pack (with straddling objects) emit a pack the parser accepts",
+    async () => {
+      await run(
+        Effect.gen(function* () {
+          // 300 × 30 KiB incompressible ≈ 9 MiB → 3 windows, with objects
+          // straddling both window edges.
+          const { sql, blobs, store, fixtures } = yield* seedRepo({
+            blobs: 300,
+            blobSize: 30 * 1024,
+            trees: 40,
+          });
+          const packs = yield* compactAll(sql, blobs, 1000); // one pack
+          expect(packs.length).toBe(1);
+          const packBytes = blobs.objects.get(packKey(REPO, packs[0]!))!;
+          expect(packBytes.length).toBeGreaterThan(2 * WINDOW_BYTES); // 3 windows
+          const coords = yield* sql.all<{ pack_id: string; n: number }>(
+            `SELECT pack_id, COUNT(*) AS n FROM objects WHERE location='pack' GROUP BY pack_id`,
+          );
+          expect(coords.map((c) => c.n)).toEqual([300]);
+
+          // Manifest in the order a closure would produce (trees first).
+          const entries = [
+            ...manifestOf(
+              fixtures.filter((f) => f.type === 2),
+              "row",
+            ),
+            ...manifestOf(
+              fixtures.filter((f) => f.type === 3),
+              "pack",
+            ),
+          ];
+          blobs.gets.length = 0;
+          const pack = yield* buildPack(store, entries);
+          expect(verifyPack(pack).error).toBeUndefined();
+          const parsed = yield* parsePack(pack, store);
+          expect(parsed.count).toBe(340);
+          expect(parsed.seen.size).toBe(340);
+          for (const f of fixtures)
+            expect(parsed.seen.get(f.oid)).toBe(f.content.length);
+
+          // One ranged GET per window touched, not per object.
+          const windowGets = blobs.gets.filter(
+            (g) => g.length === WINDOW_BYTES,
+          );
+          const straddleGets = blobs.gets.filter(
+            (g) => g.length !== WINDOW_BYTES,
+          );
+          expect(windowGets.length).toBe(3);
+          expect(straddleGets.length).toBeLessThanOrEqual(2); // ≤ one per window edge
+        }),
+      );
+    },
+    { timeout: 60_000 },
+  );
+
+  test("a manifest entry that compaction moved after the closure is still emitted (re-dispatch)", async () => {
+    await run(
+      Effect.gen(function* () {
+        const { sql, blobs, store, fixtures } = yield* seedRepo({
+          blobs: 20,
+          blobSize: 2048,
+          trees: 3,
+        });
+        // The closure saw everything as rows…
+        const entries = manifestOf(fixtures, "row");
+        // …then compaction ran before emission.
+        yield* compactAll(sql, blobs);
+        const pack = yield* buildPack(store, entries);
+        expect(verifyPack(pack).error).toBeUndefined();
+        const parsed = yield* parsePack(pack, store);
+        expect(parsed.seen.size).toBe(23);
+      }),
+    );
+  });
+
+  test("a truly absent object fails the stream instead of emitting a short pack", async () => {
+    await run(
+      Effect.gen(function* () {
+        const { store, fixtures } = yield* seedRepo({
+          blobs: 2,
+          blobSize: 100,
+          trees: 0,
+        });
+        const ghost = {
+          ...manifestOf(fixtures, "row")[0]!,
+          oid: "0".repeat(40) as Oid,
+        };
+        const result = yield* Effect.result(
+          Stream.runCollect(store.packEntries([ghost])),
+        );
+        expect(result._tag).toBe("Failure");
+      }),
+    );
+  });
+});
+
+describe("readContentBatch", () => {
+  test("returns inflated content for rows and packed objects alike", async () => {
+    await run(
+      Effect.gen(function* () {
+        const { sql, blobs, store, fixtures } = yield* seedRepo({
+          blobs: 30,
+          blobSize: 512,
+          trees: 10,
+        });
+        yield* compactAll(sql, blobs);
+        const out = yield* store.readContentBatch(fixtures.map((f) => f.oid));
+        expect(out.size).toBe(40);
+        for (const f of fixtures) {
+          expect(Array.from(out.get(f.oid)!)).toEqual(Array.from(f.content));
+        }
+      }),
+    );
+  });
+});
+
+describe("window cache", () => {
+  test(
+    "is bounded by WINDOW_CACHE_BYTES: re-reading the first of nine windows refetches",
+    async () => {
+      await run(
+        Effect.gen(function* () {
+          // 36 × 1 MiB incompressible → one 36 MiB pack = 9 windows > 8 cached.
+          const { sql, blobs, store, fixtures } = yield* seedRepo({
+            blobs: 36,
+            blobSize: 1024 * 1024,
+            trees: 0,
+          });
+          const out = yield* runCompactJob({
+            repoId: REPO,
+            sql,
+            blobs,
+            maxObjects: 100,
+            maxBytes: 64 * 1024 * 1024,
+          });
+          expect(out.moved).toBe(36);
+          expect(WINDOW_CACHE_BYTES / WINDOW_BYTES).toBe(8);
+          const sorted = [...fixtures];
+          const order = yield* sql.all<{
+            oid: string;
+            pack_offset: number;
+            zsize: number;
+          }>(
+            `SELECT oid, pack_offset, zsize FROM objects ORDER BY pack_offset`,
+          );
+          const byOid = new Map(sorted.map((f) => [f.oid, f]));
+          const first = byOid.get(order[0]!.oid as Oid)!;
+          // An object lying entirely inside window 7 (objects that straddle a
+          // window edge take a ranged read that bypasses the cache by design).
+          const inside7 = order.find(
+            (r) =>
+              Math.floor(r.pack_offset / WINDOW_BYTES) === 7 &&
+              r.pack_offset + r.zsize <= 8 * WINDOW_BYTES,
+          )!;
+          const last = byOid.get(inside7.oid as Oid)!;
+          blobs.gets.length = 0;
+          yield* store.readContentBatch([first.oid]);
+          const afterFirst = blobs.gets.length;
+          expect(afterFirst).toBeGreaterThanOrEqual(1);
+          // Touch every window.
+          yield* store.readContentBatch(order.map((r) => r.oid as Oid));
+          blobs.gets.length = 0;
+          // The first window has been evicted (9 > 8): reading it fetches again.
+          yield* store.readContentBatch([first.oid]);
+          expect(blobs.gets.length).toBeGreaterThanOrEqual(1);
+          // The last window is still hot: no fetch.
+          blobs.gets.length = 0;
+          yield* store.readContentBatch([last.oid]);
+          expect(blobs.gets.length).toBe(0);
+        }),
+      );
+    },
+    { timeout: 60_000 },
+  );
+});
