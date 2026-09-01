@@ -325,6 +325,8 @@ export class GitAuth extends HttpApiMiddleware.Service<
 export class ObjectStats extends Schema.Class<ObjectStats>("ObjectStats")({
   /** Objects whose bytes are still in DO SQLite rows. */
   loose: Schema.Number,
+  /** Commits, trees and tags kept in SQLite rows (never packed). */
+  resident: Schema.Number,
   /** Objects compacted into R2 packs. */
   packed: Schema.Number,
   /** Oversize objects stored as standalone R2 keys. */

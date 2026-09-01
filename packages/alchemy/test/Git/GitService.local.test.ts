@@ -995,6 +995,9 @@ test(
       );
     expect(stats.packed).toBeGreaterThan(0);
     expect(stats.loose).toBe(0);
+    // Only blobs move to R2 (Compact.ts BLOB_TYPE): commits/trees/tags stay
+    // row-resident so the fetch closure never walks pack windows.
+    expect(stats.resident).toBeGreaterThan(0);
 
     // Everything now reads through R2 ranged GETs: a fresh clone must be
     // fsck-clean and byte-identical, and REST blob reads must still work.

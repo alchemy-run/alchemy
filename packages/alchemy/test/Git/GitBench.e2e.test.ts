@@ -906,6 +906,118 @@ test.skipIf(skipBench)(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Single large clone — where does the time go? Splits time-to-first-byte
+// (planning: Worker -> DO -> R2 HEAD -> marker) from transfer (bytes on
+// the wire), per serving path, on a real ~36 MiB repository. This is the
+// instrument for "clones feel slow": a large TTFB is planning latency, a
+// low MiB/s with small TTFB is the streaming path itself.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: single large clone — TTFB vs transfer, by serving path",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const tmp = yield* tempDir;
+
+    // Same source as the real-world suite: this monorepo, depth-1, as one
+    // root commit — ~13.6k objects, ~36 MiB.
+    const root = (yield* mustSh(process.cwd(), `git rev-parse --show-toplevel`))
+      .stdout;
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf src
+      git clone -q --depth 1 "file://${root}" src
+      cd src && rm -rf .git && git init -q -b main && git add -A
+      git commit -q -m "alchemy snapshot"
+      `,
+    );
+    const repo = yield* freshRepo(url, "bench", "large", { public: true });
+    yield* mustSh(
+      tmp,
+      `cd src && git remote add origin '${repo.remote}' && git push -q origin main`,
+    );
+    const head = (yield* mustSh(tmp, `cd src && git rev-parse HEAD`)).stdout;
+
+    const client = yield* HttpClient.HttpClient;
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const request = (body: string) =>
+      client.execute(
+        HttpClientRequest.post(`${url}/bench/large.git/git-upload-pack`).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${repo.token}`,
+            "content-type": "application/x-git-upload-pack-request",
+          }),
+          HttpClientRequest.bodyText(body),
+        ),
+      );
+    const bodies = {
+      passthrough: `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
+      sideband: `${pkt(`want ${head} side-band-64k\n`)}0000${pkt("done\n")}`,
+      dynamic: `${pkt(`want ${head}\n`)}${pkt(`have ${"f".repeat(40)}\n`)}0000${pkt("done\n")}`,
+    };
+
+    /** One clone, timed in two halves: headers (TTFB) and body drain. */
+    const timedClone = (body: string) =>
+      Effect.gen(function* () {
+        const t0 = performance.now();
+        const response = yield* request(body);
+        const ttfbMs = performance.now() - t0;
+        const bytes = (yield* response.arrayBuffer).byteLength;
+        const totalMs = performance.now() - t0;
+        return {
+          ttfbMs,
+          totalMs,
+          bytes,
+          via: response.headers["x-git-served-by"] ?? "dynamic",
+        };
+      });
+    const describe = (r: {
+      ttfbMs: number;
+      totalMs: number;
+      bytes: number;
+      via: string;
+    }) =>
+      `ttfb ${r.ttfbMs.toFixed(0)}ms, total ${(r.totalMs / 1000).toFixed(2)}s, ` +
+      `${(r.bytes / 1048576).toFixed(1)} MiB @ ` +
+      `${(r.bytes / 1048576 / ((r.totalMs - r.ttfbMs) / 1000)).toFixed(1)} MiB/s transfer ` +
+      `[${r.via}]`;
+
+    // Wait for the bundle to land (a 36 MiB cut takes a while), bounded.
+    yield* timedClone(bodies.passthrough).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (r) => r.via.startsWith("do-bundle"),
+        times: 36,
+      }),
+    );
+
+    for (const [name, body] of Object.entries(bodies)) {
+      yield* timedClone(body); // warm
+      yield* measure(`large clone x1 — ${name}`, timedClone(body), (r) =>
+        describe(r),
+      );
+    }
+
+    // Does the streaming path scale with parallel streams, or is it a
+    // per-stream ceiling? 4 passthrough clones at once.
+    yield* measure(
+      "large clone x4 — passthrough, concurrent",
+      Effect.all(
+        Array.from({ length: 4 }, () => timedClone(bodies.passthrough)),
+        { concurrency: 4 },
+      ),
+      (rs, ms) => {
+        const total = rs.reduce((n, r) => n + r.bytes, 0);
+        return `${(total / 1048576 / (ms / 1000)).toFixed(1)} MiB/s aggregate over ${(ms / 1000).toFixed(2)}s`;
+      },
+    );
+  }).pipe(logLevel),
+  { timeout: 1_200_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Bottleneck 8 — the DO on the anonymous read path (Continuity learnings,
 // DESIGN.md §21): every advertisement and bundle-planning hop wakes the
 // repo DO today, so anonymous public reads share one single-threaded

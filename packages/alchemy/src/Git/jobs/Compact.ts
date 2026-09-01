@@ -52,10 +52,29 @@ export const MAX_BYTES_PER_RUN = 32 * 1024 * 1024;
 /**
  * Loose-bytes threshold that arms compaction (DESIGN.md §12.1).
  */
-export const COMPACT_BYTES_THRESHOLD = 1024 * 1024 * 1024;
+// Measured (DESIGN §22): a 44k-object repo left loose serves its dynamic
+// path at ~3 MB/s from 44k SQLite point reads, and every metadata scan
+// walks pages dense with inline zdata. Packing early is what makes reads
+// window-coalesced and keeps the objects table small.
+export const COMPACT_BYTES_THRESHOLD = 64 * 1024 * 1024;
 
 /** Loose-object-count threshold that arms compaction. */
-export const COMPACT_COUNT_THRESHOLD = 50_000;
+export const COMPACT_COUNT_THRESHOLD = 4_000;
+
+/**
+ * Only blobs (git type 3) are ever moved into R2 packs. Commits, trees and
+ * tags stay `location='row'` in SQLite for the life of the repo.
+ *
+ * Measured (DESIGN §22): a fetch's want→have closure is a tree walk, and a
+ * tree walk over pack storage is the worst access pattern a window cache
+ * can see — trees are tiny and, packed in oid order, scattered across
+ * every 4 MiB window of every pack. On a 15.6k-object repo the walk alone
+ * cost 12 s of TTFB (27 s before batching); the same walk over rows is a
+ * handful of batched SELECTs. Trees + commits are a few percent of a
+ * repo's bytes, so keeping them local buys sub-second negotiation for
+ * every incremental fetch at negligible storage cost.
+ */
+export const BLOB_TYPE = 3;
 
 /** Outcome of one compaction run. */
 export interface CompactOutcome {
@@ -130,7 +149,7 @@ export const runCompactJob = (
     // Oldest-first by oid keeps runs deterministic and re-runnable.
     const rows = yield* options.sql.all<LooseRow>(
       `SELECT oid, type, size, zsize, zdata FROM objects
-        WHERE location = 'row' AND staged_push IS NULL
+        WHERE location = 'row' AND type = ${BLOB_TYPE} AND staged_push IS NULL
         ORDER BY oid LIMIT ?`,
       maxObjects + 1,
     );
@@ -240,7 +259,7 @@ export const shouldCompact = (
   Effect.gen(function* () {
     const row = yield* sql.first<{ n: number; bytes: number }>(
       `SELECT COUNT(*) AS n, COALESCE(SUM(zsize), 0) AS bytes
-         FROM objects WHERE location = 'row' AND staged_push IS NULL`,
+         FROM objects WHERE location = 'row' AND type = ${BLOB_TYPE} AND staged_push IS NULL`,
     );
     if (row === undefined) return false;
     return (

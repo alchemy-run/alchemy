@@ -32,7 +32,8 @@ import {
   type PackEntryType,
 } from "../git/ObjectCodec.ts";
 import { StoreError, type ManifestEntry } from "../git/Store.ts";
-import { bundleKey } from "../store/Keys.ts";
+import { bundleKey, bundleSidebandKey } from "../store/Keys.ts";
+import { sidebandFramedLength, sidebandRechunk } from "../git/Sideband.ts";
 
 /** A ref as it appears in a bundle's covered snapshot. */
 export interface BundleRef {
@@ -151,6 +152,30 @@ export const runBundleJob = (
         Effect.mapError(
           (error: BlobStoreError) =>
             new StoreError({ reason: `blob put ${key}: ${error.reason}` }),
+        ),
+        Effect.provide(RuntimeContext.phantom),
+      );
+
+    // The pre-framed twin (Keys.ts `bundleSidebandKey`): one more pass over
+    // the same entries, framed deterministically so the length is known.
+    const sidebandKey = bundleSidebandKey(options.repoId, refsHash);
+    yield* options.blobs
+      .put(
+        sidebandKey,
+        options.packStream(options.entries).pipe(
+          Stream.mapError(
+            (error) => new BlobStoreError({ reason: error.reason }),
+          ),
+          sidebandRechunk(1),
+        ),
+        { contentLength: sidebandFramedLength(size) },
+      )
+      .pipe(
+        Effect.mapError(
+          (error: BlobStoreError) =>
+            new StoreError({
+              reason: `blob put ${sidebandKey}: ${error.reason}`,
+            }),
         ),
         Effect.provide(RuntimeContext.phantom),
       );

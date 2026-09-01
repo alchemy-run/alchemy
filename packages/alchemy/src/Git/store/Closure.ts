@@ -75,6 +75,10 @@ export interface ClosureStore extends ObjectSource {
   readonly getMetaBatch: (
     oids: ReadonlyArray<Oid>,
   ) => Effect.Effect<ReadonlyMap<Oid, ObjectMeta>, StoreError>;
+  /** Batched inflated content — one statement per tree LEVEL (DESIGN §22). */
+  readonly readContentBatch: (
+    oids: ReadonlyArray<Oid>,
+  ) => Effect.Effect<ReadonlyMap<Oid, Uint8Array>, StoreError>;
 }
 
 /**
@@ -434,42 +438,59 @@ export const computeClosure = (options: ClosureOptions) =>
     for (const root of treeRoots) {
       treeQueue.push(root);
     }
-    for (let i = 0; i < treeQueue.length; i++) {
-      const tree = treeQueue[i]!;
-      if (visitedObjects.has(tree)) {
-        continue;
+    // Level-order BFS (DESIGN §22): each level's trees are read with ONE
+    // batched statement and inflated together, instead of one SQL round
+    // trip per tree. Visitation order — and therefore the manifest — is the
+    // same breadth-first order the queue produced.
+    let level: Array<Oid> = treeQueue;
+    while (level.length > 0) {
+      const batch: Array<Oid> = [];
+      for (const tree of level) {
+        if (visitedObjects.has(tree)) continue;
+        visitedObjects.add(tree);
+        treeOrder.push(tree);
+        total += 1;
+        batch.push(tree);
       }
-      visitedObjects.add(tree);
-      treeOrder.push(tree);
-      total += 1;
       yield* failIfOverCap(total);
-      const content = yield* objects.readContent(tree);
-      const entries = yield* parseTree(content).pipe(
-        Effect.mapError(
-          (error) =>
-            new StoreError({ reason: `bad tree ${tree}: ${error.reason}` }),
-        ),
-      );
-      for (const entry of entries) {
-        switch (treeEntryKind(entry.mode)) {
-          case "tree":
-            if (!visitedObjects.has(entry.oid)) {
-              treeQueue.push(entry.oid);
-            }
-            break;
-          case "blob":
-            if (!visitedObjects.has(entry.oid)) {
-              visitedObjects.add(entry.oid);
-              blobOrder.push(entry.oid);
-              total += 1;
-            }
-            break;
-          case "commit":
-            // gitlink (submodule) — the target commit lives in another repo
-            break;
+      if (batch.length === 0) break;
+      const contents = yield* objects.readContentBatch(batch);
+      const next: Array<Oid> = [];
+      for (const tree of batch) {
+        const content = contents.get(tree);
+        if (content === undefined) {
+          return yield* Effect.fail(
+            new StoreError({ reason: `tree ${tree} vanished during closure` }),
+          );
+        }
+        const entries = yield* parseTree(content).pipe(
+          Effect.mapError(
+            (error) =>
+              new StoreError({ reason: `bad tree ${tree}: ${error.reason}` }),
+          ),
+        );
+        for (const entry of entries) {
+          switch (treeEntryKind(entry.mode)) {
+            case "tree":
+              if (!visitedObjects.has(entry.oid)) {
+                next.push(entry.oid);
+              }
+              break;
+            case "blob":
+              if (!visitedObjects.has(entry.oid)) {
+                visitedObjects.add(entry.oid);
+                blobOrder.push(entry.oid);
+                total += 1;
+              }
+              break;
+            case "commit":
+              // gitlink (submodule) — the target commit lives in another repo
+              break;
+          }
         }
       }
       yield* failIfOverCap(total);
+      level = next;
     }
 
     // ── 7. Materialize the manifest (commits → tags → trees → blobs) ────────

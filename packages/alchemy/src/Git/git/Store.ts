@@ -82,6 +82,18 @@ export interface ObjectSource {
    * size cap before requesting.
    */
   readonly readContent: (oid: Oid) => Effect.Effect<Uint8Array, StoreError>;
+  /**
+   * Emits `varint(type,size) + zdata` for every entry as a stream of LARGE
+   * chunks: objects are read in batches (one statement per ~256) and
+   * concatenated, and pack-resident objects are visited in pack order so
+   * the window cache is sequential. Optional — sources without batching
+   * fall back to one `readZData` per entry (DESIGN §22).
+   */
+  readonly packEntries?:
+    | ((
+        entries: ReadonlyArray<ManifestEntry>,
+      ) => Stream.Stream<Uint8Array, StoreError>)
+    | undefined;
 }
 
 /**

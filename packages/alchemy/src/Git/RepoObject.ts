@@ -107,8 +107,8 @@ import {
 } from "./git/Pkt.ts";
 import {
   progressMessage,
+  pumpPackBody,
   sidebandFrames,
-  wrapSideband,
 } from "./git/Sideband.ts";
 import {
   StoreError,
@@ -173,7 +173,12 @@ import {
  * R2. The R2 path costs about 2x, and is unbounded — the full 67 MiB
  * alchemy history (44k objects) pushed in 92 s.
  */
-export const MAX_PACK_BYTES = 50 * 1024 * 1024;
+export const MAX_PACK_BYTES = 24 * 1024 * 1024;
+// 24 MiB, down from the 50 MiB v1 validated with ONE active repo: instances
+// of this class share an isolate, so the in-memory pack, the ingest's
+// resolved-content LRU (20 MiB) and staging batch (8 MiB) sit beside every
+// other active repo's working set. DESIGN §22.4 records the OOM that
+// motivated it; the R2 path costs ~2x on the bytes above the threshold.
 
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
 export const STAGE_BATCH_OBJECTS = 256;
@@ -230,6 +235,25 @@ export const PUSH_WAIT_TIMEOUT = "30 seconds";
  * takes one permit, so it no longer queues behind a large one.
  */
 export const PUSH_MEMORY_BUDGET_MB = 64;
+
+let sharedPushGate: Semaphore.Semaphore | undefined;
+/**
+ * The push-admission semaphore, ONE per isolate (DESIGN §21.2, §22.4). DO
+ * instances of a class share an isolate, so a per-instance gate would let
+ * N repos each admit a full budget's worth of concurrent pushes.
+ */
+const isolatePushGate: Effect.Effect<Semaphore.Semaphore> = Effect.suspend(
+  () =>
+    sharedPushGate === undefined
+      ? Semaphore.make(PUSH_MEMORY_BUDGET_MB).pipe(
+          Effect.tap((gate) =>
+            Effect.sync(() => {
+              sharedPushGate = gate;
+            }),
+          ),
+        )
+      : Effect.succeed(sharedPushGate),
+);
 
 /**
  * Permits a push must reserve: its buffered ceiling in MiB. A body
@@ -341,7 +365,11 @@ export interface PushStatsData {
 
 /** Where a repo's objects live — see the REST `ObjectStats` schema. */
 export interface ObjectStatsData {
+  /** Blobs still in SQLite rows, awaiting compaction into an R2 pack. */
   readonly loose: number;
+  /** Commits, trees and tags: always SQLite rows (never packed). */
+  readonly resident: number;
+  /** Blobs in R2 packs. */
   readonly packed: number;
   readonly r2: number;
   readonly bytes: number;
@@ -1149,13 +1177,15 @@ export const packEntryStream = (
   entries: ReadonlyArray<ManifestEntry>,
   objects: ObjectSource,
 ): Stream.Stream<Uint8Array, StoreError> =>
-  Stream.fromIterable(entries).pipe(
-    Stream.flatMap((entry) =>
-      Stream.sync(() => encodeTypeSize(entry.type, entry.size)).pipe(
-        Stream.concat(objects.readZData(entry.oid)),
-      ),
-    ),
-  );
+  objects.packEntries !== undefined
+    ? objects.packEntries(entries)
+    : Stream.fromIterable(entries).pipe(
+        Stream.flatMap((entry) =>
+          Stream.sync(() => encodeTypeSize(entry.type, entry.size)).pipe(
+            Stream.concat(objects.readZData(entry.oid)),
+          ),
+        ),
+      );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pack ingest (DESIGN.md §3.6) — buffered v1, RandomAccess seam is the buffer
@@ -1908,7 +1938,8 @@ export const GitRepoLive = GitRepo.make(
       // ── Inner init: per-instance construction (runtime only) ────────────
       const sql = makeSqlClient(state);
       yield* initRepoSchema(sql).pipe(Effect.orDie);
-      const pushSemaphore = yield* Semaphore.make(PUSH_MEMORY_BUDGET_MB);
+      // Isolate-wide, not per repo: the memory it meters is shared.
+      const pushSemaphore = yield* isolatePushGate;
 
       // ── config helpers ───────────────────────────────────────────────────
       const getConfig = (key: string) =>
@@ -1927,7 +1958,17 @@ export const GitRepoLive = GitRepo.make(
           value,
         );
 
-      const readMeta: Effect.Effect<RepoMetaData | undefined, StoreError> =
+      /**
+       * Repo metadata from the `config` table. The `objects` breakdown is
+       * a GROUP BY over the whole `objects` table — on a large repo that
+       * scan walks pages dense with inline zdata and was measured at
+       * ~1.5 s per call (DESIGN §22). It is therefore opt-in: only the
+       * REST repo-detail responses pay for it; the wire path, auth, and
+       * every other caller get zeros there and never touch the table.
+       */
+      const readMetaWith = (
+        withStats: boolean,
+      ): Effect.Effect<RepoMetaData | undefined, StoreError> =>
         Effect.gen(function* () {
           const rows = yield* sql.all<{ key: string; value: string }>(
             `SELECT key, value FROM config`,
@@ -1935,15 +1976,23 @@ export const GitRepoLive = GitRepo.make(
           const map = new Map(rows.map((row) => [row.key, row.value]));
           const repoId = map.get("repo_id");
           if (repoId === undefined) return undefined;
-          const stats = yield* sql.all<{
-            location: string;
-            n: number;
-            bytes: number;
-          }>(
-            `SELECT location, COUNT(*) AS n, COALESCE(SUM(zsize), 0) AS bytes
-               FROM objects WHERE staged_push IS NULL GROUP BY location`,
-          );
-          const byLocation = new Map(stats.map((row) => [row.location, row]));
+          const stats = withStats
+            ? yield* sql.all<{
+                bucket: string;
+                n: number;
+                bytes: number;
+              }>(
+                // Row-resident blobs are "loose" (awaiting compaction);
+                // row-resident commits/trees/tags are "resident" — they stay
+                // in SQLite for the life of the repo (Compact.ts BLOB_TYPE).
+                `SELECT CASE WHEN location = 'row' AND type <> 3 THEN 'resident'
+                             WHEN location = 'row' THEN 'loose'
+                             ELSE location END AS bucket,
+                        COUNT(*) AS n, COALESCE(SUM(zsize), 0) AS bytes
+                   FROM objects WHERE staged_push IS NULL GROUP BY bucket`,
+              )
+            : [];
+          const byLocation = new Map(stats.map((row) => [row.bucket, row]));
           return {
             repoId,
             owner: map.get("owner") ?? "",
@@ -1960,7 +2009,8 @@ export const GitRepoLive = GitRepo.make(
                 ? null
                 : (JSON.parse(map.get("last_push")!) as PushStatsData),
             objects: {
-              loose: byLocation.get("row")?.n ?? 0,
+              loose: byLocation.get("loose")?.n ?? 0,
+              resident: byLocation.get("resident")?.n ?? 0,
               packed: byLocation.get("pack")?.n ?? 0,
               r2: byLocation.get("r2")?.n ?? 0,
               bytes: stats.reduce((sum, row) => sum + row.bytes, 0),
@@ -1968,16 +2018,23 @@ export const GitRepoLive = GitRepo.make(
           } satisfies RepoMetaData;
         });
 
-      const requireMeta: Effect.Effect<
-        RepoMetaData,
-        RepoNotFound | StoreError
-      > = readMeta.pipe(
-        Effect.flatMap((meta) =>
-          meta === undefined
-            ? Effect.fail(new RepoNotFound({ owner: "", repo: "" }))
-            : Effect.succeed(meta),
-        ),
-      );
+      const readMeta = readMetaWith(false);
+      const readMetaStats = readMetaWith(true);
+
+      const requireFrom = (
+        read: Effect.Effect<RepoMetaData | undefined, StoreError>,
+      ): Effect.Effect<RepoMetaData, RepoNotFound | StoreError> =>
+        read.pipe(
+          Effect.flatMap((meta) =>
+            meta === undefined
+              ? Effect.fail(new RepoNotFound({ owner: "", repo: "" }))
+              : Effect.succeed(meta),
+          ),
+        );
+      /** Cheap: config only. `objects` reads as zeros. */
+      const requireMeta = requireFrom(readMeta);
+      /** The REST detail shape, with the full objects aggregate. */
+      const requireMetaStats = requireFrom(readMetaStats);
 
       /** The object store, keyed by the current repoId. */
       const storeFor = (repoId: string): ObjectStore =>
@@ -2965,23 +3022,25 @@ export const GitRepoLive = GitRepo.make(
             head.push(pktText(`ACK ${ready}`));
           }
 
-          const pack = packStream(closure.entries, objects);
-          const bodyStream = sideband
-            ? Stream.fromArray([
+          // The pack goes out through the native pump (Sideband.ts
+          // `pumpPackBody`, DESIGN §22.3): the emitter's batched chunks are
+          // large, so the Effect→ReadableStream bridge is a handful of
+          // pulls, and framing/flush happen at platform speed.
+          const source = yield* packStream(closure.entries, objects).pipe(
+            Stream.toReadableStreamEffect(),
+          );
+          const prefix = sideband
+            ? concatBytes([
                 concatBytes(head),
                 progressMessage(
                   `Enumerating objects: ${closure.entries.length}, done.`,
                 ),
-              ]).pipe(
-                Stream.concat(pack.pipe(wrapSideband(1))),
-                Stream.concat(Stream.succeed(flushPkt)),
-              )
-            : Stream.fromArray([concatBytes(head)]).pipe(Stream.concat(pack));
-
-          return HttpServerResponse.stream(bodyStream, {
-            contentType: resultType,
-            headers: noCache,
-          });
+              ])
+            : concatBytes(head);
+          return HttpServerResponse.raw(
+            pumpPackBody({ prefix, source, sideband }),
+            { contentType: resultType, headers: noCache },
+          );
         });
 
       /** POST git-receive-pack — ingest + transactional CAS (DESIGN.md §3.6). */
@@ -3721,7 +3780,7 @@ export const GitRepoLive = GitRepo.make(
           verifyTokenHash(tokenHash, required),
 
         getRepoMeta: Effect.fn(function* (auth: CallerAuth) {
-          const meta = yield* requireMeta;
+          const meta = yield* requireMetaStats;
           yield* authorize(auth, { _tag: "ReadRepo" });
           return meta;
         }),
@@ -3757,7 +3816,7 @@ export const GitRepoLive = GitRepo.make(
           if (patch.public !== undefined) {
             yield* setConfig("public", patch.public ? "1" : "0");
           }
-          const updated = yield* readMeta;
+          const updated = yield* readMetaStats;
           const result = updated ?? meta;
           // Keep the Registry's denormalised copy in step (listing reads it).
           yield* syncSummary(result);

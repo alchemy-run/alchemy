@@ -45,6 +45,12 @@ export interface BlobBody {
   readonly size: number;
   readonly bytes: Effect.Effect<Uint8Array, BlobStoreError>;
   readonly stream: Stream.Stream<Uint8Array, BlobStoreError>;
+  /**
+   * The store's native body stream when it has one, for serving paths
+   * that pipe bytes to the client with no per-chunk Effect work (DESIGN
+   * §22). Consume either this or `stream`, never both.
+   */
+  readonly readable?: ReadableStream<Uint8Array> | undefined;
 }
 
 /**
@@ -135,6 +141,7 @@ export const makeBlobStoreR2 = (
               stream: object.body.pipe(
                 Stream.mapError(r2Error(`stream ${key}`)),
               ),
+              readable: object.readable,
             } satisfies BlobBody),
       ),
     ),

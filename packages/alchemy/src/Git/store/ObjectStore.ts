@@ -26,6 +26,12 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { ObjectType, Oid } from "../git/ObjectCodec.ts";
 import {
+  concatBytes,
+  encodeTypeSize,
+  type PackEntryType,
+} from "../git/ObjectCodec.ts";
+import type { ManifestEntry } from "../git/Store.ts";
+import {
   StoreError,
   type ObjectLocation,
   type ObjectMeta,
@@ -62,8 +68,51 @@ export const MAX_OBJECT_SIZE = 67_108_864;
  */
 export const WINDOW_BYTES = 4 * 1024 * 1024;
 
-/** Retained windows (insertion-ordered LRU) — bounds cache memory. */
-export const MAX_CACHED_WINDOWS = 6;
+/**
+ * Objects per batch on the emission/closure paths — one SQL statement and
+ * one emitted chunk per batch instead of per object (DESIGN §22).
+ */
+export const EMIT_BATCH = 256;
+
+const chunkArray = <T>(
+  items: ReadonlyArray<T>,
+  size: number,
+): Array<Array<T>> => {
+  const out: Array<Array<T>> = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size) as Array<T>);
+  }
+  return out;
+};
+
+/**
+ * Isolate-wide budget for retained pack windows — 32 MiB (8 windows).
+ *
+ * The cache is a module-level LRU shared by every repo instance in the
+ * isolate, not a per-instance map: Durable Object instances of one class
+ * share an isolate and its 128 MiB, so per-instance caches multiply with
+ * the number of active repos. Measured (DESIGN §22.4): a 36 MiB push into a
+ * second repo was rejected with "isolate exceeded its memory limit" while
+ * the first repo's caches were resident. Keys carry the repo id
+ * (`packKey`), so sharing is safe.
+ */
+export const WINDOW_CACHE_BYTES = 32 * 1024 * 1024;
+
+const windows = new Map<string, { start: number; bytes: Uint8Array }>();
+let windowBytes = 0;
+const retainWindow = (
+  cacheKey: string,
+  slab: { start: number; bytes: Uint8Array },
+) => {
+  windows.set(cacheKey, slab);
+  windowBytes += slab.bytes.byteLength;
+  while (windowBytes > WINDOW_CACHE_BYTES && windows.size > 1) {
+    const oldest = windows.keys().next().value;
+    if (oldest === undefined) break;
+    windowBytes -= windows.get(oldest)!.bytes.byteLength;
+    windows.delete(oldest);
+  }
+};
 
 /**
  * Raised (as a defect, via `Effect.die`) when a v1 code path reaches a
@@ -103,6 +152,17 @@ export type InsertOutcome = "inserted" | "exists";
  * staged inserts, and the connectivity-check membership oracle.
  */
 export interface ObjectStore extends ObjectSource {
+  /**
+   * Inflated content for many objects, one statement per ~256 oids — the
+   * closure walk reads whole tree levels this way instead of one SQL
+   * round trip per tree (DESIGN §22). Missing oids are simply absent.
+   */
+  readonly readContentBatch: (
+    oids: ReadonlyArray<Oid>,
+  ) => Effect.Effect<ReadonlyMap<Oid, Uint8Array>, StoreError>;
+  readonly packEntries: (
+    entries: ReadonlyArray<ManifestEntry>,
+  ) => Stream.Stream<Uint8Array, StoreError>;
   /**
    * Batched metadata for many oids (live objects only). Chunked `IN`
    * queries, ≤ 100 params each. Missing oids are simply absent from the map.
@@ -302,7 +362,6 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
    * {@link WINDOW_BYTES} are retained (insertion-ordered LRU), so the cache
    * cannot outgrow the isolate's memory budget.
    */
-  const windows = new Map<string, { start: number; bytes: Uint8Array }>();
 
   const readWindow = Effect.fn(function* (key: string, windowIndex: number) {
     const cacheKey = `${key}:${windowIndex}`;
@@ -330,12 +389,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       ),
     );
     const slab = { start, bytes };
-    windows.set(cacheKey, slab);
-    while (windows.size > MAX_CACHED_WINDOWS) {
-      const oldest = windows.keys().next().value;
-      if (oldest === undefined) break;
-      windows.delete(oldest);
-    }
+    retainWindow(cacheKey, slab);
     return slab;
   });
 
@@ -490,6 +544,44 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     return "inserted" as const;
   });
 
+  const readZDataOf = (oid: Oid): Stream.Stream<Uint8Array, StoreError> =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const row = yield* requireRow(oid);
+        switch (row.location) {
+          case "row": {
+            if (row.zdata === null) {
+              return yield* Effect.fail(
+                new StoreError({
+                  reason: `object ${oid} has location='row' but NULL zdata`,
+                }),
+              );
+            }
+            return Stream.succeed(new Uint8Array(row.zdata));
+          }
+          case "r2": {
+            const body = yield* r2Body(oid, row.r2_key);
+            return body.stream.pipe(
+              Stream.mapError(
+                (error) =>
+                  new StoreError({
+                    reason: `R2 stream ${row.r2_key}: ${error.message}`,
+                  }),
+              ),
+            );
+          }
+          case "pack":
+            return Stream.succeed(yield* packBytes(oid, row));
+          default:
+            return yield* Effect.fail(
+              new StoreError({
+                reason: `object ${oid} has unknown location '${row.location}'`,
+              }),
+            );
+        }
+      }),
+    );
+
   return {
     // ── ObjectSource (live objects only) ────────────────────────────────────
     has: (oid) =>
@@ -526,43 +618,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         return yield* metaFromRow(row);
       }),
 
-    readZData: (oid) =>
-      Stream.unwrap(
-        Effect.gen(function* () {
-          const row = yield* requireRow(oid);
-          switch (row.location) {
-            case "row": {
-              if (row.zdata === null) {
-                return yield* Effect.fail(
-                  new StoreError({
-                    reason: `object ${oid} has location='row' but NULL zdata`,
-                  }),
-                );
-              }
-              return Stream.succeed(new Uint8Array(row.zdata));
-            }
-            case "r2": {
-              const body = yield* r2Body(oid, row.r2_key);
-              return body.stream.pipe(
-                Stream.mapError(
-                  (error) =>
-                    new StoreError({
-                      reason: `R2 stream ${row.r2_key}: ${error.message}`,
-                    }),
-                ),
-              );
-            }
-            case "pack":
-              return Stream.succeed(yield* packBytes(oid, row));
-            default:
-              return yield* Effect.fail(
-                new StoreError({
-                  reason: `object ${oid} has unknown location '${row.location}'`,
-                }),
-              );
-          }
-        }),
-      ),
+    readZData: readZDataOf,
 
     readContent: (oid) =>
       readZBytes(oid).pipe(
@@ -570,6 +626,217 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           Zlib.inflate(zdata).pipe(Effect.mapError(zlibToStore)),
         ),
       ),
+
+    readContentBatch: (oids) =>
+      Effect.gen(function* () {
+        const out = new Map<Oid, Uint8Array>();
+        const unique = Array.from(new Set(oids));
+        if (unique.length === 0) return out;
+        const rows = yield* sql.inChunks<ZDataRow>(
+          (ph) =>
+            `SELECT oid, location, zdata, r2_key, pack_id, pack_offset, zsize
+               FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+          unique,
+        );
+        const inflate = (z: Uint8Array) =>
+          Zlib.inflate(z).pipe(Effect.mapError(zlibToStore));
+        // Pack-resident rows in pack order so consecutive window reads hit.
+        const packRows = rows
+          .filter((row) => row.location === "pack")
+          .sort(
+            (a, b) =>
+              (a.pack_id ?? "").localeCompare(b.pack_id ?? "") ||
+              (a.pack_offset ?? 0) - (b.pack_offset ?? 0),
+          );
+        for (const row of rows) {
+          if (row.location === "row" && row.zdata !== null) {
+            out.set(row.oid, yield* inflate(new Uint8Array(row.zdata)));
+          } else if (row.location === "r2") {
+            out.set(
+              row.oid,
+              yield* readZBytes(row.oid).pipe(Effect.flatMap(inflate)),
+            );
+          }
+        }
+        for (const row of packRows) {
+          out.set(row.oid, yield* inflate(yield* packBytes(row.oid, row)));
+        }
+        return out;
+      }),
+
+    packEntries: (entries) =>
+      Stream.suspend(() => {
+        // Locality order (DESIGN §22): a non-delta pack is order-free, so
+        // emit SQLite rows in manifest order, then every pack-resident
+        // object sorted by (pack, offset) so the window cache streams each
+        // 4 MiB window exactly once, then the rare R2-offloaded objects.
+        const byOid = new Map(entries.map((entry) => [entry.oid, entry]));
+        const rowEntries: Array<ManifestEntry> = [];
+        const packList: Array<ManifestEntry> = [];
+        const r2Entries: Array<ManifestEntry> = [];
+        for (const entry of entries) {
+          (entry.location === "row"
+            ? rowEntries
+            : entry.location === "pack"
+              ? packList
+              : r2Entries
+          ).push(entry);
+        }
+        const header = (entry: ManifestEntry) =>
+          encodeTypeSize(entry.type as PackEntryType, entry.size);
+
+        const rowStream = Stream.fromIterable(
+          chunkArray(rowEntries, EMIT_BATCH),
+        ).pipe(
+          Stream.mapEffect((run) =>
+            Effect.gen(function* () {
+              const rows = yield* sql.inChunks<{
+                oid: string;
+                zdata: ArrayBuffer | null;
+              }>(
+                (ph) =>
+                  `SELECT oid, zdata FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+                run.map((entry) => entry.oid),
+              );
+              const zdataOf = new Map(rows.map((row) => [row.oid, row.zdata]));
+              const pieces: Array<Uint8Array> = [];
+              for (const entry of run) {
+                const zdata = zdataOf.get(entry.oid);
+                if (zdata === undefined || zdata === null) {
+                  return yield* Effect.fail(
+                    new StoreError({
+                      reason: `object ${entry.oid} vanished during pack emission`,
+                    }),
+                  );
+                }
+                pieces.push(header(entry), new Uint8Array(zdata));
+              }
+              return concatBytes(pieces);
+            }),
+          ),
+        );
+
+        // Pack runs (DESIGN §22.4): coords sorted by (pack, offset) and
+        // grouped by 4 MiB window. Each group is ONE window fetch (with the
+        // next window fetched concurrently — a cache hit on the following
+        // step) and one synchronous slice loop: no per-object Effect call,
+        // no per-object cache lookup. Objects that straddle a window edge
+        // (rare) fall back to the ranged read in `packBytes`; pack order
+        // is free, so they simply follow their window's run.
+        const packStream = Stream.unwrap(
+          Effect.gen(function* () {
+            if (packList.length === 0) return Stream.empty;
+            const coords = yield* sql.inChunks<{
+              oid: string;
+              pack_id: string | null;
+              pack_offset: number | null;
+              zsize: number;
+            }>(
+              (ph) =>
+                `SELECT oid, pack_id, pack_offset, zsize FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+              packList.map((entry) => entry.oid),
+            );
+            coords.sort(
+              (a, b) =>
+                (a.pack_id ?? "").localeCompare(b.pack_id ?? "") ||
+                (a.pack_offset ?? 0) - (b.pack_offset ?? 0),
+            );
+            type Coord = (typeof coords)[number];
+            type Run = {
+              readonly key: string;
+              readonly window: number;
+              readonly inside: Array<Coord>;
+              readonly straddling: Array<Coord>;
+            };
+            const runs: Array<Run> = [];
+            for (const coord of coords) {
+              if (coord.pack_id === null || coord.pack_offset === null) {
+                return yield* Effect.fail(
+                  new StoreError({
+                    reason: `object ${coord.oid} is location='pack' without coordinates`,
+                  }),
+                );
+              }
+              const key = packKey(repoId, coord.pack_id);
+              const window = Math.floor(coord.pack_offset / WINDOW_BYTES);
+              let run = runs[runs.length - 1];
+              if (
+                run === undefined ||
+                run.key !== key ||
+                run.window !== window
+              ) {
+                run = { key, window, inside: [], straddling: [] };
+                runs.push(run);
+              }
+              (coord.pack_offset + coord.zsize <= (window + 1) * WINDOW_BYTES
+                ? run.inside
+                : run.straddling
+              ).push(coord);
+            }
+            const rowOf = (coord: Coord): ZDataRow => ({
+              oid: coord.oid,
+              location: "pack",
+              zdata: null,
+              r2_key: null,
+              pack_id: coord.pack_id,
+              pack_offset: coord.pack_offset,
+              zsize: coord.zsize,
+            });
+            return Stream.fromIterable(
+              runs.map((run, i) => [run, runs[i + 1]] as const),
+            ).pipe(
+              Stream.mapEffect(([run, next]) =>
+                Effect.gen(function* () {
+                  const [slab] = yield* Effect.all(
+                    [
+                      readWindow(run.key, run.window),
+                      next === undefined
+                        ? Effect.void
+                        : readWindow(next.key, next.window).pipe(Effect.ignore),
+                    ],
+                    { concurrency: 2 },
+                  );
+                  const pieces = yield* Effect.sync(() => {
+                    const out: Array<Uint8Array> = [];
+                    for (const coord of run.inside) {
+                      const entry = byOid.get(coord.oid);
+                      if (entry === undefined) continue;
+                      const at = coord.pack_offset! - slab.start;
+                      out.push(
+                        header(entry),
+                        slab.bytes.subarray(at, at + coord.zsize),
+                      );
+                    }
+                    return out;
+                  });
+                  for (const coord of run.straddling) {
+                    const entry = byOid.get(coord.oid);
+                    if (entry === undefined) continue;
+                    pieces.push(
+                      header(entry),
+                      yield* packBytes(coord.oid, rowOf(coord)),
+                    );
+                  }
+                  return concatBytes(pieces);
+                }),
+              ),
+            );
+          }),
+        );
+
+        const r2Stream = Stream.fromIterable(r2Entries).pipe(
+          Stream.flatMap((entry) =>
+            Stream.succeed(header(entry)).pipe(
+              Stream.concat(readZDataOf(entry.oid)),
+            ),
+          ),
+        );
+
+        return rowStream.pipe(
+          Stream.concat(packStream),
+          Stream.concat(r2Stream),
+        );
+      }),
 
     // ── Store-side surface ──────────────────────────────────────────────────
     getMetaBatch,

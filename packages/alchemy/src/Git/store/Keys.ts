@@ -45,6 +45,18 @@ export const bundleKey = (repoId: string, refsHash: string): string =>
   `${repoId}/bundles/bundle-${refsHash}.pack`;
 
 /**
+ * The bundle's **pre-framed** twin (DESIGN §22.4): the same pack already
+ * cut into band-1 sideband frames of exactly 65515 data bytes. Real git
+ * always negotiates `side-band-64k`, and bytes that cross into JS to be
+ * framed measured a hard ~15 MiB/s ceiling regardless of how the framing
+ * was written; this twin lets the sideband case be a platform-to-platform
+ * pipe like the raw case. Written alongside the bundle, immutable, same
+ * lifecycle (purged with the prefix).
+ */
+export const bundleSidebandKey = (repoId: string, refsHash: string): string =>
+  `${repoId}/bundles/bundle-${refsHash}.sideband`;
+
+/**
  * R2 key for a streamed incoming push pack (v1.x upgrade seam, DESIGN.md
  * §3.6): `{repoId}/incoming/{pushId}.pack`. Reserved — unused in v1's
  * buffered ingest.

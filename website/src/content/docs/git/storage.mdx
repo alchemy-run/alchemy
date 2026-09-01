@@ -14,9 +14,11 @@ stored pre-deflated in SQLite. Small objects stay inline; oversize ones
 go straight to blob storage with only their index kept locally.
 
 **Compacted objects** live in real packfiles in blob storage. A
-background job rewrites accumulated loose objects into an immutable
+background job rewrites accumulated loose blobs into an immutable
 pack and drops the local copies, which is what keeps a busy
-repository's Durable Object small.
+repository's Durable Object small. Commits, trees, and tags are never
+packed: they stay local, so the tree walk that answers every fetch
+runs against SQLite instead of ranged reads over blob storage.
 
 **Clone bundles** are precomputed full-clone packs, keyed by a
 snapshot of the repository's refs.
@@ -42,7 +44,7 @@ Maintenance runs on Durable Object alarms, scheduled by the work
 itself rather than a cron you configure:
 
 - **Compaction** — triggered by a post-push size check. Rewrites loose
-  objects into an immutable pack.
+  blobs into an immutable pack.
 - **Bundling** — cuts a fresh clone bundle after refs move.
 - **Purge** — drains a deleted repository's objects and blobs, then
   releases its name.
@@ -102,8 +104,9 @@ should assume.
 
 ## What to watch
 
-A repository reports its object breakdown — loose, packed, offloaded,
-and total bytes — plus timing for the last push, split into ingest,
+A repository reports its object breakdown — loose blobs awaiting
+compaction, resident commits and trees, packed, offloaded, and total
+bytes — plus timing for the last push, split into ingest,
 staging, connectivity checking, and finalization. When a push feels
 slow, that split says which phase to look at. Fetch a repository
 directly for live numbers; listings report zeros by design.

@@ -825,6 +825,19 @@ Keys are content-addressed and immutable:
 {repoId}/objects/{oid}              oversize loose objects (v1, unchanged)
 ```
 
+**Only blobs are packed (DESIGN §22).** `Compact.ts` selects `type = 3`
+rows exclusively; commits, trees and tags stay `location='row'` in SQLite
+for the life of the repo, and the REST `ObjectStats` reports them as
+`resident` (distinct from `loose`, which is now *blobs awaiting
+compaction*). The reason is the fetch path: the want→have closure is a
+tree walk, and a tree walk over pack storage is the worst access pattern
+a window cache can see — trees are tiny and, packed in oid order, land in
+every 4 MiB window of every pack. On a 15.6k-object repo that walk alone
+cost 12 s of TTFB after batching (27 s before). Over rows it is a handful
+of batched `SELECT ... IN` calls. Commits and trees are a few percent of a
+repo's bytes, so keeping them local buys sub-second negotiation for every
+incremental fetch at negligible SQLite cost.
+
 ### 12.2 Clone bundles
 
 A clone is, on the wire, exactly one pack containing the closure of the
@@ -1467,3 +1480,125 @@ minute later (in-flight ranged reads finish first).
 post-change runs. The push path is unchanged by both features (serial
 push 1.3–1.5/s across all runs — the per-ref serialization floor §15
 already names; that ceiling is v3's problem, not this change's).
+
+## 22. The clone-throughput sweep
+
+The complaint: clones pull 10–20 MB/s. The first question was whose
+number that is, and the answer settles what to fix.
+
+### §22.1 Diagnosis (production, `alchemy/alchemy`, 44k objects)
+
+| measurement | value | meaning |
+| --- | --- | --- |
+| client ← Cloudflare edge, 50 MB static download | **67 MB/s** | the pipe is not the limit |
+| bundle path, raw passthrough, 152 MiB | 10–21 MB/s (one sample stalled at 227 KB/s for 264 s) | **our streaming path is the limit** |
+| bundle path, sideband | 10.5–17 MB/s | framing is not the difference; the variance is |
+| dynamic path | 3.1 MB/s, TTFB 9.2 s | 44k sequential SQLite point reads |
+| `info/refs` advertisement (2 refs) | **1.5 s** | per-request planning cost, paid twice per clone |
+| repo object stats | loose=44,041 packed=0 r2=10, 152.7 MiB | **never compacted** — `COMPACT_COUNT_THRESHOLD` was 50,000 |
+| bytes served vs bytes pushed | 152 MiB served, 70 MiB thin pack pushed | non-delta packs are 2.2x on the wire |
+
+Three independent problems, in order of user impact: the Worker's bundle
+streaming pipeline caps single-stream throughput far below the client's
+pipe; every wire request pays ~1.5 s before its first byte; and the repo
+was serving its fallback path from 44k un-packed SQLite rows.
+
+### §22.2 Root causes
+
+**Streaming (the throughput ceiling).** `serveBundle` piped R2's body
+through `Stream.fromReadableStream` → `wrapSideband` (a `Stream.flatMap`
+per chunk) → `HttpServerResponse.stream` → `toReadableStream`. Every
+R2 chunk crossed an Effect fiber hand-off twice and was copied twice by
+the sideband framer (`sidebandFrame` allocated a payload buffer, then
+`pktLine` allocated again). At concurrency 4 the aggregate was only
+1.5x a single stream — the isolate was CPU-bound on stream machinery,
+not waiting on the network.
+
+**TTFB.** `readMeta` ran `SELECT location, COUNT(*), SUM(zsize) FROM
+objects GROUP BY location` on **every** request (via `requireMeta` at
+the wire dispatch, inside `authorize`, and inside `writeHeadSnapshot`),
+a full scan of a `WITHOUT ROWID` table whose leaf pages carry inline
+zdata. Only the REST repo-detail response ever reads `meta.objects`.
+
+**Dynamic path.** `packEntryStream` did one `sql.first` and ~6 Effect
+stream nodes per object; the closure's tree walk did one SQL round trip
+plus one inflate per tree, serially, before the first byte; and the
+manifest order (commits → tags → trees → blobs) was uncorrelated with
+compacted-pack layout (`ORDER BY oid`), so a 6-window LRU over a large
+pack thrashed.
+
+### §22.3 What changed
+
+- **Native passthrough.** `ObjectBody`/`BlobBody` expose the store's
+  own `ReadableStream` (`readable`); `respondWithPack` pipes it into the
+  `Response` via `HttpServerResponse.raw`. Raw clones go through an
+  `IdentityTransformStream` (workerd pipes it without JS touching the
+  bytes); sideband clones go through `sidebandTransform`, a web
+  `TransformStream` emitting a 5-byte header + a `subarray` per frame —
+  no copy, no fiber per chunk. The Effect path remains as the fallback
+  for stores without a native stream (S3).
+- **`requireMeta` is config-only.** The objects aggregate is opt-in
+  (`requireMetaStats`), paid by `getRepoMeta`/`updateRepoMeta` only.
+- **Compaction thresholds** 50k objects / 1 GiB → **4k / 64 MiB**.
+- **Batched emission and closure.** `ObjectStore.packEntries` reads
+  objects 256 per statement, concatenates each batch into one chunk,
+  and orders pack-resident objects by (pack, offset) so each 4 MiB
+  window is fetched exactly once; `readContentBatch` + a level-order BFS
+  read whole tree levels per statement. `packStream` uses the batched
+  emitter whenever the source offers it.
+- `sidebandFrame` builds its frame in one allocation (was two copies).
+
+### §22.4 Measured (36 MiB / 15.6k-object repo, one client, same edge)
+
+All numbers from `GitBench.e2e.test.ts` "single large clone", the same
+client machine and edge for every row. "Before" is the row-storage,
+Effect-stream code at the start of the sweep; the rest are cumulative.
+
+| path (what real clients use) | before | native pump | +blob-only compaction | +pre-framed twin, per-window emitter |
+| --- | --- | --- | --- | --- |
+| raw bundle, 1 stream | 20.3 MiB/s | 41.0 | 37.9 | 40.9 (client line rate ≈ 40–70) |
+| raw bundle, 4 streams (aggregate) | 29.7 MiB/s | 106.1 | 71.8 | 82.3 |
+| **sideband bundle (every `git clone`)** | 15.5 MiB/s | 12.7–15.7 | 15.7 | **32.7** |
+| dynamic fetch — TTFB | 1.4 s (rows) / 27.5 s (packed) | 12.0 s | **0.43 s** | 0.56 s |
+| dynamic fetch — transfer | 6.2 MiB/s (rows) / 0.2 (packed) | 7.9 | 7.0 | 7.9 |
+
+What each step bought, and what it did not:
+
+- **Native pump** (§22.3): the raw path went from an Effect stream to a
+  platform `pipeTo` and doubled; four streams saturate the client link.
+  It did NOT move sideband — three different framers (Effect stream,
+  `TransformStream`, manual 1 MiB batched writes) all landed at ~15 MiB/s.
+  The constant was never the framing: it is the cost of bundle bytes
+  crossing into JS at all. Hence the **pre-framed twin**
+  (`bundleSidebandKey`): the bundle job writes the pack a second time,
+  already cut into 65515-byte band-1 frames, and sideband serving becomes
+  a pure pipe plus a 4-byte flush. 2× on the path every real client uses,
+  for 2× bundle storage.
+- **Lowering the compaction thresholds** (50k → 4k objects) exposed a
+  latent disaster: a fetch over pack storage took 27 s to start and 243 s
+  to finish — the per-object emitter, in manifest order, missed the
+  window cache on nearly every object (15.6k × 4 MiB window reads).
+  Batching + (pack, offset) ordering fixed the transfer (0.2 → 7.9 MiB/s)
+  but the tree walk still cost 12 s: trees are tiny and, packed in oid
+  order, touch every window. **Blob-only compaction** removed the walk
+  from R2 entirely — TTFB 12 s → 0.43 s — at the cost of keeping
+  commits/trees/tags (a few percent of bytes) as SQLite rows.
+- The dynamic transfer rate is now bounded by generation inside the DO
+  (per-batch SQL + concat for resident objects, one window fetch per
+  4 MiB of blobs), not by the response path; the per-window emitter and
+  one-window lookahead did not move it. Clones do not take this path (the
+  bundle covers them); incremental fetches are small. Left as the next
+  target.
+
+**Durability finding, same sweep.** A real `git push` of the 36 MiB
+clone (a delta-heavy pack, unlike the snapshot the bench pushes) was
+rejected: `Durable Object's isolate exceeded its memory limit and was
+reset`, mid-`transactionSync`. The ingest's own footprint is bounded
+(8 MiB staging batches, 20 MiB resolved-content LRU) — but the whole
+pack sat in memory under the 50 MiB spill threshold, and instances of one
+DO class share an isolate: the other repo's per-instance window cache and
+its push gate were invisible to this push's accounting. Fixed by making
+the window cache and the push-admission semaphore **isolate-wide**
+(one 32 MiB LRU, one 64-permit gate) and lowering the in-memory spill
+threshold to 24 MiB. The same push then succeeded with the first repo's
+caches warm; the clone back through the DO was fsck-clean.

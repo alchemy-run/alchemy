@@ -106,13 +106,14 @@ import { bundleCovers, type BundleInfo } from "./jobs/Bundle.ts";
 import { headKey } from "./store/Keys.ts";
 import { decodeHeadSnapshot } from "./store/HeadSnapshot.ts";
 import {
+  concatBytes,
   parseCommit,
   parseTree,
   treeEntryKind,
   utf8Decode,
 } from "./git/ObjectCodec.ts";
 import { decodePktLines, flushPkt, pktText } from "./git/Pkt.ts";
-import { progressMessage, wrapSideband } from "./git/Sideband.ts";
+import { progressMessage, pumpPackBody, wrapSideband } from "./git/Sideband.ts";
 import type { StoreError } from "./git/Store.ts";
 import {
   ADMIN_HEADER,
@@ -310,7 +311,13 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
       entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
     createdAt: entry.createdAt,
     // No DO to ask (unseeded or mid-purge) — report an empty store.
-    objects: new ObjectStats({ loose: 0, packed: 0, r2: 0, bytes: 0 }),
+    objects: new ObjectStats({
+      loose: 0,
+      resident: 0,
+      packed: 0,
+      r2: 0,
+      bytes: 0,
+    }),
     lastPush: null,
   });
 
@@ -1404,10 +1411,47 @@ const make = Effect.gen(function* () {
       readonly objectCount: number;
       readonly sideband: boolean;
       readonly via: "do-bundle" | "head-snapshot";
+      /** The store's native stream, when it has one (R2 does). */
+      readonly readable?: ReadableStream<Uint8Array> | undefined;
+      /** `readable` is the pre-framed twin (sideband only). */
+      readonly framed?: boolean | undefined;
     },
     shape: "bundle",
   ) => {
     const nak = pktText("NAK");
+    const headers = {
+      "cache-control": "no-cache",
+      "x-git-served-by": `${options.via}:${shape}${options.framed === true ? "+framed" : ""}`,
+      [BUNDLE_HASH_HEADER]: options.refsHash,
+    };
+    // Native path (DESIGN §22): R2's own stream pipes into the Response
+    // through web streams only. The bundle bytes never enter an Effect
+    // stream, so there is no fiber hand-off per chunk — that hand-off
+    // was measured as the ceiling on clone throughput. Sideband framing
+    // is a TransformStream emitting 5-byte headers + subarrays (no copy);
+    // the raw case is an IdentityTransformStream, which workerd pipes
+    // without JS touching the bytes at all.
+    if (options.readable !== undefined) {
+      const source = options.readable;
+      const prefix = options.sideband
+        ? concatBytes([
+            nak,
+            progressMessage(
+              `Enumerating objects: ${options.objectCount}, done.`,
+            ),
+          ])
+        : nak;
+      const out = pumpPackBody({
+        prefix,
+        source,
+        sideband: options.sideband,
+        framed: options.framed,
+      });
+      return HttpServerResponse.raw(out, {
+        contentType: "application/x-git-upload-pack-result",
+        headers,
+      });
+    }
     const body = options.sideband
       ? Stream.fromArray([
           nak,
@@ -1419,11 +1463,7 @@ const make = Effect.gen(function* () {
       : Stream.fromArray([nak]).pipe(Stream.concat(packBytes));
     return HttpServerResponse.stream(body, {
       contentType: "application/x-git-upload-pack-result",
-      headers: {
-        "cache-control": "no-cache",
-        "x-git-served-by": `${options.via}:${shape}`,
-        [BUNDLE_HASH_HEADER]: options.refsHash,
-      },
+      headers,
     });
   };
 
@@ -1435,11 +1475,32 @@ const make = Effect.gen(function* () {
     /** Which plane produced the plan — observability + bench assertions. */
     readonly via: "do-bundle" | "head-snapshot";
   }) {
+    if (options.sideband) {
+      // Prefer the pre-framed twin: a pure platform pipe (Keys.ts).
+      const framed = yield* Effect.result(
+        workerBlobs.get(options.key.replace(/\.pack$/, ".sideband")),
+      );
+      if (
+        Result.isSuccess(framed) &&
+        framed.success !== null &&
+        framed.success.readable !== undefined
+      ) {
+        return respondWithPack(
+          framed.success.stream,
+          { ...options, readable: framed.success.readable, framed: true },
+          "bundle",
+        );
+      }
+    }
     const object = yield* Effect.result(workerBlobs.get(options.key));
     if (Result.isFailure(object) || object.success === null) {
       return undefined;
     }
-    return respondWithPack(object.success.stream, options, "bundle");
+    return respondWithPack(
+      object.success.stream,
+      { ...options, readable: object.success.readable },
+      "bundle",
+    );
   });
 
   /**
