@@ -163,7 +163,10 @@ const services = Layer.mergeAll(
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,
   routeCacheLayer,
-  Layer.provideMerge(selectCliServices(), CliKit.layer()),
+  Layer.provide(
+    Layer.provideMerge(selectCliServices(), CliKit.layer()),
+    PlatformServices,
+  ),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.

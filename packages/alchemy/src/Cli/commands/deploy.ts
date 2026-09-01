@@ -195,13 +195,24 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     return yield* cli.displayPlan(snapshot.native, display);
   }
 
-  if (
-    !options.yes &&
-    Stacks.hasChanges(snapshot.summary) &&
-    !(yield* cli.approvePlan(snapshot.native, display))
-  ) {
-    yield* CliKit.accessors.output.info(`${operation} aborted: plan declined.`);
-    return yield* exitDeclined;
+  if (!options.yes && Stacks.hasChanges(snapshot.summary)) {
+    const approved = yield* cli.approvePlan(snapshot.native, display).pipe(
+      Effect.tap((approved) =>
+        approved
+          ? Effect.void
+          : CliKit.accessors.output.info(
+              `${operation} aborted: plan declined.`,
+            ),
+      ),
+      Effect.catchTag("NonInteractiveTerminal", () =>
+        CliKit.accessors.output
+          .warning(
+            `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
+          )
+          .pipe(Effect.as(false)),
+      ),
+    );
+    if (!approved) return yield* exitDeclined;
   }
 
   const result = yield* Stacks.apply(snapshot).pipe(
