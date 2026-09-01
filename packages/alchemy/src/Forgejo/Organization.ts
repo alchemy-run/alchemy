@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -252,6 +253,17 @@ export const OrganizationProvider = () =>
     }),
     delete: Effect.fn(function* ({ olds }) {
       const client = yield* ForgejoCredentials;
-      yield* optional(client.request<void>("DELETE", path(olds)));
+      // Forgejo refuses to delete an organization that still owns
+      // repositories, and the engine deletes independent resources
+      // concurrently — so an organization that loses the race against its own
+      // repositories fails the destroy outright, succeeding only on a re-run.
+      // Retry until the repositories are gone.
+      yield* optional(client.request<void>("DELETE", path(olds))).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "ForgejoDependencyViolation",
+          schedule: Schedule.exponential("200 millis"),
+          times: 6,
+        }),
+      );
     }),
   });
