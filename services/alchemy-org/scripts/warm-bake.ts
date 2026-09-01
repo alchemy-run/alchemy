@@ -3,28 +3,20 @@
  *
  *   bun scripts/warm-bake.ts
  *
- * The floci emulator caps `docker build` at 15 minutes, which the COLD
- * seed build (clone + install + tsc -b + floci package) exceeds. Floci
- * builds through the classic builder against the shared daemon, so
- * building the SAME Dockerfile once here — with the `FROM` rewritten
- * to the local AL2023 base exactly as floci rewrites it — leaves the
- * seed layers (binaries, clone, pnpm store, tsbuildinfo, ~/.m2) in the
- * shared cache. The emulator's build then only runs the incremental
- * TIP layer: minutes, not tens of minutes.
- *
- * Each run passes a fresh REFRESH build-arg, so the tip layer
- * re-converges to origin/main over the warm seed — rerun this script
- * whenever you want the baked snapshot moved up to the branch head.
- * (Between runs the snapshot may lag main; harmless — sessions fetch
- * and land on the tip at claim time.)
- *
- * The bake needs NO build context (the workspace is a network clone;
- * see `SandboxMicrovm.ts`) — the context below is an empty temp dir.
+ * The floci emulator caps `docker build` at 15 minutes, which a COLD
+ * bake (binary installs + pnpm store fetch) can exceed. Floci builds
+ * through the classic builder against the shared daemon, so building
+ * the SAME Dockerfile once here — over the SAME staged workspace
+ * (`SandboxBake.ts`), with the `FROM` rewritten to the local AL2023
+ * base exactly as floci rewrites it — leaves every heavy layer in the
+ * shared cache: the emulator's build then completes in seconds to a
+ * few minutes (the tree COPY + linux node_modules link).
  */
 import { BunServices } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { stageBake } from "../src/SandboxBake.ts";
 import { SANDBOX_DOCKERFILE } from "../src/SandboxMicrovm.ts";
 
 // mirror MicrovmBuildService.rewriteBaseImage + localBaseImage()
@@ -32,27 +24,12 @@ const LOCAL_BASE =
   process.env.FLOCI_MICROVM_BASE_IMAGE ||
   "public.ecr.aws/amazonlinux/amazonlinux:2023";
 
-// tsc -b (TypeScript 7's native tsgo) needs ~8GB by itself; a Docker
-// Desktop VM sized below ~10GB SIGKILLs the seed build partway. Fail
-// fast with the fix instead of dying 10 minutes in.
-const info = Bun.spawnSync(["docker", "info", "--format", "{{.MemTotal}}"]);
-const memTotal = Number(info.stdout.toString().trim());
-if (Number.isFinite(memTotal) && memTotal > 0) {
-  const gib = memTotal / 1024 ** 3;
-  if (gib < 10) {
-    console.error(
-      `docker VM has ${gib.toFixed(1)}GiB of memory — the bake's tsc -b needs ~8GiB and will be OOM-killed.\n` +
-        "Raise Docker Desktop memory to 12GiB+ (Settings → Resources → Memory) and rerun.",
-    );
-    process.exit(1);
-  }
-}
-
 const { contextDir } = await Effect.runPromise(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const contextDir = yield* fs.makeTempDirectory({ prefix: "bake-warm-" });
+    const bake = yield* stageBake;
+    const contextDir = path.dirname(bake.dir);
     const dockerfile =
       SANDBOX_DOCKERFILE.trim().replace(/^FROM .*$/m, `FROM ${LOCAL_BASE}`) +
       "\n";
@@ -60,6 +37,7 @@ const { contextDir } = await Effect.runPromise(
       path.join(contextDir, "Dockerfile.warm"),
       dockerfile,
     );
+    console.log(`staged ${bake.fingerprint} at ${bake.dir}`);
     return { contextDir };
   }).pipe(Effect.provide(BunServices.layer)),
 );
@@ -72,8 +50,6 @@ const build = Bun.spawn(
     "build",
     "--platform",
     "linux/arm64",
-    "--build-arg",
-    `REFRESH=${Date.now()}`,
     "-f",
     `${contextDir}/Dockerfile.warm`,
     "-t",
