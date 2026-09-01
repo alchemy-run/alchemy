@@ -20,7 +20,7 @@ import {
   devStage,
   optionalConfig,
   profile,
-  resolveConfig,
+  resolveStackArgs,
 } from "./flags.ts";
 import {
   installShutdownFeedback,
@@ -51,7 +51,7 @@ export const devCommand = Command.make(
   },
   Effect.fn(
     function* (rawArgs) {
-      const args = yield* resolveConfig(rawArgs);
+      const args = yield* resolveStackArgs("dev")(rawArgs);
       // This process is only the exec child's supervisor; the child owns the
       // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
       // hits both processes and the interrupt message prints twice.

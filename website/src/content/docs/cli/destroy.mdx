@@ -28,7 +28,7 @@ Proceed?
 | Option              | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
 | `--config, -c <file>`            | Stack file to destroy (defaults to `alchemy.run.ts`)              |
-| `--stage <name>`    | Stage to destroy (defaults to `live_$USER`)                       |
+| `--stage <name>`    | Stage to destroy (defaults to `$ALCHEMY_STAGE` or `live_$USER`)   |
 | `--yes`             | Skip the approval prompt                                          |
 | `--dry-run`         | Show what would be deleted without actually deleting              |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
