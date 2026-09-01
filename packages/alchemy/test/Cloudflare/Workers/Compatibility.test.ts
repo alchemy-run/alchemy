@@ -20,12 +20,20 @@ describe("getCompatibility", () => {
     expect(flags).not.toContain("nodejs_compat");
   });
 
-  test("does not duplicate an explicit nodejs_compat", () => {
+  test("does not duplicate an explicit nodejs_compat on pre-default-on dates", () => {
     const { flags } = getCompatibility({
       isExternal: true,
-      compatibility: { flags: ["nodejs_compat"] },
+      compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
     } as WorkerProps);
     expect(flags.filter((f) => f === "nodejs_compat")).toHaveLength(1);
+  });
+
+  test("strips a redundant nodejs_compat after the default-on date", () => {
+    const { flags } = getCompatibility({
+      compatibility: { flags: ["nodejs_compat"] },
+    } as WorkerProps);
+    expect(flags).not.toContain("nodejs_compat");
+    expect(flags).not.toContain("nodejs_compat_v2");
   });
 
   // nodejs_compat with a date before 2024-09-23 selects the legacy v1 mode,

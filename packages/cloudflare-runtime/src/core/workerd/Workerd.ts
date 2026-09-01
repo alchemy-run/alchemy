@@ -8,7 +8,7 @@ import * as NodeChildProcess from "node:child_process";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
-import * as workerd from "./internal/workerd.ts";
+import { loadWorkerd } from "./internal/workerd.ts";
 
 export interface WorkerdPorts {
   [socket: string]: number;
@@ -77,8 +77,9 @@ const make = (
     args: Array<string>,
     config: Buffer,
   ) => Effect.Effect<ProcessHandle, ConfigError | SystemError>,
-) =>
-  Workerd.of({
+) => {
+  const workerd = loadWorkerd();
+  return Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (config, args, options) {
@@ -142,6 +143,7 @@ const make = (
       }),
     ),
   });
+};
 
 /**
  * A single consumer per child stream, started at spawn. A web
