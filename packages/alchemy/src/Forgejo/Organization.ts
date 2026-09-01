@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { ForgejoCredentials, optional } from "./Client.ts";
+import { type ForgejoClient, ForgejoCredentials, optional } from "./Client.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -121,8 +121,17 @@ export const Organization = Resource<Organization>("Forgejo.Organization", {
 interface ApiOrganization {
   readonly id: number;
   readonly username: string;
-  readonly html_url: string;
 }
+
+/**
+ * Build the organization's web URL.
+ *
+ * Forgejo's organization representation carries no `html_url` — unlike its
+ * repository representation — so the link is derived from the instance the
+ * client is pointed at rather than read off the response.
+ */
+const htmlUrlFor = (client: ForgejoClient, username: string) =>
+  `${client.baseUrl.replace(/\/api\/v1$/, "")}/${encodeURIComponent(username)}`;
 
 const path = (props: Pick<OrganizationProps, "username">) =>
   `/orgs/${encodeURIComponent(props.username)}`;
@@ -137,11 +146,12 @@ const settingsOf = (props: OrganizationProps) => ({
 });
 
 const attributesOf = (
+  client: ForgejoClient,
   organization: ApiOrganization,
 ): OrganizationAttributes => ({
   organizationId: organization.id,
   username: organization.username,
-  htmlUrl: organization.html_url,
+  htmlUrl: htmlUrlFor(client, organization.username),
 });
 
 const observe = Effect.fn(function* (
@@ -166,16 +176,18 @@ export const OrganizationProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
+      const client = yield* ForgejoCredentials;
       const organizations = yield* listAccessibleOrganizations();
-      return organizations.map((organization) => ({
-        organizationId: organization.id,
-        username: organization.username,
-        htmlUrl: organization.html_url,
-      }));
+      return organizations.map((organization) =>
+        attributesOf(client, organization),
+      );
     }),
     read: Effect.fn(function* ({ olds }) {
+      const client = yield* ForgejoCredentials;
       const observed = yield* observe(olds);
-      return observed === undefined ? undefined : attributesOf(observed);
+      return observed === undefined
+        ? undefined
+        : attributesOf(client, observed);
     }),
     reconcile: Effect.fn(function* ({ news }) {
       const client = yield* ForgejoCredentials;
@@ -200,7 +212,7 @@ export const OrganizationProvider = () =>
               client.request<ApiOrganization>("GET", path(news)),
             ),
           );
-        return attributesOf(created);
+        return attributesOf(client, created);
       }
 
       const updated = yield* client.request<ApiOrganization>(
@@ -210,7 +222,7 @@ export const OrganizationProvider = () =>
           body: settingsOf(news),
         },
       );
-      return attributesOf(updated);
+      return attributesOf(client, updated);
     }),
     delete: Effect.fn(function* ({ olds }) {
       const client = yield* ForgejoCredentials;

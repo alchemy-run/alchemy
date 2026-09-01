@@ -27,10 +27,6 @@ export interface ListedOrganization {
    * Numeric organization ID.
    */
   readonly id: number;
-  /**
-   * Web URL.
-   */
-  readonly html_url: string;
 }
 
 /**

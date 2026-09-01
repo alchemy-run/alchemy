@@ -500,7 +500,11 @@ test.provider(
           requiredApprovals: 1,
         }),
       );
-      expect(created).toEqual({ ruleName: "main" });
+      expect(created).toEqual({
+        owner: "alice",
+        repository: "alchemy",
+        ruleName: "main",
+      });
       expect(
         server.find("POST", "/repos/alice/alchemy/branch_protections")?.body,
       ).toMatchObject({
