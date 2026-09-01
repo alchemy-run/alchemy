@@ -10,6 +10,11 @@ import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import * as EntryCodec from "./EntryCodec.ts";
+import {
+  EncryptionKeyChangedError,
+  keyFingerprint,
+  verifyKeyFingerprint,
+} from "./KeyFingerprint.ts";
 import { EncryptionKey } from "./Token.ts";
 
 export default class Store extends DurableObject<Store>()(
@@ -43,6 +48,36 @@ export default class Store extends DurableObject<Store>()(
         Effect.tryPromise(() =>
           EntryCodec.decryptEntry<ResourceState>(cryptoKey, entry),
         ).pipe(Effect.orDie);
+
+      // Rotation guard (see KeyFingerprint.ts). Checked once per DO instance,
+      // lazily on the first data method so the check runs inside a request
+      // context; a mismatch dies loudly on every data method rather than
+      // letting unreadable entries degrade to "absent". Listing and deleting
+      // stay available so a deliberate wipe is still possible.
+      const fingerprint = yield* Effect.tryPromise(() =>
+        keyFingerprint(keyHex),
+      ).pipe(Effect.orDie);
+      const guard = yield* Effect.cached(
+        verifyKeyFingerprint(
+          {
+            get: (key) => storage.get<string>(key),
+            put: (key, value) => storage.put(key, value),
+          },
+          fingerprint,
+        ).pipe(
+          Effect.flatMap((check) =>
+            check === "mismatch"
+              ? Effect.logError(
+                  "Cloudflare State Store encryption key changed; refusing to serve state.",
+                ).pipe(
+                  Effect.andThen(Effect.die(new EncryptionKeyChangedError())),
+                )
+              : Effect.void,
+          ),
+        ),
+      );
+      const guarded = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        guard.pipe(Effect.andThen(effect));
 
       return {
         // -- Root DO methods -----------------------------------------
@@ -115,13 +150,17 @@ export default class Store extends DurableObject<Store>()(
          * null if missing.
          */
         get: ({ stage, fqn }: { stage: string; fqn: string }) =>
-          storage
-            .get<string>(resourceKey(stage, fqn))
-            .pipe(
-              Effect.flatMap((entry) =>
-                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
+          guarded(
+            storage
+              .get<string>(resourceKey(stage, fqn))
+              .pipe(
+                Effect.flatMap((entry) =>
+                  entry == null
+                    ? Effect.succeed(undefined)
+                    : decryptEntry(entry),
+                ),
               ),
-            ),
+          ),
 
         /**
          * (Stack DO only) Persist a resource. Returns the stored
@@ -136,13 +175,15 @@ export default class Store extends DurableObject<Store>()(
           fqn: string;
           value: ResourceState;
         }) =>
-          encryptValue(value).pipe(
-            Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(resourceKey(stage, fqn), encrypted)
-                .pipe(Effect.asVoid),
+          guarded(
+            encryptValue(value).pipe(
+              Effect.flatMap((encrypted) =>
+                storage
+                  .put<string>(resourceKey(stage, fqn), encrypted)
+                  .pipe(Effect.asVoid),
+              ),
+              Effect.map(() => value),
             ),
-            Effect.map(() => value),
           ),
 
         /**
@@ -175,26 +216,32 @@ export default class Store extends DurableObject<Store>()(
          * Returns `undefined` when the stage has not been deployed.
          */
         getOutput: ({ stage }: { stage: string }) =>
-          storage
-            .get<string>(stackOutputKey(stage))
-            .pipe(
-              Effect.flatMap((entry) =>
-                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
+          guarded(
+            storage
+              .get<string>(stackOutputKey(stage))
+              .pipe(
+                Effect.flatMap((entry) =>
+                  entry == null
+                    ? Effect.succeed(undefined)
+                    : decryptEntry(entry),
+                ),
               ),
-            ),
+          ),
 
         /**
          * (Stack DO only) Persist the resolved stack output for
          * `stage`. Returns the stored value unchanged.
          */
         setOutput: ({ stage, value }: { stage: string; value: any }) =>
-          encryptValue(value).pipe(
-            Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(stackOutputKey(stage), encrypted)
-                .pipe(Effect.asVoid),
+          guarded(
+            encryptValue(value).pipe(
+              Effect.flatMap((encrypted) =>
+                storage
+                  .put<string>(stackOutputKey(stage), encrypted)
+                  .pipe(Effect.asVoid),
+              ),
+              Effect.map(() => value),
             ),
-            Effect.map(() => value),
           ),
 
         /**
@@ -203,8 +250,7 @@ export default class Store extends DurableObject<Store>()(
          * `status` field can be inspected.
          */
         getReplacedResources: ({ stage }: { stage: string }) =>
-          pipe(
-            storage.list<string>({ prefix: stagePrefix(stage) }),
+          guarded(storage.list<string>({ prefix: stagePrefix(stage) })).pipe(
             Effect.map((entries) =>
               [...entries.values()].filter((e): e is string => !!e),
             ),
