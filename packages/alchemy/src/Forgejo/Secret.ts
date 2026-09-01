@@ -183,6 +183,21 @@ export const secretScope = (props: SecretProps): ActionsScope =>
   "scope" in props
     ? props.scope
     : { kind: "repository", owner: props.owner, repository: props.repository };
+/**
+ * Structural equality for two Actions scopes.
+ *
+ * Comparing serialized scopes instead would be key-order sensitive, so
+ * migrating a resource from the legacy repository props to the equivalent
+ * explicit `scope` would plan a needless replacement — and replacing a secret
+ * deletes it before recreating it, leaving CI without the value in between.
+ */
+export const sameScope = (a: ActionsScope, b: ActionsScope): boolean => {
+  if (a.kind === "repository" && b.kind === "repository")
+    return a.owner === b.owner && a.repository === b.repository;
+  if (a.kind === "organization" && b.kind === "organization")
+    return a.organization === b.organization;
+  return a.kind === "user" && b.kind === "user";
+};
 const path = (props: SecretProps) => {
   const scope = secretScope(props);
   const suffix = `/${encodeURIComponent(props.name)}`;
@@ -210,8 +225,7 @@ export const SecretProvider = () =>
       Effect.succeed(
         isResolved(news) &&
           olds !== undefined &&
-          (JSON.stringify(secretScope(news)) !==
-            JSON.stringify(secretScope(olds)) ||
+          (!sameScope(secretScope(news), secretScope(olds)) ||
             news.name !== olds.name)
           ? { action: "replace" as const }
           : undefined,
@@ -295,11 +309,8 @@ export const SecretProvider = () =>
       yield* client.request<void>("PUT", path(news), {
         body: { data: Redacted.value(news.value) },
       });
-      return {
-        scope: secretScope(news),
-        name: news.name,
-        updatedAt: new Date().toISOString(),
-      };
+      const updatedAt = yield* Effect.sync(() => new Date().toISOString());
+      return { scope: secretScope(news), name: news.name, updatedAt };
     }),
     delete: Effect.fn(function* ({ olds }) {
       const client = yield* ForgejoCredentials;

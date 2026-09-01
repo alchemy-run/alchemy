@@ -118,7 +118,7 @@ export const Webhook = Resource<Webhook>("Forgejo.Webhook");
 interface ApiHook {
   readonly id: number;
   readonly url: string;
-  readonly updated_at: string;
+  readonly updated_at?: string;
   readonly config?: Readonly<Record<string, string>>;
 }
 
@@ -128,7 +128,36 @@ const hooksPath = (props: Pick<WebhookProps, "owner" | "repository">) =>
 const attributesOf = (hook: ApiHook): WebhookAttributes => ({
   webhookId: hook.id,
   url: hook.config?.url ?? hook.url,
-  updatedAt: hook.updated_at ?? new Date().toISOString(),
+  updatedAt: hook.updated_at ?? "",
+});
+
+const urlOf = (hook: ApiHook): string => hook.config?.url ?? hook.url;
+
+/**
+ * Locate the live hook, by ID when one is already known and otherwise by
+ * delivery URL within the repository.
+ *
+ * Forgejo happily accepts several hooks pointing at the same URL, so creating
+ * unconditionally would turn a create whose state write failed into a
+ * duplicate on every retry. Matching the URL adopts the hook that is already
+ * there instead.
+ */
+const observe = Effect.fn(function* (
+  props: Pick<WebhookProps, "owner" | "repository" | "url">,
+  webhookId: number | undefined,
+) {
+  const client = yield* ForgejoCredentials;
+  if (webhookId !== undefined) {
+    const byId = yield* optional(
+      client.request<ApiHook>("GET", `${hooksPath(props)}/${webhookId}`),
+    );
+    if (byId !== undefined) return byId;
+  }
+  const hooks = yield* ignoreInaccessible(
+    paginate<ApiHook>(client, hooksPath(props)),
+    [] as readonly ApiHook[],
+  );
+  return hooks.find((hook) => urlOf(hook) === (props.url as string));
 });
 
 const bodyOf = (props: WebhookProps) => ({
@@ -186,25 +215,15 @@ export const WebhookProvider = () =>
       return hooks.flat().map(attributesOf);
     }),
     read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return undefined;
-      const client = yield* ForgejoCredentials;
-      const observed = yield* optional(
-        client.request<ApiHook>(
-          "GET",
-          `${hooksPath(olds)}/${output.webhookId}`,
-        ),
-      );
+      const observed = yield* observe(olds, output?.webhookId);
       return observed === undefined ? undefined : attributesOf(observed);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const client = yield* ForgejoCredentials;
       const path = hooksPath(news);
-      const observed =
-        output?.webhookId === undefined
-          ? undefined
-          : yield* optional(
-              client.request<ApiHook>("GET", `${path}/${output.webhookId}`),
-            );
+      // Observe: live state decides create-vs-update, so adoption and a
+      // re-run after a failed state write both converge onto one hook.
+      const observed = yield* observe(news, output?.webhookId);
 
       const hook = yield* client.request<ApiHook>(
         observed === undefined ? "POST" : "PATCH",
@@ -214,6 +233,7 @@ export const WebhookProvider = () =>
       return attributesOf(hook);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
+      if (output === undefined) return;
       const client = yield* ForgejoCredentials;
       yield* optional(
         client.request<void>(

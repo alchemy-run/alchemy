@@ -25,6 +25,7 @@ let repository: Record<string, unknown> | undefined;
 let variable: string | undefined;
 let secret: string | undefined;
 let webhook: Record<string, unknown> | undefined;
+let topics: string[] = [];
 
 const record = (request: HttpClientRequest.HttpClientRequest) => {
   const body =
@@ -82,11 +83,20 @@ const route = (request: HttpClientRequest.HttpClientRequest): Response => {
     return Response.json(repository, { status: 201 });
   }
 
-  if (
-    request.method === "PUT" &&
-    url.pathname === "/api/v1/repos/alice/alchemy/topics"
-  ) {
-    return new Response(null, { status: 204 });
+  if (url.pathname === "/api/v1/repos/alice/alchemy/topics") {
+    if (request.method === "GET") {
+      return Response.json({ topics });
+    }
+    if (request.method === "PUT") {
+      topics = [...(body as { topics: string[] }).topics];
+      return new Response(null, { status: 204 });
+    }
+  }
+
+  if (url.pathname === "/api/v1/repositories/7") {
+    return repository === undefined
+      ? new Response("not found", { status: 404 })
+      : Response.json(repository);
   }
 
   const variablePath =
@@ -121,6 +131,9 @@ const route = (request: HttpClientRequest.HttpClientRequest): Response => {
   }
 
   const hooksPath = "/api/v1/repos/alice/alchemy/hooks";
+  if (url.pathname === hooksPath && request.method === "GET") {
+    return Response.json(webhook === undefined ? [] : [webhook]);
+  }
   if (url.pathname === hooksPath && request.method === "POST") {
     webhook = {
       id: 11,
@@ -161,6 +174,7 @@ const httpClient = Layer.succeed(
 const reset = () => {
   requests.length = 0;
   repository = undefined;
+  topics = [];
   variable = undefined;
   secret = undefined;
   webhook = undefined;
@@ -239,7 +253,10 @@ test.provider("uses the Forgejo repository create and edit schemas", (stack) =>
       archived: false,
     });
     expect(
-      requests.find(({ pathname }) => pathname.endsWith("/topics"))?.body,
+      requests.find(
+        ({ method, pathname }) =>
+          method === "PUT" && pathname.endsWith("/topics"),
+      )?.body,
     ).toEqual({
       topics: ["infrastructure", "forgejo"],
     });

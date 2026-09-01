@@ -229,6 +229,18 @@ interface ApiRepository {
   readonly created_at: string;
   readonly updated_at: string;
   readonly owner: { readonly login: string };
+  readonly description?: string;
+  readonly website?: string;
+  readonly private?: boolean;
+  readonly has_issues?: boolean;
+  readonly has_projects?: boolean;
+  readonly has_wiki?: boolean;
+  readonly has_pull_requests?: boolean;
+  readonly has_releases?: boolean;
+  readonly has_packages?: boolean;
+  readonly has_actions?: boolean;
+  readonly archived?: boolean;
+  readonly template?: boolean;
 }
 
 interface ApiUser {
@@ -244,6 +256,59 @@ const observe = Effect.fn(function* (owner: string, name: string) {
     client.request<ApiRepository>("GET", pathFor(owner, name)),
   );
 });
+
+/**
+ * Look the repository up by its stable numeric ID.
+ *
+ * A rename whose state persistence failed leaves the previously-deployed name
+ * stale, so any lookup keyed on that name reports the repository as missing —
+ * which would silently re-create it on reconcile and leak it on delete. The
+ * numeric ID survives renames, so it is the identifier to prefer whenever one
+ * is known.
+ */
+const observeById = Effect.fn(function* (repoId: number) {
+  const client = yield* ForgejoCredentials;
+  return yield* optional(
+    client.request<ApiRepository>("GET", `/repositories/${repoId}`),
+  );
+});
+
+/**
+ * Settings the `PATCH` endpoint manages. An omitted prop is left alone rather
+ * than reset, so `undefined` entries are dropped from the comparison too.
+ */
+const settingsOf = (props: RepositoryProps) => ({
+  name: props.name,
+  description: props.description,
+  website: props.website,
+  private: props.private,
+  has_issues: props.hasIssues,
+  has_projects: props.hasProjects,
+  has_wiki: props.hasWiki,
+  has_pull_requests: props.hasPullRequests,
+  has_releases: props.hasReleases,
+  has_packages: props.hasPackages,
+  has_actions: props.hasActions,
+  archived: props.archived,
+  default_branch: props.defaultBranch,
+  template: props.template,
+});
+
+/**
+ * Whether the observed repository already satisfies every managed setting.
+ *
+ * Forgejo rejects edits to an archived repository, so re-issuing an unchanged
+ * `PATCH` on every deploy would make `archived: true` a one-way trap.
+ */
+const settingsMatch = (
+  observed: ApiRepository,
+  desired: ReturnType<typeof settingsOf>,
+): boolean => {
+  const live = observed as unknown as Record<string, unknown>;
+  return Object.entries(desired).every(
+    ([key, value]) => value === undefined || live[key] === value,
+  );
+};
 
 const toAttributes = (repository: ApiRepository): RepositoryAttributes => ({
   repoId: repository.id,
@@ -278,15 +343,28 @@ export const RepositoryProvider = () =>
       );
       return repositories.map(toAttributes);
     }),
-    read: Effect.fn(function* ({ olds }) {
+    read: Effect.fn(function* ({ olds, output }) {
+      // Prefer the numeric ID: `olds.name` goes stale the moment a rename's
+      // state write fails, and a name lookup would then report the
+      // repository as missing and re-create it.
+      if (output !== undefined) {
+        const byId = yield* observeById(output.repoId);
+        return byId === undefined ? undefined : toAttributes(byId);
+      }
       const repository = yield* observe(olds.owner, olds.name);
       return repository === undefined ? undefined : toAttributes(repository);
     }),
-    reconcile: Effect.fn(function* ({ news, olds }) {
+    reconcile: Effect.fn(function* ({ news, olds, output }) {
       const client = yield* ForgejoCredentials;
-      // Observe under the previously-deployed name so an in-place rename is
-      // seen as the same repository rather than a missing one.
-      let observed = yield* observe(news.owner, olds?.name ?? news.name);
+      // Observe by the numeric ID when one is known, so a rename survives
+      // even if the state write that recorded it did not. Otherwise fall
+      // back to the previously-deployed name, which is what lets an
+      // existing repository be adopted.
+      let observed =
+        output === undefined ? undefined : yield* observeById(output.repoId);
+      if (observed === undefined) {
+        observed = yield* observe(news.owner, olds?.name ?? news.name);
+      }
 
       if (observed === undefined) {
         const current = yield* client.request<ApiUser>("GET", "/user");
@@ -320,44 +398,51 @@ export const RepositoryProvider = () =>
           );
       }
 
-      const updated = yield* client.request<ApiRepository>(
-        "PATCH",
-        pathFor(news.owner, observed.name),
-        {
-          body: {
-            name: news.name,
-            description: news.description,
-            website: news.website,
-            private: news.private,
-            has_issues: news.hasIssues,
-            has_projects: news.hasProjects,
-            has_wiki: news.hasWiki,
-            has_pull_requests: news.hasPullRequests,
-            has_releases: news.hasReleases,
-            has_packages: news.hasPackages,
-            has_actions: news.hasActions,
-            archived: news.archived,
-            default_branch: news.defaultBranch,
-            template: news.template,
-          },
-        },
-      );
+      // Sync settings against what was observed, not against `olds`, and
+      // skip the call entirely when the live repository already matches.
+      const desired = settingsOf(news);
+      const updated = settingsMatch(observed, desired)
+        ? observed
+        : yield* client.request<ApiRepository>(
+            "PATCH",
+            pathFor(observed.owner.login, observed.name),
+            { body: desired },
+          );
 
       if (news.topics !== undefined) {
-        yield* client.request<void>(
-          "PUT",
-          `${pathFor(news.owner, news.name)}/topics`,
-          {
+        const topicsPath = `${pathFor(updated.owner.login, updated.name)}/topics`;
+        const live = yield* client.request<{
+          readonly topics: readonly string[] | null;
+        }>("GET", topicsPath);
+        const observedTopics = [...(live?.topics ?? [])].sort();
+        const desiredTopics = [...news.topics].sort();
+        const matches =
+          observedTopics.length === desiredTopics.length &&
+          observedTopics.every(
+            (topic, index) => topic === desiredTopics[index],
+          );
+        if (!matches) {
+          yield* client.request<void>("PUT", topicsPath, {
             body: { topics: [...news.topics] },
-          },
-        );
+          });
+        }
       }
       return toAttributes(updated);
     }),
-    delete: Effect.fn(function* ({ olds }) {
+    delete: Effect.fn(function* ({ olds, output }) {
       const client = yield* ForgejoCredentials;
+      // Resolve the live name from the numeric ID first. Deleting by a stale
+      // `olds.name` 404s, and `optional` swallows that as success — the
+      // state row would be dropped while the repository lived on.
+      const live =
+        output?.repoId === undefined
+          ? undefined
+          : yield* observeById(output.repoId);
       yield* optional(
-        client.request<void>("DELETE", pathFor(olds.owner, olds.name)),
+        client.request<void>(
+          "DELETE",
+          pathFor(live?.owner.login ?? olds.owner, live?.name ?? olds.name),
+        ),
       );
     }),
   });

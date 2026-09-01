@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
+import { liftRedacted } from "../Util/redacted.ts";
 import { Secret } from "./Secret.ts";
 
 /** Properties for creating multiple Forgejo Actions secrets. */
@@ -46,10 +47,9 @@ export const Secrets = Effect.fn(function* (props: SecretsProps) {
         owner: props.owner,
         repository: props.repository,
         name,
-        value:
-          typeof value === "string"
-            ? Redacted.make(value)
-            : (value as Redacted.Redacted<string>),
+        // Lift through lazy inputs so the inner string is wrapped after the
+        // engine resolves it — see `liftRedacted`.
+        value: liftRedacted(value),
       }),
     { concurrency: "unbounded" },
   );
