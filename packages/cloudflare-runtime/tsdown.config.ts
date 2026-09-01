@@ -70,7 +70,8 @@ export default defineConfig([
     "!src/core/internal/shared.worker.ts",
     "!src/core/**/R2Bucket.worker.ts",
   ]),
-  // The R2 worker uses `node:crypto` and runs with `nodejs_compat`. Don't
+  // The R2 worker uses `node:crypto`; the 2026-08-31 date enables Node.js
+  // compatibility without a redundant flag. Don't
   // clean the shared `dist/workers` directory, which the previous config
   // already populated. The entry is named explicitly to keep the output at
   // the path `worker:` imports resolve to.
@@ -79,7 +80,7 @@ export default defineConfig([
       "bindings/r2-bucket/R2Bucket.worker":
         "src/core/bindings/r2-bucket/R2Bucket.worker.ts",
     },
-    { compatibilityFlags: ["nodejs_compat"], clean: false },
+    { clean: false },
   ),
   {
     cwd: ".",

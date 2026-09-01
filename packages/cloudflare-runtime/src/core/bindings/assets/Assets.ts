@@ -315,7 +315,7 @@ export const AssetsLive = Layer.effect(
               name: "assets:worker",
               worker: {
                 compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
-                compatibilityFlags: ["nodejs_compat"],
+                // Node.js compatibility is default-on for the internal date.
                 bindings: [
                   {
                     name: "ASSETS_KV_NAMESPACE",
@@ -341,7 +341,8 @@ export const AssetsLive = Layer.effect(
               name: "assets:router",
               worker: {
                 compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
-                compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
+                // Keep the intentional v2 opt-out; the date supplies v1.
+                compatibilityFlags: ["no_nodejs_compat_v2"],
                 bindings: [
                   {
                     name: "ASSET_WORKER",

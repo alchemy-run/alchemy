@@ -33,7 +33,7 @@ export interface EdgeSessionOptions {
   readonly files: ReadonlyArray<File>;
   /** Remote bindings attached to the preview worker. */
   readonly bindings: ReadonlyArray<EdgeBinding>;
-  /** @default "2025-04-28" */
+  /** @default "2026-08-31" */
   readonly compatibilityDate?: string;
 }
 
@@ -47,7 +47,9 @@ export interface EdgeSessionHandle {
   readonly headers: Record<string, string>;
 }
 
-const DEFAULT_COMPATIBILITY_DATE = "2025-04-28";
+// Keep previews aligned with the vendored workerd runtime. This date enables
+// Node.js compatibility by default without a compatibility flag.
+const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
 const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>, message: string) =>
   effect.pipe(

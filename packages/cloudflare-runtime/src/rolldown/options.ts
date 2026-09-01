@@ -15,7 +15,7 @@ export interface BasePluginOptions {
    * @default []
    * @example
    * ```ts
-   * cloudflare({ compatibilityDate: "2026-04-01", compatibilityFlags: ["nodejs_compat"] });
+   * cloudflare({ compatibilityDate: "2026-08-31" });
    * ```
    */
   compatibilityFlags?: Array<string>;

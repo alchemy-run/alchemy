@@ -106,7 +106,8 @@ export const R2BucketLive = Layer.effect(
               worker: {
                 compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
                 // `node:crypto` is used to synchronously compute multipart etags
-                compatibilityFlags: ["nodejs_compat"],
+                // Node.js compatibility is default-on for the 2026-08-31
+                // internal compatibility date.
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(R2BucketWorker.worker),
                 ),

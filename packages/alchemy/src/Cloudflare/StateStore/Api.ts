@@ -105,8 +105,8 @@ export default Worker(
     main: import.meta.url,
     workersDev: true,
     compatibility: {
-      flags: ["nodejs_compat"],
-      date: "2026-03-17",
+      // Node.js compatibility is default-on for this date.
+      date: "2026-08-31",
     },
   },
   Effect.gen(function* () {

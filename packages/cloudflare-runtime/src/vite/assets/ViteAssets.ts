@@ -78,7 +78,8 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                 name: "assets:worker",
                 worker: {
                   compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
-                  compatibilityFlags: ["nodejs_compat"],
+                  // Node.js compatibility is supplied by the 2026-08-31
+                  // internal compatibility date.
                   bindings: [
                     {
                       name: "CONFIG",
@@ -108,7 +109,9 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                 name: "assets:router",
                 worker: {
                   compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
-                  compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
+                  // The date supplies nodejs_compat; this worker deliberately
+                  // retains only its v2 opt-out.
+                  compatibilityFlags: ["no_nodejs_compat_v2"],
                   bindings: [
                     {
                       name: "ASSET_WORKER",

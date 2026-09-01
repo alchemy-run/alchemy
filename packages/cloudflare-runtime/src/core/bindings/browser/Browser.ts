@@ -174,8 +174,14 @@ export const BrowserLive = Layer.effect(
             const browserService: WorkerdConfig.Service = {
               name: SERVICE_BROWSER,
               worker: {
-                // Stay pre-2026-04-07: CDP proxy hangs with auto-reply-to-close.
-                compatibilityDate: "2025-01-01",
+                // Miniflare avoids newer compatibility behavior wholesale by
+                // pinning its browser service to 2025-05-01 with nodejs_compat.
+                // Alchemy can adopt the current date and narrowly opt out of
+                // websocket_standard_binary_type: its Blob-default behavior,
+                // introduced on 2026-03-17, stops cross-service CDP WebSockets
+                // from delivering binary frames to the proxy.
+                compatibilityDate: "2026-08-31",
+                compatibilityFlags: ["no_websocket_standard_binary_type"],
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(BrowserWorker.worker),
                 ),
