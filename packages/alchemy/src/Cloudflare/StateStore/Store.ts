@@ -6,10 +6,10 @@ import type {
   ReplacedResourceState,
   ResourceState,
 } from "../../State/ResourceState.ts";
-import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import * as EntryCodec from "./EntryCodec.ts";
 import { EncryptionKey } from "./Token.ts";
 
 export default class Store extends DurableObject<Store>()(
@@ -27,56 +27,22 @@ export default class Store extends DurableObject<Store>()(
         .get()
         .pipe(Effect.map(Redacted.value), Effect.orDie);
       const cryptoKey = yield* Effect.tryPromise(() =>
-        crypto.subtle.importKey(
-          "raw",
-          Buffer.from(keyHex, "hex"),
-          { name: "AES-CTR" },
-          false,
-          ["encrypt", "decrypt"],
-        ),
+        EntryCodec.importEntryKey(keyHex),
       ).pipe(Effect.orDie);
 
       const encryptValue = (value: unknown) =>
-        Effect.tryPromise(async () => {
-          const plaintext = new TextEncoder().encode(
-            JSON.stringify(encodeState(value)),
-          );
-          const counter = crypto.getRandomValues(allocBytes(NONCE_BYTES));
-          const ct = new Uint8Array(
-            await crypto.subtle.encrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              plaintext,
-            ),
-          );
-          // Frame as a single base64 string: nonce || ciphertext.
-          return Buffer.concat([counter, ct]).toString("base64");
-        }).pipe(Effect.orDie);
+        Effect.tryPromise(() => EntryCodec.encryptEntry(cryptoKey, value)).pipe(
+          Effect.orDie,
+        );
 
+      // Unreadable entries (wrong key, corrupt frame) resolve `undefined`
+      // inside the codec — the promise never rejects for bad data, so
+      // `orDie` here only covers genuine runtime faults. See
+      // `EntryCodec.decryptEntry` for why.
       const decryptEntry = (entry: string) =>
-        Effect.tryPromise(async () => {
-          const framed = Buffer.from(entry, "base64");
-          const counter = framed.subarray(0, NONCE_BYTES);
-          const ciphertext = framed.subarray(NONCE_BYTES);
-          try {
-            const plaintext = await crypto.subtle.decrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              ciphertext,
-            );
-            return JSON.parse(new TextDecoder().decode(plaintext)) as ResourceState;
-          } catch (error) {
-            // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
-            // AES-CTR with the wrong key can produce random bytes rather than a Web Crypto failure,
-            // so JSON decode errors are treated as unreadable old entries too.
-            // The engine should reconcile, hopefully, but users may lose some data
-            console.error(
-              "Error decrypting or decoding entry. Returning undefined instead.",
-              error,
-            );
-            return undefined;
-          }
-        }).pipe(Effect.orDie);
+        Effect.tryPromise(() =>
+          EntryCodec.decryptEntry<ResourceState>(cryptoKey, entry),
+        ).pipe(Effect.orDie);
 
       return {
         // -- Root DO methods -----------------------------------------
@@ -275,9 +241,6 @@ const STACK_OUTPUT_PREFIX = `o${SEP}`;
 /** Key prefix for stack-index entries in the root DO. */
 const STACK_INDEX_PREFIX = "s:";
 
-/** AES-CTR counter block length. */
-const NONCE_BYTES = 16;
-
 /** Build the resource key inside a *stack DO*. */
 const resourceKey = (stage: string, fqn: string) =>
   `${RESOURCE_PREFIX}${stage}${SEP}${fqn}`;
@@ -301,11 +264,3 @@ const parseResourceKey = (
   if (sep < 0) return undefined;
   return { stage: rest.slice(0, sep), fqn: rest.slice(sep + 1) };
 };
-
-/**
- * Allocate a `Uint8Array` over a fresh `ArrayBuffer` (not shared) so
- * the resulting buffer satisfies Web Crypto's `BufferSource` type
- * constraint under strict DOM typings.
- */
-const allocBytes = (size: number): Uint8Array<ArrayBuffer> =>
-  new Uint8Array(new ArrayBuffer(size));
