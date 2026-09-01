@@ -373,6 +373,19 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * ) {}
  * ```
  *
+ * ### Local Docker context
+ * `context` is a directory Railway builds with `up`. Mutually exclusive
+ * with `image` (without `main`) and `repo`. Docker ignore files apply.
+ *
+ * **Example:** Upload a local Dockerfile
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   context: "./api",
+ *   port: 80,
+ * });
+ * ```
+ *
  * ### The public URL
  * Yield the Service in the Stack. `api.url` is
  * `https://{name}.up.railway.app`.
