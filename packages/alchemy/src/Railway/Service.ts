@@ -137,15 +137,8 @@ export interface ServiceProps extends PlatformProps {
    */
   buildCommand?: string;
   /**
-   * Command Railway runs after it builds the image and before it starts the
-   * new deployment. Use this for release work such as a database migration,
-   * not work required on every process restart.
-   *
-   * Railway runs the command in a separate container with the service
-   * environment and private-network access. Volumes are not mounted,
-   * filesystem changes are not persisted, and a failed command is not retried:
-   * the deployment stops. Pass `null` to clear the setting. Omit the property
-   * to leave the current Railway setting unchanged.
+   * Command Railway runs after build and before starting the deployment.
+   * Pass `null` to clear it; omit it to leave the setting unchanged.
    *
    * @see https://docs.railway.com/deployments/pre-deploy-command
    */
