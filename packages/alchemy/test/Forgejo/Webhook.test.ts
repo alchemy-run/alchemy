@@ -15,6 +15,8 @@ interface StoredHook {
   readonly id: number;
   config: Record<string, string>;
   events: string[];
+  active: boolean;
+  branch_filter: string;
 }
 
 const hooks = new Map<number, StoredHook>();
@@ -32,6 +34,10 @@ const payload = (hook: StoredHook) => ({
   updated_at: "2026-01-02T00:00:00Z",
   config: hook.config,
   events: hook.events,
+  // Forgejo reports both on every hook it lists, `branch_filter` as an empty
+  // string when unset — verified against 16.0.3.
+  active: hook.active,
+  branch_filter: hook.branch_filter,
 });
 
 const server = mockForgejo((request) => {
@@ -46,6 +52,8 @@ const server = mockForgejo((request) => {
         id: nextId++,
         config: { ...(fields?.config as Record<string, string>) },
         events: [...((fields?.events as string[]) ?? [])],
+        active: (fields?.active as boolean | undefined) ?? true,
+        branch_filter: (fields?.branch_filter as string | undefined) ?? "",
       };
       hooks.set(hook.id, hook);
       return json(payload(hook), 201);
@@ -60,6 +68,9 @@ const server = mockForgejo((request) => {
     if (method === "PATCH") {
       hook.config = { ...hook.config, ...(fields?.config as object) };
       hook.events = [...((fields?.events as string[]) ?? hook.events)];
+      hook.active = (fields?.active as boolean | undefined) ?? hook.active;
+      hook.branch_filter =
+        (fields?.branch_filter as string | undefined) ?? hook.branch_filter;
       return json(payload(hook));
     }
     if (method === "DELETE") {
@@ -92,6 +103,8 @@ test.provider(
         id: 1,
         config: { url: "https://deploy.example/hooks", content_type: "json" },
         events: ["push", "pull_request"],
+        active: true,
+        branch_filter: "",
       });
       nextId = 2;
 
@@ -141,6 +154,43 @@ test.provider(
       expect([...hooks.values()].map((hook) => hook.events).sort()).toEqual([
         ["pull_request"],
         ["push"],
+      ]);
+    }),
+);
+
+test.provider(
+  "keeps two hooks on one URL and event set apart when their config differs",
+  (stack) =>
+    Effect.gen(function* () {
+      reset();
+
+      // Forgejo 16.0.3 accepts both of these — same repository, same URL, same
+      // events, differing only in delivery config. Matching on URL and events
+      // alone would hand the second resource the first one's hook, leaving one
+      // live hook behind two state rows, each deploy undoing the other.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Webhook("Live", {
+            owner: "acme",
+            repository: "api",
+            url: "https://deploy.example/hooks",
+            events: ["push"],
+          });
+          yield* Webhook("Staged", {
+            owner: "acme",
+            repository: "api",
+            url: "https://deploy.example/hooks",
+            events: ["push"],
+            active: false,
+            contentType: "form",
+          });
+        }),
+      );
+
+      expect(hooks.size).toBe(2);
+      expect([...hooks.values()].map((hook) => hook.active).sort()).toEqual([
+        false,
+        true,
       ]);
     }),
 );
