@@ -3,7 +3,13 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import {
+  json,
+  jsonList,
+  mockForgejo,
+  noContent,
+  status,
+} from "./support/mock.ts";
 
 interface StoredHook {
   readonly id: number;
@@ -28,11 +34,13 @@ const payload = (hook: StoredHook) => ({
   events: hook.events,
 });
 
-const server = mockForgejo(({ method, path, body }) => {
+const server = mockForgejo((request) => {
+  const { method, path, body } = request;
   const fields = body as Record<string, unknown> | undefined;
 
   if (path === "/repos/acme/api/hooks") {
-    if (method === "GET") return json([...hooks.values()].map(payload));
+    if (method === "GET")
+      return jsonList(request, [...hooks.values()].map(payload));
     if (method === "POST") {
       const hook: StoredHook = {
         id: nextId++,

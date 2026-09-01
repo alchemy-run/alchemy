@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
-import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
@@ -28,7 +27,7 @@ export interface WebhookProps {
   /**
    * Delivery URL.
    */
-  readonly url: Input<string>;
+  readonly url: string;
   /**
    * Forgejo event names to deliver.
    */
@@ -193,8 +192,7 @@ const observe = Effect.fn(function* (
     [] as readonly ApiHook[],
   );
   return hooks.find(
-    (hook) =>
-      urlOf(hook) === (props.url as string) && sameEvents(hook, props.events),
+    (hook) => urlOf(hook) === props.url && sameEvents(hook, props.events),
   );
 });
 
@@ -208,7 +206,7 @@ const bodyOf = (props: WebhookProps) => ({
       ? undefined
       : Redacted.value(props.authorizationHeader),
   config: {
-    url: props.url as string,
+    url: props.url,
     content_type: props.contentType ?? "json",
     ...(props.secret === undefined
       ? {}
@@ -221,7 +219,7 @@ const bodyOf = (props: WebhookProps) => ({
  */
 export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
-    stables: ["webhookId"],
+    stables: ["webhookId", "owner", "repository"],
     diff: ({ news, olds }) => {
       if (!isResolved(news) || olds === undefined) return Effect.void;
       return Effect.succeed(

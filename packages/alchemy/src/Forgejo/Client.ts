@@ -360,9 +360,11 @@ const MAX_PAGES = 100;
  * Walk every page of a Forgejo list endpoint.
  *
  * Forgejo paginates list responses (30 entries by default), so a single
- * request silently truncates enumeration. Paging stops at the first short
- * page; hitting {@link MAX_PAGES} fails with {@link ForgejoPaginationLimit}
- * rather than returning a list that only looks complete.
+ * request silently truncates enumeration. Paging stops at the first empty
+ * page — not the first short one, since the instance may clamp the page size
+ * below {@link PAGE_LIMIT}. Hitting {@link MAX_PAGES} fails with
+ * {@link ForgejoPaginationLimit} rather than returning a list that only looks
+ * complete.
  */
 export const paginate = <T>(
   client: ForgejoClient,
@@ -386,7 +388,13 @@ export const paginate = <T>(
         Effect.flatMap((items) => {
           const combined =
             items === undefined ? accumulated : [...accumulated, ...items];
-          if (items === undefined || items.length < PAGE_LIMIT) {
+          // Stop only on an empty page, never on a short one. Forgejo clamps
+          // the requested `limit` to the instance's `[api] MAX_RESPONSE_ITEMS`,
+          // so on a server whose administrator lowered that below PAGE_LIMIT
+          // every full page looks short — treating short as "last" would end
+          // enumeration after page one and silently report a partial list as
+          // complete.
+          if (items === undefined || items.length === 0) {
             return Effect.succeed(combined);
           }
           return page >= MAX_PAGES

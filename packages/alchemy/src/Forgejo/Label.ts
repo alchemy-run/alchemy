@@ -176,7 +176,7 @@ const observe = Effect.fn(function* (
  */
 export const LabelProvider = () =>
   Provider.succeed(Label, {
-    stables: ["labelId"],
+    stables: ["labelId", "owner", "repository"],
     diff: ({ news, olds }) =>
       Effect.succeed(
         isResolved(news) &&

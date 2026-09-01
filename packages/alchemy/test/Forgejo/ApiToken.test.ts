@@ -4,7 +4,13 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import {
+  json,
+  jsonList,
+  mockForgejo,
+  noContent,
+  status,
+} from "./support/mock.ts";
 
 interface StoredToken {
   readonly id: number;
@@ -25,7 +31,8 @@ const server = mockForgejo((request) => {
   if (match === null) return status(404, "not found");
 
   if (request.method === "GET") {
-    return json(
+    return jsonList(
+      request,
       [...tokens.values()].map(
         ({ id, name, scopes, token_last_eight, created_at }) => ({
           id,
