@@ -1,5 +1,6 @@
 import {
   ForgejoCredentials,
+  ForgejoDependencyViolation,
   ForgejoForbidden,
   ForgejoNotFound,
   ForgejoServerError,
@@ -130,6 +131,43 @@ describe("Forgejo client", () => {
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(ForgejoServerError);
       expect(result.failure).toMatchObject({ status: 502 });
+    }
+  });
+
+  test("maps a 5xx that is really a dependency violation to its own tag", async () => {
+    // Forgejo 16.0.3 refuses to delete an organization that still owns
+    // repositories with this 500 — there is no conflict status to key off, so
+    // the body is the only signal.
+    const server = mockForgejo(() =>
+      status(
+        500,
+        '{"message":"user still has ownership of repositories [uid: 16]"}',
+      ),
+    );
+
+    const result = await runResult(server.layer, (client) =>
+      client.request("DELETE", "/orgs/acme"),
+    );
+
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(ForgejoDependencyViolation);
+      expect(result.failure).toMatchObject({ status: 500 });
+    }
+  });
+
+  test("names the failed request in the error message", async () => {
+    // None of these errors carry a message field, so without an explicit
+    // getter a failed destroy reports a bare tag and nothing else.
+    const server = mockForgejo(() => status(500, "boom"));
+
+    const result = await runResult(server.layer, (client) =>
+      client.request("DELETE", "/orgs/acme"),
+    );
+
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure.message).toBe("DELETE /orgs/acme -> 500: boom");
     }
   });
 
