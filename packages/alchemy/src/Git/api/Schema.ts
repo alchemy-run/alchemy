@@ -362,7 +362,14 @@ export class PushStats extends Schema.Class<PushStats>("PushStats")({
   finalizeMs: Schema.Number,
   /** Everything the DO did for this push. */
   totalMs: Schema.Number,
-  /** Ingest CPU split by phase (ms): inflate, hash, delta, deflate, copy, sink. */
+  /**
+   * Ingest split by phase (ms): inflate, hash, delta, deflate, copy, sink.
+   * Meaningful as CPU only where the clock runs during synchronous work
+   * (local workerd); production workerd freezes `performance.now()` between
+   * awaits, so there only phases that yield to the event loop accumulate —
+   * which is itself diagnostic (an async inflate path shows up, a sync one
+   * reads 0).
+   */
   phases: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 }) {}
 

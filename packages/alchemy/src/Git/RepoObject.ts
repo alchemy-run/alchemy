@@ -361,7 +361,7 @@ export interface PushStatsData {
   readonly connectivityMs: number;
   readonly finalizeMs: number;
   readonly totalMs: number;
-  /** Ingest CPU split by phase (ms): inflate, hash, delta, deflate, copy, sink. */
+  /** Ingest split by phase (ms) — see the REST `PushStats.phases` caveat. */
   readonly phases?: Record<string, number> | undefined;
 }
 

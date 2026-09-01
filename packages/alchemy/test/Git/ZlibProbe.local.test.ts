@@ -28,7 +28,32 @@ test(
   Effect.gen(function* () {
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
-    const res = yield* client.get(url);
+    const res = yield* client.get(`${url}/?path=probe`);
+    for (const path of [
+      "processChunk",
+      "info",
+      "plain",
+      "stream",
+      "sha1",
+      "copy",
+      "jsloop",
+      "effect",
+      "deflate6",
+      "deflate1",
+    ]) {
+      const n = path.startsWith("deflate") ? 200 : 2000;
+      yield* client
+        .get(`${url}/?path=${path}&n=50`)
+        .pipe(Effect.flatMap((r) => r.json));
+      const t0 = performance.now();
+      const r = (yield* client
+        .get(`${url}/?path=${path}&n=${n}`)
+        .pipe(Effect.flatMap((r) => r.json))) as { ok: number; error?: string };
+      const ms = performance.now() - t0;
+      console.log(
+        `[zlib-local] ${path.padEnd(12)} ok ${r.ok}/${n} in ${ms.toFixed(0)}ms → ${(ms / n).toFixed(3)} ms/entry${r.error ? ` error: ${r.error}` : ""}`,
+      );
+    }
     const body = (yield* res.json) as {
       hasProcessChunk: boolean;
       info?: { outLen: number; bytesWritten: number; expectedConsumed: number };
