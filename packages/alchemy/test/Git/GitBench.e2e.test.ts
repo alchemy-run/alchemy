@@ -19,6 +19,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
@@ -365,8 +366,9 @@ test.skipIf(skipBench)(
       (_, ms) => `${(ms / 1000).toFixed(1)}s (${perSecond(pushes, ms)})`,
     );
 
-    // Distinct branches: the DO's push semaphore serializes ingest, so this
-    // measures the serialization floor rather than parallel speedup.
+    // Distinct branches: admission is by ingest MEMORY, not by count
+    // (DESIGN.md §2.1), so ordinary kilobyte-sized pushes to different
+    // branches should now overlap instead of queueing behind each other.
     const branches = 4 * SCALE;
     yield* mustSh(
       tmp,
@@ -718,6 +720,187 @@ test.skipIf(skipBench)(
     // And the repo still clones cleanly through the same path.
     yield* mustSh(tmp, `rm -rf verify && git clone -q '${repo.remote}' verify`);
     yield* mustSh(tmp, `cd verify && git fsck --strict`);
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 1 — push admission. The Repo DO bounds ingest by MEMORY, not
+// by push count, so a small push no longer waits out a large upload. Both
+// arms run in ONE case so the comparison is same-repo, same-minute.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: small-push latency alone vs. behind a large upload",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "admit");
+    const tmp = yield* tempDir;
+    const bigMiB = 12 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      printf 'seed\n' > seed.txt
+      git add -A && git commit -q -m seed
+      git push -q origin main
+      `,
+    );
+
+    /** A one-file push to its own branch — kilobytes of actual work. */
+    const smallPush = (n: number) =>
+      mustSh(
+        tmp,
+        `
+        cd work
+        git checkout -q -B "tiny${n}" main
+        printf 'tiny %s\n' ${n} > "tiny${n}.txt"
+        git add -A && git commit -q -m "tiny${n}"
+        git push -q origin "tiny${n}"
+        git checkout -q main
+        `,
+      );
+
+    // Uncontended baseline.
+    yield* smallPush(1);
+    yield* measure(
+      "small push, uncontended",
+      smallPush(2),
+      (_, ms) => `${ms.toFixed(0)} ms`,
+    );
+
+    // Now the same push while a large body is still uploading. Under
+    // count-based admission the small push waited for the whole upload;
+    // under a byte budget it only needs its own MiB.
+    yield* mustSh(
+      tmp,
+      `
+      cd work
+      git checkout -q -B heavy main
+      head -c ${bigMiB * 1024 * 1024} /dev/urandom > heavy.bin
+      git add -A && git commit -q -m heavy
+      git checkout -q main
+      `,
+    );
+    // Fork the heavy push so the measurement covers the SMALL push alone,
+    // not the pair — timing both together just reports the heavy one.
+    const heavy = yield* Effect.forkChild(
+      mustSh(tmp, `cd work && git push -q origin heavy`),
+    );
+    yield* measure(
+      `small push, while a ${bigMiB} MiB upload is in flight`,
+      smallPush(3),
+      (_, ms) => `${ms.toFixed(0)} ms`,
+    );
+    yield* Fiber.join(heavy);
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 2 — bundle staleness. A ref moving after the bundle was cut
+// used to drop every clone onto the dynamic closure walk; the bundle is now
+// spliced with a small delta pack instead. Fresh and stale are measured in
+// the same run against the same repo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: clone TPS against a FRESH vs a STALE bundle",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "stale");
+    const tmp = yield* tempDir;
+    const blobKiB = 512 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      head -c ${blobKiB * 1024} /dev/urandom | base64 > payload.txt
+      i=1; while [ $i -le 50 ]; do printf 'f %s\n' $i > "f$i.txt"; i=$((i+1)); done
+      git add -A && git commit -q -m payload
+      git push -q origin main
+      `,
+    );
+    yield* Effect.sleep("8 seconds"); // let the bundle land
+
+    const client = yield* HttpClient.HttpClient;
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const request = (head: string) =>
+      client.execute(
+        HttpClientRequest.post(`${url}/bench/stale.git/git-upload-pack`).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${repo.token}`,
+            "content-type": "application/x-git-upload-pack-request",
+          }),
+          HttpClientRequest.bodyText(
+            `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
+          ),
+        ),
+      );
+    const cloneAt = (head: string) =>
+      request(head).pipe(
+        Effect.flatMap((response) => response.arrayBuffer),
+        Effect.map((buffer) => buffer.byteLength),
+      );
+    /** Which plane answered — `do-bundle:bundle`, `…:spliced`, or none. */
+    const planeAt = (head: string) =>
+      request(head).pipe(
+        Effect.map(
+          (response) => response.headers["x-git-served-by"] ?? "dynamic",
+        ),
+      );
+
+    const N = 32 * SCALE;
+    const throughput = (sizes: ReadonlyArray<number>, ms: number) => {
+      const total = sizes.reduce((sum, bytes) => sum + bytes, 0);
+      return (
+        `${perSecond(sizes.length, ms)} clones, ` +
+        `${(total / 1024 / 1024 / (ms / 1000)).toFixed(1)} MiB/s`
+      );
+    };
+
+    const fresh = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
+    yield* cloneAt(fresh); // warm
+    const freshPlane = yield* planeAt(fresh);
+    results.push(`  fresh arm served by: ${freshPlane}`);
+    yield* measure(
+      `${N} clones, FRESH bundle, concurrency 32`,
+      Effect.all(
+        Array.from({ length: N }, () => cloneAt(fresh)),
+        { concurrency: 32 },
+      ),
+      throughput,
+    );
+
+    // Move main past the bundle and clone immediately: the bundle on disk
+    // no longer names this tip.
+    yield* mustSh(
+      tmp,
+      `
+      cd work
+      printf 'more\n' > more.txt
+      git add -A && git commit -q -m more
+      git push -q origin main
+      `,
+    );
+    const stale = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
+    const warmStale = yield* cloneAt(stale);
+    expect(warmStale).toBeGreaterThan(1024);
+    const stalePlane = yield* planeAt(stale);
+    results.push(`  stale arm served by: ${stalePlane}`);
+    yield* measure(
+      `${N} clones, STALE bundle (dynamic fallback), concurrency 32`,
+      Effect.all(
+        Array.from({ length: N }, () => cloneAt(stale)),
+        { concurrency: 32 },
+      ),
+      throughput,
+    );
   }).pipe(logLevel),
   { timeout: 900_000 },
 );

@@ -136,7 +136,7 @@ import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
 import { receiveWireBody } from "./store/IncomingBody.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
-import { Registry, REGISTRY_DO_NAME, ulid } from "./RegistryObject.ts";
+import { RegistryStore, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./store/Closure.ts";
 import {
   makeObjectStore,
@@ -209,8 +209,42 @@ export const MAX_CONFLICT_PATHS = 20;
 /** Agent string advertised on the wire. */
 export const GIT_AGENT = "git-service/1";
 
-/** How long a second push waits for the ingest semaphore before 503. */
+/** How long a push waits for ingest memory before answering 503. */
 export const PUSH_WAIT_TIMEOUT = "30 seconds";
+
+/**
+ * Memory the Repo DO lends to concurrent push ingests, in MiB — one
+ * permit per MiB (DESIGN.md §2.1).
+ *
+ * The semaphore exists for MEMORY, not correctness: a DO is
+ * single-threaded, but its input gate is only closed across *storage*
+ * awaits, and receive-pack awaits the network and blob storage — so two
+ * pushes genuinely interleave. Correctness across that interleave is
+ * already handled by data scoping (`staged_push = pushId`, and every
+ * read filtering `staged_push IS NULL`) plus a synchronous
+ * `transactionSync` finalize. What is left is that two concurrent
+ * 50 MiB buffers would exhaust the 128 MB isolate.
+ *
+ * Bounding the resource rather than the count is what lets pushes to
+ * different branches proceed together: a normal push is kilobytes and
+ * takes one permit, so it no longer queues behind a large one.
+ */
+export const PUSH_MEMORY_BUDGET_MB = 64;
+
+/**
+ * Permits a push must reserve: its buffered ceiling in MiB. A body
+ * larger than {@link MAX_PACK_BYTES} spills to blob storage instead of
+ * growing in memory, so that is the cap; an absent `content-length`
+ * (chunked upload) is charged the same worst case.
+ */
+export const pushPermitsFor = (contentLength: number | undefined): number => {
+  const bytes =
+    contentLength === undefined || !Number.isFinite(contentLength)
+      ? MAX_PACK_BYTES
+      : Math.min(Math.max(contentLength, 0), MAX_PACK_BYTES);
+  const mib = Math.ceil(bytes / (1024 * 1024));
+  return Math.max(1, Math.min(PUSH_MEMORY_BUDGET_MB, mib));
+};
 
 /** How long crashed push staging survives before the GC alarm reaps it. */
 export const STAGING_TTL_MS = 24 * 60 * 60 * 1000;
@@ -1098,16 +1132,30 @@ export const packStream = (
       return bytes;
     };
     const header = Stream.sync(() => tap(packHeader(entries.length)));
-    const body = Stream.fromIterable(entries).pipe(
-      Stream.flatMap((entry) =>
-        Stream.sync(() => tap(encodeTypeSize(entry.type, entry.size))).pipe(
-          Stream.concat(objects.readZData(entry.oid).pipe(Stream.map(tap))),
-        ),
-      ),
-    );
+    const body = packEntryStream(entries, objects).pipe(Stream.map(tap));
     const trailer = Stream.sync(() => sha.digest());
     return header.pipe(Stream.concat(body), Stream.concat(trailer));
   });
+
+/**
+ * The entry stream alone — no header, no trailer. Because entries are
+ * stored non-delta (`varint(type,size) + zdata`), entry streams from
+ * different sources concatenate into one valid pack under a rewritten
+ * header and a fresh trailer. That is what lets a clone be served as
+ * "bundle bytes + a small delta" (DESIGN.md §21.2), and it is the same
+ * property geometric pack merging relies on.
+ */
+export const packEntryStream = (
+  entries: ReadonlyArray<ManifestEntry>,
+  objects: ObjectSource,
+): Stream.Stream<Uint8Array, StoreError> =>
+  Stream.fromIterable(entries).pipe(
+    Stream.flatMap((entry) =>
+      Stream.sync(() => encodeTypeSize(entry.type, entry.size)).pipe(
+        Stream.concat(objects.readZData(entry.oid)),
+      ),
+    ),
+  );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pack ingest (DESIGN.md §3.6) — buffered v1, RandomAccess seam is the buffer
@@ -1853,14 +1901,14 @@ export const GitRepoLive = GitRepo.make(
     // The swappable auth block — same layer graph as the Worker (§3.2):
     // authorization runs here, where the actions' facts are parsed.
     const authService = yield* Auth;
-    const registry = yield* Registry;
+    const registry = yield* RegistryStore;
     const selfNamespace = yield* Cloudflare.DurableObjectScope;
 
     return Effect.gen(function* () {
       // ── Inner init: per-instance construction (runtime only) ────────────
       const sql = makeSqlClient(state);
       yield* initRepoSchema(sql).pipe(Effect.orDie);
-      const pushSemaphore = yield* Semaphore.make(1);
+      const pushSemaphore = yield* Semaphore.make(PUSH_MEMORY_BUDGET_MB);
 
       // ── config helpers ───────────────────────────────────────────────────
       const getConfig = (key: string) =>
@@ -3089,8 +3137,17 @@ export const GitRepoLive = GitRepo.make(
               return respond("ok", allNg("repository is read-only"));
             }
 
-            // One push at a time (DESIGN.md §2.1): wait ≤ 30 s for the permit.
-            const permit = yield* Semaphore.take(pushSemaphore, 1).pipe(
+            // Admission by ingest memory, not by count (DESIGN.md §2.1):
+            // small pushes to different branches run concurrently; only
+            // genuinely large bodies contend. Waits ≤ 30 s, then 503.
+            const declared = Number.parseInt(
+              request.headers["content-length"] ?? "",
+              10,
+            );
+            const permits = pushPermitsFor(
+              Number.isNaN(declared) ? undefined : declared,
+            );
+            const permit = yield* Semaphore.take(pushSemaphore, permits).pipe(
               Effect.timeoutOption(PUSH_WAIT_TIMEOUT),
             );
             if (Option.isNone(permit)) {
@@ -3228,7 +3285,7 @@ export const GitRepoLive = GitRepo.make(
               );
 
               return respond("ok", results);
-            }).pipe(Effect.ensuring(Semaphore.release(pushSemaphore, 1)));
+            }).pipe(Effect.ensuring(Semaphore.release(pushSemaphore, permits)));
           }).pipe(
             // Single owner of the spilled body: whatever path exits, the
             // parked R2 object is dropped after ingest (or non-ingest).
@@ -3324,7 +3381,6 @@ export const GitRepoLive = GitRepo.make(
        */
       const syncSummary = Effect.fn(function* (meta: RepoMetaData) {
         yield* registry
-          .getByName(REGISTRY_DO_NAME)
           .updateSummary(meta.repoId, {
             defaultBranch: meta.defaultBranch,
             readOnly: meta.readOnly,
@@ -3585,7 +3641,7 @@ export const GitRepoLive = GitRepo.make(
       const runPurgeAlarm = Effect.gen(function* () {
         const meta = yield* readMeta;
         if (meta === undefined) return true;
-        const registryStub = registry.getByName(REGISTRY_DO_NAME);
+        const registryStub = registry;
         const outcome = yield* runPurgeJob({
           repoId: meta.repoId,
           blobs,

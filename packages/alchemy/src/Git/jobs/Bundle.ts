@@ -190,14 +190,50 @@ export const bundleCovers = (
     readonly clientShallow: ReadonlyArray<Oid>;
   },
 ): boolean => {
+  const uncovered = bundleUncovered(bundle, request);
+  return uncovered !== undefined && uncovered.length === 0;
+};
+
+/**
+ * How much of a request this bundle can serve (DESIGN.md §21.2).
+ *
+ * - `undefined` — unusable: the request negotiates (haves) or is
+ *   shallow. Serve dynamically.
+ * - `[]` — the bundle covers every want: stream its bytes verbatim.
+ * - non-empty — the wants the bundle does not name directly. Their
+ *   closure, computed with the bundle's refs as haves, is a delta pack
+ *   the Worker concatenates onto the bundle.
+ *
+ * A want the bundle does not *name* is usually still mostly IN it — the
+ * ordinary case is `main` having moved a few commits past the snapshot,
+ * so the bundle holds all but the new objects. Union completeness holds
+ * regardless: the bundle carries closure(bundle refs), the delta carries
+ * closure(wants) minus that, so together they cover closure(wants) with
+ * no duplicate entries. Only the *size* of the delta varies, and the
+ * caller drops the splice when it stops being a saving.
+ *
+ * The partial case is what keeps the fast path alive on a repo that is
+ * being pushed to: previously ANY ref moving after the bundle was cut
+ * made a clone's want-set uncovered, dropping every clone back onto the
+ * Durable Object until the next full re-cut.
+ */
+export const bundleUncovered = (
+  bundle: BundleInfo,
+  request: {
+    readonly wants: ReadonlyArray<Oid>;
+    readonly haves: ReadonlyArray<Oid>;
+    readonly depth?: number | undefined;
+    readonly clientShallow: ReadonlyArray<Oid>;
+  },
+): ReadonlyArray<Oid> | undefined => {
   if (
     request.haves.length > 0 ||
     request.depth !== undefined ||
     request.clientShallow.length > 0 ||
     request.wants.length === 0
   ) {
-    return false;
+    return undefined;
   }
   const covered = new Set(bundle.refs.map((ref) => ref.oid));
-  return request.wants.every((want) => covered.has(want));
+  return request.wants.filter((want) => !covered.has(want));
 };

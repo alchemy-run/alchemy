@@ -20,7 +20,6 @@ export {
   ADMIN_TOKEN_CONFIG_KEY,
   GIT_WORKER_OPTIONS,
   ReposDurableObject,
-  RegistryDurableObject,
   Server,
   ServerLive,
 } from "./Server.ts";
@@ -34,10 +33,13 @@ export {
   type BlobStoreShape,
 } from "./BlobStore.ts";
 export { BlobStoreS3, type BlobStoreS3Options } from "./BlobStoreS3.ts";
+export { RegistryD1 } from "./RegistryD1.ts";
 export { GitRepo, GitRepoLive, MAX_PACK_BYTES } from "./RepoObject.ts";
 export {
   Registry,
+  RegistryDurableObject,
   RegistryLive,
+  RegistryStore,
   REGISTRY_DO_NAME,
   RESERVED_OWNERS,
 } from "./RegistryObject.ts";

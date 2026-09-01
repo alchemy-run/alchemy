@@ -1147,6 +1147,85 @@ test(
   { timeout: 120_000 },
 );
 
+test(
+  "clone bundles: a stale bundle falls back cleanly to the dynamic path",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* createRepo(url, "acme", "bundle-splice");
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+
+    yield* mustGit(
+      tmp,
+      "-c",
+      "init.defaultBranch=main",
+      "clone",
+      repo.remote,
+      "work",
+    );
+    const work = path.join(tmp, "work");
+    yield* fs.writeFileString(path.join(work, "f.txt"), "hello\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c1");
+    yield* mustGit(work, "push", "origin", "main");
+
+    // Let the bundle land for THIS ref snapshot...
+    yield* Effect.sleep("4 seconds");
+
+    // ...then move main past it, so every clone wants an oid the bundle
+    // does not carry.
+    yield* fs.writeFileString(path.join(work, "g.txt"), "world\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c2");
+    yield* fs.writeFileString(path.join(work, "h.txt"), "again\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c3");
+    yield* mustGit(work, "push", "origin", "main");
+    const head = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
+
+    // Raw wire request, immediately — before the bundle job re-cuts, so
+    // the bundle on disk is definitively stale.
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.execute(
+      HttpClientRequest.post(
+        `${url}/acme/bundle-splice.git/git-upload-pack`,
+      ).pipe(
+        HttpClientRequest.setHeaders({
+          authorization: `Bearer ${repo.token}`,
+          "content-type": "application/x-git-upload-pack-request",
+        }),
+        HttpClientRequest.bodyText(
+          `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
+        ),
+      ),
+    );
+    expect(response.status).toBe(200);
+    // A stale bundle is NOT used: serving it would need a true delta, and
+    // `computeClosure` deliberately does not subtract boundary trees (see
+    // Closure.ts "accepted fat"), so the walk is the honest answer here.
+    expect(response.headers["x-git-bundle"]).toBeUndefined();
+    const bytes = yield* response.arrayBuffer.pipe(
+      Effect.map((buffer) => new Uint8Array(buffer)),
+    );
+    expect(new TextDecoder().decode(bytes.subarray(0, 8))).toBe("0008NAK\n");
+    expect(new TextDecoder().decode(bytes.subarray(8, 12))).toBe("PACK");
+
+    // And the clone is still correct end to end through that path.
+    yield* mustGit(tmp, "clone", repo.remote, "spliced");
+    const spliced = path.join(tmp, "spliced");
+    yield* mustGit(spliced, "fsck", "--strict");
+    expect((yield* mustGit(spliced, "rev-parse", "HEAD")).stdout).toBe(head);
+    const logWork = (yield* mustGit(work, "log", "--format=%H %s")).stdout;
+    const logSpliced = (yield* mustGit(spliced, "log", "--format=%H %s"))
+      .stdout;
+    expect(logSpliced).toBe(logWork);
+  }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // (j) public repos — anonymous read access (GitHub model)
 // ═══════════════════════════════════════════════════════════════════════════

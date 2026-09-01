@@ -20,6 +20,8 @@
  * ```
  */
 import * as Cloudflare from "../Cloudflare/index.ts";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
@@ -212,7 +214,7 @@ export interface RegistryShape {
 // Implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-const toEntry = (row: RegistryRepoRow): RegistryEntry => ({
+export const toEntry = (row: RegistryRepoRow): RegistryEntry => ({
   owner: row.owner,
   name: row.name,
   repoId: row.repo_id,
@@ -228,9 +230,9 @@ const toEntry = (row: RegistryRepoRow): RegistryEntry => ({
 });
 
 /** Encodes/decodes the opaque list cursor: base64url of `owner\0name`. */
-const encodeCursor = (owner: string, name: string): string =>
+export const encodeCursor = (owner: string, name: string): string =>
   Buffer.from(`${owner}\0${name}`, "utf8").toString("base64url");
-const decodeCursor = (
+export const decodeCursor = (
   cursor: string,
 ): readonly [owner: string, name: string] | undefined => {
   try {
@@ -257,6 +259,33 @@ export class Registry extends Cloudflare.DurableObject<
   // RPC-boundary error revival (see `DurableObjectProps.errors`).
   errors: [RepoAlreadyExists, ValidationError, StoreError],
 }) {}
+
+/**
+ * `Git.RegistryStore` — the repo *index* as a swappable block: the
+ * `owner/name -> repoId` mapping, uniqueness, and listing.
+ *
+ * The rest of the service depends on this contract, never on a
+ * particular backend, so the index can be chosen at assembly:
+ *
+ * - {@link RegistryDurableObject} — one Durable Object. Zero extra
+ *   infrastructure, and the strongest consistency (a single-threaded
+ *   `transactionSync` makes create a true CAS). It is also one object
+ *   for the whole service, so reads funnel through a single thread in a
+ *   single region.
+ * - `Git.RegistryD1` — a D1 database. Reads scale out (D1 replicates
+ *   them) and `WHERE owner = ?` listing is what a relational store is
+ *   for; uniqueness comes from the `PRIMARY KEY (owner, name)` instead
+ *   of from single-threading.
+ *
+ * Both satisfy {@link RegistryShape} exactly, so swapping is one line in
+ * the layer graph.
+ *
+ * @binding
+ */
+export class RegistryStore extends Context.Service<
+  RegistryStore,
+  RegistryShape
+>()("alchemy/Git/RegistryStore") {}
 
 /**
  * The Registry DO implementation Layer. Provide on the hosting Worker's
@@ -458,5 +487,36 @@ export const RegistryLive = Registry.make(
     });
   }),
 );
+
+/**
+ * {@link RegistryStore} backed by the singleton Registry Durable Object —
+ * the default. Registers the DO implementation and resolves the store to
+ * its stub, so callers never name the instance.
+ *
+ * @layer
+ * @provides Git.RegistryStore
+ */
+export const RegistryDurableObject: Layer.Layer<RegistryStore> = Layer.effect(
+  RegistryStore,
+  Effect.gen(function* () {
+    const namespace = yield* Registry;
+    // `getByName` must stay LAZY: the layer is built during deploy
+    // planning as well as at runtime, and the namespace only resolves to
+    // something callable inside a request. Each method therefore takes
+    // the stub at call time, exactly as the hand-rolled `registryStub()`
+    // did before this contract existed.
+    const stub = () => namespace.getByName(REGISTRY_DO_NAME);
+    return {
+      createRepo: (input) => stub().createRepo(input),
+      resolve: (owner, name) => stub().resolve(owner, name),
+      list: (input) => stub().list(input),
+      recordFork: (parentRepoId) => stub().recordFork(parentRepoId),
+      bumpForkCount: (repoId, delta) => stub().bumpForkCount(repoId, delta),
+      markDeleted: (repoId) => stub().markDeleted(repoId),
+      removeRow: (repoId) => stub().removeRow(repoId),
+      updateSummary: (repoId, summary) => stub().updateSummary(repoId, summary),
+    } satisfies RegistryShape;
+  }),
+).pipe(Layer.provide(RegistryLive)) as never;
 
 export default RegistryLive;

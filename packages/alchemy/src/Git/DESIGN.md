@@ -1362,6 +1362,63 @@ Benchmarks worth stealing: sustained small-push throughput per repo
 (their 120–300/s number; ours is bounded by one DO — measure it), and
 read-scaling under clone storm with the DO-less head-object path.
 
+### §21.2 Push admission, and a bottleneck that wasn't
+
+**Push admission is bounded by memory, not by count.** The Repo DO's
+ingest semaphore existed for one reason (§2.1): two concurrent 50 MiB
+buffers would exhaust a 128 MB isolate. It is *not* a correctness
+device — a DO's input gate only closes across storage awaits, and
+receive-pack awaits the network and blob storage, so pushes interleave
+regardless; what makes that safe is `staged_push = pushId` scoping plus
+a synchronous `transactionSync` finalize. Bounding the count therefore
+made a kilobyte push wait out a 50 MiB upload for no reason. It now
+reserves permits by buffered ceiling (`min(content-length,
+MAX_PACK_BYTES)`, one permit per MiB, budget 64).
+
+| small push (same repo) | latency |
+| --- | --- |
+| uncontended | 737 ms |
+| while a 12 MiB upload is in flight | **802 ms** (+9%) |
+
+Under the old single permit the second push waited for the first to
+release, i.e. for the whole upload — by construction, not by measurement.
+
+**What this does NOT fix:** concurrent pushes to *different branches*
+still measure ~2.7/s, unchanged. Admission was never the ceiling there;
+the DO is one JavaScript thread, so each push's inflate/SHA-1/SQL work
+serializes whatever admission allows. Per-repo push throughput remains
+the sharding problem of Part III.
+
+**Stale clone bundles are not a bottleneck (measured, hypothesis
+withdrawn).** The concern was that any ref moving after a bundle was cut
+drops every clone onto a dynamic closure walk until the next re-cut.
+Measured in one run against one repo, with the serving plane recorded on
+`x-git-served-by` so neither arm can be mistaken for the other:
+
+| clones, concurrency 32 | served by | rate |
+| --- | --- | --- |
+| fresh bundle | `do-bundle:bundle` | 40.4/s |
+| stale bundle | `dynamic` | **35.9/s** |
+
+An 11% cost, not the ~2x the earlier cross-run comparison suggested —
+those "dynamic" figures came from requests carrying an unknown `have`,
+which forces a *negotiation* walk, a strictly more expensive path than a
+plain full clone with no usable bundle. Comparing across runs compared
+two different things.
+
+A bundle+delta splice was built and reverted. It is defeated by a
+deliberate v1 tradeoff in `store/Closure.ts`: boundary (common) commits'
+tree/blob closures are **not** subtracted, so
+`computeClosure(wants, haves = bundle refs)` returns a whole snapshot
+rather than a delta. The spliced pack measured exactly 2x the bundle
+(1.013 MiB vs 0.507 MiB) at 15.8 clones/s — worse than the dynamic path
+it replaced. Making it work needs one of: the bundle recording its own
+object set at cut time (`runBundleJob` already holds the manifest) so
+the delta is a set subtraction rather than a walk; or protocol v2
+`packfile-uris`, which is git's own answer — the client takes the bundle
+by URI and runs an ordinary incremental fetch on top. Neither is worth
+doing for 11%.
+
 ### §21.1 Implemented and measured
 
 Both performance adoptions above are now implemented; measured on a

@@ -101,7 +101,7 @@ import {
   type GitAction,
 } from "./Auth.ts";
 import { githubCompatRoutes } from "./GithubCompat.ts";
-import { BlobStore } from "./BlobStore.ts";
+import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
 import { bundleCovers, type BundleInfo } from "./jobs/Bundle.ts";
 import { headKey } from "./store/Keys.ts";
 import { decodeHeadSnapshot } from "./store/HeadSnapshot.ts";
@@ -135,12 +135,7 @@ import {
   type RepoMetaData,
   type TokenData,
 } from "./RepoObject.ts";
-import {
-  Registry,
-  RegistryLive,
-  REGISTRY_DO_NAME,
-  type RegistryEntry,
-} from "./RegistryObject.ts";
+import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -352,7 +347,7 @@ const make = Effect.gen(function* () {
   // ── init: DO namespaces + admin key ────────────────────────────────────
   // RPC-boundary tagged errors are reconstructed by the stubs themselves —
   // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
-  const registry = yield* Registry;
+  const registry = yield* RegistryStore;
   const repos = yield* GitRepo;
   // The Worker streams clone bundles straight out of R2 (DESIGN.md §11):
   // the DO plans the clone, the bytes bypass it entirely.
@@ -364,7 +359,8 @@ const make = Effect.gen(function* () {
   // authorization runs in the Repo DO, which owns the actions' facts.
   const authService = yield* Auth;
 
-  const registryStub = () => registry.getByName(REGISTRY_DO_NAME);
+  // The registry block, whichever backend the assembly provided.
+  const registryStub = () => registry;
 
   // ── owner/name → RegistryEntry, 60 s in-isolate LRU (DESIGN.md §2.1) ──
   // A stale hit fails safe: the Repo DO stores its own (owner, name) and
@@ -1394,19 +1390,23 @@ const make = Effect.gen(function* () {
    * upload-pack result (NAK + optionally sideband-framed pack).
    * `undefined` when the bundle bytes are gone (GC raced us).
    */
-  const serveBundle = Effect.fn(function* (options: {
-    readonly key: string;
-    readonly refsHash: string;
-    readonly objectCount: number;
-    readonly sideband: boolean;
-    /** Which plane produced the plan — observability + bench assertions. */
-    readonly via: "do-bundle" | "head-snapshot";
-  }) {
-    const object = yield* Effect.result(workerBlobs.get(options.key));
-    if (Result.isFailure(object) || object.success === null) {
-      return undefined;
-    }
-    const packBytes = object.success.stream;
+  /**
+   * Wraps pack bytes as a complete upload-pack result (NAK, optional
+   * sideband framing, flush). `shape` distinguishes a bundle streamed
+   * verbatim from one spliced with a delta — surfaced on
+   * `x-git-served-by` so which plane answered is observable, and
+   * assertable in the benchmarks.
+   */
+  const respondWithPack = (
+    packBytes: Stream.Stream<Uint8Array, BlobStoreError>,
+    options: {
+      readonly refsHash: string;
+      readonly objectCount: number;
+      readonly sideband: boolean;
+      readonly via: "do-bundle" | "head-snapshot";
+    },
+    shape: "bundle",
+  ) => {
     const nak = pktText("NAK");
     const body = options.sideband
       ? Stream.fromArray([
@@ -1421,10 +1421,25 @@ const make = Effect.gen(function* () {
       contentType: "application/x-git-upload-pack-result",
       headers: {
         "cache-control": "no-cache",
-        "x-git-served-by": options.via,
+        "x-git-served-by": `${options.via}:${shape}`,
         [BUNDLE_HASH_HEADER]: options.refsHash,
       },
     });
+  };
+
+  const serveBundle = Effect.fn(function* (options: {
+    readonly key: string;
+    readonly refsHash: string;
+    readonly objectCount: number;
+    readonly sideband: boolean;
+    /** Which plane produced the plan — observability + bench assertions. */
+    readonly via: "do-bundle" | "head-snapshot";
+  }) {
+    const object = yield* Effect.result(workerBlobs.get(options.key));
+    if (Result.isFailure(object) || object.success === null) {
+      return undefined;
+    }
+    return respondWithPack(object.success.stream, options, "bundle");
   });
 
   /**
@@ -1787,7 +1802,6 @@ export const ServerLive = Layer.effect(Server, make);
  *
  * @layer
  */
-export const RegistryDurableObject = RegistryLive;
 
 /**
  * Hosts the `GitRepo` Durable Object (refs, objects, tokens, pulls, the
