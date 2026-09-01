@@ -24,7 +24,7 @@ import { Text } from "../ui/Typography.tsx";
 import {
   NonInteractiveTerminal,
   TerminalCancelled,
-} from "../../CliKit/errors.ts";
+} from "../../../Interaction.ts";
 import {
   confirmScreen,
   cycleSelectScreen,
@@ -36,7 +36,7 @@ import {
   textScreen,
 } from "./Prompts.tsx";
 import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
-import { setNativeProgress } from "../../CliKit/terminal.ts";
+import { setNativeProgress } from "../../../Util/Terminal.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
@@ -105,6 +105,25 @@ const normalizeView = (view: View): View => {
     );
   }
   return view;
+};
+
+const formatStaticView = (
+  view: ReactNode,
+  options: RenderOptions,
+  capabilities: CliKitCapabilities,
+): string => {
+  const colors = options.colors ?? capabilities.colors;
+  // The renderer and the components must agree on the width: components size
+  // themselves from the environment's `columns`, so an explicit render width
+  // has to flow into the capabilities too, not only into renderToString.
+  const columns = options.columns ?? capabilities.columns;
+  const output = renderToString(
+    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>
+      {view}
+    </CliEnvironment>,
+    { columns },
+  ).replace(/[\s\n]+$/, "");
+  return colors ? output : stripVTControlCharacters(output);
 };
 
 interface StoreState {
@@ -289,25 +308,6 @@ function TerminalRoot({ store }: TerminalRootProps) {
   );
 }
 
-const formatStaticView = (
-  view: ReactNode,
-  options: RenderOptions,
-  capabilities: CliKitCapabilities,
-): string => {
-  const colors = options.colors ?? capabilities.colors;
-  // The renderer and the components must agree on the width: components size
-  // themselves from the environment's `columns`, so an explicit render width
-  // has to flow into the capabilities too, not only into renderToString.
-  const columns = options.columns ?? capabilities.columns;
-  const output = renderToString(
-    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>
-      {view}
-    </CliEnvironment>,
-    { columns },
-  ).replace(/[\s\n]+$/, "");
-  return colors ? output : stripVTControlCharacters(output);
-};
-
 /** Progress rows are ordinary live views over a runtime-owned store. */
 interface ProgressState {
   readonly options: ProgressOptions;
@@ -409,11 +409,42 @@ export const makeRuntime = (
     // Static transcript renders it instead of the built-in splicing. The
     // renderer restores console and stream writes itself on unmount.
     const buffers = { stdout: "", stderr: "" };
+    // A captured write that ends mid-line parks its tail here waiting for
+    // the rest of the line. A real terminal would display the partial
+    // immediately — so when no continuation arrives promptly, flush the
+    // tail as its own row instead of holding it until unmount. Without the
+    // deadline, a writer whose final chunk lacks a trailing newline (e.g.
+    // a pretty-printed cause written raw to stderr) has its last line
+    // appear only when the process exits. One timer PER STREAM: a chatty
+    // stdout must not keep resetting the deadline of a parked stderr tail.
+    const partialFlushTimers: {
+      [Stream in keyof typeof buffers]?: ReturnType<typeof setTimeout>;
+    } = {};
+    const clearPartialFlush = (stream: keyof typeof buffers) => {
+      const timer = partialFlushTimers[stream];
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        partialFlushTimers[stream] = undefined;
+      }
+    };
+    const flushPartialLine = (stream: keyof typeof buffers) => {
+      partialFlushTimers[stream] = undefined;
+      if (buffers[stream] !== "") {
+        store.appendStatic(<AnsiText wrap="none">{buffers[stream]}</AnsiText>);
+        buffers[stream] = "";
+      }
+    };
     const appendLines = (stream: keyof typeof buffers, data: string) => {
       const parts = `${buffers[stream]}${data}`.split(/\r?\n/);
       buffers[stream] = parts.pop() ?? "";
       for (const line of parts) {
         store.appendStatic(<AnsiText wrap="none">{line || " "}</AnsiText>);
+      }
+      clearPartialFlush(stream);
+      if (buffers[stream] !== "") {
+        const timer = setTimeout(() => flushPartialLine(stream), 50);
+        timer.unref?.();
+        partialFlushTimers[stream] = timer;
       }
     };
     const sigil = render(
@@ -445,9 +476,15 @@ export const makeRuntime = (
       exit: Promise.resolve(),
       flushDirectStdio: captureDirectStdio
         ? () => {
+            // AnsiText, matching the line and deadline paths: a trailing
+            // fragment must not render color-stripped just because teardown
+            // won the race against the 50ms deadline.
             for (const stream of ["stdout", "stderr"] as const) {
+              clearPartialFlush(stream);
               if (buffers[stream] !== "") {
-                store.appendStatic(<Text wrap="none">{buffers[stream]}</Text>);
+                store.appendStatic(
+                  <AnsiText wrap="none">{buffers[stream]}</AnsiText>,
+                );
                 buffers[stream] = "";
               }
             }
@@ -463,6 +500,9 @@ export const makeRuntime = (
     current.exit = sigil.waitUntilExit().then(
       () => undefined,
       (error: unknown) => {
+        // The crashed instance is dropped without the unmount path, so
+        // disarm any pending partial-flush timer here too.
+        current.flushDirectStdio?.();
         if (mounted === current) mounted = undefined;
         failRenderer(error);
       },
@@ -502,6 +542,11 @@ export const makeRuntime = (
         // while the frame flushed. Their output would be destroyed by the
         // teardown, so leave the instance mounted for them instead.
         if (!force && (applicationMounted || !store.idle)) return;
+        // A captured chunk that arrived DURING the drain may have parked a
+        // partial line and armed a flush timer. Flush and disarm now —
+        // otherwise the timer fires after `clearStatic()` below and the
+        // stale fragment replays at the top of the next mount.
+        current.flushDirectStdio?.();
         mounted = undefined;
         // unmount restores the patched console and stream writes.
         current.sigil.unmount();
@@ -512,9 +557,11 @@ export const makeRuntime = (
         store.clearStatic();
       } catch {
         // Teardown must be total: a crashed instance still ends up unmounted
-        // with console/stream patches restored.
+        // with console/stream patches restored — and with no armed partial
+        // flush timer left to poke the store after clearStatic.
         if (mounted === current) mounted = undefined;
         try {
+          current.flushDirectStdio?.();
           current.sigil.unmount();
         } catch {
           // Already unmounted (or unmount itself is what threw above).

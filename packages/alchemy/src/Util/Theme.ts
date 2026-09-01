@@ -63,6 +63,8 @@ export const theme = {
     bullet: "·",
     overflowUp: "↑",
     overflowDown: "↓",
+    overflowLeft: "‹",
+    overflowRight: "›",
   },
   /**
    * Key-hint labels for KeyBar footers. Resolve through `useKeyGlyphs()`
@@ -107,10 +109,29 @@ export const asciiGlyphs: { readonly [Key in GlyphName]: string } = {
   bullet: ".",
   overflowUp: "^",
   overflowDown: "v",
+  overflowLeft: "<",
+  overflowRight: ">",
 };
 
 export const glyphsFor = (unicode: boolean) =>
   unicode ? theme.glyph : asciiGlyphs;
+
+const spinnerFrames = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const;
+const asciiSpinnerFrames = ["-", "\\", "|", "/"] as const;
+
+export const spinnerFramesFor = (unicode: boolean): readonly string[] =>
+  unicode ? spinnerFrames : asciiSpinnerFrames;
 
 export type StatusVariant = "info" | "success" | "warning" | "error";
 

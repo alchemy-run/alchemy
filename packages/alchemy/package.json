@@ -23,6 +23,7 @@
   },
   "files": [
     "bin",
+    "!bin/register-dev-mode.js",
     "lib",
     "src",
     "NOTICE",

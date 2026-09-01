@@ -1,9 +1,23 @@
 import type * as Effect from "effect/Effect";
 import type { ReactNode } from "react";
-import type {
-  NonInteractiveTerminal,
-  TerminalCancelled,
-} from "../CliKit/errors.ts";
+import type { ProgressOptions, SelectOptions } from "../../Interaction.ts";
+
+// The interaction vocabulary (message/prompt option shapes, progress
+// options, interaction errors) belongs to the engine's core `Interaction`
+// contract — CliKit implements a superset of it. Re-exported here so the
+// CLI's components keep one local import for their whole type surface.
+export type {
+  AwaitExternalOptions,
+  Choice,
+  ConfirmOptions,
+  InteractionError,
+  MessageOptions,
+  MultiSelectOptions,
+  PasswordInputOptions,
+  ProgressOptions,
+  SelectOptions,
+  TextInputOptions,
+} from "../../Interaction.ts";
 
 /** A composable CLI layout. Views are inert; only CliKit renders them. */
 export type View = ReactNode;
@@ -22,69 +36,6 @@ export interface CliKitCapabilities {
 export interface RenderOptions {
   readonly columns?: number;
   readonly colors?: boolean;
-}
-
-export interface Choice<Value> {
-  readonly value: Value;
-  readonly label: string;
-  /** Optional section heading shared by adjacent choices. */
-  readonly group?: string;
-  /** Indent the entire rendered row, including its selection indicator. */
-  readonly indent?: number;
-  /** Keep this row visible as the heading for following rows while scrolling. */
-  readonly sticky?: boolean;
-  /** Visually distinguish structural rows from ordinary choices. */
-  readonly tone?: "info";
-  readonly description?: string;
-  readonly disabled?: boolean | string;
-}
-
-export interface MessageOptions {
-  readonly message: string;
-  readonly detail?: string;
-}
-
-export interface TextInputOptions {
-  readonly message: string;
-  /** Secondary guidance rendered beneath the field in muted text. */
-  readonly description?: string;
-  /** Place the editable field beside the message or beneath it. @default "inline" */
-  readonly layout?: "inline" | "stacked";
-  readonly placeholder?: string;
-  readonly initialValue?: string;
-  readonly defaultValue?: string;
-  readonly validate?: (value: string) => string | Error | undefined;
-}
-
-export interface PasswordInputOptions extends Omit<
-  TextInputOptions,
-  "initialValue" | "defaultValue"
-> {}
-
-export interface ConfirmOptions {
-  readonly message: string;
-  readonly initialValue?: boolean;
-  readonly confirmLabel?: string;
-  readonly cancelLabel?: string;
-}
-
-export interface SelectOptions<Value> {
-  readonly message: string;
-  readonly options: ReadonlyArray<Choice<Value>>;
-  readonly initialValue?: Value;
-  readonly visibleCount?: number;
-  /** Allow typing to filter choices by label and description. */
-  readonly searchable?: boolean;
-  /** Place descriptions beside labels instead of on a second line. */
-  readonly descriptionPlacement?: "below" | "inline";
-}
-
-export interface MultiSelectOptions<Value> extends Omit<
-  SelectOptions<Value>,
-  "initialValue"
-> {
-  readonly initialValues?: ReadonlyArray<Value>;
-  readonly required?: boolean;
 }
 
 export interface CycleChoice<State> {
@@ -111,22 +62,6 @@ export interface CycleSelectOptions<State> {
   /** Keep the prompt open when Enter is pressed without changing any row. */
   readonly requireChange?: boolean;
   readonly unchangedMessage?: string;
-}
-
-export interface AwaitExternalOptions {
-  readonly message: string;
-  readonly waitingLabel: string;
-  readonly url?: string;
-  /** Short code the user must enter on the authorization page. */
-  readonly code?: string;
-  readonly openFailed?: boolean;
-  /** Open the authorization URL again from the waiting screen. */
-  readonly onOpen?: () => Promise<void>;
-  /** Allow Enter to switch to manual code entry. @default true */
-  readonly allowManualInput?: boolean;
-  readonly inputLabel?: string;
-  readonly placeholder?: string;
-  readonly validate?: (value: string) => string | Error | undefined;
 }
 
 /** A navigable application menu. Selecting an item does not commit output. */
@@ -163,15 +98,6 @@ export const Screen = {
   ): Screen<Value> => ({ name, render }),
 };
 
-export interface ProgressOptions {
-  readonly label: string;
-  readonly detail?: string;
-  /** Terminal window title while this progress view is active. */
-  readonly title?: string;
-  /** Animate the leading status glyph. @default true */
-  readonly spinning?: boolean;
-}
-
 /**
  * Handle for a live progress row. Acquired within a `Scope`: the enclosing
  * scope's close is a release backstop, so an interrupted fiber can never leave
@@ -201,8 +127,6 @@ export interface LiveViewOptions {
   /** Commit the final view to the static transcript when it closes. */
   readonly persistOnClose?: boolean;
 }
-
-export type InteractionError = TerminalCancelled | NonInteractiveTerminal;
 
 export interface CliKitOptions {
   readonly stdin?: NodeJS.ReadStream;

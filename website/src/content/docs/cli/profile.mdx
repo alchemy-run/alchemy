@@ -68,7 +68,7 @@ fails if the name already exists. You do not need to create `default`.
 
 ```sh
 alchemy profile create production
-alchemy profile edit production
+alchemy profile edit --profile production
 ```
 
 ## profile rename
@@ -97,7 +97,7 @@ rewritten; update it separately if it names the old profile.
 ## profile edit
 
 ```sh
-alchemy profile edit [profile] [flags]
+alchemy profile edit [flags]
 ```
 
 Without action flags, the command shows connected accounts and opens a menu of
@@ -141,9 +141,9 @@ methods stay interactive-only.
 In a non-interactive session (no terminal, CI, coding agents), the menu can't
 open. The command prints its usage and exits non-zero. Use the action flags.
 
-| Argument / option         | Description                                                |
+| Option                    | Description                                                |
 | ------------------------- | ---------------------------------------------------------- |
-| `[profile]`               | Profile to manage; defaults to the effective current one   |
+| `--profile <name>`        | Profile to manage; defaults to the effective current one   |
 | `--add <provider>`        | Connect a provider (repeatable)                            |
 | `--reconfigure <provider>` | Re-run a connected provider's configuration (repeatable)  |
 | `--remove <provider>`     | Log out a provider and disconnect it (repeatable)          |
@@ -157,11 +157,11 @@ open. The command prints its usage and exits non-zero. Use the action flags.
 alchemy profile edit
 
 # Manage a named profile interactively
-alchemy profile edit work
+alchemy profile edit --profile work
 
 # Direct, non-interactive-friendly forms
 alchemy profile edit --add cloudflare
-alchemy profile edit work --reconfigure cloudflare
+alchemy profile edit --profile work --reconfigure cloudflare
 alchemy profile edit --remove cloudflare
 
 # Several changes at once
@@ -178,7 +178,7 @@ op read op://vault/neon/key | alchemy profile edit --add neon --set apiKey=-
 ## profile refresh
 
 ```sh
-alchemy profile refresh [profile] [options]
+alchemy profile refresh [options]
 ```
 
 Refresh authentication for every connected provider without changing its
@@ -194,7 +194,7 @@ names are matched case-insensitively.
 
 | Option                | Description                                                |
 | --------------------- | ---------------------------------------------------------- |
-| `[profile]`           | Profile to refresh; defaults to the effective current one  |
+| `--profile <name>`    | Profile to refresh; defaults to the effective current one  |
 | `--provider <name>`   | Refresh only this connected provider; may be repeated      |
 | `--env-file <path>`   | Load environment variables and current-profile selection  |
 | `--config, -c <file>` | Stack entrypoint used to discover custom auth providers    |
@@ -204,7 +204,7 @@ names are matched case-insensitively.
 alchemy profile refresh
 
 # Refresh AWS in a named profile
-alchemy profile refresh production --provider AWS
+alchemy profile refresh --profile production --provider AWS
 ```
 
 ## profile current
@@ -252,7 +252,7 @@ In a non-interactive session each profile prints as one
 ## profile show
 
 ```sh
-alchemy profile show [profile] [options]
+alchemy profile show [options]
 ```
 
 Show a profile's providers as a table with authentication method, credential
@@ -277,9 +277,9 @@ If the profile doesn't exist, the command fails (non-zero exit) and lists
 the available profile names. If none exist, it suggests
 `alchemy profile create <name>`.
 
-| Argument / option   | Description                                                     |
+| Option              | Description                                                     |
 | ------------------- | --------------------------------------------------------------- |
-| `[profile]`         | Profile to inspect; defaults to the effective current one       |
+| `--profile <name>`  | Profile to inspect; defaults to the effective current one       |
 | `--env-file <path>` | Load environment variables from a file                          |
 | `--config, -c <file>` | Stack entrypoint used to discover custom auth providers       |
 
@@ -288,7 +288,7 @@ the available profile names. If none exist, it suggests
 alchemy profile show
 
 # Show a named profile
-alchemy profile show prod
+alchemy profile show --profile prod
 ```
 
 ## profile delete

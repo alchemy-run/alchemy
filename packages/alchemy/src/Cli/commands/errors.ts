@@ -12,6 +12,7 @@ import {
   ansiFg,
   colorsEnabled,
   glyphsFor,
+  spinnerFramesFor,
   theme,
   unicodeEnabled,
 } from "../CliKit/index.ts";
@@ -47,6 +48,63 @@ export const exitDeclined = setExitCode(1);
 let interruptMessagesSuppressed = false;
 export const suppressInterruptMessages = Effect.sync(() => {
   interruptMessagesSuppressed = true;
+});
+
+const SHUTDOWN_FEEDBACK_DELAY_MS = 200;
+
+/**
+ * Shutdown feedback on SIGINT/SIGTERM: silent when teardown finishes within
+ * 200ms, otherwise a spinner (TTY) or periodic log lines (plain). A second
+ * signal force-quits. Raw stderr + unref'd timers on purpose — the Effect
+ * runtime (and any `Runtime.Teardown` hook) only settles after finalizers,
+ * which is exactly the window this has to render through.
+ */
+export const installShutdownFeedback = Effect.sync(() => {
+  let firstSignalAt: number | undefined;
+  const onSignal = () => {
+    if (firstSignalAt !== undefined) {
+      // Watchers and runners in the chain (`node --watch`, pnpm) forward the
+      // tty's SIGINT to their children, so ONE ^C can be delivered twice
+      // within milliseconds. Only a press after the feedback delay — when the
+      // "Ctrl+C again" hint can even be visible — means "force quit".
+      if (Date.now() - firstSignalAt < SHUTDOWN_FEEDBACK_DELAY_MS) return;
+      if (!interruptMessagesSuppressed) {
+        process.stderr.write(
+          colorsEnabled()
+            ? `\n${ANSI_DIM}Force quitting.${ANSI_RESET}\n`
+            : "\nForce quitting.\n",
+        );
+      }
+      process.exit(EXIT_CANCELLED);
+    }
+    firstSignalAt = Date.now();
+    if (interruptMessagesSuppressed) return;
+    const startedAt = firstSignalAt;
+    const elapsed = () => Math.round((Date.now() - startedAt) / 1000);
+    const timer = setTimeout(() => {
+      if (process.stderr.isTTY) {
+        const frames = spinnerFramesFor(unicodeEnabled());
+        let frame = 0;
+        const spin = setInterval(() => {
+          process.stderr.write(
+            `\r${frames[frame++ % frames.length]} Shutting down... (Ctrl+C again to force quit) `,
+          );
+        }, 80);
+        spin.unref();
+      } else {
+        process.stderr.write(
+          "Shutting down — waiting for cleanup to finish (Ctrl+C again to force quit)\n",
+        );
+        const report = setInterval(() => {
+          process.stderr.write(`Still shutting down (${elapsed()}s)\n`);
+        }, 5000);
+        report.unref();
+      }
+    }, SHUTDOWN_FEEDBACK_DELAY_MS);
+    timer.unref();
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
 });
 
 export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>

@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefAttributes,
 } from "react";
-import { theme } from "../../CliKit/theme.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { useCliEnvironment, useGlyphs } from "./Environment.tsx";
 import { Text } from "./Typography.tsx";
 
@@ -155,6 +155,41 @@ export const listWindow = (
     Math.min(cursor - Math.floor(count / 2), length - count),
   );
   return { start, end: Math.min(length, start + count) };
+};
+
+/**
+ * Horizontal window over variable-width items (tab chips): expands around
+ * `active` — alternating right/left so the selection stays roughly centered —
+ * until `available` columns are exhausted. Returns `[start, end)` like
+ * {@link listWindow}; `active` is always inside the window.
+ */
+export const tabsWindow = (
+  widths: ReadonlyArray<number>,
+  active: number,
+  available: number,
+  gap = 1,
+): { readonly start: number; readonly end: number } => {
+  if (widths.length === 0) return { start: 0, end: 0 };
+  const cursor = Math.max(0, Math.min(active, widths.length - 1));
+  let start = cursor;
+  let end = cursor + 1;
+  let used = widths[cursor]!;
+  let takeRight = true;
+  while (true) {
+    const canRight =
+      end < widths.length && used + gap + widths[end]! <= available;
+    const canLeft = start > 0 && used + gap + widths[start - 1]! <= available;
+    if (!canRight && !canLeft) break;
+    if ((takeRight && canRight) || !canLeft) {
+      used += gap + widths[end]!;
+      end++;
+    } else {
+      start--;
+      used += gap + widths[start]!;
+    }
+    takeRight = !takeRight;
+  }
+  return { start, end };
 };
 
 /**

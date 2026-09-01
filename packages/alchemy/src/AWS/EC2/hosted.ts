@@ -68,11 +68,10 @@ export interface Ec2HostedProps extends PlatformProps {
   /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
   /**
-   * Overrides for the rolldown bundling of `main`: `input`/`output`
-   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
-   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
-   * pure by default so unused code from those packages is tree-shaken; list
-   * additional packages via `pure.packages`, or disable with `pure: false`.
+   * Overrides for the rolldown bundling of `main`. Unused code is
+   * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+   * pure so unused parts prune more aggressively. List extra packages
+   * with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
   /** Managed policy ARNs attached to the instance role. */
