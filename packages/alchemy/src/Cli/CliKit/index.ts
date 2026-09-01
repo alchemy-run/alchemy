@@ -42,3 +42,4 @@ export {
   type TextInputOptions,
   type View,
 } from "../components/types.ts";
+export { headless } from "./headless.ts";
