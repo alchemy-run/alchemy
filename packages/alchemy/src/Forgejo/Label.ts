@@ -54,6 +54,15 @@ export interface LabelAttributes {
    */
   readonly labelId: number;
   /**
+   * Repository owner. Carried on the attributes so account-wide teardown,
+   * which has no state row to read props from, can still address the label.
+   */
+  readonly owner: string;
+  /**
+   * Repository name.
+   */
+  readonly repository: string;
+  /**
    * Label name.
    */
   readonly name: string;
@@ -127,8 +136,13 @@ const bodyOf = (props: LabelProps) => ({
   is_archived: props.isArchived,
 });
 
-const attributesOf = (label: ApiLabel): LabelAttributes => ({
+const attributesOf = (
+  props: Pick<LabelProps, "owner" | "repository">,
+  label: ApiLabel,
+): LabelAttributes => ({
   labelId: label.id,
+  owner: props.owner,
+  repository: props.repository,
   name: label.name,
   color: label.color,
 });
@@ -176,24 +190,27 @@ export const LabelProvider = () =>
       const repositories = yield* listAccessibleRepositories();
       const labels = yield* Effect.forEach(
         repositories,
-        (repository) =>
-          ignoreInaccessible(
-            paginate<ApiLabel>(
-              client,
-              collection({
-                owner: repository.owner.login,
-                repository: repository.name,
-              }),
-            ),
+        (repository) => {
+          const props = {
+            owner: repository.owner.login,
+            repository: repository.name,
+          };
+          return ignoreInaccessible(
+            paginate<ApiLabel>(client, collection(props)),
             [] as readonly ApiLabel[],
-          ),
+          ).pipe(
+            Effect.map((found) =>
+              found.map((label) => attributesOf(props, label)),
+            ),
+          );
+        },
         { concurrency: 8 },
       );
-      return labels.flat().map(attributesOf);
+      return labels.flat();
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds, output?.labelId);
-      return observed === undefined ? undefined : attributesOf(observed);
+      return observed === undefined ? undefined : attributesOf(olds, observed);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const client = yield* ForgejoCredentials;
@@ -210,7 +227,7 @@ export const LabelProvider = () =>
             body: bodyOf(news),
           },
         );
-        return attributesOf(created);
+        return attributesOf(news, created);
       }
 
       const updated = yield* client.request<ApiLabel>(
@@ -220,13 +237,15 @@ export const LabelProvider = () =>
           body: bodyOf(news),
         },
       );
-      return attributesOf(updated);
+      return attributesOf(news, updated);
     }),
-    delete: Effect.fn(function* ({ olds, output }) {
+    delete: Effect.fn(function* ({ output }) {
       if (output === undefined) return;
       const client = yield* ForgejoCredentials;
+      // Address the label from `output` alone: account-wide teardown has no
+      // state row, so it passes the Attributes shape as `olds` too.
       yield* optional(
-        client.request<void>("DELETE", path(olds, output.labelId)),
+        client.request<void>("DELETE", path(output, output.labelId)),
       );
     }),
   });
