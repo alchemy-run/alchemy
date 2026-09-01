@@ -6,14 +6,18 @@
  * out of local emulation via `Alchemy.remote()`, a local Worker binding
  * that proxies to a remote resource (`dev: { remote: true }`), or the
  * deletion of a row that was last reconciled live — credentials are
- * validated exactly once, up front, BEFORE apply begins. The seam never
- * starts a login flow: missing credentials fail with the typed
+ * validated AND warmed exactly once, up front, BEFORE apply begins: the
+ * gate resolves each demanded provider's credentials through the same
+ * precedence the run will use, which silently refreshes an expired token
+ * and persists it for the child processes to read. The seam never starts
+ * a login flow: missing credentials fail with the typed
  * {@link CredentialsRequired} error naming the demanding resources and
  * pointing at `alchemy profile edit` — the profile command is the only
- * place logins happen.
+ * place logins happen — and a dead refresh token fails with the typed
+ * `NeedsReauth` before any lifecycle operation runs.
  *
  * The RPC sidecar only ever reads credentials persisted by a prior
- * `alchemy profile edit`.
+ * `alchemy profile edit` or warmed by this gate.
  *
  * Non-dev runs (`alchemy deploy` / `destroy`) never enter this seam:
  * state-store init and live providers drive the pre-existing lazy
@@ -27,12 +31,14 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { BindingNode, Plan } from "../Plan.ts";
 import { profileCommandHint } from "../Util/interactive.ts";
-import { AuthProviders } from "./AuthProvider.ts";
+import { AuthError, AuthProviders, NeedsReauth } from "./AuthProvider.ts";
 import {
   ALCHEMY_PROFILE,
   DEFAULT_PROFILE_NAME,
   ProfileStore,
+  SuppressMissingProviderConfig,
 } from "./Profile.ts";
+import { resolveProviderConfig } from "./Resolve.ts";
 
 /** Why a plan row demands live (cloud) credentials during a dev run. */
 export type CredentialDemandReason =
@@ -200,10 +206,45 @@ export const collectCredentialDemands = (plan: Plan): CredentialDemand[] => {
 };
 
 /**
- * Validate that credentials exist for every demand. Never starts a login
+ * Re-fail a warm-up resolution error with the demand attached, so the user
+ * sees WHY a dev run wanted cloud credentials. Tags are preserved —
+ * consumers match `NeedsReauth`/`AuthError` by tag, never by message.
+ */
+const attachDemandContext =
+  (demand: CredentialDemand) =>
+  <A, R>(
+    self: Effect.Effect<A, AuthError | NeedsReauth, R>,
+  ): Effect.Effect<A, AuthError | NeedsReauth, R> =>
+    self.pipe(
+      Effect.mapError((error) => {
+        const message =
+          `${error.message}\n` +
+          `These resources require ${demand.provider} credentials:\n` +
+          resourceLines(demand);
+        return error._tag === "NeedsReauth"
+          ? new NeedsReauth({
+              provider: error.provider,
+              profile: error.profile,
+              message,
+              cause: error.cause,
+            })
+          : new AuthError({ message, cause: error.cause });
+      }),
+    );
+
+/**
+ * Validate AND warm up credentials for every demand. Never starts a login
  * flow — logging in belongs to `alchemy profile edit` exclusively:
  *
- *   - already configured for the active profile → no-op
+ *   - configured for the active profile → resolve the credentials through
+ *     the exact precedence the run will use ({@link resolveProviderConfig}:
+ *     CI environment, explicit env vars, then the profile). Resolution runs
+ *     the provider's `read`, which silently refreshes an expired token and
+ *     persists it under the cross-process profile lock — so child processes
+ *     (RPC sidecar, dev children), which can only read what a parent
+ *     persisted, start with a warm token. A dead refresh token fails HERE,
+ *     before apply, as a typed {@link NeedsReauth} naming the demanding
+ *     resources — instead of mid-run inside a child.
  *   - missing → typed {@link CredentialsRequired} failure with the exact
  *     `alchemy profile edit` invocation to run
  *   - CI → validates the provider's environment credentials directly,
@@ -211,7 +252,8 @@ export const collectCredentialDemands = (plan: Plan): CredentialDemand[] => {
  *
  * Demands whose cloud has no registered auth provider are skipped (bare
  * engine runs with test providers demand nothing). All context is
- * resolved optionally, so the effect is safe to run in any environment.
+ * resolved optionally, so the effect is safe to run in any environment —
+ * and a plan with zero demand touches no credentials at all.
  */
 export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
   function* (demands: readonly CredentialDemand[]) {
@@ -231,20 +273,43 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     const profileName = yield* ALCHEMY_PROFILE.pipe(
       Config.withDefault(DEFAULT_PROFILE_NAME),
     );
-    for (const demand of demands) {
-      const auth = registry[demand.provider];
-      if (auth == null) continue;
-      if (ci) {
-        if (auth.readEnvironment === undefined) {
-          return yield* credentialsRequired(demand, profileName);
-        }
-        yield* auth.readEnvironment;
-        continue;
-      }
-      const existing = yield* profile.getProfile(profileName);
-      if (existing?.providers[auth.name] != null) continue;
-      return yield* credentialsRequired(demand, profileName);
-    }
+    yield* Effect.forEach(
+      demands,
+      (demand) =>
+        Effect.gen(function* () {
+          const auth = registry[demand.provider];
+          if (auth == null) return;
+          if (ci) {
+            if (auth.readEnvironment === undefined) {
+              return yield* credentialsRequired(demand, profileName);
+            }
+            return yield* auth.readEnvironment.pipe(
+              attachDemandContext(demand),
+            );
+          }
+          // Resolve through the same precedence the run's lazy credential
+          // flow uses, so the gate can never pass something resolution
+          // would later reject (or vice versa). Suppressed missing-config
+          // mode turns "no profile entry" into the typed tag below instead
+          // of a generic AuthError; it also mutes the env-credentials
+          // warning here — the run's own resolution still emits it.
+          const resolved = yield* resolveProviderConfig(demand.provider).pipe(
+            Effect.provideService(AuthProviders, registry),
+            Effect.provideService(ProfileStore, profile),
+            Effect.provideService(SuppressMissingProviderConfig, true),
+            Effect.catchTag("MissingProviderConfig", () =>
+              credentialsRequired(demand, profileName),
+            ),
+            Effect.catchTag(
+              "ProfileError",
+              (error) =>
+                new AuthError({ message: error.message, cause: error }),
+            ),
+          );
+          yield* resolved.resolve.pipe(attachDemandContext(demand));
+        }),
+      { concurrency: 4, discard: true },
+    );
   },
 );
 
