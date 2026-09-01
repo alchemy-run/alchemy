@@ -89,6 +89,29 @@ describe("shutdown feedback", () => {
   );
 
   it.live(
+    "a duplicate SIGINT within the feedback delay does not force-quit",
+    () =>
+      Effect.gen(function* () {
+        // `node --watch` and pnpm forward the tty's SIGINT to their children,
+        // so one ^C can be delivered twice back-to-back — that must read as
+        // ONE press, not a force-quit.
+        const fixture = yield* spawnFixture();
+        yield* fixture.sigint;
+        yield* fixture.sigint;
+        yield* waitForStderr(
+          fixture.stderr,
+          "Shutting down — waiting for cleanup",
+        );
+        expect(fixture.stderr()).not.toContain("Force quitting");
+        // A distinct press after the hint is visible still force-quits.
+        yield* fixture.sigint;
+        expect(yield* fixture.handle.exitCode).toBe(130);
+        expect(fixture.stderr()).toContain("Force quitting.");
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+    { timeout: 30_000 },
+  );
+
+  it.live(
     "a shutdown finishing within the delay stays silent",
     () =>
       Effect.gen(function* () {

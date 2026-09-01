@@ -60,17 +60,22 @@ const SHUTDOWN_FEEDBACK_DELAY_MS = 200;
  * which is exactly the window this has to render through.
  */
 export const installShutdownFeedback = Effect.sync(() => {
-  let received = false;
+  let firstSignalAt: number | undefined;
   const onSignal = () => {
-    if (received) {
+    if (firstSignalAt !== undefined) {
+      // Watchers and runners in the chain (`node --watch`, pnpm) forward the
+      // tty's SIGINT to their children, so ONE ^C can be delivered twice
+      // within milliseconds. Only a press after the feedback delay — when the
+      // "Ctrl+C again" hint can even be visible — means "force quit".
+      if (Date.now() - firstSignalAt < SHUTDOWN_FEEDBACK_DELAY_MS) return;
       if (!interruptMessagesSuppressed) {
         process.stderr.write("\nForce quitting.\n");
       }
       process.exit(EXIT_CANCELLED);
     }
-    received = true;
+    firstSignalAt = Date.now();
     if (interruptMessagesSuppressed) return;
-    const startedAt = Date.now();
+    const startedAt = firstSignalAt;
     const elapsed = () => Math.round((Date.now() - startedAt) / 1000);
     const timer = setTimeout(() => {
       if (process.stderr.isTTY) {
