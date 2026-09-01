@@ -1,3 +1,4 @@
+import { INTERNAL_WORKER_COMPATIBILITY_DATE as DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import { Redacted } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -105,8 +106,7 @@ export default Worker(
     main: import.meta.url,
     workersDev: true,
     compatibility: {
-      // Node.js compatibility is default-on for this date.
-      date: "2026-08-31",
+      date: DEFAULT_COMPATIBILITY_DATE,
     },
   },
   Effect.gen(function* () {

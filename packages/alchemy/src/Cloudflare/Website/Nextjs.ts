@@ -1,3 +1,4 @@
+import { INTERNAL_WORKER_COMPATIBILITY_DATE as DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
@@ -20,13 +21,6 @@ import {
  * subpath.
  */
 const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
-
-/**
- * The default compatibility date when none is provided. Matches the
- * `@alchemy.run/frontend-frameworks/nextjs` integration's own default so deploy and local
- * dev agree.
- */
-const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
 export interface NextjsProps<
   Bindings extends WorkerBindingProps = {},

@@ -1,3 +1,4 @@
+import { INTERNAL_WORKER_COMPATIBILITY_DATE as DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
@@ -46,10 +47,6 @@ export interface EdgeSessionHandle {
   readonly url: string;
   readonly headers: Record<string, string>;
 }
-
-// Keep previews aligned with the vendored workerd runtime. This date enables
-// Node.js compatibility by default without a compatibility flag.
-const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
 const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>, message: string) =>
   effect.pipe(
