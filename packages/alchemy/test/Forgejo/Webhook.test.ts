@@ -77,13 +77,13 @@ test.provider(
       reset();
 
       // Stand in for a create whose state write never landed: the hook exists
-      // on the instance but alchemy has no record of it. Forgejo accepts
-      // several hooks pointing at one URL, so creating unconditionally would
-      // add a second on every retry.
+      // on the instance, with exactly the config we asked for, but alchemy has
+      // no record of it. Forgejo accepts several hooks pointing at one URL, so
+      // creating unconditionally would add a second on every retry.
       hooks.set(1, {
         id: 1,
         config: { url: "https://deploy.example/hooks", content_type: "json" },
-        events: ["push"],
+        events: ["push", "pull_request"],
       });
       nextId = 2;
 
@@ -100,6 +100,40 @@ test.provider(
       expect(hooks.size).toBe(1);
       expect(hooks.get(1)?.events).toEqual(["push", "pull_request"]);
       expect(server.count("POST", "/repos/acme/api/hooks")).toBe(0);
+    }),
+);
+
+test.provider(
+  "keeps two hooks on one URL apart when their events differ",
+  (stack) =>
+    Effect.gen(function* () {
+      reset();
+
+      // Same repository, same delivery URL, different events — legitimate, and
+      // matching on URL alone would collapse both resources onto one hook with
+      // each deploy overwriting the other's events.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Webhook("Push", {
+            owner: "acme",
+            repository: "api",
+            url: "https://deploy.example/hooks",
+            events: ["push"],
+          });
+          yield* Webhook("Pull", {
+            owner: "acme",
+            repository: "api",
+            url: "https://deploy.example/hooks",
+            events: ["pull_request"],
+          });
+        }),
+      );
+
+      expect(hooks.size).toBe(2);
+      expect([...hooks.values()].map((hook) => hook.events).sort()).toEqual([
+        ["pull_request"],
+        ["push"],
+      ]);
     }),
 );
 
