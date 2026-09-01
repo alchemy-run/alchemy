@@ -132,6 +132,36 @@ export class ForgejoTransportError extends Data.TaggedError(
 }> {}
 
 /**
+ * A list endpoint returned more pages than {@link MAX_PAGES} allows.
+ *
+ * Enumeration powers account-wide operations such as `alchemy nuke`, so a
+ * silently truncated list would under-report and leave resources behind.
+ */
+export class ForgejoPaginationLimit extends Data.TaggedError(
+  "ForgejoPaginationLimit",
+)<{
+  /**
+   * API path being enumerated.
+   */
+  readonly path: string;
+  /**
+   * Number of pages walked before giving up.
+   */
+  readonly pages: number;
+  /**
+   * Entries requested per page.
+   */
+  readonly limit: number;
+}> {
+  /**
+   * Human-readable description of the incomplete enumeration.
+   */
+  override get message(): string {
+    return `Listing ${this.path} exceeded ${this.pages} pages of ${this.limit} entries; enumeration would be incomplete.`;
+  }
+}
+
+/**
  * Every failure a Forgejo API request can produce.
  */
 export type ForgejoError =
@@ -142,7 +172,8 @@ export type ForgejoError =
   | ForgejoValidationError
   | ForgejoServerError
   | ForgejoRequestError
-  | ForgejoTransportError;
+  | ForgejoTransportError
+  | ForgejoPaginationLimit;
 
 /**
  * Normalize a Forgejo origin into its API v1 base URL.
@@ -330,7 +361,8 @@ const MAX_PAGES = 100;
  *
  * Forgejo paginates list responses (30 entries by default), so a single
  * request silently truncates enumeration. Paging stops at the first short
- * page, or at {@link MAX_PAGES}.
+ * page; hitting {@link MAX_PAGES} fails with {@link ForgejoPaginationLimit}
+ * rather than returning a list that only looks complete.
  */
 export const paginate = <T>(
   client: ForgejoClient,
@@ -354,10 +386,15 @@ export const paginate = <T>(
         Effect.flatMap((items) => {
           const combined =
             items === undefined ? accumulated : [...accumulated, ...items];
-          return items === undefined ||
-            items.length < PAGE_LIMIT ||
-            page >= MAX_PAGES
-            ? Effect.succeed(combined)
+          if (items === undefined || items.length < PAGE_LIMIT) {
+            return Effect.succeed(combined);
+          }
+          return page >= MAX_PAGES
+            ? new ForgejoPaginationLimit({
+                path,
+                pages: MAX_PAGES,
+                limit: PAGE_LIMIT,
+              })
             : go(page + 1, combined);
         }),
       );

@@ -143,8 +143,9 @@ two APIs are not identical:
 - **Secrets are plaintext over TLS.** Forgejo has no public-key
   encryption handshake for Actions secrets, so values are sent
   directly to an authenticated endpoint.
-- **Organizations, teams, and API tokens need an admin credential.**
-  They are created through Forgejo's `/admin` endpoints.
+- **Organizations and API tokens need an admin credential.** They are
+  created through Forgejo's `/admin` endpoints. Teams and memberships
+  need only organization-owner rights.
 - **The instance URL is part of the credential.** Forgejo is
   self-hosted, so a profile stores an instance URL alongside the token
   rather than assuming a single host.
