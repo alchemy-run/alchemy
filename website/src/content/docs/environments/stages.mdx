@@ -34,14 +34,14 @@ $ alchemy destroy --stage dev_sam
 # tears down the local-dev stage
 ```
 
-`--stage` and `$STAGE` still work on both commands. Pointing `alchemy
-dev` at the same stage as a deploy (`--stage prod`, or a shared
-`$STAGE`) is a live ⇄ local replacement of that stage.
+`--stage` and `$ALCHEMY_STAGE` still work on both commands. Pointing
+`alchemy dev` at the same stage as a deploy (`--stage prod`, or a
+shared `$ALCHEMY_STAGE`) is a live ⇄ local replacement of that stage.
 
 The resolution order is:
 
 1. `--stage <name>` flag
-2. `$STAGE` environment variable
+2. `$ALCHEMY_STAGE` environment variable (process env, `--env-file`, or `.env`)
 3. `live_${USER}` for deploy / destroy / plan / logs / drift
    (`dev_${USER}` for `alchemy dev`)
 4. `live_unknown` / `dev_unknown` if no user is set

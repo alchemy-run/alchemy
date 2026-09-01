@@ -60,6 +60,12 @@ export interface ServiceProps extends PlatformProps {
    */
   main?: string;
   /**
+   * Local Docker context uploaded with Railway `up`. Paths are relative to the
+   * initial working directory. Limited to a 32 MiB archive, 10,000 entries,
+   * ASCII paths, and no symlinks; Docker ignore files apply.
+   */
+  context?: string;
+  /**
    * Docker image Railway should run.
    *
    * When `main` is omitted this is `source.image` (e.g.
@@ -207,7 +213,9 @@ export interface ServiceProps extends PlatformProps {
    */
   autoUpdates?: boolean;
   /**
-   * Dockerfile path relative to {@link rootDirectory}.
+   * Dockerfile path relative to {@link rootDirectory}, or to {@link context}
+   * for a local context.
+   * @default "Dockerfile"
    */
   dockerfilePath?: string;
   /**
@@ -363,6 +371,19 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *     };
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Local Docker context
+ * `context` is a directory Railway builds with `up`. Mutually exclusive
+ * with `image` (without `main`) and `repo`. Docker ignore files apply.
+ *
+ * **Example:** Upload a local Dockerfile
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   context: "./api",
+ *   port: 80,
+ * });
  * ```
  *
  * ### The public URL

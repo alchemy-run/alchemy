@@ -36,7 +36,7 @@ import * as Nextjs from "@alchemy.run/frontend-frameworks/nextjs";
 const layer = Nextjs.make({
   dev: { mode: "hmr" },
   vite: {
-    compatibilityDate: "2026-05-12",
+    compatibilityDate: "2026-08-31",
     worker: { name: "my-app", bindings: [Text.local("TEST_TEXT", "value")] },
   },
 });

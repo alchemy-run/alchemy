@@ -18,7 +18,7 @@ import {
   force,
   optionalConfig,
   profile,
-  resolveConfig,
+  resolveStackArgs,
   stage,
   yes,
 } from "./flags.ts";
@@ -240,7 +240,7 @@ export const deployCommand = Command.make(
     detectDrift,
   },
   (args) =>
-    resolveConfig(args).pipe(
+    resolveStackArgs("live")(args).pipe(
       Effect.flatMap(instrumentCommand("deploy", stackSpanAttrs)(runStack)),
     ),
 );
@@ -257,7 +257,7 @@ export const destroyCommand = Command.make(
     profile,
   },
   (args) =>
-    resolveConfig(args).pipe(
+    resolveStackArgs("live")(args).pipe(
       Effect.flatMap(
         instrumentCommand(
           "destroy",
@@ -283,7 +283,7 @@ export const planCommand = Command.make(
     detailed,
   },
   (args) =>
-    resolveConfig(args).pipe(
+    resolveStackArgs("live")(args).pipe(
       Effect.flatMap(
         instrumentCommand(
           "plan",

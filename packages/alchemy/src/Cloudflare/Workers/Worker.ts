@@ -23,6 +23,7 @@ import {
 import {
   isResourceOfType,
   Resource,
+  type ResourceClass,
   type ResourceClassLike,
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
@@ -1718,7 +1719,7 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: import.meta.url,
  *   compatibility: {
  *     flags: ["nodejs_compat"],
- *     date: "2026-03-17",
+ *     date: "2026-08-31",
  *   },
  * }
  * ```
@@ -2273,7 +2274,7 @@ export const isSelf = (value: unknown): value is Self =>
  * return {
  *   fetch: Effect.gen(function* () {
  *     const worker = yield* loader.load({
- *       compatibilityDate: "2026-01-28",
+ *       compatibilityDate: "2026-08-31",
  *       mainModule: "worker.js",
  *       modules: {
  *         "worker.js": `export default {
@@ -2295,6 +2296,7 @@ export const isSelf = (value: unknown): value is Self =>
  * @category Workers & Compute
  */
 export const Worker: ResourceClassLike<Worker> &
+  Pick<ResourceClass<Worker>, "ref"> &
   Effect.Effect<
     Worker & WorkerRuntimeContext & RuntimeContext,
     never,

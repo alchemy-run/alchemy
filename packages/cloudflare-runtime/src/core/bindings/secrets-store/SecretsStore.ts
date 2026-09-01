@@ -16,7 +16,7 @@ const SecretsStoreSecretWorker = {
     ),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
@@ -135,7 +135,7 @@ export const SecretsStoreLive = Layer.effect(
             const storeService: WorkerdConfig.Service = {
               name: SERVICE_SECRETS_STORE,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(SecretsStoreStoreWorker.worker),
                 ),
@@ -175,7 +175,7 @@ export const SecretsStoreLive = Layer.effect(
             const secretService: WorkerdConfig.Service = {
               name: SERVICE_SECRETS_STORE_SECRET,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(SecretsStoreSecretWorker.worker),
                 ),

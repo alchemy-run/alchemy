@@ -82,7 +82,9 @@ export class ContainerCrashedError extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
-export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
+// Upstream changed ContainerStartupOptions to an intersection with an
+// image/containerSnapshot union, which an interface cannot extend.
+export type ContainerStartupOptions = cf.ContainerStartupOptions;
 
 import type {
   EffectfulContainerProps,

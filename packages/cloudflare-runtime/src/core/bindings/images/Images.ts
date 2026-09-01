@@ -23,7 +23,7 @@ import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
 import * as Storage from "../../globals/Storage.ts";
 import {
-  INTERNAL_WORKER_COMPATIBILITY_DATE,
+  DEFAULT_COMPATIBILITY_DATE,
   SOCKET_USER_ENTRY,
 } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
@@ -170,7 +170,7 @@ export const ImagesLive = Layer.effect(
             const storeService: WorkerdConfig.Service = {
               name: SERVICE_IMAGES_STORE,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(ImagesStoreWorker.worker),
                 ),
@@ -206,7 +206,7 @@ export const ImagesLive = Layer.effect(
             const imagesService: WorkerdConfig.Service = {
               name: SERVICE_IMAGES,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(ImagesWorker.worker),
                 ),
@@ -229,7 +229,7 @@ export const ImagesLive = Layer.effect(
             const deliveryMiddleware: Plugin.Middleware = {
               name: "images:delivery",
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: [
                   {
                     name: "images/delivery.worker.js",

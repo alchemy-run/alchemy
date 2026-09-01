@@ -23,7 +23,7 @@ before applying the repair.
 | Option              | Description                                                        |
 | ------------------- | ------------------------------------------------------------------ |
 | `--repair`          | Repair detected drift after showing and confirming the plan        |
-| `--stage <name>`    | Stage to check (defaults to `live_$USER`)                          |
+| `--stage <name>`    | Stage to check (defaults to `$ALCHEMY_STAGE` or `live_$USER`)       |
 | `--yes`             | Skip the repair confirmation prompt                                |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
 | `--env-file <path>` | Load environment variables from a file                             |

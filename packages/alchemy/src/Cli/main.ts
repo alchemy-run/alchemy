@@ -213,7 +213,7 @@ const program = Effect.gen(function* () {
 );
 
 const mainEffect = program.pipe(
-  // $USER and $STAGE are set by the environment
+  // $USER and $ALCHEMY_STAGE are set by the environment
   Effect.provide(services),
   Effect.scoped,
   handleCliErrors,
