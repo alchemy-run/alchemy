@@ -30,7 +30,7 @@ import {
 } from "../Utils/Worker.ts";
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
-import RateLimitCompatWorker from "./fixtures/rate-limit-compat-worker.ts";
+import { api as RateLimitCompatWorker } from "./fixtures/rate-limit-compat-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: devTest } = Test.make({
@@ -802,8 +802,8 @@ describe.concurrent("Cloudflare.Worker", () => {
     }).pipe(logLevel),
   );
 
-  // #1443: local Effect Worker with RateLimit, explicit nodejs_compat,
-  // and the default compatibility date.
+  // #1443: Worker is a named export in the same file as a default-exported
+  // Stack. `handler: "api"` plucks that export instead of the Stack.
   devTest.provider(
     "dev mode: RateLimit worker with default compatibility serves locally",
     (stack) =>

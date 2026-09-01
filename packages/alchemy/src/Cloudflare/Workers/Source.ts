@@ -106,6 +106,11 @@ export interface SourceContext {
   /** `props.build` passthrough for rolldown-based sources. */
   readonly extraOptions: Bundle.BundleExtraOptions | undefined;
   /**
+   * Named export to load from `main`. `"default"` is a default import.
+   * @default "default"
+   */
+  readonly handler: string;
+  /**
    * Raw `props.assets`. Sources that own their assets (vite) merge its
    * routing config into the assets they read out of the build; sources
    * that don't own assets never touch it (the WorkerProvider reads and
@@ -407,5 +412,6 @@ export const makeSourceContext = (params: {
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
   extraOptions: params.props.build,
+  handler: params.props.handler ?? "default",
   assets: params.props.assets,
 });

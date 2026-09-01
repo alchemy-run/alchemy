@@ -1,11 +1,18 @@
+import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export default class RateLimitCompatWorker extends Cloudflare.Worker<RateLimitCompatWorker>()(
-  "RateLimitCompatWorker",
+/**
+ * The #1443 alchemy.run.ts shape: Worker is a named export, Stack is the
+ * default. `main: import.meta.url` would bundle the default (the Stack)
+ * unless `handler` names the Worker export.
+ */
+export const api = Cloudflare.Worker(
+  "api",
   {
     main: import.meta.url,
+    handler: "api",
     compatibility: {
       flags: ["nodejs_compat"],
     },
@@ -27,4 +34,12 @@ export default class RateLimitCompatWorker extends Cloudflare.Worker<RateLimitCo
       }),
     };
   }).pipe(Effect.provide(Cloudflare.Workers.RateLimitBinding)),
-) {}
+);
+
+export default Alchemy.Stack(
+  "RateLimitCompatStack",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    return yield* api;
+  }),
+);
