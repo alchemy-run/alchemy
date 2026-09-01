@@ -1,0 +1,129 @@
+---
+title: Setup
+description: Connect alchemy to a self-hosted Forgejo instance — instance URL, token, and scopes.
+---
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Forgejo from "alchemy/Forgejo";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Forgejo.providers()),
+```
+
+Then connect the provider:
+
+```sh
+alchemy profile edit --add Forgejo
+```
+
+Forgejo is self-hosted, so the instance URL is part of the credential
+rather than a constant. The prompt asks for both, and stores them
+together under `~/.alchemy/credentials/<profile>/` — one profile names
+both which instance to talk to and how to authenticate against it.
+`alchemy profile show` renders the stored URL in the clear and redacts
+the token.
+
+To configure it non-interactively:
+
+```sh
+alchemy profile edit --add Forgejo --method stored \
+  --set baseUrl=https://git.example.com \
+  --set token=<access token>
+```
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## CI
+
+When `CI=true`, profiles are bypassed and alchemy reads the
+environment directly:
+
+```sh
+FORGEJO_URL=https://git.example.com
+FORGEJO_TOKEN=<access token>
+```
+
+`FORGEJO_URL` may be the instance origin or its API base — both
+`https://git.example.com` and `https://git.example.com/api/v1`
+resolve to the same API root.
+
+## Pin credentials in code
+
+Pass them explicitly when they come from somewhere other than the
+environment:
+
+```typescript
+providers: Forgejo.providers({
+  baseUrl: "https://git.example.com",
+  token: process.env.FORGEJO_TOKEN!,
+}),
+```
+
+`token` accepts a plain string or a `Redacted` value.
+
+## Token scopes
+
+Generate a token under **Settings → Applications → Access Tokens** on
+your instance. Grant only what the stack touches:
+
+- `write:repository` — [repositories](/forgejo/repository), labels,
+  branch protection, webhooks, and repository-scoped
+  [Actions secrets and variables](/forgejo/actions-config).
+- `write:organization` — [organizations and teams](/forgejo/organizations)
+  and organization-scoped Actions configuration.
+- `write:user` — user-scoped Actions configuration.
+- `write:admin` — required to create organizations, teams, and
+  `ApiToken` resources, which go through Forgejo's `/admin` endpoints.
+
+Deleting a repository needs no extra scope, but repositories default
+to retain on removal, so you only reach that path if you opt in with
+`destroy()`.
+
+## Programmatic credentials
+
+Build the credentials layer directly from a token you already have —
+useful in tests:
+
+```typescript
+Effect.provide(Forgejo.fromToken({
+  baseUrl: "https://git.example.com",
+  token,
+}))
+```
+
+`Forgejo.fromEnv()` builds the same layer from `FORGEJO_URL` and
+`FORGEJO_TOKEN`, failing with `MissingForgejoEnvironment` when either
+is unset, and `Forgejo.fromAuthProvider()` is the profile-backed layer
+`providers()` uses by default.
+
+All three resolve `HttpClient` from the environment rather than
+constructing one, so a test can point the client at an in-memory
+instance by providing its own:
+
+```typescript
+Forgejo.providers({ baseUrl, token }).pipe(Layer.provide(myHttpClient))
+```
+
+## Errors
+
+Every API failure is a tagged error, so lifecycle code and your own
+stack code can branch on it without inspecting HTTP status codes:
+
+| Tag | Meaning |
+| --- | --- |
+| `ForgejoNotFound` | The resource does not exist (404) |
+| `ForgejoUnauthorized` | Missing, malformed, or expired credential (401) |
+| `ForgejoForbidden` | Valid credential without permission (403) |
+| `ForgejoConflict` | Already exists, or conflicts with current state (409) |
+| `ForgejoValidationError` | Forgejo rejected the payload (422) |
+| `ForgejoServerError` | Forgejo returned 5xx |
+| `ForgejoRequestError` | Any other unsuccessful status |
+| `ForgejoTransportError` | Connection failure or undecodable body |
+
+## Next steps
+
+- [Forgejo overview](/forgejo) — resources and compositions.
+- [Repositories](/forgejo/repository) — creating, renaming, deleting.
