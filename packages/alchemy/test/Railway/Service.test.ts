@@ -44,9 +44,10 @@ test.provider(
           const api = yield* Railway.Service("Api", {
             project,
             environment,
-            image: "hashicorp/http-echo",
-            port: 5678,
-            healthcheckPath: "/health",
+            image: "nginx:alpine",
+            port: 80,
+            healthcheckPath: "/",
+            preDeploy: { command: "echo predeploy" },
           });
           return { project, environment, api };
         }),
@@ -62,7 +63,7 @@ test.provider(
       expect(created.api.name.length).toBeGreaterThan(0);
       expect(created.api.name.length).toBeLessThanOrEqual(32);
       expect(created.api.name).toMatch(/^[a-z][a-z0-9-]*$/);
-      expect(created.api.port).toEqual(5678);
+      expect(created.api.port).toEqual(80);
       expect(created.api.domain).toEqual(expect.any(String));
       expect(created.api.domain).toContain("up.railway.app");
       expect(created.api.url).toEqual(`https://${created.api.domain}`);
@@ -82,14 +83,20 @@ test.provider(
       expect(instance.serviceId).toEqual(created.api.serviceId);
       expect(instance.environmentId).toEqual(created.api.environmentId);
       expect(instance.source?.image).toEqual(
-        expect.stringContaining("hashicorp/http-echo"),
+        expect.stringContaining("nginx:alpine"),
       );
-      expect(instance.healthcheckPath).toEqual("/health");
+      expect(instance.healthcheckPath).toEqual("/");
+      expect(
+        instance.preDeployCommand === "echo predeploy" ||
+          (Array.isArray(instance.preDeployCommand) &&
+            instance.preDeployCommand.length === 1 &&
+            instance.preDeployCommand[0] === "echo predeploy"),
+      ).toEqual(true);
       // Railway omits numReplicas until you scale; default is one replica.
       expect(
         instance.numReplicas === null || instance.numReplicas === 1,
       ).toEqual(true);
-      expect(created.api.healthcheckPath).toEqual("/health");
+      expect(created.api.healthcheckPath).toEqual("/");
       expect(
         created.api.replicas === undefined || created.api.replicas === 1,
       ).toEqual(true);
@@ -104,7 +111,7 @@ test.provider(
       );
       expect(liveDomain).toBeDefined();
       expect(liveDomain?.domain).toEqual(created.api.domain);
-      expect(liveDomain?.targetPort).toEqual(5678);
+      expect(liveDomain?.targetPort).toEqual(80);
 
       const provider = yield* Provider.findProvider(Railway.Service);
       const listed = yield* provider.list();
@@ -140,10 +147,11 @@ test.provider(
           const api = yield* Railway.Service("Api", {
             project,
             environment,
-            image: "hashicorp/http-echo",
-            port: 5678,
+            image: "nginx:alpine",
+            port: 80,
             name: nextName,
-            healthcheckPath: "/health",
+            healthcheckPath: "/",
+            preDeploy: { command: null },
           });
           return { project, environment, api };
         }),
@@ -158,7 +166,12 @@ test.provider(
         environmentId: updated.api.environmentId,
         serviceId: updated.api.serviceId,
       });
-      expect(updatedInstance.healthcheckPath).toEqual("/health");
+      expect(updatedInstance.healthcheckPath).toEqual("/");
+      expect(
+        updatedInstance.preDeployCommand == null ||
+          (Array.isArray(updatedInstance.preDeployCommand) &&
+            updatedInstance.preDeployCommand.length === 0),
+      ).toEqual(true);
 
       const fetchedUpdate = yield* railway.service({
         id: updated.api.serviceId,

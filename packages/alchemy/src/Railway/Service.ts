@@ -137,6 +137,21 @@ export interface ServiceProps extends PlatformProps {
    */
   buildCommand?: string;
   /**
+   * Pre-deploy step Railway runs after the image build and before
+   * start (migrations, seed). Omit to leave the current Railway setting
+   * unchanged. Pass `{ command: null }` to clear it.
+   *
+   * @see https://docs.railway.com/deployments/pre-deploy-command
+   */
+  preDeploy?: {
+    /**
+     * Shell command Railway executes in a separate container after
+     * build and before start. Must exit 0 or the deployment fails.
+     * Pass `null` to clear it.
+     */
+    command: string | null;
+  };
+  /**
    * Start command (`pnpm start`).
    */
   startCommand?: string;
@@ -406,6 +421,19 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   rootDirectory: "apps/api",
  *   buildCommand: "pnpm build",
  *   startCommand: "pnpm start",
+ * });
+ * ```
+ *
+ * ### Pre-deploy
+ * Railway runs `preDeploy.command` after the image build and before
+ * start — the same setting as the dashboard Pre-deploy Command.
+ *
+ * **Example:** Run migrations before traffic
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   preDeploy: { command: "bun --cwd apps/api migrate" },
  * });
  * ```
  *
