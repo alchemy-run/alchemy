@@ -158,6 +158,40 @@ const listTokens = Effect.fn(function* (username: string) {
 });
 
 /**
+ * Raised when a token of this name already exists but no state row does.
+ *
+ * Forgejo returns a token's secret exactly once, at creation, so a token
+ * whose state row was lost cannot be adopted — the secret is unrecoverable,
+ * and Forgejo refuses a second token of the same name. Creating blindly would
+ * fail on every subsequent deploy with a duplicate-name rejection that says
+ * nothing about how to recover, so the situation is named instead: it needs
+ * an operator to decide whether the live token is still in use.
+ */
+export class UnrecoverableApiToken extends Data.TaggedError(
+  "UnrecoverableApiToken",
+)<{
+  /**
+   * User the token belongs to.
+   */
+  readonly username: string;
+  /**
+   * Name of the token that already exists.
+   */
+  readonly name: string;
+  /**
+   * Numeric ID of the existing token.
+   */
+  readonly tokenId: number;
+}> {
+  /**
+   * Human-readable description of the unrecoverable token, naming the way out.
+   */
+  override get message(): string {
+    return `Forgejo already has an API token named '${this.name}' for user '${this.username}' (id ${this.tokenId}), but no state records it. Its secret was only returned when it was created and cannot be read back. Delete that token if it is no longer in use and deploy again, or give this resource a different name.`;
+  }
+}
+
+/**
  * Raised when Forgejo accepts a token creation but omits the generated
  * secret, which can never be recovered from a later read.
  */
@@ -225,9 +259,25 @@ export const ApiTokenProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       // Observe: a token we already generated is unchanged and its plaintext
       // is unrecoverable, so an existing one is kept as-is.
-      if (output !== undefined) {
-        const tokens = yield* listTokens(news.username);
-        if (tokens.some((token) => token.id === output.tokenId)) return output;
+      const tokens = yield* listTokens(news.username);
+      if (
+        output !== undefined &&
+        tokens.some((token) => token.id === output.tokenId)
+      ) {
+        return output;
+      }
+
+      // Without a state row, a token already holding this name is not ours to
+      // replace and not possible to adopt — its secret is gone. Creating here
+      // would be rejected for the duplicate name on this deploy and every one
+      // after it, so say what actually happened instead.
+      const conflict = tokens.find((token) => token.name === news.name);
+      if (conflict !== undefined) {
+        return yield* new UnrecoverableApiToken({
+          username: news.username,
+          name: news.name,
+          tokenId: conflict.id,
+        });
       }
 
       const client = yield* ForgejoCredentials;

@@ -350,6 +350,40 @@ test.provider(
     }),
 );
 
+test.provider("refuses to transfer an organization to another owner", (stack) =>
+  Effect.gen(function* () {
+    reset();
+
+    const created = yield* stack.deploy(
+      Organization("Acme", { owner: "alice", username: "acme" }).pipe(
+        destroy(),
+      ),
+    );
+    server.reset();
+
+    // An organization's login is globally unique, so the "new" organization a
+    // replacement would create is the one that already exists. Left as a
+    // replacement, the deploy adopts it back and reports success for an
+    // ownership transfer Forgejo has no way to perform — and with removal
+    // opted in, the old generation's delete then takes out the organization
+    // the new state points at.
+    const result = yield* Effect.result(
+      stack.deploy(
+        Organization("Acme", { owner: "bob", username: "acme" }).pipe(
+          destroy(),
+        ),
+      ),
+    );
+
+    expect(Result.isFailure(result)).toBe(true);
+    expect(JSON.stringify(result)).toContain("UnsupportedOwnerChange");
+    // The organization is untouched: not deleted, not re-created.
+    expect(organizations.get("acme")?.id).toBe(created.organizationId);
+    expect(server.count("DELETE", "/orgs/acme")).toBe(0);
+    expect(server.count("POST", "/admin/users/bob/orgs")).toBe(0);
+  }),
+);
+
 test.provider("adopts an organization that already exists", (stack) =>
   Effect.gen(function* () {
     reset();

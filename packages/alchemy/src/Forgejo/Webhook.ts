@@ -133,6 +133,8 @@ interface ApiHook {
   readonly id: number;
   readonly url: string;
   readonly updated_at?: string;
+  readonly active?: boolean;
+  readonly branch_filter?: string;
   readonly config?: Readonly<Record<string, string>>;
   readonly events?: readonly string[];
 }
@@ -169,21 +171,50 @@ const sameEvents = (
 };
 
 /**
- * Locate the live hook, by ID when one is already known and otherwise by
- * delivery URL *and* event set within the repository.
+ * Whether a live hook is the one this resource declares.
+ *
+ * Every field Forgejo lets a hook differ by has to take part. Forgejo accepts
+ * several hooks on one URL — verified on 16.0.3, which happily created two
+ * with the same URL *and* the same events — so any field left out of this
+ * comparison is a field two `Webhook` resources may legitimately differ by
+ * while both match the same live hook. They would then share one hook, and
+ * each deploy would overwrite the other's configuration.
+ *
+ * Compared against the same defaults {@link bodyOf} sends, so a hook this
+ * provider just created matches the props that created it.
+ */
+const matchesIdentity = (
+  hook: ApiHook,
+  props: Pick<
+    WebhookProps,
+    "url" | "events" | "active" | "branchFilter" | "contentType"
+  >,
+): boolean =>
+  urlOf(hook) === props.url &&
+  sameEvents(hook, props.events) &&
+  (hook.active ?? true) === (props.active ?? true) &&
+  (hook.branch_filter ?? "") === (props.branchFilter ?? "") &&
+  (hook.config?.content_type ?? "json") === (props.contentType ?? "json");
+
+/**
+ * Locate the live hook, by ID when one is already known and otherwise by its
+ * full declared identity within the repository.
  *
  * Forgejo happily accepts several hooks pointing at the same URL, so creating
  * unconditionally would turn a create whose state write failed into a
  * duplicate on every retry. Matching an existing hook adopts it instead.
- *
- * The event set is part of the match because the URL alone is not unique: two
- * `Webhook` resources may legitimately target one URL in one repository with
- * different events (say `push` versus `pull_request`), and matching on URL
- * alone would collapse them onto a single hook, each deploy overwriting the
- * other's configuration.
  */
 const observe = Effect.fn(function* (
-  props: Pick<WebhookProps, "owner" | "repository" | "url" | "events">,
+  props: Pick<
+    WebhookProps,
+    | "owner"
+    | "repository"
+    | "url"
+    | "events"
+    | "active"
+    | "branchFilter"
+    | "contentType"
+  >,
   webhookId: number | undefined,
 ) {
   const client = yield* ForgejoCredentials;
@@ -197,9 +228,7 @@ const observe = Effect.fn(function* (
     paginate<ApiHook>(client, hooksPath(props)),
     [] as readonly ApiHook[],
   );
-  return hooks.find(
-    (hook) => urlOf(hook) === props.url && sameEvents(hook, props.events),
-  );
+  return hooks.find((hook) => matchesIdentity(hook, props));
 });
 
 const bodyOf = (props: WebhookProps) => ({
