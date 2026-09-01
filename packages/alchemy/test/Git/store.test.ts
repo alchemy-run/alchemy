@@ -18,6 +18,7 @@ import { runCompactJob, shouldCompact, BLOB_TYPE } from "@/Git/jobs/Compact.ts";
 import { packKey } from "@/Git/store/Keys.ts";
 import {
   makeObjectStore,
+  STAGE_INSERT_ROWS,
   WINDOW_BYTES,
   WINDOW_CACHE_BYTES,
 } from "@/Git/store/ObjectStore.ts";
@@ -394,4 +395,79 @@ describe("window cache", () => {
     },
     { timeout: 60_000 },
   );
+});
+
+describe("insertStagedBatch", () => {
+  test("stages a batch with multi-row inserts; staged rows are invisible to live reads", async () => {
+    await run(
+      Effect.gen(function* () {
+        const sql = makeTestSqlClient();
+        const store = makeObjectStore({
+          sql,
+          blobs: makeMemoryBlobStore(),
+          repoId: REPO,
+        });
+        const objects = [];
+        for (let i = 0; i < STAGE_INSERT_ROWS * 2 + 7; i++) {
+          const f = yield* makeFixture(3, bytes(64, i + 1));
+          objects.push({
+            oid: f.oid,
+            type: f.type,
+            size: f.content.length,
+            zdata: f.zdata,
+          });
+        }
+        yield* store.insertStagedBatch("push-A", objects);
+        const staged = yield* sql.first<{ n: number }>(
+          `SELECT COUNT(*) AS n FROM objects WHERE staged_push = 'push-A'`,
+        );
+        expect(staged?.n).toBe(objects.length);
+        expect(yield* store.has(objects[0]!.oid)).toBe(false);
+      }),
+    );
+  });
+
+  test("rows left by a crashed push are adopted; live objects are left alone", async () => {
+    await run(
+      Effect.gen(function* () {
+        const sql = makeTestSqlClient();
+        const store = makeObjectStore({
+          sql,
+          blobs: makeMemoryBlobStore(),
+          repoId: REPO,
+        });
+        const objects = [];
+        for (let i = 0; i < 10; i++) {
+          const f = yield* makeFixture(3, bytes(64, i + 100));
+          objects.push({
+            oid: f.oid,
+            type: f.type,
+            size: f.content.length,
+            zdata: f.zdata,
+          });
+        }
+        yield* store.insertStagedBatch("push-crashed", objects.slice(0, 4));
+        yield* store.insertStagedBatch("push-B", objects);
+        const byPush = yield* sql.all<{ staged_push: string; n: number }>(
+          `SELECT staged_push, COUNT(*) AS n FROM objects GROUP BY staged_push`,
+        );
+        expect(byPush).toEqual([{ staged_push: "push-B", n: 10 }]);
+        yield* sql.run(
+          `UPDATE objects SET staged_push = NULL WHERE oid = ?`,
+          objects[0]!.oid,
+        );
+        yield* store.insertStagedBatch("push-C", objects.slice(0, 2));
+        const live = yield* sql.first<{ staged_push: string | null }>(
+          `SELECT staged_push FROM objects WHERE oid = ?`,
+          objects[0]!.oid,
+        );
+        expect(live?.staged_push).toBeNull();
+        const other = yield* sql.first<{ staged_push: string | null }>(
+          `SELECT staged_push FROM objects WHERE oid = ?`,
+          objects[1]!.oid,
+        );
+        expect(other?.staged_push).toBe("push-C");
+      }),
+    );
+  });
 });

@@ -141,7 +141,11 @@ const inflateEntryUnsafeSync = (
     // `bytesWritten` with it. Checking against the size the pack header
     // already declares turns that silent truncation into a fallback.
     if (expectedSize !== undefined && output.length !== expectedSize) {
-      return undefined;
+      // workerd's shim returned only the first output chunk: the public
+      // `inflateSync({ info })` loops to completion — try it before paying
+      // for the streaming path (measured: the entries that hit this were
+      // the only async work left in a production ingest).
+      return inflateEntryInfoSync(buf, offset, maxOutput, expectedSize);
     }
     return {
       content: new Uint8Array(output.buffer, output.byteOffset, output.length),

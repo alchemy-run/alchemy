@@ -74,6 +74,14 @@ export const WINDOW_BYTES = 4 * 1024 * 1024;
  */
 export const EMIT_BATCH = 256;
 
+/**
+ * Rows per multi-row `INSERT` while staging a push: 6 bindings per row, and
+ * Durable Object SQLite allows at most 100 bound parameters per statement
+ * (`MAX_IN_PARAMS`) — 16 rows is 96. Still a 16x cut in statement
+ * executions over one row per statement (see `insertStagedBatch`).
+ */
+export const STAGE_INSERT_ROWS = 16;
+
 const chunkArray = <T>(
   items: ReadonlyArray<T>,
   size: number,
@@ -881,12 +889,18 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         zsize: object.zdata.byteLength,
         zdata: toArrayBuffer(object.zdata),
       }));
-      yield* sql
-        .transactionSync((raw) => {
-          for (const row of rows) {
-            raw.exec(
-              `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, staged_push)
-               VALUES (?, ?, ?, ?, 'row', ?, ?)`,
+      // Multi-row INSERTs (DESIGN §22.4): one statement per STAGE_INSERT_ROWS
+      // rows instead of one per row. On production CPU each statement
+      // execution costs far more than binding six more parameters, and
+      // staging was the largest slice of a push's ingest (7 s of 30 s).
+      const written = yield* sql.transactionSync((raw) => {
+        let changed = 0;
+        for (let at = 0; at < rows.length; at += STAGE_INSERT_ROWS) {
+          const part = rows.slice(at, at + STAGE_INSERT_ROWS);
+          const values = part.map(() => "(?, ?, ?, ?, 'row', ?, ?)").join(", ");
+          const bindings: Array<string | number | ArrayBuffer> = [];
+          for (const row of part) {
+            bindings.push(
               row.oid,
               row.type,
               row.size,
@@ -895,11 +909,17 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
               pushId,
             );
           }
-        })
-        .pipe(Effect.asVoid);
-
-      // Adopt rows a crashed push left staged, so this push's connectivity
-      // check and live-flip see them (the per-object path does this inline).
+          const cursor = raw.exec(
+            `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, staged_push) VALUES ${values}`,
+            ...bindings,
+          );
+          changed += cursor.rowsWritten;
+        }
+        return changed;
+      });
+      // Every row was new: nothing to adopt. Only when INSERT OR IGNORE
+      // skipped rows can some belong to a crashed push and need re-stamping.
+      if (written >= rows.length) return;
       yield* sql.inChunks(
         (ph) =>
           `UPDATE objects SET staged_push = ? WHERE oid IN (${ph})
@@ -908,7 +928,6 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         { prefix: [pushId], suffix: [pushId] },
       );
     }),
-
     insertStaged: insertStagedOne,
 
     missingObjects: (oids, pushId) =>

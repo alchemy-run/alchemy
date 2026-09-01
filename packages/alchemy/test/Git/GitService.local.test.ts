@@ -159,7 +159,11 @@ class GitError extends Data.TaggedError("GitError")<{
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
-}> {}
+}> {
+  override get message() {
+    return `git ${this.args.join(" ")} → exit ${this.exitCode}\n${this.stderr.trim()}\n${this.stdout.trim()}`;
+  }
+}
 
 /** Run `git <args>` in `cwd`, capturing exit code and output. Bounded. */
 const git = Effect.fn(function* (cwd: string, ...args: Array<string>) {

@@ -43,10 +43,23 @@ export const makeTestSqlClient = (): SqlClient & { readonly db: Database } => {
   for (const ddl of REPO_DDL) db.run(ddl);
 
   const exec = (query: string, bindings: ReadonlyArray<Value>) => {
+    // Durable Object SQLite: at most 100 bound parameters per statement.
+    if (bindings.length > MAX_IN_PARAMS) {
+      throw new Error(
+        `too many SQL variables (${bindings.length} > ${MAX_IN_PARAMS}): SQLITE_ERROR`,
+      );
+    }
     const stmt = db.query(query);
-    const rows = stmt.all(...bindings.map(bind)) as Array<
-      Record<string, unknown>
-    >;
+    const isRead = /^\s*(SELECT|WITH|PRAGMA)/i.test(query);
+    let rowsWritten = 0;
+    let rows: Array<Record<string, unknown>> = [];
+    if (isRead || /RETURNING/i.test(query)) {
+      rows = stmt.all(...bindings.map(bind)) as Array<Record<string, unknown>>;
+    } else {
+      // `run` reports `changes`, which is what the DO cursor's rowsWritten is.
+      rowsWritten = (stmt.run(...bindings.map(bind)) as { changes: number })
+        .changes;
+    }
     const out = rows.map(normalize);
     return {
       toArray: () => out,
@@ -56,7 +69,7 @@ export const makeTestSqlClient = (): SqlClient & { readonly db: Database } => {
         return out[0];
       },
       raw: () => out.map((r) => Object.values(r)),
-      rowsWritten: 0,
+      rowsWritten,
       rowsRead: out.length,
       columnNames: out.length > 0 ? Object.keys(out[0]!) : [],
       [Symbol.iterator]: () => out[Symbol.iterator](),

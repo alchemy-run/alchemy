@@ -22,14 +22,19 @@ import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
 /** A synthetic non-delta pack of `n` blobs with sizes cycling 100..5000. */
-const buildPack = (n: number) =>
+const buildPack = (
+  n: number,
+  options?: { readonly incompressible?: boolean },
+) =>
   Effect.gen(function* () {
     const pieces: Array<Uint8Array> = [packHeader(n)];
     const oids: Array<Oid> = [];
     for (let i = 0; i < n; i++) {
       const size = 100 + ((i * 977) % 4900);
       const content = new Uint8Array(size);
-      for (let j = 0; j < size; j++) content[j] = (j * 7 + i) & 0xff;
+      if (options?.incompressible) crypto.getRandomValues(content);
+      else for (let j = 0; j < size; j++) content[j] = (j * 7 + i) & 0xff;
+      content[0] = i & 0xff;
       oids.push(yield* hashObject(3, content));
       pieces.push(encodeTypeSize(3, size), yield* Zlib.deflate(content));
     }
@@ -122,7 +127,7 @@ describe("blobRandomAccess", () => {
   test("with production geometry (large windows) a sequential parse fetches about one window each", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
-        const { pack } = yield* buildPack(600);
+        const { pack } = yield* buildPack(600, { incompressible: true });
         const blobs = makeMemoryBlobStore();
         yield* blobs.put("incoming", pack);
         const windowBytes = 64 * 1024;
