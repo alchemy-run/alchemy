@@ -3,6 +3,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { ForgejoCredentials, optional, paginate } from "./Client.ts";
+import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -67,18 +68,27 @@ export interface RepositoryProps {
   readonly defaultBranch?: string;
   /**
    * Initialize the repository on creation.
+   *
+   * Create-only: Forgejo's edit endpoint cannot change it, so altering this
+   * on an existing repository has no effect and does not replace it.
    */
   readonly autoInit?: boolean;
   /**
    * Comma-separated gitignore templates used on creation.
+   *
+   * Create-only; see {@link autoInit}.
    */
   readonly gitignores?: string;
   /**
    * License template used on creation.
+   *
+   * Create-only; see {@link autoInit}.
    */
   readonly license?: string;
   /**
    * README template used on creation.
+   *
+   * Create-only; see {@link autoInit}.
    */
   readonly readme?: string;
   /**
@@ -87,6 +97,8 @@ export interface RepositoryProps {
   readonly template?: boolean;
   /**
    * Git object format used on creation.
+   *
+   * Create-only; see {@link autoInit}.
    */
   readonly objectFormatName?: "sha1" | "sha256";
   /**
@@ -294,22 +306,6 @@ const settingsOf = (props: RepositoryProps) => ({
   template: props.template,
 });
 
-/**
- * Whether the observed repository already satisfies every managed setting.
- *
- * Forgejo rejects edits to an archived repository, so re-issuing an unchanged
- * `PATCH` on every deploy would make `archived: true` a one-way trap.
- */
-const settingsMatch = (
-  observed: ApiRepository,
-  desired: ReturnType<typeof settingsOf>,
-): boolean => {
-  const live = observed as unknown as Record<string, unknown>;
-  return Object.entries(desired).every(
-    ([key, value]) => value === undefined || live[key] === value,
-  );
-};
-
 const toAttributes = (repository: ApiRepository): RepositoryAttributes => ({
   repoId: repository.id,
   fullName: repository.full_name,
@@ -401,7 +397,7 @@ export const RepositoryProvider = () =>
       // Sync settings against what was observed, not against `olds`, and
       // skip the call entirely when the live repository already matches.
       const desired = settingsOf(news);
-      const updated = settingsMatch(observed, desired)
+      const updated = matchesDesired(observed, desired)
         ? observed
         : yield* client.request<ApiRepository>(
             "PATCH",
