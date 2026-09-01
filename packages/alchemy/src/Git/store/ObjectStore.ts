@@ -882,13 +882,18 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
 
       // One transaction for the whole batch: `INSERT OR IGNORE` needs no
       // existence probe, and a single commit replaces one per object.
-      const rows = inline.map((object) => ({
-        oid: object.oid,
-        type: object.type,
-        size: object.size,
-        zsize: object.zdata.byteLength,
-        zdata: toArrayBuffer(object.zdata),
-      }));
+      // Sorted by oid: the table is WITHOUT ROWID keyed by oid, so inserting
+      // in key order turns a batch into sequential B-tree appends instead of
+      // random page splits.
+      const rows = inline
+        .map((object) => ({
+          oid: object.oid,
+          type: object.type,
+          size: object.size,
+          zsize: object.zdata.byteLength,
+          zdata: toArrayBuffer(object.zdata),
+        }))
+        .sort((a, b) => (a.oid < b.oid ? -1 : a.oid > b.oid ? 1 : 0));
       // Multi-row INSERTs (DESIGN §22.4): one statement per STAGE_INSERT_ROWS
       // rows instead of one per row. On production CPU each statement
       // execution costs far more than binding six more parameters, and

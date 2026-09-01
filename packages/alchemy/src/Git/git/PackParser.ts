@@ -557,9 +557,15 @@ export const ingestPack = <E, R>(
       let attempt = yield* Effect.result(
         timed("inflate", inflateEntry(window, pos, inflateOptions)),
       );
+      // The header declares the uncompressed size; the compressed span is
+      // at most that plus deflate's own overhead, so one grow reaches an
+      // entry that outran the probe instead of doubling toward it (each
+      // failed attempt below costs up to three inflate passes).
       while (
         Result.isFailure(attempt) &&
-        (yield* growWindow(window.length * 2))
+        (yield* growWindow(
+          Math.max(window.length * 2, pos + header.size + 64 * 1024),
+        ))
       ) {
         attempt = yield* Effect.result(
           inflateEntry(window, pos, inflateOptions),

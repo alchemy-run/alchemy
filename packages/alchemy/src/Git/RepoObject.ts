@@ -181,7 +181,11 @@ export const MAX_PACK_BYTES = 24 * 1024 * 1024;
 // motivated it; the R2 path costs ~2x on the bytes above the threshold.
 
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
-export const STAGE_BATCH_OBJECTS = 256;
+export const STAGE_BATCH_OBJECTS = 2048;
+// 2048 (was 256): measured on production, staging cost tracked the number
+// of transaction COMMITs (~100 ms each), not rows — 61 commits for a
+// 15.6k-object push. Objects average a few KiB, so 2048 stays well under
+// STAGE_BATCH_BYTES; the byte cap still bounds memory for large objects.
 
 /** Byte budget per staging batch, so a batch of large blobs stays bounded. */
 export const STAGE_BATCH_BYTES = 8 * 1024 * 1024;
