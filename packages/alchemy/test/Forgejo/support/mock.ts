@@ -122,6 +122,20 @@ export const json = (body: unknown, status = 200) =>
   Response.json(body, { status });
 
 /**
+ * Build a paginated list response, honouring the request's `page` and `limit`.
+ *
+ * Forgejo returns an empty array once a list is exhausted, and `paginate`
+ * relies on that to stop. A mock that serves the whole list for every page
+ * would never terminate, so list routes must slice like the real API.
+ */
+export const jsonList = <T>(request: RecordedRequest, items: readonly T[]) => {
+  const page = Number(request.query.page ?? "1");
+  const limit = Number(request.query.limit ?? String(items.length));
+  const start = (page - 1) * limit;
+  return json(items.slice(start, start + limit));
+};
+
+/**
  * Build an empty `204 No Content` response.
  */
 export const noContent = () => new Response(null, { status: 204 });
