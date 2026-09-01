@@ -47,8 +47,8 @@
   "files.exclude": {
     "**/__pycache__": true,
     "**/*.pyc": true,
-    "packages/alchemy/bin/**/*.js*": true,
-    "packages/alchemy/bin/**/*.d*": true
+    "packages/alchemy/bin/**/*.d*": true,
+    "packages/alchemy/bin/**/*.map": true,
   },
   // The client watcher feeds the tsgo LSP (workspace/didChangeWatchedFiles);
   // every unexcluded change storm forces a session-snapshot clone + program
@@ -70,7 +70,7 @@
     "**/.alchemy/**": true
   },
   // Keep the 200MB generated distilled surface out of the auto-import index.
-  "typescript.preferences.autoImportFileExcludePatterns": ["**/distilled/**"],
+  "typescript.preferences.autoImportFileExcludePatterns": [ "**/distilled/**" ],
   "[typescript]": {
     "editor.indentSize": 2,
     "editor.defaultFormatter": "oxc.oxc-vscode"
