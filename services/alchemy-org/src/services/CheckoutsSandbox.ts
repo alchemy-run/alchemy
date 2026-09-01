@@ -91,14 +91,39 @@ export const CheckoutsSandbox = Layer.effect(
       remote: marker.remote,
     });
 
-    /** Empty the tree — everything including dotfiles, best-effort.
-     *  A baked image's tree is GBs of installed repo (node_modules
-     *  included), so the delete gets a generous budget — a 60s cap
-     *  was observed expiring partway, leaving `.git` behind to
-     *  conflict with the greenfield derivation. */
+    /** Empty the tree — everything including dotfiles. A baked
+     *  image's tree is GBs of installed repo (node_modules included):
+     *  `rm -rf` the top-level entries (one exec per subtree beats
+     *  `find -delete`'s per-inode unlink walk) under a generous
+     *  budget. STRICT — a half-emptied tree left the baked workspace
+     *  behind as untracked debris inside the freshly derived repo, so
+     *  a failure here must fail the claim, not litter it. */
     const emptyTree = sandbox
-      .exec("find", [".", "-mindepth", "1", "-delete"], { timeout: 300_000 })
-      .pipe(Effect.ignore);
+      .exec(
+        "find",
+        [".", "-mindepth", "1", "-maxdepth", "1", "-exec", "rm", "-rf", "{}", "+"],
+        { timeout: 300_000 },
+      )
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new Git.GitError({
+              command: "emptyTree",
+              exitCode: -1,
+              stderr: String(error),
+            }),
+        ),
+        Effect.filterOrFail(
+          (result) => result.success,
+          (result) =>
+            new Git.GitError({
+              command: "emptyTree",
+              exitCode: result.exitCode,
+              stderr: result.stderr,
+            }),
+        ),
+        Effect.asVoid,
+      );
 
     /** Clone-URL identity: scheme/`.git`-suffix/trailing-slash agnostic. */
     const sameRemote = (a: string, b: string) => {
@@ -126,14 +151,29 @@ export const CheckoutsSandbox = Layer.effect(
           const ref = options.ref ?? Git.defaultBranch(options.remote);
           const current = Option.getOrUndefined(yield* readMarker);
 
+          // Land on the REAL branch (`main` unless the caller pins a
+          // ref), tracking origin — the machine is the session's own
+          // isolated sandbox, so there is no detached-worktree dance:
+          // `git status` in a fresh session reads like a normal clone.
+          const landOnBranch = Effect.gen(function* () {
+            yield* git([
+              "fetch",
+              "--depth",
+              "1",
+              "origin",
+              `+${ref}:refs/remotes/origin/${ref}`,
+            ]);
+            // --force: untracked leftovers from a torn reset must not
+            // abort the checkout; -B (re)points the local branch at
+            // the fetched tip and sets up tracking
+            yield* git(["checkout", "--force", "-B", ref, `origin/${ref}`]);
+            yield* git(["reset", "--hard", `origin/${ref}`]);
+          });
+
           if (current !== undefined && current.key === options.key) {
             if (options.fresh !== true) return checkout(current);
             // re-derive the SAME tree from the remote as it is now
-            // (--force: untracked leftovers from a torn reset must not
-            // abort the checkout)
-            yield* git(["fetch", "--depth", "1", "origin", ref]);
-            yield* git(["checkout", "--force", "--detach", "FETCH_HEAD"]);
-            yield* git(["reset", "--hard", "FETCH_HEAD"]);
+            yield* landOnBranch;
             const marker: Marker = {
               key: options.key,
               branch: ref,
@@ -159,17 +199,16 @@ export const CheckoutsSandbox = Layer.effect(
             if (sameRemote(baked, options.remote.url)) {
               // the bake IS the worktree: adopt it in place — full
               // history, remote intact, node_modules warm. The baked
-              // branch is a build-time snapshot; converge only when the
-              // requested ref differs (or `fresh` demands the tip).
+              // branch is a build-time snapshot (whatever the host had
+              // checked out); converge onto the requested branch when
+              // it differs (or `fresh` demands the tip).
               const head = yield* git([
                 "rev-parse",
                 "--abbrev-ref",
                 "HEAD",
               ]).pipe(Effect.orElseSucceed(() => ""));
-              if (head !== ref || options.fresh === true) {
-                yield* git(["fetch", "origin", ref]);
-                yield* git(["checkout", "--force", "--detach", "FETCH_HEAD"]);
-                yield* git(["reset", "--hard", "FETCH_HEAD"]);
+              if (head.trim() !== ref || options.fresh === true) {
+                yield* landOnBranch;
               }
               const marker: Marker = {
                 key: options.key,
@@ -191,8 +230,8 @@ export const CheckoutsSandbox = Layer.effect(
           }
 
           // greenfield: derive the tree in place (shallow — the ref's
-          // tip is what a review reads). The remote falls back to
-          // set-url so a leftover origin from a torn reset converges
+          // tip is what a session starts from). The remote falls back
+          // to set-url so a leftover origin from a torn reset converges
           // instead of crashing the whole session INIT.
           yield* git(["init", "."]);
           yield* git(["remote", "add", "origin", options.remote.url]).pipe(
@@ -200,8 +239,7 @@ export const CheckoutsSandbox = Layer.effect(
               git(["remote", "set-url", "origin", options.remote.url]),
             ),
           );
-          yield* git(["fetch", "--depth", "1", "origin", ref]);
-          yield* git(["checkout", "--force", "--detach", "FETCH_HEAD"]);
+          yield* landOnBranch;
           const marker: Marker = {
             key: options.key,
             branch: ref,
