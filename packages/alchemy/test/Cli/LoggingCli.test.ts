@@ -1,5 +1,7 @@
 import { LoggingCli, formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { Cli } from "@/Report.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import * as Layer from "effect/Layer";
 import { describe, expect, it, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
@@ -64,7 +66,10 @@ it.effect("emits plain progress through the Effect logger", () => {
     yield* cli.displayPlan(planWith([createNode({}, "Worker")]));
 
     expect(messages).toEqual([["Plan: 1 to create"], ["[Worker] create"]]);
-  }).pipe(Effect.provide(LoggingCli), Effect.provide(Logger.layer([logger])));
+  }).pipe(
+    Effect.provide(Layer.provide(LoggingCli, PlatformServices)),
+    Effect.provide(Logger.layer([logger])),
+  );
 });
 
 it.effect("streams apply notes as they arrive", () => {
@@ -113,5 +118,8 @@ it.effect("streams apply notes as they arrive", () => {
       "[Website] Uploaded 490 of 5195 assets...",
       "[Website] updated — Reconciling custom domains (1) ... (0ms)",
     ]);
-  }).pipe(Effect.provide(LoggingCli), Effect.provide(Logger.layer([logger])));
+  }).pipe(
+    Effect.provide(Layer.provide(LoggingCli, PlatformServices)),
+    Effect.provide(Logger.layer([logger])),
+  );
 });
