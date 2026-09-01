@@ -18,18 +18,9 @@ import cloudflare_workers from "./cloudflare_workers.ts";
 
 type SpanOptions = Parameters<Tracer.Tracer["span"]>[0];
 type RunInContext = ReturnType<typeof AsyncLocalStorage.snapshot>;
-
-interface CloudflareSpan {
-  readonly isTraced: boolean;
-  setAttribute(key: string, value: string | number | boolean | undefined): void;
-  end(): void;
-}
-
-interface CloudflareTracing {
-  startActiveSpan<T>(name: string, callback: (span: CloudflareSpan) => T): T;
-}
-
-let warnedMissingApi = false;
+type CloudflareSpan = ReturnType<
+  (typeof import("cloudflare:workers"))["tracing"]["startSpan"]
+>;
 
 class Span extends Tracer.NativeSpan {
   constructor(
@@ -37,13 +28,11 @@ class Span extends Tracer.NativeSpan {
     readonly runInContext: RunInContext,
     readonly cloudflareSpan?: CloudflareSpan,
   ) {
+    // Cascade Cloudflare's head-sampling decision: an untraced invocation
+    // (or a runtime without the API) marks the Effect span unsampled, so
+    // descendants skip `startActiveSpan` entirely.
     super({
-      name: options.name,
-      parent: options.parent,
-      annotations: options.annotations,
-      links: options.links,
-      startTime: options.startTime,
-      kind: options.kind,
+      ...options,
       sampled: options.sampled && (cloudflareSpan?.isTraced ?? false),
     });
   }
@@ -60,7 +49,6 @@ class Span extends Tracer.NativeSpan {
   }
 
   override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {
-    if (this.status._tag === "Ended") return;
     super.end(endTime, exit);
     this.cloudflareSpan?.setAttribute(
       "effect.exit",
@@ -74,11 +62,6 @@ class Span extends Tracer.NativeSpan {
   }
 }
 
-const tracingOf = (
-  workers: typeof import("cloudflare:workers"),
-): CloudflareTracing | undefined =>
-  (workers as { tracing?: CloudflareTracing }).tracing;
-
 /**
  * Per-event Tracer Layer. Cloudflare owns sampling and export; scalar
  * attributes are forwarded; events, links, and non-scalars stay
@@ -88,16 +71,11 @@ const tracingOf = (
 export const layer: Layer.Layer<never> = Layer.effect(
   Tracer.Tracer,
   Effect.gen(function* () {
-    const workers = yield* cloudflare_workers;
-    const tracing = tracingOf(workers);
-    if (tracing?.startActiveSpan === undefined && !warnedMissingApi) {
-      warnedMissingApi = true;
-      yield* Effect.logWarning(
-        "Cloudflare.Telemetry() requires compatibility date >= 2026-07-28 " +
-          "(tracing.startActiveSpan). Effect spans will not appear in " +
-          "Workers Observability.",
-      );
-    }
+    // `tracing` only exists on compatibility dates >= 2026-07-28. Deploy
+    // already rejects older dates (`assertCloudflareTelemetryCompatibility`),
+    // so a missing API here (an old local workerd) just keeps spans
+    // Effect-local.
+    const { tracing } = yield* cloudflare_workers;
     const invocationContext = AsyncLocalStorage.snapshot();
     const contextFor = (span: Tracer.AnySpan | undefined): RunInContext => {
       while (span?._tag === "Span") {

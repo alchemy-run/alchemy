@@ -2826,7 +2826,6 @@ export const LiveWorkerProvider = () =>
           );
         }
         yield* validateVersionWorkerProps(news, bindings, parentName);
-        yield* assertCloudflareTelemetryCompatibility(news, bindings);
         const traffic = version.traffic ?? 0;
         // Resolve the alias and preview context BEFORE the upload: the
         // aliased preview URL (`<alias>-<script>.<subdomain>.workers.dev`)
@@ -3100,7 +3099,6 @@ export const LiveWorkerProvider = () =>
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
-        yield* assertCloudflareTelemetryCompatibility(news, bindings);
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
           return yield* Effect.fail(
@@ -5089,6 +5087,7 @@ export const LiveWorkerProvider = () =>
           output,
           session,
         }) {
+          yield* assertCloudflareTelemetryCompatibility(news, bindings);
           // A version worker uploads an immutable version to its parent's
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.

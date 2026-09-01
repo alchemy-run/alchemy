@@ -4,10 +4,7 @@ import {
   CloudflareTelemetryCompatibilityError,
   MIN_CLOUDFLARE_TRACING_DATE,
 } from "@/Cloudflare/Workers/Telemetry.ts";
-import {
-  getObservabilityBinding,
-  resolveObservability,
-} from "@/Cloudflare/Workers/WorkerAsyncBindings.ts";
+import { resolveObservability } from "@/Cloudflare/Workers/WorkerAsyncBindings.ts";
 import type { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import type { ResourceBinding } from "@/Resource.ts";
 import * as Test from "@/Test/Alchemy";
@@ -56,20 +53,14 @@ describe("resolveObservability", () => {
     expect(resolved.traces?.persist).toBeUndefined();
   });
 
-  unit("persist false last-defined-wins", () => {
-    const bindings = [
-      ...tracesBind({ enabled: true, persist: true }),
-      ...tracesBind({ enabled: true, persist: false }),
-    ] as unknown as Bindings;
-    const bound = getObservabilityBinding(bindings);
-    expect(bound?.persist).toBe(false);
-    const resolved = resolveObservability({}, bindings);
-    expect(resolved.traces?.persist).toBe(false);
-  });
-
   unit("fills traces when news.observability exists without traces", () => {
     const resolved = resolveObservability(
-      { observability: { enabled: true, logs: { persist: true } } },
+      {
+        observability: {
+          enabled: true,
+          logs: { enabled: true, invocationLogs: true, persist: true },
+        },
+      },
       tracesBind({ enabled: true, headSamplingRate: 1 }),
     );
     expect(resolved.logs?.persist).toBe(true);
@@ -213,14 +204,6 @@ test.provider(
             Effect.die(
               new Error(
                 "Cloudflare rejected the observability telemetry query (Unauthorized). " +
-                  'Mint credentials with the "workers_observability:read" scope.',
-              ),
-            ),
-          ),
-          Effect.catchTag("Forbidden", () =>
-            Effect.die(
-              new Error(
-                "Cloudflare rejected the observability telemetry query (Forbidden). " +
                   'Mint credentials with the "workers_observability:read" scope.',
               ),
             ),

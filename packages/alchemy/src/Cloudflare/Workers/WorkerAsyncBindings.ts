@@ -679,62 +679,21 @@ const DEFAULT_OBSERVABILITY: WorkerObservability = {
   },
 };
 
-type BoundTraces = NonNullable<WorkerObservability["traces"]>;
-
 /**
- * Merge Workers Traces settings contributed by `Cloudflare.Telemetry()`.
- * Last-defined wins for `persist` / `headSamplingRate` so `persist: false`
- * survives. `enabled` is true if any contributor did not set `false`.
- */
-export const getObservabilityBinding = (
-  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-): BoundTraces | undefined => {
-  const traces = bindings.flatMap((b) => {
-    const next = b.data.observability?.traces;
-    return next != null ? [next] : [];
-  });
-  if (traces.length === 0) {
-    return undefined;
-  }
-  let persist: boolean | undefined;
-  let headSamplingRate: number | null | undefined;
-  for (const entry of traces) {
-    if (entry.persist !== undefined) persist = entry.persist;
-    if (entry.headSamplingRate !== undefined) {
-      headSamplingRate = entry.headSamplingRate;
-    }
-  }
-  return {
-    enabled: traces.some((entry) => entry.enabled !== false),
-    ...(headSamplingRate !== undefined ? { headSamplingRate } : {}),
-    ...(persist !== undefined ? { persist } : {}),
-  };
-};
-
-/**
- * Resolve the observability metadata to upload.
- *
- * - Explicit `news.observability.traces` wins wholesale.
- * - If `news.observability` exists but `traces` is omitted, fill traces
- *   from the `Cloudflare.Telemetry()` bind.
- * - If `news.observability` is omitted, keep today's default logs and add
- *   bound traces. Do **not** use cache-style `??` — that would drop
- *   `logs.invocationLogs`.
+ * Resolve the observability metadata to upload. An explicit
+ * `news.observability.traces` wins; otherwise the traces contributed by
+ * `Cloudflare.Telemetry()` (a single binding row — rows are collapsed by
+ * sid) fill in without clobbering the logs config. A cache-style `??` on
+ * the whole object would drop the default `logs.invocationLogs`.
  */
 export const resolveObservability = (
   news: Pick<WorkerProps, "observability">,
   bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
 ): WorkerObservability => {
-  const boundTraces = getObservabilityBinding(bindings);
-  const newsObs = news.observability;
-  if (newsObs?.traces !== undefined && newsObs.traces !== null) {
-    return newsObs;
-  }
-  if (boundTraces === undefined) {
-    return newsObs ?? DEFAULT_OBSERVABILITY;
-  }
-  if (newsObs === undefined) {
-    return { ...DEFAULT_OBSERVABILITY, traces: boundTraces };
-  }
-  return { ...newsObs, traces: boundTraces };
+  const observability = news.observability ?? DEFAULT_OBSERVABILITY;
+  const bound = bindings.find((b) => b.data.observability?.traces != null)?.data
+    .observability?.traces;
+  return observability.traces != null || bound == null
+    ? observability
+    : { ...observability, traces: bound };
 };

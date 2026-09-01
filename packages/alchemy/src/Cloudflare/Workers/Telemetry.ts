@@ -149,7 +149,7 @@ export const assertCloudflareTelemetryCompatibility = (
  */
 export const Telemetry = (
   props: CloudflareTelemetryProps = {},
-): Layer.Layer<never> =>
+): Layer.Layer<never, never, Worker> =>
   Layer.unwrap(
     Effect.gen(function* () {
       const host = yield* Worker;
@@ -161,6 +161,8 @@ export const Telemetry = (
           }),
         );
       }
-      return AlchemyTelemetry.layer(Layer.fresh(cloudflareTracerLayer));
+      // The runtime bridges build the registered Layer per event with a
+      // forked MemoMap, so the Tracer is naturally fresh per invocation.
+      return AlchemyTelemetry.layer(cloudflareTracerLayer);
     }),
-  ) as Layer.Layer<never>;
+  );

@@ -2,14 +2,14 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { createServer, type Server } from "node:http";
 import * as pathe from "pathe";
 import { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
+import { expectUrlContains } from "../Utils/Http.ts";
+import { startOtlpCollector } from "../Utils/OtlpCollector.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -29,34 +29,7 @@ const collectorMain = pathe.resolve(
 const producerFlags = {
   date: "2026-08-25",
   flags: ["streaming_tail_worker", "tail_worker_user_spans"],
-} as const;
-
-class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
-  status: number;
-}> {}
-
-const getTextReady = (url: string) =>
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const res = yield* client.get(url).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new WorkerNotReady({ status: res.status })),
-      ),
-      Effect.retry({
-        while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-        schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
-          Schedule.recurs(10),
-        ]),
-      }),
-    );
-    return yield* res.text;
-  }).pipe(Effect.orDie);
+};
 
 interface RecordedTailEvent {
   invocationId?: string;
@@ -117,50 +90,6 @@ const pollSessions = (producerUrl: string, consumerUrl: string) =>
     }),
   );
 
-interface LogCollector {
-  readonly server: Server;
-  readonly url: string;
-  readonly posts: { value: number };
-}
-
-const startLogCollector = Effect.acquireRelease(
-  Effect.callback<LogCollector, Error>((resume) => {
-    const posts = { value: 0 };
-    const server = createServer((request, response) => {
-      request.resume();
-      request.once("end", () => {
-        if (request.method === "POST") posts.value += 1;
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end('{"partialSuccess":{}}');
-      });
-    });
-    const onError = (error: Error) => resume(Effect.fail(error));
-    server.once("error", onError);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", onError);
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        resume(Effect.fail(new Error("log collector address unavailable")));
-        return;
-      }
-      resume(
-        Effect.succeed({
-          server,
-          posts,
-          url: `http://127.0.0.1:${address.port}`,
-        }),
-      );
-    });
-    return Effect.sync(() => server.close());
-  }),
-  ({ server }) =>
-    Effect.callback<void, Error>((resume) => {
-      server.close((error) =>
-        resume(error === undefined ? Effect.void : Effect.fail(error)),
-      );
-    }).pipe(Effect.orDie),
-);
-
 test.provider(
   "local Cloudflare.Telemetry() nests Effect spans with platform children",
   (stack) =>
@@ -184,7 +113,8 @@ test.provider(
 
       expect(deployed.events.namespaceId).toMatch(/^dev:/);
       expect(deployed.producer.url).toMatch(/^http:\/\/localhost:\d+$/);
-      expect(yield* getTextReady(deployed.consumer.url!)).toBe(
+      yield* expectUrlContains(
+        deployed.consumer.url!,
         "native-tracing-collector-ok",
       );
 
@@ -248,7 +178,7 @@ const compositionTest = (order: "cf-last" | "otlp-last") =>
     `local Cloudflare.Telemetry() + logs-only OTLP compose (${order})`,
     (stack) =>
       Effect.gen(function* () {
-        const collector = yield* startLogCollector;
+        const collector = yield* startOtlpCollector();
         const currentConfig = yield* ConfigProvider.ConfigProvider;
         yield* stack.destroy();
 
@@ -278,24 +208,20 @@ const compositionTest = (order: "cf-last" | "otlp-last") =>
             ),
           );
 
-        expect(yield* getTextReady(deployed.producer.url!)).toBe(
-          "native-tracing-ok",
+        yield* expectUrlContains(deployed.producer.url!, "native-tracing-ok");
+        yield* expectUrlContains(
+          `${deployed.producer.url}/work`,
+          "native-did-work",
         );
-        const client = yield* HttpClient.HttpClient;
-        const res = yield* client
-          .get(`${deployed.producer.url}/work`)
-          .pipe(Effect.orDie);
-        expect(res.status).toBe(200);
-        expect(yield* res.text).toContain("native-did-work");
 
-        yield* Effect.sync(() => collector.posts.value).pipe(
+        yield* Effect.sync(() => collector.completedRequests.value).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("200 millis"),
             until: (posts) => posts >= 1,
             times: 40,
           }),
         );
-        expect(collector.posts.value).toBeGreaterThanOrEqual(1);
+        expect(collector.completedRequests.value).toBeGreaterThanOrEqual(1);
 
         yield* stack.destroy();
       }).pipe(logLevel),
