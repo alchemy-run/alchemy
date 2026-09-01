@@ -28,7 +28,7 @@ project references:
 ## Provenance
 
 Sourced from [`cloudflare/workers-sdk`](https://github.com/cloudflare/workers-sdk)
-at commit `b973ed30015e4e4bface3c0733c33f624066523a` (path:
+at commit `b7b4ff84477982e7c770bb93928287893fcf2e03` (path:
 `packages/workers-shared`). Upstream license: MIT OR Apache-2.0.
 
 | Upstream path                                                                                         | Vendored path                                      |

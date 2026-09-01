@@ -34,7 +34,7 @@ class WorkflowImpl implements Workflow {
   }
 
   async deleteBatch(instanceIds: string[]): Promise<WorkflowBatchDeleteResult> {
-    return this.binding.deleteBatch(instanceIds);
+    return this.binding.deleteBatch({ instances: instanceIds });
   }
 
   async unsafeGetBindingName(): Promise<string> {
