@@ -217,9 +217,25 @@ export const OrganizationProvider = () =>
             // A concurrent create wins the race; adopt what is there. The
             // admin endpoint declares 403/422 for a duplicate, not 409, so
             // the conflict surfaces under those tags.
+            //
+            // Those tags also cover genuine failures — a non-administrator
+            // credential gets the same 403 — so recover only if the
+            // organization actually turned up. Otherwise re-fail with the
+            // original error: reporting "not found" for what is really "your
+            // token is not an administrator" replaces the clearest diagnosis
+            // with the most misleading one.
             Effect.catchTag(
               ["ForgejoValidationError", "ForgejoForbidden"],
-              () => client.request<ApiOrganization>("GET", path(news)),
+              (cause) =>
+                optional(
+                  client.request<ApiOrganization>("GET", path(news)),
+                ).pipe(
+                  Effect.flatMap((existing) =>
+                    existing === undefined
+                      ? Effect.fail(cause)
+                      : Effect.succeed(existing),
+                  ),
+                ),
             ),
           );
         return attributesOf(client, created);
