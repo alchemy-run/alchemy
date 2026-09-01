@@ -15,6 +15,22 @@ import ProvisionedCacheDataPlaneLive, {
 } from "./Provisioned.DataPlane.handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// A type alias so it stays comparable to `response.json`'s JsonObject.
+type ConnectionProbe = {
+  valkey: {
+    host: string;
+    port: number;
+    readerHost?: string;
+    readerPort?: number;
+    tls: boolean;
+  };
+  memcached: {
+    endpoints: Array<{ address: string; port: number }>;
+    tls: boolean;
+  };
+};
+
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "connects from a VPC Lambda to provisioned Valkey and Memcached",
   (stack) =>
@@ -69,10 +85,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           }),
         );
 
-      const connection = (yield* getJson("/connection", 60)) as {
-        valkey: AWS.ElastiCache.ReplicationGroupConnectionInfo;
-        memcached: AWS.ElastiCache.CacheClusterConnectionInfo;
-      };
+      const connection = (yield* getJson("/connection", 60)) as ConnectionProbe;
       expect(connection.valkey.host).toBeTruthy();
       expect(connection.valkey.port).toBe(6379);
       expect(connection.memcached.endpoints).toHaveLength(1);

@@ -17,6 +17,7 @@ import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Output from "@/Output.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Schedule from "effect/Schedule";
 import {
   assertCacheClusterGone,
@@ -63,6 +64,7 @@ test(
     for (const props of invalid) {
       const error = validateReplicationGroupProps({
         description: "invalid cache",
+        engine: "valkey",
         ...props,
       });
       expect(error?._tag).toBe("InvalidReplicationGroupConfiguration");
@@ -71,9 +73,9 @@ test(
   { timeout: 2_700_000 },
 );
 
-const withEnv = <A>(
+const withEnv = <A, E = never, R = never>(
   values: Record<string, string>,
-  effect: Effect.Effect<A>,
+  effect: Effect.Effect<A, E, R>,
 ) => {
   const previous = Object.fromEntries(
     Object.keys(values).map((key) => [key, process.env[key]]),
@@ -133,7 +135,9 @@ test(
         ]),
         [`${memcachedPrefix}_TLS`]: "false",
       },
-      Effect.all([replicationConnect, memcachedConnect]),
+      Effect.all([replicationConnect, memcachedConnect]).pipe(
+        Effect.provide(RuntimeContext.phantom),
+      ),
     );
 
     expect(replication).toEqual({
