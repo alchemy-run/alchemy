@@ -16,6 +16,7 @@ const modulePromise: Promise<typeof import("cloudflare:workers")> =
         WorkflowEntrypoint: class {
           async run() {}
         },
+        tracing: undefined,
       }) as any,
   );
 

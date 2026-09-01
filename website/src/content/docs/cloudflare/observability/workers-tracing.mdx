@@ -1,0 +1,97 @@
+---
+title: Native Workers tracing
+description: Mirror Effect spans into Cloudflare Workers Observability with Cloudflare.Telemetry() — the same Layer shape as Axiom.Telemetry, with Cloudflare owning sampling and export.
+sidebar:
+  order: 15
+---
+
+Cloudflare Workers can emit OpenTelemetry traces natively: fetch, KV, R2,
+and D1 are auto-instrumented, and custom spans join that waterfall via
+`tracing.startActiveSpan`. Alchemy's `Cloudflare.Telemetry()` Layer
+forwards `Effect.withSpan` / `Effect.fn` frames into that API so Effect
+code shows up next to the platform spans.
+
+## Provide the layer
+
+Pin a compatibility date at or after `2026-07-28` (`startActiveSpan` GA).
+The global Worker default is still older, so omit the date and deploy
+fails instead of silently dropping Effect spans.
+
+```typescript
+export default Cloudflare.Worker(
+  "Worker",
+  {
+    main: import.meta.url,
+    compatibility: { date: "2026-08-25" },
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        yield* doWork().pipe(Effect.withSpan("operation"));
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.R2.ReadWriteBucketBinding,
+        Cloudflare.Telemetry(),
+      ),
+    ),
+  ),
+);
+```
+
+You do **not** set `observability.traces.enabled` on the Worker, write a
+Wrangler `observability` block, or configure an OTLP URL. The Layer
+enables traces on the host (the same bind path as `Cloudflare.cache()`)
+and installs a per-event Effect Tracer. Cloudflare owns sampling and
+export — spans submit with the request, no `waitUntil` flush.
+
+Existing `Effect.withSpan` / `Effect.fn` instrumentation does not change.
+
+## What you get
+
+- Effect spans nested with automatic fetch / KV / R2 / D1 spans in the
+  Workers Observability waterfall.
+- Scalar attributes (`string` / `number` / `boolean`) forwarded.
+  Nested objects, events, and links stay Effect-local.
+- Completion recorded as `effect.exit` = `success` | `failure` |
+  `interrupted` (Cloudflare has no outcome setter yet).
+- Optional `headSamplingRate` and `persist` on the Layer. Omit them to
+  keep Cloudflare's defaults. Pass `persist: false` to export without
+  dashboard persistence.
+
+## Combining with Axiom
+
+Effect has a single `Tracer`. `Cloudflare.Telemetry()` replaces it, so
+`Axiom.Telemetry({ traces })` will **not** receive Effect spans via the
+Worker-side OTLP exporter. Logs and metrics still merge, in either
+`Layer.mergeAll` order:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(
+    Cloudflare.Telemetry(),
+    Axiom.Telemetry({ token: Ingest, logs: Logs, metrics: Metrics }),
+  ),
+)
+```
+
+To see the same waterfall (Effect + platform spans) in Axiom, export
+from Cloudflare with [`ObservabilityDestination`](/cloudflare/observability/axiom-observability)
+rather than sending a second Worker-side OTLP trace stream.
+
+## Async Workers
+
+Non-Effect Workers keep the `observability` prop — there is no Tracer to
+install:
+
+```typescript
+yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  observability: {
+    traces: { enabled: true },
+  },
+});
+```

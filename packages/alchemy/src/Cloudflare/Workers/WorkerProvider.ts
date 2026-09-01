@@ -44,6 +44,7 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
+import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   isSelfUrl,
   Worker,
@@ -55,6 +56,7 @@ import {
   getCacheBinding,
   getCronBindings,
   isContainerDecl,
+  resolveObservability,
 } from "./WorkerAsyncBindings.ts";
 import type {
   WireWorkerBinding,
@@ -2824,6 +2826,7 @@ export const LiveWorkerProvider = () =>
           );
         }
         yield* validateVersionWorkerProps(news, bindings, parentName);
+        yield* assertCloudflareTelemetryCompatibility(news, bindings);
         const traffic = version.traffic ?? 0;
         // Resolve the alias and preview context BEFORE the upload: the
         // aliased preview URL (`<alias>-<script>.<subdomain>.workers.dev`)
@@ -3097,6 +3100,7 @@ export const LiveWorkerProvider = () =>
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
+        yield* assertCloudflareTelemetryCompatibility(news, bindings);
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
           return yield* Effect.fail(
@@ -3600,13 +3604,7 @@ export const LiveWorkerProvider = () =>
           logpush: news.logpush,
           mainModule: bundle.main,
           migrations,
-          observability: news.observability ?? {
-            enabled: true,
-            logs: {
-              enabled: true,
-              invocationLogs: true,
-            },
-          },
+          observability: resolveObservability(news, bindings),
           placement: news.placement,
           tags: metadataTags,
           tailConsumers,
@@ -4554,6 +4552,10 @@ export const LiveWorkerProvider = () =>
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* assertCloudflareTelemetryCompatibility(
+            news as WorkerProps,
+            bindings,
+          );
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4746,13 +4748,7 @@ export const LiveWorkerProvider = () =>
                         newSqliteClasses: doClasses,
                       }
                     : undefined,
-                observability: news.observability ?? {
-                  enabled: true,
-                  logs: {
-                    enabled: true,
-                    invocationLogs: true,
-                  },
-                },
+                observability: resolveObservability(news, bindings),
                 tags,
               },
               files: [

@@ -61,6 +61,7 @@ import {
   makeScopedArtifacts,
 } from "../../Artifacts.ts";
 import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
+import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -357,6 +358,7 @@ export const LocalWorkerProvider = () =>
         bindings,
       }: LocalProvider.LocalProviderInput<Worker>) {
         const props = news as WorkerProps;
+        yield* assertCloudflareTelemetryCompatibility(props, bindings);
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
         const bindingDescriptors: WorkerBinding[] = [];

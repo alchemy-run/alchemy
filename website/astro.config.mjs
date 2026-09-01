@@ -861,6 +861,10 @@ export default defineConfig({
               label: "Observability",
               items: [
                 {
+                  label: "Native tracing",
+                  link: "/cloudflare/observability/workers-tracing",
+                },
+                {
                   label: "Axiom telemetry",
                   link: "/cloudflare/observability/axiom-observability",
                 },

@@ -40,6 +40,11 @@ export default Cloudflare.Worker(
 Without a telemetry layer, nothing exports — Effect's default tracer
 is a no-op, so all instrumentation stays free.
 
+On Cloudflare, [`Cloudflare.Telemetry()`](/cloudflare/observability/workers-tracing)
+is the platform-native alternative: it mirrors Effect spans into
+Workers Observability (fetch/KV/R2/D1 auto-spans included) instead of
+shipping OTLP from the Worker. Cloudflare owns sampling and export.
+
 ## Binding layers
 
 `Alchemy.Telemetry.layerOtlp` is the generic form: a *binding* layer for
@@ -198,6 +203,8 @@ settings for you.
   telemetry to Axiom end to end
 - [Observability](/testing/observability) — provision the receiving
   end (datasets, tokens, monitors, alarms) as resources
+- [Native Workers tracing](/cloudflare/observability/workers-tracing) —
+  `Cloudflare.Telemetry()`, Effect spans in the Cloudflare waterfall
 - [Ship Worker telemetry to Axiom](/cloudflare/observability/axiom-observability) —
   the Cloudflare-specific reference, including the platform-push
   alternative

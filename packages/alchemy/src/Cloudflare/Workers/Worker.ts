@@ -1301,6 +1301,14 @@ export type Worker<Bindings = any> = Resource<
      * `WorkerProps.cache` takes precedence.
      */
     cache?: WorkerCache;
+    /**
+     * Workers Observability traces settings contributed by
+     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
+     * traces fill in when `WorkerProps.observability.traces` is omitted,
+     * and never clobber the default logs config. An explicit
+     * `observability.traces` object wins.
+     */
+    observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
       dev: DevContainerImage | undefined;
@@ -1969,6 +1977,12 @@ export const isSelf = (value: unknown): value is Self =>
  * prop. Pass the prop yourself to tune sampling, enable persistence, or
  * turn on the new `traces` channel (the same toggle the dashboard's
  * Observability tab writes).
+ *
+ * Effect-native Workers should prefer `Cloudflare.Telemetry()` over
+ * setting `observability.traces` by hand: providing the Layer enables
+ * traces on this Worker and mirrors `Effect.withSpan` into the Cloudflare
+ * waterfall. Pin `compatibility: { date: "2026-08-25" }` (or later) until
+ * the global default date is raised past 2026-07-28.
  *
  * Field names match the Cloudflare API (camelCased): `headSamplingRate`,
  * `invocationLogs`, etc.
