@@ -1,6 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { NonInteractiveTerminal } from "./Cli/CliKit/errors.ts";
+import type { NonInteractiveTerminal } from "./Interaction.ts";
 import type { Plan } from "./Plan.ts";
 import type { ProviderMode } from "./ProviderMode.ts";
 

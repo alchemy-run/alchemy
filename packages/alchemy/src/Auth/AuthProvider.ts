@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as Semaphore from "effect/Semaphore";
+import { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
 
@@ -27,9 +28,9 @@ export const AUTH_ERROR_URL = `${AUTH_LANDING_HOST}/auth/error`;
  * before Planetscale's begins — even when the two auth provider Layers
  * are built in parallel as part of a single `providers()` Layer.
  *
- * CliKit enforces per-prompt
- * serialization; this mutex enforces per-flow serialization so the user
- * sees one provider's prompts grouped together rather than interleaved.
+ * The interactive renderer enforces per-prompt serialization; this mutex
+ * enforces per-flow serialization so the user sees one provider's prompts
+ * grouped together rather than interleaved.
  */
 const interactiveMutex = Semaphore.makeUnsafe(1);
 
@@ -69,14 +70,14 @@ export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()(
  * top later without touching call sites.
  */
 export const refreshHint = (provider: string, profileName: string): string =>
-  `Run \`alchemy profile refresh ${profileName} --provider ${provider}\`.`;
+  `Run \`alchemy profile refresh --profile ${profileName} --provider ${provider}\`.`;
 
 /** {@link refreshHint}'s sibling for reconfiguration. */
 export const reconfigureHint = (
   provider: string,
   profileName: string,
 ): string =>
-  `Run \`alchemy profile edit ${profileName} --reconfigure ${provider}\` to reconfigure.`;
+  `Run \`alchemy profile edit --profile ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
 export class AuthProviders extends Context.Service<
   AuthProviders,
@@ -220,7 +221,7 @@ export interface AuthProviderImpl<
   configure(
     profileName: string,
     currentConfig?: Config,
-  ): Effect.Effect<Config, AuthError, R>;
+  ): Effect.Effect<Config, AuthError, R | Interaction>;
 
   /**
    * Flag-driven configuration for scripts and agents: validated `--set`
@@ -233,7 +234,7 @@ export interface AuthProviderImpl<
       readonly method: string;
       readonly values: Record<string, string>;
     },
-  ): Effect.Effect<Config, AuthError, R>;
+  ): Effect.Effect<Config, AuthError, R | Interaction>;
 
   /**
    * The methods {@link configureWith} accepts and their fields. Required
@@ -242,12 +243,15 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
-  login(profileName: string, config: Config): Effect.Effect<void, AuthError, R>;
+  login(
+    profileName: string,
+    config: Config,
+  ): Effect.Effect<void, AuthError, R | Interaction>;
 
   logout(
     profileName: string,
     config: Config,
-  ): Effect.Effect<void, AuthError, R>;
+  ): Effect.Effect<void, AuthError, R | Interaction>;
 
   /**
    * Structured credential details for display. Fails with
@@ -258,8 +262,15 @@ export interface AuthProviderImpl<
   details(
     profileName: string,
     config: Config,
-  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, R>;
+  ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, R | Interaction>;
 
+  /**
+   * Resolve credentials from the store/config, silently refreshing when the
+   * provider supports it. MUST be non-interactive — this is the only method
+   * (with {@link readEnvironment}) that child processes exercise, and their
+   * graphs carry no interaction services. When re-authentication is needed,
+   * fail with {@link NeedsReauth} instead of prompting.
+   */
   read(
     profileName: string,
     config: Config,
@@ -313,9 +324,26 @@ export const AuthProvider =
     Effect.gen(function* () {
       // FileSystem/Path back the cross-process credentials lock that wraps
       // `logout`/`read` below, so capture them with the impl's own services.
-      const ctx = yield* Effect.context<
-        FileSystem.FileSystem | Path.Path | R | ImplReq
-      >();
+      //
+      // `Effect.context()` snapshots the ENTIRE fiber context (the type
+      // parameter only narrows the type), and `Effect.provideContext` makes
+      // the provided side win — so an Interaction that happens to be
+      // ambient at REGISTRATION would silently shadow whatever the caller
+      // provides at call time, making the interactive methods' declared
+      // `Interaction` requirement a dead letter. Omit it from the snapshot:
+      // interactive flows resolve Interaction from the caller, exactly as
+      // their signatures promise (a scripted test Interaction, a
+      // browser-driven Alchemist login).
+      // SAFETY: the assertion restores the pre-omit type — tsc cannot reduce
+      // `Exclude<R, … Exclude<R, Interaction>>` over the generic R. It only
+      // over-promises Interaction, which every registered method signature
+      // re-declares as a requirement anyway, so no call site can rely on the
+      // capture satisfying it.
+      const ctx = Context.omit(Interaction)(
+        yield* Effect.context<
+          FileSystem.FileSystem | Path.Path | R | ImplReq
+        >(),
+      ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl)
         ? impl

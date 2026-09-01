@@ -1,5 +1,4 @@
 import * as Layer from "effect/Layer";
-import * as CliKit from "../Cli/CliKit/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
@@ -32,6 +31,5 @@ Layer.mergeAll(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),
   Layer.provide(DockerLive),
-  Layer.provide(CliKit.layer({ input: false })),
   RpcServer.launch,
 );

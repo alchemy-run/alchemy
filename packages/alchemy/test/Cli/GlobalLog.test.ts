@@ -1,8 +1,5 @@
-import {
-  consoleLogFloor,
-  makeConsoleLogger,
-  makePlainConsoleSink,
-} from "@/Cli/GlobalLog.ts";
+import { consoleLogFloor, makeConsoleLogger } from "@/Cli/GlobalLog.ts";
+import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";

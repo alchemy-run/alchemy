@@ -10,7 +10,7 @@ import { Path } from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import { rootDir } from "../Auth/Paths.ts";
 import packageJson from "../../package.json" with { type: "json" };
-import { ANSI_RESET, colorsEnabled } from "./CliKit/terminal.ts";
+import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 
 /** Logs older than this are pruned (by mtime) on CLI start. */
 const MAX_LOG_AGE = Duration.days(7);
@@ -59,27 +59,6 @@ export const consoleLogFloor = (
     floor = logLevelChoices[value.toLowerCase()] ?? floor;
   }
   return floor;
-};
-
-/** Effect pretty prefixes with selective color and untouched message styling. */
-export const makePlainConsoleSink = (colors = colorsEnabled()) => {
-  const pretty = Logger.consolePretty({ colors });
-  if (!colors) return pretty;
-  return Logger.make<unknown, void>((options) => {
-    const messages = Array.isArray(options.message)
-      ? options.message
-      : [options.message];
-    pretty.log({
-      ...options,
-      // consolePretty applies bold cyan around the first string. Reset that
-      // wrapper before the content; any intentional ANSI inside the message
-      // still takes effect normally.
-      message: [
-        `${ANSI_RESET}${String(messages[0] ?? "")}`,
-        ...messages.slice(1),
-      ],
-    });
-  });
 };
 
 /** Terminal sink: forwards records at or above `floor` to `sink`. */

@@ -36,7 +36,7 @@ import {
   recordStateStoreInit,
   recordStateStoreOp,
 } from "../../Telemetry/Metrics.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
+import * as Interaction from "../../Interaction.ts";
 import * as Access from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
@@ -76,7 +76,7 @@ export const state = () =>
         if (yield* hasLocalStack(localStage)) {
           // if there's still a local stack, then we need to finish the bootstrap
           // TODO(sam): what if the local stack was
-          const task = (yield* CliKit.CliKit).task;
+          const task = (yield* Interaction.Interaction).task;
           return yield* task(
             {
               label: `Resuming Cloudflare State Store '${scriptName}' deployment`,
@@ -104,7 +104,7 @@ export const state = () =>
             if (observed === undefined) {
               const shouldDeploy =
                 autoUpdateStateStore ||
-                (yield* CliKit.accessors.prompt.confirm({
+                (yield* Interaction.accessors.prompt.confirm({
                   message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
                   // Deploying is the constructive happy path, not destructive
                   // — keep default-yes despite the prompt-wide default-no.
@@ -118,7 +118,7 @@ export const state = () =>
                   profile: profileName,
                 });
               } else {
-                return yield* Effect.die(new CliKit.TerminalCancelled());
+                return yield* Effect.die(new Interaction.TerminalCancelled());
               }
             }
 
@@ -129,8 +129,8 @@ export const state = () =>
 
             // The store is out of date. Upgrade it in place.
             const upgrade = Effect.gen(function* () {
-              const cli = yield* CliKit.CliKit;
-              return yield* cli.task(
+              const interaction = yield* Interaction.Interaction;
+              return yield* interaction.task(
                 {
                   label: `Updating Cloudflare State Store '${scriptName}'`,
                   detail: `v${observed ?? "unknown"} → v${expected}`,
@@ -159,7 +159,7 @@ export const state = () =>
                 }),
               );
             } else {
-              const shouldDeploy = yield* CliKit.accessors.prompt.confirm({
+              const shouldDeploy = yield* Interaction.accessors.prompt.confirm({
                 message:
                   `Cloudflare State Store '${scriptName}' is out of date ` +
                   `(expected v${expected}, observed v${observed ?? "unknown"})`,
@@ -171,7 +171,7 @@ export const state = () =>
               if (shouldDeploy) {
                 return yield* upgrade;
               } else {
-                return yield* Effect.die(new CliKit.TerminalCancelled());
+                return yield* Effect.die(new Interaction.TerminalCancelled());
               }
             }
           });
@@ -210,7 +210,7 @@ export const state = () =>
           // silently read/write state in the wrong account, so discard it
           // and fall through to re-derivation from the current account.
           if (isStateStoreCredentialsStale(credentials, accountId)) {
-            yield* CliKit.accessors.output.info(
+            yield* Interaction.accessors.output.info(
               `Cloudflare State Store credentials were minted for a different ` +
                 `Cloudflare account; re-deriving for the current account.`,
             );
@@ -235,7 +235,7 @@ export const state = () =>
             }),
           );
         } else {
-          const confirm = CliKit.accessors.prompt.confirm;
+          const confirm = Interaction.accessors.prompt.confirm;
           return yield* confirm({
             message:
               "Cloudflare State Store not found. Do you want to deploy it?",
@@ -245,7 +245,7 @@ export const state = () =>
             Effect.flatMap((shouldDeploy) =>
               shouldDeploy
                 ? bootstrap()
-                : Effect.die(new CliKit.TerminalCancelled()),
+                : Effect.die(new Interaction.TerminalCancelled()),
             ),
           );
         }
@@ -278,7 +278,7 @@ export interface BootstrapOptions {
  * Report `state.bootstrap.*` progress events around a state-store deploy or
  * upgrade. Bootstrap runs lazily inside the plan's "loading state" phase,
  * can take many seconds (it deploys a worker), and would otherwise be
- * invisible to non-interactive renderers and traces — the CliKit task only
+ * invisible to non-interactive renderers and traces — the Interaction task only
  * paints the local terminal.
  */
 const withStateBootstrapEvents =
@@ -295,7 +295,7 @@ const withStateBootstrapEvents =
 export const bootstrap = (options: BootstrapOptions = {}) =>
   withStateBootstrapEvents(options.workerName ?? STATE_STORE_SCRIPT_NAME)(
     Effect.gen(function* () {
-      const prompt = yield* CliKit.CliKit;
+      const interaction = yield* Interaction.Interaction;
       const isCI = yield* CI;
       const profileName = options.profile ?? (yield* currentProfileName);
       const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
@@ -312,7 +312,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       if (yield* hasLocalStack(localStage)) {
         // if there's a local stack still, we can assume we did not finish hoisting it, so finish that
         // resume deployment
-        return yield* prompt.task(
+        return yield* interaction.task(
           {
             label: `Resuming Cloudflare State Store '${scriptName}' deployment`,
           },
@@ -329,7 +329,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       if (yield* isStateStoreServing(accountId)) {
         // this is a regular update, let's check if it needs an update and refresh credentials
         if (!force) {
-          yield* CliKit.accessors.output.info(
+          yield* Interaction.accessors.output.info(
             `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
               `Use --force to redeploy.`,
           );
@@ -354,7 +354,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           yield* checkStateStoreVersion(url);
         const httpState = yield* makeCloudflareStateStore({ url, authToken });
         if (!matches || force) {
-          return yield* prompt.task(
+          return yield* interaction.task(
             {
               label: `${matches ? "Redeploying" : "Updating"} Cloudflare State Store '${scriptName}'`,
               detail: matches
@@ -371,7 +371,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           return httpState;
         }
       } else {
-        return yield* prompt.task(
+        return yield* interaction.task(
           { label: `Deploying Cloudflare State Store '${scriptName}'` },
           deployWithLocalState({
             scriptName,
@@ -419,7 +419,7 @@ export interface TeardownOptions {
  */
 export const teardownStateStore = (options: TeardownOptions = {}) =>
   Effect.gen(function* () {
-    const prompt = yield* CliKit.CliKit;
+    const interaction = yield* Interaction.Interaction;
     const profileName = options.profile ?? (yield* currentProfileName);
     const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
     const deleteEmptyStore = options.deleteEmptySecretsStore ?? true;
@@ -433,13 +433,13 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     });
 
     // 1. Delete the state-store Worker.
-    yield* CliKit.accessors.output.info(
+    yield* Interaction.accessors.output.info(
       `Deleting state store worker '${scriptName}'...`,
     );
     yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
       Effect.asVoid,
       Effect.catchTag("WorkerNotFound", () =>
-        prompt.output.info(
+        interaction.output.info(
           `  Worker '${scriptName}' not found (already gone).`,
         ),
       ),
@@ -467,7 +467,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
         );
       const ours = secrets.filter((s) => ourSecretNames.has(s.name));
       for (const secret of ours) {
-        yield* CliKit.accessors.output.info(
+        yield* Interaction.accessors.output.info(
           `Deleting secret '${secret.name}'...`,
         );
         yield* SecretsStore.deleteStoreSecret({
@@ -484,7 +484,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
       }
       const remaining = secrets.length - ours.length;
       if (deleteEmptyStore && remaining === 0) {
-        yield* CliKit.accessors.output.info(
+        yield* Interaction.accessors.output.info(
           `Deleting empty secrets store '${store.id}'...`,
         );
         yield* SecretsStore.deleteStore({
@@ -499,7 +499,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
           ),
         );
       } else if (remaining > 0) {
-        yield* CliKit.accessors.output.info(
+        yield* Interaction.accessors.output.info(
           `Secrets store '${store.id}' still has ${remaining} other ` +
             `secret(s); leaving it in place.`,
         );
@@ -510,7 +510,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     const credStore = yield* CredentialsStore;
     yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
 
-    yield* CliKit.accessors.output.success(
+    yield* Interaction.accessors.output.success(
       `Cloudflare State Store '${scriptName}' torn down.`,
     );
   }).pipe(
@@ -788,8 +788,8 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
       }
     }
 
-    const cli = yield* CliKit.CliKit;
-    const credentials = yield* cli.task(
+    const interaction = yield* Interaction.Interaction;
+    const credentials = yield* interaction.task(
       { label: "Refreshing Cloudflare State Store credentials" },
       Effect.gen(function* () {
         // 1. Locate the single Secrets Store on the account.
@@ -859,7 +859,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
         return credentials;
       }),
     );
-    if (!isCI) yield* cli.output.info(`  url:     ${credentials.url}`);
+    if (!isCI) yield* interaction.output.info(`  url:     ${credentials.url}`);
     return credentials;
   }).pipe(
     Effect.catchTag("EdgeSessionError", (e) =>

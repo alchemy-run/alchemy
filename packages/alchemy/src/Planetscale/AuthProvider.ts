@@ -31,7 +31,7 @@ import {
   mapPromptCancellation,
 } from "../Auth/Env.ts";
 import { browserOAuth } from "../Auth/BrowserOAuth.ts";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 
 /**
@@ -75,7 +75,7 @@ const withOAuthCredentials = <A, E, R>(
  */
 const selectOrganization = (accessToken: string) =>
   Effect.gen(function* () {
-    const prompt = CliKit.accessors;
+    const interaction = Interaction.accessors;
     const list = yield* listOrganizations;
     const response = yield* list({});
     const orgs = response.data;
@@ -91,12 +91,12 @@ const selectOrganization = (accessToken: string) =>
           message: "Planetscale: organization response was unexpectedly empty.",
         });
       }
-      yield* prompt.output.info(
+      yield* interaction.output.info(
         `Planetscale: using organization: ${org.name} (${org.id})`,
       );
       return org.name;
     }
-    return yield* prompt.prompt
+    return yield* interaction.prompt
       .select({
         message: "Select a Planetscale organization",
         options: orgs.map((o) => ({
@@ -209,7 +209,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
 >()(
   PLANETSCALE_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const prompt = CliKit.accessors;
+    const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
     const oauthLogin = (profileName: string) =>
@@ -229,7 +229,9 @@ export const PlanetscaleAuth = AuthProviderLayer<
           OAuthClient.OAuthCredentials,
           credentials,
         );
-        yield* prompt.output.success("Planetscale: OAuth credentials saved.");
+        yield* interaction.output.success(
+          "Planetscale: OAuth credentials saved.",
+        );
         return credentials;
       });
 
@@ -246,10 +248,10 @@ export const PlanetscaleAuth = AuthProviderLayer<
       ).pipe(
         Effect.catch((e) =>
           Effect.gen(function* () {
-            yield* prompt.output.warning(
+            yield* interaction.output.warning(
               `Planetscale: could not auto-list organizations (${String(e)}). Falling back to manual entry.`,
             );
-            return yield* prompt.prompt
+            return yield* interaction.prompt
               .text({
                 message: "Planetscale Organization (URL slug)",
                 validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -263,21 +265,21 @@ export const PlanetscaleAuth = AuthProviderLayer<
     });
 
     const loginStored = Effect.fn(function* (profileName: string) {
-      const tokenId = yield* prompt.prompt
+      const tokenId = yield* interaction.prompt
         .text({
           message: "Planetscale Service Token ID",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         })
         .pipe(mapPromptCancellation, Effect.map(Redacted.make));
 
-      const token = yield* prompt.prompt
+      const token = yield* interaction.prompt
         .password({
           message: "Planetscale Service Token",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         })
         .pipe(mapPromptCancellation, Effect.map(Redacted.make));
 
-      const organization = yield* prompt.prompt
+      const organization = yield* interaction.prompt
         .text({
           message: "Planetscale Organization (URL slug)",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -295,12 +297,12 @@ export const PlanetscaleAuth = AuthProviderLayer<
           organization,
         },
       );
-      yield* prompt.output.success("Planetscale: credentials saved.");
+      yield* interaction.output.success("Planetscale: credentials saved.");
       return { method: "stored" as const };
     });
 
     const configureInteractive = (profileName: string) =>
-      prompt.prompt
+      interaction.prompt
         .select({
           message: "Planetscale authentication method",
           options,
@@ -348,7 +350,11 @@ export const PlanetscaleAuth = AuthProviderLayer<
         readonly method: string;
         readonly values: Record<string, string>;
       },
-    ): Effect.Effect<PlanetscaleAuthConfig, AuthError, CliKit.CliKit> =>
+    ): Effect.Effect<
+      PlanetscaleAuthConfig,
+      AuthError,
+      Interaction.Interaction
+    > =>
       input.method === "service-token"
         ? validateFieldValues(
             PLANETSCALE_AUTH_PROVIDER_NAME,
@@ -369,7 +375,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
               ),
             ),
             Effect.andThen(
-              prompt.output.success("Planetscale: credentials saved."),
+              interaction.output.success("Planetscale: credentials saved."),
             ),
             Effect.as({ method: "stored" as const }),
           )
@@ -491,7 +497,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
             .delete(profileName, STORED_STORAGE_KEY)
             .pipe(
               Effect.andThen(
-                prompt.output.success(
+                interaction.output.success(
                   "Planetscale: stored credentials removed",
                 ),
               ),
@@ -504,7 +510,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
             .delete(profileName, OAUTH_STORAGE_KEY)
             .pipe(
               Effect.andThen(
-                prompt.output.success(
+                interaction.output.success(
                   "Planetscale: OAuth credentials removed.",
                 ),
               ),
@@ -546,7 +552,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                 creds?.type === "oauth" && OAuthClient.usesCurrentClient(creds)
                   ? yield* withProfileCredentialsLock(
                       profileName,
-                      prompt.output
+                      interaction.output
                         .info("Planetscale: refreshing OAuth credentials...")
                         .pipe(
                           Effect.andThen(OAuthClient.refresh(creds)),
@@ -560,7 +566,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                               )
                               .pipe(
                                 Effect.andThen(
-                                  prompt.output.success(
+                                  interaction.output.success(
                                     "Planetscale: OAuth credentials refreshed.",
                                   ),
                                 ),
@@ -575,7 +581,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   : yield* Effect.gen(function* () {
                       if (creds?.type === "oauth") {
                         yield* store.delete(profileName, OAUTH_STORAGE_KEY);
-                        yield* prompt.output.warning(
+                        yield* interaction.output.warning(
                           "Planetscale: removed OAuth credentials issued to the previous client.",
                         );
                       }

@@ -302,7 +302,7 @@ test.provider(
         expect(error.message).toContain("AWS credentials are required");
         expect(error.message).toContain("RemoteBucket");
         expect(error.message).toContain(
-          `alchemy profile edit ${NO_CREDS_PROFILE} --add AWS`,
+          `alchemy profile edit --profile ${NO_CREDS_PROFILE} --add AWS`,
         );
         expect(error.message).toContain("Alchemy.remote()");
       }

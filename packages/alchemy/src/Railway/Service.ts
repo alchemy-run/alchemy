@@ -80,6 +80,12 @@ export interface ServiceProps extends PlatformProps {
    */
   port?: number;
   /**
+   * Whether to create and manage a generated `*.up.railway.app` domain.
+   * Existing unowned generated or custom domains are not removed.
+   * @default true
+   */
+  publicDomain?: boolean;
+  /**
    * Additional environment variables. Merged after binding-injected
    * `env`. Upserted as service-scoped Railway variables with
    * `skipDeploys: true`; this Service owns the subsequent deploy.
@@ -136,6 +142,21 @@ export interface ServiceProps extends PlatformProps {
    * {@link RailwayBuildOptions} (`build.install`).
    */
   buildCommand?: string;
+  /**
+   * Pre-deploy step Railway runs after the image build and before
+   * start (migrations, seed). Omit to leave the current Railway setting
+   * unchanged. Pass `{ command: null }` to clear it.
+   *
+   * @see https://docs.railway.com/deployments/pre-deploy-command
+   */
+  preDeploy?: {
+    /**
+     * Shell command Railway executes in a separate container after
+     * build and before start. Must exit 0 or the deployment fails.
+     * Pass `null` to clear it.
+     */
+    command: string | null;
+  };
   /**
    * Start command (`pnpm start`).
    */
@@ -360,6 +381,22 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * );
  * ```
  *
+ * ### Private service
+ * `publicDomain: false` skips the generated `*.up.railway.app` hostname.
+ * `url` / `domain` stay unset. Reach it on the private mesh at
+ * `{name}.railway.internal`. Unowned generated or custom domains are
+ * left alone.
+ *
+ * **Example:** Private-only service
+ * ```typescript
+ * const worker = yield* Railway.Service("Worker", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   publicDomain: false,
+ * });
+ * ```
+ *
  * ### Pin a region
  * Omit `region` to use Railway's default. Updating it is in place.
  *
@@ -406,6 +443,19 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   rootDirectory: "apps/api",
  *   buildCommand: "pnpm build",
  *   startCommand: "pnpm start",
+ * });
+ * ```
+ *
+ * ### Pre-deploy
+ * Railway runs `preDeploy.command` after the image build and before
+ * start — the same setting as the dashboard Pre-deploy Command.
+ *
+ * **Example:** Run migrations before traffic
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   preDeploy: { command: "bun --cwd apps/api migrate" },
  * });
  * ```
  *

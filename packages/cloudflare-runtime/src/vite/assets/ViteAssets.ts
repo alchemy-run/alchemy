@@ -52,7 +52,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
         Effect.gen(function* () {
           const { worker } = yield* PluginContext;
           const { assetsConfig, routerConfig } =
-            Assets.buildAssetConfigs(worker);
+            yield* Assets.buildAssetConfigs(worker);
 
           const prefix = `vite-assets:${encodeURIComponent(worker.name)}`;
           const htmlExistsService = yield* loopback.api.route(

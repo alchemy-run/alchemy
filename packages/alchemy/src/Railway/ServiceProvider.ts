@@ -30,7 +30,9 @@ import {
 import { ownedProjects, type Project } from "./Project.ts";
 import { listServiceVolumes } from "./Volume.ts";
 import {
+  deleteOwnedServiceDomain,
   ensureServiceDomain,
+  findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
 import {
@@ -195,6 +197,18 @@ const sameWatchPatterns = (
   desired: readonly string[] | undefined,
 ) => desired === undefined || deepEqual([...(observed ?? [])], [...desired]);
 
+const samePreDeployCommand = (
+  observed: unknown,
+  desired: string | null | undefined,
+) =>
+  desired === undefined ||
+  (desired === null
+    ? observed == null || (Array.isArray(observed) && observed.length === 0)
+    : observed === desired ||
+      (Array.isArray(observed) &&
+        observed.length === 1 &&
+        observed[0] === desired));
+
 const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
   input: ServiceInstanceUpdateInput,
   key: K,
@@ -216,6 +230,7 @@ const instanceSettingsDelta = (input: {
     region?: string;
     rootDirectory?: string;
     buildCommand?: string;
+    preDeploy?: { command: string | null };
     startCommand?: string;
     healthcheckPath?: string;
     healthcheck?: string;
@@ -270,6 +285,19 @@ const instanceSettingsDelta = (input: {
       input.props.buildCommand,
       instance?.buildCommand,
     ) || changed;
+  const preDeployCommand =
+    input.props.preDeploy === undefined
+      ? undefined
+      : input.props.preDeploy.command;
+  if (
+    preDeployCommand !== undefined &&
+    !samePreDeployCommand(instance?.preDeployCommand, preDeployCommand)
+  ) {
+    // Railway's GraphQL field is `[String]`. `null` is a no-op; `[]` clears.
+    delta.preDeployCommand =
+      preDeployCommand === null ? [] : [preDeployCommand];
+    changed = true;
+  }
   changed =
     assignIfChanged(
       delta,
@@ -787,17 +815,42 @@ export const ServiceProvider = () =>
             resolvedEnvId.length > 0
               ? yield* getInstance(resolvedEnvId, found.id)
               : undefined;
+          // A recorded domain id is the ownership boundary. Refresh an owned
+          // domain, but do not claim a generated domain found during adoption.
+          const domain =
+            output?.domainId !== undefined &&
+            resolvedProjectId.length > 0 &&
+            resolvedEnvId.length > 0
+              ? yield* findServiceDomainById({
+                  projectId: resolvedProjectId,
+                  environmentId: resolvedEnvId,
+                  serviceId: found.id,
+                  domainId: output.domainId,
+                })
+              : undefined;
           const attrs = toAttrs({
             service: found,
             instance,
-            domain: undefined,
+            domain,
             projectId: resolvedProjectId,
             environmentId: resolvedEnvId,
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
           });
-          if (output !== undefined) return attrs;
+          if (output !== undefined) {
+            // Keep the recorded ownership id even if the live list lags.
+            // Wiping it makes `publicDomain: false` a no-op.
+            if (domain === undefined && output.domainId !== undefined) {
+              return {
+                ...attrs,
+                domainId: output.domainId,
+                domain: output.domain,
+                url: output.url,
+              };
+            }
+            return attrs;
+          }
           return matchesAlchemyPhysicalName(found.name)
             ? attrs
             : Unowned(attrs);
@@ -1010,17 +1063,34 @@ export const ServiceProvider = () =>
           // non-fork env and `serviceInstance` 404s until it lands.
           let instance = yield* waitForInstance(environmentId, current.id);
 
-          // Railway's generated-domain API refuses a service that already
-          // has PORT (or other env) set — it returns "please try again"
-          // forever. Create the hostname on a bare service, then sync env.
-          yield* (session?.note ?? ((_message: string) => Effect.void))(
-            `Creating service domain for ${id}...`,
-          );
-          let domain = yield* ensureServiceDomain({
-            projectId,
-            environmentId,
-            serviceId: current.id,
-          });
+          const publicDomain = props.publicDomain !== false;
+          let domain: ServiceDomainRecord | undefined;
+          if (publicDomain) {
+            // Railway's generated-domain API refuses a service that already
+            // has PORT (or other env) set — it returns "please try again"
+            // forever. Create the hostname on a bare service, then sync env.
+            yield* (session?.note ?? ((_message: string) => Effect.void))(
+              `Creating service domain for ${id}...`,
+            );
+            domain = yield* ensureServiceDomain({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              domainId: output?.domainId ?? null,
+            });
+          } else {
+            // Only the recorded generated domain belongs to this resource.
+            // Adoption does not populate domainId/domain, so a foreign
+            // domain stays. Null the environment-config key — GraphQL
+            // delete alone is not enough; Railway recreates from config.
+            yield* deleteOwnedServiceDomain({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              domainId: output?.domainId,
+              domain: output?.domain,
+            });
+          }
 
           const attached = yield* listServiceVolumes(
             environmentId,
@@ -1097,11 +1167,12 @@ export const ServiceProvider = () =>
           });
           if (envChanged) needsDeploy = true;
 
-          if (port !== undefined) {
+          if (publicDomain && port !== undefined) {
             domain = yield* ensureServiceDomain({
               projectId,
               environmentId,
               serviceId: current.id,
+              domainId: domain?.id,
               targetPort: port,
             });
           }

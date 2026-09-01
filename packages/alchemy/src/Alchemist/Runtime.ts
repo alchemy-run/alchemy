@@ -5,7 +5,7 @@ import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { routeCacheLayer } from "./Session.ts";
 
@@ -15,8 +15,8 @@ import { routeCacheLayer } from "./Session.ts";
  * Progress reporting remains caller-controlled: without an override the
  * default reporter is a no-op, while interactive and plain renderers can
  * provide {@link import("./Progress.ts").Progress} around individual calls.
- * CliKit is installed without input for the engine paths that still depend on
- * it; those paths should eventually move to presentation-free services.
+ * The non-interactive Interaction default serves the engine paths that need
+ * one (state-store confirms fail typed; profile probes never prompt).
  *
  * @example
  * ```ts
@@ -36,5 +36,5 @@ export const layer = () =>
     ConfigProvider.layer(ConfigProvider.fromEnv()),
     Layer.succeed(ArtifactStore, createArtifactStore()),
     routeCacheLayer,
-    CliKit.layer({ input: false }),
+    Interaction.layerNonInteractive(),
   );

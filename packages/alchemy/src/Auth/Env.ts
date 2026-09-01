@@ -1,7 +1,7 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import { AuthError } from "./AuthProvider.ts";
 
 export const getEnv = (key: string) =>
@@ -45,7 +45,7 @@ export const getEnvRedactedRequired = (key: string) =>
   );
 
 export const mapPromptCancellation = <A, R>(
-  self: Effect.Effect<A, CliKit.InteractionError, R>,
+  self: Effect.Effect<A, Interaction.InteractionError, R>,
 ) =>
   self.pipe(
     Effect.mapError(

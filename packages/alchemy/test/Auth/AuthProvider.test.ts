@@ -5,6 +5,7 @@ import {
   getAuthProvider,
 } from "@/Auth/AuthProvider.ts";
 import { getEnvRedactedRequired } from "@/Auth/Env.ts";
+import { Interaction } from "@/Interaction.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -87,6 +88,60 @@ it.effect(
           "declare its `environment` variables",
         );
       }
+    }).pipe(
+      Effect.provideService(AuthProviders, {}),
+      Effect.provide(NodeServices.layer),
+    ),
+);
+
+it.effect(
+  "call-time Interaction wins over the one ambient at registration",
+  () =>
+    Effect.gen(function* () {
+      const answered: string[] = [];
+      const scripted = (name: string): Interaction["Service"] => ({
+        output: {
+          info: () => Effect.void,
+          success: () => Effect.void,
+          warning: () => Effect.void,
+          error: () => Effect.void,
+        },
+        prompt: {
+          text: () =>
+            Effect.sync(() => {
+              answered.push(name);
+              return name;
+            }),
+          password: () => Effect.succeed(name),
+          confirm: () => Effect.succeed(true),
+          select: () => Effect.die("unused"),
+          multiSelect: () => Effect.die("unused"),
+          awaitExternal: () => Effect.succeed(name),
+        },
+        task: (_options, effect) => effect,
+      });
+
+      // Registered while "registration" is the ambient Interaction: the
+      // factory's context snapshot must NOT capture it — configure's declared
+      // requirement is resolved by whoever calls it.
+      yield* AuthProvider<{ method: "custom" }, void>()("OverrideProvider", {
+        ...implementation,
+        configure: () =>
+          Effect.gen(function* () {
+            const interaction = yield* Interaction;
+            yield* interaction.prompt
+              .text({ message: "token" })
+              .pipe(Effect.orDie);
+            return { method: "custom" as const };
+          }),
+      }).pipe(Effect.provideService(Interaction, scripted("registration")));
+
+      const provider = yield* getAuthProvider("OverrideProvider");
+      yield* provider
+        .configure("default")
+        .pipe(Effect.provideService(Interaction, scripted("call-time")));
+
+      expect(answered).toEqual(["call-time"]);
     }).pipe(
       Effect.provideService(AuthProviders, {}),
       Effect.provide(NodeServices.layer),
