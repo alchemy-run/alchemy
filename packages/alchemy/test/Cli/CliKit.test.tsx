@@ -30,7 +30,10 @@ import {
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
-import { makeResourceLogger, makeResourceOutput } from "@/Cli/Output.ts";
+import {
+  makeResourceLogger,
+  makeResourceOutput,
+} from "@/Util/ResourceOutput.ts";
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan } from "@/Cli/components/view/PlanView.tsx";
 import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";
@@ -726,6 +729,26 @@ it.effect("commits stdio above active Sigil views", () =>
     expect(stdout.output.lastIndexOf("node warning")).toBeLessThan(
       stdout.output.lastIndexOf("Credentials resolved"),
     );
+  }),
+);
+
+it.effect("flushes a captured partial line without waiting for unmount", () =>
+  Effect.gen(function* () {
+    const { service, stdout, stderr } = yield* makeLive({
+      captureConsole: true,
+    });
+    const store = new LiveStore("Deploying");
+    const live = yield* service.live.open(<LiveLabel store={store} />);
+    // A writer whose final chunk has no trailing newline (e.g. an error
+    // block written raw to stderr): its tail must render within the
+    // partial-flush deadline — before this, it sat buffered until the
+    // renderer unmounted at process exit, so the last line of an error
+    // only ever appeared on shutdown.
+    yield* Effect.sync(() => {
+      stderr.write("stack tail without newline");
+    });
+    yield* Effect.promise(() => stdout.waitFor("stack tail without newline"));
+    yield* live.close;
   }),
 );
 

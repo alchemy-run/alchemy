@@ -12,7 +12,7 @@ import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
-import type { AuthError } from "./Auth/AuthProvider.ts";
+import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
 import {
   type CredentialsRequired,
   demandPlanCredentials,
@@ -155,6 +155,7 @@ export const apply = <P extends Plan>(
   | DestroyError
   | CredentialsRequired
   | AuthError
+  | NeedsReauth
   | PlatformError
   | ConfigError,
   State | Stack | Stage

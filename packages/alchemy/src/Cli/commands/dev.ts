@@ -8,7 +8,10 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
-import { transformTypesFlags } from "../../Util/Node.ts";
+import {
+  isRegisterHooksSupported,
+  transformTypesFlags,
+} from "../../Util/Node.ts";
 import { DevOptions } from "../DevOptions.ts";
 import {
   configPath,
@@ -76,14 +79,31 @@ export const devCommand = Command.make(
               "--no-clear-screen",
               fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
             ]
-          : [
-              "node",
-              ...process.execArgv,
-              ...transformTypesFlags(),
-              "--watch",
-              "--watch-preserve-output",
-              fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
-            ];
+          : import.meta.url.endsWith(".ts") && isRegisterHooksSupported()
+            ? [
+                // Source checkout under node: run the .ts exec entry with
+                // the dev-mode hooks (tsx loader + src-condition
+                // resolution), so dev works without a build (mirrors
+                // bin/cli.js's launcher path). `process.execPath`, not
+                // "node": the hooks are gated on THIS node's version. A
+                // duplicate --import inherited via execArgv is harmless —
+                // the second import of the same URL hits the module cache.
+                process.execPath,
+                ...process.execArgv,
+                "--import",
+                import.meta.resolve("../../../bin/register-dev-mode.js"),
+                "--watch",
+                "--watch-preserve-output",
+                fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
+              ]
+            : [
+                process.execPath,
+                ...process.execArgv,
+                ...transformTypesFlags(),
+                "--watch",
+                "--watch-preserve-output",
+                fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
+              ];
       const child = yield* ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",
         stdout: "inherit",

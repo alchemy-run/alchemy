@@ -49,7 +49,7 @@ import {
   storedValueText,
   validateFieldValues,
 } from "../Auth/StoredAuthProvider.ts";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import * as Endpoint from "./Endpoint.ts";
 import * as Region from "./Region.ts";
 
@@ -68,7 +68,7 @@ export const LOCAL_ACCOUNT_ID = "000000000000";
  * diagnostic in addition to failing with the typed `ExpiredSSOToken`. The
  * typed error already carries the same message (and the profile UI surfaces
  * it as a reauth diagnostic), so the raw console write only smears over the
- * CliKit renderer. Provide this no-op Console on every distilled
+ * Interaction renderer. Provide this no-op Console on every distilled
  * `loadProfileCredentials` call so distilled has nowhere to print.
  */
 const noop = () => {};
@@ -224,7 +224,7 @@ export const AwsAuth = AuthProviderLayer<
 >()(
   AWS_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const prompt = CliKit.accessors;
+    const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
     const getAccountId = ({
@@ -273,28 +273,28 @@ export const AwsAuth = AuthProviderLayer<
       );
 
     const loginStored = Effect.fn(function* (profileName: string) {
-      const accessKeyId = yield* prompt.prompt
+      const accessKeyId = yield* interaction.prompt
         .text({
           message: "AWS Access Key ID",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         })
         .pipe(mapPromptCancellation);
 
-      const secretAccessKey = yield* prompt.prompt
+      const secretAccessKey = yield* interaction.prompt
         .password({
           message: "AWS Secret Access Key",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         })
         .pipe(mapPromptCancellation);
 
-      const sessionToken = yield* prompt.prompt
+      const sessionToken = yield* interaction.prompt
         .password({
           message: "AWS Session Token (optional; press Enter to skip)",
           placeholder: "(none)",
         })
         .pipe(mapPromptCancellation);
 
-      const region = yield* prompt.prompt
+      const region = yield* interaction.prompt
         .text({
           message: "AWS Region",
           placeholder: "us-east-1",
@@ -316,13 +316,13 @@ export const AwsAuth = AuthProviderLayer<
         sessionToken: sessionToken ? Redacted.make(sessionToken) : undefined,
         region,
       });
-      yield* prompt.output.success("AWS credentials saved.");
+      yield* interaction.output.success("AWS credentials saved.");
 
       return { method: "stored" as const };
     });
 
     const configureInteractive = (profileName: string) =>
-      prompt.prompt
+      interaction.prompt
         .select({
           message: "AWS authentication method",
           options,
@@ -332,12 +332,12 @@ export const AwsAuth = AuthProviderLayer<
             Match.value(method).pipe(
               Match.when("sso", () =>
                 Effect.gen(function* () {
-                  const ssoProfile = yield* prompt.prompt.text({
+                  const ssoProfile = yield* interaction.prompt.text({
                     message: "AWS profile name (from ~/.aws/config)",
                     placeholder: "default",
                     defaultValue: "default",
                   });
-                  const authorizationMethod = yield* prompt.prompt.select({
+                  const authorizationMethod = yield* interaction.prompt.select({
                     message: "AWS SSO authorization method",
                     options: [
                       {
@@ -368,11 +368,11 @@ export const AwsAuth = AuthProviderLayer<
               Match.when("stored", () => loginStored(profileName)),
               Match.when("local", () =>
                 Effect.gen(function* () {
-                  const endpoint = yield* prompt.prompt.text({
+                  const endpoint = yield* interaction.prompt.text({
                     message: "Emulator endpoint",
                     defaultValue: DEFAULT_LOCAL_ENDPOINT,
                   });
-                  const region = yield* prompt.prompt.text({
+                  const region = yield* interaction.prompt.text({
                     message: "AWS Region",
                     defaultValue: "us-east-1",
                   });
@@ -401,7 +401,7 @@ export const AwsAuth = AuthProviderLayer<
       | HttpClient.HttpClient
       | FileSystem.FileSystem
       | Path.Path
-      | CliKit.CliKit
+      | Interaction.Interaction
     > =>
       configureInteractive(profileName).pipe(
         Effect.mapError((e) =>
@@ -798,7 +798,7 @@ export const AwsAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when({ method: "local" }, () => Effect.void),
         Match.when({ method: "sso" }, (config) =>
-          prompt.output
+          interaction.output
             .info(
               `AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`,
             )
@@ -807,9 +807,9 @@ export const AwsAuth = AuthProviderLayer<
               Effect.zip(clearDistilledSsoCache(config.ssoProfile)),
               Effect.match({
                 onSuccess: () =>
-                  prompt.output.success("AWS: SSO logout complete"),
+                  interaction.output.success("AWS: SSO logout complete"),
                 onFailure: (e) =>
-                  prompt.output.warning(
+                  interaction.output.warning(
                     `AWS: SSO logout failed: \`${e.message}\``,
                   ),
               }),
@@ -820,7 +820,7 @@ export const AwsAuth = AuthProviderLayer<
             .delete(profileName, STORAGE_KEY)
             .pipe(
               Effect.andThen(
-                prompt.output.success("AWS: stored credentials removed"),
+                interaction.output.success("AWS: stored credentials removed"),
               ),
             ),
         ),
@@ -1008,7 +1008,7 @@ const loginSSO = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const prompt = yield* CliKit.CliKit;
+      const interaction = yield* Interaction.Interaction;
       const services = yield* Effect.context<ChildProcessSpawner>();
       const runOpenUrl = Effect.runPromiseWith(services);
       const authorizationUrl = yield* Deferred.make<string>();
@@ -1104,13 +1104,13 @@ const loginSSO = (
               ),
             )
           : undefined;
-      const openFailed = yield* CliKit.openUrl(url).pipe(
+      const openFailed = yield* Interaction.openUrl(url).pipe(
         Effect.as(false),
         Effect.catch(() => Effect.succeed(true)),
       );
       yield* Fiber.join(processFiber).pipe(
         Effect.raceFirst(
-          prompt.prompt
+          interaction.prompt
             .awaitExternal({
               message: "AWS authorization",
               waitingLabel:
@@ -1120,13 +1120,13 @@ const loginSSO = (
               url,
               code,
               openFailed,
-              onOpen: () => runOpenUrl(CliKit.openUrl(url)),
+              onOpen: () => runOpenUrl(Interaction.openUrl(url)),
               allowManualInput: false,
             })
             .pipe(Effect.asVoid),
         ),
       );
-      yield* prompt.output.success("AWS SSO: login complete");
+      yield* interaction.output.success("AWS SSO: login complete");
     }),
   );
 

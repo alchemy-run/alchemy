@@ -1,12 +1,18 @@
 export { accessors, Application, CliKit } from "./CliKit.ts";
 export { layer } from "./layer.ts";
-export { openUrl } from "./openUrl.ts";
+export { CliKitInteraction } from "./interaction.ts";
+export { openUrl } from "../../Interaction.ts";
 export {
   BrowserOpenFailed,
   NonInteractiveTerminal,
   TerminalCancelled,
-} from "./errors.ts";
-export { glyphsFor, spinnerFramesFor, theme, type GlyphName } from "./theme.ts";
+} from "../../Interaction.ts";
+export {
+  glyphsFor,
+  spinnerFramesFor,
+  theme,
+  type GlyphName,
+} from "../../Util/Theme.ts";
 export {
   ANSI_BOLD,
   ANSI_DIM,
@@ -17,7 +23,7 @@ export {
   pipedColorEnv,
   truncate,
   unicodeEnabled,
-} from "./terminal.ts";
+} from "../../Util/Terminal.ts";
 export {
   Screen,
   type Choice,

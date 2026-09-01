@@ -139,8 +139,27 @@ const root = Command.make("alchemy", {}, () =>
   Command.withGlobalFlags([NoInput]),
 );
 
+/**
+ * How this CLI process is running, appended to `--version` in a checkout
+ * for debugging the launcher's implicit mode selection (`bin/cli.js`): the
+ * runtime, and whether we're executing `.ts` source (bun, or node with type
+ * stripping + the register-tsx hook) or built output — `node <x>, lib` is
+ * the tell for the old-node fallback that still needs a build. Published
+ * installs print the plain version string.
+ */
+const devRunMode = import.meta.url.includes("/node_modules/")
+  ? undefined
+  : `${
+      typeof globalThis.Bun !== "undefined"
+        ? `bun ${globalThis.Bun.version}`
+        : `node ${process.versions.node}`
+    }, ${import.meta.url.endsWith(".ts") ? "src" : "lib"}`;
+
 const cli = Command.run(root, {
-  version: packageJson.version,
+  version:
+    devRunMode === undefined
+      ? packageJson.version
+      : `${packageJson.version} (${devRunMode})`,
 });
 
 const services = Layer.mergeAll(
@@ -164,7 +183,10 @@ const services = Layer.mergeAll(
   TelemetryLive,
   routeCacheLayer,
   Layer.provide(
-    Layer.provideMerge(selectCliServices(), CliKit.layer()),
+    Layer.provideMerge(
+      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
+      CliKit.layer(),
+    ),
     PlatformServices,
   ),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at

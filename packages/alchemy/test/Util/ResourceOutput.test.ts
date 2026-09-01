@@ -1,4 +1,7 @@
-import { formatResourceTag, stripChildEffectPrefix } from "@/Cli/Output.ts";
+import {
+  formatResourceTag,
+  stripChildEffectPrefix,
+} from "@/Util/ResourceOutput.ts";
 import { describe, expect, it } from "alchemy-test";
 
 describe("stripChildEffectPrefix", () => {

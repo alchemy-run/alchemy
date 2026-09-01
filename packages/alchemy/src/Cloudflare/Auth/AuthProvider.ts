@@ -33,7 +33,7 @@ import {
   mapPromptCancellation,
 } from "../../Auth/Env.ts";
 import { browserOAuth } from "../../Auth/BrowserOAuth.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
+import * as Interaction from "../../Interaction.ts";
 import { CREDENTIALS_FILE as STATE_STORE_CREDENTIALS_FILE } from "../StateStore/CredentialsFile.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 import {
@@ -133,7 +133,7 @@ const listVisibleAccounts: Effect.Effect<
 
 const selectAccount = (accessToken: string) =>
   Effect.gen(function* () {
-    const prompt = CliKit.accessors;
+    const interaction = Interaction.accessors;
     const accounts = yield* listVisibleAccounts;
     if (accounts.length === 0) {
       return yield* new AuthError({
@@ -144,10 +144,12 @@ const selectAccount = (accessToken: string) =>
     }
     const [account] = accounts;
     if (accounts.length === 1 && account !== undefined) {
-      yield* prompt.output.info(`Using Cloudflare account ${account.name}.`);
+      yield* interaction.output.info(
+        `Using Cloudflare account ${account.name}.`,
+      );
       return account.id;
     }
-    return yield* prompt.prompt
+    return yield* interaction.prompt
       .select({
         message: "Select a Cloudflare account",
         searchable: true,
@@ -162,8 +164,8 @@ const selectAccount = (accessToken: string) =>
 
 const promptAccountId = () =>
   Effect.gen(function* () {
-    const prompt = yield* CliKit.CliKit;
-    return yield* prompt.prompt
+    const interaction = yield* Interaction.Interaction;
+    return yield* interaction.prompt
       .text({
         message: "Cloudflare Account ID",
         validate: validateAccountIdField,
@@ -201,8 +203,8 @@ const configureMethods: ReadonlyArray<ConfigureMethod> = [
 
 const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
   Effect.gen(function* () {
-    const prompt = yield* CliKit.CliKit;
-    const mode = yield* prompt.prompt
+    const interaction = yield* Interaction.Interaction;
+    const mode = yield* interaction.prompt
       .select({
         message: "Cloudflare OAuth scopes",
         options: [
@@ -226,7 +228,7 @@ const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
       .pipe(mapPromptCancellation);
     if (mode === "basic") return [...BASIC_SCOPES];
     if (mode === "all") return [...ALL_SCOPE_IDS];
-    return yield* prompt.prompt
+    return yield* interaction.prompt
       .multiSelect({
         message: "Select OAuth scopes",
         initialValues: customOAuthScopeDefaults(currentConfig),
@@ -256,7 +258,7 @@ export const CloudflareAuth = AuthProviderLayer<
 >()(
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const prompt = CliKit.accessors;
+    const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
     const oauthLogin = (profileName: string, scopes: string[]) =>
@@ -279,12 +281,14 @@ export const CloudflareAuth = AuthProviderLayer<
           OAuthClient.OAuthCredentials,
           credentials,
         );
-        yield* prompt.output.success("Connected to Cloudflare with OAuth.");
+        yield* interaction.output.success(
+          "Connected to Cloudflare with OAuth.",
+        );
         return credentials;
       });
 
     const loginStored = Effect.fn(function* (profileName: string) {
-      const credentialType = yield* prompt.prompt
+      const credentialType = yield* interaction.prompt
         .select({
           message: "Cloudflare credential type",
           options: [
@@ -301,7 +305,7 @@ export const CloudflareAuth = AuthProviderLayer<
       return yield* Match.value(credentialType).pipe(
         Match.when("apiToken", () =>
           Effect.gen(function* () {
-            const apiToken = yield* prompt.prompt
+            const apiToken = yield* interaction.prompt
               .password({
                 message: "Cloudflare API Token",
                 validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -315,7 +319,7 @@ export const CloudflareAuth = AuthProviderLayer<
               CloudflareStoredCredentials,
               { type: "apiToken", apiToken, accountId },
             );
-            yield* prompt.output.success("Cloudflare: credentials saved.");
+            yield* interaction.output.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiToken" as const,
@@ -324,14 +328,14 @@ export const CloudflareAuth = AuthProviderLayer<
         ),
         Match.when("apiKey", () =>
           Effect.gen(function* () {
-            const apiKey = yield* prompt.prompt
+            const apiKey = yield* interaction.prompt
               .password({
                 message: "Cloudflare API Key",
                 validate: (v) => (v.length === 0 ? "Required" : undefined),
               })
               .pipe(mapPromptCancellation, Effect.map(Redacted.make));
 
-            const email = yield* prompt.prompt
+            const email = yield* interaction.prompt
               .text({
                 message: "Cloudflare Email",
                 validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -345,7 +349,7 @@ export const CloudflareAuth = AuthProviderLayer<
               CloudflareStoredCredentials,
               { type: "apiKey", apiKey, email, accountId },
             );
-            yield* prompt.output.success("Cloudflare: credentials saved.");
+            yield* interaction.output.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiKey" as const,
@@ -390,7 +394,7 @@ export const CloudflareAuth = AuthProviderLayer<
       profileName: string,
       currentConfig?: CloudflareAuthConfig,
     ) =>
-      prompt.prompt
+      interaction.prompt
         .select({
           message: "Cloudflare authentication method",
           options,
@@ -597,7 +601,7 @@ export const CloudflareAuth = AuthProviderLayer<
               .delete(profileName, STORED_STORAGE_KEY)
               .pipe(
                 Effect.andThen(
-                  prompt.output.success(
+                  interaction.output.success(
                     "Cloudflare: stored credentials removed",
                   ),
                 ),
@@ -616,7 +620,7 @@ export const CloudflareAuth = AuthProviderLayer<
                   OAuthClient.usesCurrentClient(creds)
                     ? OAuthClient.revoke(creds).pipe(
                         Effect.catchTag("OAuthError", (err) =>
-                          prompt.output.warning(
+                          interaction.output.warning(
                             `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
                           ),
                         ),
@@ -625,7 +629,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 ),
                 Effect.andThen(store.delete(profileName, OAUTH_STORAGE_KEY)),
                 Effect.andThen(
-                  prompt.output.success(
+                  interaction.output.success(
                     "Cloudflare: OAuth credentials removed.",
                   ),
                 ),
@@ -689,7 +693,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 return (
                   dropped.length === 0
                     ? Effect.void
-                    : prompt.output.warning(
+                    : interaction.output.warning(
                         `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
                           `Scopes must be picked again. ${reconfigure}`,
                       )
@@ -705,7 +709,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 creds?.type === "oauth" && OAuthClient.usesCurrentClient(creds)
                   ? yield* withProfileCredentialsLock(
                       profileName,
-                      prompt.output
+                      interaction.output
                         .info("Cloudflare: refreshing OAuth credentials...")
                         .pipe(
                           Effect.andThen(OAuthClient.refresh(creds)),
@@ -719,7 +723,7 @@ export const CloudflareAuth = AuthProviderLayer<
                               )
                               .pipe(
                                 Effect.andThen(
-                                  prompt.output.success(
+                                  interaction.output.success(
                                     "Cloudflare: OAuth credentials refreshed.",
                                   ),
                                 ),
@@ -734,7 +738,7 @@ export const CloudflareAuth = AuthProviderLayer<
                   : yield* Effect.gen(function* () {
                       if (creds?.type === "oauth") {
                         yield* store.delete(profileName, OAUTH_STORAGE_KEY);
-                        yield* prompt.output.warning(
+                        yield* interaction.output.warning(
                           "Cloudflare: removed OAuth credentials issued to the previous client.",
                         );
                       }

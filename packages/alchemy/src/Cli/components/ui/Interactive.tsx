@@ -17,8 +17,8 @@ import {
 } from "react";
 import stringWidth from "string-width";
 import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
-import { theme } from "../../CliKit/theme.ts";
-import { copyToClipboard, truncate } from "../../CliKit/terminal.ts";
+import { theme } from "../../../Util/Theme.ts";
+import { copyToClipboard, truncate } from "../../../Util/Terminal.ts";
 import {
   useBorderStyle,
   useCliEnvironment,
