@@ -57,18 +57,45 @@ export interface BranchProtectionProps {
   readonly applyToAdmins?: boolean;
   /**
    * Users allowed to push.
+   *
+   * Forgejo only enforces a whitelist when {@link enablePushWhitelist} is on,
+   * which defaults to `true` whenever this or {@link pushWhitelistTeams} is
+   * non-empty.
    */
   readonly pushWhitelistUsernames?: readonly string[];
   /**
    * Teams allowed to push.
+   *
+   * See {@link pushWhitelistUsernames} for how the whitelist is enabled.
    */
   readonly pushWhitelistTeams?: readonly string[];
+  /**
+   * Whether direct pushes to the branch are permitted at all.
+   *
+   * @default true when a push whitelist is set, otherwise left unmanaged
+   */
+  readonly enablePush?: boolean;
+  /**
+   * Whether the push whitelist is enforced.
+   *
+   * @default true when a push whitelist is set, otherwise left unmanaged
+   */
+  readonly enablePushWhitelist?: boolean;
 }
 
 /**
  * Observed Forgejo branch-protection attributes.
  */
 export interface BranchProtectionAttributes {
+  /**
+   * Repository owner. Carried on the attributes so account-wide teardown,
+   * which has no state row to read props from, can still address the rule.
+   */
+  readonly owner: string;
+  /**
+   * Repository name.
+   */
+  readonly repository: string;
   /**
    * Rule name.
    */
@@ -118,6 +145,9 @@ export interface BranchProtection extends Resource<
  * ```
  *
  * ### Restricting Who Can Push
+ * Declaring a whitelist enables push-whitelist enforcement automatically;
+ * set `enablePush` or `enablePushWhitelist` explicitly to override.
+ *
  * **Example:** Limit Pushes to a Team
  * ```typescript
  * yield* Forgejo.BranchProtection("main", {
@@ -144,21 +174,41 @@ const collection = (
 ) =>
   `/repos/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repository)}/branch_protections`;
 
-const rulePath = (props: BranchProtectionProps) =>
-  `${collection(props)}/${encodeURIComponent(props.ruleName)}`;
+const rulePath = (
+  props: Pick<BranchProtectionProps, "owner" | "repository" | "ruleName">,
+) => `${collection(props)}/${encodeURIComponent(props.ruleName)}`;
 
-const bodyOf = (props: BranchProtectionProps) => ({
-  rule_name: props.ruleName,
-  required_approvals: props.requiredApprovals,
-  require_signed_commits: props.requireSignedCommits,
-  enable_status_check: props.enableStatusCheck,
-  status_check_contexts: props.statusCheckContexts,
-  block_on_rejected_reviews: props.blockOnRejectedReviews,
-  block_on_outdated_branch: props.blockOnOutdatedBranch,
-  apply_to_admins: props.applyToAdmins,
-  push_whitelist_usernames: props.pushWhitelistUsernames,
-  push_whitelist_teams: props.pushWhitelistTeams,
+const attributesOf = (
+  props: Pick<BranchProtectionProps, "owner" | "repository">,
+  rule: ApiBranchProtection,
+): BranchProtectionAttributes => ({
+  owner: props.owner,
+  repository: props.repository,
+  ruleName: rule.rule_name,
 });
+
+const bodyOf = (props: BranchProtectionProps) => {
+  // A whitelist is inert unless its enable flags are on, so declaring one
+  // turns them on by default — otherwise the rule silently permits everyone.
+  const hasPushWhitelist =
+    (props.pushWhitelistUsernames?.length ?? 0) > 0 ||
+    (props.pushWhitelistTeams?.length ?? 0) > 0;
+  const whitelistDefault = hasPushWhitelist ? true : undefined;
+  return {
+    rule_name: props.ruleName,
+    required_approvals: props.requiredApprovals,
+    require_signed_commits: props.requireSignedCommits,
+    enable_status_check: props.enableStatusCheck,
+    status_check_contexts: props.statusCheckContexts,
+    block_on_rejected_reviews: props.blockOnRejectedReviews,
+    block_on_outdated_branch: props.blockOnOutdatedBranch,
+    apply_to_admins: props.applyToAdmins,
+    push_whitelist_usernames: props.pushWhitelistUsernames,
+    push_whitelist_teams: props.pushWhitelistTeams,
+    enable_push: props.enablePush ?? whitelistDefault,
+    enable_push_whitelist: props.enablePushWhitelist ?? whitelistDefault,
+  };
+};
 
 /**
  * Provider layer implementing branch-protection lifecycle.
@@ -181,29 +231,30 @@ export const BranchProtectionProvider = () =>
       const repositories = yield* listAccessibleRepositories();
       const rules = yield* Effect.forEach(
         repositories,
-        (repository) =>
-          ignoreInaccessible(
-            paginate<ApiBranchProtection>(
-              client,
-              collection({
-                owner: repository.owner.login,
-                repository: repository.name,
-              }),
-            ),
+        (repository) => {
+          const props = {
+            owner: repository.owner.login,
+            repository: repository.name,
+          };
+          return ignoreInaccessible(
+            paginate<ApiBranchProtection>(client, collection(props)),
             [] as readonly ApiBranchProtection[],
-          ),
+          ).pipe(
+            Effect.map((found) =>
+              found.map((rule) => attributesOf(props, rule)),
+            ),
+          );
+        },
         { concurrency: 8 },
       );
-      return rules.flat().map((rule) => ({ ruleName: rule.rule_name }));
+      return rules.flat();
     }),
     read: Effect.fn(function* ({ olds }) {
       const client = yield* ForgejoCredentials;
       const observed = yield* optional(
         client.request<ApiBranchProtection>("GET", rulePath(olds)),
       );
-      return observed === undefined
-        ? undefined
-        : { ruleName: observed.rule_name };
+      return observed === undefined ? undefined : attributesOf(olds, observed);
     }),
     reconcile: Effect.fn(function* ({ news }) {
       const client = yield* ForgejoCredentials;
@@ -228,7 +279,7 @@ export const BranchProtectionProvider = () =>
               }),
             ),
           );
-        return { ruleName: created.rule_name };
+        return attributesOf(news, created);
       }
 
       const updated = yield* client.request<ApiBranchProtection>(
@@ -238,10 +289,13 @@ export const BranchProtectionProvider = () =>
           body: bodyOf(news),
         },
       );
-      return { ruleName: updated.rule_name };
+      return attributesOf(news, updated);
     }),
-    delete: Effect.fn(function* ({ olds }) {
+    delete: Effect.fn(function* ({ output }) {
+      if (output === undefined) return;
       const client = yield* ForgejoCredentials;
-      yield* optional(client.request<void>("DELETE", rulePath(olds)));
+      // Address the rule from `output` alone: account-wide teardown has no
+      // state row, so it passes the Attributes shape as `olds` too.
+      yield* optional(client.request<void>("DELETE", rulePath(output)));
     }),
   });

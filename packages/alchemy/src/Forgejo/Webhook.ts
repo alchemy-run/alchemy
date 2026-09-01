@@ -64,6 +64,15 @@ export interface WebhookAttributes {
    */
   readonly webhookId: number;
   /**
+   * Repository owner. Carried on the attributes so account-wide teardown,
+   * which has no state row to read props from, can still address the hook.
+   */
+  readonly owner: string;
+  /**
+   * Repository name.
+   */
+  readonly repository: string;
+  /**
    * Delivery URL.
    */
   readonly url: string;
@@ -120,30 +129,56 @@ interface ApiHook {
   readonly url: string;
   readonly updated_at?: string;
   readonly config?: Readonly<Record<string, string>>;
+  readonly events?: readonly string[];
 }
+
+/** Events Forgejo delivers when a webhook declares none. */
+const DEFAULT_EVENTS = ["push"] as const;
 
 const hooksPath = (props: Pick<WebhookProps, "owner" | "repository">) =>
   `/repos/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repository)}/hooks`;
 
-const attributesOf = (hook: ApiHook): WebhookAttributes => ({
+const attributesOf = (
+  props: Pick<WebhookProps, "owner" | "repository">,
+  hook: ApiHook,
+): WebhookAttributes => ({
   webhookId: hook.id,
+  owner: props.owner,
+  repository: props.repository,
   url: hook.config?.url ?? hook.url,
   updatedAt: hook.updated_at ?? "",
 });
 
 const urlOf = (hook: ApiHook): string => hook.config?.url ?? hook.url;
 
+const sameEvents = (
+  hook: ApiHook,
+  events: readonly string[] | undefined,
+): boolean => {
+  const observed = [...(hook.events ?? [])].sort();
+  const desired = [...(events ?? DEFAULT_EVENTS)].sort();
+  return (
+    observed.length === desired.length &&
+    observed.every((event, index) => event === desired[index])
+  );
+};
+
 /**
  * Locate the live hook, by ID when one is already known and otherwise by
- * delivery URL within the repository.
+ * delivery URL *and* event set within the repository.
  *
  * Forgejo happily accepts several hooks pointing at the same URL, so creating
  * unconditionally would turn a create whose state write failed into a
- * duplicate on every retry. Matching the URL adopts the hook that is already
- * there instead.
+ * duplicate on every retry. Matching an existing hook adopts it instead.
+ *
+ * The event set is part of the match because the URL alone is not unique: two
+ * `Webhook` resources may legitimately target one URL in one repository with
+ * different events (say `push` versus `pull_request`), and matching on URL
+ * alone would collapse them onto a single hook, each deploy overwriting the
+ * other's configuration.
  */
 const observe = Effect.fn(function* (
-  props: Pick<WebhookProps, "owner" | "repository" | "url">,
+  props: Pick<WebhookProps, "owner" | "repository" | "url" | "events">,
   webhookId: number | undefined,
 ) {
   const client = yield* ForgejoCredentials;
@@ -157,13 +192,16 @@ const observe = Effect.fn(function* (
     paginate<ApiHook>(client, hooksPath(props)),
     [] as readonly ApiHook[],
   );
-  return hooks.find((hook) => urlOf(hook) === (props.url as string));
+  return hooks.find(
+    (hook) =>
+      urlOf(hook) === (props.url as string) && sameEvents(hook, props.events),
+  );
 });
 
 const bodyOf = (props: WebhookProps) => ({
   type: "forgejo",
   active: props.active ?? true,
-  events: props.events ?? ["push"],
+  events: props.events ?? [...DEFAULT_EVENTS],
   branch_filter: props.branchFilter,
   authorization_header:
     props.authorizationHeader === undefined
@@ -197,26 +235,29 @@ export const WebhookProvider = () =>
       const repositories = yield* listAccessibleRepositories();
       const hooks = yield* Effect.forEach(
         repositories,
-        (repository) =>
+        (repository) => {
+          const props = {
+            owner: repository.owner.login,
+            repository: repository.name,
+          };
           // A repository whose hooks the credential cannot read is skipped
           // rather than failing the whole sweep.
-          ignoreInaccessible(
-            paginate<ApiHook>(
-              client,
-              hooksPath({
-                owner: repository.owner.login,
-                repository: repository.name,
-              }),
-            ),
+          return ignoreInaccessible(
+            paginate<ApiHook>(client, hooksPath(props)),
             [] as readonly ApiHook[],
-          ),
+          ).pipe(
+            Effect.map((found) =>
+              found.map((hook) => attributesOf(props, hook)),
+            ),
+          );
+        },
         { concurrency: 8 },
       );
-      return hooks.flat().map(attributesOf);
+      return hooks.flat();
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds, output?.webhookId);
-      return observed === undefined ? undefined : attributesOf(observed);
+      return observed === undefined ? undefined : attributesOf(olds, observed);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const client = yield* ForgejoCredentials;
@@ -230,15 +271,17 @@ export const WebhookProvider = () =>
         observed === undefined ? path : `${path}/${observed.id}`,
         { body: bodyOf(news) },
       );
-      return attributesOf(hook);
+      return attributesOf(news, hook);
     }),
-    delete: Effect.fn(function* ({ olds, output }) {
+    delete: Effect.fn(function* ({ output }) {
       if (output === undefined) return;
       const client = yield* ForgejoCredentials;
+      // Address the hook from `output` alone: account-wide teardown has no
+      // state row, so it passes the Attributes shape as `olds` too.
       yield* optional(
         client.request<void>(
           "DELETE",
-          `${hooksPath(olds)}/${output.webhookId}`,
+          `${hooksPath(output)}/${output.webhookId}`,
         ),
       );
     }),
