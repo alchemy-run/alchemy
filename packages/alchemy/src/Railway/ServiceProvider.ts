@@ -190,6 +190,18 @@ const deployFailed = (status: string | undefined) =>
 const undef = <T>(value: T | null | undefined): T | undefined =>
   value == null ? undefined : value;
 
+/** @internal */
+export const normalizePreDeployCommand = (
+  value: unknown,
+): string | undefined => {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return undefined;
+    if (value.length === 1 && typeof value[0] === "string") return value[0];
+  }
+  return undefined;
+};
+
 const sameWatchPatterns = (
   observed: readonly string[] | null | undefined,
   desired: readonly string[] | undefined,
@@ -241,7 +253,7 @@ export const instanceSettingsDelta = (input: {
     region?: string;
     rootDirectory?: string;
     buildCommand?: string;
-    preDeployCommand?: string[] | null;
+    preDeployCommand?: string | null;
     startCommand?: string;
     healthcheckPath?: string;
     healthcheck?: string;
@@ -296,15 +308,16 @@ export const instanceSettingsDelta = (input: {
       input.props.buildCommand,
       instance?.buildCommand,
     ) || changed;
-  if (
-    input.props.preDeployCommand !== undefined &&
-    !deepEqual(
-      undef(instance?.preDeployCommand),
-      undef(input.props.preDeployCommand),
-    )
-  ) {
-    delta.preDeployCommand = input.props.preDeployCommand;
-    changed = true;
+  if (input.props.preDeployCommand !== undefined) {
+    const desired = undef(input.props.preDeployCommand);
+    const observed = normalizePreDeployCommand(instance?.preDeployCommand);
+    if (observed !== desired) {
+      delta.preDeployCommand =
+        input.props.preDeployCommand === null
+          ? null
+          : [input.props.preDeployCommand];
+      changed = true;
+    }
   }
   changed =
     assignIfChanged(
@@ -729,7 +742,7 @@ const toAttrs = (input: {
   healthcheckTimeout: input.instance?.healthcheckTimeout ?? undefined,
   replicas: input.instance?.numReplicas ?? undefined,
   buildCommand: input.instance?.buildCommand ?? undefined,
-  preDeployCommand: input.instance?.preDeployCommand ?? undefined,
+  preDeployCommand: normalizePreDeployCommand(input.instance?.preDeployCommand),
   startCommand: input.instance?.startCommand ?? undefined,
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   rootDirectory: input.instance?.rootDirectory ?? undefined,
