@@ -50,16 +50,6 @@ export const suppressInterruptMessages = Effect.sync(() => {
   interruptMessagesSuppressed = true;
 });
 
-/**
- * SIGTERM means a supervisor decided to stop us — `node --watch` restarting
- * the exec child on a file change, a process manager, `kill`. Nobody is at
- * the terminal waiting for feedback, and during dev the "Interrupted." line
- * would print AFTER the watcher's own "Restarting ..." message, reading like
- * a stray error from the new run. Only a human Ctrl+C (SIGINT) keeps the
- * message. Set by {@link installShutdownFeedback}'s signal handler.
- */
-let terminatedBySupervisor = false;
-
 const SHUTDOWN_FEEDBACK_DELAY_MS = 200;
 
 /**
@@ -71,8 +61,7 @@ const SHUTDOWN_FEEDBACK_DELAY_MS = 200;
  */
 export const installShutdownFeedback = Effect.sync(() => {
   let firstSignalAt: number | undefined;
-  const onSignal = (signal: NodeJS.Signals) => {
-    if (signal === "SIGTERM") terminatedBySupervisor = true;
+  const onSignal = () => {
     if (firstSignalAt !== undefined) {
       // Watchers and runners in the chain (`node --watch`, pnpm) forward the
       // tty's SIGINT to their children, so ONE ^C can be delivered twice
@@ -137,7 +126,7 @@ export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
         : (Effect.failCause(cause) as Effect.Effect<never, E, never>);
     }),
     Effect.onInterrupt(() =>
-      interruptMessagesSuppressed || terminatedBySupervisor
+      interruptMessagesSuppressed
         ? Effect.void
         : Console.log(
             colorsEnabled()
