@@ -451,7 +451,7 @@ test.provider(
 const localContextDir = `${import.meta.dirname}/fixtures/local-context`;
 
 test.provider(
-  "create, serve, and delete a local Docker context service",
+  "create, serve, switch to image, and delete a local Docker context service",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -474,6 +474,12 @@ test.provider(
       expect(created.api.domain).toContain("up.railway.app");
       expect(created.api.url).toEqual(`https://${created.api.domain}`);
 
+      const fromContext = yield* railway.serviceInstance({
+        environmentId: created.api.environmentId,
+        serviceId: created.api.serviceId,
+      });
+      expect(fromContext.dockerfilePath).toEqual("Dockerfile");
+
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.api.url!).pipe(
         Effect.flatMap((res) =>
@@ -488,6 +494,43 @@ test.provider(
       );
       expect(typeof body).toEqual("string");
       expect(body.length).toBeGreaterThan(0);
+
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Ctx", {
+            project,
+            environment,
+            image: "nginx:alpine",
+            port: 80,
+            healthcheckPath: "/",
+          });
+          return { api };
+        }),
+      );
+      expect(updated.api.serviceId).toEqual(created.api.serviceId);
+
+      const fromImage = yield* railway.serviceInstance({
+        environmentId: updated.api.environmentId,
+        serviceId: updated.api.serviceId,
+      });
+      expect(fromImage.source?.image).toEqual(
+        expect.stringContaining("nginx:alpine"),
+      );
+
+      const afterImage = yield* client.get(updated.api.url!).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.text
+            : Effect.fail(new Error(`api returned ${res.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.spaced("4 seconds"),
+          times: 20,
+        }),
+      );
+      expect(typeof afterImage).toEqual("string");
+      expect(afterImage.length).toBeGreaterThan(0);
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.api.serviceId)).toEqual("gone");
