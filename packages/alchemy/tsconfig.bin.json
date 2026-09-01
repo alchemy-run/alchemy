@@ -1,11 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": ["bin/**/*.ts"],
-  // The .dev.ts twins import ../src/*.ts relatively (node source mode);
-  // that crosses project roots, which the emitting bin project cannot
-  // rewrite (TS2878). They are 4-line shims exercised end-to-end by
-  // test/Cli/exitCodes.test.ts's node launcher test.
-  "exclude": ["bin/*.dev.ts"],
   "compilerOptions": {
     "composite": true,
     "outDir": "./bin",

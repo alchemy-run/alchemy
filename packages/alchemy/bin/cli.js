@@ -110,8 +110,6 @@ const invokedByBun = execpath.includes("bun") || userAgent.startsWith("bun/");
 const binDir = path.dirname(fileURLToPath(import.meta.url));
 const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
-const nodeSourceEntry = path.join(binDir, "alchemy.dev.ts");
-const registerTsx = new URL("register-tsx.js", import.meta.url).href;
 
 /**
  * Whether this node supports `--experimental-transform-types` (and the
@@ -150,22 +148,21 @@ if (runtime === "bun" && isDev) {
 
 if (runtime === "node" && isDev && nodeRunsTypeScript) {
   // Run the checkout's source directly, no build required: node's own type
-  // stripping handles .ts, and the register-tsx hook transpiles the CLI's
-  // .tsx (terminal UI) with oxc. `alchemy.dev.ts` imports the source tree
-  // relatively — the package-specifier entry would resolve to built lib/.
+  // stripping handles .ts, and the register-dev-mode hooks transpile the
+  // CLI's .tsx (terminal UI) with oxc AND resolve the monorepo's own
+  // packages (`alchemy/*`, `@alchemy.run/*`, `@distilled.cloud/*`) through
+  // their `bun` export condition onto src/ — so the CLI, the user's stack,
+  // and every workspace dependency load one source universe instead of
+  // whatever built lib/ happens to be lying around.
   args.push(
     "--experimental-transform-types",
     "--no-warnings=ExperimentalWarning",
     "--import",
-    registerTsx,
+    new URL("register-dev-mode.js", import.meta.url).href,
   );
 }
 args.push(
-  runtime === "bun"
-    ? tsEntry
-    : isDev && nodeRunsTypeScript
-      ? nodeSourceEntry
-      : jsEntry,
+  runtime === "bun" || (isDev && nodeRunsTypeScript) ? tsEntry : jsEntry,
   ...process.argv.slice(2),
 );
 

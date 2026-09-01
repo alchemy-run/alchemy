@@ -23,8 +23,7 @@
   },
   "files": [
     "bin",
-    "!bin/*.dev.*",
-    "!bin/register-tsx.js",
+    "!bin/register-dev-mode.js",
     "lib",
     "src",
     "NOTICE",

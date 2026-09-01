@@ -79,18 +79,19 @@ export const devCommand = Command.make(
           : import.meta.url.endsWith(".ts")
             ? [
                 // Source checkout under node: run the .ts exec entry with
-                // type stripping plus the .tsx loader hook, so dev works
-                // without a build (mirrors bin/cli.js's launcher path). A
-                // duplicate --import inherited via execArgv is harmless —
-                // the second import of the same URL hits the module cache.
+                // type stripping plus the dev-mode hooks (tsx transform +
+                // src-condition resolution), so dev works without a build
+                // (mirrors bin/cli.js's launcher path). A duplicate
+                // --import inherited via execArgv is harmless — the second
+                // import of the same URL hits the module cache.
                 "node",
                 ...process.execArgv,
                 ...transformTypesFlags(),
                 "--import",
-                import.meta.resolve("../../../bin/register-tsx.js"),
+                import.meta.resolve("../../../bin/register-dev-mode.js"),
                 "--watch",
                 "--watch-preserve-output",
-                fileURLToPath(import.meta.resolve("../../../bin/exec.dev.ts")),
+                fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
               ]
             : [
                 "node",
