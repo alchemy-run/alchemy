@@ -40,7 +40,7 @@ ${AWS.AI.SANDBOX_MICROVM_DOCKERFILE.trim()}
 # node 24 + pnpm 11.24 + bun 1.3.13 match the repo's devEngines /
 # packageManager pins. unzip is for the bun installer; the JDK RUNS
 # the host-built floci jar (nothing is compiled in-image).
-RUN dnf install -y unzip nodejs24 nodejs24-npm java-25-amazon-corretto-devel \\
+RUN dnf install -y unzip findutils nodejs24 nodejs24-npm java-25-amazon-corretto-devel \\
   && dnf clean all \\
   && npm install -g pnpm@11.24.0
 
