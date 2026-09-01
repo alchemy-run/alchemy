@@ -4,20 +4,21 @@
  *   bun scripts/warm-bake.ts
  *
  * The floci emulator caps `docker build` at 15 minutes, which a COLD
- * repo bake (copy + install + type-check) exceeds. Floci builds
- * through the classic builder against the shared daemon, so building
- * the SAME Dockerfile prefix once here — over the SAME staged repo
- * (`SandboxBake.ts`), with the `FROM` rewritten to the local AL2023
- * base exactly as floci rewrites it — leaves every heavy layer in the
- * shared cache: the emulator's build then completes in seconds. Rerun
- * after committing (the bake tracks HEAD) or after changing the
- * Dockerfile's heavy layers.
+ * bake (clone + install + type-check + floci package) exceeds. Floci
+ * builds through the classic builder against the shared daemon, so
+ * building the SAME Dockerfile once here — with the `FROM` rewritten
+ * to the local AL2023 base exactly as floci rewrites it — leaves every
+ * heavy layer in the shared cache: the emulator's build then completes
+ * in seconds. Rerun after changing the Dockerfile's heavy layers (the
+ * clone layer snapshots main at build time, so rerun to refresh it).
+ *
+ * The bake needs NO build context (the workspace is a network clone;
+ * see `SandboxMicrovm.ts`) — the context below is an empty temp dir.
  */
 import { BunServices } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { stageBake } from "../src/SandboxBake.ts";
 import { SANDBOX_DOCKERFILE } from "../src/SandboxMicrovm.ts";
 
 // mirror MicrovmBuildService.rewriteBaseImage + localBaseImage()
@@ -29,8 +30,7 @@ const { contextDir } = await Effect.runPromise(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const bake = yield* stageBake;
-    const contextDir = path.dirname(bake.dir);
+    const contextDir = yield* fs.makeTempDirectory({ prefix: "bake-warm-" });
     const dockerfile =
       SANDBOX_DOCKERFILE.trim().replace(/^FROM .*$/m, `FROM ${LOCAL_BASE}`) +
       "\n";
@@ -38,7 +38,6 @@ const { contextDir } = await Effect.runPromise(
       path.join(contextDir, "Dockerfile.warm"),
       dockerfile,
     );
-    console.log(`staged ${bake.fingerprint} at ${bake.dir}`);
     return { contextDir };
   }).pipe(Effect.provide(BunServices.layer)),
 );

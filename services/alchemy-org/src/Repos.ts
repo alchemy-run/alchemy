@@ -28,8 +28,8 @@ export const testAlchemy = GitHub.Repository("test-alchemy", {
 /**
  * The alchemy repository itself — an IDENTITY HANDLE only, never
  * yielded under the Stack: the org contributes to this repository (the
- * baked sandbox worktree's origin — `SandboxBake.ts`) but must never
- * claim ownership of it. Deferred consts with static `owner`/`name`
+ * baked sandbox worktree's origin — the image clones it, see
+ * `SandboxMicrovm.ts`) but must never claim ownership of it. Deferred consts with static `owner`/`name`
  * resolve without provisioning (see `RepositoryLike`), which is
  * exactly how the publish bindings consume it.
  */

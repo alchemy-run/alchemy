@@ -3,37 +3,29 @@ import * as AWS from "alchemy/AWS";
 import * as Workspace from "alchemy/Workspace";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { stageBake } from "./SandboxBake.ts";
 
 /**
  * The org sandbox MicroVM image — the circular one, the Firecracker
- * sibling of the Container image in `Sandbox.ts`: the alchemy
- * repository itself, COPIED from the local repo root (`SandboxBake.ts`
- * stages the committed tree + a depth-1 `.git` — no network clone) and
- * installed at IMAGE BUILD. Every session's VM wakes up inside a ready
- * dev tree with zero cold setup — the image IS the branch, a warm
- * worktree the session can branch, commit, and publish from
- * (`pushBranch` / `openPullRequest` ride the tree's origin, re-pointed
- * at the real repository by the stager).
+ * sibling of the Container image in `Sandbox.ts`: a FRESH depth-1
+ * clone of the alchemy repository (plus its distilled and floci
+ * submodules at their pinned commits), installed and compiled at
+ * IMAGE BUILD. No host snapshot, no staging — the image is exactly
+ * what a new contributor's first checkout is: clone, `pnpm install`,
+ * `tsc -b`, and a packaged floci for local AWS emulation.
  *
- * The bake is a snapshot of local `HEAD` at build time — a session
- * that needs newer code runs `git fetch`/`pull` itself. The image
- * NEVER compiles: the stage carries the host's build artifacts
- * (`lib/`, `dist/`, tsbuildinfo — see `SandboxBake.ts`), so the only
- * in-image work is re-linking linux `node_modules` from the pnpm
- * store (the host's darwin-native installs cannot ship). Sessions
- * that need newer artifacts run the builds themselves, incrementally,
- * against the shipped tsbuildinfo.
+ * The bake is a snapshot of `main` at build time — sessions converge
+ * to the branch tip at claim time anyway (`CheckoutsSandbox` fetches
+ * and lands on the branch), so image staleness only costs the delta
+ * fetch, never correctness.
  *
- * Layer order is load-bearing for the per-commit rebuild cost:
- * lockfiles + patches are COPY'd alone and `pnpm fetch`ed BEFORE the
- * full tree, so a new commit re-links from the cached store (seconds)
- * instead of re-downloading the world.
+ * Layer order is load-bearing: ALL binaries install FIRST (dnf, pnpm,
+ * bun, JDK) — those layers are stable across bakes, so a re-bake
+ * re-runs only the clone-and-build layers below them, and the floci
+ * emulator's layer cache stays warm across Dockerfile-tail changes.
  *
- * Layered on the stock sandbox base (git + ripgrep + ssh); bun is
- * installed for the bake but deliberately NOT linked into
- * `/usr/local/bin` — the MicroVM codegen appends its own runtime
- * install step whose `ln -s` must not collide.
+ * bun is installed for the repo's prepare/build scripts but
+ * deliberately NOT linked into `/usr/local/bin` — the MicroVM codegen
+ * appends its own runtime install step whose `ln -s` must not collide.
  *
  * LOCAL DEV: the floci emulator caps image builds at 15 minutes, which
  * a cold bake exceeds — warm the shared docker layer cache once with
@@ -42,47 +34,42 @@ import { stageBake } from "./SandboxBake.ts";
 export const SANDBOX_DOCKERFILE = `
 ${AWS.AI.SANDBOX_MICROVM_DOCKERFILE.trim()}
 
+# ── binaries FIRST: stable layers shared by every bake ─────────────
 # node + pnpm: the repo declares packageManager pnpm@11 — its prepare
-# script (turbo) resolves that exact binary, and pnpm itself runs on
-# node. unzip is for the bun installer below.
-RUN dnf install -y unzip nodejs22 && dnf clean all \\
+# script resolves that exact binary, and pnpm itself runs on node.
+# unzip is for the bun installer; the JDK builds .vendor/floci
+# (maven.compiler.release 25).
+RUN dnf install -y unzip nodejs22 java-25-amazon-corretto-devel && dnf clean all \\
   && npm install -g pnpm@11.21.0
 
 RUN curl -fsSL https://bun.sh/install | bash
 
-# bun on PATH for the repo's prepare/build scripts — NOT linked into
-# /usr/local/bin (the MicroVM codegen appends its own runtime install
-# whose \`ln -s\` must not collide)
 ENV PATH="/root/.bun/bin:\${PATH}"
 
-# Dependency store layer: lockfiles + patches only, so it survives
-# commits — pnpm fetch needs nothing but the lockfile. A new bake then
-# re-links from the warm store instead of re-downloading everything.
-COPY alchemy/package.json alchemy/pnpm-workspace.yaml alchemy/pnpm-lock.yaml /workspace/alchemy/
-COPY alchemy/patches/ /workspace/alchemy/patches/
-COPY alchemy/distilled/package.json alchemy/distilled/pnpm-workspace.yaml alchemy/distilled/pnpm-lock.yaml /workspace/alchemy/distilled/
-
-WORKDIR /workspace/alchemy
-
-RUN pnpm fetch
-RUN cd distilled && pnpm fetch
-
-COPY alchemy/ /workspace/alchemy/
-
-# the copy roundtrip drops exec bits — restore modes from the index,
-# and give the tree a commit identity so sessions can commit
-RUN git checkout -- . \\
+# ── the workspace: a fresh depth-1 clone of main ───────────────────
+# distilled and floci come from their PINNED submodule commits (the
+# workspace only compiles against the distilled it pins), shallow,
+# and NOT recursive — distilled's own spec-mirror submodules are
+# multi-GB codegen inputs sessions never need. floci's .gitmodules
+# entry says update=none (hosts skip it), so the bake overrides it.
+RUN git clone --depth 1 https://github.com/alchemy-run/alchemy.git /workspace/alchemy \\
+  && cd /workspace/alchemy \\
+  && git submodule update --init --depth 1 distilled \\
+  && git -c submodule."vendor/floci".update=checkout \\
+       submodule update --init --depth 1 .vendor/floci \\
   && git config user.email "org@alchemy.run" \\
   && git config user.name "alchemy-org"
 
-# Materialize LINUX node_modules from the fetched store. The host's
-# node_modules never ships (darwin-native binaries cannot run here);
-# everything COMPILED does — the stage carries the working tree's
-# lib/, dist/, tsbuildinfo, and generated files, so --ignore-scripts
-# skips the prepare chain (husky + turbo builds) that would only
-# recompile what the COPY above already delivered.
-RUN pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
-RUN cd distilled && pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+WORKDIR /workspace/alchemy
+
+# ── install + compile: the first-checkout experience, prebaked ─────
+# full install (the prepare chain patches tsc, builds the cloudflare
+# packages, and generates the eval runtime — a fresh clone needs all
+# of it), then the workspace type-check/build and the floci jar.
+RUN pnpm install --frozen-lockfile
+RUN cd distilled && pnpm install --frozen-lockfile
+RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsc -b
+RUN cd .vendor/floci && ./mvnw --quiet --batch-mode -DskipTests package
 `;
 
 /**
@@ -99,31 +86,13 @@ RUN cd distilled && pnpm install --frozen-lockfile --prefer-offline --ignore-scr
 export const SandboxMicrovmRuntime = AWS.AI.SandboxMicrovmImage.make(
   Effect.gen(function* () {
     const buildRole = yield* AWS.AI.SandboxMicrovmBuildRole;
-    // Stage the LOCAL repo (committed tree + depth-1 .git) into the
-    // build context; the fingerprint (HEAD commits) drives the diff,
-    // so the image rebuilds per COMMIT, never per file save.
-    //
-    // DEPLOY-SIDE ONLY: the platform re-evaluates this props effect
-    // inside the deployed guest (where resource constructors resolve
-    // from bound context) — running the stager there crashes the VM
-    // at boot (its module-relative repo root doesn't exist in the
-    // image), so guard it exactly like bindings guard `host.bind`.
-    const contextInclude = globalThis.__ALCHEMY_RUNTIME__
-      ? []
-      : [
-          yield* stageBake.pipe(
-            Effect.map((bake) => ({
-              from: bake.dir,
-              to: "alchemy",
-              fingerprint: bake.fingerprint,
-            })),
-          ),
-        ];
+    // No build context beyond the bundled entry: the workspace is a
+    // fresh network clone at image-build time (see the Dockerfile),
+    // so the image rebuilds only when the Dockerfile itself changes.
     return {
       main: import.meta.url,
       runtime: "bun" as const,
       dockerfile: SANDBOX_DOCKERFILE,
-      contextInclude,
       buildRole,
       cpuConfigurations: [{ architecture: "ARM_64" as const }],
       // a dev tree, not a stub: sessions run installs, tests, and
