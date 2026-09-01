@@ -26,9 +26,11 @@ const sameArray = (
  * other entry must equal what was observed, otherwise the caller issues its
  * update call.
  *
- * Skipping a matching update is not just an optimization: Forgejo rejects
- * edits to an archived repository, so re-sending an unchanged payload on
- * every deploy would make `archived: true` a permanent deploy failure.
+ * Skipping a matching update keeps a converged resource quiet: a no-op `PATCH`
+ * still counts as a write, bumping the resource's timestamps and reporting an
+ * update on a deploy that had nothing to do. It is not a guard against
+ * archived repositories — contrary to what Gitea's model suggests, Forgejo
+ * 16.0.3 accepts and applies a `PATCH` to a repository with `archived: true`.
  */
 export const matchesDesired = (
   observed: unknown,

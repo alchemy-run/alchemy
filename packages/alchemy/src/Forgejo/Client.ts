@@ -47,19 +47,41 @@ export interface ForgejoErrorContext {
 }
 
 /**
+ * Render the request that failed, plus whatever Forgejo said about it.
+ *
+ * Nothing else gives these errors a message, so without this a failed
+ * `alchemy destroy` reports `ForgejoServerError:` and nothing more.
+ */
+const describe = (
+  error: ForgejoErrorContext & { readonly status?: number },
+): string => {
+  const status = error.status === undefined ? "" : ` -> ${error.status}`;
+  const body = error.body === "" ? "" : `: ${error.body}`;
+  return `${error.method} ${error.path}${status}${body}`;
+};
+
+/**
  * The requested resource does not exist. Lifecycle operations treat this as a
  * successful no-op when deleting, and as "needs creating" when reconciling.
  */
 export class ForgejoNotFound extends Data.TaggedError(
   "ForgejoNotFound",
-)<ForgejoErrorContext> {}
+)<ForgejoErrorContext> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * The credential is missing, malformed, or expired.
  */
 export class ForgejoUnauthorized extends Data.TaggedError(
   "ForgejoUnauthorized",
-)<ForgejoErrorContext> {}
+)<ForgejoErrorContext> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * The credential is valid but lacks permission for this operation. Forgejo
@@ -67,7 +89,11 @@ export class ForgejoUnauthorized extends Data.TaggedError(
  */
 export class ForgejoForbidden extends Data.TaggedError(
   "ForgejoForbidden",
-)<ForgejoErrorContext> {}
+)<ForgejoErrorContext> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * The resource already exists, or the request conflicts with current state.
@@ -75,14 +101,45 @@ export class ForgejoForbidden extends Data.TaggedError(
  */
 export class ForgejoConflict extends Data.TaggedError(
   "ForgejoConflict",
-)<ForgejoErrorContext> {}
+)<ForgejoErrorContext> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * Forgejo rejected the request payload.
  */
 export class ForgejoValidationError extends Data.TaggedError(
   "ForgejoValidationError",
-)<ForgejoErrorContext> {}
+)<ForgejoErrorContext> {
+  override get message(): string {
+    return describe(this);
+  }
+}
+
+/**
+ * The operation cannot proceed until something that depends on the target is
+ * gone — Forgejo's equivalent of a dependency violation.
+ *
+ * Forgejo answers it with a `500` rather than a conflict status, so it is
+ * recognized by response body — see {@link DEPENDENCY_VIOLATION}. Lifecycle
+ * operations retry it rather than failing the deploy.
+ */
+export class ForgejoDependencyViolation extends Data.TaggedError(
+  "ForgejoDependencyViolation",
+)<
+  ForgejoErrorContext & {
+    /**
+     * HTTP status returned by Forgejo.
+     */
+    readonly status: number;
+  }
+> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * Forgejo returned a 5xx response.
@@ -94,7 +151,11 @@ export class ForgejoServerError extends Data.TaggedError("ForgejoServerError")<
      */
     readonly status: number;
   }
-> {}
+> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * Forgejo returned an unsuccessful status that maps to no more specific tag.
@@ -108,7 +169,11 @@ export class ForgejoRequestError extends Data.TaggedError(
      */
     readonly status: number;
   }
-> {}
+> {
+  override get message(): string {
+    return describe(this);
+  }
+}
 
 /**
  * The request never produced a usable response: a connection failure, an
@@ -129,7 +194,11 @@ export class ForgejoTransportError extends Data.TaggedError(
    * Underlying transport or decoding failure.
    */
   readonly cause: unknown;
-}> {}
+}> {
+  override get message(): string {
+    return `${this.method} ${this.path}: ${String(this.cause)}`;
+  }
+}
 
 /**
  * A list endpoint returned more pages than {@link MAX_PAGES} allows.
@@ -170,6 +239,7 @@ export type ForgejoError =
   | ForgejoForbidden
   | ForgejoConflict
   | ForgejoValidationError
+  | ForgejoDependencyViolation
   | ForgejoServerError
   | ForgejoRequestError
   | ForgejoTransportError
@@ -234,6 +304,16 @@ export class ForgejoCredentials extends Context.Service<
   ForgejoClient
 >()("Forgejo::Credentials") {}
 
+/**
+ * Body Forgejo returns for a 5xx that is really a dependency violation, and
+ * the only signal separating one from a genuine server fault.
+ *
+ * Deleting an organization that still owns repositories answers `500` with
+ * `{"message":"user still has ownership of repositories [uid: 16]"}`
+ * (observed on Forgejo 16.0.3).
+ */
+const DEPENDENCY_VIOLATION = /still has ownership of repositories/i;
+
 const statusError = (
   status: number,
   context: ForgejoErrorContext,
@@ -243,6 +323,8 @@ const statusError = (
   if (status === 404) return new ForgejoNotFound(context);
   if (status === 409) return new ForgejoConflict(context);
   if (status === 422) return new ForgejoValidationError(context);
+  if (status >= 500 && DEPENDENCY_VIOLATION.test(context.body))
+    return new ForgejoDependencyViolation({ ...context, status });
   if (status >= 500) return new ForgejoServerError({ ...context, status });
   return new ForgejoRequestError({ ...context, status });
 };

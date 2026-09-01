@@ -79,6 +79,10 @@ export interface BranchProtectionProps {
   /**
    * Whether the push whitelist is enforced.
    *
+   * Forgejo only keeps this on while {@link enablePush} is on too — with
+   * direct pushes disabled there is nothing for a whitelist to permit, so
+   * asking for both records this as off, matching what the instance stores.
+   *
    * @default true when a push whitelist is set, otherwise left unmanaged
    */
   readonly enablePushWhitelist?: boolean;
@@ -206,6 +210,14 @@ const bodyOf = (props: BranchProtectionProps) => {
     (props.pushWhitelistUsernames?.length ?? 0) > 0 ||
     (props.pushWhitelistTeams?.length ?? 0) > 0;
   const whitelistDefault = hasPushWhitelist ? true : undefined;
+  const enablePush = props.enablePush ?? whitelistDefault;
+  // Forgejo stores `enable_push_whitelist` as false whenever `enable_push` is
+  // false, on create and on edit alike. Asking for a `true` it will not keep
+  // never converges: every reconcile observes false, sees drift, and re-issues
+  // the same edit. Apply the server's own rule here instead. An omitted prop
+  // is `undefined`, which `&&` passes through, so it stays unmanaged.
+  const enablePushWhitelist =
+    (props.enablePushWhitelist ?? whitelistDefault) && enablePush === true;
   return {
     rule_name: props.ruleName,
     required_approvals: props.requiredApprovals,
@@ -217,8 +229,8 @@ const bodyOf = (props: BranchProtectionProps) => {
     apply_to_admins: props.applyToAdmins,
     push_whitelist_usernames: props.pushWhitelistUsernames,
     push_whitelist_teams: props.pushWhitelistTeams,
-    enable_push: props.enablePush ?? whitelistDefault,
-    enable_push_whitelist: props.enablePushWhitelist ?? whitelistDefault,
+    enable_push: enablePush,
+    enable_push_whitelist: enablePushWhitelist,
   };
 };
 
