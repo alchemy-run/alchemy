@@ -240,12 +240,21 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     for (const demand of demands) {
       const auth = registry[demand.provider];
       if (auth == null) continue;
-      if (ci && explicitProfile === undefined) {
-        if (auth.readEnvironment === undefined) {
+      if (ci) {
+        // Env-first in CI (mirrors Resolve.ts): a satisfied env contract
+        // wins; an explicit profile is only the fallback when env
+        // credentials are absent (the local alchemy-test runner defaults
+        // CI to "true").
+        const envResult =
+          auth.readEnvironment === undefined
+            ? undefined
+            : yield* Effect.result(auth.readEnvironment);
+        if (envResult !== undefined && Result.isSuccess(envResult)) {
+          continue;
+        }
+        if (explicitProfile === undefined) {
           return yield* credentialsRequired(demand, profileName);
         }
-        yield* auth.readEnvironment;
-        continue;
       }
       const existing = yield* profile.getProfile(profileName);
       if (existing?.providers[auth.name] != null) continue;

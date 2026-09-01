@@ -3,6 +3,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import {
   AuthError,
   getAuthProvider,
@@ -62,10 +63,6 @@ export const resolveProviderConfig = <
   Effect.gen(function* () {
     const auth = yield* getAuthProvider<C, Credentials>(providerName);
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    // Explicit profile selection is authoritative — even under CI=true.
-    // (The alchemy-test runner defaults CI to "true", and PR #1234's
-    // contract is that an explicitly selected profile wins; only an
-    // IMPLICIT profile is unavailable in CI.)
     const explicitProfile = yield* Config.option(ALCHEMY_PROFILE).pipe(
       Effect.mapError(
         (cause) =>
@@ -75,21 +72,39 @@ export const resolveProviderConfig = <
           }),
       ),
     );
-    if (ci && Option.isNone(explicitProfile)) {
-      if (auth.readEnvironment === undefined) {
+    if (ci) {
+      // In CI, environment credentials come FIRST: a satisfied env
+      // contract wins even when ALCHEMY_PROFILE is set (CI must never
+      // read local profile state on the strength of a leaked variable).
+      // But env-first is not env-ONLY: the alchemy-test runner defaults
+      // CI to "true" locally (to force tools down non-interactive
+      // paths), so when the env contract is NOT satisfied and a profile
+      // was explicitly selected, fall through to that profile.
+      // Probe by ATTEMPTING the env read (through Config, so provided
+      // ConfigProviders are honored — process.env alone is not the
+      // contract's source of truth).
+      const envSatisfied =
+        auth.readEnvironment !== undefined &&
+        Result.isSuccess(yield* Effect.result(auth.readEnvironment));
+      if (envSatisfied) {
+        return {
+          auth,
+          profileName: undefined,
+          config: undefined,
+          resolve: auth.readEnvironment!,
+          source: "environment" as const,
+        };
+      }
+      if (Option.isNone(explicitProfile)) {
         return yield* Effect.fail(
           new AuthError({
-            message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
+            message:
+              auth.readEnvironment === undefined
+                ? `Auth provider '${providerName}' does not support environment credentials in CI.`
+                : `Auth provider '${providerName}' has no environment credentials in CI (and no explicit profile was selected).`,
           }),
         );
       }
-      return {
-        auth,
-        profileName: undefined,
-        config: undefined,
-        resolve: auth.readEnvironment,
-        source: "environment" as const,
-      };
     }
     const profile = yield* ProfileStore;
     const configuredProfile = explicitProfile;
