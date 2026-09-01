@@ -72,11 +72,11 @@ your instance. Grant only what the stack touches:
 - `write:repository` — [repositories](/forgejo/repository), labels,
   branch protection, webhooks, and repository-scoped
   [Actions secrets and variables](/forgejo/actions-config).
-- `write:organization` — [organizations and teams](/forgejo/organizations)
+- `write:organization` — [teams and their membership](/forgejo/organizations),
   and organization-scoped Actions configuration.
 - `write:user` — user-scoped Actions configuration.
-- `write:admin` — required to create organizations, teams, and
-  `ApiToken` resources, which go through Forgejo's `/admin` endpoints.
+- `write:admin` — required to create [organizations](/forgejo/organizations)
+  and `ApiToken` resources, which go through Forgejo's `/admin` endpoints.
 
 Deleting a repository needs no extra scope, but repositories default
 to retain on removal, so you only reach that path if you opt in with

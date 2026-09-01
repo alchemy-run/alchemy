@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
@@ -147,12 +148,23 @@ const listTokens = Effect.fn(function* (username: string) {
  * Raised when Forgejo accepts a token creation but omits the generated
  * secret, which can never be recovered from a later read.
  */
-export class MissingGeneratedToken extends Error {
-  constructor() {
-    super(
-      "Forgejo did not return the generated API token in the create response.",
-    );
-    this.name = "MissingGeneratedToken";
+export class MissingGeneratedToken extends Data.TaggedError(
+  "MissingGeneratedToken",
+)<{
+  /**
+   * User the token was generated for.
+   */
+  readonly username: string;
+  /**
+   * Name of the token Forgejo was asked to create.
+   */
+  readonly name: string;
+}> {
+  /**
+   * Human-readable description of the unusable create response.
+   */
+  override get message(): string {
+    return `Forgejo did not return the generated API token '${this.name}' for user '${this.username}' in the create response.`;
   }
 }
 
@@ -210,7 +222,10 @@ export const ApiTokenProvider = () =>
         },
       );
       if (created.sha1 === undefined) {
-        return yield* Effect.fail(new MissingGeneratedToken());
+        return yield* new MissingGeneratedToken({
+          username: news.username,
+          name: news.name,
+        });
       }
       return {
         tokenId: created.id,
@@ -220,6 +235,7 @@ export const ApiTokenProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ olds, output }) {
+      if (output === undefined) return;
       const client = yield* ForgejoCredentials;
       yield* optional(
         client.request<void>(

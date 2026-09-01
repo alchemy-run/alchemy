@@ -9,9 +9,10 @@ describe who owns what on your instance. `Forgejo.Label` and
 repository. Together they let a stack stand up a new team's whole
 workspace in one deploy.
 
-Organizations, teams, and memberships go through Forgejo's `/admin`
-endpoints, so the provider credential must belong to an
-administrator. New here? [Set up credentials](/forgejo/setup) first.
+Creating an organization goes through Forgejo's `/admin` endpoints, so
+that resource needs an administrator credential. Teams and memberships
+use the ordinary organization endpoints and need only organization-owner
+rights. New here? [Set up credentials](/forgejo/setup) first.
 
 ## Organizations
 

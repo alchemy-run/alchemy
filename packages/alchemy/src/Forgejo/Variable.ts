@@ -13,7 +13,7 @@ import {
   listAccessibleRepositories,
 } from "./Lists.ts";
 import type * as Forgejo from "./Providers.ts";
-import type { ActionsScope } from "./Secret.ts";
+import { type ActionsScope, sameScope } from "./Secret.ts";
 
 /**
  * Legacy repository-scoped variable properties.
@@ -151,8 +151,7 @@ export const VariableProvider = () =>
       Effect.succeed(
         isResolved(news) &&
           olds !== undefined &&
-          (JSON.stringify(variableScope(news)) !==
-            JSON.stringify(variableScope(olds)) ||
+          (!sameScope(variableScope(news), variableScope(olds)) ||
             news.name !== olds.name)
           ? { action: "replace" as const }
           : undefined,
