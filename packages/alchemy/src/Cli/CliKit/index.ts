@@ -6,7 +6,7 @@ export {
   NonInteractiveTerminal,
   TerminalCancelled,
 } from "./errors.ts";
-export { glyphsFor, theme, type GlyphName } from "./theme.ts";
+export { glyphsFor, spinnerFramesFor, theme, type GlyphName } from "./theme.ts";
 export {
   ANSI_BOLD,
   ANSI_DIM,

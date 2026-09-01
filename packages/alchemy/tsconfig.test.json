@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "include": ["package.json", "test"],
   "exclude": [
+    "test/Cli/fixtures/shutdown-feedback-fixture.ts",
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-server-entry-b.ts",
     "test/Local/fixtures/rpc-server-logs.ts",
