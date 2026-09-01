@@ -47,28 +47,55 @@ const ProbeAuth = AuthProviderLayer<{ method: "stored" }, string>()(PROBE, {
     }),
 });
 
-const testLayer = Layer.mergeAll(ProfileStoreLive, ProbeAuth).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      Layer.succeed(AuthProviders, {}),
-      // Fully replaces the ambient provider: an exported CI=1 (or
-      // ALCHEMY_PROFILE) in the developer's shell must not leak into the
-      // demand seam under test.
-      ConfigProvider.layer(ConfigProvider.fromUnknown({})),
-      NodeServices.layer,
-    ),
-  ),
+const ENV_PROBE = "DemandEnvProbe";
+const ENV_PROBE_TOKEN = "DEMAND_PROBE_TOKEN";
+const envState = { reads: 0 };
+
+/** A provider that also supports environment credentials. */
+const EnvProbeAuth = AuthProviderLayer<{ method: "stored" }, string>()(
+  ENV_PROBE,
+  {
+    configSchema: Schema.Struct({ method: Schema.Literal("stored") }),
+    configure: () => Effect.succeed({ method: "stored" as const }),
+    login: () => Effect.void,
+    logout: () => Effect.void,
+    details: () => Effect.succeed({ lines: [] }),
+    read: () => Effect.succeed("profile-credentials"),
+    readEnvironment: Effect.sync(() => {
+      envState.reads += 1;
+      return "env-credentials";
+    }),
+    environment: [{ name: ENV_PROBE_TOKEN, required: true, secret: true }],
+  },
 );
+
+const makeTestLayer = (config: Record<string, unknown> = {}) =>
+  Layer.mergeAll(ProfileStoreLive, ProbeAuth, EnvProbeAuth).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.succeed(AuthProviders, {}),
+        // Fully replaces the ambient provider: an exported CI=1 (or
+        // ALCHEMY_PROFILE) in the developer's shell must not leak into the
+        // demand seam under test.
+        ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
+        NodeServices.layer,
+      ),
+    ),
+  );
 
 /**
  * Point `ALCHEMY_HOME` at a scoped temp directory so the store never
  * touches the developer's real `~/.alchemy`. Tests using this must be
  * `exclusive` — the env var is process-global.
  */
-const withTempHome = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+const withTempHome = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  config: Record<string, unknown> = {},
+) =>
   Effect.gen(function* () {
     state.reads = 0;
     state.mode = "ok";
+    envState.reads = 0;
     const fs = yield* FileSystem.FileSystem;
     const dir = yield* fs.makeTempDirectoryScoped({
       prefix: "alchemy-demand-",
@@ -85,7 +112,7 @@ const withTempHome = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         }),
     );
     return yield* effect;
-  }).pipe(Effect.scoped, Effect.provide(testLayer));
+  }).pipe(Effect.scoped, Effect.provide(makeTestLayer(config)));
 
 const configureProbe = Effect.gen(function* () {
   const profile = yield* ProfileStore;
@@ -158,6 +185,61 @@ it.live(
         expect(error.resources).toEqual(["Website"]);
         expect(error.message).toContain(`--add ${PROBE}`);
         expect(state.reads).toBe(0);
+      }),
+    ),
+  { exclusive: true },
+);
+
+it.live(
+  "a nonexistent explicit profile fails with the actionable CredentialsRequired",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const error = (yield* Effect.flip(
+          demandCredentials([demand]),
+        )) as CredentialsRequired;
+        // NOT a generic ProfileError: the user must still learn which
+        // resources demanded credentials and which command fixes it.
+        expect(error._tag).toBe("CredentialsRequired");
+        expect(error.message).toContain("ghost");
+        expect(error.message).toContain("Website");
+        expect(state.reads).toBe(0);
+      }),
+      { ALCHEMY_PROFILE: "ghost" },
+    ),
+  { exclusive: true },
+);
+
+/** Set a process env var for the duration of the surrounding scope. */
+const withProcessEnv = (name: string, value: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const previous = process.env[name];
+      process.env[name] = value;
+      return previous;
+    }),
+    (previous) =>
+      Effect.sync(() => {
+        if (previous === undefined) delete process.env[name];
+        else process.env[name] = previous;
+      }),
+  );
+
+it.live(
+  "exported env credentials satisfy the gate when no profile is selected",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        yield* withProcessEnv(ENV_PROBE_TOKEN, "token");
+        yield* demandCredentials([
+          {
+            provider: ENV_PROBE,
+            resources: [{ fqn: "Api", reason: "remote" }],
+          },
+        ]);
+        // The gate warmed through the provider's environment path — the
+        // same source the run's lazy resolution will use.
+        expect(envState.reads).toBe(1);
       }),
     ),
   { exclusive: true },

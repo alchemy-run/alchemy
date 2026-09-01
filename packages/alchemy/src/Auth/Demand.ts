@@ -31,7 +31,12 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { BindingNode, Plan } from "../Plan.ts";
 import { profileCommandHint } from "../Util/interactive.ts";
-import { AuthError, AuthProviders, NeedsReauth } from "./AuthProvider.ts";
+import {
+  AuthError,
+  AuthProviders,
+  NeedsReauth,
+  presentEnvironment,
+} from "./AuthProvider.ts";
 import {
   ALCHEMY_PROFILE,
   DEFAULT_PROFILE_NAME,
@@ -270,8 +275,10 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     // or inspect a local profile first: CI runners intentionally have no
     // profile manifest, and doing so would also risk consulting a developer's
     // stored profiles when this path is exercised locally under Doppler.
-    const profileName = yield* ALCHEMY_PROFILE.pipe(
-      Config.withDefault(DEFAULT_PROFILE_NAME),
+    const configuredProfile = yield* Config.option(ALCHEMY_PROFILE);
+    const profileName = Option.getOrElse(
+      configuredProfile,
+      () => DEFAULT_PROFILE_NAME,
     );
     yield* Effect.forEach(
       demands,
@@ -287,12 +294,32 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
               attachDemandContext(demand),
             );
           }
-          // Resolve through the same precedence the run's lazy credential
-          // flow uses, so the gate can never pass something resolution
-          // would later reject (or vice versa). Suppressed missing-config
-          // mode turns "no profile entry" into the typed tag below instead
-          // of a generic AuthError; it also mutes the env-credentials
-          // warning here — the run's own resolution still emits it.
+          // Read-only precheck of the two non-CI configuration sources the
+          // resolution precedence below consults: a profile entry, or —
+          // when no profile was explicitly selected — exported environment
+          // credentials. "Nothing configured" fails with the actionable
+          // {@link CredentialsRequired} here, WITHOUT entering
+          // `resolveProviderConfig`: its profile path goes through
+          // `ensureProfile`, which fails a nonexistent profile with a
+          // generic ProfileError that would bury which resources demanded
+          // credentials and what command fixes it.
+          const envUsable =
+            Option.isNone(configuredProfile) &&
+            auth.readEnvironment !== undefined &&
+            (yield* Effect.sync(() =>
+              presentEnvironment(auth.environment, process.env),
+            )) !== undefined;
+          const existing = yield* profile.getProfile(profileName);
+          if (existing?.providers[auth.name] == null && !envUsable) {
+            return yield* credentialsRequired(demand, profileName);
+          }
+          // Something IS configured — resolve through the same precedence
+          // the run's lazy credential flow uses, so the gate can never
+          // pass something resolution would later reject (or vice versa).
+          // Suppressed missing-config mode turns a check/resolve race into
+          // the typed tag below instead of a generic AuthError; it also
+          // mutes the env-credentials warning here — the run's own
+          // resolution still emits it.
           const resolved = yield* resolveProviderConfig(demand.provider).pipe(
             Effect.provideService(AuthProviders, registry),
             Effect.provideService(ProfileStore, profile),
