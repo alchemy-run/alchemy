@@ -95,9 +95,15 @@ export const blobRandomAccess = (options: {
         const first = Math.floor(offset / windowBytes);
         const last = Math.floor((end - 1) / windowBytes);
         if (first === last) {
+          // A VIEW, not a copy (DESIGN §22.4). The parser probes every
+          // entry with a window-sized read and copies only what it keeps;
+          // returning a slice here copied that probe window per entry —
+          // 15k entries × the probe size — which on a spilled 40 MiB push
+          // was the difference between ~6 s and ~40 s of ingest. The slab
+          // stays alive as long as any view does, so eviction is safe.
           const slab = yield* fetchWindow(first);
           const from = offset - slab.start;
-          return slab.bytes.slice(from, from + (end - offset));
+          return slab.bytes.subarray(from, from + (end - offset));
         }
         // A read spanning window boundaries: stitch the windows it covers.
         const out = new Uint8Array(end - offset);

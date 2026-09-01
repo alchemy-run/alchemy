@@ -188,7 +188,16 @@ const MAX_CACHE_ENTRY_BYTES = 10 * 1024 * 1024;
  * which is what keeps ingest from a remote source proportional to the pack
  * size rather than to entries × pack size.
  */
-const ENTRY_WINDOW_BYTES = 512 * 1024;
+/**
+ * Bytes probed per entry before inflating. In-window reads are views on
+ * both sources, so the probe's size costs nothing — except when it crosses
+ * a window edge on the spilled (blob-backed) source, where the reader must
+ * assemble a copy. 64 KiB keeps such crossings rare (only entries within
+ * 64 KiB of a 4 MiB edge) and small; the rare larger entry grows the
+ * window on demand (DESIGN §22.4 — 512 KiB here was ~1 GB of copies per
+ * 15k-object spilled push).
+ */
+const ENTRY_WINDOW_BYTES = 64 * 1024;
 
 /**
  * Options for {@link ingestPack}.
