@@ -112,6 +112,23 @@ export const asciiGlyphs: { readonly [Key in GlyphName]: string } = {
 export const glyphsFor = (unicode: boolean) =>
   unicode ? theme.glyph : asciiGlyphs;
 
+const spinnerFrames = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const;
+const asciiSpinnerFrames = ["-", "\\", "|", "/"] as const;
+
+export const spinnerFramesFor = (unicode: boolean): readonly string[] =>
+  unicode ? spinnerFrames : asciiSpinnerFrames;
+
 export type StatusVariant = "info" | "success" | "warning" | "error";
 
 export const statusColor = (variant: StatusVariant): string =>

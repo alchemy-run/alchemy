@@ -2,6 +2,7 @@
 import { useAnimation } from "@alchemy.run/sigil";
 import type { ReactNode } from "react";
 import {
+  spinnerFramesFor,
   statusColor,
   statusPaint,
   theme,
@@ -121,25 +122,11 @@ export function KeyBar({ keys, marginTop = 1 }: KeyBarProps) {
   );
 }
 
-const SPINNER_FRAMES = [
-  "⠋",
-  "⠙",
-  "⠹",
-  "⠸",
-  "⠼",
-  "⠴",
-  "⠦",
-  "⠧",
-  "⠇",
-  "⠏",
-] as const;
-const ASCII_SPINNER_FRAMES = ["-", "\\", "|", "/"] as const;
-
 export const useSpinnerFrame = (): string => {
   const { unicode } = useCliEnvironment();
-  const frames = unicode ? SPINNER_FRAMES : ASCII_SPINNER_FRAMES;
+  const frames = spinnerFramesFor(unicode);
   const { frame } = useAnimation({ interval: 80 });
-  return frames[frame % frames.length] ?? ASCII_SPINNER_FRAMES[0];
+  return frames[frame % frames.length] ?? "-";
 };
 
 /**

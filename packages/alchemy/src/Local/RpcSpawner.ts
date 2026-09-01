@@ -141,7 +141,14 @@ export const make = Effect.fn(function* ({
         // test runner's reporter/TUI. The drain below is mandatory — an
         // unread pipe eventually fills and blocks the child.
         stderr: "pipe",
-        detached: false,
+        // `detached` deliberately unset: the spawner defaults to a new process
+        // group on POSIX (and none on Windows, where a detached console child
+        // has its own quirks). A terminal Ctrl+C must NOT reach the sidecar
+        // directly — its lifecycle belongs to this process's finalizer (the
+        // bounded kill below), and a sidecar tearing itself down concurrently
+        // yanks local providers out from under the exec child mid-shutdown.
+        // As a group leader the kill also reaps the sidecar's own children
+        // (workerd, emulators) instead of orphaning them.
         env: {
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
           ...pipedColorEnv(),

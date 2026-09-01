@@ -29,6 +29,7 @@ import {
   canOpenWebSocket,
   isAlive,
   openWebSocket,
+  pgidOf,
   pidListeningOn,
 } from "./fixtures/process-effect.ts";
 
@@ -156,6 +157,25 @@ describe(`Local.RpcSpawner (runtime=${typeof globalThis.Bun !== "undefined" ? "b
         const a = yield* post(url, samplePayload(FIXTURE_TS_URL));
         const b = yield* post(url, samplePayload(FIXTURE_B_TS_URL));
         expect(a).not.toBe(b);
+      }).pipe(Effect.provide(services)),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "sidecars lead their own process group (a terminal Ctrl+C cannot reach them)",
+    () =>
+      Effect.gen(function* () {
+        // POSIX-only: Windows has no process groups; the spawner leaves
+        // sidecars attached there (detached console children have their own
+        // quirks) and Ctrl+C delivery works differently anyway.
+        if (process.platform === "win32") return;
+        const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+        const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
+        const pid = yield* pidListeningOn(wsUrl);
+        if (pid === undefined || Number.isNaN(pid)) return;
+        // Group leader (pgid === pid) proves the sidecar was spawned
+        // detached: the tty's foreground-group signals stop at this process.
+        expect(yield* pgidOf(pid)).toBe(pid);
       }).pipe(Effect.provide(services)),
     { timeout: 60_000 },
   );
