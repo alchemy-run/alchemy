@@ -39,7 +39,7 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 
 | Option              | Description                                                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `--stage <name>`    | Stage to target. Falls back to `$STAGE`, then `live_$USER` (`dev_$USER` for `alchemy dev`). Must match `[a-z0-9]+([-_a-z0-9]+)*`. |
+| `--stage <name>`    | Stage to target. Falls back to `$ALCHEMY_STAGE`, then `live_$USER` (`dev_$USER` for `alchemy dev`). Must match `[a-z0-9]+([-_a-z0-9]+)*`. |
 | `--profile <name>`  | Auth profile from `~/.alchemy/profiles.json`. Overrides `$ALCHEMY_PROFILE`; defaults to `default`.                                      |
 | `--env-file <path>` | File to load environment variables from. Defaults to `.env`.                                                                             |
 | `--yes`             | Yes to all prompts.                                                                                                                       |
