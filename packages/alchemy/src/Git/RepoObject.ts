@@ -1414,7 +1414,17 @@ export const ingestPackFrom = (
     // 13.7k-object push take ~20 s inside a single-threaded DO — the work
     // is inherently serial, so the only lever is fewer operations
     // (DESIGN.md §16.6).
-    let batch: Array<StagedObject> = [];
+    // Buffered entries keep their pack coordinates so the promote/inline
+    // decision is made at FLUSH time (DESIGN §22.6): a streaming body only
+    // becomes a wire pack once it crosses the spill threshold, but the wire
+    // object holds the body from byte 0, so entries buffered before that
+    // moment can still be promoted when the flush happens after it.
+    let batch: Array<
+      StagedObject & {
+        readonly dataOffset: number;
+        readonly fromDelta: boolean;
+      }
+    > = [];
     let batchBytes = 0;
     let promoted = 0;
     /** Time spent in SQL staging; the rest of ingest is CPU. */
@@ -1424,8 +1434,26 @@ export const ingestPackFrom = (
       const pending = batch;
       batch = [];
       batchBytes = 0;
+      const target = options.promote?.();
+      const staged: Array<StagedObject> = pending.map((entry) => {
+        const pack =
+          target !== undefined &&
+          !entry.fromDelta &&
+          entry.type === ObjectType.blob &&
+          entry.dataOffset >= 0
+            ? { packId: target.packId, offset: target.base + entry.dataOffset }
+            : undefined;
+        if (pack !== undefined) promoted += 1;
+        return {
+          oid: entry.oid,
+          type: entry.type,
+          size: entry.size,
+          zdata: entry.zdata,
+          pack,
+        };
+      });
       const at = yield* Effect.sync(() => performance.now());
-      yield* store.insertStagedBatch(pushId, pending);
+      yield* store.insertStagedBatch(pushId, staged);
       stageMs += yield* Effect.sync(() => performance.now() - at);
     });
 
@@ -1438,33 +1466,17 @@ export const ingestPackFrom = (
     const stage = (entries: ReadonlyArray<PackParser.ResolvedEntry>) =>
       Effect.gen(function* () {
         for (const entry of entries) {
-          // Evaluated per entry: a streaming body only becomes a wire pack
-          // once it crosses the spill threshold (DESIGN §22.6), so entries
-          // seen before that are staged inline.
-          const target =
-            !entry.fromDelta &&
-            entry.type === ObjectType.blob &&
-            entry.dataOffset >= 0
-              ? options.promote?.()
-              : undefined;
-          const pack =
-            target === undefined
-              ? undefined
-              : {
-                  packId: target.packId,
-                  offset: target.base + entry.dataOffset,
-                };
-          if (pack !== undefined) promoted += 1;
           batch.push({
             oid: entry.oid,
             type: entry.type,
             size: entry.size,
             zdata: entry.zdata,
-            pack,
+            dataOffset: entry.dataOffset,
+            fromDelta: entry.fromDelta,
           });
-          // Promoted rows carry no BLOB; only inline bytes count toward the
-          // staging batch's memory cap.
-          batchBytes += pack === undefined ? entry.zdata.byteLength : 0;
+          // Counted as inline until the flush decides; promoted rows carry
+          // no BLOB, so this over-counts — safe for a memory cap.
+          batchBytes += entry.zdata.byteLength;
           if (
             batch.length >= STAGE_BATCH_OBJECTS ||
             batchBytes >= STAGE_BATCH_BYTES

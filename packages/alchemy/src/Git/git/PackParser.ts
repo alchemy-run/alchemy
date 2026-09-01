@@ -553,12 +553,22 @@ export const ingestPack = <E, R>(
     // ── main pass: index + resolve in pack order ─────────────────────────────
     const sinkBatch = options.sinkBatch;
     let pendingSink: Array<ResolvedEntry> = [];
+    // On a streaming source the body arrives through the event loop, and
+    // a synchronous batch monopolizes the isolate: without a real
+    // (macrotask) yield between batches, receive and parse alternate
+    // instead of overlapping (DESIGN §22.6). Fiber yields are not enough —
+    // they stay within the same task.
+    const streaming = !Number.isFinite(source.size);
+    const breathe = streaming
+      ? Effect.promise(
+          () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+        )
+      : Effect.void;
     const flushPending = Effect.suspend(() => {
-      if (pendingSink.length === 0 || sinkBatch === undefined)
-        return Effect.void;
+      if (pendingSink.length === 0 || sinkBatch === undefined) return breathe;
       const batch = pendingSink;
       pendingSink = [];
-      return timed("sink", sinkBatch(batch));
+      return timed("sink", sinkBatch(batch)).pipe(Effect.andThen(breathe));
     });
     /**
      * The synchronous fast path (DESIGN §22.5): a non-delta entry whose
