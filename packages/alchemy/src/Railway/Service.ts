@@ -80,6 +80,12 @@ export interface ServiceProps extends PlatformProps {
    */
   port?: number;
   /**
+   * Whether to create and manage a generated `*.up.railway.app` domain.
+   * Existing unowned generated or custom domains are not removed.
+   * @default true
+   */
+  publicDomain?: boolean;
+  /**
    * Additional environment variables. Merged after binding-injected
    * `env`. Upserted as service-scoped Railway variables with
    * `skipDeploys: true`; this Service owns the subsequent deploy.
@@ -373,6 +379,22 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *     return { url: api.url };
  *   }),
  * );
+ * ```
+ *
+ * ### Private service
+ * `publicDomain: false` skips the generated `*.up.railway.app` hostname.
+ * `url` / `domain` stay unset. Reach it on the private mesh at
+ * `{name}.railway.internal`. Unowned generated or custom domains are
+ * left alone.
+ *
+ * **Example:** Private-only service
+ * ```typescript
+ * const worker = yield* Railway.Service("Worker", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   publicDomain: false,
+ * });
  * ```
  *
  * ### Pin a region
