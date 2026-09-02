@@ -1,8 +1,10 @@
+import { Services } from "@distilled.cloud/forgejo";
+import type { Repository as ApiRepository } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { ForgejoCredentials, optional, paginate } from "./Client.ts";
+import { listAccessibleRepositories } from "./Lists.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -230,44 +232,10 @@ export const Repository = Resource<Repository>("Forgejo.Repository", {
   defaultRemovalPolicy: "retain",
 });
 
-interface ApiRepository {
-  readonly id: number;
-  readonly name: string;
-  readonly full_name: string;
-  readonly html_url: string;
-  readonly clone_url: string;
-  readonly ssh_url: string;
-  readonly default_branch: string;
-  readonly created_at: string;
-  readonly updated_at: string;
-  readonly owner: { readonly login: string };
-  readonly description?: string;
-  readonly website?: string;
-  readonly private?: boolean;
-  readonly has_issues?: boolean;
-  readonly has_projects?: boolean;
-  readonly has_wiki?: boolean;
-  readonly has_pull_requests?: boolean;
-  readonly has_releases?: boolean;
-  readonly has_packages?: boolean;
-  readonly has_actions?: boolean;
-  readonly archived?: boolean;
-  readonly template?: boolean;
-}
-
-interface ApiUser {
-  readonly login: string;
-}
-
-const pathFor = (owner: string, name: string) =>
-  `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
-
-const observe = Effect.fn(function* (owner: string, name: string) {
-  const client = yield* ForgejoCredentials;
-  return yield* optional(
-    client.request<ApiRepository>("GET", pathFor(owner, name)),
-  );
-});
+const observe = (owner: string, name: string) =>
+  Services.repository
+    .repoGet({ owner, repo: name })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 /**
  * Look the repository up by its stable numeric ID.
@@ -278,15 +246,13 @@ const observe = Effect.fn(function* (owner: string, name: string) {
  * numeric ID survives renames, so it is the identifier to prefer whenever one
  * is known.
  */
-const observeById = Effect.fn(function* (repoId: number) {
-  const client = yield* ForgejoCredentials;
-  return yield* optional(
-    client.request<ApiRepository>("GET", `/repositories/${repoId}`),
-  );
-});
+const observeById = (repoId: number) =>
+  Services.repository
+    .repoGetByID({ id: repoId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 /**
- * Settings the `PATCH` endpoint manages. An omitted prop is left alone rather
+ * Settings the edit endpoint manages. An omitted prop is left alone rather
  * than reset, so `undefined` entries are dropped from the comparison too.
  */
 const settingsOf = (props: RepositoryProps) => ({
@@ -318,6 +284,35 @@ const toAttributes = (repository: ApiRepository): RepositoryAttributes => ({
 });
 
 /**
+ * Create the repository under a user or an organization.
+ *
+ * Forgejo has one create endpoint per owner kind, and only the authenticated
+ * user may own a repository created through the user endpoint — every other
+ * owner has to be an organization.
+ */
+const create = Effect.fn(function* (news: RepositoryProps) {
+  const options = {
+    name: news.name,
+    description: news.description,
+    private: news.private,
+    auto_init: news.autoInit,
+    default_branch: news.defaultBranch,
+    gitignores: news.gitignores,
+    license: news.license,
+    readme: news.readme,
+    template: news.template,
+    object_format_name: news.objectFormatName,
+  };
+  const current = yield* Services.user.userGetCurrent({});
+  return current.login.toLowerCase() === news.owner.toLowerCase()
+    ? yield* Services.repository.createCurrentUserRepo(options)
+    : yield* Services.organization.createOrgRepo({
+        org: news.owner,
+        ...options,
+      });
+});
+
+/**
  * Provider layer implementing the Forgejo repository lifecycle.
  */
 export const RepositoryProvider = () =>
@@ -330,13 +325,9 @@ export const RepositoryProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
-      const client = yield* ForgejoCredentials;
       // `/user/repos` already returns the full repository representation, so
       // enumeration needs no per-repository follow-up request.
-      const repositories = yield* paginate<ApiRepository>(
-        client,
-        "/user/repos",
-      );
+      const repositories = yield* listAccessibleRepositories();
       return repositories.map(toAttributes);
     }),
     read: Effect.fn(function* ({ olds, output }) {
@@ -351,7 +342,6 @@ export const RepositoryProvider = () =>
       return repository === undefined ? undefined : toAttributes(repository);
     }),
     reconcile: Effect.fn(function* ({ news, olds, output }) {
-      const client = yield* ForgejoCredentials;
       // Observe by the numeric ID when one is known, so a rename survives
       // even if the state write that recorded it did not. Otherwise fall
       // back to the previously-deployed name, which is what lets an
@@ -363,35 +353,12 @@ export const RepositoryProvider = () =>
       }
 
       if (observed === undefined) {
-        const current = yield* client.request<ApiUser>("GET", "/user");
-        const createPath =
-          current.login.toLowerCase() === news.owner.toLowerCase()
-            ? "/user/repos"
-            : `/orgs/${encodeURIComponent(news.owner)}/repos`;
-        observed = yield* client
-          .request<ApiRepository>("POST", createPath, {
-            body: {
-              name: news.name,
-              description: news.description,
-              private: news.private,
-              auto_init: news.autoInit,
-              default_branch: news.defaultBranch,
-              gitignores: news.gitignores,
-              license: news.license,
-              readme: news.readme,
-              template: news.template,
-              object_format_name: news.objectFormatName,
-            },
-          })
-          .pipe(
-            // A concurrent create wins the race; adopt what is there.
-            Effect.catchTag("ForgejoConflict", () =>
-              client.request<ApiRepository>(
-                "GET",
-                pathFor(news.owner, news.name),
-              ),
-            ),
-          );
+        observed = yield* create(news).pipe(
+          // A concurrent create wins the race; adopt what is there.
+          Effect.catchTag("Conflict", () =>
+            Services.repository.repoGet({ owner: news.owner, repo: news.name }),
+          ),
+        );
       }
 
       // Sync settings against what was observed, not against `olds`, and
@@ -399,18 +366,16 @@ export const RepositoryProvider = () =>
       const desired = settingsOf(news);
       const updated = matchesDesired(observed, desired)
         ? observed
-        : yield* client.request<ApiRepository>(
-            "PATCH",
-            pathFor(observed.owner.login, observed.name),
-            { body: desired },
-          );
+        : yield* Services.repository.repoEdit({
+            owner: observed.owner.login,
+            repo: observed.name,
+            ...desired,
+          });
 
       if (news.topics !== undefined) {
-        const topicsPath = `${pathFor(updated.owner.login, updated.name)}/topics`;
-        const live = yield* client.request<{
-          readonly topics: readonly string[] | null;
-        }>("GET", topicsPath);
-        const observedTopics = [...(live?.topics ?? [])].sort();
+        const target = { owner: updated.owner.login, repo: updated.name };
+        const live = yield* Services.repository.repoListTopics(target);
+        const observedTopics = [...(live.topics ?? [])].sort();
         const desiredTopics = [...news.topics].sort();
         const matches =
           observedTopics.length === desiredTopics.length &&
@@ -418,27 +383,27 @@ export const RepositoryProvider = () =>
             (topic, index) => topic === desiredTopics[index],
           );
         if (!matches) {
-          yield* client.request<void>("PUT", topicsPath, {
-            body: { topics: [...news.topics] },
+          yield* Services.repository.repoUpdateTopics({
+            ...target,
+            topics: [...news.topics],
           });
         }
       }
       return toAttributes(updated);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
-      const client = yield* ForgejoCredentials;
       // Resolve the live name from the numeric ID first. Deleting by a stale
-      // `olds.name` 404s, and `optional` swallows that as success — the
-      // state row would be dropped while the repository lived on.
+      // `olds.name` 404s, which is swallowed as success — the state row would
+      // be dropped while the repository lived on.
       const live =
         output?.repoId === undefined
           ? undefined
           : yield* observeById(output.repoId);
-      yield* optional(
-        client.request<void>(
-          "DELETE",
-          pathFor(live?.owner.login ?? olds.owner, live?.name ?? olds.name),
-        ),
-      );
+      yield* Services.repository
+        .repoDelete({
+          owner: live?.owner.login ?? olds.owner,
+          repo: live?.name ?? olds.name,
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

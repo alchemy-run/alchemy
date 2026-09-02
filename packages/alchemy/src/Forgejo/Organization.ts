@@ -1,10 +1,12 @@
+import { Credentials, Services } from "@distilled.cloud/forgejo";
+import type { Organization as ApiOrganization } from "@distilled.cloud/forgejo/organization";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { type ForgejoClient, ForgejoCredentials, optional } from "./Client.ts";
+import { originOf } from "./Credentials.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
@@ -154,29 +156,17 @@ export class UnsupportedOwnerChange extends Data.TaggedError(
   }
 }
 
-interface ApiOrganization {
-  readonly id: number;
-  readonly username: string;
-  readonly description?: string;
-  readonly full_name?: string;
-  readonly visibility?: string;
-  readonly website?: string;
-  readonly email?: string;
-  readonly location?: string;
-}
-
 /**
- * Build the organization's web URL.
+ * Origin of the instance the credential points at.
  *
  * Forgejo's organization representation carries no `html_url` — unlike its
  * repository representation — so the link is derived from the instance the
- * client is pointed at rather than read off the response.
+ * credential is pointed at rather than read off the response.
  */
-const htmlUrlFor = (client: ForgejoClient, username: string) =>
-  `${client.baseUrl.replace(/\/api\/v1$/, "")}/${encodeURIComponent(username)}`;
-
-const path = (props: Pick<OrganizationProps, "username">) =>
-  `/orgs/${encodeURIComponent(props.username)}`;
+const instanceOrigin = Effect.gen(function* () {
+  const resolve = yield* Credentials;
+  return originOf(yield* resolve);
+});
 
 const settingsOf = (props: OrganizationProps) => ({
   description: props.description,
@@ -188,20 +178,18 @@ const settingsOf = (props: OrganizationProps) => ({
 });
 
 const attributesOf = (
-  client: ForgejoClient,
+  origin: string,
   organization: ApiOrganization,
 ): OrganizationAttributes => ({
   organizationId: organization.id,
   username: organization.username,
-  htmlUrl: htmlUrlFor(client, organization.username),
+  htmlUrl: `${origin}/${encodeURIComponent(organization.username)}`,
 });
 
-const observe = Effect.fn(function* (
-  props: Pick<OrganizationProps, "username">,
-) {
-  const client = yield* ForgejoCredentials;
-  return yield* optional(client.request<ApiOrganization>("GET", path(props)));
-});
+const observe = (props: Pick<OrganizationProps, "username">) =>
+  Services.organization
+    .orgGet({ org: props.username })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 /**
  * Provider layer implementing organization lifecycle.
@@ -222,21 +210,21 @@ export const OrganizationProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
-      const client = yield* ForgejoCredentials;
+      const origin = yield* instanceOrigin;
       const organizations = yield* listAccessibleOrganizations();
       return organizations.map((organization) =>
-        attributesOf(client, organization),
+        attributesOf(origin, organization),
       );
     }),
     read: Effect.fn(function* ({ olds }) {
-      const client = yield* ForgejoCredentials;
+      const origin = yield* instanceOrigin;
       const observed = yield* observe(olds);
       return observed === undefined
         ? undefined
-        : attributesOf(client, observed);
+        : attributesOf(origin, observed);
     }),
     reconcile: Effect.fn(function* ({ news, olds }) {
-      const client = yield* ForgejoCredentials;
+      const origin = yield* instanceOrigin;
 
       // An organization's login is globally unique, so a changed `owner` still
       // resolves to the same organization. Forgejo has no ownership-transfer
@@ -256,14 +244,12 @@ export const OrganizationProvider = () =>
       const observed = yield* observe(news);
 
       if (observed === undefined) {
-        const created = yield* client
-          .request<ApiOrganization>(
-            "POST",
-            `/admin/users/${encodeURIComponent(news.owner)}/orgs`,
-            {
-              body: { username: news.username, ...settingsOf(news) },
-            },
-          )
+        const created = yield* Services.admin
+          .adminCreateOrg({
+            owner: news.owner,
+            username: news.username,
+            ...settingsOf(news),
+          })
           .pipe(
             // A concurrent create wins the race; adopt what is there. The
             // admin endpoint declares 403/422 for a duplicate, not 409, so
@@ -275,42 +261,39 @@ export const OrganizationProvider = () =>
             // original error: reporting "not found" for what is really "your
             // token is not an administrator" replaces the clearest diagnosis
             // with the most misleading one.
-            Effect.catchTag(
-              ["ForgejoValidationError", "ForgejoForbidden"],
-              (cause) =>
-                optional(
-                  client.request<ApiOrganization>("GET", path(news)),
-                ).pipe(
-                  Effect.flatMap((existing) =>
-                    existing === undefined
-                      ? Effect.fail(cause)
-                      : Effect.succeed(existing),
-                  ),
+            Effect.catchTag(["UnprocessableEntity", "Forbidden"], (cause) =>
+              observe(news).pipe(
+                Effect.flatMap((existing) =>
+                  existing === undefined
+                    ? Effect.fail(cause)
+                    : Effect.succeed(existing),
                 ),
+              ),
             ),
           );
-        return attributesOf(client, created);
+        return attributesOf(origin, created);
       }
 
       // Sync only when the live organization differs from what was declared.
       const desired = settingsOf(news);
       const updated = matchesDesired(observed, desired)
         ? observed
-        : yield* client.request<ApiOrganization>("PATCH", path(news), {
-            body: desired,
+        : yield* Services.organization.orgEdit({
+            org: news.username,
+            ...desired,
           });
-      return attributesOf(client, updated);
+      return attributesOf(origin, updated);
     }),
     delete: Effect.fn(function* ({ olds }) {
-      const client = yield* ForgejoCredentials;
       // Forgejo refuses to delete an organization that still owns
       // repositories, and the engine deletes independent resources
       // concurrently — so an organization that loses the race against its own
       // repositories fails the destroy outright, succeeding only on a re-run.
       // Retry until the repositories are gone.
-      yield* optional(client.request<void>("DELETE", path(olds))).pipe(
+      yield* Services.organization.orgDelete({ org: olds.username }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
-          while: (error) => error._tag === "ForgejoDependencyViolation",
+          while: (error) => error._tag === "OrganizationOwnsRepositories",
           schedule: Schedule.exponential("200 millis"),
           times: 6,
         }),

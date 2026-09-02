@@ -1,14 +1,11 @@
+import { Services } from "@distilled.cloud/forgejo";
+import type { Team as ApiTeam } from "@distilled.cloud/forgejo/organization";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  ForgejoCredentials,
-  ignoreInaccessible,
-  optional,
-  paginate,
-} from "./Client.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
+import { paginate } from "./Pagination.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -103,34 +100,32 @@ export interface Team extends Resource<
  */
 export const Team = Resource<Team>("Forgejo.Team");
 
-interface ApiTeam {
-  readonly id: number;
-  readonly name: string;
-  readonly description?: string;
-  readonly permission?: string;
-  readonly includes_all_repositories?: boolean;
-  readonly can_create_org_repo?: boolean;
-  readonly units?: readonly string[];
-}
-
-const collection = (props: Pick<TeamProps, "organization">) =>
-  `/orgs/${encodeURIComponent(props.organization)}/teams`;
-
-const path = (teamId: number) => `/teams/${teamId}`;
-
 const bodyOf = (props: TeamProps) => ({
   name: props.name,
   permission: props.permission,
   description: props.description,
   includes_all_repositories: props.includesAllRepositories,
   can_create_org_repo: props.canCreateOrgRepo,
-  units: props.units,
+  units: props.units === undefined ? undefined : [...props.units],
 });
 
 const attributesOf = (team: ApiTeam): TeamAttributes => ({
   teamId: team.id,
   name: team.name,
 });
+
+/**
+ * Every team of an organization, or none when the credential cannot read
+ * the organization: account-wide enumeration walks organizations the
+ * credential may not be able to inspect, and a single inaccessible one must
+ * not abort the whole sweep.
+ */
+const listTeams = (organization: string) =>
+  paginate(Services.organization.orgListTeams, { org: organization }).pipe(
+    Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.succeed([] as readonly ApiTeam[]),
+    ),
+  );
 
 /**
  * Locate the live team, by ID when one is already known and otherwise by name
@@ -142,15 +137,13 @@ const observe = Effect.fn(function* (
   props: Pick<TeamProps, "organization" | "name">,
   teamId: number | undefined,
 ) {
-  const client = yield* ForgejoCredentials;
   if (teamId !== undefined) {
-    const byId = yield* optional(client.request<ApiTeam>("GET", path(teamId)));
+    const byId = yield* Services.organization
+      .orgGetTeam({ id: teamId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     if (byId !== undefined) return byId;
   }
-  const teams = yield* ignoreInaccessible(
-    paginate<ApiTeam>(client, collection(props)),
-    [] as readonly ApiTeam[],
-  );
+  const teams = yield* listTeams(props.organization);
   return teams.find((team) => team.name === props.name);
 });
 
@@ -169,18 +162,10 @@ export const TeamProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
-      const client = yield* ForgejoCredentials;
       const organizations = yield* listAccessibleOrganizations();
       const teams = yield* Effect.forEach(
         organizations,
-        (organization) =>
-          ignoreInaccessible(
-            paginate<ApiTeam>(
-              client,
-              collection({ organization: organization.username }),
-            ),
-            [] as readonly ApiTeam[],
-          ),
+        (organization) => listTeams(organization.username),
         { concurrency: 8 },
       );
       return teams.flat().map(attributesOf);
@@ -190,20 +175,15 @@ export const TeamProvider = () =>
       return observed === undefined ? undefined : attributesOf(observed);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
-      const client = yield* ForgejoCredentials;
-
       // Observe: live state decides create-vs-update, so adoption and a
       // re-run after a failed state write both converge.
       const observed = yield* observe(news, output?.teamId);
 
       if (observed === undefined) {
-        const created = yield* client.request<ApiTeam>(
-          "POST",
-          collection(news),
-          {
-            body: bodyOf(news),
-          },
-        );
+        const created = yield* Services.organization.orgCreateTeam({
+          org: news.organization,
+          ...bodyOf(news),
+        });
         return attributesOf(created);
       }
 
@@ -211,14 +191,16 @@ export const TeamProvider = () =>
       const desired = bodyOf(news);
       const updated = matchesDesired(observed, desired)
         ? observed
-        : yield* client.request<ApiTeam>("PATCH", path(observed.id), {
-            body: desired,
+        : yield* Services.organization.orgEditTeam({
+            id: observed.id,
+            ...desired,
           });
       return attributesOf(updated);
     }),
     delete: Effect.fn(function* ({ output }) {
       if (output === undefined) return;
-      const client = yield* ForgejoCredentials;
-      yield* optional(client.request<void>("DELETE", path(output.teamId)));
+      yield* Services.organization
+        .orgDeleteTeam({ id: output.teamId })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });
